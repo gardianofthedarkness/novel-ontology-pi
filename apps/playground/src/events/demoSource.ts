@@ -51,7 +51,7 @@ export const DEMO_PROPOSALS: { node: WorldNode; edges: WorldEdge[] }[] = [
   },
 ];
 
-const SCRIPT: { at: number; event: PlaygroundEvent }[] = [
+export const SCRIPT: { at: number; event: PlaygroundEvent }[] = [
   { at: 600, event: { type: "block.started", blockId: "b0011", label: "block b0011 · branch ch.2" } },
   { at: 1500, event: { type: "sectioned", blockId: "b0011", sentences: 38 } },
   { at: 2400, event: { type: "verdict", patch: "presence", text: "jev · present — 黒子 p .96" } },
@@ -59,7 +59,7 @@ const SCRIPT: { at: number; event: PlaygroundEvent }[] = [
   { at: 4000, event: { type: "proposal.added", changesetId: "cs_b0011", ...DEMO_PROPOSALS[0] } },
   { at: 4900, event: { type: "proposal.added", changesetId: "cs_b0011", ...DEMO_PROPOSALS[1] } },
   { at: 5800, event: { type: "proposal.added", changesetId: "cs_b0011", ...DEMO_PROPOSALS[2] } },
-  { at: 6400, event: { type: "changeset.pending", changesetId: "cs_b0011", label: "cs_b0011 — 6 proposals (branch 寻回)" } },
+  { at: 6400, event: { type: "changeset.pending", changesetId: "cs_b0011", label: "cs_b0011 — 6 proposals (branch 寻回)", nodeIds: ["p_clerk", "p_dlg_ask", "p_ev_early"] } },
   { at: 8200, event: { type: "changeset.held", changesetId: "cs_b0011", nodeIds: ["p_ev_early"] } },
 ];
 

@@ -92,3 +92,25 @@ button:hover { border-color: var(--teal); }
   0%, 100% { box-shadow: 0 0 4px rgba(251, 191, 36, .5); }
   50% { box-shadow: 0 0 22px rgba(251, 191, 36, .95); }
 }
+
+/* HTML node labels (projected from the 3D scene every frame) */
+.labels-layer {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 3;
+}
+.node-label {
+  position: absolute; top: 0; left: 0;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 3px 8px 4px;
+  background: rgba(10, 14, 22, 0.82);
+  border: 1px solid #334155; border-radius: 999px;
+  font-size: 12px; line-height: 1.25; color: #e2e8f0;
+  white-space: nowrap; pointer-events: auto; cursor: pointer;
+  will-change: transform;
+}
+.node-label span { font-size: 10px; color: #8fa3c8; }
+.node-label.k-bigEvent { border-color: #2dd4bf; }
+.node-label.k-character { border-color: #a78bfa; }
+.node-label.k-location { border-color: #7dd3fc; }
+.node-label.k-dialogue { border-color: #fbbf24; }
+.node-label.s-proposed { border-color: #d97706; background: rgba(60, 36, 4, 0.88); }
+.node-label.s-held { border-color: #64748b; background: rgba(30, 41, 59, 0.9); }

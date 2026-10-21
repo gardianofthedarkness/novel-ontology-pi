@@ -67,7 +67,7 @@ export type PlaygroundEvent =
       node: WorldNode;
       edges: WorldEdge[];
     }
-  | { type: "changeset.pending"; changesetId: string; label: string }
+  | { type: "changeset.pending"; changesetId: string; label: string; nodeIds: string[] }
   | { type: "changeset.held"; changesetId: string; nodeIds: string[] }
   | { type: "changeset.merged"; changesetId: string }
   | { type: "graph.rebuilt" };

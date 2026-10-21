@@ -15,50 +15,67 @@ repo root.
 cd apps/playground
 npm install
 npm run dev        # http://localhost:5173
-npm run build      # type-check + production build
 ```
 
-Node ≥ 22. This app is a separate package — the root CLI package and
-its CI are unaffected.
+Requires **React 19** — Reagraph 4.32 bundles @react-three/fiber v9,
+which crashes on React 18 internals ("reading 'S'" at reconciler
+creation). The root CLI package is unaffected.
 
-## What's real vs. demo in this v1
+## Data: local files only
 
-Real (the actual product skeleton):
+The app reads everything from local files under `public/db/novel/` —
+a simulated novel bundle in the exact layout the CLI writes, plus the
+playground read model and the session stream. No external APIs, no
+CDN: even the graph's node labels are plain HTML projected from the
+3D scene every frame, because Reagraph's built-in labels (troika /
+drei Text) fetch font data from a CDN at runtime — and when that
+fetch fails, the suspension takes the whole scene down with it.
 
-- The one-world view model: lanes (canon + branch big events) →
-  click a big event → its 3D interior (characters, locations, scenes,
-  dialogue, events; single-direction links; chronological layout).
-- Ghost states: **proposed** (amber), **held** (slate — visually
-  distinct from pending, per Sirui's review), **canon** (solid).
-- The merge-gate queue with approve; held proposals stay held.
-- The activity tab: shines for knitting elsewhere, gate arrivals and
-  holds; click = guided flight to the knitting site.
-- The `PlaygroundEvent` contract (`src/types.ts`) and the
-  `EventSource` interface — the CLI's future `novel watch`
-  (events.jsonl + SSE) plugs in behind the same interface.
-- Layout toggle: chronological (authored positions, locked) vs.
-  force-directed 3D exploration.
+| File | Role |
+| --- | --- |
+| `ontology/manifest.json`, `ontology/*.jsonl` | the simulated bundle (source of truth) |
+| `view.json` | playground read model: positioned nodes/edges for lanes + interiors |
+| `events.jsonl` | the PlaygroundEvent stream (`{"at": ms, "event": …}` per line) — the file `novel watch` will tail / serve over SSE |
+| `changesets/cs_b0011.json` | the session's ChangeSet record |
 
-Demo (until live models land):
+`view.json` and `events.jsonl` are generated from the seed data in
+`src/data/demoWorld.ts` + `src/events/demoSource.ts`:
 
-- `DemoEventSource` replays a scripted session: System 1 knits block
-  b0011 into the branch big event 寻回 — 3 ghost nodes + relations,
-  a ChangeSet reaching the gate, one proposal held by the main agent.
-- The world data (`src/data/demoWorld.ts`) is the dashboard's sample
-  scenario, including the two parallel chains inside 归还终端.
+```bash
+node tools/gen-fixtures.mjs
+```
 
-## Known v1 limitations
+## Single-file edition
 
-- Reagraph has no per-node opacity/dash, so ghosts are encoded by
-  color + sub-label rather than translucency.
-- Guided flight uses `fitNodesInView`; cross-view flights switch the
-  view then frame the site (no continuous camera path yet).
-- Bundle size is Three.js-heavy; code-split when this graduates
-  from testing UI to product.
+```bash
+npm run build && node tools/build-singlefile.mjs
+```
 
-## Next steps (sector 13 roadmap)
+Produces `playground-live.html` — the whole app plus the DB files
+embedded, runnable fully offline from one file (handy for phone
+testing).
 
-1. `SseEventSource` against the CLI's `novel watch` (Sirui's track).
-2. Live Theater polish + Gate Queue first (v1 scope per review);
-   Explorer and Timeline Lanes grow from the same state after.
-3. Cluster-first rendering at whole-novel scale.
+## Contracts it codes against
+
+- `PlaygroundEvent` stream (`src/types.ts`) — the same events the CLI
+  will emit: `block.started`, `sectioned`, `verdict` (Jev),
+  `proposal.added`, `changeset.pending` / `held` / `merged`,
+  `graph.rebuilt`. Served by `FileEventSource` (`src/events/`).
+- Ghost states: proposed (amber), held (slate), canon (kind colors).
+  Held proposals stay held when the rest of the set merges.
+- Notification policy (from Sirui's sector-13 feedback): gate arrivals
+  and holds shine the activity tab immediately; ordinary proposals
+  batch silently. Clicking the tab flies the camera to the knitting
+  site. Agent activity never moves the camera on its own — framing
+  happens only on view changes and explicit flights.
+- Camera notes: `cameraMode="rotate"` — Reagraph's `"orbit"` is an
+  auto-rotating showcase mode (20°/s), not mouse-orbit. Node
+  positions are pinned via `fx/fy/fz` (v4.32 ignores a `position`
+  field) in the chronological layout; "force" unpins them. Initial
+  framing is computed from the node positions (`framePositions`)
+  rather than Reagraph's `fitNodesInView`.
+
+Verified end-to-end headlessly (Chromium + SwiftShader): session
+replay, gate fill, hold, guided flight, approve → merged, in both
+dev-server mode and the offline single file, with zero console
+errors.
