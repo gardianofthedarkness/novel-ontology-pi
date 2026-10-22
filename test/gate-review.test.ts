@@ -209,24 +209,24 @@ test("corrections: pin, re-pin replaces, pins map per block", async () => {
   assert.equal(pinsForBlock(all, "b0002").get("speaker:0"), "char_000001");
 });
 
-test("miniloop honors a pinned boundary against the model's own answer", async () => {
+test("miniloop honors a pinned scene start against the model's own answer", async () => {
   const { sentences } = sectionBlock("第一句。第二句。第三句。", 0);
   const ids = sentences.map((s) => s.id);
-  const mock = new MockDecisionModel({}); // every boundary -> 0 (no split)
+  const mock = new MockDecisionModel({}); // choice fallback: first option (points at every start)
   const loop = new Miniloop(mock, {});
   const plain = await loop.runBlock({
     blockId: "b0001", sentences, knownEntities: [], stateSummary: "t",
   });
-  assert.equal((plain.accepted["sceneSpans"] as string[][]).length, 1);
+  assert.equal((plain.accepted["sceneSpans"] as string[][]).length, 3, "model's own picks: singleton scenes");
   const pinned = await loop.runBlock({
     blockId: "b0001",
     sentences,
     knownEntities: [],
     stateSummary: "t",
-    pinnedAnswers: new Map([[`boundary:${ids[1]}`, 1]]),
+    pinnedAnswers: new Map([[`scene_start:${ids[0]}`, "NONE"]]),
   });
-  assert.equal((pinned.accepted["sceneSpans"] as string[][]).length, 2, "pin forced the split");
-  assert.deepEqual(pinned.appliedPins, [`boundary:${ids[1]}`]);
+  assert.equal((pinned.accepted["sceneSpans"] as string[][]).length, 1, "pin suppressed every scene start");
+  assert.deepEqual(pinned.appliedPins, [`scene_start:${ids[0]}`]);
 });
 
 /** Minimal loopback Jev mock (same wire answers as the ingest suite). */
@@ -295,13 +295,13 @@ test("recall: a held block re-runs with the pin honored and the old changeset ke
     const first = await ingestNovel(dir, file, { env, maxBlocks: 1 });
     assert.equal(first.stoppedAt, "b0001", "gate mode holds the first block");
 
-    // The reviewer traces the problem to one boundary decision and pins it.
+    // The reviewer traces the problem to one scene-start decision and pins it.
     const { sentences } = sectionBlock(
       "御坂美琴走进教室，坐了下来。她翻开课本，开始预习今天的内容。窗外的阳光洒在课桌上。",
       0,
     );
-    const pinKey = `boundary:${sentences[1].id}`;
-    await addCorrection(dir, { blockId: "b0001", key: pinKey, value: 1, reason: "new scene at the sunlight sentence" });
+    const pinKey = `scene_start:${sentences[0].id}`;
+    await addCorrection(dir, { blockId: "b0001", key: pinKey, value: "NONE", reason: "no new scene begins in this block" });
 
     const recalled = await runRecall(dir, "b0001", { env });
     assert.equal(recalled.pinsHonored, 1);

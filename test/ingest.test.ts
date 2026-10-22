@@ -43,11 +43,18 @@ async function startMockJev(): Promise<MockJev> {
           answers[key] = { noul: key.startsWith("present:") ? 0.97 : 0.1 };
         } else if (q.type === "choice") {
           const options = Object.keys(q.criteria ?? {});
-          const pick = options.includes("narration")
-            ? "narration"
-            : options.includes("none")
-              ? "none"
-              : options[0];
+          // Span segmentation (2026-10-22): a scene runs to the end of
+          // the region the mock is shown — one scene per block — and no
+          // new scene ever begins.
+          const pick = key.startsWith("scene_end:")
+            ? options[options.length - 1]
+            : key.startsWith("scene_start:")
+              ? "NONE"
+              : options.includes("narration")
+                ? "narration"
+                : options.includes("none")
+                  ? "none"
+                  : options[0];
           answers[key] = { choice: pick, probabilities: { [pick]: 1 }, confidence: 0.9 };
         } else {
           answers[key] = { score: 1, confidence: 0.9 };
@@ -133,8 +140,8 @@ test("ingest --auto-approve runs the full loop: blocks -> Jev miniloop -> gate -
     assert.ok(result.graph, "graph counts returned after merges");
 
     // The real JevClient was consulted through the wire mock...
-    assert.ok(jev.seenKeys.some((k) => k.startsWith("boundary:")), "scene-boundary questions asked");
-    assert.ok(jev.seenKeys.some((k) => k.startsWith("kind:")), "dialogue questions asked");
+    assert.ok(jev.seenKeys.some((k) => k.startsWith("scene_end:")), "scene segmentation questions asked");
+    assert.ok(jev.seenKeys.some((k) => k.startsWith("dlg_start:")), "dialogue selection questions asked");
     // ...and the seeded entity reached the presence patch, which only
     // happens when the cumulative registry is actually loaded per block
     // (the old code hardcoded an empty registry).
