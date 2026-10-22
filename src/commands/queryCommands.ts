@@ -1,8 +1,10 @@
 import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { BundleStore } from "../connectors/bundle.js";
 import { LadybugStore } from "../connectors/ladybug.js";
+import { latestEvent } from "../ontology/state.js";
 import { forkPoints } from "../ontology/retrieval.js";
-import type { Entity, OntEvent } from "../ontology/types.js";
+import type { CharacterStateAtPoint, Entity, OntEvent } from "../ontology/types.js";
 
 /**
  * The read-only browsing commands: `novel query`, `novel search`,
@@ -125,6 +127,44 @@ export async function novelSearch(
     limit,
     results: await store.searchText(text, limit),
   }));
+}
+
+export interface NovelStateResult {
+  novelDir: string;
+  characterId: string;
+  state: CharacterStateAtPoint;
+}
+
+/**
+ * `novel state <novel-dir> <character-id> [--at <event-id>]` — the
+ * character's state at a point: the deterministic fold of the bundle's
+ * state deltas (decision #10). Unlike the other commands here this
+ * reads the BUNDLE, not the graph — state is fold-on-read over the
+ * source of truth, so it works before any graph build. Without --at,
+ * the point is the latest canon event.
+ */
+export async function novelState(
+  novelDir: string,
+  characterId: string,
+  atEventId?: string,
+): Promise<NovelStateResult> {
+  const bundle = new BundleStore(join(novelDir, "ontology"));
+  let at = atEventId;
+  if (!at) {
+    const rows = await bundle.loadFile<OntEvent>("events.jsonl");
+    const byId = new Map<string, OntEvent>();
+    for (const e of rows) byId.set(e.id, e);
+    const latest = latestEvent([...byId.values()]);
+    if (!latest) {
+      throw new Error(`No canon events in ${novelDir} yet — nothing to fold state from.`);
+    }
+    at = latest.id;
+  }
+  const state = await bundle.getStateAt(characterId, at);
+  if (!state) {
+    throw new Error(`Cannot fold state at unknown event ${at} in ${novelDir}.`);
+  }
+  return { novelDir, characterId, state };
 }
 
 /** `novel timeline list <novel-dir>` — the workspace's timelines. */

@@ -111,6 +111,31 @@ export interface Branch {
   label: string;
 }
 
+/**
+ * One state delta, as proposed by extraction (sector 08) and persisted
+ * at apply time (state materialization v1, 2026-10-22). Deltas are the
+ * records; a character's state is never stored — it is the fold of the
+ * deltas up to a point (decision #10). Emotions and relationships are
+ * ADDITIVE deltas (owner's call, 2026-10-22), each emitted clamped to
+ * [-1, 1]; knowledge/goals/possessions are set add/remove; location
+ * replaces when non-null.
+ */
+export interface StateChange {
+  /** The originating proposal id — stable and unique per (block, event, character). */
+  id: string;
+  characterId: string;
+  /** The delta takes effect AFTER this event. */
+  afterEventId: string;
+  emotions: Record<string, number>;
+  knowledgeAdd: string[];
+  goalsAdd: string[];
+  /** Target entity id -> additive affinity delta. */
+  relationships: Record<string, number>;
+  location: string | null;
+  possessionsAdd: string[];
+  possessionsRemove: string[];
+}
+
 /** Character state at a point = fold of the event stream up to that point. */
 export interface CharacterStateAtPoint {
   characterId: string;
@@ -119,4 +144,6 @@ export interface CharacterStateAtPoint {
   knowledge: string[];
   goals: string[];
   relationships: Record<string, number>;
+  location: string | null;
+  possessions: string[];
 }

@@ -14,6 +14,7 @@ import type {
   Relation,
   RelationType,
   Scene,
+  StateChange,
 } from "../ontology/types.js";
 
 /**
@@ -136,6 +137,18 @@ export class LadybugStore implements OntologyStore {
   }
 
   // ---------------- writes (approved merges + graph build only) ----------
+
+  async addStateChange(_change: StateChange): Promise<void> {
+    throw new Error(
+      "State deltas live in the bundle (state-changes.jsonl) and are folded on read; apply through BundleStore.",
+    );
+  }
+
+  async addAlias(_entityId: string, _aliasText: string): Promise<boolean> {
+    throw new Error(
+      "Aliases materialize in the bundle (entities.jsonl); apply through BundleStore.",
+    );
+  }
 
   async upsertEntity(e: Entity): Promise<void> {
     await this.initSchema();
@@ -355,7 +368,7 @@ export class LadybugStore implements OntologyStore {
 
   async getStateAt(): Promise<CharacterStateAtPoint | null> {
     throw new Error(
-      "State folding lands with the extraction step (state deltas are not in the graph yet).",
+      "State folding reads the bundle's state deltas (BundleStore.getStateAt); the graph does not carry deltas in v1.",
     );
   }
 
