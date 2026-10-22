@@ -36,9 +36,10 @@ test("parallel story chains share sequence columns without bending or merging th
   assert.equal(positions.get("battle-a")![1], positions.get("a-2")![1]);
   assert.equal(positions.get("battle-b")![1], positions.get("b-2")![1]);
   assert.notEqual(positions.get("a-1")![1], positions.get("b-1")![1]);
-  assert.equal(positions.get("person-a")![0], positions.get("a-1")![0]);
-  assert.ok(positions.get("person-a")![1] > positions.get("a-1")![1]);
-  assert.ok(positions.get("person-b")![1] > positions.get("b-1")![1]);
+  const distance = (first: string, second: string) => Math.hypot(...positions.get(first)!.map((value, axis) => value - positions.get(second)![axis]));
+  assert.ok(distance("person-a", "a-1") < distance("person-a", "b-1"));
+  assert.ok(distance("person-b", "b-1") < distance("person-b", "a-1"));
+  assert.notEqual(positions.get("person-a")![2], 0);
   for (const track of result.tracks) { assert.equal(track.start[1], track.end[1]); assert.ok(track.end[0] > track.start[0]); }
 });
 

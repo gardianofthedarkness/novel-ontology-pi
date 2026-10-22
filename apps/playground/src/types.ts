@@ -23,6 +23,16 @@ export interface WorldNode {
   id: string;
   label: string;
   subLabel?: string;
+  summary?: string;
+  relatedSummaries?: { id: string; text: string }[];
+  cluster?: {
+    kind: "scenes" | "records";
+    ids: string[];
+    recordCount: number;
+    proposed: number;
+    held: number;
+    focusSceneId?: string;
+  };
   kind: NodeKind;
   state: CanonState;
   /** Which big event's interior this node lives in (null = lane-level node). */
@@ -30,6 +40,8 @@ export interface WorldNode {
   lane: LaneId;
   /** Rough chronological order key inside its view. */
   chrono: number;
+  trackId?: string;
+  trackLabel?: string;
   /** Position in the lanes view. */
   lanePos: [number, number, number];
   /** Position inside the parent big event's interior view. */
@@ -43,6 +55,9 @@ export interface WorldEdge {
   kind: "flow" | "contains" | "speaks" | "cross";
   state: CanonState;
   parent: string | null;
+  weight?: number;
+  derived?: boolean;
+  relationLabel?: string;
 }
 
 export interface ChangeSet {

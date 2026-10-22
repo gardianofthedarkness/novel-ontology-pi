@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { root, novel, agentEvents } from './config.mjs';
 import { runOutcome } from './run-outcome.mjs';
+import { sceneContext } from './scene-context.mjs';
 
 async function json(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return fallback; throw error; }
@@ -111,7 +112,8 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     const allEvents = [...eventMap.values(), ...proposed.filter((proposal) => proposal.kind === 'create_event').map((proposal) => proposal.payload)];
     const ordered = fold(allEvents).filter((event) => event.chapterIndex === chapter.index && ids.has(event.id)).sort((first, second) => first.chronologicalOrder - second.chronologicalOrder);
     for (let index = 1; index < ordered.length; index++) addEdge(ordered[index - 1].id, ordered[index].id, 'flow', state, 'narrative-order');
-    interiors[chapterId] = { nodes, edges };
+    const allScenes = [...sceneMap.values(), ...proposed.filter((proposal) => proposal.kind === 'create_scene').map((proposal) => proposal.payload)];
+    interiors[chapterId] = sceneContext(nodes, edges, allScenes, allEvents);
     const overview = nodes.filter((node) => node.state !== 'canon').slice(-6);
     for (const node of overview) {
       if (laneNodes.some((entry) => entry.id === node.id)) continue;

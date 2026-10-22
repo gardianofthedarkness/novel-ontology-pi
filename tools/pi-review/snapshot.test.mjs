@@ -29,6 +29,19 @@ test('fresh database contains no sample ontology', () => fixture(async (director
   assert.equal(result.gates.length, 0);
 }));
 
+test('live snapshot preserves scene/event memberships and stored summaries instead of disconnected scene IDs', () => fixture(async (directory, runtime) => {
+  await writeFile(`${directory}/ontology/events.jsonl`, JSON.stringify({ ...proposals[1].payload, evidence: { text: 'PRIVATE-SOURCE-QUOTE', sentenceIds: ['section0_sentence1'] } }) + '\n');
+  await writeFile(`${directory}/ontology/scenes.jsonl`, JSON.stringify({ id: 'scene_1', chapterIndex: 0, sentenceIds: ['section0_sentence1'], charactersPresent: [], charactersMentioned: [], turns: [], locationId: null }) + '\n');
+  const result = await snapshot(directory, runtime);
+  const graph = result.world.interiors.chapter_0;
+  const scene = graph.nodes.find((node) => node.id === 'scene_1');
+  assert.equal(scene.summary, 'An action');
+  assert.equal(scene.label, 'An action');
+  assert.ok(graph.edges.some((edge) => edge.from === 'scene_1' && edge.to === 'evt_1' && edge.kind === 'contains' && edge.derived));
+  assert.ok(!JSON.stringify(result).includes('PRIVATE-SOURCE-QUOTE'));
+  assert.ok(!JSON.stringify(result).includes('sentenceIds'));
+}));
+
 test('held proposals become real ghost records without exposing payloads or quotes', () => fixture(async (directory, runtime) => {
   await writeFile(`${directory}/changesets/cs_b0001.json`, JSON.stringify({ id: 'cs_b0001', blockId: 'b0001', status: 'held', proposals }));
   const result = await snapshot(directory, runtime);
