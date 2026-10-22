@@ -20,7 +20,7 @@ import type {
 } from "./types";
 
 const KNIT_SITE = "be_found"; // the branch big event System 1 knits in this session
-const DB = "/db/novel";
+const DB = "db/novel";
 let feedSeq = 0;
 
 export default function App() {

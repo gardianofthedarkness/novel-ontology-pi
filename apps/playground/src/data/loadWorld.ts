@@ -17,7 +17,7 @@ export interface LoadedWorld {
  * is embedded in a <script id="db-view"> tag instead, so the page
  * works fully offline from one file.
  */
-export async function loadWorld(url = "/db/novel/view.json"): Promise<LoadedWorld> {
+export async function loadWorld(url = "db/novel/view.json"): Promise<LoadedWorld> {
   const embedded = document.getElementById("db-view")?.textContent;
   if (embedded) return JSON.parse(embedded) as LoadedWorld;
   const res = await fetch(url);
