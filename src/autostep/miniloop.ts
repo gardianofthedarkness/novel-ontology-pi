@@ -4,6 +4,7 @@ import type { DialogueTurn, Entity } from "../ontology/types.js";
 import { newChangeSet, type ChangeSet } from "../merge/changeset.js";
 import type { PatchContext } from "./patches/types.js";
 import { PATCH_REGISTRY } from "./patches/index.js";
+import { linkExchangeScenes } from "./segmentation.js";
 import {
   nominateCandidateSpans,
   scanKnownNames,
@@ -42,9 +43,12 @@ export interface MiniloopProgress {
  * The System 1 autostep miniloop.
  *
  * Rolls over ONE block of novel text (a chapter, or a long block) that has
- * already been auto-sectioned into sentences. For each window it runs the
- * decision patches in registry order; each patch asks the decision model
- * (Jev) ONE batched call of typed questions and interprets the answers.
+ * already been auto-sectioned into sentences. Block-level segmentation
+ * pipelines (scene tiling, dialogue selection, name refinement) run
+ * CONCURRENTLY first — each sequential in its own decisions, none
+ * waiting on another — then, for each window, the remaining patches run
+ * in registry order; each patch asks the decision model (Jev) ONE
+ * batched call of typed questions and interprets the answers.
  *
  * Recursion: a patch whose unit confidence falls between its gates
  * triggers a re-ask with an expanded window; below the re-ask gate the
@@ -113,15 +117,95 @@ export class Miniloop {
     // New-name candidates (sector 04): code nominates spans, the
     // optional zero-context refiner extracts the name forms, and the
     // name patch's Jev questions judge them — once per block, in the
-    // first window (the list is cleared after it).
+    // first window (the list is cleared after it). The refinement is
+    // a pipeline of its own: it runs concurrently with segmentation
+    // below and lands before the first window needs it.
     const nominations = nominateCandidateSpans(input.sentences, input.knownEntities);
-    ctx.accepted["nameCandidates"] = this.opts.refineNameCandidates
-      ? await this.opts.refineNameCandidates(nominations, input.sentences)
-      : nominations.map((n) => n.span);
+    ctx.accepted["nameCandidates"] = nominations.map((n) => n.span);
 
     const windows: WindowRecord[] = [];
     const seenProposalIds = new Set<string>();
     const appliedPins: string[] = [];
+    // Pin-aware decision channel, shared by the prepass and the window
+    // loop (sector 09): a pinned key keeps the question on the record
+    // but the applied answer is the reviewing agent's correction, at
+    // full confidence.
+    const decideWithPins = async (
+      state: string,
+      questions: Parameters<DecisionModel["decide"]>[1],
+    ) => {
+      const decided = await this.decisions.decide(state, questions);
+      return decided.map((a) => {
+        if (input.pinnedAnswers?.has(a.key)) {
+          if (!appliedPins.includes(a.key)) appliedPins.push(a.key);
+          return { ...a, value: input.pinnedAnswers.get(a.key) as string | number, confidence: 1 };
+        }
+        return a;
+      });
+    };
+    const absorbOutcome = (
+      patchId: string,
+      outcome: { proposals: ChangeSet["proposals"]; escalations: { unitId: string; reason: string }[] },
+    ) => {
+      for (const p of outcome.proposals) {
+        if (seenProposalIds.has(p.id)) continue;
+        seenProposalIds.add(p.id);
+        changeset.proposals.push(p);
+      }
+      escalations.push(
+        ...outcome.escalations.map((e) => ({ patchId, ...e })),
+      );
+    };
+    // Block-level pipelines run CONCURRENTLY (the owner's pipelining
+    // model, 2026-10-22): scene tiling, dialogue selection, and the
+    // name-candidate refinement are independent decision pipelines —
+    // each is sequential in its own calls (a span's start depends on
+    // the last), but no pipeline waits on another, so the prepass
+    // costs the LONGEST pipeline, not the sum. They write disjoint
+    // accepted keys; the one true dependency — dialogue exchanges
+    // link to scenes — is a pure join computed after all land.
+    const snapshotProgress = async (patchId: string) => {
+      await input.onProgress?.({
+        blockId: input.blockId,
+        patchId,
+        proposals: [...changeset.proposals],
+        sceneSpans: ((ctx.accepted["sceneSpans"] as string[][] | undefined) ?? []).map((span) => [...span]),
+        dialogueUnits: ((ctx.accepted["dialogueUnits"] as string[][] | undefined) ?? []).map((unit) => [...unit]),
+        turns: [],
+      });
+    };
+    const pipelines: Promise<void>[] = [];
+    if (this.opts.refineNameCandidates) {
+      const refine = this.opts.refineNameCandidates;
+      pipelines.push(
+        (async () => {
+          ctx.accepted["nameCandidates"] = await refine(nominations, input.sentences);
+        })(),
+      );
+    }
+    for (const patch of PATCH_REGISTRY) {
+      if (!patch.prepass) continue;
+      pipelines.push(
+        (async () => {
+          const outcome = await patch.prepass!(ctx, decideWithPins, () => snapshotProgress(patch.id));
+          absorbOutcome(patch.id, outcome);
+          await snapshotProgress(patch.id);
+        })(),
+      );
+    }
+    await Promise.all(pipelines);
+    // The join: link dialogue exchanges to the scene partition.
+    const unitSpans = ctx.accepted["dialogueUnitSpans"] as [number, number][] | undefined;
+    const sceneSpans = ctx.accepted["sceneSpans"] as string[][] | undefined;
+    if (unitSpans && sceneSpans) {
+      ctx.accepted["dialogueUnitScenes"] = linkExchangeScenes(input.sentences, unitSpans, sceneSpans);
+    }
+    // Block-level dialogue exchanges from the prepass; the window loop
+    // projects (clips) them per window for the speaker patch, and the
+    // block-level list is restored into `accepted` at the end.
+    const blockDialogueUnits = (
+      (ctx.accepted["dialogueUnits"] as string[][] | undefined) ?? []
+    ).map((u) => [...u]);
     const identityRegistry = input.knownEntities.filter((entity) => entity.kind === "Character").map((entity) => `${entity.id}: ${entity.names.map((form) => form.text).join(" / ")}`).join("\n");
     let firstWindow = true;
     for (let w = 0; w < input.sentences.length; w += windowSize) {
@@ -136,7 +220,12 @@ export class Miniloop {
       ctx.accepted["charactersPresent"] = [];
       ctx.accepted["charactersMentioned"] = [];
       ctx.accepted["turns"] = [];
-      ctx.accepted["dialogueUnits"] = undefined;
+      // Project the block-level exchanges into this window: the
+      // speaker patch attributes turns over the clipped units.
+      const windowIdSet = new Set(ctx.windowSentenceIds);
+      ctx.accepted["dialogueUnits"] = blockDialogueUnits
+        .map((u) => u.filter((id) => windowIdSet.has(id)))
+        .filter((u) => u.length > 0);
       ctx.accepted["sceneSpans"] = ctx.accepted["sceneSpans"] ?? [];
 
       for (const patch of PATCH_REGISTRY) {
@@ -149,31 +238,12 @@ export class Miniloop {
               `${id}: ${input.sentences.find((s) => s.id === id)?.text ?? ""}`,
           )
           .join("\n");
-        const decided = await this.decisions.decide(
+        const decided = await decideWithPins(
           `${ctx.stateSummary}\nIDENTITY REGISTRY (not evidence of presence):\n${identityRegistry}\n---\n${windowText}`,
           questions,
         );
-        // Recall pins (sector 09): a pinned key keeps the question on
-        // the record but the applied answer is the reviewing agent's
-        // correction, at full confidence.
-        const answers = decided.map((a) => {
-          if (input.pinnedAnswers?.has(a.key)) {
-            if (!appliedPins.includes(a.key)) appliedPins.push(a.key);
-            return { ...a, value: input.pinnedAnswers.get(a.key) as string | number, confidence: 1 };
-          }
-          return a;
-        });
-        const outcome = patch.applyAnswers(ctx, answers);
-        for (const p of outcome.proposals) {
-          // A patch that re-runs per window must not double-propose:
-          // proposal ids are deterministic, so dedupe on them.
-          if (seenProposalIds.has(p.id)) continue;
-          seenProposalIds.add(p.id);
-          changeset.proposals.push(p);
-        }
-        escalations.push(
-          ...outcome.escalations.map((e) => ({ patchId: patch.id, ...e })),
-        );
+        const outcome = patch.applyAnswers(ctx, decided);
+        absorbOutcome(patch.id, outcome);
         await input.onProgress?.({
           blockId: input.blockId,
           patchId: patch.id,
@@ -199,6 +269,9 @@ export class Miniloop {
       }
     }
 
+    // `accepted` reports the block-level exchanges (the per-window
+    // projections were working state for the speaker patch).
+    ctx.accepted["dialogueUnits"] = blockDialogueUnits;
     changeset.status = "pending_review";
     return { changeset, escalations, accepted: ctx.accepted, windows, appliedPins };
   }
