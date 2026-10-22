@@ -1,17 +1,18 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type GraphNode, type GraphEdge } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Vector3 } from "three";
+import { Vector3, type PerspectiveCamera } from "three";
 import { ArchiveNode } from "./ArchiveNode";
 import { recordColor } from "../archive";
 import type { WorldEdge, WorldNode } from "../types";
 import type { TimelineTrack } from "../data/timelineLayout";
+import { cameraFrame } from "../data/cameraFraming";
 
 export const SCALE = 3;
 
 const archiveTheme = {
   ...darkTheme,
-  canvas: { background: "#171d1b", fog: null },
+  canvas: { background: "#080f18", fog: null },
   node: { ...darkTheme.node, opacity: 1, selectedOpacity: 1, inactiveOpacity: 1 },
   edge: { ...darkTheme.edge, fill: "#9aaa84", activeFill: "#acbc8e", opacity: 0.85, selectedOpacity: 1, inactiveOpacity: 0.7 },
   arrow: { fill: "#8a947c", activeFill: "#acbc8e" },
@@ -26,30 +27,32 @@ export function framePositions(
   if (!positions.length) return;
   const controls = ref.current?.getControls?.() as {
     camera: { fov: number; aspect: number };
+    getPosition: (position: Vector3) => Vector3;
+    getTarget: (position: Vector3) => Vector3;
     setTarget: (horizontal: number, vertical: number, depth: number, transition?: boolean) => unknown;
     setPosition: (horizontal: number, vertical: number, depth: number, transition?: boolean) => unknown;
   } | undefined;
   if (!controls) return;
-  const minimum = [Infinity, Infinity, Infinity];
-  const maximum = [-Infinity, -Infinity, -Infinity];
-  for (const position of positions) {
-    for (let axis = 0; axis < 3; axis++) {
-      minimum[axis] = Math.min(minimum[axis], position[axis]);
-      maximum[axis] = Math.max(maximum[axis], position[axis]);
-    }
-  }
-  const center = minimum.map((value, axis) => (value + maximum[axis]) / 2);
-  const halfWidth = (maximum[0] - minimum[0]) / 2 + 190;
-  const halfHeight = (maximum[1] - minimum[1]) / 2 + 230;
-  const tangent = Math.tan((controls.camera.fov || 10) * Math.PI / 360);
   const stage = document.querySelector<HTMLElement>(".stage");
   const height = stage?.clientHeight || window.innerHeight;
   const width = stage?.clientWidth || window.innerWidth;
-  const usableHeight = Math.max(0.4, (height - 300) / height);
-  const usableWidth = Math.max(0.5, (width - 90) / width);
-  const distance = Math.max(halfHeight / (tangent * usableHeight), halfWidth / (tangent * (controls.camera.aspect || 1) * usableWidth)) * pad;
-  void controls.setTarget(center[0], center[1], center[2], animated);
-  void controls.setPosition(center[0] + distance * 0.035, center[1] + distance * 0.14, center[2] + distance, animated);
+  const bounds = stage?.getBoundingClientRect();
+  const sheet = document.querySelector<HTMLElement>(".inspector-sheet:not([hidden])")?.getBoundingClientRect();
+  const toolbar = document.querySelector<HTMLElement>(".scene-toolbar")?.getBoundingClientRect();
+  const sequence = document.querySelector<HTMLElement>(".scene-sequence")?.getBoundingClientRect();
+  const transport = document.querySelector<HTMLElement>(".pipeline")?.getBoundingClientRect();
+  const inset = { left: 28, right: 65, top: Math.max(95, (sequence?.bottom ?? toolbar?.bottom ?? 170) - (bounds?.top ?? 0) + 18), bottom: transport && bounds ? bounds.bottom - transport.top + 32 : 200 };
+  if (sheet && bounds) {
+    if (sheet.width > width * 0.55) inset.bottom = Math.max(inset.bottom, bounds.bottom - sheet.top + 16);
+    else inset.right = Math.max(inset.right, bounds.right - sheet.left + 18);
+  }
+  const direction = positions.length === 1
+    ? controls.getPosition(new Vector3()).sub(controls.getTarget(new Vector3())).toArray() as [number, number, number]
+    : document.querySelector('.structure-switch button[aria-pressed="true"]')?.textContent?.includes("Chronology") ? [0.08, 0.25, 1] as [number, number, number] : undefined;
+  const frame = cameraFrame(positions, { width, height, fov: controls.camera.fov || 45, inset, padding: pad, margin: positions.length === 1 ? 105 : 190, direction });
+  if (!frame) return;
+  void controls.setTarget(...frame.target, animated);
+  void controls.setPosition(...frame.position, animated);
 }
 
 export function scaledPos(node: WorldNode, interior: boolean): [number, number, number] {
@@ -78,7 +81,7 @@ function toGraphEdge(edge: WorldEdge): GraphEdge {
   return {
     id: edge.id, source: edge.from, target: edge.to,
     fill: edge.state === "proposed" ? "#d6b57e" : edge.state === "held" ? "#819398" : edge.kind === "cross" ? "#c0a79a" : edge.kind === "speaks" ? "#a79ab4" : "#9aaa84",
-    size: edge.kind === "flow" ? 2.5 : 2,
+    size: edge.weight && Number.isFinite(edge.weight) && edge.weight > 0 ? Math.min(5, 1.5 + Math.log1p(edge.weight)) : edge.kind === "flow" ? 2.5 : 2,
     dashed: edge.state !== "canon" || edge.kind === "cross",
     dashArray: [12, 8],
     arrowPlacement: "mid",
@@ -105,12 +108,12 @@ function LabelProjector({ bus, selectedId, hoveredId, nodes, tracks, interior }:
       object.getWorldPosition(point.current);
       bus.positions.set(node.id, [point.current.x, point.current.y, point.current.z]);
       const focused = node.id === selectedId || node.id === hoveredId;
-      if (!focused && node.state === "canon" && node.kind !== "bigEvent" && node.kind !== "location" && node.kind !== "event" && node.kind !== "character") return;
+      if (!focused && node.state === "canon" && node.kind === "dialogue") return;
       if (node.kind === "character" && interior) { point.current.x += 125; point.current.y -= 10; }
       else if (node.kind !== "bigEvent") point.current.y -= 110;
       point.current.project(camera);
       if (point.current.z > 1 || Math.abs(point.current.x) > 1 || Math.abs(point.current.y) > 1) return;
-      candidates.push({ element, horizontal: (point.current.x * 0.5 + 0.5) * size.width, vertical: (-point.current.y * 0.5 + 0.5) * size.height, priority: node.id === selectedId ? 0 : node.id === hoveredId ? 1 : node.kind === "bigEvent" || node.state !== "canon" ? 2 : 3 });
+      candidates.push({ element, horizontal: (point.current.x * 0.5 + 0.5) * size.width, vertical: (-point.current.y * 0.5 + 0.5) * size.height, priority: node.id === selectedId ? 0 : node.id === hoveredId ? 1 : node.kind === "bigEvent" || node.state !== "canon" ? 2 : node.kind === "scene" ? 3 : node.kind === "character" ? 4 : 5 });
     });
     const occupied: { left: number; top: number; right: number; bottom: number }[] = [];
     candidates.sort((first, second) => first.priority - second.priority);
@@ -139,17 +142,33 @@ function TimelineRails({ tracks }: { tracks: TimelineTrack[] }) {
   return <>{tracks.map((track) => {
     const length = (track.end[0] - track.start[0]) * SCALE;
     const color = track.lane === "branch" ? "#9e877a" : "#81946d";
-    return <group key={track.id} position={[track.start[0] * SCALE, track.start[1] * SCALE, -65]}>
+    return <group key={track.id} position={[track.start[0] * SCALE, track.start[1] * SCALE, track.start[2] * SCALE]}>
       <mesh position={[length / 2, 0, 0]}><boxGeometry args={[length, 2.2, 2.2]} /><meshBasicMaterial color={color} /></mesh>
       <mesh position={[length + 8, 0, 0]} rotation={[0, 0, -Math.PI / 2]}><coneGeometry args={[9, 24, 3]} /><meshBasicMaterial color={color} /></mesh>
     </group>;
   })}</>;
 }
 
+function OntologyGrid({ positions }: { positions: [number, number, number][] }) {
+  const bounds = useMemo(() => {
+    const extent = Math.max(1800, ...positions.flatMap((position) => position.map(Math.abs)));
+    const size = Math.ceil((extent * 2 + 1800) / 600) * 600;
+    const floor = Math.min(-600, ...positions.map((position) => position[1] - 320));
+    return { size, floor, back: -size / 2 };
+  }, [positions]);
+  return <group>
+    <gridHelper args={[bounds.size, Math.min(100, bounds.size / 180), "#365e78", "#1a3043"]} position={[0, bounds.floor, 0]} />
+    <gridHelper args={[bounds.size, Math.min(100, bounds.size / 180), "#24445b", "#142536"]} position={[0, bounds.floor + bounds.size / 2, bounds.back]} rotation={[Math.PI / 2, 0, 0]} />
+    <axesHelper args={[Math.min(bounds.size / 3, 1400)]} position={[-bounds.size / 2, bounds.floor + 2, bounds.back]} />
+  </group>;
+}
+
 function SemanticZoom({ nodes, openableIds, onOpen, interior, onExit }: { nodes: WorldNode[]; openableIds: string[]; onOpen: (node: WorldNode) => void; interior: boolean; onExit: () => void }) {
   const { camera, scene, gl, size } = useThree();
   const intent = useRef({ at: -Infinity, horizontal: 0, vertical: 0, direction: "in" as "in" | "out" });
   const fired = useRef(false);
+  const nodeKey = JSON.stringify([nodes.map((node) => node.id), openableIds]);
+  useEffect(() => { fired.current = false; intent.current.at = -Infinity; }, [nodeKey]);
   const available = useMemo(() => new Map(nodes.filter((node) => openableIds.includes(node.id)).map((node) => [node.id, node])), [nodes, openableIds]);
   useEffect(() => {
     const surface = gl.domElement.closest(".stage") ?? gl.domElement;
@@ -188,8 +207,7 @@ function SemanticZoom({ nodes, openableIds, onOpen, interior, onExit }: { nodes:
     if (fired.current || performance.now() - intent.current.at > 1500) return;
     const usableHeight = Math.max(0.4, (size.height - 300) / size.height);
     const usableWidth = Math.max(0.5, (size.width - 90) / size.width);
-    if (interior) {
-      if (intent.current.direction !== "out") return;
+    if (interior && intent.current.direction === "out") {
       const points: Vector3[] = [];
       scene.traverse((object) => {
         if (object.userData.type !== "node") return;
@@ -211,10 +229,12 @@ function SemanticZoom({ nodes, openableIds, onOpen, interior, onExit }: { nodes:
       const position = object.getWorldPosition(new Vector3());
       const center = position.clone().project(camera);
       if (center.z > 1 || Math.abs(center.x) > 1.2 || Math.abs(center.y) > 1.2) return;
-      const top = position.clone().add(new Vector3(0, 180, 0)).project(camera);
-      const bottom = position.clone().add(new Vector3(0, -180, 0)).project(camera);
-      const left = position.clone().add(new Vector3(-170, 0, 0)).project(camera);
-      const right = position.clone().add(new Vector3(170, 0, 0)).project(camera);
+      const height = node.kind === "bigEvent" ? 180 : 75;
+      const width = node.kind === "bigEvent" ? 170 : 80;
+      const top = position.clone().add(new Vector3(0, height, 0)).project(camera);
+      const bottom = position.clone().add(new Vector3(0, -height, 0)).project(camera);
+      const left = position.clone().add(new Vector3(-width, 0, 0)).project(camera);
+      const right = position.clone().add(new Vector3(width, 0, 0)).project(camera);
       const halfHeight = Math.abs(top.y - bottom.y) / 2;
       const halfWidth = Math.abs(right.x - left.x) / 2;
       if (halfHeight < 0.68 * usableHeight || Math.abs(center.x - intent.current.horizontal) > halfWidth + 0.12 || Math.abs(center.y - intent.current.vertical) > halfHeight + 0.12) return;
@@ -231,12 +251,19 @@ function Framing({ graphRef, positions, viewKey, reducedMotion }: {
 }) {
   const { width, height } = useThree((state) => state.size);
   const scene = useThree((state) => state.scene);
+  const camera = useThree((state) => state.camera) as PerspectiveCamera;
   const surface = useThree((state) => state.gl.domElement);
   useEffect(() => {
+    camera.fov = 42;
+    camera.near = 1;
+    camera.far = 2_000_000;
+    camera.updateProjectionMatrix();
     let interacted = false;
     const markInteraction = () => { interacted = true; };
-    surface.addEventListener("wheel", markInteraction, { passive: true });
-    surface.addEventListener("pointerdown", markInteraction, { passive: true });
+    const interactionSurface = surface.closest(".stage") ?? surface;
+    interactionSurface.addEventListener("wheel", markInteraction, { passive: true });
+    interactionSurface.addEventListener("pointerdown", markInteraction, { passive: true });
+    interactionSurface.addEventListener("keydown", markInteraction);
     const apply = () => { if (!interacted) framePositions(graphRef, positions.current, 1.18, !reducedMotion); };
     const settle = () => {
       if (interacted) return;
@@ -252,23 +279,25 @@ function Framing({ graphRef, positions, viewKey, reducedMotion }: {
     const settled = setTimeout(settle, 900);
     return () => {
       clearTimeout(initial); clearTimeout(settled);
-      surface.removeEventListener("wheel", markInteraction);
-      surface.removeEventListener("pointerdown", markInteraction);
+      interactionSurface.removeEventListener("wheel", markInteraction);
+      interactionSurface.removeEventListener("pointerdown", markInteraction);
+      interactionSurface.removeEventListener("keydown", markInteraction);
     };
-  }, [graphRef, positions, viewKey, width, height, reducedMotion, scene, surface]);
+  }, [graphRef, positions, viewKey, width, height, reducedMotion, scene, surface, camera]);
   return null;
 }
 
 interface Props {
   nodes: WorldNode[]; edges: WorldEdge[]; interior: boolean; viewId: string;
   tracks: TimelineTrack[]; openableIds: string[];
+  contextNodeIds?: string[];
   labelBus: LabelBus; selectedId: string | null; reducedMotion: boolean;
   onNodeClick: (node: WorldNode) => void; onNodeOpen: (node: WorldNode) => void;
   onViewBack: () => void;
 }
 
 export const WorldGraph = forwardRef<GraphCanvasRef, Props>(function WorldGraph(
-  { nodes, edges, tracks, interior, viewId, openableIds, labelBus, selectedId, reducedMotion, onNodeClick, onNodeOpen, onViewBack }, ref,
+  { nodes, edges, tracks, interior, viewId, openableIds, contextNodeIds, labelBus, selectedId, reducedMotion, onNodeClick, onNodeOpen, onViewBack }, ref,
 ) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const positions = useRef<[number, number, number][]>([]);
@@ -276,8 +305,8 @@ export const WorldGraph = forwardRef<GraphCanvasRef, Props>(function WorldGraph(
   const graphNodes = useMemo(() => nodes.map((node) => toGraphNode(node, interior, true)), [nodes, interior]);
   const graphEdges = useMemo(() => {
     const ids = new Set(nodes.map((node) => node.id));
-    return edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to)).map(toGraphEdge);
-  }, [nodes, edges]);
+    return edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to) && (!interior || !edge.id.includes(":narrative-order:"))).map(toGraphEdge);
+  }, [nodes, edges, interior]);
   const selections = useMemo(() => selectedId ? [selectedId] : [], [selectedId]);
   return (
     <GraphCanvas
@@ -289,6 +318,7 @@ export const WorldGraph = forwardRef<GraphCanvasRef, Props>(function WorldGraph(
       selections={selections}
       glOptions={{ preserveDrawingBuffer: true, antialias: true }}
       layoutType="forceDirected3d" cameraMode="rotate" draggable={false} labelType="none"
+      minDistance={260} maxDistance={1_000_000}
       edgeArrowPosition="end" edgeInterpolation="linear" animated={false}
       onNodeClick={(node) => onNodeClick(node.data.world as WorldNode)}
       onNodePointerOver={(node) => setHoveredId(node.id)}
@@ -297,6 +327,7 @@ export const WorldGraph = forwardRef<GraphCanvasRef, Props>(function WorldGraph(
       <ambientLight intensity={0.8} />
       <directionalLight position={[-900, 1800, 2200]} intensity={1.6} color="#fff9e9" />
       <directionalLight position={[1400, -600, 500]} intensity={0.5} color="#cdd4c4" />
+      <OntologyGrid positions={contextNodeIds ? nodes.filter((node) => contextNodeIds.includes(node.id)).map((node) => scaledPos(node, interior)) : positions.current} />
       <TimelineRails tracks={tracks} />
       <Framing graphRef={ref as { current: GraphCanvasRef | null }} positions={positions} viewKey={viewId} reducedMotion={reducedMotion} />
       <LabelProjector bus={labelBus} selectedId={selectedId} hoveredId={hoveredId} nodes={nodes} tracks={tracks} interior={interior} />

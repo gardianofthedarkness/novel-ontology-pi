@@ -7,6 +7,8 @@ import { loadWorld, type LoadedWorld } from "./data/loadWorld";
 import { FileEventSource } from "./events/fileSource";
 import { SseEventSource } from "./events/sseSource";
 import { RecordInspector } from "./components/RecordInspector";
+import { ExplorerNavigation } from "./components/ExplorerNavigation";
+import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
 import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
 import type {
@@ -48,6 +50,8 @@ export default function App() {
     [],
   );
   const graphRef = useRef<GraphCanvasRef>(null);
+  const focusFlight = useRef<number | null>(null);
+  useEffect(() => () => { if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current); }, []);
   const inspectorRef = useRef<HTMLDivElement>(null);
   const labelBus = useMemo<LabelBus>(
     () => ({ targets: new Map(), active: new Set(), positions: new Map(), trackTargets: new Map() }),
@@ -214,8 +218,9 @@ export default function App() {
     (node: WorldNode) => {
       if (node.kind === "bigEvent" && world?.interiors[node.id]) {
         setView({ mode: "interior", bigEventId: node.id });
-        setSelectedId(world.interiors[node.id].nodes[0]?.id ?? null);
+        setSelectedId(null);
         setPanel("record");
+        setInspectorOpen(false);
         if (node.id === KNIT_SITE) {
           setActivity((a) => ({ ...a, count: 0, shine: false }));
         }
@@ -224,7 +229,7 @@ export default function App() {
     [world],
   );
 
-  const { nodes, edges } = useMemo(() => {
+  const { nodes: sourceNodes, edges: sourceEdges } = useMemo(() => {
     if (!world) return { nodes: [] as WorldNode[], edges: [] as WorldEdge[] };
     if (view.mode === "lanes") {
       return withOverviewActivity(world.laneNodes, world.laneEdges, dynNodes, dynEdges);
@@ -238,8 +243,10 @@ export default function App() {
     };
   }, [world, view, dynNodes, dynEdges]);
 
-  const timeline = useMemo(() => arrangeTimeline(nodes, edges, view.mode === "interior"), [nodes, edges, view.mode]);
-  const openableIds = useMemo(() => Object.keys(world?.interiors ?? {}), [world]);
+  const explorer = useSceneExplorer(sourceNodes, sourceEdges, view.mode === "interior", view.mode === "lanes" ? "lanes" : view.bigEventId);
+  const { nodes, edges } = explorer;
+  const timeline = useMemo(() => explorer.timeline ?? arrangeTimeline(nodes, edges, view.mode === "interior", explorer.structure), [nodes, edges, view.mode, explorer.structure, explorer.timeline]);
+  const openableIds = useMemo(() => [...Object.keys(world?.interiors ?? {}), ...nodes.filter((node) => (node.cluster || node.kind === "scene") && !explorer.path.some((scope) => scope.key === node.id)).map((node) => node.id)], [world, nodes, explorer.path]);
   const visibleEdges = useMemo(() => showRelations ? edges : [], [edges, showRelations]);
 
   const selected = nodes.find((node) => node.id === selectedId) ?? nodes[0];
@@ -248,23 +255,44 @@ export default function App() {
   useEffect(() => {
     inspectorRef.current?.scrollTo(0, 0);
   }, [panel, selected?.id, view.mode, inspectorOpen]);
-  const selectNode = (node: WorldNode) => { setSelectedId(node.id); setPanel("record"); setInspectorOpen(true); };
-  const activateNode = (node: WorldNode) => {
-    if (node.kind === "bigEvent" && world?.interiors[node.id]) { openNode(node); return; }
-    selectNode(node);
-    if (node.kind !== "character") {
+  const selectNode = (node: WorldNode) => {
+    setSelectedId(node.id); setPanel("record"); setInspectorOpen(true);
+    if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current);
+    focusFlight.current = requestAnimationFrame(() => {
       const positioned = timeline.nodes.find((record) => record.id === node.id) ?? node;
       const position = labelBus.positions.get(node.id) ?? scaledPos(positioned, view.mode === "interior");
-      framePositions(graphRef, [position], 1.35, !reducedMotion);
+      framePositions(graphRef, [position], 1.2, !reducedMotion);
+    });
+  };
+  const stopCamera = () => {
+    if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current);
+    graphRef.current?.getControls?.()?.stop();
+  };
+  const activateNode = (node: WorldNode) => {
+    if (node.kind === "bigEvent" && world?.interiors[node.id]) { explorer.reset(); openNode(node); return; }
+    if (explorer.reveal(node) || explorer.open(node)) {
+      setSelectedId(node.id);
+      stopCamera();
+      setPanel("record");
+      setInspectorOpen(!node.cluster);
+      return;
     }
+    selectNode(node);
   };
   const stepRecord = (step: number) => {
-    if (nodes.length) selectNode(nodes[(selectedIndex + step + nodes.length) % nodes.length]);
+    if (nodes.length) activateNode(nodes[(selectedIndex + step + nodes.length) % nodes.length]);
   };
   const overview = () => {
     if (view.mode === "interior") setSelectedId(view.bigEventId);
     setView({ mode: "lanes" });
     setPanel("record");
+  };
+
+  const backLevel = () => {
+    if (!explorer.back()) { overview(); return; }
+    stopCamera();
+    setSelectedId(null);
+    setInspectorOpen(false);
   };
 
   const labels = useMemo(() => {
@@ -299,31 +327,32 @@ export default function App() {
       </header>
       <div className="page-heading">
         <div><div className="eyebrow">COLLECTION 001 / INDEX SAMPLE</div><h1>{view.mode === "lanes" ? "Narrative archive." : world.bigEventLabels[view.bigEventId]}</h1></div>
-        <div className={`heading-caption${view.mode === "interior" ? " interior-heading" : ""}`}>{view.mode === "lanes" ? <><span>One world. Parallel stories.</span><small>Click a file or scroll closer to enter.</small></> : <><button className="back-link" onClick={overview}>← Back to chronology</button><small>EVENT INTERIOR / {nodes.length} RECORDS</small></>}</div>
+        <div className={`heading-caption${view.mode === "interior" ? " interior-heading" : ""}`}>{view.mode === "lanes" ? <><span>One world. Parallel stories.</span><small>Click a file or scroll closer to enter.</small></> : <><button className="back-link" onClick={overview}>← Back to chronology</button><small>EVENT INTERIOR / {sourceNodes.length} RECORDS</small></>}</div>
       </div>
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
           <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
-            <span className="direction-label">Narrative order →</span>
+            <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
             <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>
             <button onClick={() => framePositions(graphRef, labelBus.positions.size ? [...labelBus.positions.values()] : timeline.nodes.map((node) => scaledPos(node, view.mode === "interior")), 1.18, !reducedMotion)}>Frame view ⌖</button>
           </div></div>
+          {view.mode === "interior" && <ExplorerNavigation nodes={sourceNodes} selectedId={selected?.id ?? null} onSelect={activateNode} structure={explorer.structure} onStructure={explorer.setStructure} expandedCount={explorer.path.length} scopeLabel={explorer.path.at(-1)?.label} shown={nodes.length} total={sourceNodes.length} onBack={backLevel} onReset={() => { stopCamera(); explorer.reset(); setSelectedId(null); setInspectorOpen(false); }} />}
           <div className="stage" tabIndex={0} aria-label="3D records. Arrow keys select, Enter opens an event, Escape returns to chronology." onKeyDown={(event) => {
             if (event.target !== event.currentTarget) return;
             if (event.key === "ArrowRight" || event.key === "ArrowLeft") { event.preventDefault(); stepRecord(event.key === "ArrowRight" ? 1 : -1); }
-            if (event.key === "Enter" && selected) { event.preventDefault(); openNode(selected); }
-            if (event.key === "Escape") overview();
+            if (event.key === "Enter" && selected) { event.preventDefault(); activateNode(selected); }
+            if (event.key === "Escape") backLevel();
           }}>
-            <div className="graph-canvas"><WorldGraph ref={graphRef} nodes={timeline.nodes} edges={visibleEdges} tracks={timeline.tracks} interior={view.mode === "interior"} viewId={view.mode === "lanes" ? "lanes" : view.bigEventId} openableIds={openableIds} labelBus={labelBus} selectedId={selected?.id ?? null} reducedMotion={reducedMotion} onNodeClick={activateNode} onNodeOpen={openNode} onViewBack={overview} /></div>
-            <div className="scene-coordinate" aria-hidden="true">N / O<br /><span>ARCHIVE<br />EXPLORER</span></div>
+            <div className="graph-canvas"><WorldGraph ref={graphRef} nodes={timeline.nodes} edges={visibleEdges} tracks={timeline.tracks} contextNodeIds={explorer.rootIds} interior={view.mode === "interior"} viewId={explorer.key} openableIds={openableIds} labelBus={labelBus} selectedId={selected?.id ?? null} reducedMotion={reducedMotion} onNodeClick={activateNode} onNodeOpen={activateNode} onViewBack={backLevel} /></div>
+            <div className="scene-coordinate" aria-hidden="true">X / Y / Z<br /><span>TIME → / RELATIONS<br />SPATIAL ONTOLOGY</span></div>
             <div className="labels-layer">
               {nodes.map((node, index) => <button key={node.id} className={`node-label k-${node.kind} s-${node.state}${selected?.id === node.id ? " is-selected" : ""}`} style={{ visibility: "hidden" }} aria-label={`${openableIds.includes(node.id) ? "Open" : "Select"} ${node.label}`} aria-pressed={selected?.id === node.id} ref={(element) => { if (element) labelBus.targets.set(node.id, element); else labelBus.targets.delete(node.id); }} onClick={() => activateNode(node)}>
-                <span className="node-code">{String(index + 1).padStart(2, "0")} / {node.lane.toUpperCase()}</span><b>{node.label}</b><span>{node.state !== "canon" ? node.state.toUpperCase() : KIND_LABEL[node.kind]}</span>
+                <span className="node-code">{node.cluster ? `${node.cluster.ids.length} ${node.cluster.kind.toUpperCase()}` : node.kind === "scene" ? `SCENE ${explorer.rank.get(node.id) ?? index + 1}` : String(index + 1).padStart(2, "0")} / {node.lane.toUpperCase()}</span><b>{node.label}</b>{node.cluster && <em className="cluster-preview">{node.subLabel}</em>}<span>{node.cluster ? `${node.cluster.recordCount} records · ${explorer.path.some((scope) => scope.key === node.id) ? "collapse" : "expand"}${node.cluster.proposed ? ` · ${node.cluster.proposed} ghosts` : ""}${node.cluster.held ? ` · ${node.cluster.held} held` : ""}` : node.state !== "canon" ? node.state.toUpperCase() : KIND_LABEL[node.kind]}</span>
                 {node.kind === "bigEvent" && dynNodes.some((child) => child.parent === node.id && child.state !== "canon") && <em className="node-updates">{dynNodes.filter((child) => child.parent === node.id && child.state !== "canon").length} IN REVIEW</em>}
               </button>)}
             </div>
             <div className="track-labels">{timeline.tracks.map((track) => <span key={track.id} className="track-label" ref={(element) => { if (element) labelBus.trackTargets.set(track.id, element); else labelBus.trackTargets.delete(track.id); }}>{track.label}<small>SEQUENCE →</small></span>)}</div>
-            <div className="stage-bottom"><span>CLICK TO ENTER / SCROLL TO ZOOM</span><span>{timeline.tracks.length} TRACKS · {nodes.length} RECORDS</span></div>
+            <div className="stage-bottom"><span>CLICK TO INSPECT / SCROLL TO ZOOM</span><span>{view.mode === "interior" ? explorer.structure.toUpperCase() : `${timeline.tracks.length} TRACKS`} · {nodes.length} SHOWN</span></div>
           </div>
           <div className="scene-legend"><span><i className="canon" />Canon</span><span><i className="branch" />Branch</span><span><i className="proposed" />Proposed</span><span><i className="held" />Held</span><button aria-pressed={reducedMotion} onClick={() => setReducedMotion(!reducedMotion)}>{reducedMotion ? "Motion reduced" : "Motion on"}</button></div>
         </section>
@@ -341,7 +370,7 @@ export default function App() {
           <div className="inspector-sheet" hidden={!inspectorOpen}>
           <div className="sheet-heading"><span className="eyebrow">ARCHIVE / {panel}</span><button aria-label="Close details" onClick={() => { setInspectorOpen(false); document.getElementById(`tab-${panel}`)?.focus(); }}>×</button></div>
           <div ref={inspectorRef} className="inspector-body" id={`panel-${panel}`} role="tabpanel" aria-labelledby={`tab-${panel}`}>
-            {panel === "record" && <RecordInspector selected={selected} nodes={nodes} edges={edges} childCount={selected ? (world.interiors[selected.id]?.nodes.length ?? 0) + dynNodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!world.interiors[selected.id]} onSelect={activateNode} />}
+            {panel === "record" && <RecordInspector selected={selected} nodes={nodes} lookupNodes={sourceNodes} edges={selected?.cluster ? edges : sourceEdges} childCount={selected ? (world.interiors[selected.id]?.nodes.length ?? 0) + dynNodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!world.interiors[selected.id]} onSelect={activateNode} />}
             {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? (liveUrl ? "Connected to the live watch stream." : "Waiting for the sample session.")}</p><button onClick={startSession}>{liveUrl ? "Reconnect live" : "Replay sample ↻"}</button></div><DecisionFeed entries={feed} /></>}
             {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>Review the sample proposals. Held records stay separate when the rest merge.</p></div><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></>}
           </div>

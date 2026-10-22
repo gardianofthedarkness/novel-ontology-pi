@@ -4,21 +4,26 @@ import type { WorldEdge, WorldNode } from "../types";
 interface Props {
   selected: WorldNode | undefined;
   nodes: WorldNode[];
+  lookupNodes?: WorldNode[];
   edges: WorldEdge[];
   childCount: number;
   canOpen: boolean;
   onSelect: (node: WorldNode) => void;
 }
 
-export function RecordInspector({ selected, nodes, edges, childCount, canOpen, onSelect }: Props) {
+export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, childCount, canOpen, onSelect }: Props) {
   if (!selected) return <p className="empty-state">No records in this view.</p>;
   const connections = edges.filter((edge) => edge.from === selected.id || edge.to === selected.id);
   return (
     <div className="record-inspector">
       <div className="record-eyebrow"><span>{KIND_LABEL[selected.kind]}</span><span>#{String(nodes.indexOf(selected) + 1).padStart(2, "0")}</span></div>
       <h2>{selected.label}</h2>
-      <span className={`record-status status-${selected.state}`}><i />{recordStatus(selected)}</span>
-      <div className="record-stamp" aria-hidden="true"><span>N / O</span><div className="barcode" /><span>ARCHIVE RECORD</span></div>
+      <span className={`record-status status-${selected.state}`}><i />{selected.cluster ? "View-only group · not an ontology record" : recordStatus(selected)}</span>
+      <section className="record-summary" aria-label="Recorded summary">
+        <h3>{selected.kind === "scene" ? "Scene · recorded event summary" : "Recorded summary"}</h3>
+        {selected.cluster ? <p>{selected.cluster.ids.length} {selected.cluster.kind} · {selected.cluster.recordCount} represented records. <button onClick={() => onSelect(selected)}>Expand group →</button></p> : selected.summary ? <p>{selected.summary}</p> : <p className="empty-state">No stored summary for this record.</p>}
+        {!!selected.relatedSummaries?.length && <ul>{selected.relatedSummaries.filter((entry) => entry.text !== selected.summary).map((entry) => <li key={entry.id}><button onClick={() => { const event = lookupNodes.find((node) => node.id === entry.id); if (event) onSelect(event); }}>{entry.text}</button></li>)}</ul>}
+      </section>
       <dl className="record-facts">
         <div><dt>Record ID</dt><dd>{selected.id}</dd></div>
         <div><dt>Timeline</dt><dd>{selected.lane === "canon" ? "01 / Canon" : "02 / Branch"}</dd></div>
