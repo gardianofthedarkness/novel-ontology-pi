@@ -7,6 +7,7 @@ import type {
 import { sectionBlock, type Sentence } from "../src/text/sectioning.js";
 import {
   selectExchanges,
+  selectExchangeSpans,
   tileScenes,
   type DecideFn,
 } from "../src/autostep/segmentation.js";
@@ -160,4 +161,59 @@ test("miniloop pipelines: scene tiling and dialogue selection run concurrently",
   const spans = result.accepted["sceneSpans"] as string[][];
   assertPartition(sentences, spans);
   assert.ok(Array.isArray(result.accepted["dialogueUnitScenes"]), "the scene-link join ran after the pipelines");
+});
+
+test("dialogue prompts retain brief narration but split long non-verbal gaps within the same scene", async () => {
+  const sentences = sectionBlock('“我会回来。”\n他站起身。\n“天亮之前。”\n风吹过街道。\n雪落在窗沿。\n远处的灯熄灭了。\n“我还会等你。”', 1).sentences;
+  const prompts: DecisionQuestion[] = [];
+  const answer = scripted({
+    [`dlg_start:${sentences[0].id}`]: sentences[0].id,
+    [`dlg_end:${sentences[0].id}`]: sentences[2].id,
+    [`dlg_start:${sentences[3].id}`]: sentences[6].id,
+    [`dlg_end:${sentences[6].id}`]: sentences[6].id,
+  });
+  const decide: DecideFn = async (state, questions) => {
+    prompts.push(...questions);
+    return answer(state, questions);
+  };
+  const result = await selectExchanges(sentences, [ids(sentences, 0, 6)], decide, { stateSummary: "同一场景，同一说话人", gates: GATES });
+  assert.deepEqual(result.units, [ids(sentences, 0, 2), ids(sentences, 6, 6)]);
+  assert.deepEqual(result.unitScenes, [[0], [0]]);
+  const starts = prompts.filter(question => question.key.startsWith("dlg_start:"));
+  const ends = prompts.filter(question => question.key.startsWith("dlg_end:"));
+  assert.ok(starts.length >= 2 && ends.length >= 2);
+  for (const question of starts) {
+    assert.match(question.instructions, /sentence level/);
+    assert.match(question.instructions, /Three or more consecutive non-verbal sentences/);
+    assert.match(question.instructions, /even with the same speakers in the same scene/);
+    assert.match(question.instructions, /One or two brief narration/);
+  }
+  for (const question of ends) {
+    assert.match(question.instructions, /BEFORE any gap of three or more/);
+    assert.match(question.instructions, /LAST spoken sentence/);
+    assert.match(question.instructions, /same speakers resume in the same scene/);
+  }
+});
+
+test("uncertain NONE dialogue decisions are escalated and streamed coverage reaches EOF", async () => {
+  const sentences = sectionBlock("他没有说话。", 0).sentences;
+  const result = await selectExchanges(sentences, [sentences.map(sentence => sentence.id)], async (_state, questions) => questions.map(question => ({ key: question.key, value: "NONE", confidence: 0.2 })), { stateSummary: "", gates: GATES });
+  assert.equal(result.escalations.length, 1);
+  assert.match(result.escalations[0].reason, /absence decision/);
+});
+
+test("dialogue streaming only publishes stable spans and monotone complete-through watermarks", async () => {
+  const sentences = makeSentences(100);
+  const snapshots: { spans: [number, number][]; through: number }[] = [];
+  const result = await selectExchangeSpans(sentences, scripted({
+    [`dlg_start:${sentences[0].id}`]: sentences[10].id,
+    [`dlg_end:${sentences[10].id}`]: sentences[70].id,
+    [`dlg_start:${sentences[60].id}`]: sentences[65].id,
+    [`dlg_end:${sentences[65].id}`]: sentences[90].id,
+  }), { stateSummary: "", gates: GATES, onBatch: async (spans, through) => { snapshots.push({ spans: structuredClone(spans), through }); } });
+  assert.equal(snapshots[0].through, 9);
+  assert.deepEqual(snapshots[0].spans, []);
+  assert.equal(snapshots.at(-1)!.through, 99);
+  assert.deepEqual(snapshots.at(-1)!.spans, result.spans);
+  assert.ok(snapshots.every((snapshot, index) => !index || snapshot.through >= snapshots[index - 1].through));
 });

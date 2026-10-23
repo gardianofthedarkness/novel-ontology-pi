@@ -75,6 +75,19 @@ const okHandler: Handler = (req) =>
       : "pong",
   );
 
+test("work LLM honors an external faculty deadline without retrying an aborted request", async () => {
+  let calls = 0;
+  const controller = new AbortController();
+  const work = new HttpWorkModel({ baseUrl: "https://example.invalid/v1", apiKey: FAKE_KEY, model: "mock", maxRetries: 3, fetchFn: async (_url, init) => {
+    calls++;
+    controller.abort(new Error("faculty deadline"));
+    init?.signal?.throwIfAborted();
+    throw new Error("Expected cancellation");
+  } });
+  await assert.rejects(work.generate({ system: "test", prompt: "test", signal: controller.signal }), /faculty deadline/);
+  assert.equal(calls, 1);
+});
+
 function client(baseUrl: string, extra: object = {}): HttpWorkModel {
   return new HttpWorkModel({
     baseUrl,

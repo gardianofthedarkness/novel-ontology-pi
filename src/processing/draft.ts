@@ -1,7 +1,7 @@
 import { chmod, mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import type { DialogueTurn } from "../ontology/types.js";
+import type { CharacterStateAtPoint, DialogueTurn } from "../ontology/types.js";
 import type { ChangeProposal } from "../merge/changeset.js";
 
 export interface WorkingDraft {
@@ -17,6 +17,7 @@ export interface WorkingDraft {
   turns: DialogueTurn[];
   completedScenes: number;
   totalScenes: number;
+  statePreview?: CharacterStateAtPoint[];
 }
 
 export async function saveWorkingDraft(novelDir: string, draft: WorkingDraft): Promise<void> {

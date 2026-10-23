@@ -96,6 +96,7 @@ export class HttpWorkModel implements WorkModel {
     prompt: string;
     jsonSchema?: Record<string, unknown>;
     maxTokens?: number;
+    signal?: AbortSignal;
   }): Promise<string> {
     return (await this.generateWithInfo(request)).text;
   }
@@ -106,6 +107,7 @@ export class HttpWorkModel implements WorkModel {
     prompt: string;
     jsonSchema?: Record<string, unknown>;
     maxTokens?: number;
+    signal?: AbortSignal;
   }): Promise<WorkModelResult> {
     const body: Record<string, unknown> = {
       model: this.opts.model,
@@ -127,9 +129,10 @@ export class HttpWorkModel implements WorkModel {
     let attempts = 0;
     let lastError: Error | null = null;
     while (attempts <= this.maxRetries) {
+      request.signal?.throwIfAborted();
       attempts++;
       try {
-        const res = await this.post(body);
+        const res = await this.post(body, request.signal);
         if (res.ok) {
           const data = (await res.json()) as ChatCompletionResponse;
           const text = data.choices?.[0]?.message?.content;
@@ -153,6 +156,7 @@ export class HttpWorkModel implements WorkModel {
         const detail = (await res.text()).slice(0, 500);
         throw new HttpStatusError(res.status, detail);
       } catch (err) {
+        request.signal?.throwIfAborted();
         if (err instanceof HttpStatusError && !err.retryable) throw err;
         lastError = err instanceof Error ? err : new Error(String(err));
       }
@@ -165,7 +169,7 @@ export class HttpWorkModel implements WorkModel {
     );
   }
 
-  private async post(body: Record<string, unknown>): Promise<Response> {
+  private async post(body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -176,7 +180,7 @@ export class HttpWorkModel implements WorkModel {
           Authorization: `Bearer ${this.opts.apiKey}`,
         },
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
       });
     } catch (err) {
       if (

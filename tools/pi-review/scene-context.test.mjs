@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import { sceneContext } from './scene-context.mjs';
 
 const node = (id, kind, state = 'canon') => ({ id, label: id, kind, state, parent: 'chapter_0' });
+test('a stored faculty scene summary is visible without needing an event excerpt', () => {
+  const result = sceneContext([node('scene_1', 'scene')], [], [{ id: 'scene_1', chapterIndex: 0, sentenceIds: ['private_source_id'], summary: '人物相遇，交谈后分开。' }], []);
+  assert.equal(result.nodes[0].summary, '人物相遇，交谈后分开。');
+  assert.equal(result.nodes[0].label, '人物相遇，交谈后分开。');
+  assert.ok(!JSON.stringify(result).includes('private_source_id'));
+});
 test('scene links and readable summaries come from actual shared evidence and stored rosters', () => {
   const nodes = [node('scene_1', 'scene'), node('evt_1', 'event'), node('char_1', 'character'), node('char_2', 'character'), node('loc_1', 'location')];
   const scenes = [{ id: 'scene_1', chapterIndex: 0, sentenceIds: ['section1_sentence1'], charactersPresent: ['char_1'], charactersMentioned: ['char_2'], locationId: 'loc_1' }];

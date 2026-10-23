@@ -26,6 +26,7 @@ test("working scene/dialogue drafts exist before extraction or the merge gate, w
     return "held";
   }, {
     novelDir: directory,
+    facultyGraph: false,
     workModel: {
       modelId: "mock-work",
       async generate() {
@@ -62,6 +63,7 @@ test("block processing honors reviewer extraction constraints at a fresh held ga
   let observed = false;
   const processor = new BlockProcessor(new BundleStore(join(directory, "ontology")), new MockDecisionModel({}), async () => "held", {
     novelDir: directory,
+    facultyGraph: false,
     loadCorrections: async () => [{ id: "corr_0001", blockId: "b0002", key: "extraction:constraints", value: { rejectCharacterNames: ["unknown"], instructions: "不推断身份，使用中文摘要。" }, reason: "未知身份不是命名角色", createdAt: new Date().toISOString() }],
     workModel: {
       modelId: "mock-work",
@@ -78,5 +80,27 @@ test("block processing honors reviewer extraction constraints at a fresh held ga
   assert.ok(changeset?.reviewNotes["recall:pin:extraction:constraints"]);
   assert.equal(changeset?.proposals.filter((proposal) => proposal.kind === "upsert_entity").length, 0);
   assert.ok(changeset?.proposals.every((proposal) => proposal.provenance.sentenceIds.every((id) => id.startsWith("b0001_"))));
+  assert.equal(await readFile(join(directory, "ontology", "events.jsonl"), "utf8"), "");
+});
+
+test("default faculty ingestion keeps proposals and state previews unapproved until the block review gate", async (context) => {
+  const parent = await mkdtemp(join(tmpdir(), "novel-faculty-gate-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const directory = join(parent, "novel");
+  await initWorkspace(directory);
+  const processor = new BlockProcessor(new BundleStore(join(directory, "ontology")), new MockDecisionModel(), async changeset => {
+    assert.ok(changeset.reviewNotes["faculty:execution"]);
+    assert.equal(await readFile(join(directory, "ontology", "events.jsonl"), "utf8"), "");
+    const draft = JSON.parse(await readFile(join(directory, "working", "b0001.json"), "utf8")) as WorkingDraft;
+    assert.equal(draft.stage, "gate");
+    assert.deepEqual(draft.statePreview, []);
+    return "held";
+  }, { novelDir: directory, workModel: { modelId: "work", async generate(request) {
+    if (request.system.startsWith("FACULTY: entities-participants")) return JSON.stringify({ newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null });
+    if (request.system.startsWith("FACULTY: dialogue-adjudication")) return JSON.stringify({ turns: [] });
+    return JSON.stringify({ summary: "门打开了。", events: [{ summaryEn: "门打开了。", evidence: ["b0000_s0000"] }] });
+  } } });
+  await processor.processNovel([{ blockId: "b0001", text: "门打开了。" }]);
+  assert.equal((await loadChangeSet(directory, "cs_b0001"))!.status, "held");
   assert.equal(await readFile(join(directory, "ontology", "events.jsonl"), "utf8"), "");
 });

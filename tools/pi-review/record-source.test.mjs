@@ -25,3 +25,13 @@ test('missing and noncontiguous provenance is explicit and arbitrary paths are n
   assert.deepEqual(result.segments, ['甲走进房间。', '甲离开房间。']);
   assert.ok(!JSON.stringify(result).includes('PRIVATE PATH'));
 });
+
+test('expanded scene text includes all stored sentences and intervening narration without excerpt truncation', async () => {
+  const original = Array.from({ length: 90 }, (_, index) => index % 3 ? `他在第${index}步停了下来。` : `“这是第${index}次说话。”`).join('\n\n');
+  const references = sectionBlock(original, 0).sentences.map(sentence => sentence.id);
+  const result = await recordSource({ id: 'scene_long', scenes: [{ id: 'scene_long', sentenceIds: references }], events: [], readBlock: async () => original, sectionBlock });
+  assert.equal(result.text, original);
+  assert.equal(result.complete, true);
+  assert.equal(result.contiguous, true);
+  assert.ok(result.text.includes('第89步'));
+});
