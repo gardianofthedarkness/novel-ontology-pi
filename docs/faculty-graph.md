@@ -46,14 +46,32 @@ this graph does not invent cross-scene causation from adjacent events.
 
 ## System 1 / System 2 routing
 
-- Unpinned scene choices below 0.85 request one scoped LLM adjudication. The
-  result must be an exact offered option and explicitly resolved. Its routing
+- A shared `DecisionRouter` provides local S1 -> bounded wider-context S1 ->
+  unresolved-only S2 routing. The router owns retry budgets, concurrency and
+  metrics; faculty adapters supply questions and structural validators.
+- Unpinned scene choices below 0.85 request scoped LLM adjudication by default.
+  If their faculty's context buffer is explicitly enabled, they first retry the
+  same question and options with neighboring source context. Only a still-unresolved choice requests
+  scoped LLM adjudication. Its result must be an exact offered option and explicitly resolved. Its routing
   confidence is a policy threshold, not a calibrated LLM probability; original
   confidence and the adjudicated choice remain in review notes.
+- Dialogue boundary choices can opt into the same shared S1 retry policy at 0.85;
+  remaining uncertainty is deferred to scene-local dialogue adjudication and
+  Pi review, rather than adding a separate LLM call for every boundary.
 - Speaker choices use local name candidates and a 0.8 threshold. Unknowns,
   low-confidence attribution, multiple quote starts, and source quotation
-  candidates absent from System 1 coverage route to turn adjudication. Source
-  quote patterns nominate checks; they do not decide that text is speech.
+  candidates absent from S1 coverage remain unresolved. For structurally valid
+  units, insufficiently confident attribution retries the **same questions,
+  candidates and sentence units**, with wider context only. A validated retry
+  bypasses S2. Structural defects cannot be repaired by repeating speaker
+  questions: their repair belongs to the upstream dialogue-boundary retry or
+  S2 adjudication. Such attribution retries are skipped rather than inflating
+  the S1 workload with per-sentence reclassification. Quote patterns nominate
+  checks, not proof of speech. Neither scene nor dialogue questions change
+  granularity during a context retry.
+- Entities/participants and scene understanding remain always-on LLM faculties,
+  not confidence-triggered fallbacks. Emotion/state observations share the
+  understanding call. No S1 approximation of generative summaries is introduced.
 - Adjudication can split mixed-speaker spans and recover missed speech. It uses
   sentence endpoints, not character-level speech-fragment offsets. No speaker
   outside the supplied candidate set is accepted. Unknown names remain null
@@ -65,7 +83,61 @@ this graph does not invent cross-scene causation from adjacent events.
   on the faculty path. Exact reference existence is not semantic entailment.
 - Failures, oversized sentences, missing identities and unresolved decisions
   remain explicit review notes. Failed chunks preserve full scene provenance.
-  There is no semantic retry-until-pass or automatic approval loop.
+  There is no semantic retry-until-pass or automatic approval loop. Independently
+  valid S2 rows are retained even when other rows remain unresolved; an unknown
+  speaker is not counted as a fully resolved attribution.
+
+`facultyGraph.decisionRouting` configures this policy. Default ingestion enables
+the wider-context S1 retry **only for speaker attribution**. Scene and dialogue
+boundary widening remain off; their existing S2/review routes are unchanged.
+The shared router is retained, rather than creating a separate speaker-specific
+execution loop. Override a faculty through `faculties`, for example:
+
+```ts
+decisionRouting: {
+  faculties: {
+    "dialogue-attribution": { enabled: true, contextMargin: 32 },
+    "scene-boundaries": { enabled: false },
+    "dialogue-boundaries": { enabled: false },
+  },
+}
+```
+
+An explicit top-level `enabled: false` disables every retry, including enabled
+faculty overrides; `enabled: true` without overrides enables the historical
+all-faculty experiment. Faculty policies can override context margin, state-byte
+ceiling, retry count and timeout. Call budget and concurrency remain shared.
+Only enabled faculties contribute to the cross-block read-only buffer size.
+Default limits are one expanded
+attempt, 32 additional neighboring sentences per side, 16,000 UTF-8 bytes of
+state, at most 128 retry calls per block, four concurrent S1 retries and a
+15-second cancellable retry deadline. Set `enabled: false` for a no-buffer
+control, or `maxRetries: 2` for a second, wider bounded attempt. Existing target
+text, reviewer constraints and allowed options are never removed to fit a
+budget. If no additional context fits, skip the retry rather than repeat the
+same request. `BlockProcessor` supplies bounded previous/next-block source
+when those blocks are available in its input; neighboring source is read-only
+and does not establish canonical identities or events. An online caller without
+following source cannot assume this retrospective lookahead is available.
+
+Per-faculty routing metrics are stored under `accepted.decisionRouting` and
+the execution review note: processed tasks, initial acceptance/uncertainty,
+retry attempts/recoveries, S2 escalations/validated resolutions, unresolved
+tasks, failures, skipped retries, stage latency, state bytes and question counts.
+Scene/dialogue-boundary denominators are individual choices; attribution
+denominators are scene-local execution chunks. Pinned choices are excluded.
+Recovery rate is `retryRecovered / retries`; escalation rate is
+`escalated / processed`. Do not combine incompatible task denominators or
+mistake 35 fallback calls out of 63 LLM calls for an escalation rate. State-byte
+counters exclude serialized question schemas and are not token billing figures.
+Actual token cost and accuracy require provider usage and independent labels;
+higher S1 confidence alone is not evidence of correctness.
+
+The prior 36/38 speaker-attribution score came from an **all-faculty** buffer run,
+not this speaker-only default. In that run, boundary retries recovered three
+choices, while speaker retries recovered zero of two. The 94.7% result must not
+be advertised as measured accuracy of speaker-only widening. This customization
+selects a policy; it is not a new isolated accuracy claim.
 
 Scene/dialogue recall pins take precedence. Dialogue boundary pins disable
 automatic restructuring of those selected units. Legacy name, presence or
@@ -117,3 +189,5 @@ deterministic fold. Parallel workers never invoke store writes.
 
 See [the bounded live comparison](faculty-benchmark.md) for measured quality,
 latency, token tradeoffs and remaining errors.
+See [the S1 buffer comparison](system1-buffer-benchmark.md) for the opt-in retry
+policy's system-wide cost, latency, escalation rates and negative first result.

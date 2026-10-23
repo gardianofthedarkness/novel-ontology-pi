@@ -101,7 +101,7 @@ export class BlockProcessor {
     const corrections = this.observation.loadCorrections
       ? await this.observation.loadCorrections()
       : [];
-    for (const block of blocks) {
+    for (const [blockIndex, block] of blocks.entries()) {
       await emit?.({ type: "block.started", blockId: block.blockId });
       const { sentences } = sectionBlock(block.text, block.sectionIndex ?? mergedBlocks.length);
       await emit?.({ type: "sectioned", blockId: block.blockId, sentences: sentences.length });
@@ -138,9 +138,15 @@ export class BlockProcessor {
         const constraintsValue = corrections.find(correction => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)?.value;
         const constraints = constraintsValue ? parseExtractionConstraints(constraintsValue) : undefined;
         const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
-        const faculty = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
-          ? await new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}).run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, knownEntities, pins, constraints, onProgress: async (progress) => publish(progress, true) })
-          : undefined;
+        const graph = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
+          ? new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}) : undefined;
+        const margin = graph?.router.contextWindow(["scene-boundaries", "dialogue-boundaries", "dialogue-attribution"]) ?? 0;
+        const contextSentences = margin > 0 ? [
+          ...(blockIndex > 0 ? sectionBlock(blocks[blockIndex - 1].text, blocks[blockIndex - 1].sectionIndex ?? blockIndex - 1).sentences.slice(-margin) : []),
+          ...sentences,
+          ...(blockIndex + 1 < blocks.length ? sectionBlock(blocks[blockIndex + 1].text, blocks[blockIndex + 1].sectionIndex ?? blockIndex + 1).sentences.slice(0, margin) : []),
+        ] : sentences;
+        const faculty = await graph?.run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, contextSentences, knownEntities, pins, constraints, onProgress: async progress => publish(progress, true) });
         const result = faculty?.miniloop ?? await miniloop.runBlock({
           blockId: block.blockId,
           sentences,
