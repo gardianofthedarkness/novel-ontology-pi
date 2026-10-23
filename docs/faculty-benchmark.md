@@ -1,5 +1,10 @@
 # Small-batch live faculty comparison
 
+> Historical single-speaker pipeline results. The current product uses
+> multi-participant dialogue cards; see [the current benchmark
+> contract](dialogue-card-benchmark.md). No historical speaker percentage is
+> a measured card-participant accuracy result.
+
 23 October 2026. Two fresh, unapproved processing paths over the same private
 493-sentence source block, with an initially empty identity registry. Both use
 Jev-1.13.0 and DeepSeek's configured `deepseek-flash` model with thinking disabled.

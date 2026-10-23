@@ -151,6 +151,10 @@ export async function mergeEntities(
       if (t.speakerId) t.speakerId = remap(t.speakerId);
       if (t.addresseeId) t.addresseeId = remap(t.addresseeId);
     }
+    for (const card of s.dialogues ?? []) {
+      card.participantIds = dedupe(card.participantIds.map(remap));
+      if (card.unresolvedParticipantIds) card.unresolvedParticipantIds = dedupe(card.unresolvedParticipantIds.map(remap)).filter(id => !card.participantIds.includes(id));
+    }
     if (s.locationId) s.locationId = remap(s.locationId);
     if (JSON.stringify(s) !== before) rewiredScenes++;
   }
@@ -275,6 +279,10 @@ export async function removeEntity(
     for (const t of s.turns) {
       if (t.speakerId === id) t.speakerId = null;
       if (t.addresseeId === id) t.addresseeId = null;
+    }
+    for (const card of s.dialogues ?? []) {
+      card.participantIds = card.participantIds.filter(member => member !== id);
+      if (card.unresolvedParticipantIds) card.unresolvedParticipantIds = card.unresolvedParticipantIds.filter(member => member !== id);
     }
   }
   await writeJsonl(join(dir, "scenes.jsonl"), scenes);

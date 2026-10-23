@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { restoreReviewCoverage, sourcePage } from './review-coverage.mjs';
+import { creditFacts, requireFactCoverage, restoreReviewCoverage, sourcePage } from './review-coverage.mjs';
+
+test('semantic gate credits actual byte-bounded facts, rejects stale or unseen accepts and permits explicit unknowns', () => {
+  const coverage = creditFacts(null, { revision: 'current', facts: [{ id: 'speaker', evidence: [{ id: 'source', text: 'source' }] }, { id: 'emotion', evidence: [] }] }, 'current');
+  assert.doesNotThrow(() => requireFactCoverage(coverage, 'current', [{ factId: 'speaker', verdict: 'accept' }]));
+  assert.throws(() => requireFactCoverage(coverage, 'old', [{ factId: 'speaker', verdict: 'accept' }]), /current/);
+  assert.throws(() => requireFactCoverage(coverage, 'current', [{ factId: 'emotion', verdict: 'accept' }]), /source evidence/);
+  assert.throws(() => requireFactCoverage(coverage, 'current', [{ factId: 'never-read', verdict: 'accept' }]), /current/);
+  assert.doesNotThrow(() => requireFactCoverage(coverage, 'current', [{ factId: 'never-read', verdict: 'hold' }]));
+  assert.equal(creditFacts(coverage, { revision: 'new', facts: [{ id: 'replacement', evidence: [] }] }, 'new').facts.size, 1);
+});
 
 test('resumption credits only successful recorded reads matching the current complete page content', () => {
   const current = { id: 'cs_b0002', createdAt: 'original', proposals: [{ id: 'p0' }, { id: 'p1', value: 'revised' }], reviewNotes: { new: 'read this too' } };

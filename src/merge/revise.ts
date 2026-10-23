@@ -28,6 +28,7 @@ export async function reviseProposals(novelDir: string, id: string, value: unkno
   if (!edits.dropProposalIds?.length && !edits.removeEntityIds?.length && !edits.sanitizeTypes && !edits.retypeEntities?.length && !edits.mentionedOnlyEntityIds?.length) throw new Error("Revision contains no edits.");
   const changeset = await loadChangeSet(novelDir, id);
   if (!["held", "pending_review", "revision_requested"].includes(changeset.status)) throw new Error("Only unapproved review packets may be revised.");
+  if (changeset.reviewSource) throw new Error("Semantic packets require targeted fact decisions, not bulk proposal edits that can erase supported speakers");
   const history = await readFile(join(novelDir, "events.jsonl"), "utf8").catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error;
     return "";
@@ -97,6 +98,10 @@ export async function reviseProposals(novelDir: string, id: string, value: unkno
       scene.charactersPresent = scene.charactersPresent.filter((entityId) => character(entityId) && !mentionedOnly.has(entityId));
       scene.charactersMentioned = [...new Set([...scene.charactersMentioned.filter(character), ...moved])];
       scene.turns = scene.turns.map((turn) => ({ ...turn, speakerId: turn.speakerId && character(turn.speakerId) && !mentionedOnly.has(turn.speakerId) ? turn.speakerId : null, addresseeId: turn.addresseeId && character(turn.addresseeId) && !mentionedOnly.has(turn.addresseeId) ? turn.addresseeId : null }));
+      for (const card of scene.dialogues ?? []) {
+        card.participantIds = card.participantIds.filter(character);
+        if (card.unresolvedParticipantIds) card.unresolvedParticipantIds = card.unresolvedParticipantIds.filter(character);
+      }
       if (scene.locationId && (removed.has(scene.locationId) || edits.sanitizeTypes && entities.get(scene.locationId)?.kind !== "Location")) scene.locationId = null;
     }
     if (before !== JSON.stringify(proposal.payload)) changed++;
@@ -106,6 +111,7 @@ export async function reviseProposals(novelDir: string, id: string, value: unkno
   const superseded = join(novelDir, "changesets", `${id}.superseded-revision-${revisionId}.json`);
   await copyFile(join(novelDir, "changesets", `${id}.json`), superseded);
   changeset.status = "held";
+  delete changeset.semanticReview;
   changeset.reviewNotes[`revision:${revisionId}`] = `Reviewing agent revised pending proposals: ${reason}. Dropped ${original - changeset.proposals.length}; normalized ${changed} payloads. No new identities, presence, speakers or source facts were inferred. Re-read every proposal and note before approval.`;
   await saveChangeSet(novelDir, changeset);
   await appendAudit(novelDir, "revise-proposals", { changesetId: id, revisionId, edits, dropped: original - changeset.proposals.length, normalized: changed }, reason);

@@ -596,6 +596,7 @@ export async function evalExtract(
       attest(turn.speakerId, ch);
       attest(turn.addresseeId, ch);
     }
+    for (const card of sc.dialogues ?? []) for (const id of card.participantIds ?? []) attest(id, ch);
   }
   for (const ev of events) {
     const ch = chapterOf(ev);

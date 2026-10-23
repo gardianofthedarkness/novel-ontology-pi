@@ -12,6 +12,8 @@ import { FacultyPool, type FacultyCall } from "./facultyPool.js";
 import { expandDecisionContext, jsonObject, renderSentences, sourceChunks, type SourceChunk } from "./facultyContext.js";
 import { DecisionRouter, type DecisionRouterOptions } from "./decisionRouter.js";
 import { readSpeakerGuesses, speakerQuestions } from "./dialogueDecisions.js";
+import { attributeBlockTurns, joinAttributedTurns } from "./turnAttribution.js";
+import { attributeDialogueCards, joinDialogueCards, type NamedDialogueCard } from "./dialogueCards.js";
 
 const IDENTITY_SYSTEM = `FACULTY: entities-participants. Read only the supplied source. Return JSON with newEntities:[{name,kind,aliases:[{text,kind}]}], charactersPresent:[name], charactersMentioned:[name], locationName:string|null. Allowed kinds: Character, Location, Organization, Item, Concept. Copy every name and alias exactly from the source or registry, preserving its language/script. Include people newly named in this scene, even when merely mentioned, but distinguish physical presence from mention. Include grounded role descriptions when no personal name is given, never invented placeholders. A narrator's description is not a person's alias. Do not create animal entities. Household groups are Organizations. Registry membership never proves presence. Do not fuse different people on generic pronouns or descriptions. No events or summaries.`;
 
@@ -22,6 +24,7 @@ const strings = (value: unknown): string[] => Array.isArray(value) ? value.filte
 const KINDS = new Set(["Character", "Location", "Organization", "Item", "Concept"]);
 
 export interface FacultyGraphOptions {
+  dialogueScope?: "card" | "scene" | "block-turn";
   concurrency?: number;
   maxCalls?: number;
   maxInFlightScenes?: number;
@@ -34,6 +37,7 @@ export class FacultyGraph {
   readonly router: DecisionRouter;
 
   constructor(private decisions: DecisionModel, work: WorkModel, private options: FacultyGraphOptions = {}) {
+    if (options.dialogueScope !== undefined && !["card", "scene", "block-turn"].includes(options.dialogueScope)) throw new Error("Invalid dialogue scope");
     this.pool = new FacultyPool(work, options);
     this.router = new DecisionRouter({
       ...options.decisionRouting,
@@ -41,6 +45,7 @@ export class FacultyGraph {
         "scene-boundaries": { enabled: false },
         "dialogue-boundaries": { enabled: false },
         "dialogue-attribution": { enabled: true },
+        "dialogue-participants": { enabled: true },
         ...options.decisionRouting?.faculties,
       } : options.decisionRouting.faculties,
     });
@@ -56,6 +61,8 @@ export class FacultyGraph {
     constraints?: ExtractionConstraints;
     onProgress?: (progress: Partial<WorkingDraft>) => Promise<void>;
   }): Promise<{ miniloop: MiniloopResult; sceneResults: Map<string, Promise<SceneFacultyResult>> }> {
+    const blockTurnScope = this.options.dialogueScope === "block-turn" && !input.pins?.size;
+    const cardScope = (this.options.dialogueScope ?? "card") === "card";
     const changeset = newChangeSet(input.blockId);
     const sentenceIndex = new Map(input.sentences.map((sentence, index) => [sentence.id, index]));
     const sceneResults = new Map<string, Promise<SceneFacultyResult>>();
@@ -63,6 +70,7 @@ export class FacultyGraph {
     const appliedPins = new Set<string>();
     const escalations: MiniloopResult["escalations"] = [];
     const sourceTurns: NamedTurn[] = [];
+    const sourceCards: NamedDialogueCard[] = [];
     const sceneSpans: string[][] = [];
     let dialogueSpans: [number, number][] = [];
     let coverage = -1;
@@ -70,11 +78,12 @@ export class FacultyGraph {
     const coverageWaiters = new Set<() => void>();
     let progressChain = Promise.resolve();
     const publish = (patchId: string) => {
-      const update: Partial<WorkingDraft> = { patchId, sceneSpans: sceneSpans.map(span => [...span]), dialogueUnits: dialogueSpans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), turns: sourceTurns.map(turn => ({ speakerId: null, addresseeId: null, sentenceIds: [...turn.sentenceIds] })), totalScenes: sceneSpans.length };
+      const update: Partial<WorkingDraft> = { patchId, sceneSpans: sceneSpans.map(span => [...span]), dialogueUnits: dialogueSpans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), turns: sourceTurns.map(turn => ({ speakerId: null, addresseeId: null, sentenceIds: [...turn.sentenceIds] })), ...(cardScope ? { dialogueCards: sourceCards.map(card => ({ id: card.id, sentenceIds: card.sentenceIds, participantNames: card.participantNames, unresolvedNames: card.unresolvedNames })) } : {}), totalScenes: sceneSpans.length };
       progressChain = progressChain.then(() => input.onProgress?.(update));
       return progressChain;
     };
     const note = (key: string, message: string) => { changeset.reviewNotes[`faculty:${key}`] = message; };
+    if (this.options.dialogueScope === "block-turn" && !blockTurnScope) note("pinned-dialogue-scope", "Retained the scene-scoped path for this revision to honor reviewer pins without reinterpreting their targets.");
     const constraints = input.constraints ? `REVIEWER CONSTRAINTS: ${JSON.stringify(input.constraints)}\n` : "";
     const widerState = (faculty: string, state: string, attempt: number) => {
       const policy = this.router.policyFor(faculty);
@@ -235,6 +244,17 @@ export class FacultyGraph {
       if (routed.stage === "unresolved") notes.push("Dialogue attribution remains unresolved after bounded routing; Pi review is required.");
       return routed.value.turns;
     };
+    const blockIdentityNotes: string[] = [];
+    const blockIdentities = blockTurnScope || cardScope ? Promise.all(sourceChunks(input.sentences, { maxBytes: 7000, maxSentences: 48, margin: 4 }).map(async (chunk, index) => {
+      try { return await identityChunk(chunk, blockIdentityNotes); } catch {
+        note(`block-identity:${index}`, "Block identity discovery failed, exceeded its budget or was unavailable; no identity was invented and unresolved references require review.");
+        return { newEntities: [] } as LlmScene;
+      }
+    })).then(parts => ({
+      newEntities: parts.flatMap(part => part.newEntities ?? []),
+      charactersPresent: [], charactersMentioned: [],
+    } satisfies LlmScene)) : null;
+    void blockIdentities?.catch(() => {});
     const startScene = (span: string[], sceneIndex: number): Promise<SceneFacultyResult> => {
       const sentences = span.map(id => input.sentences[sentenceIndex.get(id)!]);
       const notes: string[] = [];
@@ -255,6 +275,8 @@ export class FacultyGraph {
         return { events, summary: parts.map(part => part.summary).filter(Boolean).join("\n") } satisfies LlmScene;
       }, { events: [] } as LlmScene);
       const dialogue = safely("dialogue-adjudication", async () => {
+        if (cardScope) return [];
+        if (blockTurnScope) return joinAttributedTurns(await blockDialogue!, span);
         const identities = await identity;
         await waitForDialogue(sentenceIndex.get(span.at(-1)!)!);
         const chunks = sourceChunks(sentences, { maxBytes: 5_000, maxSentences: 24, margin: 5 });
@@ -268,10 +290,12 @@ export class FacultyGraph {
         }
         return merged;
       }, [] as NamedTurn[]);
-      return Promise.all([identity, understanding, dialogue]).then(async ([identities, facts, turns]) => {
+      const cards = cardScope ? blockCards!.then(cards => joinDialogueCards(cards, span)) : Promise.resolve(undefined);
+      return Promise.all([identity, understanding, dialogue, cards]).then(async ([identities, facts, turns, dialogues]) => {
         sourceTurns.push(...turns);
+        if (dialogues) sourceCards.push(...dialogues);
         await publish("grounding-assembly");
-        return { scene: { ...facts, ...identities }, turns, notes };
+        return { scene: { ...facts, ...identities }, turns, ...(dialogues ? { dialogues } : {}), notes };
       });
     };
     const acceptScenes = async (spans: string[][]) => {
@@ -292,6 +316,18 @@ export class FacultyGraph {
       return result;
     });
     void dialoguePipeline.catch(error => { dialogueFailure = error; for (const wake of coverageWaiters) wake(); coverageWaiters.clear(); });
+    const blockDialogue = blockTurnScope && blockIdentities ? dialoguePipeline.then(dialogues => attributeBlockTurns({
+      sentences: input.sentences, contextSentences: input.contextSentences, selectedSpans: dialogues.spans, identities: blockIdentities, constraintsText: constraints,
+      knownNames: input.knownEntities.filter(entity => entity.kind === "Character").flatMap(entity => entity.names.map(name => name.text)),
+      decisions: this.decisions, router: this.router, pool: this.pool, note,
+    })) : null;
+    void blockDialogue?.catch(() => {});
+    const blockCards = cardScope && blockIdentities ? dialoguePipeline.then(dialogues => attributeDialogueCards({
+      blockId: input.blockId, sentences: input.sentences, contextSentences: input.contextSentences,
+      selectedSpans: dialogues.spans, identities: blockIdentities, knownEntities: input.knownEntities,
+      decisions: this.decisions, router: this.router, pool: this.pool, constraintsText: constraints, note,
+    })) : null;
+    void blockCards?.catch(() => {});
     const scenesPipeline = tileScenes(input.sentences, decide, { stateSummary: `Processing block ${input.blockId}.`, gates: { accept: 0.85, reask: 0.55 }, onSpan: acceptScenes }).then(async result => {
       await acceptScenes(result.spans);
       escalations.push(...result.escalations.map(entry => ({ ...entry, patchId: "scene-boundary" })));
@@ -303,11 +339,16 @@ export class FacultyGraph {
     for (const result of pipelineResults) if (result.status === "rejected") throw new Error("A System 1 faculty failed; no proposals were approved");
     const dialogues = await dialoguePipeline;
     const scenes = await scenesPipeline;
+    if (blockDialogue) {
+      const turns = await blockDialogue;
+      changeset.reviewNotes["faculty:block-context"] = JSON.stringify({ scope: "block-turn", turns: turns.length, identityNotes: blockIdentityNotes });
+    }
+    if (blockCards) changeset.reviewNotes["faculty:block-context"] = JSON.stringify({ scope: "card", cards: (await blockCards).length, identityNotes: blockIdentityNotes });
     for (const entry of escalations) note(`escalation:${entry.patchId}:${entry.unitId}`, entry.reason);
     note("execution", JSON.stringify({ topology: "scene-streaming", ...this.pool.metrics, decisionRouting: this.router.metrics, unresolvedPolicy: "retain review notes; never auto-approve" }));
     changeset.status = "pending_review";
     return {
-      miniloop: { changeset, escalations, appliedPins: [...appliedPins], accepted: { sceneSpans: scenes.spans, dialogueUnits: dialogues.spans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), dialogueUnitScenes: linkExchangeScenes(input.sentences, dialogues.spans, scenes.spans), nameHits: [], facultyMetrics: { ...this.pool.metrics }, decisionRouting: this.router.metrics }, windows: [] },
+      miniloop: { changeset, escalations, appliedPins: [...appliedPins], accepted: { sceneSpans: scenes.spans, dialogueUnits: dialogues.spans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), dialogueUnitScenes: linkExchangeScenes(input.sentences, dialogues.spans, scenes.spans), nameHits: [], facultyMetrics: { ...this.pool.metrics }, decisionRouting: this.router.metrics, ...(blockIdentities ? { blockIdentityDeclarations: (await blockIdentities).newEntities } : {}), ...(blockDialogue ? { blockNamedTurns: await blockDialogue } : {}) }, windows: [] },
       sceneResults,
     };
   }

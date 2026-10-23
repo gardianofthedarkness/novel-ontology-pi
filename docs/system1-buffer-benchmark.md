@@ -1,5 +1,10 @@
 # Wider-context System 1 buffer: live comparison
 
+> Historical speaker-attribution experiment. The current product benchmark
+> measures multi-participant dialogue cards, not sentence speakers; see
+> [the current contract](dialogue-card-benchmark.md). Scores below are not
+> reinterpreted as card-participant accuracy.
+
 23 October 2026. Two real runs over the same private 493-sentence block, with
 fresh identity registries, Jev-1.13.0 and DeepSeek `deepseek-flash` with thinking
 disabled. The control disables the context buffer; the treatment enables it.

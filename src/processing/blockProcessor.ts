@@ -54,6 +54,7 @@ export class BlockProcessor {
     private review: (cs: ChangeSet) => Promise<ReviewDecision>,
     private observation: {
       novelDir?: string;
+      semanticReview?: boolean;
       emit?: EventSink;
       /**
        * Loads the entities the miniloop should treat as already known
@@ -140,7 +141,7 @@ export class BlockProcessor {
         const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
         const graph = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
           ? new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}) : undefined;
-        const margin = graph?.router.contextWindow(["scene-boundaries", "dialogue-boundaries", "dialogue-attribution"]) ?? 0;
+        const margin = graph?.router.contextWindow(["scene-boundaries", "dialogue-boundaries", "dialogue-attribution", "dialogue-participants"]) ?? 0;
         const contextSentences = margin > 0 ? [
           ...(blockIndex > 0 ? sectionBlock(blocks[blockIndex - 1].text, blocks[blockIndex - 1].sectionIndex ?? blockIndex - 1).sentences.slice(-margin) : []),
           ...sentences,
@@ -190,6 +191,7 @@ export class BlockProcessor {
             await publish({ patchId: "continuity-relations", statePreview: await previewFacultyStates(this.store, out.proposals) });
           }
         }
+        if (this.observation.semanticReview) result.changeset.reviewSource = sentences;
         if (this.observation.novelDir) await saveChangeSet(this.observation.novelDir, result.changeset);
         await publish({ stage: "gate", patchId: "merge-gate", proposals: result.changeset.proposals });
         // No event emissions here: saveChangeSet is the emitter of record

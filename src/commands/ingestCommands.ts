@@ -12,9 +12,10 @@ import { EventLog } from "../events/log.js";
 import { listChangeSets } from "../merge/changesetStore.js";
 import type { Entity } from "../ontology/types.js";
 import { loadExtractionCounts } from "../processing/counts.js";
+import { facultyOptionsFromEnv } from "../processing/facultyOptions.js";
 
 export interface IngestOptions {
-  /** Approve every ChangeSet at the merge gate (smoke runs, trusted batches). */
+  /** Legacy miniloop-only smoke option; a configured work model requires fact review. */
   autoApprove?: boolean;
   /** Stop after this many blocks. */
   maxBlocks?: number;
@@ -36,9 +37,8 @@ export interface IngestOptions {
  *    `novel changeset approve` to apply it, and re-run ingest to roll on.
  *    This is the main-agent workflow: the agent reads each ChangeSet and
  *    only then lets the run continue.
- *  - --auto-approve: every ChangeSet is approved and applied in-process.
- *    For smoke tests and trusted batches; the gate still exists — the
- *    reviewer is just the flag.
+ *  - --auto-approve: legacy miniloop-only smoke runs apply in-process.
+ *    Work-model extraction rejects this flag; use the fact-review gate.
  *
  * The known-entity registry is the bundle itself: entities.jsonl is
  * re-read (last write wins) before every block, so names merged by
@@ -50,6 +50,7 @@ export async function ingestNovel(
   opts: IngestOptions = {},
 ) {
   const env = opts.env ?? process.env;
+  const facultyGraph = facultyOptionsFromEnv(env);
   const ontologyDir = join(novelDir, "ontology");
   try {
     await stat(join(ontologyDir, "manifest.json"));
@@ -120,6 +121,7 @@ export async function ingestNovel(
 
   const review = async (): Promise<ReviewDecision> =>
     opts.autoApprove ? "approved" : "held";
+  if (opts.autoApprove && workModel) throw new Error("Live semantic extraction requires fact review; --auto-approve cannot bypass it");
 
   const processor = new BlockProcessor(bundle, jevFromEnv(env), review, {
     novelDir,
@@ -128,6 +130,8 @@ export async function ingestNovel(
     loadCounts,
     loadCorrections: () => loadCorrections(novelDir),
     workModel: workModel ?? undefined,
+    facultyGraph,
+    semanticReview: !!workModel,
   });
 
   const result = await processor.processNovel(

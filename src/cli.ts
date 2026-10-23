@@ -35,6 +35,7 @@ import {
 import { resolveJevKey } from "./connectors/secrets.js";
 import { inspectNovel } from "./commands/inspectCommands.js";
 import { evalExtract, evalRun } from "./commands/evalCommands.js";
+import { evalDialogueCards } from "./commands/dialogueEval.js";
 import { sectionBlock } from "./text/sectioning.js";
 import { cutBlocks } from "./text/blocks.js";
 import { initWorkspace } from "./workspace/init.js";
@@ -44,6 +45,7 @@ import { exportBundle, importBundle } from "./connectors/bundleTransfer.js";
 import { applyChangeSet } from "./merge/apply.js";
 import { reviewPage } from "./merge/reviewPage.js";
 import { reviseProposals } from "./merge/revise.js";
+import { decideFacts, prepareSemantic, semanticPage } from "./merge/semanticCommands.js";
 import {
   listChangeSets,
   loadChangeSet,
@@ -71,6 +73,10 @@ const COMMANDS: Record<string, string> = {
     "The merge gate: review accumulated proposals before they touch the main graph",
   "novel changeset show <novel-dir> <id> [--summary | --offset N --limit N [--notes]]":
     "Read a bounded proposal or review-note page; follow page.nextOffset until null",
+  "novel changeset facts <novel-dir> <id> [--summary | --offset N --limit N | --fact <fact-id>]":
+    "Read compact consequential assertions with source excerpts, or page one fact's full evidence; boundaries and minor event detection are code-validated",
+  "novel changeset decide <novel-dir> <id> --revision <hash> --decisions '<JSON>'":
+    "Record at most 50 source-grounded accept/hold/reject decisions; optional replacement changes only that fact. Unreviewed facts remain held",
   "novel graph build <bundle-dir> [db-path]": "(Re)build the Ladybug store from the bundle",
   "novel graph query <db-path> <cypher>": "Raw Cypher against the Ladybug store",
   "novel graph stats <db-path>": "Node/relation counts per table",
@@ -98,6 +104,8 @@ const COMMANDS: Record<string, string> = {
     "Corpus diagnostics over a novel bundle (counts, coverage, integrity tallies — no judgments)",
   "novel eval run <dataset-dir> <predictions-dir>":
     "Score prediction files against a golden-chapter dataset (precision/recall; metrics only, no thresholds)",
+  "novel eval dialogues <gold-cards.json> <predicted-cards.json>":
+    "Score exchange-level participants: correct/wrong/missing, unknown cards and source-span matching; no model calls",
   "novel eval extract <novel-dir> <predictions-dir>":
     "Project an ingested bundle's ontology into a per-chapter predictions dir for eval run (records as stored; no model calls)",
   "novel config": "Show model routing config (keys via env / secure store only)",
@@ -199,6 +207,10 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "eval") {
+    if (sub === "dialogues" && positional.length === 4) {
+      out(await evalDialogueCards(positional[2], positional[3]), pretty);
+      return;
+    }
     if (sub === "run" && positional[2] && positional[3]) {
       out(await evalRun(positional[2], positional[3]), pretty);
       return;
@@ -207,7 +219,7 @@ async function main(): Promise<void> {
       out(await evalExtract(positional[2], positional[3]), pretty);
       return;
     }
-    throw new Error("Usage: novel eval run <dataset-dir> <predictions-dir> | novel eval extract <novel-dir> <predictions-dir>");
+    throw new Error("Usage: novel eval run <dataset-dir> <predictions-dir> | novel eval extract <novel-dir> <predictions-dir> | novel eval dialogues <gold-cards.json> <predicted-cards.json>");
   }
 
   if (cmd === "watch") {
@@ -298,6 +310,22 @@ async function main(): Promise<void> {
     }
     const id = positional[3];
     if (!id) throw new Error(`changeset ${sub} needs a changeset id`);
+    if (sub === "facts") {
+      const options = positional.slice(4);
+      for (let index = 0; index < options.length; index++) {
+        if (options[index] === "--summary") continue;
+        if (["--offset", "--limit", "--fact"].includes(options[index]) && options[index + 1]) { index++; continue; }
+        throw new Error("Unsupported fact page option");
+      }
+      out(await semanticPage(novelDir, id, { summary: options.includes("--summary"), factId: flag(options, "--fact"), offset: flag(options, "--offset") === undefined ? undefined : Number(flag(options, "--offset")), limit: flag(options, "--limit") === undefined ? undefined : Number(flag(options, "--limit")) }), pretty);
+      return;
+    }
+    if (sub === "decide") {
+      const options = positional.slice(4);
+      if (options.length !== 4 || !flag(options, "--revision") || !flag(options, "--decisions") || new Set([options[0], options[2]]).size !== 2 || ![options[0], options[2]].every(option => ["--revision", "--decisions"].includes(option))) throw new Error("Use --revision <current hash> --decisions '<JSON array>'");
+      out(await decideFacts(novelDir, id, flag(options, "--revision")!, JSON.parse(flag(options, "--decisions")!)), pretty);
+      return;
+    }
     if (sub === "show") {
       const changeset = await loadChangeSet(novelDir, id);
       const options = positional.slice(4);
@@ -327,9 +355,12 @@ async function main(): Promise<void> {
     }
     if (sub === "approve") {
       const ontologyDir = join(novelDir, "ontology");
+      const pending = await loadChangeSet(novelDir, id);
+      if (pending.status === "approved") throw new Error("Packet already approved; do not apply twice");
+      const context = pending.reviewSource ? await prepareSemantic(novelDir, pending) : undefined;
       let cs = await setChangeSetStatus(novelDir, id, "approved");
       const bundle = new BundleStore(ontologyDir);
-      const { applied, processed, deferred } = await applyChangeSet(bundle, cs, new EventLog(novelDir).emit);
+      const application = await applyChangeSet(bundle, cs, new EventLog(novelDir).emit, context);
       const counts = await buildGraphFromBundle(
         ontologyDir,
         join(ontologyDir, "graph.lbug"),
@@ -337,7 +368,7 @@ async function main(): Promise<void> {
       );
       cs = await loadChangeSet(novelDir, id);
       out(
-        { id: cs.id, status: cs.status, applied, processed, deferred, graph: counts },
+        { id: cs.id, status: cs.status, ...application, graph: counts },
         pretty,
       );
       return;

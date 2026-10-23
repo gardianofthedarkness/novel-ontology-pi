@@ -1,10 +1,13 @@
 export async function recordSource({ id, scenes, events, readBlock, sectionBlock }) {
   const turnId = /^view-turn:(.+):(\d+)$/.exec(id);
-  const scene = scenes.find((entry) => entry.id === (turnId?.[1] ?? id));
+  const cardId = /^view-card:(.+):(\d+)$/.exec(id);
+  const scene = scenes.find((entry) => entry.id === (cardId?.[1] ?? turnId?.[1] ?? id));
   const turn = turnId && scene?.turns?.[Number(turnId[2])];
+  const card = cardId && scene?.dialogues?.[Number(cardId[2])];
   if (turnId && !turn) return null;
+  if (cardId && !card) return null;
   const event = !scene && events.find((entry) => entry.id === id);
-  const references = turn ? turn.sentenceIds : scene ? scene.sentenceIds : event?.evidence?.sentenceIds;
+  const references = card ? scenes.flatMap(entry => entry.dialogues ?? []).filter(entry => entry.id === card.id).flatMap(entry => entry.sentenceIds) : turn ? turn.sentenceIds : scene ? scene.sentenceIds : event?.evidence?.sentenceIds;
   if (!references?.length) return null;
   const requested = [...new Set(references)];
   const located = [];
@@ -43,5 +46,5 @@ export async function recordSource({ id, scenes, events, readBlock, sectionBlock
   const segments = ranges.map((range) => range.text.slice(range.start, range.end));
   const text = segments.join('\n\n');
   if (text.length > 300000) return { id, complete: false, message: 'This segment exceeds the local viewer size limit.' };
-  return { id, kind: turn ? 'turn' : scene ? 'scene' : 'event', text, complete: missing === 0, contiguous: segments.length <= 1, segments, missing };
+  return { id, kind: card ? 'dialogue' : turn ? 'turn' : scene ? 'scene' : 'event', text, complete: missing === 0, contiguous: segments.length <= 1, segments, missing };
 }
