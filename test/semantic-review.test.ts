@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { newChangeSet, type ChangeProposal } from "../src/merge/changeset.js";
-import { materializeSemantic, semanticFacts, semanticRevision, type FactDecision } from "../src/merge/semantic.js";
+import { materializeSemantic, semanticFacts, semanticRevision, validateStructure, type FactDecision } from "../src/merge/semantic.js";
 import { decideFacts, prepareSemantic, semanticPage } from "../src/merge/semanticCommands.js";
 import { saveChangeSet, loadChangeSet, setChangeSetStatus } from "../src/merge/changesetStore.js";
 import { applyChangeSet } from "../src/merge/apply.js";
@@ -39,6 +39,19 @@ function fixture() {
 function decision(factId: string, verdict: FactDecision["verdict"] = "accept", replacement?: unknown): FactDecision {
   return { factId, verdict, reason: "依据原文独立核对", ...(replacement === undefined ? {} : { replacement }) };
 }
+
+test("duplicate actor or affected IDs in stored packets still fail closed rather than being silently normalized by review", () => {
+  for (const field of ["primaryActors", "affectedCharacters"] as const) {
+    const { packet } = fixture();
+    const event = packet.proposals.find(proposal => proposal.kind === "create_event")!.payload as OntEvent;
+    event[field].push(event[field][0]);
+    const facts = semanticFacts(packet);
+    assert.ok(facts.some(fact => fact.field === "actors"));
+    assert.throws(() => validateStructure(packet), /Invalid event detection metadata/);
+    packet.semanticReview = { version: 1, revision: semanticRevision(packet), decisions: [] };
+    assert.throws(() => materializeSemantic(packet, []), /Invalid event detection metadata/);
+  }
+});
 
 test("fact review excludes segmentation and event detection but retains identities, dialogue, relations, actors and emotions", () => {
   const { packet } = fixture();

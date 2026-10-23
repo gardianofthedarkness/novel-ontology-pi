@@ -311,10 +311,29 @@ New work-model ingestion uses [precision-first semantic review](docs/semantic-re
 `changeset facts` returns byte-bounded assertions with source excerpts;
 `changeset decide --revision <hash> --decisions '<JSON>'` accepts, holds or
 rejects individual facts. Code checks spans/coverage; Pi reviews identity,
-speakers, relations, participants and state, not segmentation perfection.
+dialogue-card memberships, relations, participants and state, not segmentation perfection.
 Approval can leave uncertain facts held outside canon while processing
 continues. Missing means unknown, not false. Work-model ingestion refuses
 `--auto-approve`; existing legacy miniloop-only smoke runs are unchanged.
+
+For a trusted **live extraction smoke test**, initialize a fresh private workspace
+and omit `--auto-approve`:
+
+```sh
+smoke_root="$(mktemp -d)"
+novel init "$smoke_root/novel"
+novel ingest "$smoke_root/novel" /path/to/source.txt --max-blocks 1
+novel changeset facts "$smoke_root/novel" cs_b0001 --summary
+novel inspect "$smoke_root/novel"
+```
+
+This stops with pending proposals for inspection, not a populated canonical
+ontology or a passed end-to-end review. For canonical verification, run the
+skill-loaded Pi reviewer (see `tools/pi-review/README.md`) or record independent
+source-supported fact decisions before approval. Scripts that formerly combined
+a work model with `--auto-approve` must adopt one of these paths; there is no
+live override or implicit accept-all mode. A miniloop-only smoke test is not a
+substitute for testing the full extraction/review pipeline.
 
 Live processing also writes owner-only, atomically replaced
 `working/<block-id>.json` snapshots after real Jev patches and each extracted

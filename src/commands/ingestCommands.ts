@@ -15,7 +15,7 @@ import { loadExtractionCounts } from "../processing/counts.js";
 import { facultyOptionsFromEnv } from "../processing/facultyOptions.js";
 
 export interface IngestOptions {
-  /** Approve every ChangeSet at the merge gate (smoke runs, trusted batches). */
+  /** Legacy miniloop-only smoke option; a configured work model requires fact review. */
   autoApprove?: boolean;
   /** Stop after this many blocks. */
   maxBlocks?: number;
@@ -37,9 +37,8 @@ export interface IngestOptions {
  *    `novel changeset approve` to apply it, and re-run ingest to roll on.
  *    This is the main-agent workflow: the agent reads each ChangeSet and
  *    only then lets the run continue.
- *  - --auto-approve: every ChangeSet is approved and applied in-process.
- *    For smoke tests and trusted batches; the gate still exists — the
- *    reviewer is just the flag.
+ *  - --auto-approve: legacy miniloop-only smoke runs apply in-process.
+ *    Work-model extraction rejects this flag; use the fact-review gate.
  *
  * The known-entity registry is the bundle itself: entities.jsonl is
  * re-read (last write wins) before every block, so names merged by

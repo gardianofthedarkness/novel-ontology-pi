@@ -553,12 +553,12 @@ export function createExtractor(work: WorkModel) {
         }
         const eventId = `evt_${String(++eventSeq).padStart(6, "0")}`;
         llmIndexToEventId.set(ei, eventId);
-        const actorIds = strList(le.actors).flatMap(
+        const actorIds = [...new Set(strList(le.actors).flatMap(
           (name) => { const actor = resolveOrMint(name, "Character", [], `Actor of event ${eventId}`); return actor?.kind === "Character" ? actor.id : []; },
-        );
-        const affectedIds = strList(le.affected).flatMap(
+        ))];
+        const affectedIds = [...new Set(strList(le.affected).flatMap(
           (name) => { const actor = resolveOrMint(name, "Character", [], `Affected by event ${eventId}`); return actor?.kind === "Character" ? actor.id : []; },
-        );
+        ))];
         const evidence = evidenceIds.length
           ? evidenceIds
           : [spanIds[0]];

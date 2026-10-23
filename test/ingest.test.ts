@@ -126,6 +126,23 @@ function assertSubsequence(haystack: string[], needle: string[]): void {
   );
 }
 
+test("a configured work model cannot auto-approve and fails before any model request or canonical write", async () => {
+  const jev = await startMockJev();
+  try {
+    const { dir, file } = await makeNovel();
+    const original = await readFile(join(dir, "ontology", "entities.jsonl"), "utf8");
+    await assert.rejects(ingestNovel(dir, file, { autoApprove: true, env: {
+      ...process.env, TYPESAFE_API_KEY: FAKE_KEY, JEV_ENDPOINT: jev.url,
+      WORK_LLM_API_KEY: "synthetic-work-key", WORK_LLM_PROVIDER: "deepseek", WORK_LLM_MODEL: "deepseek-flash",
+      WORK_LLM_BASE_URL: jev.url, NOVEL_SECRETS_DIR: join(dir, "secrets"),
+    } }), /requires fact review; --auto-approve cannot bypass it/);
+    assert.deepEqual(jev.seenKeys, []);
+    assert.deepEqual(await listChangeSets(dir), []);
+    assert.equal(await readFile(join(dir, "ontology", "entities.jsonl"), "utf8"), original);
+    assert.deepEqual(await new BundleStore(join(dir, "ontology")).loadFile("events.jsonl"), []);
+  } finally { await jev.close(); }
+});
+
 test("ingest --auto-approve runs the full loop: blocks -> Jev miniloop -> gate -> graph", async () => {
   const jev = await startMockJev();
   try {

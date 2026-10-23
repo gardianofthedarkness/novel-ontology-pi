@@ -63,6 +63,13 @@ progress/error files, not just process termination.
 
 ## Gates and boundaries
 
+Live-model smoke scripts must not use `--auto-approve`. To inspect extraction
+alone, run `novel ingest ... --max-blocks 1` without that flag in a fresh private
+workspace, then inspect the held packet with `changeset facts ... --summary`.
+That is not canonical application or completed semantic review. Use this scoped
+runner for independent end-to-end review; no operator override/accept-all smoke
+path is provided. Enabling one would require a separate owner policy decision.
+
 The custom Bash backend parses one allowlisted CLI/read command; it never
 executes shell text. Commands are serialized, confined to manifest
 workspaces, and cannot use `--auto-approve` or direct data writes. The

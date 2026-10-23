@@ -157,3 +157,31 @@ audited merge/removal operations now remap/deduplicate card members. Remaining
 review-loop behavior is not claimed fixed by the new progress fields alone.
 The skill's focused instructions/reference were updated; its optional Python
 validator could not run because PyYAML is absent from available runtimes.
+
+## Independent review follow-up: duplicate actor IDs
+
+The reviewer reported a real gate-mode smoke at `e7e8241`: cards were extracted,
+but four events had repeated primary-actor IDs and `changeset facts --summary`
+failed structural validation. This is a failed review entry point, not a
+successful canonical end-to-end run or a card-accuracy result.
+
+A synthetic regression reproduced the failure before the fix. Extraction now
+deduplicates actors and affected characters **after name/alias resolution**,
+before creating events and participation proposals. Distinct people and the
+same person appearing in both actor roles are preserved. These lists are
+resolved from extraction's name lists, not concatenated with card membership.
+The alias-resolution list construction also exists on main; strict semantic
+validation exposed the previously tolerated invalid representation.
+
+Regressions cover existing/new aliases, legacy/card extraction, four repeated
+events, unique participation proposal IDs, materialization and the actual
+`changeset facts --summary` CLI. Malformed already-stored packets still fail
+closed: this fix does not rewrite old pending packets or relax the validator.
+Fresh extraction or an authorized audited recall is needed for those artifacts.
+
+254 core and 36 Pi/viewer tests pass. No new paid model calls or live re-test of
+the fixed code was performed. Live `--auto-approve` remains prohibited, with a
+regression proving rejection before model requests or canonical writes. Operator
+runbooks now distinguish extraction-only held smoke tests from independent
+canonical review. No trusted-batch override was added; changing that policy
+requires an explicit owner decision, not a code-review suggestion.
