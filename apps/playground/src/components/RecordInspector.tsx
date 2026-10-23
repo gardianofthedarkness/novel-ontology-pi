@@ -9,9 +9,10 @@ interface Props {
   childCount: number;
   canOpen: boolean;
   onSelect: (node: WorldNode) => void;
+  orbital?: boolean;
 }
 
-export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, childCount, canOpen, onSelect }: Props) {
+export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, childCount, canOpen, onSelect, orbital = false }: Props) {
   if (!selected) return <p className="empty-state">No records in this view.</p>;
   const connections = edges.filter((edge) => edge.from === selected.id || edge.to === selected.id);
   return (
@@ -21,7 +22,10 @@ export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, c
       <span className={`record-status status-${selected.state}`}><i />{selected.cluster ? "View-only group · not an ontology record" : recordStatus(selected)}</span>
       <section className="record-summary" aria-label="Recorded summary">
         <h3>{selected.kind === "scene" ? "Scene · recorded event summary" : "Recorded summary"}</h3>
-        {selected.cluster ? <p>{selected.cluster.ids.length} {selected.cluster.kind} · {selected.cluster.recordCount} represented records. <button onClick={() => onSelect(selected)}>Expand group →</button></p> : selected.summary ? <p>{selected.summary}</p> : <p className="empty-state">No stored summary for this record.</p>}
+        {selected.cluster && selected.summary && <p>{selected.summary}</p>}
+        {selected.dialogue && <p className="dialogue-turn-heading">Turn {selected.dialogue.turn + 1} · {selected.dialogue.speakerLabel ?? "Speaker unresolved"}</p>}
+        {selected.dialogue?.text ? <p className="dialogue-turn-text">{selected.dialogue.text}</p> : selected.dialogue && <p className="empty-state">Original turn text is not stored in this projection. Any summary below is not a transcript.</p>}
+        {selected.cluster ? <p>{selected.cluster.ids.length} {selected.cluster.kind} · {selected.cluster.recordCount} represented records. {orbital ? "Zoom to reveal its orbital timeline; double-click a revealed sphere to enter." : <button onClick={() => onSelect(selected)}>Expand group →</button>}</p> : !selected.dialogue?.text && (selected.summary ? <p>{selected.summary}</p> : selected.kind === "dialogue" && !selected.dialogue ? <p>{selected.label}</p> : <p className="empty-state">No stored summary for this record.</p>)}
         {!!selected.relatedSummaries?.length && <ul>{selected.relatedSummaries.filter((entry) => entry.text !== selected.summary).map((entry) => <li key={entry.id}><button onClick={() => { const event = lookupNodes.find((node) => node.id === entry.id); if (event) onSelect(event); }}>{entry.text}</button></li>)}</ul>}
       </section>
       <dl className="record-facts">
@@ -30,7 +34,7 @@ export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, c
         <div><dt>Sequence</dt><dd>{String(selected.chrono).padStart(2, "0")}</dd></div>
         <div><dt>Connections</dt><dd>{connections.length}</dd></div>
       </dl>
-      {canOpen ? <p className="interior-summary">{childCount} interior records · click the file to enter ↗</p> : selected.kind === "bigEvent" && <p className="empty-state">No interior records in this sample.</p>}
+      {canOpen ? <p className="interior-summary">{childCount} interior records · {orbital ? "zoom to reveal; double-click a revealed sphere to enter" : "click the file to enter ↗"}</p> : !orbital && selected.kind === "bigEvent" && <p className="empty-state">No interior records in this sample.</p>}
       <div className="index-heading"><h3>Records in this view</h3><span>{nodes.length}</span></div>
       <ol className="record-index" aria-label="Archive records">
         {nodes.map((node, index) => (

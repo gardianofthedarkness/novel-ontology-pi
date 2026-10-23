@@ -35,3 +35,26 @@ test('working scene memberships remain ghosts and repeated snapshots do not dupl
   assert.equal(result.edges[0].state, 'held');
   assert.equal(sceneContext(result.nodes, result.edges, scenes, events).edges.length, 1);
 });
+
+test('each stored spoken turn gets one stable sphere without exporting source quotations or inferring presence', () => {
+  const nodes = [{ ...node('scene_1', 'scene', 'proposed'), chrono: 2 }, node('char_1', 'character'), node('evt_1', 'dialogue')];
+  nodes[1].label = '上条当麻';
+  const scenes = [{ id: 'scene_1', chapterIndex: 0, sentenceIds: ['s1'], turns: [{ speakerId: 'char_1', sentenceIds: ['s1'] }, { speakerId: null, sentenceIds: ['s2'] }] }];
+  const events = [{ id: 'evt_1', chapterIndex: 0, summaryEn: '原文语言的摘要', evidence: { text: 'PRIVATE QUOTE', sentenceIds: ['s1'] } }];
+  const before = JSON.stringify({ nodes, scenes, events });
+  const result = sceneContext(nodes, [], scenes, events);
+  const turns = result.nodes.filter((entry) => entry.dialogue);
+  assert.equal(turns.length, 2);
+  assert.equal(turns[0].dialogue.speakerLabel, '上条当麻');
+  assert.equal(turns[0].summary, '原文语言的摘要');
+  assert.equal(turns[0].dialogue.text, undefined);
+  assert.equal(turns[1].summary, undefined);
+  assert.equal(turns[1].dialogue.speakerId, null);
+  assert.ok(turns.every((entry) => entry.state === 'proposed'));
+  assert.ok(turns[0].chrono < turns[1].chrono);
+  assert.ok(!result.edges.some((entry) => entry.relationLabel === 'Present in scene'));
+  assert.equal(sceneContext(result.nodes, result.edges, scenes, events).nodes.length, result.nodes.length);
+  assert.ok(!JSON.stringify(result).includes('sentenceIds'));
+  assert.ok(!JSON.stringify(result).includes('PRIVATE QUOTE'));
+  assert.equal(JSON.stringify({ nodes, scenes, events }), before);
+});

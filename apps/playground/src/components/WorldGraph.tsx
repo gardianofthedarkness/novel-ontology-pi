@@ -23,6 +23,7 @@ export function framePositions(
   positions: [number, number, number][],
   pad = 1.18,
   animated = true,
+  options?: { margin?: number; direction?: [number, number, number] },
 ): void {
   if (!positions.length) return;
   const controls = ref.current?.getControls?.() as {
@@ -46,10 +47,10 @@ export function framePositions(
     if (sheet.width > width * 0.55) inset.bottom = Math.max(inset.bottom, bounds.bottom - sheet.top + 16);
     else inset.right = Math.max(inset.right, bounds.right - sheet.left + 18);
   }
-  const direction = positions.length === 1
+  const direction = options?.direction ?? (positions.length === 1
     ? controls.getPosition(new Vector3()).sub(controls.getTarget(new Vector3())).toArray() as [number, number, number]
-    : document.querySelector('.structure-switch button[aria-pressed="true"]')?.textContent?.includes("Chronology") ? [0.08, 0.25, 1] as [number, number, number] : undefined;
-  const frame = cameraFrame(positions, { width, height, fov: controls.camera.fov || 45, inset, padding: pad, margin: positions.length === 1 ? 105 : 190, direction });
+    : document.querySelector('.structure-switch button[aria-pressed="true"]')?.textContent?.includes("Chronology") ? [0.08, 0.25, 1] as [number, number, number] : undefined);
+  const frame = cameraFrame(positions, { width, height, fov: controls.camera.fov || 45, inset, padding: pad, margin: options?.margin ?? (positions.length === 1 ? 105 : 190), direction });
   if (!frame) return;
   void controls.setTarget(...frame.target, animated);
   void controls.setPosition(...frame.position, animated);

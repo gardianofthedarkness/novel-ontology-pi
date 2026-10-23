@@ -1,0 +1,55 @@
+.design-switch { position: absolute; top: 157px; right: 34px; z-index: 12; color: #a8d5ed; font-size: 10px; border: 1px solid #8ab6d33d; background: #0a1925aa; border-radius: 20px; padding: 5px 12px; }
+.app.orbital-active .heading-caption { display: none; }
+.orbital-navigation { top: 195px; left: 32px; right: 76px; flex-direction: column; align-items: stretch; gap: 5px; }
+.orbital-navigation-top { display: flex; align-items: center; gap: 12px; }
+.orbital-navigation-top button { background: #0b2033a1; border: 1px solid #75b9df35; border-radius: 5px; font-size: 10px; color: #b6dcf0; padding: 5px 8px; }
+.orbital-level { color: #b8e0ff; font-size: 10px; letter-spacing: .1em; }
+.orbital-breadcrumb { max-width: min(780px, 80vw); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; color: #a6c1d4; }
+.orbital-help { display: flex; justify-content: space-between; gap: 14px; color: #8aa6bc; font-size: 9px; }
+.orbital-help > span { white-space: nowrap; }
+.orbital-count { color: #a9d8ec; }
+.orbital-active .inspector-sheet { background: linear-gradient(130deg, #aecde214, #19344960 50%, #07131f8c); border: 1px solid #b2d8ed45; border-radius: 14px; backdrop-filter: blur(24px) saturate(145%); -webkit-backdrop-filter: blur(24px) saturate(145%); box-shadow: inset 0 1px #edf7ff25, 0 22px 60px #0006; }
+.orbital-active .inspector-tabs button { border-color: #97c7e63d; background: #0c223655; }
+.orbital-label { background: none !important; max-width: 180px !important; min-width: 50px; text-shadow: 0 1px 7px #050b15, 0 0 20px #102131; touch-action: manipulation; }
+.orbital-label .node-code { display: block !important; color: #95bdd4; font-size: 7px; margin-bottom: 3px; }
+.orbital-active .orbital-label b { max-width: 170px; max-height: 2.7em; overflow: hidden; font-size: 12px; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.35; }
+.orbital-label.role-preview { max-width: 138px !important; }
+.orbital-label.role-preview .node-code { color: #7bd5ff; }
+.orbital-label.role-preview b { font-size: 10px; }
+.orbital-label.role-nebula b { font-size: 11px; }
+.orbital-time-key { position: absolute; left: 32px; bottom: 232px; color: #83cfff; font-size: 10px; letter-spacing: .08em; pointer-events: none; }
+.orbital-time-key i { display: inline-block; width: 24px; height: 2px; background: #68caff; box-shadow: 0 0 12px #50b9ff; margin: 0 8px 3px 0; }
+.orbital-time-key span { display: block; margin-top: 6px; color: #8aa6bc; font-size: 8px; letter-spacing: 0; }
+.orbital-transition-status { position: absolute; top: 49%; left: 50%; transform: translateX(-50%); color: #bce5ff; background: #0b1b2c88; padding: 8px 16px; border-radius: 20px; font-size: 11px; pointer-events: none; }
+.dialogue-turn-text { font-size: 16px !important; line-height: 1.9 !important; color: #f0e7ff; }
+.dialogue-turn-heading { font-size: 11px !important; color: #c8b0ec; }
+.phone-live .design-switch { top: 166px; right: 20px; }
+.phone-live .orbital-navigation { top: 205px; }
+@media (max-width: 700px) {
+  .design-switch { top: 151px; right: 18px; font-size: 8px; }
+  .orbital-navigation { top: 184px; left: 18px; right: 48px; }
+  .orbital-navigation-top { gap: 5px; flex-wrap: wrap; }
+  .orbital-navigation-top button { font-size: 9px; }
+  .orbital-level { font-size: 8px; }
+  .orbital-help { display: block; font-size: 8px; }
+  .orbital-help > span { display: block; white-space: normal; }
+  .orbital-breadcrumb { max-width: 78vw; font-size: 9px; }
+  .phone-live .design-switch { top: 169px; right: 15px; }
+  .phone-live .orbital-navigation { top: 203px; }
+  .orbital-time-key { left: 18px; bottom: 245px; font-size: 8px; }
+  .phone-live .orbital-time-key { bottom: 170px; }
+  .orbital-time-key span { display: none; }
+  .orbital-active .inspector.is-open { height: min(260px, 31svh); }
+}
+@media (max-height: 600px) {
+  .design-switch { top: 74px; right: 20px; font-size: 8px; }
+  .orbital-navigation { top: 111px; left: 20px; }
+  .phone-live .design-switch { top: 133px; }
+  .phone-live .orbital-navigation { top: 165px; }
+  .orbital-time-key { bottom: 108px; }
+  .orbital-active .orbital-navigation { top: 104px; gap: 2px; }
+  .orbital-active .orbital-help, .orbital-active .orbital-breadcrumb { display: none; }
+  .orbital-active .orbital-navigation-top { gap: 5px; }
+  .orbital-active .orbital-navigation-top button { padding: 3px 5px; font-size: 8px; }
+  .orbital-active .inspector.is-open { top: 140px; bottom: 100px; }
+}

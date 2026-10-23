@@ -1,0 +1,101 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { orbitalLevel, representativeScene, volumeScope, type OrbitalWorld } from "../apps/playground/src/data/orbitalModel.js";
+import { helixPoint, interpolatePose, layoutOrbitalLevel, layoutOrbitalPreview, visibleOrbitalEdges } from "../apps/playground/src/data/orbitalLayout.js";
+import type { WorldEdge, WorldNode } from "../apps/playground/src/types.js";
+
+const record = (id: string, kind: WorldNode["kind"], chrono = 0): WorldNode => ({ id, kind, label: id, chrono, state: "canon", lane: "canon", parent: "chapter", lanePos: [0, 0, 0], interiorPos: [0, 0, 0] });
+const relation = (from: string, to: string, weight = 1): WorldEdge => ({ id: `${from}:${to}`, from, to, weight, kind: "contains", state: "canon", parent: "chapter" });
+const worldWith = (nodes: WorldNode[], edges: WorldEdge[] = []): OrbitalWorld => ({ laneNodes: [record("chapter", "bigEvent")], laneEdges: [], interiors: { chapter: { nodes, edges } } });
+const chapter = { key: "chapter", label: "Chapter", kind: "chapter" as const, chapterId: "chapter" };
+const scenes = (count: number) => Array.from({ length: count }, (_, index) => ({ ...record(`scene-${index}`, "scene", index), summary: `原文摘要 ${index}` }));
+
+test("orbital hierarchy recursively pages scenes and retains all chapter nebula at each depth", () => {
+  const nodes = [...scenes(20000), record("character", "character"), { ...record("ghost", "character"), state: "proposed" as const }, record("location", "location")];
+  const world = worldWith(nodes);
+  const before = structuredClone(world);
+  let scope = chapter as Parameters<typeof orbitalLevel>[1];
+  let depth = 0;
+  while (true) {
+    const level = orbitalLevel(world, scope);
+    assert.equal(level.nebula.length, 3);
+    assert.equal(level.nebula.find((node) => node.id === "ghost")?.state, "proposed");
+    assert.ok(level.main.length <= 20);
+    const first = level.main[0];
+    if (!first.node.cluster) { assert.equal(first.node.id, "scene-0"); break; }
+    assert.equal(level.main.flatMap((entry) => entry.members).length, scope?.ids?.length ?? 20000);
+    scope = first.scope;
+    assert.ok(++depth < 8);
+  }
+  assert.equal(depth, 3);
+  assert.deepEqual(world, before);
+});
+
+test("representative labels use the most connected stored summary, not generated text", () => {
+  const nodes = [...scenes(2), record("person", "character"), record("location", "location")];
+  const edges = [relation("person", "scene-1", 9), relation("location", "scene-1", 5)];
+  assert.equal(representativeScene(nodes, edges)?.summary, "原文摘要 1");
+  assert.equal(orbitalLevel(worldWith(nodes, edges), volumeScope).main[0].node.label, "原文摘要 1");
+  assert.equal(representativeScene(nodes.map((node) => ({ ...node, summary: undefined })), edges), undefined);
+});
+
+test("parallel story tracks stay separate, aligned and straight; gravity moves only nebula", () => {
+  const nodes = [...scenes(40).map((node, index) => ({ ...node, chrono: Math.floor(index / 2), trackId: index % 2 ? "b" : "a" })), record("person", "character")];
+  const level = orbitalLevel(worldWith(nodes, [relation("person", "scene-0", 50)]), chapter);
+  assert.equal(level.main.length, 20);
+  assert.ok(level.main.every((entry) => new Set(entry.members.map((id) => nodes.find((node) => node.id === id)!.trackId)).size === 1));
+  const layout = layoutOrbitalLevel(level);
+  const changed = layoutOrbitalLevel({ ...level, sourceEdges: [relation("person", "scene-39", 50)] });
+  assert.deepEqual(layout.draws.filter((draw) => draw.role === "main"), changed.draws.filter((draw) => draw.role === "main"));
+  assert.notDeepEqual(layout.draws.at(-1)!.position, changed.draws.at(-1)!.position);
+  for (const track of ["a", "b"]) {
+    const entries = layout.draws.filter((draw) => draw.role === "main" && draw.node.trackId === track);
+    assert.equal(new Set(entries.map((draw) => draw.position[1])).size, 1);
+    assert.ok(entries.every((draw, index) => draw.position[2] === 0 && (!index || draw.position[0] > entries[index - 1].position[0])));
+  }
+  const offsets = Array.from({ length: 11 }, (_, index) => {
+    const first = helixPoint(index / 10, 0, 2, 165), second = helixPoint(index / 10, 1, 2, 165);
+    assert.equal(first[0], second[0]); assert.equal(first[2], second[2]);
+    return second[1] - first[1];
+  });
+  assert.ok(offsets.every((value) => Math.abs(value - offsets[0]) < 1e-8));
+});
+
+test("preview stays inside the enclosing sphere and promotion uncoils to exact local positions", () => {
+  const world = worldWith(scenes(20));
+  const parent = layoutOrbitalLevel(orbitalLevel(world)).draws[0];
+  const level = orbitalLevel(world, chapter);
+  const preview = layoutOrbitalPreview(parent, level);
+  const local = layoutOrbitalLevel(level);
+  assert.equal(preview.draws.length, 20);
+  for (const draw of preview.draws) {
+    assert.ok(Math.hypot(...draw.position.map((value, axis) => value - parent.position[axis])) + draw.radius < parent.radius);
+    const target = local.draws.find((entry) => entry.node.id === draw.node.id)!;
+    assert.deepEqual(interpolatePose(draw, target, 0), { position: draw.position, radius: draw.radius });
+    assert.deepEqual(interpolatePose(draw, target, 1), { position: target.position, radius: target.radius });
+    assert.ok(interpolatePose(draw, target, 0.5).position.every(Number.isFinite));
+  }
+  for (const tracks of [1, 2, 20]) for (let track = 0; track < tracks; track++) for (let sample = 0; sample <= 100; sample++) {
+    assert.ok(Math.hypot(...helixPoint(sample / 100, track, tracks, parent.radius)) + 13 < parent.radius);
+  }
+});
+
+test("one stored turn per sphere appears only below its scene; legacy summary dialogue is not duplicated", () => {
+  const nodes = [record("scene", "scene"), record("legacy", "dialogue"), { ...record("turn-0", "dialogue"), dialogue: { turn: 0, speakerId: null } }, { ...record("turn-1", "dialogue"), dialogue: { turn: 1, speakerId: null }, state: "held" as const }, record("loose", "event")];
+  const edges = nodes.slice(1, 4).map((node) => relation("scene", node.id));
+  const world = worldWith(nodes, edges);
+  const overview = orbitalLevel(world, chapter);
+  assert.ok(overview.main.every((entry) => entry.node.kind !== "dialogue"));
+  assert.ok(overview.main.some((entry) => entry.members.includes("loose")));
+  const bottom = orbitalLevel(world, overview.main.find((entry) => entry.node.id === "scene")!.scope);
+  assert.deepEqual(bottom.main.map((entry) => entry.node.id), ["turn-0", "turn-1"]);
+  assert.equal(bottom.main[1].node.state, "held");
+});
+
+test("relations show only selected visible endpoints and never projected aggregates or time links", () => {
+  const level = orbitalLevel(worldWith([record("scene", "scene"), record("person", "character")]), chapter);
+  const draws = layoutOrbitalLevel(level).draws;
+  const edges = [relation("person", "scene"), relation("person", "hidden"), { ...relation("person", "scene"), id: "view-aggregate" }, { ...relation("person", "scene"), id: "chapter:narrative-order:1" }];
+  assert.deepEqual(visibleOrbitalEdges(edges, draws, "person"), [edges[0]]);
+  assert.deepEqual(visibleOrbitalEdges(edges, draws, null), []);
+});
