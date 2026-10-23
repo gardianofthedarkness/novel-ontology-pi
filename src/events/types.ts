@@ -8,7 +8,8 @@ export type ProcessingEvent =
   | { type: "changeset.pending" | "changeset.approved" | "changeset.held" | "changeset.revision_requested" | "changeset.accumulating"; changesetId: string; proposalIds: string[] }
   | { type: "changeset.applied"; changesetId: string; target: "store"; processed: number; unsupportedProposalIds: string[] }
   | { type: "changeset.merged"; changesetId: string; target: "store" }
-  | { type: "graph.rebuilt"; counts: { entities: number; events: number; scenes: number; relations: number; branches: number } };
+  | { type: "graph.rebuilt"; counts: { entities: number; events: number; scenes: number; relations: number; branches: number } }
+  | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate" };
 
 export interface EventRecord {
   version: 1;
@@ -41,6 +42,7 @@ export function projectEvent(event: ProcessingEvent): ProcessingEvent {
       const c = event.counts;
       return { type: event.type, counts: { entities: c.entities, events: c.events, scenes: c.scenes, relations: c.relations, branches: c.branches } };
     }
+    case "draft.updated": return { type: event.type, blockId: event.blockId, patchId: event.patchId, stage: event.stage };
     default: throw new Error("Unsupported processing event");
   }
 }

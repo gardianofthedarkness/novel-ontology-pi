@@ -113,10 +113,20 @@ export class BlockProcessor {
           proposals: [], sceneSpans: [], dialogueUnits: [], turns: [], completedScenes: 0, totalScenes: 0,
         };
         let publishing = Promise.resolve();
-        const publish = (update: Partial<WorkingDraft>) => {
+        const publish = (update: Partial<WorkingDraft>, announce = false) => {
           publishing = publishing.then(async () => {
             draft = { ...draft, ...update, updatedAt: new Date().toISOString() };
-            if (this.observation.novelDir) await saveWorkingDraft(this.observation.novelDir, draft);
+            if (this.observation.novelDir) {
+              await saveWorkingDraft(this.observation.novelDir, draft);
+              // Phase B (decision #15): the working-draft stream is the
+              // live view's source of truth. Only progress publishes
+              // announce — a draft.updated fact means "a new batch of
+              // decisions landed", never the empty initial draft or the
+              // gate transition (changeset.pending already says that).
+              if (announce) {
+                await emit?.({ type: "draft.updated", blockId: draft.blockId, patchId: draft.patchId, stage: draft.stage });
+              }
+            }
           });
           return publishing;
         };
@@ -129,7 +139,7 @@ export class BlockProcessor {
         const constraints = constraintsValue ? parseExtractionConstraints(constraintsValue) : undefined;
         const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
         const faculty = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
-          ? await new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}).run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, knownEntities, pins, constraints, onProgress: publish })
+          ? await new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}).run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, knownEntities, pins, constraints, onProgress: async (progress) => publish(progress, true) })
           : undefined;
         const result = faculty?.miniloop ?? await miniloop.runBlock({
           blockId: block.blockId,
@@ -137,7 +147,7 @@ export class BlockProcessor {
           knownEntities,
           stateSummary: `Processing block ${block.blockId}.`,
           pinnedAnswers: pins,
-          onProgress: async (progress) => publish({ ...progress, totalScenes: progress.sceneSpans.length }),
+          onProgress: async (progress) => publish({ ...progress, totalScenes: progress.sceneSpans.length }, true),
         });
         if (legacyPins && this.observation.workModel && this.observation.facultyGraph !== false) result.changeset.reviewNotes["faculty:legacy-pins"] = "Used the legacy execution path to honor reviewer pins whose window-scoped keys cannot be reinterpreted safely by the scene graph.";
         for (const key of pins.keys()) if (key !== EXTRACTION_CONSTRAINTS_KEY && !result.appliedPins?.includes(key)) result.changeset.reviewNotes[`recall:unapplied:${key}`] = "The pinned question did not occur in this revision. The correction was not silently reinterpreted; Pi must check its applicability.";
@@ -165,7 +175,7 @@ export class BlockProcessor {
             counts,
             constraints,
             sceneResults: faculty?.sceneResults,
-            onProgress: async (progress) => publish(progress),
+            onProgress: async (progress) => publish(progress, true),
           } satisfies ExtractionInput);
           result.changeset.proposals = out.proposals;
           Object.assign(result.changeset.reviewNotes, out.notes);
