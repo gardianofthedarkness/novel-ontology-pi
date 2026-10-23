@@ -94,6 +94,9 @@ test("closed scenes start identity and understanding before dialogue or segmenta
     },
   };
   const graph = new FacultyGraph(decisions, work);
+  assert.equal(graph.router.policyFor("scene-boundaries").enabled, false);
+  assert.equal(graph.router.policyFor("dialogue-boundaries").enabled, false);
+  assert.equal(graph.router.policyFor("dialogue-attribution").enabled, true);
   const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [character] });
   assert.equal(understandingStarted, true);
   assert.equal(result.sceneResults.size, 2);
@@ -129,13 +132,15 @@ test("valid dialogue rows survive context-only records and unknown speaker names
     }
     return JSON.stringify({ summary: "小樱说话。", events: [] });
   } };
-  const graph = new FacultyGraph(decisions, work);
+  const graph = new FacultyGraph(decisions, work, { decisionRouting: { enabled: true } });
   const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [character] });
   const scene = await result.sceneResults.get(sentences[0].id)!;
   assert.equal(scene.turns.length, 2);
   assert.equal(scene.turns[0].speakerName, null);
   assert.deepEqual(scene.turns[1].sentenceIds, [sentences[24].id]);
   assert.ok(scene.notes.some(note => note.includes("source turn was preserved")));
+  assert.equal(graph.router.metrics["dialogue-attribution"].retries, 0);
+  assert.equal(graph.router.metrics["dialogue-attribution"].retrySkipped, 2);
 });
 
 test("dialogue recall pins take priority over automatic restructuring and remain auditable", async () => {
@@ -165,4 +170,49 @@ test("invalid faculty output keeps complete source scenes and explicit unresolve
   assert.equal(output.proposals.filter(proposal => proposal.kind === "create_event" || proposal.kind === "upsert_entity").length, 0);
   assert.ok(Object.values(output.notes).some(note => note.includes("requires Pi review")));
   assert.deepEqual((output.proposals[0].payload as Scene).sentenceIds, sentences.map(sentence => sentence.id));
+});
+
+test("scene boundaries retry System 1 with wider context before any System 2 escalation", async () => {
+  const sentences = sectionBlock(Array.from({ length: 100 }, (_, index) => `第${index}句叙述。`).join("\n"), 0).sentences;
+  const decisions: DecisionModel = { modelId: "jev", async decide(state, questions) {
+    return questions.map(question => ({ key: question.key, value: question.key.startsWith("scene_end:") ? question.options!.at(-1)! : question.key.startsWith("scene_seam:") ? "continues" : "NONE", confidence: question.key.startsWith("scene_end:") && !state.includes("READ-ONLY NEIGHBOR CONTEXT") ? 0.4 : 0.99 }));
+  } };
+  const work: WorkModel = { modelId: "work", async generate(request) {
+    assert.ok(!request.system.startsWith("Resolve one uncertain"));
+    return request.system.startsWith("FACULTY: entities-participants") ? JSON.stringify({ newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null }) : JSON.stringify({ events: [] });
+  } };
+  const graph = new FacultyGraph(decisions, work, { decisionRouting: { enabled: true } });
+  const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [] });
+  assert.equal(graph.router.metrics["scene-boundaries"].retryRecovered, 1);
+  assert.equal(graph.router.metrics["scene-boundaries"].escalated, 0);
+  assert.equal(result.miniloop.changeset.status, "pending_review");
+});
+
+test("dialogue retries keep the same questions and units while using neighboring blocks read-only", async () => {
+  const sentences = sectionBlock("小樱说：“你好。”\n小林说：“再见。”\n两人离开。", 1).sentences;
+  const neighbors = sectionBlock("此前小樱与小林一起走来。", 0).sentences;
+  let originalQuestions: unknown;
+  const decisions: DecisionModel = { modelId: "jev", async decide(state, questions, options) {
+    if (state.includes("READ-ONLY NEIGHBOR CONTEXT") && questions[0].key.startsWith("speaker:")) {
+      assert.ok(state.includes(neighbors[0].id));
+      assert.ok(options?.signal);
+      assert.deepEqual(questions, originalQuestions);
+      return questions.map(question => ({ key: question.key, confidence: 0.99, value: question.key.endsWith(sentences[0].id) ? "小樱" : "小林" }));
+    }
+    if (questions[0].key.startsWith("speaker:")) originalQuestions = structuredClone(questions);
+    return questions.map(question => ({ key: question.key, value: question.key.startsWith("scene_end:") ? sentences[2].id : question.key === `dlg_start:${sentences[0].id}` || question.key === `dlg_end:${sentences[0].id}` ? sentences[0].id : question.key === `dlg_start:${sentences[1].id}` || question.key === `dlg_end:${sentences[1].id}` ? sentences[1].id : question.key.startsWith("speaker:") ? "unknown" : "NONE", confidence: question.key.startsWith("speaker:") ? 0.2 : 0.99 }));
+  } };
+  const work: WorkModel = { modelId: "work", async generate(request) {
+    assert.ok(!request.system.startsWith("FACULTY: dialogue-adjudication"));
+    return request.system.startsWith("FACULTY: entities-participants") ? JSON.stringify({ newEntities: [], charactersPresent: ["小樱", "小林"], charactersMentioned: [], locationName: null }) : JSON.stringify({ events: [] });
+  } };
+  const graph = new FacultyGraph(decisions, work);
+  const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, contextSentences: [...neighbors, ...sentences], knownEntities: [] });
+  const scene = await result.sceneResults.get(sentences[0].id)!;
+  assert.deepEqual(scene.turns.map(turn => turn.speakerName), ["小樱", "小林"]);
+  assert.deepEqual(scene.turns.map(turn => turn.sentenceIds), [[sentences[0].id], [sentences[1].id]]);
+  assert.equal(graph.router.metrics["dialogue-attribution"].retryRecovered, 1);
+  assert.equal(graph.router.metrics["dialogue-attribution"].escalated, 0);
+  assert.equal(graph.router.metrics["scene-boundaries"].retries, 0);
+  assert.equal(graph.router.metrics["dialogue-boundaries"].retries, 0);
 });

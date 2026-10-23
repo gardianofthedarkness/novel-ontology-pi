@@ -5,11 +5,48 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BlockProcessor } from "../src/processing/blockProcessor.js";
 import { MockDecisionModel } from "../src/connectors/jev.js";
+import type { DecisionModel } from "../src/connectors/jev.js";
 import { BundleStore } from "../src/connectors/bundle.js";
 import { initWorkspace } from "../src/workspace/init.js";
 import { addCorrection } from "../src/maintenance/corrections.js";
 import { loadChangeSet } from "../src/merge/changesetStore.js";
 import type { WorkingDraft } from "../src/processing/draft.js";
+
+test("block context buffer includes the following block without proposing or processing its source at a held gate", async context => {
+  const parent = await mkdtemp(join(tmpdir(), "novel-context-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const directory = join(parent, "novel");
+  await initWorkspace(directory);
+  let retried = false;
+  const decisions: DecisionModel = { modelId: "mock", async decide(state, questions) {
+    return questions.map(question => {
+      const end = question.key.startsWith("scene_end:");
+      const expanded = state.includes("READ-ONLY NEIGHBOR CONTEXT");
+      if (end && expanded) {
+        retried = true;
+        assert.ok(state.includes("b0008_s0000: 次章的来源"));
+        assert.ok(question.options?.every(option => option.startsWith("b0007_")));
+      }
+      return { key: question.key, value: end ? question.options!.at(-1)! : "NONE", confidence: end && !expanded ? 0.4 : 0.99 };
+    });
+  } };
+  const processor = new BlockProcessor(new BundleStore(join(directory, "ontology")), decisions, async () => "held", {
+    novelDir: directory,
+    facultyGraph: { decisionRouting: { enabled: true } },
+    workModel: { modelId: "mock", async generate(request) {
+      assert.ok(!request.system.startsWith("Resolve one uncertain"));
+      assert.ok(!request.prompt.includes("次章的来源"));
+      return request.system.startsWith("FACULTY: entities-participants") ? JSON.stringify({ newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null }) : JSON.stringify({ events: [] });
+    } },
+  });
+  await processor.processNovel([{ blockId: "b0008", sectionIndex: 7, text: "当前来源。" }, { blockId: "b0009", sectionIndex: 8, text: "次章的来源。" }]);
+  assert.equal(retried, true);
+  const changeset = await loadChangeSet(directory, "cs_b0008");
+  assert.equal(changeset?.status, "held");
+  assert.ok(changeset?.proposals.every(proposal => proposal.provenance.sentenceIds.every(id => id.startsWith("b0007_"))));
+  assert.equal(await readFile(join(directory, "ontology", "events.jsonl"), "utf8"), "");
+  await assert.rejects(loadChangeSet(directory, "cs_b0009"), { code: "ENOENT" });
+});
 
 test("working scene/dialogue drafts exist before extraction or the merge gate, without canonical writes", async (context) => {
   const parent = await mkdtemp(join(tmpdir(), "novel-working-"));
