@@ -10,6 +10,7 @@ import type { ExtractionConstraints } from "../extraction/constraints.js";
 import type { WorkingDraft } from "./draft.js";
 import { FacultyPool, type FacultyCall } from "./facultyPool.js";
 import { jsonObject, renderSentences, sourceChunks, type SourceChunk } from "./facultyContext.js";
+import { containmentTargets, type FragmentTarget } from "../matching/fragmentMatch.js";
 
 const IDENTITY_SYSTEM = `FACULTY: entities-participants. Read only the supplied source. Return JSON with newEntities:[{name,kind,aliases:[{text,kind}]}], charactersPresent:[name], charactersMentioned:[name], locationName:string|null. Allowed kinds: Character, Location, Organization, Item, Concept. Copy every name and alias exactly from the source or registry, preserving its language/script. Include people newly named in this scene, even when merely mentioned, but distinguish physical presence from mention. Include grounded role descriptions when no personal name is given, never invented placeholders. A narrator's description is not a person's alias. Do not create animal entities. Household groups are Organizations. Registry membership never proves presence. Do not fuse different people on generic pronouns or descriptions. No events or summaries. Set "descriptive":true on a newEntities entry whose name is a role or appearance description rather than a proper name.`;
 
@@ -43,9 +44,12 @@ export class FacultyGraph {
     sentences: Sentence[];
     knownEntities: Entity[];
     pins?: Map<string, unknown>;
+    /** Fragment declines remembered per novel (matching.json): pairs
+     * the birth check must not re-ask. */
+    fragmentDeclines?: { form: string; entityId: string }[];
     constraints?: ExtractionConstraints;
     onProgress?: (progress: Partial<WorkingDraft>) => Promise<void>;
-  }): Promise<{ miniloop: MiniloopResult; sceneResults: Map<string, Promise<SceneFacultyResult>> }> {
+  }): Promise<{ miniloop: MiniloopResult; sceneResults: Map<string, Promise<SceneFacultyResult>>; fragmentDeclines: { form: string; entityId: string }[] }> {
     const changeset = newChangeSet(input.blockId);
     const sentenceIndex = new Map(input.sentences.map((sentence, index) => [sentence.id, index]));
     const sceneResults = new Map<string, Promise<SceneFacultyResult>>();
@@ -180,19 +184,28 @@ export class FacultyGraph {
       });
     };
     /**
-     * Alias-at-birth (identification policy, 2026-10-23): a
-     * descriptive candidate ("honey-colored girl") must first be
-     * checked against the existing characters. One strict Jev round
-     * over the scene passage decides: if the description belongs to
-     * an existing character, it is born as that character's alias
-     * and no entity is minted; only a figure Jev will not attach at
-     * BIRTH_ALIAS_THRESHOLD becomes a new entity. Descriptions that
-     * are already recorded forms of a character fold without a call.
+     * Birth resolution (identification policy, 2026-10-23): two
+     * checks before any Character is minted.
+     *  - Alias-at-birth: a DESCRIPTIVE candidate ("honey-colored
+     *    girl") faces one strict Jev choice round over the scene
+     *    passage; if it belongs to an existing character it is born
+     *    as that character's alias and no entity is minted.
+     *  - Fragment-at-birth: a name candidate that contains or is
+     *    contained in a known character's name (surname-only,
+     *    given-name-only, short forms) faces the same strict round,
+     *    scoped to its containment matches. Fragments partition the
+     *    text, so no later structural pass can see them; and naive
+     *    substring folding is dangerous (relatives, clones), so the
+     *    Jev round is load-bearing.
+     * Both attach only at BIRTH_ALIAS_THRESHOLD. Declined fragment
+     * pairs are returned for per-novel memory so the question is
+     * not re-asked every block. Descriptions that are already
+     * recorded forms fold without a call.
      */
-    const resolveDescriptiveBirths = async (llm: LlmScene, sceneSentences: Sentence[], notes: string[]): Promise<LlmScene> => {
+    const newFragmentDeclines: { form: string; entityId: string }[] = [];
+    const resolveBirths = async (llm: LlmScene, sceneSentences: Sentence[], notes: string[]): Promise<LlmScene> => {
       const declarations = llm.newEntities ?? [];
       const descriptive = declarations.filter(d => d.kind === "Character" && d.descriptive && typeof d.name === "string" && d.name.length > 0);
-      if (!descriptive.length) return llm;
       const registryCandidates = input.knownEntities
         .filter(e => e.kind === "Character")
         .map(e => ({ name: e.names[0]?.text ?? e.id, id: e.id as string | undefined, forms: e.names.map(n => n.text) }));
@@ -223,32 +236,68 @@ export class FacultyGraph {
           notes.push(`alias-at-birth: "${d.name}" is already a recorded form of ${owner.name}; folded without a new entity.`);
         } else pending.push(d);
       }
-      if (pending.length) {
-        const candList = candidates.map(c => `- ${c.name} (forms: ${c.forms.join(", ")})`).join("\n");
-        const state = `${constraints}PASSAGE:\n${renderSentences(sceneSentences)}\n\nEXISTING CHARACTERS:\n${candList}`;
-        const questions = pending.map(d => ({
+      // Fragment pendings are computed over what remains after
+      // descriptive folding: name-shaped Character declarations whose
+      // name containment-matches a candidate, minus remembered
+      // declines (registry targets only — memory keys on entity ids).
+      const declined = new Set((input.fragmentDeclines ?? []).map(fd => `${fd.form}|${fd.entityId}`));
+      const fragPending: { name: string; targets: FragmentTarget[] }[] = [];
+      for (const d of remaining) {
+        if (d.kind !== "Character" || d.descriptive || typeof d.name !== "string" || !d.name) continue;
+        const targets = containmentTargets(d.name, candidates)
+          .filter(t => !(t.id && declined.has(`${d.name}|${t.id}`)));
+        if (targets.length) fragPending.push({ name: d.name, targets });
+      }
+      if (!pending.length && !fragPending.length) return { ...llm, newEntities: remaining };
+      const candList = candidates.map(c => `- ${c.name} (forms: ${c.forms.join(", ")})`).join("\n");
+      const state = `${constraints}PASSAGE:\n${renderSentences(sceneSentences)}\n\nEXISTING CHARACTERS:\n${candList}`;
+      const questions = [
+        ...pending.map(d => ({
           key: `birth:${d.name}`,
           primitive: "choice" as const,
           instructions: `In the passage, the narrator refers to a figure as "${d.name}". Which EXISTING character does this description refer to in this passage? Choose that character's exact name from the options. Choose NEW_PERSON if the figure is a different person, a new character, or the passage does not establish the identity with confidence. A figure who merely appears in the same scene as a character, or interacts with them, is NOT that character.`,
           options: [...candidates.map(c => c.name), "NEW_PERSON"],
-        }));
-        try {
-          const answers = await decide(state, questions);
-          for (const d of pending) {
-            const a = answers.find(x => x.key === `birth:${d.name}`);
-            const value = typeof a?.value === "string" ? a.value : "NEW_PERSON";
-            const conf = a?.confidence ?? 0;
-            const target = candidates.find(c => c.name === value);
-            if (target && conf >= BIRTH_ALIAS_THRESHOLD) {
-              attach(d.name!, target);
-              notes.push(`alias-at-birth: "${d.name}" attached to ${target.name} (Jev confidence ${conf.toFixed(2)}); no new entity minted.`);
-            } else {
-              notes.push(`alias-at-birth: "${d.name}" kept as a new entity (Jev: ${value}, confidence ${conf.toFixed(2)}).`);
+        })),
+        ...fragPending.map(f => ({
+          key: `fragment:${f.name}`,
+          primitive: "choice" as const,
+          instructions: `In the passage, a figure is referred to as "${f.name}", a shortened or extended form of a known character's name (${f.targets.map(t => t.name).join(", ")}). A fragment of a known character's name (surname-only or given-name-only reference) usually denotes that same character — but it can also be a DIFFERENT person: a relative sharing the surname, a clone, or a namesake. Which listed character does "${f.name}" refer to in this passage? Choose NEW_PERSON if it is a different or newly introduced person, or if the passage does not establish the identity with confidence.`,
+          options: [...f.targets.map(t => t.name), "NEW_PERSON"],
+        })),
+      ];
+      try {
+        const answers = await decide(state, questions);
+        for (const d of pending) {
+          const a = answers.find(x => x.key === `birth:${d.name}`);
+          const value = typeof a?.value === "string" ? a.value : "NEW_PERSON";
+          const conf = a?.confidence ?? 0;
+          const target = candidates.find(c => c.name === value);
+          if (target && conf >= BIRTH_ALIAS_THRESHOLD) {
+            attach(d.name!, target);
+            notes.push(`alias-at-birth: "${d.name}" attached to ${target.name} (Jev confidence ${conf.toFixed(2)}); no new entity minted.`);
+          } else {
+            notes.push(`alias-at-birth: "${d.name}" kept as a new entity (Jev: ${value}, confidence ${conf.toFixed(2)}).`);
+          }
+        }
+        for (const f of fragPending) {
+          const a = answers.find(x => x.key === `fragment:${f.name}`);
+          const value = typeof a?.value === "string" ? a.value : "NEW_PERSON";
+          const conf = a?.confidence ?? 0;
+          const target = f.targets.find(t => t.name === value);
+          if (target && conf >= BIRTH_ALIAS_THRESHOLD) {
+            attach(f.name, target);
+            notes.push(`fragment-at-birth: "${f.name}" folded into ${target.name} (Jev confidence ${conf.toFixed(2)}); no new entity minted.`);
+          } else {
+            notes.push(`fragment-at-birth: "${f.name}" kept as a new entity (Jev: ${value}, confidence ${conf.toFixed(2)}).`);
+            for (const t of f.targets) {
+              if (t.id && !newFragmentDeclines.some(fd => fd.form === f.name && fd.entityId === t.id)) {
+                newFragmentDeclines.push({ form: f.name, entityId: t.id });
+              }
             }
           }
-        } catch {
-          notes.push("alias-at-birth check unavailable; descriptive candidates were kept as new entities for review.");
         }
+      } catch {
+        notes.push("birth checks unavailable; descriptive and fragment candidates were kept as new entities for review.");
       }
       return { ...llm, newEntities: remaining };
     };
@@ -261,7 +310,7 @@ export class FacultyGraph {
       const identity = safely<LlmScene>("entities-participants", async () => {
         const parts = await Promise.all(sourceChunks(sentences, { maxBytes: 7_000, maxSentences: 48, margin: 4 }).map(chunk => safely<LlmScene>("entities-participants chunk", () => identityChunk(chunk, notes), { newEntities: [], charactersPresent: [], charactersMentioned: [] })));
         return { newEntities: parts.flatMap(part => part.newEntities ?? []), charactersPresent: [...new Set(parts.flatMap(part => part.charactersPresent ?? []))], charactersMentioned: [...new Set(parts.flatMap(part => part.charactersMentioned ?? []))], locationName: parts.map(part => part.locationName).find(Boolean) ?? null } satisfies LlmScene;
-      }, { newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null } as LlmScene).then(llm => resolveDescriptiveBirths(llm, sentences, notes));
+      }, { newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null } as LlmScene).then(llm => resolveBirths(llm, sentences, notes));
       const understanding = safely<LlmScene>("scene-understanding", async () => {
         const parts = await Promise.all(sourceChunks(sentences, { maxBytes: 7_000, maxSentences: 48, margin: 4 }).map(chunk => safely<LlmScene>("scene-understanding chunk", () => understandingChunk(chunk, sceneIndex), { events: [] })));
         const events: NonNullable<LlmScene["events"]> = [];
@@ -326,6 +375,7 @@ export class FacultyGraph {
     return {
       miniloop: { changeset, escalations, appliedPins: [...appliedPins], accepted: { sceneSpans: scenes.spans, dialogueUnits: dialogues.spans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), dialogueUnitScenes: linkExchangeScenes(input.sentences, dialogues.spans, scenes.spans), nameHits: [], facultyMetrics: { ...this.pool.metrics } }, windows: [] },
       sceneResults,
+      fragmentDeclines: newFragmentDeclines,
     };
   }
 }

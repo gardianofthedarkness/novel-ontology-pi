@@ -153,3 +153,21 @@ completes (observed by the CLI as a fully merged auto-approved
 run; in gate mode the reviewing agent's `novel match` is the
 sweep, and it now includes structural candidates too).
 
+Fragment-at-birth completes the birth policy (spec:
+[fragment-at-birth.md](fragment-at-birth.md)). Fragments —
+surname-only, given-name-only and short forms — are the dominant
+live duplicate class, and they partition the text (one form per
+scene), so structural matching is blind to them by construction.
+At the faculty identity stage, a name candidate that contains or
+is contained in a known character's name faces the same strict
+Jev round, scoped to its containment matches; on confirm it folds
+as a form and is never minted. The miniloop name patch instead
+gets the containment match injected as evidence into its existing
+new/nickname questions — no new round. Declined pairs are
+remembered in `matching.json` (suppressing only the birth
+question). Live on the same 15K slice: the four known fragment
+pairs fold at 1.00 offline; in the full ingest 2 of 4 classes
+resolved at birth, the misses tracing to the spec's named v1
+limits (birth-order races and extraction's own cast-name mint
+path, left unguarded in v1).
+

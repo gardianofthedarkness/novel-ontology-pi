@@ -31,18 +31,44 @@ export interface EmDistinctMemory {
   distinct: DistinctRecord[];
 }
 
-export async function loadDistinctMemory(novelDir: string): Promise<DistinctRecord[]> {
+/** A fragment-at-birth decline: this form was considered against
+ * this entity at birth and not attached. Suppresses only the birth
+ * question; the pair stays eligible for EM / `novel match`. */
+export interface FragmentDecline {
+  form: string;
+  entityId: string;
+  ts: string;
+}
+
+export interface MatchMemory {
+  distinct: DistinctRecord[];
+  fragmentDeclines: FragmentDecline[];
+}
+
+export async function loadMatchMemory(novelDir: string): Promise<MatchMemory> {
   try {
-    const parsed = JSON.parse(await readFile(join(novelDir, "matching.json"), "utf8")) as EmDistinctMemory;
-    return Array.isArray(parsed.distinct) ? parsed.distinct : [];
+    const parsed = JSON.parse(await readFile(join(novelDir, "matching.json"), "utf8")) as Partial<MatchMemory>;
+    return {
+      distinct: Array.isArray(parsed.distinct) ? parsed.distinct : [],
+      fragmentDeclines: Array.isArray(parsed.fragmentDeclines) ? parsed.fragmentDeclines : [],
+    };
   } catch {
-    return [];
+    return { distinct: [], fragmentDeclines: [] };
   }
 }
 
-export async function saveDistinctMemory(novelDir: string, distinct: DistinctRecord[]): Promise<void> {
+export async function saveMatchMemory(novelDir: string, memory: MatchMemory): Promise<void> {
   await mkdir(novelDir, { recursive: true });
-  await writeFile(join(novelDir, "matching.json"), JSON.stringify({ distinct }, null, 1) + "\n");
+  await writeFile(join(novelDir, "matching.json"), JSON.stringify(memory, null, 1) + "\n");
+}
+
+export async function loadDistinctMemory(novelDir: string): Promise<DistinctRecord[]> {
+  return (await loadMatchMemory(novelDir)).distinct;
+}
+
+export async function saveDistinctMemory(novelDir: string, distinct: DistinctRecord[]): Promise<void> {
+  const memory = await loadMatchMemory(novelDir);
+  await saveMatchMemory(novelDir, { ...memory, distinct });
 }
 
 export interface EmGraphData {

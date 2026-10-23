@@ -26,7 +26,7 @@ import { previewFacultyStates } from "./facultyContinuity.js";
 import { join } from "node:path";
 import { BundleStore } from "../connectors/bundle.js";
 import type { OntEvent, Relation, Scene } from "../ontology/types.js";
-import { runEntityMatching, type EmSummary } from "../matching/emFaculty.js";
+import { runEntityMatching, loadMatchMemory, saveMatchMemory, type EmSummary } from "../matching/emFaculty.js";
 
 export type ReviewDecision = "approved" | "held" | "revision_requested";
 
@@ -153,8 +153,20 @@ export class BlockProcessor {
         const constraints = constraintsValue ? parseExtractionConstraints(constraintsValue) : undefined;
         const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
         const faculty = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
-          ? await new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}).run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, knownEntities, pins, constraints, onProgress: async (progress) => publish(progress, true) })
+          ? await new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}).run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, knownEntities, pins, constraints, fragmentDeclines: this.observation.novelDir ? (await loadMatchMemory(this.observation.novelDir)).fragmentDeclines : [], onProgress: async (progress) => publish(progress, true) })
           : undefined;
+        if (faculty && faculty.fragmentDeclines.length && this.observation.novelDir) {
+          // Remember fragment-at-birth declines per novel so later
+          // blocks do not re-ask the same pair (matching.json).
+          const memory = await loadMatchMemory(this.observation.novelDir);
+          const known = new Set(memory.fragmentDeclines.map((fd) => `${fd.form}|${fd.entityId}`));
+          for (const fd of faculty.fragmentDeclines) {
+            if (!known.has(`${fd.form}|${fd.entityId}`)) {
+              memory.fragmentDeclines.push({ ...fd, ts: new Date().toISOString() });
+            }
+          }
+          await saveMatchMemory(this.observation.novelDir, memory);
+        }
         const result = faculty?.miniloop ?? await miniloop.runBlock({
           blockId: block.blockId,
           sentences,
