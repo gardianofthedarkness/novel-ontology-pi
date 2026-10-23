@@ -146,6 +146,55 @@ their meaning is not silently changed by moving to scene-scoped execution.
 
 ## Context and resource limits
 
+### Opt-in scene-independent turn attribution
+
+`FacultyGraphOptions.dialogueScope: "block-turn"` enables the experimental
+decoupled path. Omit it, or use `"scene"`, to retain the current default.
+Hosts can pass this through the existing `BlockProcessor` observation option
+`facultyGraph`; there is no new CLI flag or automatic rollout.
+
+```text
+Original source
+  ├─ scene segmentation ──> scene participants / understanding
+  ├─ block identity discovery ──────────────────────────┐
+  └─ dialogue detection ──> turn-structure repair ───────┤
+                                                      v
+                  fixed turns + bounded source context + candidates
+                                                      |
+                  S1 attribution -> context retry -> speaker-only S2
+                                                      |
+                              join attributed turns to scene spans
+                                                      |
+                         grounding / pending proposal assembly
+```
+
+Turn evidence comes from original source rather than being clipped by scene
+boundaries. Available neighboring blocks remain read-only context: they cannot
+become turn output or block identity evidence. Structure repair has no identity
+output; speaker assignment cannot add or extend dialogue spans. Retry metrics
+count turns in this mode, not the default mode's scene-local chunks.
+
+Block identity declarations are registered as pending, source-grounded entity
+proposals before scene assembly so attributed speakers are not lost when a
+scene's identity response is absent. Every accepted name/alias must occur in
+the current block; provenance cites its actual source sentences. Conflicting
+existing identity owners/kinds are not fused. Registry membership never implies
+physical scene presence. Names remain in the original language/script.
+
+Reviewer constraints accompany decisions. Any reviewer pins retain the original
+scene-scoped execution path for that revision, with an explicit review note,
+rather than silently changing pinned targets. Invalid/oversized states and
+failed structure or speaker work remain unresolved. No target or candidate list
+is silently truncated to fit a budget; candidate lists over 250 fail explicitly.
+The existing independent Pi review/application gate is unchanged.
+
+This mode deliberately remains opt-in: the bounded real-data experiment needed
+an offline assembly correction, spent more tokens, and exhausted its combined
+test budget before all non-speaker work completed. It still duplicates some
+block/scene identity work and makes per-turn attribution calls. Batching,
+budget isolation and a complete live validation are prerequisites to promoting
+it to the default. See [the decoupling benchmark](decoupled-faculty-benchmark.md).
+
 All work-model calls share one per-block pool: four concurrent requests by
 default, with one slot reserved for adjudication (at concurrency one, all work
 uses that slot). Queued adjudication has priority over bulk understanding.
