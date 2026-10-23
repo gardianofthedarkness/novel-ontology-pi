@@ -1,5 +1,11 @@
 # Scene-independent speaker attribution: bounded real-novel experiment
 
+> Historical speaker-attribution experiment, not the current product target.
+> The owner-approved design now uses multi-participant dialogue cards, with
+> no sentence-by-sentence speaker assignment. See the [current benchmark
+> contract](dialogue-card-benchmark.md) and DESIGN.md. Results below are kept
+> unchanged as historical evidence; none is a card-participant accuracy claim.
+
 23 October 2026. This report contains aggregate results only; private novel
 source, annotation identities, raw requests/responses, credentials and audit
 details are not included in the repository.

@@ -1,5 +1,10 @@
 # Precision-first review validation
 
+> Design update: dialogue cards now represent multi-person exchanges, not
+> single-speaker turns. The sentence-speaker results below describe the old
+> implementation and do not measure the new contract. See
+> [dialogue-card benchmarking](../dialogue-card-benchmark.md).
+
 ## Motivation: prior fresh three-chapter run
 
 The earlier live test used two empty databases, fresh TypeSafe/Jev and
