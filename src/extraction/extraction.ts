@@ -57,6 +57,7 @@ export interface ExtractionInput {
   /** Distinct entity/event/scene counts already in the bundle. */
   counts: { events: number; scenes: number; reservedEntityIds?: string[] };
   constraints?: ExtractionConstraints;
+  sceneResults?: Map<string, Promise<SceneFacultyResult>>;
   onProgress?: (progress: { proposals: ChangeProposal[]; completedScenes: number; totalScenes: number }) => Promise<void>;
 }
 
@@ -88,12 +89,26 @@ interface LlmEvent {
   stateChanges?: LlmStateChange[];
 }
 
-interface LlmScene {
+export interface LlmScene {
+  summary?: string;
   locationName?: string | null;
   charactersPresent?: string[];
   charactersMentioned?: string[];
   events?: LlmEvent[];
   newEntities?: { name?: string; kind?: string; aliases?: { text?: string; kind?: string }[] }[];
+}
+
+export interface NamedTurn {
+  speakerName: string | null;
+  addresseeName: string | null;
+  sentenceIds: string[];
+  continuesPrevious?: boolean;
+}
+
+export interface SceneFacultyResult {
+  scene: LlmScene;
+  turns: NamedTurn[];
+  notes: string[];
 }
 
 export const EXTRACTION_SYSTEM = `You are the extraction step of a novel-ontology pipeline. You receive ONE structured scene from a novel: its sentences (with stable ids), the characters the system already knows, and dialogue turns attributed by a decision model. You output ONLY a JSON object describing the scene's ontology: events, participants, causal links, character state changes, and any genuinely new entities.
@@ -329,6 +344,10 @@ export function createExtractor(work: WorkModel) {
       }
       const known = formToId.get(name);
       if (known) return entityById.get(known)!;
+      if (input.sceneResults) {
+        notes[`faculty:unresolved-reference:${name}`] = `${origin}: identity faculty did not resolve this name; no placeholder entity was invented.`;
+        return undefined;
+      }
       const entity = mintEntity(name, kind, aliases);
       const stub = stubByCandidate.get(name);
       if (stub) {
@@ -370,36 +389,45 @@ export function createExtractor(work: WorkModel) {
         for (const id of w.charactersPresent) castIds.add(id);
         for (const id of w.charactersMentioned) mentionedIds.add(id);
       }
-      const turns = input.miniloop.windows
+      let turns = input.miniloop.windows
         .flatMap((w) => w.turns)
         .filter((t) => t.sentenceIds.some((id) => spanIds.includes(id)));
 
       let llm: LlmScene | null = null;
+      let faculty: SceneFacultyResult | undefined;
       try {
-        const raw = await work.generate({
-          system: EXTRACTION_SYSTEM,
-          prompt: buildScenePrompt({
-            sceneIndex: si + 1,
-            chapterIndex: input.chapterIndex,
-            sentences: spanSentences,
-            cast: [...castIds].map((id) => ({
-              id,
-              forms: (entityById.get(id)?.names ?? []).map((n) => n.text),
-            })),
-            turns,
-            pendingCandidates: [...stubByCandidate.keys()],
-            registry: [...entityById.values()].map((entity) => ({ id: entity.id, forms: entity.names.map((name) => name.text) })),
-            constraints,
-          }),
-          jsonSchema: { type: "object" },
-          maxTokens: 4000,
-        });
-        llm = parseSceneJson(raw);
-        if (!llm) notes[`extraction:scene:${sceneId}`] = "Work model returned unparseable JSON; scene contributed no proposals.";
+        if (input.sceneResults) {
+          faculty = await input.sceneResults.get(spanIds[0]);
+          if (!faculty) throw new Error("Missing scene faculty result");
+          llm = faculty.scene;
+          faculty.notes.forEach((note, index) => { notes[`faculty:${sceneId}:${index}`] = note; });
+        } else {
+          const raw = await work.generate({
+            system: EXTRACTION_SYSTEM,
+            prompt: buildScenePrompt({
+              sceneIndex: si + 1,
+              chapterIndex: input.chapterIndex,
+              sentences: spanSentences,
+              cast: [...castIds].map((id) => ({
+                id,
+                forms: (entityById.get(id)?.names ?? []).map((n) => n.text),
+              })),
+              turns,
+              pendingCandidates: [...stubByCandidate.keys()],
+              registry: [...entityById.values()].map((entity) => ({ id: entity.id, forms: entity.names.map((name) => name.text) })),
+              constraints,
+            }),
+            jsonSchema: { type: "object" },
+            maxTokens: 4000,
+          });
+          llm = parseSceneJson(raw);
+          if (!llm) notes[`extraction:scene:${sceneId}`] = "Work model returned unparseable JSON; scene contributed no proposals.";
+        }
       } catch (err) {
         notes[`extraction:scene:${sceneId}`] = `Work model call failed: ${(err as Error).message.slice(0, 160)}`;
       }
-      if (!llm) continue;
+      if (!llm && !input.sceneResults) continue;
+      if (!llm) llm = { events: [], newEntities: [], charactersPresent: [], charactersMentioned: [] };
 
       // Register the model's declared new entities first, so event
       // actors resolve to them (and to stubs they flesh out).
@@ -501,6 +529,11 @@ export function createExtractor(work: WorkModel) {
       for (let ei = 0; ei < llmEvents.length; ei++) {
         const le = llmEvents[ei];
         if (!le.summaryEn) continue;
+        const evidenceIds = strList(le.evidence).filter((id) => spanIds.includes(id));
+        if (input.sceneResults && !evidenceIds.length) {
+          notes[`faculty:missing-evidence:${sceneId}:${ei}`] = "Event omitted: no valid source evidence was supplied; no first-sentence citation was fabricated.";
+          continue;
+        }
         const eventId = `evt_${String(++eventSeq).padStart(6, "0")}`;
         llmIndexToEventId.set(ei, eventId);
         const actorIds = strList(le.actors).flatMap(
@@ -509,7 +542,6 @@ export function createExtractor(work: WorkModel) {
         const affectedIds = strList(le.affected).flatMap(
           (name) => { const actor = resolveOrMint(name, "Character", [], `Affected by event ${eventId}`); return actor?.kind === "Character" ? actor.id : []; },
         );
-        const evidenceIds = strList(le.evidence).filter((id) => spanIds.includes(id));
         const evidence = evidenceIds.length
           ? evidenceIds
           : [spanIds[0]];
@@ -612,6 +644,14 @@ export function createExtractor(work: WorkModel) {
         }
       }
       if (!Array.isArray(llm.charactersPresent) || !Array.isArray(llm.charactersMentioned)) notes[`extraction:roster:${sceneId}`] = "Scene-specific roster fields missing; no physical presence inferred from window hints or event actors.";
+      if (faculty) {
+        turns = faculty.turns.map(turn => ({
+          speakerId: turn.speakerName ? formToId.get(turn.speakerName) ?? null : null,
+          addresseeId: turn.addresseeName ? formToId.get(turn.addresseeName) ?? null : null,
+          sentenceIds: [...turn.sentenceIds],
+        }));
+        for (let index = 0; index < turns.length; index++) if (!turns[index].speakerId) notes[`faculty:unknown-speaker:${sceneId}:${index}`] = "Speaker remains unresolved; source was preserved without inventing an identity.";
+      }
       const scene: Scene = {
         id: sceneId,
         chapterIndex: input.chapterIndex,
@@ -620,6 +660,7 @@ export function createExtractor(work: WorkModel) {
         charactersMentioned: [...mentionedIds].filter((id) => !castIds.has(id) && entityById.get(id)?.kind === "Character"),
         turns: turns.map((turn) => ({ ...turn, speakerId: turn.speakerId && entityById.get(turn.speakerId)?.kind === "Character" ? turn.speakerId : null, addresseeId: turn.addresseeId && entityById.get(turn.addresseeId)?.kind === "Character" ? turn.addresseeId : null })),
         locationId,
+        ...(faculty && llm.summary ? { summary: llm.summary } : {}),
       };
       sceneProposals.push({
         id: `${input.blockId}_${sceneId}`,

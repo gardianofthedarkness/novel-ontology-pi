@@ -101,6 +101,7 @@ export interface Scene {
   charactersMentioned: string[]; // mentioned is NOT present
   turns: DialogueTurn[];
   locationId: string | null;
+  summary?: string;
 }
 
 export interface Branch {

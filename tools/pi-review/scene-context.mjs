@@ -30,9 +30,9 @@ export function sceneContext(inputNodes, inputEdges, scenes, events) {
     }
     const ordered = [...matches.values()].sort((first, second) => first.chronologicalOrder - second.chronologicalOrder || first.id.localeCompare(second.id));
     const summaries = ordered.filter((event) => clean(event.summaryEn)).slice(0, 3).map((event) => ({ id: event.id, text: clean(event.summaryEn) }));
-    if (summaries.length) {
-      node.label = clean(summaries[0].text, 55);
-      node.summary = summaries[0].text;
+    if (clean(scene.summary) || summaries.length) {
+      node.label = clean(scene.summary || summaries[0].text, 55);
+      node.summary = clean(scene.summary) || summaries[0].text;
       node.relatedSummaries = summaries;
     }
     for (const event of ordered) link(scene.id, event.id, 'contains', 'Shared source coverage', 2.4);

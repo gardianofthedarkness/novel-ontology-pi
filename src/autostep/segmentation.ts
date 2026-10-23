@@ -208,14 +208,14 @@ export async function tileScenes(
         },
       ]);
       const a = choiceValue(answers, key);
-      if (!a || a.value === "NONE" || a.value === "") break;
-      const conf = a.confidence ?? 0;
+      const conf = a?.confidence ?? 0;
       if (conf < opts.gates.reask) {
         escalations.push({
           unitId: anchorId,
           reason: `scene start decision too uncertain (${conf.toFixed(2)})`,
         });
       }
+      if (!a || a.value === "NONE" || a.value === "") break;
       const s = typeof a.value === "string" ? idxOf.get(a.value) : undefined;
       if (s === undefined || s < local) break;
       if (s <= cur.start) {
@@ -250,7 +250,7 @@ export async function tileScenes(
 export async function selectExchangeSpans(
   sentences: Sentence[],
   decide: DecideFn,
-  opts: { stateSummary: string; gates: SegmentationGates },
+  opts: { stateSummary: string; gates: SegmentationGates; onBatch?: (spans: [number, number][], completeThrough: number) => Promise<void> },
 ): Promise<{
   spans: [number, number][];
   escalations: SpanEscalation[];
@@ -275,13 +275,16 @@ export async function selectExchangeSpans(
           {
             key: startKey,
             primitive: "choice",
-            instructions: `A dialogue exchange is one ongoing conversation between the same people; brief narration beats of a sentence or two inside the conversation do not end it. Which sentence id BEGINS the next dialogue exchange at or after ${firstId}? Pick the first spoken line of the exchange, or NONE if no exchange begins in the rest of this passage.`,
+            instructions: `Select dialogue at sentence level: one short continuous run of actual speech. One or two brief narration or action sentences BETWEEN spoken sentences may remain inside the run. Three or more consecutive non-verbal sentences break the run: speech resuming after that gap starts another dialogue unit/turn, even with the same speakers in the same scene. Do not include a long descriptive passage merely to connect two spoken lines. Thoughts, quoted labels and descriptions are not spoken dialogue. Which sentence id BEGINS the next dialogue exchange at or after ${firstId}? Pick its first spoken sentence, including speech resuming after a long narration gap, or NONE if no speech begins in the rest of this passage.`,
             options: startOpts,
           },
         ]),
         startKey,
       );
-      if (!sa || sa.value === "NONE" || sa.value === "") break;
+      if (!sa || sa.value === "NONE" || sa.value === "") {
+        if ((sa?.confidence ?? 0) < opts.gates.reask) escalations.push({ unitId: firstId, reason: "dialogue absence decision too uncertain" });
+        break;
+      }
       const sLocal = region.findIndex((s) => s.id === sa.value);
       if (sLocal < local) break;
       const confS = sa.confidence ?? 0;
@@ -299,7 +302,7 @@ export async function selectExchangeSpans(
           {
             key: endKey,
             primitive: "choice",
-            instructions: `The dialogue exchange beginning at sentence ${region[sLocal].id} ends when the conversation stops, the participants change entirely, or narration runs for three or more consecutive sentences. Which sentence id is the LAST sentence belonging to this exchange? Pick only an id from ${region[sLocal].id} to ${endOpts[endOpts.length - 1]}.`,
+            instructions: `The sentence-level dialogue run beginning at ${region[sLocal].id} may include one or two brief non-verbal sentences only when speech resumes immediately afterward. End the run BEFORE any gap of three or more consecutive narration, action or description sentences, even if the same speakers resume in the same scene; that resumed speech starts another dialogue unit/turn. Also end when the conversation stops or the participants change entirely. Choose the LAST spoken sentence before the break, not the scene's end or the narration after speech. Which sentence id is the LAST sentence belonging to this exchange? Pick only an id from ${region[sLocal].id} to ${endOpts[endOpts.length - 1]}.`,
             options: endOpts,
           },
         ]),
@@ -317,14 +320,21 @@ export async function selectExchangeSpans(
       raw.push([b + sLocal, b + eLocal]);
       local = eLocal + 1;
     }
+    const merged = stitchDialogueSpans(raw);
+    const nextStart = b + BATCH >= n ? n : b + STEP;
+    const crossing = merged.find(([start, end]) => start < nextStart && end >= nextStart);
+    const through = crossing ? crossing[0] - 1 : nextStart - 1;
+    await opts.onBatch?.(merged.filter(([, end]) => end <= through), through);
     if (b + BATCH >= n) break;
   }
 
-  // Stitch across batches: >= 3 sentences of overlap = the same
-  // exchange seen twice; a 1-2 sentence graze trims the later span.
-  raw.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+  return { spans: stitchDialogueSpans(raw), escalations, unitConfidences };
+}
+
+function stitchDialogueSpans(raw: [number, number][]): [number, number][] {
+  const sorted = raw.map(([start, end]): [number, number] => [start, end]).sort((left, right) => left[0] - right[0] || left[1] - right[1]);
   const merged: [number, number][] = [];
-  for (const span of raw) {
+  for (const span of sorted) {
     const last = merged[merged.length - 1];
     if (last && span[0] <= last[1]) {
       const overlap = last[1] - span[0] + 1;
@@ -338,7 +348,7 @@ export async function selectExchangeSpans(
     merged.push([...span]);
   }
 
-  return { spans: merged, escalations, unitConfidences };
+  return merged;
 }
 
 /**

@@ -20,7 +20,10 @@ two API keys (one work LLM + one decision model), and start.
   works as independent **decision patches** — a dialogue detector, a name
   detector, a presence detector, a speaker attributor — each asking the
   decision model small typed questions (`noul` / `choice` / `score`)
-  over auto-sectioned sentences.
+  over auto-sectioned sentences. Dialogue remains sentence-level: the detector
+  prompt allows one or two brief narration beats between spoken sentences, but
+  asks for a new dialogue unit after three or more non-verbal sentences, even
+  with the same speakers in the same scene.
 - **The merge gate:** the miniloop never writes to the ontology main
   graph. Per chapter/block it accumulates a **ChangeSet** of proposed
   changes, and the main agent — holding the full context — **approves,
@@ -34,6 +37,7 @@ two API keys (one work LLM + one decision model), and start.
   The legacy `summaryEn` field holds source-language text.
 
 📐 **Design:** [DESIGN.md](DESIGN.md) ·
+⚙️ **Streaming faculties:** [dependency graph and bounded System 2](docs/faculty-graph.md) · [live comparison](docs/faculty-benchmark.md) ·
 🧠 **System 1 in detail (by sector):** [docs/system1/index.html](docs/system1/index.html) ·
 📱 **Single-file viewer** (all sector pages in one self-contained HTML, clickable anywhere): [docs/system1-viewer.html](docs/system1-viewer.html) — regenerate with `node tools/build-viewer.mjs`
 

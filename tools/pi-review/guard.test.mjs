@@ -46,12 +46,15 @@ test('full-volume scopes permit only the current block in the selected workspace
   assert.equal(authorize("novel ingest /tmp/authorized-volume-2 /tmp/authorized-volume-2.txt --max-blocks 9 --block-size 24000", scope).kind, 'cli');
   assert.equal(authorize("novel changeset show /tmp/authorized-volume-2 cs_b0009 --offset 0 --limit 10", scope).kind, 'cli');
   assert.equal(authorize("novel recall /tmp/authorized-volume-2 b0009", scope).kind, 'cli');
+  assert.equal(authorize('novel inspect /tmp/authorized-volume-2', scope).kind, 'cli');
   for (const command of [
     'novel changeset approve /tmp/authorized-volume-2 cs_b0008',
     'novel changeset approve /tmp/other-volume cs_b0009',
     'novel ingest /tmp/authorized-volume-2 /tmp/authorized-volume-2.txt --max-blocks 10 --block-size 24000',
     'novel recall /tmp/authorized-volume-2 b0001',
     'cat /tmp/old-b0008.txt',
+    'novel inspect /tmp/other-volume',
+    'novel inspect /tmp/authorized-volume-2 --output /tmp/leak',
     "novel fix correct /tmp/authorized-volume-2 --block b0009 --key x --key y --value '{}' --reason test",
   ]) assert.throws(() => authorize(command, scope), command);
 });

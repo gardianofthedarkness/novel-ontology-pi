@@ -15,6 +15,7 @@ export interface WorkModel {
     /** Ask for a JSON object conforming to a caller-side schema. */
     jsonSchema?: Record<string, unknown>;
     maxTokens?: number;
+    signal?: AbortSignal;
   }): Promise<string>;
 }
 

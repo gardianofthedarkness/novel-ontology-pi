@@ -297,6 +297,10 @@ async function startMockWorkLlm(): Promise<{ url: string; close: () => Promise<v
           })
           .filter(Boolean)
           .join("\n");
+      } else if (system.startsWith("FACULTY: entities-participants")) {
+        content = JSON.stringify({ newEntities: user.includes("白井黑子") ? [{ name: "白井黑子", kind: "Character", aliases: [] }] : [], charactersPresent: ["御坂美琴"], charactersMentioned: [], locationName: null });
+      } else if (system.startsWith("FACULTY: dialogue-adjudication")) {
+        content = JSON.stringify({ turns: [] });
       } else {
         const ids = [...user.matchAll(/^(b\d+_s\d+):/gm)].map((m) => m[1]);
         content = JSON.stringify({
@@ -351,6 +355,7 @@ test("ingest with a work LLM runs extraction: the graph comes out non-empty", as
   const work = await startMockWorkLlm();
   try {
     const { dir, file } = await makeNovel();
+    await writeFile(file, NOVEL_TEXT.replace("御坂美琴走进教室。", "御坂美琴走进教室。白井黑子跟着进来。"));
     const env = {
       ...process.env,
       TYPESAFE_API_KEY: FAKE_KEY,
