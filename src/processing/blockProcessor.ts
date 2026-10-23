@@ -108,9 +108,19 @@ export class BlockProcessor {
           stage: "miniloop", patchId: "starting", updatedAt: new Date().toISOString(),
           proposals: [], sceneSpans: [], dialogueUnits: [], turns: [], completedScenes: 0, totalScenes: 0,
         };
-        const publish = async (update: Partial<WorkingDraft>) => {
+        const publish = async (update: Partial<WorkingDraft>, announce = false) => {
           draft = { ...draft, ...update, updatedAt: new Date().toISOString() };
-          if (this.observation.novelDir) await saveWorkingDraft(this.observation.novelDir, draft);
+          if (this.observation.novelDir) {
+            await saveWorkingDraft(this.observation.novelDir, draft);
+            // Phase B (decision #15): the working-draft stream is the
+            // live view's source of truth. Only progress publishes
+            // announce — a draft.updated fact means "a new batch of
+            // decisions landed", never the empty initial draft or the
+            // gate transition (changeset.pending already says that).
+            if (announce) {
+              await emit?.({ type: "draft.updated", blockId: draft.blockId, patchId: draft.patchId, stage: draft.stage });
+            }
+          }
         };
         await publish({});
         const knownEntities = this.observation.loadKnownEntities
@@ -122,7 +132,7 @@ export class BlockProcessor {
           knownEntities,
           stateSummary: `Processing block ${block.blockId}.`,
           pinnedAnswers: pinsForBlock(corrections, block.blockId),
-          onProgress: async (progress) => publish({ ...progress, totalScenes: progress.sceneSpans.length }),
+          onProgress: async (progress) => publish({ ...progress, totalScenes: progress.sceneSpans.length }, true),
         });
         for (const key of result.appliedPins ?? []) {
           result.changeset.reviewNotes[`recall:pin:${key}`] =
@@ -149,7 +159,7 @@ export class BlockProcessor {
             constraints: corrections.some((correction) => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)
               ? parseExtractionConstraints(corrections.find((correction) => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)!.value)
               : undefined,
-            onProgress: async (progress) => publish(progress),
+            onProgress: async (progress) => publish(progress, true),
           } satisfies ExtractionInput);
           result.changeset.proposals = out.proposals;
           Object.assign(result.changeset.reviewNotes, out.notes);

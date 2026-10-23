@@ -59,6 +59,8 @@ export default function App() {
   );
   const graphRef = useRef<GraphCanvasRef>(null);
   const focusFlight = useRef<number | null>(null);
+  /** The most recently emerged ghost node — where System 1 is knitting right now (Phase B). */
+  const lastKnitRef = useRef<{ node: WorldNode; chapterId: string } | null>(null);
   useEffect(() => () => { if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current); }, []);
   const inspectorRef = useRef<HTMLDivElement>(null);
   const labelBus = useMemo<LabelBus>(
@@ -105,8 +107,14 @@ export default function App() {
           break;
         case "proposal.added":
           setStage(2);
-          setDynNodes((ns) => [...ns, ev.node]);
-          setDynEdges((es) => [...es, ...ev.edges]);
+          // Replace-by-id: a revised changeset re-emits its ghosts,
+          // and a relation re-emits its source node to carry the edge.
+          setDynNodes((ns) => [...ns.filter((n) => n.id !== ev.node.id), ev.node]);
+          setDynEdges((es) => [
+            ...es.filter((e) => !ev.edges.some((x) => x.id === e.id)),
+            ...ev.edges,
+          ]);
+          lastKnitRef.current = { node: ev.node, chapterId: ev.node.parent ?? KNIT_SITE };
           setProposalsByCs((m) => ({
             ...m,
             [ev.changesetId]: [...(m[ev.changesetId] ?? []), ev.node.id],
@@ -157,6 +165,7 @@ export default function App() {
 
   const startSession = useCallback(() => {
     sourceRef.current?.stop();
+    lastKnitRef.current = null;
     setDynNodes([]);
     setDynEdges([]);
     setProposalsByCs({});
@@ -212,6 +221,19 @@ export default function App() {
 
   /** Guided flight: wherever the user is, take the camera to the knitting site. */
   const flyToSite = useCallback(() => {
+    // Phase B: if real work has emerged this session, fly to the
+    // latest ghost in its own chapter interior — the demo world's
+    // fixed knit site is only the fallback.
+    const knit = lastKnitRef.current;
+    if (knit && world?.interiors[knit.chapterId]) {
+      if (orbitalMode) setOrbitalFocus((current) => ({ node: knit.node, chapterId: knit.chapterId, sequence: (current?.sequence ?? 0) + 1 }));
+      setView({ mode: "interior", bigEventId: knit.chapterId });
+      setSelectedId(knit.node.id);
+      setPanel("review");
+      setInspectorOpen(true);
+      setActivity((a) => ({ ...a, count: 0, shine: false }));
+      return;
+    }
     const target = world?.interiors[KNIT_SITE]?.nodes[0];
     if (orbitalMode && target) setOrbitalFocus((current) => ({ node: target, chapterId: KNIT_SITE, sequence: (current?.sequence ?? 0) + 1 }));
     setView({ mode: "interior", bigEventId: KNIT_SITE });

@@ -108,7 +108,11 @@ test("real BlockProcessor + mocked model records whole gate decisions, not scrip
     const processor = new BlockProcessor(new BundleStore(join(novelDir, "ontology")), new MockDecisionModel(), async () => decision, { novelDir });
     const result = await processor.processNovel([{ blockId: "b1", text: "她走进房间。" }]);
     const events = (await readEventBatch(eventLogPath(novelDir), 0)).map((r) => r.event);
-    assert.deepEqual(events.slice(0, 3).map((e) => e.type), ["block.started", "sectioned", "changeset.pending"]);
+    assert.deepEqual(events.slice(0, 2).map((e) => e.type), ["block.started", "sectioned"]);
+    // Gate states still precede their facts; draft.updated transport
+    // facts (Phase B) may interleave anywhere after sectioning.
+    const firstGateFact = events.findIndex((e) => e.type.startsWith("changeset."));
+    assert.equal(events[firstGateFact].type, "changeset.pending");
     assert.equal((await loadChangeSet(novelDir, "cs_b1")).status, decision);
     assert.equal(events.filter((e) => e.type === "changeset.merged").length, decision === "approved" ? 1 : 0);
     assert.equal(result.stoppedAt, decision === "approved" ? null : "b1");
@@ -157,4 +161,24 @@ test("a competing log lock is preserved and replay detects file replacement afte
   await writeFile(join(root, "replacement"), await readFile(log.path));
   await rename(join(root, "replacement"), log.path);
   await assert.rejects(readEventBatch(log.path, Number(record.id), identity), /replaced/);
+});
+
+test("draft.updated: BlockProcessor announces every published draft batch; the log round-trips it", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "novel-draft-events-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "ontology"));
+  const processor = new BlockProcessor(new BundleStore(join(root, "ontology")), new MockDecisionModel(), async () => "approved", { novelDir: root });
+  await processor.processNovel([{ blockId: "b0007", text: "她走进房间。她说：你好。" }]);
+  const events = (await readEventBatch(eventLogPath(root), 0)).map((r) => r.event);
+  const drafts = events.filter((e) => e.type === "draft.updated");
+  assert.ok(drafts.length >= 2, `expected several draft batches, got ${drafts.length}`);
+  assert.ok(drafts.every((e) => e.type === "draft.updated" && e.blockId === "b0007" && typeof e.patchId === "string"));
+  // The announced draft is fetchable state: the file on disk is a real
+  // working draft for the same block, ending at the gate stage — while
+  // the last ANNOUNCEMENT is a decision batch (the gate transition is
+  // changeset.pending's fact, not a draft batch).
+  const onDisk = JSON.parse(await readFile(join(root, "working", "b0007.json"), "utf8"));
+  assert.equal(onDisk.blockId, "b0007");
+  assert.equal(onDisk.stage, "gate");
+  assert.notEqual(drafts.at(-1)!.type === "draft.updated" && drafts.at(-1)!.stage, "gate");
 });

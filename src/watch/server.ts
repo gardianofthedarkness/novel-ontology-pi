@@ -1,5 +1,6 @@
 import { createServer, type ServerResponse } from "node:http";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { eventLogPath, readEventBatch, validateCursor, cursorId, type LogIdentity } from "../events/log.js";
 
 export interface WatchOptions {
@@ -9,7 +10,7 @@ export interface WatchOptions {
   heartbeatMs?: number;
 }
 
-/** No ontology/store imports: this server can only read the processing log. */
+/** Read-only: this server serves the processing log and the working drafts — it never writes. */
 export async function startWatch(novelDir: string, options: WatchOptions = {}) {
   const host = options.host ?? "127.0.0.1";
   if (host !== "127.0.0.1" && host !== "::1") throw new Error("watch only accepts loopback addresses");
@@ -29,11 +30,10 @@ export async function startWatch(novelDir: string, options: WatchOptions = {}) {
     const setup = async () => {
       if (closing) { res.writeHead(503).end(); return; }
       const url = new URL(req.url ?? "/", "http://localhost");
-      if (url.pathname !== "/events") { res.writeHead(404).end(); return; }
-      if (req.method !== "GET") { res.writeHead(405, { Allow: "GET" }).end(); return; }
       // Browser development clients may live on a separate loopback port.
       // No wildcard CORS and no credentials; remote web origins get no access.
-      if (req.headers.origin) {
+      const allowLoopbackOrigin = () => {
+        if (!req.headers.origin) return;
         try {
           const origin = new URL(req.headers.origin);
           if ((origin.protocol === "http:" || origin.protocol === "https:") &&
@@ -42,7 +42,28 @@ export async function startWatch(novelDir: string, options: WatchOptions = {}) {
             res.setHeader("Vary", "Origin");
           }
         } catch { /* Invalid origins receive no CORS permission. */ }
+      };
+      // Working drafts (Phase B): the live view fetches the current
+      // draft for a block when the stream announces `draft.updated`.
+      // Block ids are validated exactly as the draft writer validates
+      // them — no path ever leaves <novelDir>/working/.
+      const draftMatch = /^\/drafts\/(b[0-9]+)$/.exec(url.pathname);
+      if (draftMatch || url.pathname.startsWith("/drafts/")) {
+        if (req.method !== "GET") { res.writeHead(405, { Allow: "GET" }).end(); return; }
+        if (!draftMatch) { res.writeHead(404).end(); return; }
+        allowLoopbackOrigin();
+        try {
+          const body = await readFile(join(novelDir, "working", `${draftMatch[1]}.json`), "utf8");
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-cache" }).end(body);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === "ENOENT") { res.writeHead(404).end(); return; }
+          res.writeHead(500).end();
+        }
+        return;
       }
+      if (url.pathname !== "/events") { res.writeHead(404).end(); return; }
+      if (req.method !== "GET") { res.writeHead(405, { Allow: "GET" }).end(); return; }
+      allowLoopbackOrigin();
       const supplied = req.headers["last-event-id"] ?? url.searchParams.get("after") ?? cursorId(0);
       let offset: number;
       const identity: LogIdentity = {};
