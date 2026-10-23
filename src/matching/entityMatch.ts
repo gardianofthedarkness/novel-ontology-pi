@@ -1,5 +1,8 @@
 import type { DecisionModel, DecisionQuestion } from "../connectors/jev.js";
 import type { Entity, OntEvent } from "../ontology/types.js";
+import { foldVariants } from "../text/nameForms.js";
+
+export { foldVariants };
 
 /**
  * Entity matching — the gate's first-stage review for the oldest
@@ -38,29 +41,6 @@ export interface MatchVerdict extends MatchCandidate {
   keepId: string;
   dropId: string;
 }
-
-/** Common CJK script variants, folded to the first char of each pair. */
-const VARIANT_PAIRS: [string, string][] = [
-  ["黑", "黒"], ["泽", "沢"], ["泽", "澤"], ["岛", "島"], ["宫", "宮"],
-  ["园", "園"], ["会", "會"], ["国", "國"], ["学", "學"], ["队", "隊"],
-  ["长", "長"], ["门", "門"], ["风", "風"], ["云", "雲"], ["龙", "龍"],
-  ["马", "馬"], ["车", "車"], ["书", "書"], ["语", "語"], ["时", "時"],
-  ["现", "現"], ["点", "點"], ["线", "線"], ["气", "氣"], ["热", "熱"],
-  ["电", "電"], ["话", "話"], ["说", "說"], ["读", "讀"], ["写", "寫"],
-  ["听", "聽"], ["见", "見"], ["开", "開"], ["关", "關"], ["乐", "樂"],
-  ["东", "東"], ["个", "個"], ["们", "們"], ["这", "這"], ["对", "對"],
-  ["实", "實"], ["图", "圖"], ["广", "廣"], ["场", "場"], ["达", "達"],
-  ["进", "進"], ["过", "過"], ["还", "還"], ["边", "邊"], ["远", "遠"],
-  ["运", "運"], ["动", "動"], ["医", "醫"], ["员", "員"], ["圆", "圓"],
-  ["团", "團"], ["响", "響"], ["与", "與"], ["为", "為"], ["后", "後"],
-];
-const FOLD = new Map<string, string>();
-for (const [a, b] of VARIANT_PAIRS) {
-  FOLD.set(b, a);
-  FOLD.set(a, a);
-}
-export const foldVariants = (s: string): string =>
-  [...s].map((ch) => FOLD.get(ch) ?? ch).join("");
 
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;

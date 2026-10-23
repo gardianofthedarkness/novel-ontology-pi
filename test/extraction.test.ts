@@ -318,6 +318,39 @@ test("a 'new' entity whose alias is already known folds into that entity — no 
   assert.deepEqual(ev.primaryActors, ["char_000009"], "actor '食蜂' resolves to the known entity");
 });
 
+test("a 'new' entity spelled with a Japanese variant glyph folds into the known entity", async () => {
+  const kuroko: Entity = {
+    id: "char_000010",
+    kind: "Character",
+    names: [{ text: "白井黑子", lang: "zh", kind: "canonical" }],
+    properties: {},
+    confidence: 1,
+  };
+  const { work, input } = makeInput({
+    text: "白井黒子瞬移到御坂美琴身边。",
+    known: [mikoto, kuroko],
+    reply: JSON.stringify({
+      locationName: null,
+      events: [
+        { summaryEn: "Kuroko teleports to Mikoto's side", eventType: "action", importance: 0.5, actors: ["白井黒子"], affected: ["御坂美琴"], evidence: [], causes: null, stateChanges: [] },
+      ],
+      newEntities: [{ name: "白井黒子", kind: "Character", aliases: [] }],
+    }),
+  });
+  const out = await createExtractor(work)(input);
+  const upserts = out.proposals.filter((p) => p.kind === "upsert_entity");
+  assert.equal(upserts.length, 1, "exactly one upsert: the variant fold, not a mint");
+  const folded = upserts[0].payload as Entity;
+  assert.equal(folded.id, "char_000010");
+  assert.deepEqual(
+    folded.names.map((n) => n.text),
+    ["白井黑子", "白井黒子"],
+    "the variant spelling is kept as a form of the same entity",
+  );
+  const ev = out.proposals.find((p) => p.kind === "create_event")?.payload as OntEvent;
+  assert.deepEqual(ev.primaryActors, ["char_000010"], "actor spelled with the variant glyph resolves to the known entity");
+});
+
 test("extraction survives unparseable model output and notes it", async () => {
   const { work, input } = makeInput({
     text: "御坂美琴走进教室。",
