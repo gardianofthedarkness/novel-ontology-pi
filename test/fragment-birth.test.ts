@@ -155,3 +155,49 @@ test("name patch injects containment evidence into its existing questions", () =
   const plain = qs.find((q) => q.key === "nick:韩梅梅")!;
   assert.ok(!plain.instructions.includes("containment match"), "unrelated candidates are untouched");
 });
+
+test("fragment-at-birth: a mutual pair (full name + its fragment declared together) gets one question and one survivor", async () => {
+  const sentences = sectionBlock("黄泉川爱穗走进教室。\n黄泉川看向窗外。\n众人安静下来。", 0).sentences;
+  const askedKeys: string[] = [];
+  const decisions: DecisionModel = {
+    modelId: "jev",
+    async decide(_state, questions) {
+      return questions.map((q) => {
+        askedKeys.push(q.key);
+        // Fold whichever fragment is asked into the other name — the
+        // incoherent double-fold the mutual-pair guard must prevent.
+        if (q.key === "fragment:黄泉川") return { key: q.key, value: "黄泉川爱穗", confidence: 0.95 };
+        if (q.key === "fragment:黄泉川爱穗") return { key: q.key, value: "黄泉川", confidence: 0.95 };
+        if (q.key.startsWith("scene_end:")) return { key: q.key, value: sentences.at(-1)!.id, confidence: 0.99 };
+        return { key: q.key, value: "NONE", confidence: 0.99 };
+      });
+    },
+  };
+  const work: WorkModel = {
+    modelId: "work",
+    async generate(request) {
+      if (request.system.startsWith("FACULTY: entities-participants")) {
+        return JSON.stringify({
+          newEntities: [
+            { name: "黄泉川爱穗", kind: "Character", aliases: [] },
+            { name: "黄泉川", kind: "Character", aliases: [] },
+          ],
+          charactersPresent: ["黄泉川爱穗", "黄泉川"], charactersMentioned: [], locationName: null,
+        });
+      }
+      if (request.system.startsWith("FACULTY: dialogue-adjudication")) return JSON.stringify({ turns: [] });
+      return JSON.stringify({ summary: "黄泉川爱穗走进教室。", events: [] });
+    },
+  };
+  const result = await new FacultyGraph(decisions, work).run({
+    blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [],
+  });
+  const scene = await [...result.sceneResults.values()][0];
+  const declarations = scene.scene.newEntities ?? [];
+  assert.ok(!askedKeys.includes("fragment:黄泉川爱穗"), "the longer name is never asked as a fragment of its own fragment");
+  assert.ok(!declarations.some((d) => d.name === "黄泉川"), "fragment not minted alongside its full name");
+  assert.ok(
+    declarations.find((d) => d.name === "黄泉川爱穗")?.aliases?.some((a) => a.text === "黄泉川"),
+    "fragment survives as a form of the full name",
+  );
+});

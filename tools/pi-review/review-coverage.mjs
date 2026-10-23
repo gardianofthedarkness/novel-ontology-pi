@@ -8,7 +8,24 @@ export function sourcePage(content, permitted, path) {
   return { output, lines };
 }
 
-export const reviewRevision = (changeset) => createHash('sha256').update(JSON.stringify({ createdAt: changeset.createdAt, proposals: changeset.proposals, notes: changeset.reviewNotes })).digest('hex');
+export const reviewRevision = (changeset) => createHash('sha256').update(JSON.stringify({ createdAt: changeset.createdAt, proposals: changeset.proposals, notes: changeset.reviewNotes, ...(changeset.reviewSource ? { source: changeset.reviewSource, semanticReview: changeset.semanticReview } : {}) })).digest('hex');
+
+export function creditFacts(coverage, page, revision) {
+  const current = coverage?.revision === revision ? coverage : { revision, facts: new Set(), evidence: new Set() };
+  if (page.revision !== revision || !Array.isArray(page.facts)) return current;
+  for (const fact of page.facts) {
+    if (!fact.id) continue;
+    current.facts.add(fact.id);
+    if (fact.evidence?.some(sentence => typeof sentence.text === 'string' && sentence.text.trim()) || fact.evidenceIds?.some(id => typeof page.evidence?.[id] === 'string' && page.evidence[id].trim())) current.evidence.add(fact.id);
+  }
+  return current;
+}
+
+export function requireFactCoverage(coverage, revision, decisions) {
+  for (const decision of decisions) {
+    if (decision.verdict === 'accept' && (coverage?.revision !== revision || !coverage.facts.has(decision.factId) || !coverage.evidence.has(decision.factId))) throw new Error('Read the current complete fact value and its source evidence before accepting it');
+  }
+}
 
 export function restoreReviewCoverage(entries, changeset) {
   const coverage = { revision: reviewRevision(changeset), proposals: new Set(), notes: new Set() };

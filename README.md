@@ -18,9 +18,12 @@ two API keys (one work LLM + one decision model), and start.
 - **System 1 — the autostep miniloop** (inside the CLI): a recursive
   decision system built on **Jev** (TypeSafe AI's decision model). It
   works as independent **decision patches** — a dialogue detector, a name
-  detector, a presence detector, a speaker attributor — each asking the
+  detector, a presence detector, a dialogue-membership faculty — each asking the
   decision model small typed questions (`noul` / `choice` / `score`)
-  over auto-sectioned sentences. Dialogue remains sentence-level: the detector
+  over auto-sectioned source. The default work-model path emits multi-person
+  dialogue cards, not sentence-speaker assignments. Sentence IDs locate the
+  original exchange. Membership is reviewed independently for each person.
+  The detector
   prompt allows one or two brief narration beats between spoken sentences, but
   asks for a new dialogue unit after three or more non-verbal sentences, even
   with the same speakers in the same scene.
@@ -233,7 +236,7 @@ stored fields only:
 - **events** go to their own `chapterIndex`;
 - **entities** carry no chapter field, so an entity is projected into
   every chapter where a stored scene or event places it (scene
-  presence/mentions/location/dialogue turns; event primary actors /
+  presence/mentions/location/dialogue-card members or legacy turns; event primary actors /
   affected characters);
 - **relations** carry no chapter field either, so a relation is
   projected into the chapters *both* endpoints are placed in — a
@@ -304,6 +307,34 @@ Large review packets support `novel changeset show <dir> <id> --summary`
 and `--offset 0 --limit 20`; follow `page.nextOffset` until null. Add
 `--notes` to page through review notes without truncating the Bash output.
 
+New work-model ingestion uses [precision-first semantic review](docs/semantic-review.md):
+`changeset facts` returns byte-bounded assertions with source excerpts;
+`changeset decide --revision <hash> --decisions '<JSON>'` accepts, holds or
+rejects individual facts. Code checks spans/coverage; Pi reviews identity,
+dialogue-card memberships, relations, participants and state, not segmentation perfection.
+Approval can leave uncertain facts held outside canon while processing
+continues. Missing means unknown, not false. Work-model ingestion refuses
+`--auto-approve`; existing legacy miniloop-only smoke runs are unchanged.
+
+For a trusted **live extraction smoke test**, initialize a fresh private workspace
+and omit `--auto-approve`:
+
+```sh
+smoke_root="$(mktemp -d)"
+novel init "$smoke_root/novel"
+novel ingest "$smoke_root/novel" /path/to/source.txt --max-blocks 1
+novel changeset facts "$smoke_root/novel" cs_b0001 --summary
+novel inspect "$smoke_root/novel"
+```
+
+This stops with pending proposals for inspection, not a populated canonical
+ontology or a passed end-to-end review. For canonical verification, run the
+skill-loaded Pi reviewer (see `tools/pi-review/README.md`) or record independent
+source-supported fact decisions before approval. Scripts that formerly combined
+a work model with `--auto-approve` must adopt one of these paths; there is no
+live override or implicit accept-all mode. A miniloop-only smoke test is not a
+substitute for testing the full extraction/review pipeline.
+
 Live processing also writes owner-only, atomically replaced
 `working/<block-id>.json` snapshots after real Jev patches and each extracted
 scene. These are disposable, uncommitted working drafts: scene/dialogue
@@ -317,8 +348,9 @@ continues to exclude raw payloads and source quotes.
 ### Optional Pi reviewer and real test report
 
 The [scoped Pi runner](tools/pi-review/README.md) loads the skill and uses
-only CLI commands to review, repair and apply blocks. It requires full
-source and current-revision proposal/note coverage before approval, keeps
+only CLI commands to review, repair and apply blocks. Semantic packets require
+current fact values and source evidence before accepting an assertion;
+legacy packets retain full source/proposal/note coverage. The runner keeps
 private checkpoints, supports explicit per-block repair budgets, and
 exports source-redacted native Pi session replay. It never auto-approves
 or starts a public tunnel. Its SDK dependencies are optional and separate
@@ -334,7 +366,7 @@ from `ontology/events.jsonl`). See the [contract draft and SSH setup](docs/playg
 for replay, integration limits, and frontend questions. `watch` never reviews
 or applies ChangeSets. The CLI ingest path **is** wired: `novel ingest
 <novel-dir> <file>` runs blocks -> miniloop -> ChangeSets -> merge gate
-(stops at the first gate by default; `--auto-approve` applies in-process),
+(stops at the first gate by default; `--auto-approve` is miniloop-only),
 and the playground follows a run live via `?live=http://127.0.0.1:4317/events`.
 Re-running ingest with the same input and block size skips approved blocks
 with recorded application, preserving their ChangeSets and the remaining

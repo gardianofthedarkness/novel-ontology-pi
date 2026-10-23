@@ -1,7 +1,9 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { DecisionModel } from "../connectors/jev.js";
+import { BundleStore } from "../connectors/bundle.js";
 import { mergeEntities } from "../maintenance/fixes.js";
+import type { ChangeSet } from "../merge/changeset.js";
 import type { Entity, OntEvent, Relation, Scene } from "../ontology/types.js";
 import { checkMatches, type MatchCandidate } from "./entityMatch.js";
 import {
@@ -43,6 +45,10 @@ export interface FragmentDecline {
 export interface MatchMemory {
   distinct: DistinctRecord[];
   fragmentDeclines: FragmentDecline[];
+  /** Canon changed (a block applied) since the last chapter sweep;
+   * the sweep consumes and clears this. Lets the cadence survive
+   * gate mode, where applies happen outside the ingest run. */
+  sweepPending?: boolean;
 }
 
 export async function loadMatchMemory(novelDir: string): Promise<MatchMemory> {
@@ -51,6 +57,7 @@ export async function loadMatchMemory(novelDir: string): Promise<MatchMemory> {
     return {
       distinct: Array.isArray(parsed.distinct) ? parsed.distinct : [],
       fragmentDeclines: Array.isArray(parsed.fragmentDeclines) ? parsed.fragmentDeclines : [],
+      sweepPending: parsed.sweepPending === true,
     };
   } catch {
     return { distinct: [], fragmentDeclines: [] };
@@ -139,4 +146,51 @@ export async function runEntityMatching(input: {
   }
   if (memoryDirty) await saveDistinctMemory(input.novelDir, distinct);
   return summary;
+}
+
+/**
+ * The per-block EM pass, homed on the APPLY rather than on any one
+ * caller: BlockProcessor runs it when a changeset is approved
+ * in-process, and `novel changeset approve` runs it when the gate
+ * applies a changeset externally (the default semantic-gate flow —
+ * without this port the cadence silently never fires in gate mode).
+ * Advisory by contract: any failure returns null and leaves the
+ * applied block untouched; the chapter sweep or `novel match`
+ * retries. A successful call also marks the chapter sweep pending,
+ * since canon identity evidence changed.
+ */
+export async function runEmPassAfterApply(input: {
+  novelDir: string;
+  decisions: DecisionModel;
+  changeset: ChangeSet;
+}): Promise<EmSummary | null> {
+  try {
+    const memory = await loadMatchMemory(input.novelDir);
+    if (!memory.sweepPending && input.changeset.proposals.length > 0) {
+      await saveMatchMemory(input.novelDir, { ...memory, sweepPending: true });
+    }
+    const touchedIds = new Set(
+      input.changeset.proposals
+        .filter((p) => p.kind === "upsert_entity")
+        .map((p) => (p.payload as Entity).id),
+    );
+    if (touchedIds.size === 0) return null;
+    const bundle = new BundleStore(join(input.novelDir, "ontology"));
+    const rows = await bundle.loadFile<Entity>("entities.jsonl");
+    const byId = new Map<string, Entity>();
+    for (const e of rows) byId.set(e.id, e);
+    return await runEntityMatching({
+      novelDir: input.novelDir,
+      decisions: input.decisions,
+      touchedIds,
+      data: {
+        entities: [...byId.values()],
+        events: await bundle.loadFile<OntEvent>("events.jsonl"),
+        scenes: await bundle.loadFile<Scene>("scenes.jsonl"),
+        relations: await bundle.loadFile<Relation>("relations.jsonl"),
+      },
+    });
+  } catch {
+    return null;
+  }
 }

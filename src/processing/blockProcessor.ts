@@ -26,7 +26,7 @@ import { previewFacultyStates } from "./facultyContinuity.js";
 import { join } from "node:path";
 import { BundleStore } from "../connectors/bundle.js";
 import type { OntEvent, Relation, Scene } from "../ontology/types.js";
-import { runEntityMatching, loadMatchMemory, saveMatchMemory, type EmSummary } from "../matching/emFaculty.js";
+import { runEmPassAfterApply, loadMatchMemory, saveMatchMemory, type EmSummary } from "../matching/emFaculty.js";
 
 export type ReviewDecision = "approved" | "held" | "revision_requested";
 
@@ -58,6 +58,7 @@ export class BlockProcessor {
     private review: (cs: ChangeSet) => Promise<ReviewDecision>,
     private observation: {
       novelDir?: string;
+      semanticReview?: boolean;
       emit?: EventSink;
       /**
        * Loads the entities the miniloop should treat as already known
@@ -115,7 +116,7 @@ export class BlockProcessor {
     const corrections = this.observation.loadCorrections
       ? await this.observation.loadCorrections()
       : [];
-    for (const block of blocks) {
+    for (const [blockIndex, block] of blocks.entries()) {
       await emit?.({ type: "block.started", blockId: block.blockId });
       const { sentences } = sectionBlock(block.text, block.sectionIndex ?? mergedBlocks.length);
       await emit?.({ type: "sectioned", blockId: block.blockId, sentences: sentences.length });
@@ -152,9 +153,15 @@ export class BlockProcessor {
         const constraintsValue = corrections.find(correction => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)?.value;
         const constraints = constraintsValue ? parseExtractionConstraints(constraintsValue) : undefined;
         const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
-        const faculty = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
-          ? await new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}).run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, knownEntities, pins, constraints, fragmentDeclines: this.observation.novelDir ? (await loadMatchMemory(this.observation.novelDir)).fragmentDeclines : [], onProgress: async (progress) => publish(progress, true) })
-          : undefined;
+        const graph = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
+          ? new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}) : undefined;
+        const margin = graph?.router.contextWindow(["scene-boundaries", "dialogue-boundaries", "dialogue-attribution", "dialogue-participants"]) ?? 0;
+        const contextSentences = margin > 0 ? [
+          ...(blockIndex > 0 ? sectionBlock(blocks[blockIndex - 1].text, blocks[blockIndex - 1].sectionIndex ?? blockIndex - 1).sentences.slice(-margin) : []),
+          ...sentences,
+          ...(blockIndex + 1 < blocks.length ? sectionBlock(blocks[blockIndex + 1].text, blocks[blockIndex + 1].sectionIndex ?? blockIndex + 1).sentences.slice(0, margin) : []),
+        ] : sentences;
+        const faculty = await graph?.run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, contextSentences, knownEntities, pins, constraints, fragmentDeclines: graph && this.observation.novelDir ? (await loadMatchMemory(this.observation.novelDir)).fragmentDeclines : [], onProgress: async progress => publish(progress, true) });
         if (faculty && faculty.fragmentDeclines.length && this.observation.novelDir) {
           // Remember fragment-at-birth declines per novel so later
           // blocks do not re-ask the same pair (matching.json).
@@ -210,6 +217,7 @@ export class BlockProcessor {
             await publish({ patchId: "continuity-relations", statePreview: await previewFacultyStates(this.store, out.proposals) });
           }
         }
+        if (this.observation.semanticReview) result.changeset.reviewSource = sentences;
         if (this.observation.novelDir) await saveChangeSet(this.observation.novelDir, result.changeset);
         await publish({ stage: "gate", patchId: "merge-gate", proposals: result.changeset.proposals });
         // No event emissions here: saveChangeSet is the emitter of record
@@ -223,38 +231,15 @@ export class BlockProcessor {
           await applyChangeSet(this.store, result.changeset, emit);
           mergedBlocks.push(block.blockId);
           if (this.observation.entityMatching && this.observation.novelDir) {
-            const touchedIds = new Set(
-              result.changeset.proposals
-                .filter((p) => p.kind === "upsert_entity")
-                .map((p) => (p.payload as Entity).id),
-            );
-            if (touchedIds.size > 0) {
-              try {
-                const bundle = new BundleStore(join(this.observation.novelDir, "ontology"));
-                const rows = await bundle.loadFile<Entity>("entities.jsonl");
-                const byId = new Map<string, Entity>();
-                for (const e of rows) byId.set(e.id, e);
-                const summary = await runEntityMatching({
-                  novelDir: this.observation.novelDir,
-                  decisions: this.decisions,
-                  touchedIds,
-                  data: {
-                    entities: [...byId.values()],
-                    events: await bundle.loadFile<OntEvent>("events.jsonl"),
-                    scenes: await bundle.loadFile<Scene>("scenes.jsonl"),
-                    relations: await bundle.loadFile<Relation>("relations.jsonl"),
-                  },
-                });
-                if (summary.nominated > 0) {
-                  result.changeset.reviewNotes["em-faculty"] =
-                    `EM pass after apply: ${summary.nominated} nominated, ${summary.merged.length} merged, ${summary.distinct.length} distinct (remembered), ${summary.uncertain.length} uncertain.`;
-                  this.observation.onEntityMatching?.(block.blockId, summary);
-                }
-              } catch {
-                // The EM faculty is advisory infrastructure: a failed
-                // pass leaves the applied block untouched and is
-                // retried by the next chapter sweep or `novel match`.
-              }
+            const summary = await runEmPassAfterApply({
+              novelDir: this.observation.novelDir,
+              decisions: this.decisions,
+              changeset: result.changeset,
+            });
+            if (summary && summary.nominated > 0) {
+              result.changeset.reviewNotes["em-faculty"] =
+                `EM pass after apply: ${summary.nominated} nominated, ${summary.merged.length} merged, ${summary.distinct.length} distinct (remembered), ${summary.uncertain.length} uncertain.`;
+              this.observation.onEntityMatching?.(block.blockId, summary);
             }
           }
           break;

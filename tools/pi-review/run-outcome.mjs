@@ -8,9 +8,10 @@ export function runOutcome(changesets, records, expectedChapters = 2, unit = 'ch
   const approved = changesets.filter((changeset) => changeset.status === 'approved');
   const applied = approved.filter((changeset) => applications.has(changeset.id));
   const deferred = applied.reduce((total, changeset) => total + applications.get(changeset.id).unsupportedProposalIds.length, 0);
-  const unsupported = deferred ? ` · ${deferred} proposals deferred` : '';
+  const heldFacts = applied.reduce((total, changeset) => total + (applications.get(changeset.id).deferredFactIds?.length ?? 0), 0);
+  const unsupported = (deferred ? ` · ${deferred} proposals deferred` : '') + (heldFacts ? ` · ${heldFacts} semantic facts held` : '');
   const progress = `${applied.length}/${expectedChapters} ${unit} applied`;
   if (held.length) return { status: 'review', label: `Pi paused · ${held.join(', ')} held · ${progress}${unsupported}`, held, applied: applied.length, deferred };
-  if (applied.length === expectedChapters) return { status: 'complete', label: `Pi review complete · ${progress}${unsupported}`, held, applied: applied.length, deferred };
+  if (applied.length === expectedChapters) return { status: 'complete', label: `${heldFacts ? 'Pi processing complete' : 'Pi review complete'} · ${progress}${unsupported}`, held, applied: applied.length, deferred, heldFacts };
   return { status: 'review', label: `Pi stopped · ${progress} · needs attention${unsupported}`, held, applied: applied.length, deferred };
 }

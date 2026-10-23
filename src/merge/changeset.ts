@@ -4,6 +4,8 @@ import type {
   Relation,
   Scene,
 } from "../ontology/types.js";
+import type { Sentence } from "../text/sectioning.js";
+import type { SemanticReview } from "./semantic.js";
 
 /**
  * A ChangeSet is the ONLY output the System 1 miniloop is allowed to
@@ -57,6 +59,8 @@ export interface ChangeSet {
   /** Per-proposal review notes when held / revision is requested. */
   reviewNotes: Record<string, string>;
   createdAt: string;
+  reviewSource?: Sentence[];
+  semanticReview?: SemanticReview;
 }
 
 export function newChangeSet(blockId: string): ChangeSet {

@@ -214,8 +214,8 @@ export class LadybugStore implements OntologyStore {
   async upsertScene(s: Scene): Promise<void> {
     await this.initSchema();
     await this.run(
-      `MERGE (n:Scene {id: $id}) SET n.chapter_index = $chapterIndex`,
-      { id: s.id, chapterIndex: s.chapterIndex },
+      `MERGE (n:Scene {id: $id}) SET n.chapter_index = $chapterIndex, n.dialogue_cards_json = $dialogues`,
+      { id: s.id, chapterIndex: s.chapterIndex, dialogues: JSON.stringify(s.dialogues ?? []) },
     );
     for (const cid of s.charactersPresent) {
       await this.addRelation({
