@@ -122,6 +122,67 @@ export class Miniloop {
     const windows: WindowRecord[] = [];
     const seenProposalIds = new Set<string>();
     const appliedPins: string[] = [];
+    // Pin-aware decision channel, shared by the prepass and the window
+    // loop (sector 09): a pinned key keeps the question on the record
+    // but the applied answer is the reviewing agent's correction, at
+    // full confidence.
+    const decideWithPins = async (
+      state: string,
+      questions: Parameters<DecisionModel["decide"]>[1],
+    ) => {
+      const decided = await this.decisions.decide(state, questions);
+      return decided.map((a) => {
+        if (input.pinnedAnswers?.has(a.key)) {
+          if (!appliedPins.includes(a.key)) appliedPins.push(a.key);
+          return { ...a, value: input.pinnedAnswers.get(a.key) as string | number, confidence: 1 };
+        }
+        return a;
+      });
+    };
+    const absorbOutcome = (
+      patchId: string,
+      outcome: { proposals: ChangeSet["proposals"]; escalations: { unitId: string; reason: string }[] },
+    ) => {
+      for (const p of outcome.proposals) {
+        if (seenProposalIds.has(p.id)) continue;
+        seenProposalIds.add(p.id);
+        changeset.proposals.push(p);
+      }
+      escalations.push(
+        ...outcome.escalations.map((e) => ({ patchId, ...e })),
+      );
+    };
+    // Block-level prepass patches (span segmentation, sectors 02/03):
+    // sequential decisions over the whole block that must complete
+    // before the per-window patches consume their output.
+    for (const patch of PATCH_REGISTRY) {
+      if (!patch.prepass) continue;
+      const outcome = await patch.prepass(ctx, decideWithPins, async () => {
+        await input.onProgress?.({
+          blockId: input.blockId,
+          patchId: patch.id,
+          proposals: [...changeset.proposals],
+          sceneSpans: ((ctx.accepted["sceneSpans"] as string[][] | undefined) ?? []).map((span) => [...span]),
+          dialogueUnits: ((ctx.accepted["dialogueUnits"] as string[][] | undefined) ?? []).map((unit) => [...unit]),
+          turns: [],
+        });
+      });
+      absorbOutcome(patch.id, outcome);
+      await input.onProgress?.({
+        blockId: input.blockId,
+        patchId: patch.id,
+        proposals: [...changeset.proposals],
+        sceneSpans: ((ctx.accepted["sceneSpans"] as string[][] | undefined) ?? []).map((span) => [...span]),
+        dialogueUnits: ((ctx.accepted["dialogueUnits"] as string[][] | undefined) ?? []).map((unit) => [...unit]),
+        turns: [],
+      });
+    }
+    // Block-level dialogue exchanges from the prepass; the window loop
+    // projects (clips) them per window for the speaker patch, and the
+    // block-level list is restored into `accepted` at the end.
+    const blockDialogueUnits = (
+      (ctx.accepted["dialogueUnits"] as string[][] | undefined) ?? []
+    ).map((u) => [...u]);
     const identityRegistry = input.knownEntities.filter((entity) => entity.kind === "Character").map((entity) => `${entity.id}: ${entity.names.map((form) => form.text).join(" / ")}`).join("\n");
     let firstWindow = true;
     for (let w = 0; w < input.sentences.length; w += windowSize) {
@@ -136,7 +197,12 @@ export class Miniloop {
       ctx.accepted["charactersPresent"] = [];
       ctx.accepted["charactersMentioned"] = [];
       ctx.accepted["turns"] = [];
-      ctx.accepted["dialogueUnits"] = undefined;
+      // Project the block-level exchanges into this window: the
+      // speaker patch attributes turns over the clipped units.
+      const windowIdSet = new Set(ctx.windowSentenceIds);
+      ctx.accepted["dialogueUnits"] = blockDialogueUnits
+        .map((u) => u.filter((id) => windowIdSet.has(id)))
+        .filter((u) => u.length > 0);
       ctx.accepted["sceneSpans"] = ctx.accepted["sceneSpans"] ?? [];
 
       for (const patch of PATCH_REGISTRY) {
@@ -149,31 +215,12 @@ export class Miniloop {
               `${id}: ${input.sentences.find((s) => s.id === id)?.text ?? ""}`,
           )
           .join("\n");
-        const decided = await this.decisions.decide(
+        const decided = await decideWithPins(
           `${ctx.stateSummary}\nIDENTITY REGISTRY (not evidence of presence):\n${identityRegistry}\n---\n${windowText}`,
           questions,
         );
-        // Recall pins (sector 09): a pinned key keeps the question on
-        // the record but the applied answer is the reviewing agent's
-        // correction, at full confidence.
-        const answers = decided.map((a) => {
-          if (input.pinnedAnswers?.has(a.key)) {
-            if (!appliedPins.includes(a.key)) appliedPins.push(a.key);
-            return { ...a, value: input.pinnedAnswers.get(a.key) as string | number, confidence: 1 };
-          }
-          return a;
-        });
-        const outcome = patch.applyAnswers(ctx, answers);
-        for (const p of outcome.proposals) {
-          // A patch that re-runs per window must not double-propose:
-          // proposal ids are deterministic, so dedupe on them.
-          if (seenProposalIds.has(p.id)) continue;
-          seenProposalIds.add(p.id);
-          changeset.proposals.push(p);
-        }
-        escalations.push(
-          ...outcome.escalations.map((e) => ({ patchId: patch.id, ...e })),
-        );
+        const outcome = patch.applyAnswers(ctx, decided);
+        absorbOutcome(patch.id, outcome);
         await input.onProgress?.({
           blockId: input.blockId,
           patchId: patch.id,
@@ -199,6 +246,9 @@ export class Miniloop {
       }
     }
 
+    // `accepted` reports the block-level exchanges (the per-window
+    // projections were working state for the speaker patch).
+    ctx.accepted["dialogueUnits"] = blockDialogueUnits;
     changeset.status = "pending_review";
     return { changeset, escalations, accepted: ctx.accepted, windows, appliedPins };
   }

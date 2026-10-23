@@ -50,6 +50,22 @@ export interface DecisionPatch {
     ctx: PatchContext,
     answers: DecisionAnswer[],
   ): PatchOutcome;
+  /**
+   * Optional block-level pass, run ONCE before the per-window loop for
+   * patches whose decisions are inherently sequential over the whole
+   * block (span segmentation: each scene's end must be chosen before
+   * the next scene's start exists). `decide` is the miniloop's
+   * pin-aware decision channel. A patch with a prepass returns no
+   * per-window questions and is skipped by the window loop.
+   */
+  prepass?: (
+    ctx: PatchContext,
+    decide: (
+      state: string,
+      questions: DecisionQuestion[],
+    ) => Promise<DecisionAnswer[]>,
+    onProgress?: () => Promise<void>,
+  ) => Promise<PatchOutcome>;
 }
 
 export const EMPTY_OUTCOME: PatchOutcome = {
