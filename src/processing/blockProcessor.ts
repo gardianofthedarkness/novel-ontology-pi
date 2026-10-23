@@ -54,6 +54,7 @@ export class BlockProcessor {
     private review: (cs: ChangeSet) => Promise<ReviewDecision>,
     private observation: {
       novelDir?: string;
+      semanticReview?: boolean;
       emit?: EventSink;
       /**
        * Loads the entities the miniloop should treat as already known
@@ -190,6 +191,7 @@ export class BlockProcessor {
             await publish({ patchId: "continuity-relations", statePreview: await previewFacultyStates(this.store, out.proposals) });
           }
         }
+        if (this.observation.semanticReview) result.changeset.reviewSource = sentences;
         if (this.observation.novelDir) await saveChangeSet(this.observation.novelDir, result.changeset);
         await publish({ stage: "gate", patchId: "merge-gate", proposals: result.changeset.proposals });
         // No event emissions here: saveChangeSet is the emitter of record

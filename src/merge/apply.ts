@@ -2,6 +2,7 @@ import type { OntologyStore } from "../ontology/store.js";
 import type { ChangeSet } from "./changeset.js";
 import type { Entity, OntEvent, Relation, Scene, StateChange } from "../ontology/types.js";
 import type { EventSink } from "../events/types.js";
+import { digest, materializeSemantic } from "./semantic.js";
 
 /**
  * Applies an APPROVED ChangeSet to the ontology main graph.
@@ -20,15 +21,19 @@ export async function applyChangeSet(
   store: OntologyStore,
   changeset: ChangeSet,
   emit?: EventSink,
-): Promise<{ applied: number; processed: number; deferred: number }> {
+  context?: { entities: Entity[]; objects: { id: string; kind: string }[] },
+): Promise<{ applied: number; processed: number; deferred: number; deferredFacts?: number; rejectedFacts?: number }> {
   if (changeset.status !== "approved") {
     throw new Error(
       `Refusing to apply change set ${changeset.id}: status is ${changeset.status}, not approved.`,
     );
   }
   let processed = 0;
+  if (changeset.reviewSource && !context) throw new Error("Semantic application requires canonical context and current fact decisions");
+  if (changeset.reviewSource && changeset.semanticReview?.contextDigest !== digest(context)) throw new Error("Semantic decisions must bind the current canonical context");
+  const projection = changeset.reviewSource ? materializeSemantic(changeset, context!.entities, context!.objects) : null;
   const deferredProposalIds: string[] = [];
-  for (const p of changeset.proposals) {
+  for (const p of projection?.proposals ?? changeset.proposals) {
     switch (p.kind) {
       case "upsert_entity":
         await store.upsertEntity(p.payload as Entity);
@@ -57,8 +62,8 @@ export async function applyChangeSet(
     processed++;
   }
   if (emit) {
-    await emit({ type: "changeset.applied", changesetId: changeset.id, target: "store", processed, unsupportedProposalIds: deferredProposalIds });
-    if (!deferredProposalIds.length) await emit({ type: "changeset.merged", changesetId: changeset.id, target: "store" });
+    await emit({ type: "changeset.applied", changesetId: changeset.id, target: "store", processed, unsupportedProposalIds: deferredProposalIds, ...(projection ? { deferredFactIds: projection.deferredFactIds, rejectedFactIds: projection.rejectedFactIds, verifiedFacts: projection.verifiedFacts } : {}) });
+    if (!deferredProposalIds.length && !projection?.deferredFactIds.length) await emit({ type: "changeset.merged", changesetId: changeset.id, target: "store" });
   }
-  return { applied: processed - deferredProposalIds.length, processed, deferred: deferredProposalIds.length };
+  return { applied: processed - deferredProposalIds.length, processed, deferred: deferredProposalIds.length, ...(projection ? { deferredFacts: projection.deferredFactIds.length, rejectedFacts: projection.rejectedFactIds.length } : {}) };
 }

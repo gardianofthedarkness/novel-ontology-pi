@@ -12,6 +12,7 @@ import { EventLog } from "../events/log.js";
 import { listChangeSets } from "../merge/changesetStore.js";
 import type { Entity } from "../ontology/types.js";
 import { loadExtractionCounts } from "../processing/counts.js";
+import { facultyOptionsFromEnv } from "../processing/facultyOptions.js";
 
 export interface IngestOptions {
   /** Approve every ChangeSet at the merge gate (smoke runs, trusted batches). */
@@ -50,6 +51,7 @@ export async function ingestNovel(
   opts: IngestOptions = {},
 ) {
   const env = opts.env ?? process.env;
+  const facultyGraph = facultyOptionsFromEnv(env);
   const ontologyDir = join(novelDir, "ontology");
   try {
     await stat(join(ontologyDir, "manifest.json"));
@@ -120,6 +122,7 @@ export async function ingestNovel(
 
   const review = async (): Promise<ReviewDecision> =>
     opts.autoApprove ? "approved" : "held";
+  if (opts.autoApprove && workModel) throw new Error("Live semantic extraction requires fact review; --auto-approve cannot bypass it");
 
   const processor = new BlockProcessor(bundle, jevFromEnv(env), review, {
     novelDir,
@@ -128,6 +131,8 @@ export async function ingestNovel(
     loadCounts,
     loadCorrections: () => loadCorrections(novelDir),
     workModel: workModel ?? undefined,
+    facultyGraph,
+    semanticReview: !!workModel,
   });
 
   const result = await processor.processNovel(

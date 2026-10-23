@@ -6,7 +6,7 @@ export type ProcessingEvent =
   | { type: "sectioned"; blockId: string; sentences: number }
   | { type: "proposal.added"; changesetId: string; proposal: Pick<ChangeProposal, "id" | "kind" | "confidence" | "provenance"> }
   | { type: "changeset.pending" | "changeset.approved" | "changeset.held" | "changeset.revision_requested" | "changeset.accumulating"; changesetId: string; proposalIds: string[] }
-  | { type: "changeset.applied"; changesetId: string; target: "store"; processed: number; unsupportedProposalIds: string[] }
+  | { type: "changeset.applied"; changesetId: string; target: "store"; processed: number; unsupportedProposalIds: string[]; deferredFactIds?: string[]; rejectedFactIds?: string[]; verifiedFacts?: number }
   | { type: "changeset.merged"; changesetId: string; target: "store" }
   | { type: "graph.rebuilt"; counts: { entities: number; events: number; scenes: number; relations: number; branches: number } }
   | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate" };
@@ -36,7 +36,7 @@ export function projectEvent(event: ProcessingEvent): ProcessingEvent {
     case "changeset.pending": case "changeset.approved": case "changeset.held":
     case "changeset.revision_requested": case "changeset.accumulating":
       return { type: event.type, changesetId: event.changesetId, proposalIds: [...event.proposalIds] };
-    case "changeset.applied": return { type: event.type, changesetId: event.changesetId, target: "store", processed: event.processed, unsupportedProposalIds: [...event.unsupportedProposalIds] };
+    case "changeset.applied": return { type: event.type, changesetId: event.changesetId, target: "store", processed: event.processed, unsupportedProposalIds: [...event.unsupportedProposalIds], ...(event.deferredFactIds ? { deferredFactIds: [...event.deferredFactIds], rejectedFactIds: [...event.rejectedFactIds ?? []], verifiedFacts: event.verifiedFacts } : {}) };
     case "changeset.merged": return { type: event.type, changesetId: event.changesetId, target: "store" };
     case "graph.rebuilt": {
       const c = event.counts;

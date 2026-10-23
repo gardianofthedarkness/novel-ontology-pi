@@ -304,6 +304,15 @@ Large review packets support `novel changeset show <dir> <id> --summary`
 and `--offset 0 --limit 20`; follow `page.nextOffset` until null. Add
 `--notes` to page through review notes without truncating the Bash output.
 
+New work-model ingestion uses [precision-first semantic review](docs/semantic-review.md):
+`changeset facts` returns byte-bounded assertions with source excerpts;
+`changeset decide --revision <hash> --decisions '<JSON>'` accepts, holds or
+rejects individual facts. Code checks spans/coverage; Pi reviews identity,
+speakers, relations, participants and state, not segmentation perfection.
+Approval can leave uncertain facts held outside canon while processing
+continues. Missing means unknown, not false. Work-model ingestion refuses
+`--auto-approve`; existing legacy miniloop-only smoke runs are unchanged.
+
 Live processing also writes owner-only, atomically replaced
 `working/<block-id>.json` snapshots after real Jev patches and each extracted
 scene. These are disposable, uncommitted working drafts: scene/dialogue
@@ -317,8 +326,9 @@ continues to exclude raw payloads and source quotes.
 ### Optional Pi reviewer and real test report
 
 The [scoped Pi runner](tools/pi-review/README.md) loads the skill and uses
-only CLI commands to review, repair and apply blocks. It requires full
-source and current-revision proposal/note coverage before approval, keeps
+only CLI commands to review, repair and apply blocks. Semantic packets require
+current fact values and source evidence before accepting an assertion;
+legacy packets retain full source/proposal/note coverage. The runner keeps
 private checkpoints, supports explicit per-block repair budgets, and
 exports source-redacted native Pi session replay. It never auto-approves
 or starts a public tunnel. Its SDK dependencies are optional and separate
@@ -334,7 +344,7 @@ from `ontology/events.jsonl`). See the [contract draft and SSH setup](docs/playg
 for replay, integration limits, and frontend questions. `watch` never reviews
 or applies ChangeSets. The CLI ingest path **is** wired: `novel ingest
 <novel-dir> <file>` runs blocks -> miniloop -> ChangeSets -> merge gate
-(stops at the first gate by default; `--auto-approve` applies in-process),
+(stops at the first gate by default; `--auto-approve` is miniloop-only),
 and the playground follows a run live via `?live=http://127.0.0.1:4317/events`.
 Re-running ingest with the same input and block size skips approved blocks
 with recorded application, preserving their ChangeSets and the remaining

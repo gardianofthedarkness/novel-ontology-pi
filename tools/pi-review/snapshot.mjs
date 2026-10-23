@@ -122,7 +122,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     }
     for (const changeset of chapterSets.filter((entry) => !workingBlocks.has(entry.blockId))) {
       const applied = processing.map((record) => record.event).findLast((event) => event.type === 'changeset.applied' && event.changesetId === changeset.id);
-      const deferred = applied?.unsupportedProposalIds?.length ?? 0;
+      const deferred = (applied?.unsupportedProposalIds?.length ?? 0) + (applied?.deferredFactIds?.length ?? 0);
       gates.push({ id: changeset.id, label: `Chapter ${chapter.index} · ${changeset.id}`, status: changeset.status === 'approved' ? deferred ? 'applied' : 'merged' : changeset.status === 'held' ? 'held' : 'pending', nodeIds: changeset.proposals.map((proposal) => proposal.id), deferred });
     }
   }
@@ -135,7 +135,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     if (event.type === 'block.started') label = `CLI started ${event.blockId}`;
     if (event.type === 'sectioned') label = `${event.blockId} sectioned · ${event.sentences} sentences`;
     if (event.type === 'proposal.added') { label = `${event.proposal.kind} proposed · ${Math.round(event.proposal.confidence * 100)}% · ${event.proposal.id}`; tone = 'jev'; }
-    if (event.type.startsWith('changeset.')) { label = `${event.changesetId} · ${event.type.slice(10)}${event.type === 'changeset.applied' ? ` · ${event.processed - event.unsupportedProposalIds.length} supported / ${event.unsupportedProposalIds.length} deferred` : ''}`; tone = event.type === 'changeset.held' ? 'warn' : 'ok'; }
+    if (event.type.startsWith('changeset.')) { label = `${event.changesetId} · ${event.type.slice(10)}${event.type === 'changeset.applied' ? ` · ${event.processed - event.unsupportedProposalIds.length} supported / ${event.unsupportedProposalIds.length} deferred · ${event.deferredFactIds?.length ?? 0} facts held` : ''}`; tone = event.type === 'changeset.held' ? 'warn' : 'ok'; }
     if (event.type === 'graph.rebuilt') { label = `Graph rebuilt · ${event.counts.entities} entities · ${event.counts.events} events · ${event.counts.relations} relations`; tone = 'ok'; }
     if (label) journal.push({ id: `cli-${record.id}`, timestamp: record.timestamp, text: text(label, 220), tone });
   }

@@ -15,6 +15,7 @@ import { appendAudit } from "../maintenance/fixes.js";
 import { changesetDir, loadChangeSet } from "../merge/changesetStore.js";
 import type { Entity } from "../ontology/types.js";
 import { loadExtractionCounts } from "../processing/counts.js";
+import { facultyOptionsFromEnv } from "../processing/facultyOptions.js";
 
 /**
  * `novel recall <novel-dir> <blockId>` — the recall protocol
@@ -29,6 +30,7 @@ export async function runRecall(
   opts: { env?: NodeJS.ProcessEnv } = {},
 ) {
   const env = opts.env ?? process.env;
+  const facultyGraph = facultyOptionsFromEnv(env);
   const ontologyDir = join(novelDir, "ontology");
   try {
     await stat(join(ontologyDir, "manifest.json"));
@@ -117,6 +119,8 @@ export async function runRecall(
     loadCounts,
     loadCorrections: () => loadCorrections(novelDir),
     workModel,
+    facultyGraph,
+    semanticReview: true,
   });
   await processor.processNovel([
     { blockId: block.id, text: block.text, chapterIndex: block.chapterIndex, sectionIndex: block.index },

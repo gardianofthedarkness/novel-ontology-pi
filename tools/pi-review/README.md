@@ -56,7 +56,8 @@ parent with `NOVEL_REVIEW_HOME`. Each attempt has `job.json`,
 `progress.json`, `approval-receipts.jsonl`, session files, private reports,
 and pre-fix ontology checkpoints. `validation.json` is written after the
 assigned blocks apply. `complete` means the assigned target passed the
-checks; deferred proposal kinds are still reported separately.
+checks; deferred proposal kinds and held semantic facts are reported separately.
+`factsComplete` is distinct from processing completion.
 `review` and `error` are not completion. Inspect the current attempt's
 progress/error files, not just process termination.
 
@@ -70,13 +71,18 @@ lock or run a separate unrestricted CLI writer against the same database.
 After a crash, verify the recorded PID is no longer active before manually
 recovering a stale lock. These are cooperative locks, not an OS sandbox.
 
-Approval requires the skill, every assigned source line, and every proposal
-and note page for the current SHA-256 packet revision to have been delivered
-without truncation. A revision invalidates previous packet coverage. These
-receipts prove delivery, not the model's comprehension or semantic accuracy.
+Semantic packets use `changeset facts` / `decide`: accepted assertions require
+delivery of complete fact values and source excerpts for the current packet
+and canonical-context revision. Missing/uncertain assertions remain held
+outside canon; code validates spans and references. Pi does not optimize
+segmentation or small event detection. Targeted replacements preserve unrelated
+speakers and state. See [the policy and commands](../../docs/semantic-review.md).
+Legacy approval still requires every source line and proposal/note page.
+Receipts prove delivery, not comprehension or semantic accuracy.
 Canonical fixes retain private checkpoints; held/applied packets cannot be
-overwritten by ingest/recall to bypass review. Unresolved work stops the
-serial loop instead of silently continuing into later volumes.
+overwritten by ingest/recall to bypass review. A structural/packet-wide hold
+stops the serial loop; individual held facts do not block unrelated supported
+work. Held fact counts must not be presented as fully verified completion.
 
 ## Replay and projection
 

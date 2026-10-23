@@ -20,3 +20,11 @@ test('only recorded applications count and actual unsupported proposals remain e
   assert.equal(result.deferred, 1);
   assert.match(result.label, /2\/2 chapters applied.*1 proposals deferred/);
 });
+
+test('processed blocks with held facts are not presented as fully verified review', () => {
+  const result = runOutcome([{ id: 'cs_b0001', status: 'approved' }], [{ event: { type: 'changeset.applied', changesetId: 'cs_b0001', unsupportedProposalIds: [], deferredFactIds: ['emotion', 'relationship'] } }], 1);
+  assert.equal(result.status, 'complete');
+  assert.equal(result.heldFacts, 2);
+  assert.match(result.label, /processing complete.*2 semantic facts held/);
+  assert.ok(!result.label.includes('review complete'));
+});

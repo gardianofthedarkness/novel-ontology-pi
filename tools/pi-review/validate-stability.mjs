@@ -36,9 +36,10 @@ export async function validateStability(jobRoot, manifest) {
       const receipt = receipts.findLast((entry) => entry.volume === volume.id && entry.blockId === block.id);
       const application = applications.get(`cs_${block.id}`);
       const applied = packet?.status === 'approved' && !!application;
-      const reviewed = !!packet && !!receipt && receipt.revision === reviewRevision(packet) && receipt.reviewedProposals === packet.proposals.length && receipt.reviewedNotes === Object.keys(packet.reviewNotes).length && receipt.sourceLines === block.lines && receipt.coveredSourceLines >= block.lines;
+      const semanticReviewed = packet?.reviewSource && receipt?.policy === 'semantic-v1' && packet.semanticReview && receipt.revision === reviewRevision(packet) && packet.semanticReview.decisions.filter(decision => decision.verdict === 'accept').every(decision => receipt.acceptedFactIds?.includes(decision.factId) && receipt.verifiedSourceFacts?.includes(decision.factId));
+      const reviewed = !!packet && !!receipt && (packet.reviewSource ? !!semanticReviewed : receipt.revision === reviewRevision(packet) && receipt.reviewedProposals === packet.proposals.length && receipt.reviewedNotes === Object.keys(packet.reviewNotes).length && receipt.sourceLines === block.lines && receipt.coveredSourceLines >= block.lines);
       if (applied && !reviewed) issues.push({ code: 'missing-current-review-proof', blockId: block.id, volume: volume.id });
-      states.push({ volume: volume.id, blockId: block.id, chapterIndex: block.chapterIndex, applied, reviewed, status: packet?.status ?? 'not-started', supported: application ? application.processed - application.unsupportedProposalIds.length : 0, deferred: application?.unsupportedProposalIds.length ?? 0 });
+      states.push({ volume: volume.id, blockId: block.id, chapterIndex: block.chapterIndex, applied, reviewed, status: packet?.status ?? 'not-started', supported: application ? application.processed - application.unsupportedProposalIds.length : 0, deferred: application?.unsupportedProposalIds.length ?? 0, deferredFacts: application?.deferredFactIds?.length ?? 0 });
     }
     const [entities, events, scenes, relations] = await Promise.all(['entities', 'events', 'scenes', 'relations'].map((file) => rows(`${volume.workspace}/ontology/${file}.jsonl`)));
     issues.push(...structuralIssues(fold(entities), fold(events), fold(scenes), relations));
@@ -47,7 +48,7 @@ export async function validateStability(jobRoot, manifest) {
   }
   const chapters = [...new Set(states.map((state) => `${state.volume}:${state.chapterIndex}`))];
   const completedChapters = chapters.filter((chapter) => states.filter((state) => `${state.volume}:${state.chapterIndex}` === chapter).every((state) => state.applied && state.reviewed)).length;
-  return { complete: states.every((state) => state.applied && state.reviewed) && !issues.length && !languageWarnings, completedChapters, targetChapters: chapters.length, appliedBlocks: states.filter((state) => state.applied).length, heldBlocks: states.filter((state) => ['held', 'revision_requested'].includes(state.status)).length, unfinishedBlocks: states.filter((state) => !state.applied).length, supported: states.reduce((total, state) => total + state.supported, 0), deferred: states.reduce((total, state) => total + state.deferred, 0), languageWarnings, issues, states };
+  return { complete: states.every((state) => state.applied && state.reviewed) && !issues.length && !languageWarnings, factsComplete: states.every(state => state.applied && !state.deferredFacts), deferredFacts: states.reduce((total, state) => total + state.deferredFacts, 0), completedChapters, targetChapters: chapters.length, appliedBlocks: states.filter((state) => state.applied).length, heldBlocks: states.filter((state) => ['held', 'revision_requested'].includes(state.status)).length, unfinishedBlocks: states.filter((state) => !state.applied).length, supported: states.reduce((total, state) => total + state.supported, 0), deferred: states.reduce((total, state) => total + state.deferred, 0), languageWarnings, issues, states };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
