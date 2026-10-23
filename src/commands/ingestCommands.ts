@@ -10,8 +10,9 @@ import { loadCorrections } from "../maintenance/corrections.js";
 import { resolveJevKey } from "../connectors/secrets.js";
 import { EventLog } from "../events/log.js";
 import { listChangeSets } from "../merge/changesetStore.js";
-import type { Entity } from "../ontology/types.js";
+import type { Entity, OntEvent, Relation, Scene } from "../ontology/types.js";
 import { loadExtractionCounts } from "../processing/counts.js";
+import { runEntityMatching } from "../matching/emFaculty.js";
 
 export interface IngestOptions {
   /** Approve every ChangeSet at the merge gate (smoke runs, trusted batches). */
@@ -121,6 +122,7 @@ export async function ingestNovel(
   const review = async (): Promise<ReviewDecision> =>
     opts.autoApprove ? "approved" : "held";
 
+  const emPerBlock: { blockId: string; nominated: number; merged: number; distinct: number; uncertain: number }[] = [];
   const processor = new BlockProcessor(bundle, jevFromEnv(env), review, {
     novelDir,
     emit: log.emit,
@@ -128,11 +130,48 @@ export async function ingestNovel(
     loadCounts,
     loadCorrections: () => loadCorrections(novelDir),
     workModel: workModel ?? undefined,
+    entityMatching: true,
+    onEntityMatching: (blockId, summary) => emPerBlock.push({
+      blockId,
+      nominated: summary.nominated,
+      merged: summary.merged.length,
+      distinct: summary.distinct.length,
+      uncertain: summary.uncertain.length,
+    }),
   });
 
   const result = await processor.processNovel(
     blocks.map((b) => ({ blockId: b.id, text: b.text, chapterIndex: b.chapterIndex, sectionIndex: b.index })),
   );
+
+  // Chapter-completion sweep (owner cadence, 2026-10-23): old x old
+  // pairs are reviewed only when a whole first-level node completes.
+  // The CLI observes completion as a fully-merged auto-approved run;
+  // in gate mode the sweep is the reviewing agent's `novel match`.
+  let emChapterSweep: { nominated: number; merged: number; distinct: number; uncertain: number } | null = null;
+  if (opts.autoApprove && blocks.length > 0 && result.mergedBlocks.length === blocks.length) {
+    try {
+      const summary = await runEntityMatching({
+        novelDir,
+        decisions: jevFromEnv(env),
+        events: log.emit,
+        data: {
+          entities: await loadKnownEntities(),
+          events: await bundle.loadFile<OntEvent>("events.jsonl"),
+          scenes: await bundle.loadFile<Scene>("scenes.jsonl"),
+          relations: await bundle.loadFile<Relation>("relations.jsonl"),
+        },
+      });
+      emChapterSweep = {
+        nominated: summary.nominated,
+        merged: summary.merged.length,
+        distinct: summary.distinct.length,
+        uncertain: summary.uncertain.length,
+      };
+    } catch {
+      emChapterSweep = null;
+    }
+  }
 
   let graph: Awaited<ReturnType<typeof buildGraphFromBundle>> | null = null;
   if (result.mergedBlocks.length > 0) {
@@ -156,6 +195,7 @@ export async function ingestNovel(
     mergedBlocks: result.mergedBlocks,
     stoppedAt: result.stoppedAt,
     stopReason: result.stopReason,
+    entityMatching: { perBlock: emPerBlock, chapterSweep: emChapterSweep },
     graph,
   };
 }
