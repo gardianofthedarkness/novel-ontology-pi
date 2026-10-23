@@ -15,6 +15,7 @@ import { loadConfig } from "./config.js";
 import {
   novelQuery,
   novelSearch,
+  novelState,
   timelineList,
   timelineShow,
   DEFAULT_MIN_IMPORTANCE,
@@ -74,6 +75,8 @@ const COMMANDS: Record<string, string> = {
   "novel query <novel-dir> <cypher>": "OntologyStore query (graph traversal)",
   "novel search <novel-dir> <text> [--limit N]":
     "Graph-first text search (Cypher CONTAINS scan)",
+  "novel state <novel-dir> <character-id> [--at <event-id>]":
+    "Character state at a point — the deterministic fold of state deltas (bundle)",
   "novel timeline list|show <novel-dir> [timeline-id]":
     "Browse timelines / time points (chapter / event, by importance)",
   "novel fork create --at <event-id> --label <name>": "Fork a parallel universe at a time point",
@@ -432,6 +435,17 @@ async function main(): Promise<void> {
       );
     }
     out(await novelSearch(novelDir, text, limit), pretty);
+    return;
+  }
+
+  if (cmd === "state") {
+    const novelDir = positional[1];
+    const characterId = positional[2];
+    if (!novelDir || !characterId) {
+      throw new Error("Usage: novel state <novel-dir> <character-id> [--at <event-id>]");
+    }
+    const at = flag(positional, "--at");
+    out(await novelState(novelDir, characterId, at), pretty);
     return;
   }
 

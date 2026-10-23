@@ -5,6 +5,7 @@ import type {
   OntEvent,
   Relation,
   Scene,
+  StateChange,
 } from "./types.js";
 
 /**
@@ -26,6 +27,14 @@ export interface OntologyStore {
   upsertScene(scene: Scene): Promise<void>;
   addRelation(relation: Relation): Promise<void>;
   createBranch(branch: Branch): Promise<void>;
+  /** Persist one state delta (state materialization v1). Deltas are records; state is their fold. */
+  addStateChange(change: StateChange): Promise<void>;
+  /**
+   * Materialize an alias name form onto an entity. Returns false when
+   * the entity does not exist (the proposal cannot be applied).
+   * Idempotent: an already-present form is a successful no-op.
+   */
+  addAlias(entityId: string, aliasText: string): Promise<boolean>;
 
   // --- reads ---
   getEntity(id: string): Promise<Entity | null>;
