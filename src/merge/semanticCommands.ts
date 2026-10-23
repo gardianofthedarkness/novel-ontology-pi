@@ -30,7 +30,7 @@ export async function semanticPage(novelDir: string, id: string, options: { offs
   const log = await readFile(join(novelDir, "events.jsonl"), "utf8").catch((error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return ""; throw error; });
   const application = log.split("\n").filter(Boolean).map(line => JSON.parse(line)).reverse().find(record => record.event.type === "changeset.applied" && record.event.changesetId === id)?.event as { deferredFactIds?: string[]; verifiedFacts?: number } | undefined;
   const materialization = (factId: string) => !application ? "pending" : application.deferredFactIds?.includes(factId) ? "held" : decisions.find(decision => decision.factId === factId)?.verdict === "accept" ? "verified" : "rejected";
-  const base = { id, revision, policy: "semantic-v1", totalFacts: facts.length, accepted: decisions.filter(decision => decision.verdict === "accept").length, rejected: decisions.filter(decision => decision.verdict === "reject").length, heldFacts: application?.deferredFactIds?.length ?? null, verifiedFacts: application?.verifiedFacts ?? null, defaultVerdict: "hold", structure: "code-validated; segmentation and small event detection are not semantic review targets" };
+  const base = { id, revision, policy: "semantic-v1", totalFacts: facts.length, accepted: decisions.filter(decision => decision.verdict === "accept").length, rejected: decisions.filter(decision => decision.verdict === "reject").length, explicitHolds: decisions.filter(decision => decision.verdict === "hold").length, unreviewed: facts.length - decisions.length, heldFacts: application?.deferredFactIds?.length ?? null, verifiedFacts: application?.verifiedFacts ?? null, defaultVerdict: "hold", structure: "code-validated; segmentation and small event detection are not semantic review targets" };
   if (options.summary) return base;
   if (options.factId) {
     const fact = facts.find(fact => fact.id === options.factId);
@@ -55,7 +55,7 @@ export async function semanticPage(novelDir: string, id: string, options: { offs
       return { id: event.id, eventType: event.eventType, derivedSummary: event.summaryEn };
     });
     const canonicalIdentity = fact.field === "identity" ? entities.find(entity => entity.id === (fact.value as Entity).id) : undefined;
-    const row = { id: fact.id, field: fact.field, value: reviewedValue, ...(decision && "replacement" in decision ? { originalCandidate: fact.value } : {}), canonicalIdentity,
+    const row = { id: fact.id, field: fact.field, value: reviewedValue, ...(fact.cardId ? { cardId: fact.cardId, candidateOnly: fact.candidateOnly } : {}), reviewed: !!decision, ...(decision && "replacement" in decision ? { originalCandidate: fact.value } : {}), canonicalIdentity,
       sourceRange: { first: fact.sentenceIds[0] ?? null, last: fact.sentenceIds.at(-1) ?? null, count: fact.sentenceIds.length },
       eventIds: events.map(event => event.id), evidenceIds: evidence.sentences.map(sentence => sentence.id), evidencePage: evidence.page,
       verdict: decision?.verdict ?? "hold", materialization: materialization(fact.id) };

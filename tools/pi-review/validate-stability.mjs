@@ -16,6 +16,7 @@ export function structuralIssues(entities, events, scenes, relations) {
     characters(scene.charactersPresent, scene.id);
     characters(scene.charactersMentioned, scene.id);
     for (const turn of scene.turns ?? []) characters([turn.speakerId, turn.addresseeId].filter(Boolean), scene.id);
+    for (const card of scene.dialogues ?? []) characters([...card.participantIds ?? [], ...card.unresolvedParticipantIds ?? []], scene.id);
     if (scene.locationId && kinds.get(scene.locationId) !== 'Location') issues.push({ code: 'invalid-location-reference', record: scene.id });
     if ((scene.charactersPresent ?? []).some((id) => scene.charactersMentioned?.includes(id))) issues.push({ code: 'overlapping-presence-and-mention', record: scene.id });
   }

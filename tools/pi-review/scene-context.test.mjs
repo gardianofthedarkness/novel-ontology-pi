@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 import { sceneContext } from './scene-context.mjs';
 
 const node = (id, kind, state = 'canon') => ({ id, label: id, kind, state, parent: 'chapter_0' });
+test('one exchange sphere links every stored member without inventing directed speech or presence', () => {
+  const nodes = [node('scene_1', 'scene'), node('char_1', 'character'), node('char_2', 'character')];
+  const scenes = [{ id: 'scene_1', chapterIndex: 0, sentenceIds: ['s1', 's2'], turns: [], dialogues: [{ id: 'card_1', sentenceIds: ['s1', 's2'], participantIds: ['char_1', 'char_2'], summary: '两人交谈。' }] }];
+  const result = sceneContext(nodes, [], scenes, []);
+  const card = result.nodes.find(entry => entry.id === 'view-card:scene_1:0');
+  assert.deepEqual(card.dialogue.participantIds, ['char_1', 'char_2']);
+  assert.equal(card.dialogue.speakerId, undefined);
+  assert.equal(card.summary, '两人交谈。');
+  assert.equal(result.edges.filter(edge => edge.relationLabel === 'Dialogue participant').length, 2);
+  assert.ok(!result.edges.some(edge => edge.kind === 'speaks' || edge.relationLabel === 'Present in scene'));
+  assert.equal(sceneContext(result.nodes, result.edges, scenes, []).nodes.length, result.nodes.length);
+  assert.ok(!JSON.stringify(result).includes('sentenceIds'));
+});
 test('a stored faculty scene summary is visible without needing an event excerpt', () => {
   const result = sceneContext([node('scene_1', 'scene')], [], [{ id: 'scene_1', chapterIndex: 0, sentenceIds: ['private_source_id'], summary: '人物相遇，交谈后分开。' }], []);
   assert.equal(result.nodes[0].summary, '人物相遇，交谈后分开。');

@@ -141,7 +141,7 @@ export class BlockProcessor {
         const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
         const graph = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
           ? new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}) : undefined;
-        const margin = graph?.router.contextWindow(["scene-boundaries", "dialogue-boundaries", "dialogue-attribution"]) ?? 0;
+        const margin = graph?.router.contextWindow(["scene-boundaries", "dialogue-boundaries", "dialogue-attribution", "dialogue-participants"]) ?? 0;
         const contextSentences = margin > 0 ? [
           ...(blockIndex > 0 ? sectionBlock(blocks[blockIndex - 1].text, blocks[blockIndex - 1].sectionIndex ?? blockIndex - 1).sentences.slice(-margin) : []),
           ...sentences,

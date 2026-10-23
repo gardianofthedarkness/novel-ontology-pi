@@ -21,6 +21,24 @@ card clipped by scene joins is reassembled by card ID before scoring.
 
 ## Required measures
 
+`novel eval dialogues <gold-cards.json> <predicted-cards.json>` scores two JSON
+arrays of `{id, sentenceIds, participantIds, unresolvedParticipantIds?}` with no
+model calls or database writes. It rejoins scene fragments by logical card ID,
+uses deterministic maximum-total-source-IoU one-to-one matching at IoU >= 0.5,
+and rejects more than 500 logical cards per side instead of truncating. Score
+larger corpora in independently frozen chapter batches. Identity IDs must be
+mapped through independently frozen equivalences before scoring; the scorer
+does not infer aliases or grade conflations from names.
+
+`wrongParticipants` counts unsupported members on matched cards; membership
+assertions on unmatched predicted cards are separate `unmatchedParticipantAssertions`,
+not proof of a wrong person. Micro precision includes both as false-positive
+assertions, while `matchedParticipantPrecision` excludes unmatched cards.
+Recall includes known members on unmatched gold cards as missing. Empty
+prediction sets have null precision, not 100%. Uncertain gold memberships are
+reported/excluded explicitly; cards with such uncertainty are outside the
+exact-set denominator. Split/merged source spans remain separate diagnostics.
+
 - Correct, wrong and missing participants are distinct. Wrong means a predicted
   member unsupported by the labelled exchange; missing includes absent/held
   supported members. Report counts and denominators, micro precision/recall/F1,

@@ -4,8 +4,9 @@ import { facultyOptionsFromEnv } from "../src/processing/facultyOptions.js";
 import { ingestNovel } from "../src/commands/ingestCommands.js";
 import { runRecall } from "../src/commands/recallCommands.js";
 
-test("CLI faculty scope defaults to scene and supports explicit block-turn", () => {
-  assert.deepEqual(facultyOptionsFromEnv({}), { dialogueScope: "scene" });
+test("CLI faculty scope defaults to dialogue cards and retains explicit historical modes", () => {
+  assert.deepEqual(facultyOptionsFromEnv({}), { dialogueScope: "card" });
+  assert.deepEqual(facultyOptionsFromEnv({ NOVEL_DIALOGUE_SCOPE: "card" }), { dialogueScope: "card" });
   assert.deepEqual(facultyOptionsFromEnv({ NOVEL_DIALOGUE_SCOPE: "scene" }), { dialogueScope: "scene" });
   assert.deepEqual(facultyOptionsFromEnv({ NOVEL_DIALOGUE_SCOPE: " block-turn " }), { dialogueScope: "block-turn" });
   assert.throws(() => facultyOptionsFromEnv({ NOVEL_DIALOGUE_SCOPE: "invalid" }), /NOVEL_DIALOGUE_SCOPE/);

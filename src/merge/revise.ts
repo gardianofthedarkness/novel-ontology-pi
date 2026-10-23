@@ -98,6 +98,10 @@ export async function reviseProposals(novelDir: string, id: string, value: unkno
       scene.charactersPresent = scene.charactersPresent.filter((entityId) => character(entityId) && !mentionedOnly.has(entityId));
       scene.charactersMentioned = [...new Set([...scene.charactersMentioned.filter(character), ...moved])];
       scene.turns = scene.turns.map((turn) => ({ ...turn, speakerId: turn.speakerId && character(turn.speakerId) && !mentionedOnly.has(turn.speakerId) ? turn.speakerId : null, addresseeId: turn.addresseeId && character(turn.addresseeId) && !mentionedOnly.has(turn.addresseeId) ? turn.addresseeId : null }));
+      for (const card of scene.dialogues ?? []) {
+        card.participantIds = card.participantIds.filter(character);
+        if (card.unresolvedParticipantIds) card.unresolvedParticipantIds = card.unresolvedParticipantIds.filter(character);
+      }
       if (scene.locationId && (removed.has(scene.locationId) || edits.sanitizeTypes && entities.get(scene.locationId)?.kind !== "Location")) scene.locationId = null;
     }
     if (before !== JSON.stringify(proposal.payload)) changed++;

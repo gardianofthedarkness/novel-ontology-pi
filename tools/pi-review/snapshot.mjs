@@ -66,7 +66,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     };
     for (const entity of entityMap.values()) {
       const ownChapter = provenanceChapter.get(entity.id);
-      const presentInChapter = [...eventMap.values()].some((event) => event.chapterIndex === chapter.index && [...(event.primaryActors ?? []), ...(event.affectedCharacters ?? [])].includes(entity.id)) || [...sceneMap.values()].some((scene) => scene.chapterIndex === chapter.index && (scene.locationId === entity.id || (scene.charactersPresent ?? []).includes(entity.id)));
+      const presentInChapter = [...eventMap.values()].some((event) => event.chapterIndex === chapter.index && [...(event.primaryActors ?? []), ...(event.affectedCharacters ?? [])].includes(entity.id)) || [...sceneMap.values()].some((scene) => scene.chapterIndex === chapter.index && (scene.locationId === entity.id || (scene.charactersPresent ?? []).includes(entity.id) || scene.dialogues?.some(card => card.participantIds.includes(entity.id))));
       if (ownChapter === chapter.index || presentInChapter) add(entity, 'entity', 'canon');
     }
     for (const event of eventMap.values()) if (event.chapterIndex === chapter.index) add(event, 'event', 'canon');
@@ -90,7 +90,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
         for (const unit of draft.dialogueUnits.filter((unit) => span.includes(unit[0]))) {
           const dialogueId = `draft:${draft.blockId}:dialogue:${unit[0]}`;
           const turn = draft.turns.find((entry) => entry.sentenceIds.includes(unit[0]));
-          add({ id: dialogueId, summaryEn: `Dialogue · ${unit.length} sentence${unit.length === 1 ? '' : 's'} · ${turn?.speakerId ? 'speaker attributed' : 'speaker unresolved'}`, eventType: 'dialogue' }, 'event', 'proposed', Number(unit[0]?.split('_s')[1] ?? 0));
+          add({ id: dialogueId, summaryEn: `Dialogue exchange · ${unit.length} sentence${unit.length === 1 ? '' : 's'} · ${draft.dialogueCards ? 'participant membership' : turn?.speakerId ? 'legacy speaker attributed' : 'membership pending'}`, eventType: 'dialogue' }, 'event', 'proposed', Number(unit[0]?.split('_s')[1] ?? 0));
           draftLinks.push([id, dialogueId, 'contains']);
           if (turn?.speakerId && entityMap.has(turn.speakerId)) {
             add(entityMap.get(turn.speakerId), 'entity', 'canon');

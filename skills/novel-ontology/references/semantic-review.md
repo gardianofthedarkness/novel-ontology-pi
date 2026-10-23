@@ -10,9 +10,9 @@ relationship is unclear:
 
 Page-level `labels`, `events` and `evidence` dictionaries are shared by facts
 through `eventIds` and `evidenceIds`; source ranges summarize citation IDs,
-not assertion values. Dialogue speaker evidence does not imply physical
-presence: remembered speech can retain its speaker without present-time
-presence. Verify communication versus thoughts/quoted labels, not perfect
+not assertion values. Dialogue participation evidence does not imply physical
+presence: remembered exchanges need not imply present-time presence.
+Verify communication versus thoughts/quoted labels, not perfect
 dialogue boundaries or incidental narration.
 
 `novel changeset facts <dir> <id> --fact '<fact-id>' --offset 0 --limit 12`
@@ -23,12 +23,23 @@ Use the current `revision` to record batches of at most 50 decisions:
 
 Verdicts: `accept`, `hold`, `reject`. Omitted decisions default to hold.
 Accept requires adequate source evidence, not a high confidence score.
+For `dialogue-member`, the value is one Character ID for one exchange.
+Accept supported members independently; reject wrong members and hold uncertainty.
+`candidateOnly` marks initially unresolved candidates, not verified participants.
+Correct a wrong identity using a source-supported Character ID replacement.
+Do not assign speakers/addressees per sentence. Legacy `turn` facts retain
+their original shape only for older packets.
+
 Use an optional `replacement` on an accepted decision to correct just its
 value; keep its field shape. A turn value is `{speakerId,addresseeId}`;
 presence/mention is an array of character IDs; actors is
 `{primaryActors,affectedCharacters}`. Identity replacements retain the ID
 and use only existing candidate/source name forms. Hold a fused identity
 instead of guessing a split. A missing speaker remains null, not narration.
+
+Pages distinguish `reviewed` decisions from the default hold on unreviewed facts;
+summary counts include `explicitHolds` and `unreviewed`. Do not repeatedly submit
+unchanged decisions or reread completed pages to resolve intentional holds.
 
 Decisions preserve unrelated facts and segmentation. A presence correction
 must not change a turn, addressee or event actor. Relations and emotions

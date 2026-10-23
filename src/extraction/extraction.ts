@@ -108,12 +108,14 @@ export interface NamedTurn {
 export interface SceneFacultyResult {
   scene: LlmScene;
   turns: NamedTurn[];
+  dialogues?: import("../processing/dialogueCards.js").NamedDialogueCard[];
   notes: string[];
 }
 
-export const EXTRACTION_SYSTEM = `You are the extraction step of a novel-ontology pipeline. You receive ONE structured scene from a novel: its sentences (with stable ids), the characters the system already knows, and dialogue turns attributed by a decision model. You output ONLY a JSON object describing the scene's ontology: events, participants, causal links, character state changes, and any genuinely new entities.
+export const EXTRACTION_SYSTEM = `You are the extraction step of a novel-ontology pipeline. You receive ONE structured scene from a novel: its sentences (with stable ids) and the characters the system already knows. Dialogue cards are multi-person exchanges, not single-speaker turns. You output ONLY a JSON object describing the scene's ontology: events, participants, causal links, character state changes, and any genuinely new entities.
 
 Rules:
+- Do not assign individual sentences to speakers or addressees. Shared dialogue membership does not establish a directed utterance, relationship or emotion; derive such claims only from explicit original evidence.
 - Animal entities are outside the project's current scope; do not mint animal nodes or invent human replacements. Preserve relevant source evidence and human-story events. Households/families acting as groups are Organizations, not individual Characters. A person merely mentioned can still be a Character, but mentioning them does not establish physical presence or speaking.
 - Write every summary and narrative state fact in the language of the scene's surrounding narration, not English by default. The legacy JSON key summaryEn still holds a source-language summary. Keep schema keys and enum values unchanged.
 - Names and aliases must be copied exactly in their original surface form and script from the text or known-cast list. Do not translate or romanize names. Preserve original names in mixed-language passages too.
@@ -144,7 +146,7 @@ export function buildScenePrompt(input: {
     ? input.turns
         .map((t) => `- sentences ${t.sentenceIds.join(", ")} — speaker: ${t.speakerId ?? "unknown"}`)
         .join("\n")
-    : "(no dialogue turns decided)";
+    : "Multi-person exchanges are resolved independently; no sentence-speaker map is supplied.";
   const sentenceLines = input.sentences.map((s) => `${s.id}: ${s.text}`).join("\n");
   return [
     `SCENE ${input.sceneIndex} (chapter ${input.chapterIndex})`,
@@ -158,7 +160,7 @@ export function buildScenePrompt(input: {
     input.pendingCandidates.length
       ? `NEW-NAME CANDIDATES a decision model judged likely new (if they appear, describe them under newEntities): ${input.pendingCandidates.join(", ")}`
       : "",
-    `DIALOGUE TURNS:\n${turnLines}`,
+    `${input.turns.length ? "LEGACY ATTRIBUTION" : "DIALOGUE CARDS"}:\n${turnLines}`,
     `SENTENCES:\n${sentenceLines}`,
     `Respond with JSON of exactly this shape:
 {"locationName": string|null, "charactersPresent": [name forms], "charactersMentioned": [name forms], "events": [{"summaryEn": string, "eventType": "dialogue"|"action"|"revelation"|"conflict"|"movement"|"decision"|"introduction"|"resolution"|"other", "importance": number 0..1, "actors": [name forms], "affected": [name forms], "evidence": [sentence ids], "causes": number|null, "stateChanges": [{"character": name form, "emotions": {string: number}, "knowledgeAdd": [string], "goalsAdd": [string], "relationships": {name form: number}, "location": string|null, "possessionsAdd": [string], "possessionsRemove": [string]}]}], "newEntities": [{"name": string, "kind": "Character"|"Location"|"Organization"|"Item"|"Concept", "aliases": [{"text": string, "kind": "alias"|"nickname"|"title"}]}]}`,
@@ -674,6 +676,16 @@ export function createExtractor(work: WorkModel) {
         charactersPresent: [...castIds].filter((id) => entityById.get(id)?.kind === "Character"),
         charactersMentioned: [...mentionedIds].filter((id) => !castIds.has(id) && entityById.get(id)?.kind === "Character"),
         turns: turns.map((turn) => ({ ...turn, speakerId: turn.speakerId && entityById.get(turn.speakerId)?.kind === "Character" ? turn.speakerId : null, addresseeId: turn.addresseeId && entityById.get(turn.addresseeId)?.kind === "Character" ? turn.addresseeId : null })),
+        ...(faculty?.dialogues ? { dialogues: faculty.dialogues.map(card => {
+          const resolveMembers = (names: string[]) => [...new Set(names.flatMap(name => {
+            const id = formToId.get(name);
+            if (id && entityById.get(id)?.kind === "Character") return [id];
+            notes[`faculty:unknown-member:${card.id}:${name}`] = "Dialogue participant identity did not resolve; source retained without minting or guessing a person.";
+            return [];
+          }))];
+          const participantIds = resolveMembers(card.participantNames);
+          return { id: card.id, sentenceIds: [...card.sentenceIds], participantIds, unresolvedParticipantIds: resolveMembers(card.unresolvedNames).filter(id => !participantIds.includes(id)) };
+        }) } : {}),
         locationId,
         ...(faculty && llm.summary ? { summary: llm.summary } : {}),
       };

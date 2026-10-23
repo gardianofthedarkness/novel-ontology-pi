@@ -1,5 +1,46 @@
 # Streaming faculties and bounded adjudication
 
+## Current dialogue contract
+
+The default work-model path is `dialogueScope: "card"` (CLI:
+`NOVEL_DIALOGUE_SCOPE=card`). It detects multi-person exchange spans independently
+of scene cuts, discovers source-grounded identities, then asks one independent
+membership question per candidate in a shared S1 batch for each exchange.
+Uncertain membership gets bounded S1 context widening and one shared S2
+adjudication per card. No single winner, per-sentence speaker map, speaker-only
+S2 or voice-change split is used on this path. Scene identity/understanding work
+still streams; participant resolution waits for its source/candidate dependencies.
+
+Scene `dialogues` store stable card IDs, source spans, `participantIds` and
+initially unresolved candidates. Scene-cut fragments share the card ID, and
+semantic review deduplicates membership facts across those fragments. Each
+member is reviewed independently; holding one does not erase supported members
+or source text. Card membership does not infer physical presence, directed
+speech, relationships or emotions. The viewer shows all known members and
+retrieves the full original exchange across scene fragments on demand.
+
+The portable bundle retains these cards. Rebuild existing disposable graphs
+to query `Scene.dialogue_cards_json`; no directed Character edge is generated
+from card co-membership. Legacy turns remain readable. The explicit `scene`
+and `block-turn` modes below are historical compatibility/benchmark paths, not
+the default contract. The no-work-model miniloop remains the legacy path.
+Historical text below describes those older modes unless noted otherwise.
+
+PR36 (`feat/em-faculty`, inspected at `4e355eb`) is open and not merged here.
+It adds descriptive/fragment alias-at-birth and structural matching; its reported
+birth-order and extraction-mint gaps still matter for candidate identity quality.
+This change consumes grounded identity declarations and remaps/deduplicates card
+members through the existing audited entity merge/removal path. Integrating
+PR36 must cover block-level birth resolution as well as scene declarations,
+include card memberships in matching evidence without treating co-participants
+as the same person, and reconcile post-apply confidence-triggered merges with
+this branch's independent semantic gate. It is not safe to silently import that
+auto-merge behavior or assume its scores measure dialogue-card accuracy.
+
+Current benchmark: [dialogue-card contract](dialogue-card-benchmark.md).
+
+## Historical single-speaker implementation
+
 Live ingestion with a work model uses `FacultyGraph` by default. The no-work-model
 path remains System 1 only. `BlockProcessor` also accepts `facultyGraph: false`
 for reference tests. No model call approves or writes canonical records.

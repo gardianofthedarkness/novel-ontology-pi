@@ -93,7 +93,7 @@ test("closed scenes start identity and understanding before dialogue or segmenta
       return JSON.stringify({ summary: "小樱说话。", events: [{ summaryEn: "小樱说话。", actors: ["小樱"], evidence: [first], stateChanges: [{ character: "小樱", emotions: { 高兴: 0.2 } }] }] });
     },
   };
-  const graph = new FacultyGraph(decisions, work);
+  const graph = new FacultyGraph(decisions, work, { dialogueScope: "scene" });
   assert.equal(graph.router.policyFor("scene-boundaries").enabled, false);
   assert.equal(graph.router.policyFor("dialogue-boundaries").enabled, false);
   assert.equal(graph.router.policyFor("dialogue-attribution").enabled, true);
@@ -132,7 +132,7 @@ test("valid dialogue rows survive context-only records and unknown speaker names
     }
     return JSON.stringify({ summary: "小樱说话。", events: [] });
   } };
-  const graph = new FacultyGraph(decisions, work, { decisionRouting: { enabled: true } });
+  const graph = new FacultyGraph(decisions, work, { dialogueScope: "scene", decisionRouting: { enabled: true } });
   const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [character] });
   const scene = await result.sceneResults.get(sentences[0].id)!;
   assert.equal(scene.turns.length, 2);
@@ -152,7 +152,7 @@ test("dialogue recall pins take priority over automatic restructuring and remain
     if (request.system.startsWith("FACULTY: entities-participants")) return JSON.stringify({ newEntities: [], charactersPresent: ["小樱"], charactersMentioned: [], locationName: null });
     return JSON.stringify({ events: [] });
   } };
-  const graph = new FacultyGraph(decisions, work);
+  const graph = new FacultyGraph(decisions, work, { dialogueScope: "scene" });
   const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [character], pins: new Map([[key, "NONE"]]) });
   assert.ok(result.miniloop.appliedPins?.includes(key));
   assert.ok(result.miniloop.changeset.reviewNotes["faculty:dialogue-pins"]);
@@ -163,7 +163,7 @@ test("invalid faculty output keeps complete source scenes and explicit unresolve
   const sentences = sectionBlock("小樱说道：“你好。”", 0).sentences;
   const decisions: DecisionModel = { modelId: "jev", async decide(_state, questions) { return questions.map(question => ({ key: question.key, value: question.key.startsWith("scene_end:") ? sentences[0].id : "NONE", confidence: 0.99 })); } };
   const work: WorkModel = { modelId: "bad", async generate() { return JSON.stringify({ newEntities: [{ name: "INVENTED", kind: "Character" }], events: [{ summaryEn: "假摘要", evidence: ["bogus"] }], turns: [{ first: "bogus", last: "bogus", speaker: "INVENTED" }] }); } };
-  const graph = new FacultyGraph(decisions, work);
+  const graph = new FacultyGraph(decisions, work, { dialogueScope: "scene" });
   const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [] });
   const output = await createExtractor(work)({ blockId: "b0001", chapterIndex: 0, sentences, miniloop: result.miniloop, knownEntities: [], proposals: [], counts: { events: 0, scenes: 0 }, sceneResults: result.sceneResults });
   assert.equal(output.proposals.filter(proposal => proposal.kind === "create_scene").length, 1);
@@ -181,7 +181,7 @@ test("scene boundaries retry System 1 with wider context before any System 2 esc
     assert.ok(!request.system.startsWith("Resolve one uncertain"));
     return request.system.startsWith("FACULTY: entities-participants") ? JSON.stringify({ newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null }) : JSON.stringify({ events: [] });
   } };
-  const graph = new FacultyGraph(decisions, work, { decisionRouting: { enabled: true } });
+  const graph = new FacultyGraph(decisions, work, { dialogueScope: "scene", decisionRouting: { enabled: true } });
   const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [] });
   assert.equal(graph.router.metrics["scene-boundaries"].retryRecovered, 1);
   assert.equal(graph.router.metrics["scene-boundaries"].escalated, 0);
@@ -206,7 +206,7 @@ test("dialogue retries keep the same questions and units while using neighboring
     assert.ok(!request.system.startsWith("FACULTY: dialogue-adjudication"));
     return request.system.startsWith("FACULTY: entities-participants") ? JSON.stringify({ newEntities: [], charactersPresent: ["小樱", "小林"], charactersMentioned: [], locationName: null }) : JSON.stringify({ events: [] });
   } };
-  const graph = new FacultyGraph(decisions, work);
+  const graph = new FacultyGraph(decisions, work, { dialogueScope: "scene" });
   const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, contextSentences: [...neighbors, ...sentences], knownEntities: [] });
   const scene = await result.sceneResults.get(sentences[0].id)!;
   assert.deepEqual(scene.turns.map(turn => turn.speakerName), ["小樱", "小林"]);

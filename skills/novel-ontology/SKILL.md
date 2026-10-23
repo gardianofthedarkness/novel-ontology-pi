@@ -17,12 +17,12 @@ without keys. Missing credentials require secure entry, never chat.
    Ingest stops at the next review gate. Never use `--auto-approve`.
 3. Read `novel changeset facts <dir> <id> --offset 0 --limit 20` and
    follow `page.nextOffset`. Review consequential assertions: identity,
-   aliases, speakers/addressees, presence, actors, relations and state.
+   aliases, dialogue-card participant memberships, presence, actors, relations and state.
    Source excerpts and canonical identities accompany the facts; request
    more evidence when insufficient. See [fact decisions](references/semantic-review.md).
 4. Accept only source-supported facts. Hold uncertainty; reject disproven
    assertions. Correct only the affected fact, never clear a person's
-   speakers/actors to fix presence. Do not optimize scene/dialogue boundaries,
+   dialogue members/actors to fix presence. Do not optimize scene/dialogue boundaries,
    minor event detection or small omissions; code checks their structure.
 5. `novel changeset approve <dir> <id>` applies validated text organization
    and verified facts. Other facts remain held outside canon, including
@@ -42,6 +42,9 @@ without keys. Missing credentials require secure entry, never chat.
   Households/groups are Organizations; mentioned people can be Characters.
 - A name match, registry entry or event actor does not prove physical
   presence. Mentioned, remembered and absent people are not present.
+- Dialogue cards are multi-person exchanges. Review each member independently;
+  do not assign sentences to speakers, split at voice changes, or infer directed
+  speech/relationships/emotions from co-membership. Hold only uncertain members.
 - Do not merge distinct people, discard supported facts to clear a gate,
   guess unresolved speakers, or reuse an entity id to change its identity.
 - Empty Cypher results mean unknown, not false. Retrieve original evidence
@@ -56,6 +59,8 @@ without keys. Missing credentials require secure entry, never chat.
   `chapter_index`, `chronological_order`, `event_type`, `summary_en`,
   `timeline_id`, `importance`. Names/evidence live in proposals/bundles,
   not invented Cypher properties.
+  Scenes expose `dialogue_cards_json` after rebuilding the graph; legacy turns
+  remain readable, not verified card memberships.
 - `novel match <dir> --changeset <id>` suggests duplicate identities;
   source evidence decides whether to merge.
 - `novel fix ...` changes existing canonical records, not pending-only

@@ -275,7 +275,7 @@ export async function selectExchangeSpans(
           {
             key: startKey,
             primitive: "choice",
-            instructions: `Select dialogue at sentence level: one short continuous run of actual speech. One or two brief narration or action sentences BETWEEN spoken sentences may remain inside the run. Three or more consecutive non-verbal sentences break the run: speech resuming after that gap starts another dialogue unit/turn, even with the same speakers in the same scene. Do not include a long descriptive passage merely to connect two spoken lines. Thoughts, quoted labels and descriptions are not spoken dialogue. Which sentence id BEGINS the next dialogue exchange at or after ${firstId}? Pick its first spoken sentence, including speech resuming after a long narration gap, or NONE if no speech begins in the rest of this passage.`,
+            instructions: `Select dialogue at sentence level: one continuous exchange of actual speech involving one or more people. Alternating voices do not require a new exchange. One or two brief narration or action sentences BETWEEN spoken sentences may remain inside the run. Three or more consecutive non-verbal sentences break the run: speech resuming after that gap starts another dialogue card, even with the same speakers in the same scene. Do not include a long descriptive passage merely to connect two spoken lines. Thoughts, quoted labels and descriptions are not spoken dialogue. Which sentence id BEGINS the next dialogue exchange at or after ${firstId}? Pick its first spoken sentence, including speech resuming after a long narration gap, or NONE if no speech begins in the rest of this passage.`,
             options: startOpts,
           },
         ]),
@@ -302,7 +302,7 @@ export async function selectExchangeSpans(
           {
             key: endKey,
             primitive: "choice",
-            instructions: `The sentence-level dialogue run beginning at ${region[sLocal].id} may include one or two brief non-verbal sentences only when speech resumes immediately afterward. End the run BEFORE any gap of three or more consecutive narration, action or description sentences, even if the same speakers resume in the same scene; that resumed speech starts another dialogue unit/turn. Also end when the conversation stops or the participants change entirely. Choose the LAST spoken sentence before the break, not the scene's end or the narration after speech. Which sentence id is the LAST sentence belonging to this exchange? Pick only an id from ${region[sLocal].id} to ${endOpts[endOpts.length - 1]}.`,
+            instructions: `The multi-person dialogue exchange beginning at ${region[sLocal].id} may include one or two brief non-verbal sentences only when speech resumes immediately afterward. End the run BEFORE any gap of three or more consecutive narration, action or description sentences, even if the same speakers resume in the same scene; that resumed speech starts another dialogue card. Also end when the conversation stops or the participants change entirely. Choose the LAST spoken sentence before the break, not the scene's end or the narration after speech. Which sentence id is the LAST sentence belonging to this exchange? Pick only an id from ${region[sLocal].id} to ${endOpts[endOpts.length - 1]}.`,
             options: endOpts,
           },
         ]),

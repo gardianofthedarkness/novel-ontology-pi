@@ -6,8 +6,10 @@ import type { Sentence } from "../text/sectioning.js";
 export interface Fact {
   id: string;
   proposalId: string;
-  field: "identity" | "alias" | "actors" | "presence" | "mention" | "location" | "turn" | "relation" | "state";
+  field: "identity" | "alias" | "actors" | "presence" | "mention" | "location" | "turn" | "dialogue-member" | "relation" | "state";
   turnIndex?: number;
+  cardId?: string;
+  candidateOnly?: boolean;
   value: unknown;
   sentenceIds: string[];
 }
@@ -28,6 +30,7 @@ export const semanticRevision = (changeset: ChangeSet, contextDigest = changeset
 
 export function semanticFacts(changeset: ChangeSet): Fact[] {
   const facts: Fact[] = [];
+  const reviewedCards = new Set<string>();
   const push = (proposal: ChangeProposal, field: Fact["field"], value: unknown, sentenceIds = proposal.provenance.sentenceIds, turnIndex?: number) => {
     facts.push({ id: `${proposal.id}/${field}${turnIndex === undefined ? "" : `/${turnIndex}`}`, proposalId: proposal.id, field, value, sentenceIds, ...(turnIndex === undefined ? {} : { turnIndex }) });
   };
@@ -48,6 +51,16 @@ export function semanticFacts(changeset: ChangeSet): Fact[] {
       scene.turns.forEach((turn, index) => {
         if (turn.speakerId || turn.addresseeId) push(proposal, "turn", { speakerId: turn.speakerId, addresseeId: turn.addresseeId }, turn.sentenceIds, index);
       });
+      for (const card of scene.dialogues ?? []) {
+        if (reviewedCards.has(card.id)) continue;
+        reviewedCards.add(card.id);
+        const fragments = changeset.proposals.filter(entry => entry.kind === "create_scene").flatMap(entry => (entry.payload as Scene).dialogues ?? []).filter(entry => entry.id === card.id);
+        const references = new Set(fragments.flatMap(entry => entry.sentenceIds));
+        const sentenceIds = (changeset.reviewSource ?? []).filter(sentence => references.has(sentence.id)).map(sentence => sentence.id);
+        for (const participantId of [...card.participantIds, ...card.unresolvedParticipantIds ?? []]) {
+          facts.push({ id: `${proposal.id}/dialogue-member/${card.id}/${participantId}`, proposalId: proposal.id, field: "dialogue-member", cardId: card.id, value: participantId, sentenceIds, candidateOnly: !card.participantIds.includes(participantId) });
+        }
+      }
     }
     if (proposal.kind === "add_relation") {
       const relation = proposal.payload as Relation;
@@ -77,6 +90,7 @@ export function validateStructure(changeset: ChangeSet): void {
   const owners = new Map<string, number>();
   const proposalIds = new Set<string>();
   const objects = new Set<string>();
+  const cardMemberships = new Map<string, string>();
   const validSpan = (span: string[], allowEmpty = false, ordered = false) => {
     if (!Array.isArray(span) || !allowEmpty && !span.length || span.some(id => !ids.has(id)) || new Set(span).size !== span.length) throw new Error("Invalid source references");
     const order = span.map(id => source.findIndex(sentence => sentence.id === id));
@@ -97,6 +111,21 @@ export function validateStructure(changeset: ChangeSet): void {
       if (!Number.isSafeInteger(scene.chapterIndex) || scene.chapterIndex < 0 || !Array.isArray(scene.turns)) throw new Error("Invalid scene structure");
       if (!strings(scene.charactersPresent) || !strings(scene.charactersMentioned) || scene.locationId !== null && typeof scene.locationId !== "string") throw new Error("Invalid scene reference structure");
       validSpan(scene.sentenceIds, false, true);
+      if (scene.dialogues !== undefined && (!Array.isArray(scene.dialogues) || scene.turns.length)) throw new Error("Dialogue cards and legacy speaker turns cannot be mixed");
+      const cardIds = new Set<string>();
+      const cardSentences = new Set<string>();
+      for (const card of scene.dialogues ?? []) {
+        if (typeof card.id !== "string" || !card.id || cardIds.has(card.id) || !strings(card.participantIds) || !strings(card.unresolvedParticipantIds ?? []) || card.participantIds.some(id => card.unresolvedParticipantIds?.includes(id))) throw new Error("Invalid dialogue card membership structure");
+        cardIds.add(card.id);
+        validSpan(card.sentenceIds, false, true);
+        for (const id of card.sentenceIds) {
+          if (!scene.sentenceIds.includes(id) || cardSentences.has(id)) throw new Error("Dialogue card source leaves its scene or overlaps another card");
+          cardSentences.add(id);
+        }
+        const signature = JSON.stringify([[...card.participantIds].sort(), [...card.unresolvedParticipantIds ?? []].sort()]);
+        if (cardMemberships.has(card.id) && cardMemberships.get(card.id) !== signature) throw new Error("Shared dialogue card membership candidates disagree");
+        cardMemberships.set(card.id, signature);
+      }
       for (const id of scene.sentenceIds) owners.set(id, (owners.get(id) ?? 0) + 1);
       const spoken = new Set<string>();
       for (const turn of scene.turns) {
@@ -154,7 +183,11 @@ export function materializeSemantic(changeset: ChangeSet, knownEntities: Entity[
     if (objectKinds.has(id)) throw new Error("Semantic application cannot overwrite existing scenes or events");
     objectKinds.set(id, proposal.kind === "create_scene" ? "Scene" : "Event");
     if (proposal.kind === "create_event") { payload.primaryActors = []; payload.affectedCharacters = []; }
-    else { payload.charactersPresent = []; payload.charactersMentioned = []; payload.locationId = null; payload.turns = (payload.turns as Scene["turns"]).map(turn => ({ ...turn, speakerId: null, addresseeId: null })); }
+    else {
+      payload.charactersPresent = []; payload.charactersMentioned = []; payload.locationId = null;
+      payload.turns = (payload.turns as Scene["turns"]).map(turn => ({ ...turn, speakerId: null, addresseeId: null }));
+      if (payload.dialogues) payload.dialogues = (payload.dialogues as NonNullable<Scene["dialogues"]>).map(card => ({ ...card, participantIds: [], unresolvedParticipantIds: [] }));
+    }
   }
   const output = new Map(projected.map(proposal => [proposal.id, proposal]));
   for (const fact of facts.filter(fact => fact.field === "identity" && accepted(fact))) {
@@ -186,6 +219,11 @@ export function materializeSemantic(changeset: ChangeSet, knownEntities: Entity[
       if (resolved) target![fact.field === "presence" ? "charactersPresent" : "charactersMentioned"] = structuredClone(next);
     } else if (fact.field === "location") {
       resolved = typed(next, ["Location"]); if (resolved) target!.locationId = next;
+    } else if (fact.field === "dialogue-member") {
+      resolved = typed(next, ["Character"]);
+      if (resolved) for (const projectedScene of projected.filter(entry => entry.kind === "create_scene")) {
+        for (const card of (projectedScene.payload as Scene).dialogues ?? []) if (card.id === fact.cardId && !card.participantIds.includes(next as string)) card.participantIds.push(next as string);
+      }
     } else if (fact.field === "turn") {
       if (!record(next) || Object.keys(next).some(key => !["speakerId", "addresseeId"].includes(key)) || !("speakerId" in next) || !("addresseeId" in next)) throw new Error("Invalid dialogue assignment");
       const speaker = next.speakerId === null || typed(next.speakerId, ["Character"]);

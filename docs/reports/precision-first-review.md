@@ -131,3 +131,29 @@ uncertainty on unsupported facts. These are findings, not fixes validated by
 this run. Do not resume paid processing or promote held assertions implicitly.
 Only aggregates are published; source, payloads, gold identities, credentials,
 private audit reasons and full runtime reports remain private.
+
+## Dialogue-card implementation update
+
+The approved design/benchmark contract was published first at `3ac05a2`, before
+implementation. The default work-model path now stores multi-person dialogue
+cards with independent membership facts instead of sentence-speaker labels.
+Source-only card matching and participant scoring are available through
+`novel eval dialogues`; historical sentence gold is not repurposed as card gold.
+
+251 core and 36 Pi/viewer tests pass; the frontend production build succeeds
+with its existing bundle-size warning. New synthetic tests cover alternating
+voices, monologues/three-person exchanges, mentioned distractors, S1 widening,
+one shared S2 fallback per card, unknown/oversized inputs, independent member
+holds, scene-fragment identity/source reconstruction, actual CLI approval,
+audited entity remaps/removal, Ladybug card queries and deterministic card-level
+scoring/CLI execution without network. No new paid novel calls were made and
+no real card-participant accuracy, latency or savings claim is established.
+
+PR36's alias/fragment-at-birth and structural matching code was inspected at
+`4e355eb`. It is not merged here. Integration must include block-level identity
+births and card member remapping/evidence, without introducing confidence-only
+post-apply merges through this branch's independent semantic gate. Existing
+audited merge/removal operations now remap/deduplicate card members. Remaining
+review-loop behavior is not claimed fixed by the new progress fields alone.
+The skill's focused instructions/reference were updated; its optional Python
+validator could not run because PyYAML is absent from available runtimes.

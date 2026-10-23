@@ -18,9 +18,12 @@ two API keys (one work LLM + one decision model), and start.
 - **System 1 — the autostep miniloop** (inside the CLI): a recursive
   decision system built on **Jev** (TypeSafe AI's decision model). It
   works as independent **decision patches** — a dialogue detector, a name
-  detector, a presence detector, a speaker attributor — each asking the
+  detector, a presence detector, a dialogue-membership faculty — each asking the
   decision model small typed questions (`noul` / `choice` / `score`)
-  over auto-sectioned sentences. Dialogue remains sentence-level: the detector
+  over auto-sectioned source. The default work-model path emits multi-person
+  dialogue cards, not sentence-speaker assignments. Sentence IDs locate the
+  original exchange. Membership is reviewed independently for each person.
+  The detector
   prompt allows one or two brief narration beats between spoken sentences, but
   asks for a new dialogue unit after three or more non-verbal sentences, even
   with the same speakers in the same scene.
@@ -233,7 +236,7 @@ stored fields only:
 - **events** go to their own `chapterIndex`;
 - **entities** carry no chapter field, so an entity is projected into
   every chapter where a stored scene or event places it (scene
-  presence/mentions/location/dialogue turns; event primary actors /
+  presence/mentions/location/dialogue-card members or legacy turns; event primary actors /
   affected characters);
 - **relations** carry no chapter field either, so a relation is
   projected into the chapters *both* endpoints are placed in — a

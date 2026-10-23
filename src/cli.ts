@@ -35,6 +35,7 @@ import {
 import { resolveJevKey } from "./connectors/secrets.js";
 import { inspectNovel } from "./commands/inspectCommands.js";
 import { evalExtract, evalRun } from "./commands/evalCommands.js";
+import { evalDialogueCards } from "./commands/dialogueEval.js";
 import { sectionBlock } from "./text/sectioning.js";
 import { cutBlocks } from "./text/blocks.js";
 import { initWorkspace } from "./workspace/init.js";
@@ -103,6 +104,8 @@ const COMMANDS: Record<string, string> = {
     "Corpus diagnostics over a novel bundle (counts, coverage, integrity tallies — no judgments)",
   "novel eval run <dataset-dir> <predictions-dir>":
     "Score prediction files against a golden-chapter dataset (precision/recall; metrics only, no thresholds)",
+  "novel eval dialogues <gold-cards.json> <predicted-cards.json>":
+    "Score exchange-level participants: correct/wrong/missing, unknown cards and source-span matching; no model calls",
   "novel eval extract <novel-dir> <predictions-dir>":
     "Project an ingested bundle's ontology into a per-chapter predictions dir for eval run (records as stored; no model calls)",
   "novel config": "Show model routing config (keys via env / secure store only)",
@@ -204,6 +207,10 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "eval") {
+    if (sub === "dialogues" && positional.length === 4) {
+      out(await evalDialogueCards(positional[2], positional[3]), pretty);
+      return;
+    }
     if (sub === "run" && positional[2] && positional[3]) {
       out(await evalRun(positional[2], positional[3]), pretty);
       return;
@@ -212,7 +219,7 @@ async function main(): Promise<void> {
       out(await evalExtract(positional[2], positional[3]), pretty);
       return;
     }
-    throw new Error("Usage: novel eval run <dataset-dir> <predictions-dir> | novel eval extract <novel-dir> <predictions-dir>");
+    throw new Error("Usage: novel eval run <dataset-dir> <predictions-dir> | novel eval extract <novel-dir> <predictions-dir> | novel eval dialogues <gold-cards.json> <predicted-cards.json>");
   }
 
   if (cmd === "watch") {
