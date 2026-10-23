@@ -95,7 +95,7 @@ export interface LlmScene {
   charactersPresent?: string[];
   charactersMentioned?: string[];
   events?: LlmEvent[];
-  newEntities?: { name?: string; kind?: string; aliases?: { text?: string; kind?: string }[] }[];
+  newEntities?: { name?: string; kind?: string; descriptive?: boolean; aliases?: { text?: string; kind?: string }[] }[];
 }
 
 export interface NamedTurn {

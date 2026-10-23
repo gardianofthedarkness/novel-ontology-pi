@@ -23,6 +23,10 @@ import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../extra
 import { FacultyGraph, type FacultyGraphOptions } from "./facultyGraph.js";
 import { groundFacultyProposals } from "./facultyGrounding.js";
 import { previewFacultyStates } from "./facultyContinuity.js";
+import { join } from "node:path";
+import { BundleStore } from "../connectors/bundle.js";
+import type { OntEvent, Relation, Scene } from "../ontology/types.js";
+import { runEntityMatching, type EmSummary } from "../matching/emFaculty.js";
 
 export type ReviewDecision = "approved" | "held" | "revision_requested";
 
@@ -71,6 +75,16 @@ export class BlockProcessor {
        */
       workModel?: WorkModel;
       facultyGraph?: false | FacultyGraphOptions;
+      /**
+       * The EM faculty (sector 04): after each block is applied, run
+       * the strict structural entity-matching pass over pairs that
+       * touch the block's entities (new x registry, new x new).
+       * Confident Jev verdicts merge through the audited maintenance
+       * path; distinct verdicts are remembered per novel. Only the
+       * ingest CLI enables this; EM failures never block ingestion.
+       */
+      entityMatching?: boolean;
+      onEntityMatching?: (blockId: string, summary: EmSummary) => void;
       /** Distinct event/scene counts in the bundle, for ID/order sequencing. */
       loadCounts?: () => Promise<{ events: number; scenes: number; reservedEntityIds?: string[] }>;
       /**
@@ -196,6 +210,41 @@ export class BlockProcessor {
           result.changeset.status = "approved";
           await applyChangeSet(this.store, result.changeset, emit);
           mergedBlocks.push(block.blockId);
+          if (this.observation.entityMatching && this.observation.novelDir) {
+            const touchedIds = new Set(
+              result.changeset.proposals
+                .filter((p) => p.kind === "upsert_entity")
+                .map((p) => (p.payload as Entity).id),
+            );
+            if (touchedIds.size > 0) {
+              try {
+                const bundle = new BundleStore(join(this.observation.novelDir, "ontology"));
+                const rows = await bundle.loadFile<Entity>("entities.jsonl");
+                const byId = new Map<string, Entity>();
+                for (const e of rows) byId.set(e.id, e);
+                const summary = await runEntityMatching({
+                  novelDir: this.observation.novelDir,
+                  decisions: this.decisions,
+                  touchedIds,
+                  data: {
+                    entities: [...byId.values()],
+                    events: await bundle.loadFile<OntEvent>("events.jsonl"),
+                    scenes: await bundle.loadFile<Scene>("scenes.jsonl"),
+                    relations: await bundle.loadFile<Relation>("relations.jsonl"),
+                  },
+                });
+                if (summary.nominated > 0) {
+                  result.changeset.reviewNotes["em-faculty"] =
+                    `EM pass after apply: ${summary.nominated} nominated, ${summary.merged.length} merged, ${summary.distinct.length} distinct (remembered), ${summary.uncertain.length} uncertain.`;
+                  this.observation.onEntityMatching?.(block.blockId, summary);
+                }
+              } catch {
+                // The EM faculty is advisory infrastructure: a failed
+                // pass leaves the applied block untouched and is
+                // retried by the next chapter sweep or `novel match`.
+              }
+            }
+          }
           break;
         }
         if (decision === "held") {

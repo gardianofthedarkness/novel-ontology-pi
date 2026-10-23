@@ -11,7 +11,11 @@ import type { WorkingDraft } from "./draft.js";
 import { FacultyPool, type FacultyCall } from "./facultyPool.js";
 import { jsonObject, renderSentences, sourceChunks, type SourceChunk } from "./facultyContext.js";
 
-const IDENTITY_SYSTEM = `FACULTY: entities-participants. Read only the supplied source. Return JSON with newEntities:[{name,kind,aliases:[{text,kind}]}], charactersPresent:[name], charactersMentioned:[name], locationName:string|null. Allowed kinds: Character, Location, Organization, Item, Concept. Copy every name and alias exactly from the source or registry, preserving its language/script. Include people newly named in this scene, even when merely mentioned, but distinguish physical presence from mention. Include grounded role descriptions when no personal name is given, never invented placeholders. A narrator's description is not a person's alias. Do not create animal entities. Household groups are Organizations. Registry membership never proves presence. Do not fuse different people on generic pronouns or descriptions. No events or summaries.`;
+const IDENTITY_SYSTEM = `FACULTY: entities-participants. Read only the supplied source. Return JSON with newEntities:[{name,kind,aliases:[{text,kind}]}], charactersPresent:[name], charactersMentioned:[name], locationName:string|null. Allowed kinds: Character, Location, Organization, Item, Concept. Copy every name and alias exactly from the source or registry, preserving its language/script. Include people newly named in this scene, even when merely mentioned, but distinguish physical presence from mention. Include grounded role descriptions when no personal name is given, never invented placeholders. A narrator's description is not a person's alias. Do not create animal entities. Household groups are Organizations. Registry membership never proves presence. Do not fuse different people on generic pronouns or descriptions. No events or summaries. Set "descriptive":true on a newEntities entry whose name is a role or appearance description rather than a proper name.`;
+
+/** Alias-at-birth: a descriptive candidate attaches to an existing
+ * character only when the strict Jev round is this confident. */
+export const BIRTH_ALIAS_THRESHOLD = 0.85;
 
 const DIALOGUE_SYSTEM = `FACULTY: dialogue-adjudication. Resolve uncertain System 1 dialogue and speakers using ONLY the supplied original sentences and candidate names. Return JSON {"turns":[{"first":"sentence id","last":"sentence id","speaker":"exact candidate name or null","addressee":"exact candidate name or null","continuesPrevious":false}]}. Each turn has ONE speaker. Split whenever the speaker changes, even in the same conversation/scene. Keep consecutive sentences of one utterance together, including sentences continuing an already-open quote. Start at its first spoken sentence and end at its last spoken sentence. At most two brief narration/action sentences may stay BETWEEN speech of the SAME speaker. Three consecutive non-verbal sentences require a new turn. Exclude trailing narration, interior thoughts, quoted labels and standalone quoted silence. Explicit lip-reading communication is dialogue, not a thought. Recover speech missed by System 1. Output only turns whose first/last sentences are in CORE, in source order without overlaps. CONTEXT is read-only for interpreting CORE, not output. If a turn crosses a CORE boundary, output the CORE portion and set continuesPrevious only when it truly continues the same speaker's preceding utterance. Do not guess identities from mere presence or who is being addressed. Use null for ambiguous or unavailable candidates. No commentary.`;
 
@@ -117,7 +121,7 @@ export class FacultyGraph {
           if (!isRecord(alias) || !supported(alias.text)) { notes.push("Unsupported alias omitted without assigning it to another character."); return []; }
           return [{ text: alias.text, kind: ["alias", "nickname", "title"].includes(String(alias.kind)) ? String(alias.kind) : "alias" }];
         });
-        declarations.push({ name: entry.name, kind: String(entry.kind), aliases });
+        declarations.push({ name: entry.name, kind: String(entry.kind), descriptive: entry.descriptive === true, aliases });
       }
       const roster = (value: unknown) => strings(value).filter(name => { if (supported(name)) return true; notes.push("Unsupported participant reference remains unresolved; no identity was invented."); return false; });
       if (!Array.isArray(result.charactersPresent) || !Array.isArray(result.charactersMentioned)) throw new Error("Missing scene participant decisions");
@@ -175,6 +179,79 @@ export class FacultyGraph {
         return [{ sentenceIds: chunk.core.slice(first, last + 1).map(sentence => sentence.id), speakerName: name(entry.speaker), addresseeName: name(entry.addressee), continuesPrevious: globalFirst < firstIndex || entry.continuesPrevious === true }];
       });
     };
+    /**
+     * Alias-at-birth (identification policy, 2026-10-23): a
+     * descriptive candidate ("honey-colored girl") must first be
+     * checked against the existing characters. One strict Jev round
+     * over the scene passage decides: if the description belongs to
+     * an existing character, it is born as that character's alias
+     * and no entity is minted; only a figure Jev will not attach at
+     * BIRTH_ALIAS_THRESHOLD becomes a new entity. Descriptions that
+     * are already recorded forms of a character fold without a call.
+     */
+    const resolveDescriptiveBirths = async (llm: LlmScene, sceneSentences: Sentence[], notes: string[]): Promise<LlmScene> => {
+      const declarations = llm.newEntities ?? [];
+      const descriptive = declarations.filter(d => d.kind === "Character" && d.descriptive && typeof d.name === "string" && d.name.length > 0);
+      if (!descriptive.length) return llm;
+      const registryCandidates = input.knownEntities
+        .filter(e => e.kind === "Character")
+        .map(e => ({ name: e.names[0]?.text ?? e.id, id: e.id as string | undefined, forms: e.names.map(n => n.text) }));
+      const sceneCandidates = declarations
+        .filter(d => d.kind === "Character" && !d.descriptive && typeof d.name === "string")
+        .map(d => ({ name: d.name as string, id: undefined as string | undefined, forms: [d.name as string, ...(d.aliases ?? []).flatMap(a => a.text ? [a.text] : [])] }));
+      const candidates = [...registryCandidates, ...sceneCandidates];
+      if (!candidates.length) return llm;
+      const remaining = [...declarations];
+      const attach = (descName: string, target: { name: string; id?: string }) => {
+        const idx = remaining.findIndex(d => d.name === descName);
+        if (idx >= 0) remaining.splice(idx, 1);
+        const host = remaining.find(d => d.name === target.name && d.kind === "Character");
+        if (host) {
+          host.aliases = [...(host.aliases ?? []), { text: descName, kind: "alias" }];
+        } else {
+          remaining.push({ name: target.name, kind: "Character", aliases: [{ text: descName, kind: "alias" }] });
+        }
+        const swap = (list?: string[]) => [...new Set((list ?? []).map(n => (n === descName ? target.name : n)))];
+        llm.charactersPresent = swap(llm.charactersPresent);
+        llm.charactersMentioned = swap(llm.charactersMentioned);
+      };
+      const pending: typeof descriptive = [];
+      for (const d of descriptive) {
+        const owner = candidates.find(c => c.forms.includes(d.name!));
+        if (owner) {
+          attach(d.name!, owner);
+          notes.push(`alias-at-birth: "${d.name}" is already a recorded form of ${owner.name}; folded without a new entity.`);
+        } else pending.push(d);
+      }
+      if (pending.length) {
+        const candList = candidates.map(c => `- ${c.name} (forms: ${c.forms.join(", ")})`).join("\n");
+        const state = `${constraints}PASSAGE:\n${renderSentences(sceneSentences)}\n\nEXISTING CHARACTERS:\n${candList}`;
+        const questions = pending.map(d => ({
+          key: `birth:${d.name}`,
+          primitive: "choice" as const,
+          instructions: `In the passage, the narrator refers to a figure as "${d.name}". Which EXISTING character does this description refer to in this passage? Choose that character's exact name from the options. Choose NEW_PERSON if the figure is a different person, a new character, or the passage does not establish the identity with confidence. A figure who merely appears in the same scene as a character, or interacts with them, is NOT that character.`,
+          options: [...candidates.map(c => c.name), "NEW_PERSON"],
+        }));
+        try {
+          const answers = await decide(state, questions);
+          for (const d of pending) {
+            const a = answers.find(x => x.key === `birth:${d.name}`);
+            const value = typeof a?.value === "string" ? a.value : "NEW_PERSON";
+            const conf = a?.confidence ?? 0;
+            const target = candidates.find(c => c.name === value);
+            if (target && conf >= BIRTH_ALIAS_THRESHOLD) {
+              attach(d.name!, target);
+              notes.push(`alias-at-birth: "${d.name}" attached to ${target.name} (Jev confidence ${conf.toFixed(2)}); no new entity minted.`);
+            } else {
+              notes.push(`alias-at-birth: "${d.name}" kept as a new entity (Jev: ${value}, confidence ${conf.toFixed(2)}).`);
+            }
+          }
+        } catch {
+          notes.push("alias-at-birth check unavailable; descriptive candidates were kept as new entities for review.");
+        }
+      }
+      return { ...llm, newEntities: remaining };
+    };
     const startScene = (span: string[], sceneIndex: number): Promise<SceneFacultyResult> => {
       const sentences = span.map(id => input.sentences[sentenceIndex.get(id)!]);
       const notes: string[] = [];
@@ -184,7 +261,7 @@ export class FacultyGraph {
       const identity = safely<LlmScene>("entities-participants", async () => {
         const parts = await Promise.all(sourceChunks(sentences, { maxBytes: 7_000, maxSentences: 48, margin: 4 }).map(chunk => safely<LlmScene>("entities-participants chunk", () => identityChunk(chunk, notes), { newEntities: [], charactersPresent: [], charactersMentioned: [] })));
         return { newEntities: parts.flatMap(part => part.newEntities ?? []), charactersPresent: [...new Set(parts.flatMap(part => part.charactersPresent ?? []))], charactersMentioned: [...new Set(parts.flatMap(part => part.charactersMentioned ?? []))], locationName: parts.map(part => part.locationName).find(Boolean) ?? null } satisfies LlmScene;
-      }, { newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null } as LlmScene);
+      }, { newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null } as LlmScene).then(llm => resolveDescriptiveBirths(llm, sentences, notes));
       const understanding = safely<LlmScene>("scene-understanding", async () => {
         const parts = await Promise.all(sourceChunks(sentences, { maxBytes: 7_000, maxSentences: 48, margin: 4 }).map(chunk => safely<LlmScene>("scene-understanding chunk", () => understandingChunk(chunk, sceneIndex), { events: [] })));
         const events: NonNullable<LlmScene["events"]> = [];

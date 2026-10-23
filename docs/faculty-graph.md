@@ -117,3 +117,39 @@ deterministic fold. Parallel workers never invoke store writes.
 
 See [the bounded live comparison](faculty-benchmark.md) for measured quality,
 latency, token tradeoffs and remaining errors.
+
+## Alias-at-birth and the EM faculty
+
+Descriptive candidates ("honey-colored girl") are an identity
+problem at birth, not a cleanup problem afterwards. The identity
+faculty flags them (`descriptive: true`); before any entity is
+minted, one strict Jev choice round over the scene passage asks
+which existing character — if any — the description refers to.
+Only an answer at confidence ≥ 0.85 attaches: the description is
+born as that character's alias, the scene roster is rewritten to
+the canonical name, and the decision is recorded in the scene
+notes. Everything else mints as today. Validated live against
+hand-labeled ground truth: 4 of 5 real descriptive records
+resolved correctly with zero false attachments, including both
+designed traps refused on confidence (full results in the PR).
+
+What birth cannot settle — named-record twins (spelling or
+cross-script), under-threshold declines, descriptions whose
+referent is only named in a later chapter — is the EM faculty's
+job. It nominates pairs STRUCTURALLY (scene/event overlap and
+relation-neighbor similarity over the applied graph), strictly:
+score ≥ 0.6, a support floor, and zero co-actor events, because
+co-acting is distinctness evidence and companions are the
+false-positive class. Pairs already sharing a name form are
+excluded — an existing alias is already a linked identity. Jev
+reviews one batch per pass with the structural dossier; only
+confident verdicts merge, through the audited maintenance path
+(`mergeEntities`, which also rewires state changes). Distinct
+verdicts are remembered in `<novelDir>/matching.json` and skipped
+until their shared evidence grows materially. Cadence: a per-block
+pass over pairs touching the block's entities runs after each
+block applies; the old × old sweep runs only when a chapter
+completes (observed by the CLI as a fully merged auto-approved
+run; in gate mode the reviewing agent's `novel match` is the
+sweep, and it now includes structural candidates too).
+
