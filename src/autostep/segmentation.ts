@@ -247,14 +247,12 @@ export async function tileScenes(
  * sentence-id arrays; unitScenes[i] holds the scene-span indices for
  * units[i], one or two entries.
  */
-export async function selectExchanges(
+export async function selectExchangeSpans(
   sentences: Sentence[],
-  sceneSpans: string[][],
   decide: DecideFn,
   opts: { stateSummary: string; gates: SegmentationGates },
 ): Promise<{
-  units: string[][];
-  unitScenes: number[][];
+  spans: [number, number][];
   escalations: SpanEscalation[];
   unitConfidences: Record<string, number>;
 }> {
@@ -340,26 +338,63 @@ export async function selectExchanges(
     merged.push([...span]);
   }
 
-  // Scene links: the scene holding the exchange's first sentence, and
-  // the one holding its last, when they differ (the straddle case).
+  return { spans: merged, escalations, unitConfidences };
+}
+
+/**
+ * Link exchange spans (index ranges) to the scene partition: the
+ * scene holding the exchange's first sentence, plus the one holding
+ * its last when they differ (the straddle case). Pure join — runs
+ * after the scene and dialogue pipelines complete, in any order.
+ */
+export function linkExchangeScenes(
+  sentences: Sentence[],
+  spans: [number, number][],
+  sceneSpans: string[][],
+): number[][] {
   const idxById = new Map(sentences.map((s, i) => [s.id, i]));
-  const sceneOf = new Array<number>(n).fill(-1);
+  const sceneOf = new Array<number>(sentences.length).fill(-1);
   sceneSpans.forEach((span, si) => {
     for (const id of span) {
       const idx = idxById.get(id);
       if (idx !== undefined) sceneOf[idx] = si;
     }
   });
-  const units = merged.map(([a, b]) =>
-    sentences.slice(a, b + 1).map((s) => s.id),
-  );
-  const unitScenes = merged.map(([a, b]) => {
+  return spans.map(([a, b]) => {
     const first = sceneOf[a];
     const lastS = sceneOf[b];
     const links = [first];
     if (lastS !== first && lastS >= 0) links.push(lastS);
     return links.filter((x) => x >= 0);
   });
+}
 
-  return { units, unitScenes, escalations, unitConfidences };
+/**
+ * Select dialogue exchanges over the block and link each to the scene
+ * (or two scenes, when it straddles a cut) it belongs to. Units are
+ * sentence-id arrays; unitScenes[i] holds the scene-span indices for
+ * units[i], one or two entries.
+ */
+export async function selectExchanges(
+  sentences: Sentence[],
+  sceneSpans: string[][],
+  decide: DecideFn,
+  opts: { stateSummary: string; gates: SegmentationGates },
+): Promise<{
+  units: string[][];
+  unitScenes: number[][];
+  escalations: SpanEscalation[];
+  unitConfidences: Record<string, number>;
+}> {
+  const { spans, escalations, unitConfidences } = await selectExchangeSpans(
+    sentences,
+    decide,
+    opts,
+  );
+  return {
+    units: spans.map(([a, b]) => sentences.slice(a, b + 1).map((s) => s.id)),
+    unitScenes: linkExchangeScenes(sentences, spans, sceneSpans),
+    escalations,
+    unitConfidences,
+  };
 }

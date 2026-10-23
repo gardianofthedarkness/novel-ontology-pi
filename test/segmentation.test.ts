@@ -133,3 +133,31 @@ test("selectExchanges: a 1-2 sentence graze trims instead of merging", async () 
   assert.deepEqual(units, [ids(sentences, 10, 70), ids(sentences, 71, 75)]);
   assert.deepEqual(unitScenes, [[0], [0]]);
 });
+
+test("miniloop pipelines: scene tiling and dialogue selection run concurrently", async () => {
+  const { Miniloop } = await import("../src/autostep/miniloop.js");
+  const sentences = makeSentences(120);
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const slowDecide: DecideFn = async (_state, questions) => {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((r) => setTimeout(r, 15));
+    inFlight--;
+    return questions.map((q): DecisionAnswer => {
+      let value: string | number = q.options ? q.options[q.options.length - 1] : 0;
+      if (q.key.startsWith("scene_start:") || q.key.startsWith("dlg_start:")) value = "NONE";
+      if (q.key.startsWith("scene_seam:")) value = "continues";
+      if (q.key.startsWith("dlg_end:")) value = q.options![0];
+      return { key: q.key, value, confidence: 0.95 };
+    });
+  };
+  const loop = new Miniloop({ decide: slowDecide } as never, {});
+  const result = await loop.runBlock({
+    blockId: "b0001", sentences, knownEntities: [], stateSummary: "t",
+  });
+  assert.ok(maxInFlight >= 2, `pipelines overlapped (max in-flight decide calls: ${maxInFlight})`);
+  const spans = result.accepted["sceneSpans"] as string[][];
+  assertPartition(sentences, spans);
+  assert.ok(Array.isArray(result.accepted["dialogueUnitScenes"]), "the scene-link join ran after the pipelines");
+});

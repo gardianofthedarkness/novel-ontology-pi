@@ -1,6 +1,6 @@
 import type { DecisionPatch } from "./types.js";
 import { EMPTY_OUTCOME } from "./types.js";
-import { selectExchanges } from "../segmentation.js";
+import { selectExchangeSpans } from "../segmentation.js";
 
 /**
  * Dialogue Detector patch — exchange selection (sector 03, redesigned
@@ -23,9 +23,11 @@ import { selectExchanges } from "../segmentation.js";
  * and produces the turns; per-sentence classification survives only
  * there, where it belongs.
  *
- * Runs as a block-level prepass after scene-boundary (it needs the
- * finished partition for scene links). Selection endpoints are
- * pinnable for recall: `dlg_start:<firstId>` / `dlg_end:<startId>`.
+ * Runs as a block-level prepass, CONCURRENTLY with scene tiling
+ * (pipelined model): selection needs no scene input; the miniloop
+ * joins exchanges to scenes once both pipelines land. Selection
+ * endpoints are pinnable for recall: `dlg_start:<firstId>` /
+ * `dlg_end:<startId>`.
  */
 export const dialogueDetector: DecisionPatch = {
   id: "dialogue-detector",
@@ -42,15 +44,19 @@ export const dialogueDetector: DecisionPatch = {
   },
 
   async prepass(ctx, decide) {
-    const sceneSpans =
-      (ctx.accepted["sceneSpans"] as string[][] | undefined) ?? [];
-    const { units, unitScenes, escalations, unitConfidences } =
-      await selectExchanges(ctx.sentences, sceneSpans, decide, {
-        stateSummary: ctx.stateSummary,
-        gates: dialogueDetector.gates,
-      });
-    ctx.accepted["dialogueUnits"] = units;
-    ctx.accepted["dialogueUnitScenes"] = unitScenes;
+    // Selection only: this pipeline runs CONCURRENTLY with scene
+    // tiling (the owner's pipelining model), so it cannot read the
+    // scene partition. The miniloop joins the two afterwards —
+    // linkExchangeScenes fills ctx.accepted["dialogueUnitScenes"].
+    const { spans, escalations, unitConfidences } = await selectExchangeSpans(
+      ctx.sentences,
+      decide,
+      { stateSummary: ctx.stateSummary, gates: dialogueDetector.gates },
+    );
+    ctx.accepted["dialogueUnitSpans"] = spans;
+    ctx.accepted["dialogueUnits"] = spans.map(([a, b]) =>
+      ctx.sentences.slice(a, b + 1).map((s) => s.id),
+    );
     return { ...EMPTY_OUTCOME, escalations, unitConfidences };
   },
 };
