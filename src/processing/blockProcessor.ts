@@ -20,6 +20,9 @@ import { EventLog } from "../events/log.js";
 import type { EventSink } from "../events/types.js";
 import { saveWorkingDraft, type WorkingDraft } from "./draft.js";
 import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../extraction/constraints.js";
+import { FacultyGraph, type FacultyGraphOptions } from "./facultyGraph.js";
+import { groundFacultyProposals } from "./facultyGrounding.js";
+import { previewFacultyStates } from "./facultyContinuity.js";
 
 export type ReviewDecision = "approved" | "held" | "revision_requested";
 
@@ -67,6 +70,7 @@ export class BlockProcessor {
        * When absent, blocks produce miniloop-only ChangeSets.
        */
       workModel?: WorkModel;
+      facultyGraph?: false | FacultyGraphOptions;
       /** Distinct event/scene counts in the bundle, for ID/order sequencing. */
       loadCounts?: () => Promise<{ events: number; scenes: number; reservedEntityIds?: string[] }>;
       /**
@@ -108,32 +112,45 @@ export class BlockProcessor {
           stage: "miniloop", patchId: "starting", updatedAt: new Date().toISOString(),
           proposals: [], sceneSpans: [], dialogueUnits: [], turns: [], completedScenes: 0, totalScenes: 0,
         };
-        const publish = async (update: Partial<WorkingDraft>, announce = false) => {
-          draft = { ...draft, ...update, updatedAt: new Date().toISOString() };
-          if (this.observation.novelDir) {
-            await saveWorkingDraft(this.observation.novelDir, draft);
-            // Phase B (decision #15): the working-draft stream is the
-            // live view's source of truth. Only progress publishes
-            // announce — a draft.updated fact means "a new batch of
-            // decisions landed", never the empty initial draft or the
-            // gate transition (changeset.pending already says that).
-            if (announce) {
-              await emit?.({ type: "draft.updated", blockId: draft.blockId, patchId: draft.patchId, stage: draft.stage });
+        let publishing = Promise.resolve();
+        const publish = (update: Partial<WorkingDraft>, announce = false) => {
+          publishing = publishing.then(async () => {
+            draft = { ...draft, ...update, updatedAt: new Date().toISOString() };
+            if (this.observation.novelDir) {
+              await saveWorkingDraft(this.observation.novelDir, draft);
+              // Phase B (decision #15): the working-draft stream is the
+              // live view's source of truth. Only progress publishes
+              // announce — a draft.updated fact means "a new batch of
+              // decisions landed", never the empty initial draft or the
+              // gate transition (changeset.pending already says that).
+              if (announce) {
+                await emit?.({ type: "draft.updated", blockId: draft.blockId, patchId: draft.patchId, stage: draft.stage });
+              }
             }
-          }
+          });
+          return publishing;
         };
         await publish({});
         const knownEntities = this.observation.loadKnownEntities
           ? await this.observation.loadKnownEntities()
           : [];
-        const result = await miniloop.runBlock({
+        const pins = pinsForBlock(corrections, block.blockId);
+        const constraintsValue = corrections.find(correction => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)?.value;
+        const constraints = constraintsValue ? parseExtractionConstraints(constraintsValue) : undefined;
+        const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
+        const faculty = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
+          ? await new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}).run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, knownEntities, pins, constraints, onProgress: async (progress) => publish(progress, true) })
+          : undefined;
+        const result = faculty?.miniloop ?? await miniloop.runBlock({
           blockId: block.blockId,
           sentences,
           knownEntities,
           stateSummary: `Processing block ${block.blockId}.`,
-          pinnedAnswers: pinsForBlock(corrections, block.blockId),
+          pinnedAnswers: pins,
           onProgress: async (progress) => publish({ ...progress, totalScenes: progress.sceneSpans.length }, true),
         });
+        if (legacyPins && this.observation.workModel && this.observation.facultyGraph !== false) result.changeset.reviewNotes["faculty:legacy-pins"] = "Used the legacy execution path to honor reviewer pins whose window-scoped keys cannot be reinterpreted safely by the scene graph.";
+        for (const key of pins.keys()) if (key !== EXTRACTION_CONSTRAINTS_KEY && !result.appliedPins?.includes(key)) result.changeset.reviewNotes[`recall:unapplied:${key}`] = "The pinned question did not occur in this revision. The correction was not silently reinterpreted; Pi must check its applicability.";
         for (const key of result.appliedPins ?? []) {
           result.changeset.reviewNotes[`recall:pin:${key}`] =
             "Decision pinned by a reviewing-agent correction (sector 09 recall); the miniloop honored the pin instead of its own judgment.";
@@ -156,13 +173,16 @@ export class BlockProcessor {
             knownEntities,
             proposals: result.changeset.proposals,
             counts,
-            constraints: corrections.some((correction) => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)
-              ? parseExtractionConstraints(corrections.find((correction) => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)!.value)
-              : undefined,
+            constraints,
+            sceneResults: faculty?.sceneResults,
             onProgress: async (progress) => publish(progress, true),
           } satisfies ExtractionInput);
           result.changeset.proposals = out.proposals;
           Object.assign(result.changeset.reviewNotes, out.notes);
+          if (faculty) {
+            Object.assign(result.changeset.reviewNotes, groundFacultyProposals(out.proposals, knownEntities, sentences));
+            await publish({ patchId: "continuity-relations", statePreview: await previewFacultyStates(this.store, out.proposals) });
+          }
         }
         if (this.observation.novelDir) await saveChangeSet(this.observation.novelDir, result.changeset);
         await publish({ stage: "gate", patchId: "merge-gate", proposals: result.changeset.proposals });
