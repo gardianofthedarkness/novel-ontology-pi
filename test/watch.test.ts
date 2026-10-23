@@ -188,3 +188,31 @@ test("corruption, truncation and same-size file replacement disconnect without e
     await watch.close();
   }
 });
+
+test("watch serves working drafts read-only at /drafts/<blockId> and nothing else", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "novel-watch-drafts-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "working"), { recursive: true });
+  const draft = { version: 1, blockId: "b0001", stage: "miniloop", patchId: "scene-boundary", proposals: [] };
+  await writeFile(join(root, "working", "b0001.json"), JSON.stringify(draft));
+  const watch = await startWatch(root, { port: 0, pollMs: 10, heartbeatMs: 30 });
+  t.after(() => watch.close());
+  const base = watch.url.replace(/\/events$/, "");
+  const fetchStatus = (path: string, method = "GET") => new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const req = get(base + path, { method }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => { body += c; });
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+  const ok = await fetchStatus("/drafts/b0001");
+  assert.equal(ok.status, 200);
+  assert.deepEqual(JSON.parse(ok.body), draft);
+  assert.equal((await fetchStatus("/drafts/b9999")).status, 404); // no such draft
+  assert.equal((await fetchStatus("/drafts/evil")).status, 404); // invalid id shape
+  assert.equal((await fetchStatus("/drafts/..%2Fevents")).status, 404); // no traversal
+  assert.equal((await fetchStatus("/drafts/b0001", "POST")).status, 405); // read-only
+});

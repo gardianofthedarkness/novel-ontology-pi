@@ -49,6 +49,7 @@ export type ProcessingEvent =
       processed: number;
       unsupportedProposalIds: string[];
     }
+  | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate" }
   | { type: "changeset.merged"; changesetId: string; target: "store" }
   | {
       type: "graph.rebuilt";
@@ -124,6 +125,11 @@ export function projectProcessingEvent(event: ProcessingEvent): PlaygroundEvent[
     }
     case "changeset.merged":
       return [{ type: "changeset.merged", changesetId: event.changesetId }];
+    case "draft.updated":
+      // Transport fact only: the fact itself renders nothing. The SSE
+      // source intercepts it, fetches the working draft, and projects
+      // the batch's emergence via ./draftProject.
+      return [];
     case "graph.rebuilt":
       return [{ type: "graph.rebuilt" }];
     default:
