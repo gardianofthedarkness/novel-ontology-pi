@@ -23,6 +23,13 @@
 .orbital-transition-status { position: absolute; top: 49%; left: 50%; transform: translateX(-50%); color: #bce5ff; background: #0b1b2c88; padding: 8px 16px; border-radius: 20px; font-size: 11px; pointer-events: none; }
 .dialogue-turn-text { font-size: 16px !important; line-height: 1.9 !important; color: #f0e7ff; }
 .dialogue-turn-heading { font-size: 11px !important; color: #c8b0ec; }
+.original-source, .chronological-contents { border-top: 1px solid #96c5df30; padding-top: 16px; margin-top: 20px; }
+.original-source-text { white-space: pre-wrap; line-height: 1.95; font-size: 14px; color: #e4eef3; overflow-wrap: anywhere; }
+.chronological-contents ol { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.chronological-contents li { border-left: 1px solid #75b9df55; padding-left: 12px; }
+.chronological-contents button { display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; padding: 8px 0; }
+.chronological-contents small { color: #8cb8d4; font-size: 9px; }
+.chronological-contents span { white-space: normal; font-size: 12px; line-height: 1.7; }
 .phone-live .design-switch { top: 166px; right: 20px; }
 .phone-live .orbital-navigation { top: 205px; }
 @media (max-width: 700px) {

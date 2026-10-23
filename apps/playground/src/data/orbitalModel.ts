@@ -39,6 +39,41 @@ export function representativeScene(nodes: WorldNode[], edges: WorldEdge[], cand
   return [...candidates].filter((node) => node.summary?.trim()).sort((first, second) => (scores.get(second.id) ?? 0) - (scores.get(first.id) ?? 0) || order(first, second))[0];
 }
 
+export function orbitalContents(node: WorldNode, level: OrbitalLevel): WorldNode[] {
+  if (node.kind === "bigEvent") return level.sourceNodes.filter((entry) => entry.parent === node.id && entry.kind === "scene").sort(order);
+  if (node.cluster) {
+    const ids = new Set(node.cluster.ids);
+    return level.sourceNodes.filter((entry) => ids.has(entry.id)).sort(order);
+  }
+  if (node.kind !== "scene") return [];
+  const ids = new Set(level.sourceEdges.filter((edge) => edge.from === node.id && edge.kind === "contains" && isSourceRelation(edge)).map((edge) => edge.to));
+  const records = level.sourceNodes.filter((entry) => ids.has(entry.id) && !isNebula(entry));
+  return records.filter((entry) => !records.some((node) => node.dialogue) || entry.kind !== "dialogue" || entry.dialogue).sort(order);
+}
+
+export function progressiveNebula(level: OrbitalLevel, depth: number, selectedId: string | null = null): { nodes: WorldNode[]; eligible: number } {
+  const entities = new Map(level.nebula.map((node) => [node.id, node]));
+  const targets = new Set(level.main.flatMap((entry) => entry.members).filter((id) => !entities.has(id)));
+  if (level.scope.sceneId) targets.add(level.scope.sceneId);
+  for (const edge of level.sourceEdges.filter(isSourceRelation)) {
+    if (targets.has(edge.from) && !entities.has(edge.to)) targets.add(edge.to);
+  }
+  const scores = new Map<string, number>();
+  for (const pair of relationshipAffinities(level.sourceNodes, level.sourceEdges.filter(isSourceRelation))) {
+    for (const [entity, target] of [[pair.from, pair.to], [pair.to, pair.from]]) {
+      if (entities.has(entity) && targets.has(target)) scores.set(entity, (scores.get(entity) ?? 0) + pair.strength);
+    }
+  }
+  const ranked = [...entities.values()].filter((node) => (scores.get(node.id) ?? 0) > 0 || node.id === selectedId || node.state !== "canon" && (level.scope.kind === "volume" || level.scope.kind === "chapter")).sort((first, second) => (scores.get(second.id) ?? 0) - (scores.get(first.id) ?? 0) || first.id.localeCompare(second.id));
+  const bottom = level.scope.kind === "scene" || level.scope.kind === "records" || level.scope.kind === "dialogue";
+  const limit = bottom ? ranked.length : Math.min(ranked.length, 5 + Math.max(0, depth - 1) * 5);
+  const pending = ranked.filter((node) => node.state !== "canon").slice(0, Math.min(2, limit));
+  const shown = [...pending, ...ranked.filter((node) => !pending.includes(node)).slice(0, limit - pending.length)];
+  const selected = entities.get(selectedId ?? "");
+  if (selected && !shown.some((node) => node.id === selected.id)) shown.push(selected);
+  return { nodes: shown, eligible: ranked.length };
+}
+
 function groupEntries(records: WorldNode[], scope: OrbitalScope, sourceNodes: WorldNode[], sourceEdges: WorldEdge[], kind: "scenes" | "records" | "dialogue", forceGroup = false): OrbitalEntry[] {
   const sorted = [...records].sort(order);
   const individual = (node: WorldNode): OrbitalEntry => ({ node, members: [node.id], ...(node.kind === "scene" ? { scope: { key: `orbital:scene:${node.id}`, label: node.summary ?? node.label, kind: "scene", chapterId: scope.chapterId, sceneId: node.id } as OrbitalScope } : {}) });
@@ -86,7 +121,8 @@ export function orbitalLevel(world: OrbitalWorld, scope: OrbitalScope = volumeSc
       const chapterNode = representative ? { ...node, label: representative.summary!.slice(0, 72), summary: representative.summary, subLabel: node.label } : node;
       return { node: chapterNode, members: [node.id, ...source.map((entry) => entry.id)], ...(source.length ? { scope: { key: `orbital:chapter:${node.id}`, label: node.label, kind: "chapter", chapterId: node.id } as OrbitalScope } : {}) };
     });
-    return { scope, main, nebula: [], sourceNodes: [...world.laneNodes, ...Object.values(world.interiors).flatMap((graph) => graph.nodes), ...activityNodes], sourceEdges: [...world.laneEdges, ...Object.values(world.interiors).flatMap((graph) => graph.edges), ...activityEdges] };
+    const sourceNodes = [...new Map([...world.laneNodes, ...Object.values(world.interiors).flatMap((graph) => graph.nodes), ...activityNodes].map((node) => [node.id, node])).values()];
+    return { scope, main, nebula: sourceNodes.filter(isNebula), sourceNodes, sourceEdges: [...world.laneEdges, ...Object.values(world.interiors).flatMap((graph) => graph.edges), ...activityEdges] };
   }
   const interior = world.interiors[scope.chapterId ?? ""];
   const sourceNodes = [...new Map([...(interior?.nodes ?? []), ...activityNodes.filter((node) => node.parent === scope.chapterId)].map((node) => [node.id, node])).values()];

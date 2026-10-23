@@ -7,6 +7,7 @@ import type { WorldEdge } from "../types";
 import type { Position3 } from "../data/spatialLayout";
 import { interpolatePose, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
 import { framePositions, type LabelBus } from "./WorldGraph";
+import { ScaleNavigation } from "./ScaleNavigation";
 
 interface GlyphData {
   draw: OrbitalDraw;
@@ -118,11 +119,13 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
   useEffect(() => {
     const wheel = (event: WheelEvent) => { if (event.deltaY > 0) zoomOut.current = performance.now(); };
     const surface = gl.domElement.closest(".stage") ?? gl.domElement;
-    surface.addEventListener("wheel", wheel as EventListener, { passive: true });
+    surface.addEventListener("wheel", wheel as EventListener, { capture: true, passive: true });
+    const command = (event: Event) => { if ((event as CustomEvent<{ delta: number }>).detail.delta > 0) zoomOut.current = performance.now(); };
+    surface.addEventListener("orbital-zoom", command);
     let pinch = 0;
     const touch = (event: Event) => { const touches = (event as TouchEvent).touches; if (touches.length !== 2) { pinch = 0; return; } const distance = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY); if (pinch && distance < pinch) zoomOut.current = performance.now(); pinch = distance; };
     surface.addEventListener("touchmove", touch, { passive: true });
-    return () => { surface.removeEventListener("wheel", wheel as EventListener); surface.removeEventListener("touchmove", touch); };
+    return () => { surface.removeEventListener("wheel", wheel as EventListener, true); surface.removeEventListener("orbital-zoom", command); surface.removeEventListener("touchmove", touch); };
   }, [gl]);
   useFrame(() => {
     bus.positions.clear();
@@ -146,7 +149,7 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
         const score = pixels - Math.hypot(point.x, point.y) * 20 + (selectedId === draw.node.id || selectedPreview ? 10000 : 0);
         if (pixels >= (revealed.current === draw.node.id ? 46 : 64) && (!closest || score > closest.score)) closest = { id: draw.node.id, pixels, score };
       }
-      if (draw.role === "preview" && pixels < 3 && selectedId !== draw.node.id) return;
+      if ((draw.role === "connection" || draw.role === "preview" && pixels < 3) && selectedId !== draw.node.id) return;
       candidates.push({ draw, position: point, pixels, priority: selectedId === draw.node.id ? 0 : draw.role === "preview" ? 1 : draw.role === "main" ? 2 : 3 });
     });
     const next = closest as { id: string; pixels: number; score: number } | null;
@@ -202,7 +205,7 @@ interface Props {
 }
 
 export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, bus, selectedId, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack }, ref) {
-  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, transparent: revealedId === draw.node.id } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId]);
+  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id) } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   return <GraphCanvas ref={ref} nodes={nodes} edges={[]} theme={theme} renderNode={renderSphere} labelType="none" layoutType="forceDirected3d" cameraMode="rotate" draggable={false} animated={false} minDistance={16} maxDistance={1000000} selections={[]} glOptions={{ antialias: true, preserveDrawingBuffer: true }}
     onNodeClick={(node) => onSelect((node.data.glyph as GlyphData).draw)} onNodeDoubleClick={(node) => onEnter((node.data.glyph as GlyphData).draw)}>
@@ -212,6 +215,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} />)}
     <VisibleConnections edges={edges} bus={bus} />
     <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} onReveal={onReveal} onExtremeBack={onBack} />
+    <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
     <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} positions={draws.filter((draw) => draw.role !== "preview").map((draw) => draw.position)} levelKey={levelKey} reducedMotion={reducedMotion} />
   </GraphCanvas>;
 });

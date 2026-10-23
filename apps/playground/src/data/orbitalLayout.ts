@@ -8,7 +8,7 @@ export interface OrbitalDraw {
   entry?: OrbitalEntry;
   position: Position3;
   radius: number;
-  role: "main" | "nebula" | "preview";
+  role: "main" | "nebula" | "preview" | "connection";
   previewParentId?: string;
 }
 export interface OrbitalPath { id: string; points: Position3[]; preview?: boolean; fromPoints?: Position3[] }
@@ -45,6 +45,27 @@ export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.ne
     return from && to && from !== to ? [{ ...edge, from, to }] : [];
   });
   const positions = arrangeRelationships([...level.main.map((entry) => entry.node), ...contextNebula], gravityEdges, anchors);
+  for (const node of contextNebula) {
+    const neighbors = gravityEdges.filter((edge) => edge.from === node.id || edge.to === node.id).flatMap((edge) => {
+      const position = anchors.get(edge.from === node.id ? edge.to : edge.from);
+      return position ? [{ position, weight: Math.max(0.1, edge.weight ?? 1) }] : [];
+    });
+    const strength = neighbors.reduce((sum, entry) => sum + entry.weight, 0);
+    const center = [0, 1, 2].map((axis) => strength ? neighbors.reduce((sum, entry) => sum + entry.position[axis] * entry.weight, 0) / strength : 0);
+    let hash = 2166136261;
+    for (const character of node.id) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
+    const vertical = (hash % 2001) / 1000 - 1;
+    const angle = hash * 2.399963229728653;
+    const radial = Math.sqrt(1 - vertical * vertical);
+    const direction = [Math.cos(angle) * radial, vertical, Math.sin(angle) * radial];
+    const old = positions.get(node.id)!;
+    const offset = old.map((value, axis) => value - center[axis]);
+    const distance = Math.max(1, Math.hypot(...offset));
+    const spread = direction.map((value, axis) => value * 0.85 + offset[axis] / distance * 0.35);
+    const length = Math.max(0.1, Math.hypot(...spread));
+    const radius = 270 + Math.sqrt(contextNebula.length) * 24 + 180 / (1 + Math.log1p(strength));
+    positions.set(node.id, center.map((value, axis) => value + spread[axis] / length * radius) as Position3);
+  }
   const draws: OrbitalDraw[] = level.main.map((entry) => ({ node: entry.node, entry, position: anchors.get(entry.node.id)!.map((value) => value * 3) as Position3, radius: entry.node.kind === "bigEvent" ? 165 : entry.node.kind === "dialogue" ? 72 : 115, role: "main" }));
   draws.push(...contextNebula.map((node): OrbitalDraw => ({ node, position: positions.get(node.id)!.map((value) => value * 3) as Position3, radius: node.kind === "character" ? 48 : 42, role: "nebula" })));
   const paths = tracks.map((track): OrbitalPath => {
@@ -72,4 +93,40 @@ export function visibleOrbitalEdges(edges: WorldEdge[], draws: OrbitalDraw[], se
   if (!selectedId) return [];
   const ids = new Set(draws.map((draw) => draw.node.id));
   return edges.filter((edge) => isSourceRelation(edge) && ids.has(edge.from) && ids.has(edge.to) && (edge.from === selectedId || edge.to === selectedId));
+}
+
+export function nestedEntityConnections(level: OrbitalLevel, draws: OrbitalDraw[], selectedId: string | null): { draws: OrbitalDraw[]; edges: WorldEdge[] } {
+  if (!level.nebula.some((node) => node.id === selectedId)) return { draws: [], edges: visibleOrbitalEdges(level.sourceEdges, draws, selectedId) };
+  const byId = new Map(level.sourceNodes.map((node) => [node.id, node]));
+  const ownership = sceneIndex(level.sourceNodes, level.sourceEdges).owner;
+  const ports = new Map<string, OrbitalDraw>();
+  const edges = new Map<string, WorldEdge>();
+  const visible = new Set(draws.map((draw) => draw.node.id));
+  for (const edge of level.sourceEdges.filter(isSourceRelation)) {
+    if (edge.from !== selectedId && edge.to !== selectedId) continue;
+    const other = edge.from === selectedId ? edge.to : edge.from;
+    const source = byId.get(other);
+    if (!source) continue;
+    const scenes = level.sourceEdges.filter((entry) => entry.kind === "contains" && isSourceRelation(entry) && (entry.from === other || entry.to === other)).flatMap((entry) => {
+      const endpoint = entry.from === other ? entry.to : entry.from;
+      return byId.get(endpoint)?.kind === "scene" ? [endpoint] : [];
+    });
+    const targets = visible.has(other) || isNebula(source) || source.kind === "scene" ? [source.id] : scenes.length ? [...new Set(scenes)] : [ownership.get(source.id) ?? source.id];
+    for (const target of targets) {
+      if (!visible.has(target) && !ports.has(target)) {
+        const container = draws.find((draw) => draw.role === "main" && draw.entry?.members.includes(target));
+        const record = byId.get(target);
+        if (!container || !record || isNebula(record)) continue;
+        const members = level.sourceNodes.filter((node) => container.entry!.members.includes(node.id) && node.kind === record.kind).sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id));
+        const index = members.findIndex((node) => node.id === target);
+        const local = helixPoint(members.length > 1 ? index / (members.length - 1) : 0.5, 0, 1, container.radius);
+        ports.set(target, { node: record, position: local.map((value, axis) => value + container.position[axis]) as Position3, radius: 3, role: "connection", previewParentId: container.node.id });
+      }
+      if (!visible.has(target) && !ports.has(target)) continue;
+      const key = `${selectedId}:${target}`;
+      const previous = edges.get(key);
+      edges.set(key, { ...edge, id: `orbital-link:${key}`, from: selectedId!, to: target, derived: target !== other || edge.derived, weight: (previous?.weight ?? 0) + (edge.weight ?? 1), relationLabel: target === other ? edge.relationLabel : "Scene connection via recorded event (not a presence claim)" });
+    }
+  }
+  return { draws: [...ports.values()], edges: [...edges.values()] };
 }

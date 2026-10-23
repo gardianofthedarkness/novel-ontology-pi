@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { orbitalLevel, representativeScene, volumeScope, type OrbitalWorld } from "../apps/playground/src/data/orbitalModel.js";
-import { helixPoint, interpolatePose, layoutOrbitalLevel, layoutOrbitalPreview, visibleOrbitalEdges } from "../apps/playground/src/data/orbitalLayout.js";
+import { orbitalContents, orbitalLevel, progressiveNebula, representativeScene, volumeScope, type OrbitalWorld } from "../apps/playground/src/data/orbitalModel.js";
+import { helixPoint, interpolatePose, layoutOrbitalLevel, layoutOrbitalPreview, nestedEntityConnections, visibleOrbitalEdges } from "../apps/playground/src/data/orbitalLayout.js";
 import type { WorldEdge, WorldNode } from "../apps/playground/src/types.js";
 
 const record = (id: string, kind: WorldNode["kind"], chrono = 0): WorldNode => ({ id, kind, label: id, chrono, state: "canon", lane: "canon", parent: "chapter", lanePos: [0, 0, 0], interiorPos: [0, 0, 0] });
@@ -90,6 +90,7 @@ test("one stored turn per sphere appears only below its scene; legacy summary di
   const bottom = orbitalLevel(world, overview.main.find((entry) => entry.node.id === "scene")!.scope);
   assert.deepEqual(bottom.main.map((entry) => entry.node.id), ["turn-0", "turn-1"]);
   assert.equal(bottom.main[1].node.state, "held");
+  assert.deepEqual(orbitalContents(nodes[0], bottom).map((node) => node.id), ["turn-0", "turn-1"]);
 });
 
 test("relations show only selected visible endpoints and never projected aggregates or time links", () => {
@@ -98,4 +99,41 @@ test("relations show only selected visible endpoints and never projected aggrega
   const edges = [relation("person", "scene"), relation("person", "hidden"), { ...relation("person", "scene"), id: "view-aggregate" }, { ...relation("person", "scene"), id: "chapter:narrative-order:1" }];
   assert.deepEqual(visibleOrbitalEdges(edges, draws, "person"), [edges[0]]);
   assert.deepEqual(visibleOrbitalEdges(edges, draws, null), []);
+});
+
+test("surroundings reveal progressively by scoped link strength rather than persisting every entity", () => {
+  const entities = Array.from({ length: 40 }, (_, index) => record(`person-${index}`, "character"));
+  const nodes = [...scenes(100), ...entities];
+  const edges = entities.map((node, index) => relation(node.id, "scene-0", index + 1));
+  const world = worldWith(nodes, edges);
+  const root = progressiveNebula(orbitalLevel(world), 1);
+  const middle = progressiveNebula(orbitalLevel(world, chapter), 2);
+  const leaf = orbitalLevel(world, { ...chapter, key: "scene-0", kind: "scene", sceneId: "scene-0" });
+  assert.equal(root.nodes.length, 5);
+  assert.equal(middle.nodes.length, 10);
+  assert.equal(progressiveNebula(leaf, 4).nodes.length, 40);
+  assert.equal(root.nodes[0].id, "person-39");
+  assert.equal(root.eligible, 40);
+  assert.ok(progressiveNebula(orbitalLevel(world), 1, "person-0").nodes.some((node) => node.id === "person-0"));
+  const ghost = { ...record("candidate", "character"), state: "proposed" as const };
+  assert.ok(progressiveNebula(orbitalLevel(worldWith([...nodes, ghost], edges)), 1).nodes.some((node) => node.id === ghost.id));
+});
+
+test("selected entities connect to every linked nested scene without claiming event actors were physically present", () => {
+  const nodes = [...scenes(40), record("person", "character"), record("event", "event")];
+  const edges = [relation("person", "scene-0"), relation("person", "scene-39"), relation("person", "event"), relation("scene-5", "event"), relation("scene-6", "event")];
+  const level = orbitalLevel(worldWith(nodes, edges), chapter);
+  const layout = layoutOrbitalLevel(level);
+  const result = nestedEntityConnections(level, layout.draws, "person");
+  assert.deepEqual(new Set(result.edges.map((edge) => edge.to)), new Set(["scene-0", "scene-39", "scene-5", "scene-6"]));
+  assert.equal(result.draws.length, 4);
+  assert.ok(result.edges.find((edge) => edge.to === "scene-5")?.relationLabel?.includes("not a presence claim"));
+  for (const port of result.draws) {
+    const parent = layout.draws.find((draw) => draw.node.id === port.previewParentId)!;
+    assert.ok(Math.hypot(...port.position.map((value, axis) => value - parent.position[axis])) < parent.radius);
+  }
+  const chapterNode = orbitalLevel(worldWith(nodes, edges)).main[0].node;
+  assert.deepEqual(orbitalContents(chapterNode, level).map((node) => node.id), scenes(40).map((node) => node.id));
+  assert.deepEqual(orbitalContents(level.main[0].node, level).map((node) => node.id), ["scene-0", "scene-1"]);
+  assert.deepEqual(orbitalContents(nodes[5], level).map((node) => node.id), ["event"]);
 });
