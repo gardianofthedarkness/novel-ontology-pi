@@ -7,6 +7,27 @@ export interface SourceChunk {
 
 export const renderSentences = (sentences: Sentence[]): string => sentences.map(sentence => `${sentence.id}: ${sentence.text}`).join("\n");
 
+export function expandDecisionContext(state: string, source: Sentence[], options: { margin?: number; maxBytes?: number } = {}): string | undefined {
+  const visible = new Set([...state.matchAll(/^(b\d+_s\d+):/gm)].map(match => match[1]));
+  const indices = source.flatMap((sentence, index) => visible.has(sentence.id) ? [index] : []);
+  if (!indices.length) return undefined;
+  const maxBytes = options.maxBytes ?? 16_000;
+  const margin = options.margin ?? 32;
+  const prefix = "READ-ONLY NEIGHBOR CONTEXT: use only to interpret the original target. Do not output neighboring sentences or change the allowed options.\n";
+  const extra: Sentence[] = [];
+  for (let distance = 1; distance <= margin; distance++) {
+    for (const index of [indices[0] - distance, indices.at(-1)! + distance]) {
+      const sentence = source[index];
+      if (!sentence || visible.has(sentence.id)) continue;
+      const candidate = [...extra, sentence].sort((first, second) => source.indexOf(first) - source.indexOf(second));
+      if (Buffer.byteLength(`${prefix}${renderSentences(candidate)}\nORIGINAL TARGET AND QUESTIONS:\n${state}`, "utf8") <= maxBytes) extra.push(sentence);
+    }
+  }
+  if (!extra.length) return undefined;
+  extra.sort((first, second) => source.indexOf(first) - source.indexOf(second));
+  return `${prefix}${renderSentences(extra)}\nORIGINAL TARGET AND QUESTIONS:\n${state}`;
+}
+
 export function sourceChunks(sentences: Sentence[], options: { maxBytes?: number; maxSentences?: number; margin?: number } = {}): SourceChunk[] {
   const maxBytes = options.maxBytes ?? 6_000;
   const chunks: SourceChunk[] = [];

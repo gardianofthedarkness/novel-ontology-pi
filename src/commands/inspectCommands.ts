@@ -166,6 +166,8 @@ export interface InspectResult {
       withoutLocation: number;
       dialogueTurns: number;
       unresolvedTurns: number;
+      dialogueCards: number;
+      cardsWithoutParticipants: number;
     };
   };
   integrity: {
@@ -343,6 +345,8 @@ export async function inspectNovel(novelDirArg: string): Promise<InspectResult> 
         withoutLocation: scenes.filter((s) => s.locationId === null || s.locationId === undefined).length,
         dialogueTurns: totalTurns,
         unresolvedTurns,
+        dialogueCards: new Set(scenes.flatMap(scene => (scene.dialogues ?? []).map(card => card.id))).size,
+        cardsWithoutParticipants: new Set(scenes.flatMap(scene => (scene.dialogues ?? []).filter(card => !card.participantIds.length).map(card => card.id))).size,
       },
     },
     integrity: {

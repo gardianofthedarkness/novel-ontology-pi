@@ -39,7 +39,25 @@ export function sceneContext(inputNodes, inputEdges, scenes, events) {
     for (const id of scene.charactersPresent ?? []) link(id, scene.id, 'contains', 'Present in scene', 1.4);
     for (const id of scene.charactersMentioned ?? []) link(id, scene.id, 'cross', 'Mentioned in scene', 0.35);
     if (scene.locationId) link(scene.id, scene.locationId, 'contains', 'Scene location', 1.2);
-    for (const [turnIndex, turn] of (scene.turns ?? []).entries()) {
+    for (const [cardIndex, card] of (scene.dialogues ?? []).entries()) {
+      const id = `view-card:${scene.id}:${cardIndex}`;
+      const members = (card.participantIds ?? []).map(member => byId.get(member)).filter(Boolean);
+      const covered = new Set(card.sentenceIds ?? []);
+      const matched = ordered.find(event => event.evidence?.sentenceIds?.some(sentence => covered.has(sentence)));
+      if (!byId.has(id)) {
+        const dialogue = {
+          ...node, id, kind: 'dialogue', label: `#${cardIndex + 1} · ${members.length ? members.map(member => member.label).join(' / ') : 'Participants unresolved'}`,
+          chrono: (Number.isFinite(node.chrono) ? node.chrono : 0) + (cardIndex + 1) / (((scene.dialogues?.length ?? 0) + 1) * 100),
+          summary: clean(card.summary || matched?.summaryEn) || undefined, relatedSummaries: undefined,
+          dialogue: { cardId: card.id, participantIds: members.map(member => member.id), participantLabels: members.map(member => member.label) },
+        };
+        nodes.push(dialogue);
+        byId.set(id, dialogue);
+      }
+      link(scene.id, id, 'contains', 'Stored dialogue exchange', 1.4);
+      for (const member of members) link(member.id, id, 'contains', 'Dialogue participant', 1.2);
+    }
+    for (const [turnIndex, turn] of (scene.dialogues ? [] : scene.turns ?? []).entries()) {
       const id = `view-turn:${scene.id}:${turnIndex}`;
       const speaker = byId.get(turn.speakerId);
       const covered = new Set(turn.sentenceIds ?? []);

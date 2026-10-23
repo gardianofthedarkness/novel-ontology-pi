@@ -6,6 +6,17 @@ import { recordSource } from './record-source.mjs';
 const text = '甲走进房间。\n\n「你好！」\n「再见。」\n\n甲离开房间。';
 const scene = { id: 'scene_1', sentenceIds: ['b0000_s0000', 'b0000_s0001', 'b0000_s0002', 'b0000_s0003'], turns: [{ sentenceIds: ['b0000_s0001', 'b0000_s0002'] }] };
 const options = { scenes: [scene], events: [], readBlock: async () => text, sectionBlock };
+test('dialogue-card source spans reassemble the full original exchange across scene cuts', async () => {
+  const scenes = [
+    { id: 'left', dialogues: [{ id: 'shared', sentenceIds: ['b0000_s0001'], participantIds: ['char_1', 'char_2'] }] },
+    { id: 'right', dialogues: [{ id: 'shared', sentenceIds: ['b0000_s0002'], participantIds: ['char_1', 'char_2'] }] },
+  ];
+  const result = await recordSource({ ...options, scenes, id: 'view-card:left:0' });
+  assert.equal(result.kind, 'dialogue');
+  assert.equal(result.text, '「你好！」\n「再见。」');
+  assert.equal(result.complete, true);
+  assert.equal(await recordSource({ ...options, scenes, id: 'view-card:left:9' }), null);
+});
 test('original scene and full turn text preserve whitespace and do not substitute summaries or evidence quotes', async () => {
   assert.equal((await recordSource({ ...options, id: scene.id })).text, text);
   const result = await recordSource({ ...options, id: 'view-turn:scene_1:0' });

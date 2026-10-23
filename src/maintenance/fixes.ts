@@ -8,6 +8,7 @@ import type {
   Relation,
   RelationType,
   Scene,
+  StateChange,
 } from "../ontology/types.js";
 
 /**
@@ -151,10 +152,32 @@ export async function mergeEntities(
       if (t.speakerId) t.speakerId = remap(t.speakerId);
       if (t.addresseeId) t.addresseeId = remap(t.addresseeId);
     }
+    for (const card of s.dialogues ?? []) {
+      card.participantIds = dedupe(card.participantIds.map(remap));
+      if (card.unresolvedParticipantIds) card.unresolvedParticipantIds = dedupe(card.unresolvedParticipantIds.map(remap)).filter(id => !card.participantIds.includes(id));
+    }
     if (s.locationId) s.locationId = remap(s.locationId);
     if (JSON.stringify(s) !== before) rewiredScenes++;
   }
   await writeJsonl(join(dir, "scenes.jsonl"), scenes);
+
+  // State changes key on character ids (the owner and every
+  // relationship target); a merge must move them or the dropped
+  // character's state chain orphans.
+  const stateChanges = await readJsonl<StateChange>(join(dir, "state-changes.jsonl"));
+  let rewiredState = 0;
+  for (const sc of stateChanges) {
+    const before = JSON.stringify(sc);
+    if (sc.characterId === dropId) sc.characterId = keepId;
+    const rels: Record<string, number> = {};
+    for (const [target, delta] of Object.entries(sc.relationships)) {
+      const t = remap(target);
+      rels[t] = (rels[t] ?? 0) + delta;
+    }
+    sc.relationships = rels;
+    if (JSON.stringify(sc) !== before) rewiredState++;
+  }
+  if (rewiredState > 0) await writeJsonl(join(dir, "state-changes.jsonl"), stateChanges);
 
   await appendAudit(novelDir, "merge", { keepId, dropId, foldedForms: drop.names.map((n) => n.text) }, reason);
   return { keepId, dropId, rewired: { relations: rewiredRelations, events: rewiredEvents, scenes: rewiredScenes } };
@@ -275,6 +298,10 @@ export async function removeEntity(
     for (const t of s.turns) {
       if (t.speakerId === id) t.speakerId = null;
       if (t.addresseeId === id) t.addresseeId = null;
+    }
+    for (const card of s.dialogues ?? []) {
+      card.participantIds = card.participantIds.filter(member => member !== id);
+      if (card.unresolvedParticipantIds) card.unresolvedParticipantIds = card.unresolvedParticipantIds.filter(member => member !== id);
     }
   }
   await writeJsonl(join(dir, "scenes.jsonl"), scenes);

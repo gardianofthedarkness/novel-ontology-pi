@@ -42,6 +42,7 @@ export interface NovelQueryResult {
   novelDir: string;
   dbPath: string;
   rows: Record<string, unknown>[];
+  epistemic: string;
 }
 
 export interface NovelSearchResult {
@@ -111,6 +112,7 @@ export async function novelQuery(
     novelDir,
     dbPath,
     rows: await store.run(cypher),
+    epistemic: "Open world: no result means unknown, not false. Summaries, event detection and segmentation are derived, not verified facts. New semantic packets gate identities, participants, relations, dialogue attribution and state through fact review.",
   }));
 }
 

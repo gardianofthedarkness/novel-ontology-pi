@@ -48,6 +48,7 @@ export type ProcessingEvent =
       target: "store";
       processed: number;
       unsupportedProposalIds: string[];
+      deferredFactIds?: string[];
     }
   | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate" }
   | { type: "entity.merged"; keepId: string; dropId: string }
@@ -114,9 +115,9 @@ export function projectProcessingEvent(event: ProcessingEvent): PlaygroundEvent[
     case "changeset.accumulating":
       return [];
     case "changeset.applied": {
-      const skipped = event.unsupportedProposalIds.length
+      const skipped = (event.unsupportedProposalIds.length
         ? ` · ${event.unsupportedProposalIds.length} deferred`
-        : "";
+        : "") + (event.deferredFactIds?.length ? ` · ${event.deferredFactIds.length} facts held` : "");
       return [
         {
           type: "verdict",

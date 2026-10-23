@@ -222,3 +222,29 @@ test("JevClient retries a 529 once, then succeeds; a 401 fails at once", async (
   );
   assert.equal(denied.requests.length, 1);
 });
+
+test("JevClient respects cancellation before dispatch and while a request is pending", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_input, init) => {
+    calls++;
+    return new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      if (signal?.aborted) reject(signal.reason);
+      else signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  };
+  try {
+    const client = new JevClient({ apiKey: FAKE_KEY, endpoint: "http://127.0.0.1/unused", model: "jev-1.13.0" });
+    const questions = [{ key: "q", primitive: "choice" as const, instructions: "Choose", options: ["yes", "no"] }];
+    const alreadyAborted = new AbortController();
+    alreadyAborted.abort();
+    await assert.rejects(client.decide("s", questions, { signal: alreadyAborted.signal }));
+    assert.equal(calls, 0);
+    const pending = new AbortController();
+    const result = client.decide("s", questions, { signal: pending.signal });
+    pending.abort();
+    await assert.rejects(result);
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});

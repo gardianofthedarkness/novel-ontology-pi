@@ -86,6 +86,26 @@ export function authorize(command, scope) {
     const options = tokens.slice(4);
     valid = tokens[2] === novel && blockIds.map((id) => `cs_${id}`).includes(tokens[3]) && options.length === 4 && new Set([options[0], options[2]]).size === 2 && [options[0], options[2]].every((flag) => ['--edits', '--reason'].includes(flag)) && !!options[1] && !!options[3];
   }
+  if (verb === 'changeset' && operation === 'facts') {
+    valid = tokens[2] === novel && blockIds.map(id => `cs_${id}`).includes(tokens[3]);
+    const options = tokens.slice(4);
+    const seen = new Set();
+    for (let index = 0; index < options.length; index++) {
+      const option = options[index];
+      if (seen.has(option)) valid = false;
+      seen.add(option);
+      if (option === '--summary') continue;
+      if (['--offset', '--limit'].includes(option) && /^\d+$/.test(options[index + 1] ?? '')) { if (option === '--limit' && (Number(options[index + 1]) < 1 || Number(options[index + 1]) > 30)) valid = false; index++; continue; }
+      if (option === '--fact' && options[index + 1]) { index++; continue; }
+      valid = false;
+    }
+  }
+  if (verb === 'changeset' && operation === 'decide') {
+    const options = tokens.slice(4);
+    const values = new Map();
+    for (let index = 0; index < options.length; index += 2) values.set(options[index], options[index + 1]);
+    valid = tokens[2] === novel && blockIds.map(id => `cs_${id}`).includes(tokens[3]) && options.length === 4 && values.size === 2 && /^[a-f0-9]{64}$/.test(values.get('--revision') ?? '') && !!values.get('--decisions');
+  }
   if (verb === 'fix') {
     const operations = new Set(['merge', 'rename', 'add-form', 'relate', 'unrelate', 'remove-entity', 'remove-event']);
     valid = operations.has(operation) && tokens[2] === novel && tokens.includes('--reason') && tokens.length <= 12;

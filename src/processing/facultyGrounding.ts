@@ -19,6 +19,10 @@ export function groundFacultyProposals(proposals: ChangeProposal[], knownEntitie
         if (turn.sentenceIds.some(id => !scene.sentenceIds.includes(id))) notes[`faculty:grounding:${proposal.id}:turn`] = "Turn references leave their scene; review required.";
         if (turn.speakerId && entities.get(turn.speakerId)?.kind !== "Character") notes[`faculty:grounding:${proposal.id}:speaker`] = "Turn speaker does not resolve to a Character; review required.";
       }
+      for (const card of scene.dialogues ?? []) {
+        if (card.sentenceIds.some(id => !scene.sentenceIds.includes(id))) notes[`faculty:grounding:${proposal.id}:dialogue`] = "Dialogue card references leave their scene; review required.";
+        if ([...card.participantIds, ...card.unresolvedParticipantIds ?? []].some(id => entities.get(id)?.kind !== "Character")) notes[`faculty:grounding:${proposal.id}:members`] = "Dialogue membership does not resolve to a Character; review required.";
+      }
     }
     if (proposal.kind === "create_event") {
       const event = proposal.payload as OntEvent;

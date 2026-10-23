@@ -28,7 +28,7 @@ export const LADYBUG_DDL: string[] = [
      chronological_order INT64, event_type STRING, summary_en STRING,
      importance DOUBLE, PRIMARY KEY(id))`,
   `CREATE NODE TABLE IF NOT EXISTS Scene(
-     id STRING, chapter_index INT64, PRIMARY KEY(id))`,
+     id STRING, chapter_index INT64, dialogue_cards_json STRING, PRIMARY KEY(id))`,
   `CREATE NODE TABLE IF NOT EXISTS Timeline(
      id STRING, label STRING, PRIMARY KEY(id))`,
   `CREATE NODE TABLE IF NOT EXISTS Branch(

@@ -10,6 +10,9 @@ import { listChangeSets, setChangeSetStatus } from "../src/merge/changesetStore.
 import { applyChangeSet } from "../src/merge/apply.js";
 import { BundleStore } from "../src/connectors/bundle.js";
 import { EventLog } from "../src/events/log.js";
+import { semanticFacts, semanticRevision } from "../src/merge/semantic.js";
+import { decideFacts, prepareSemantic, semanticPage } from "../src/merge/semanticCommands.js";
+import { buildGraphFromBundle } from "../src/connectors/ladybug.js";
 
 /**
  * End-to-end ingest over a LOOPBACK Jev wire mock: the real JevClient
@@ -123,6 +126,23 @@ function assertSubsequence(haystack: string[], needle: string[]): void {
   );
 }
 
+test("a configured work model cannot auto-approve and fails before any model request or canonical write", async () => {
+  const jev = await startMockJev();
+  try {
+    const { dir, file } = await makeNovel();
+    const original = await readFile(join(dir, "ontology", "entities.jsonl"), "utf8");
+    await assert.rejects(ingestNovel(dir, file, { autoApprove: true, env: {
+      ...process.env, TYPESAFE_API_KEY: FAKE_KEY, JEV_ENDPOINT: jev.url,
+      WORK_LLM_API_KEY: "synthetic-work-key", WORK_LLM_PROVIDER: "deepseek", WORK_LLM_MODEL: "deepseek-flash",
+      WORK_LLM_BASE_URL: jev.url, NOVEL_SECRETS_DIR: join(dir, "secrets"),
+    } }), /requires fact review; --auto-approve cannot bypass it/);
+    assert.deepEqual(jev.seenKeys, []);
+    assert.deepEqual(await listChangeSets(dir), []);
+    assert.equal(await readFile(join(dir, "ontology", "entities.jsonl"), "utf8"), original);
+    assert.deepEqual(await new BundleStore(join(dir, "ontology")).loadFile("events.jsonl"), []);
+  } finally { await jev.close(); }
+});
+
 test("ingest --auto-approve runs the full loop: blocks -> Jev miniloop -> gate -> graph", async () => {
   const jev = await startMockJev();
   try {
@@ -228,8 +248,12 @@ test("gate-mode resume skips an applied chapter and preserves the next chapter's
       WORK_LLM_API_KEY: FAKE_KEY, WORK_LLM_BASE_URL: work.url, WORK_LLM_MODEL: "test-model",
     };
     await ingestNovel(dir, file, { env });
+    const pending = (await listChangeSets(dir)).find(packet => packet.id === "cs_b0001")!;
+    await decideFacts(dir, pending.id, (await semanticPage(dir, pending.id, { summary: true })).revision, []);
+    const decided = (await listChangeSets(dir)).find(packet => packet.id === pending.id)!;
+    const context = await prepareSemantic(dir, decided);
     const approved = await setChangeSetStatus(dir, "cs_b0001", "approved");
-    await applyChangeSet(new BundleStore(join(dir, "ontology")), approved, new EventLog(dir).emit);
+    await applyChangeSet(new BundleStore(join(dir, "ontology")), approved, new EventLog(dir).emit, context);
     const previous = await readFile(join(dir, "changesets", "cs_b0001.json"), "utf8");
     const resumed = await ingestNovel(dir, file, { env });
     assert.deepEqual(resumed.skippedBlocks, ["b0001"]);
@@ -350,7 +374,7 @@ async function startMockWorkLlm(): Promise<{ url: string; close: () => Promise<v
   };
 }
 
-test("ingest with a work LLM runs extraction: the graph comes out non-empty", async () => {
+test("ingest with a work LLM requires explicit fact decisions before graph application", async () => {
   const jev = await startMockJev();
   const work = await startMockWorkLlm();
   try {
@@ -365,16 +389,26 @@ test("ingest with a work LLM runs extraction: the graph comes out non-empty", as
       WORK_LLM_BASE_URL: work.url,
       WORK_LLM_MODEL: "test-model",
     };
-    const result = await ingestNovel(dir, file, { autoApprove: true, env });
+    await assert.rejects(ingestNovel(dir, file, { autoApprove: true, env }), /cannot bypass/);
+    const result = await ingestNovel(dir, file, { env });
     assert.equal(result.extraction, "live");
     assert.equal(result.workModel, "test-model");
-    assert.deepEqual(result.mergedBlocks, ["b0001", "b0002"]);
-    assert.ok(result.graph);
+    assert.deepEqual(result.mergedBlocks, []);
+    for (const blockId of ["b0001", "b0002"]) {
+      const pending = (await listChangeSets(dir)).find(packet => packet.blockId === blockId)!;
+      await decideFacts(dir, pending.id, (await semanticPage(dir, pending.id, { summary: true })).revision, semanticFacts(pending).map(fact => ({ factId: fact.id, verdict: "accept", reason: "Verified synthetic fixture" })));
+      const decided = (await listChangeSets(dir)).find(packet => packet.id === pending.id)!;
+      const context = await prepareSemantic(dir, decided);
+      const approved = await setChangeSetStatus(dir, pending.id, "approved");
+      await applyChangeSet(new BundleStore(join(dir, "ontology")), approved, new EventLog(dir).emit, context);
+      if (blockId === "b0001") await ingestNovel(dir, file, { env });
+    }
+    const graph = await buildGraphFromBundle(join(dir, "ontology"), join(dir, "ontology", "graph.lbug"));
     // Seeded Mikoto + extraction-minted Kuroko; 2 events per block.
-    assert.equal(result.graph!.entities, 2);
-    assert.equal(result.graph!.events, 4);
-    assert.equal(result.graph!.scenes, 2);
-    assert.ok(result.graph!.relations >= 6, `relations: ${result.graph!.relations}`);
+    assert.equal(graph.entities, 2);
+    assert.equal(graph.events, 4);
+    assert.equal(graph.scenes, 2);
+    assert.ok(graph.relations >= 6, `relations: ${graph.relations}`);
 
     const changesets = await listChangeSets(dir);
     const cs1 = changesets.find((c) => c.id === "cs_b0001")!;
