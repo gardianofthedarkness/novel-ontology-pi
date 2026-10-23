@@ -34,6 +34,7 @@ import {
 } from "./commands/jevCommands.js";
 import { resolveJevKey } from "./connectors/secrets.js";
 import { inspectNovel } from "./commands/inspectCommands.js";
+import { albumImport, albumList } from "./commands/albumCommands.js";
 import { evalExtract, evalRun } from "./commands/evalCommands.js";
 import { sectionBlock } from "./text/sectioning.js";
 import { cutBlocks } from "./text/blocks.js";
@@ -96,6 +97,10 @@ const COMMANDS: Record<string, string> = {
   "novel jev ping": "Jev smoke test: one tiny live decision via the resolved key",
   "novel inspect <novel-dir>":
     "Corpus diagnostics over a novel bundle (counts, coverage, integrity tallies — no judgments)",
+  "novel album import <novel-dir> <epub-file>":
+    "Import an EPUB's illustrations: spine-walk in reading order, images to assets/, extracted text to source/ (ingest that file), anchors to ontology/illustrations.jsonl",
+  "novel album list <novel-dir> [--block-size N]":
+    "List illustrations with each anchor resolved to chapter / block / sentence / scene (scene once the block is ingested)",
   "novel eval run <dataset-dir> <predictions-dir>":
     "Score prediction files against a golden-chapter dataset (precision/recall; metrics only, no thresholds)",
   "novel eval extract <novel-dir> <predictions-dir>":
@@ -196,6 +201,23 @@ async function main(): Promise<void> {
     }
     out(await inspectNovel(sub), pretty);
     return;
+  }
+
+  if (cmd === "album") {
+    if (sub === "import" && positional[2] && positional[3] && !positional[3].startsWith("--")) {
+      out(await albumImport(positional[2], positional[3]), pretty);
+      return;
+    }
+    if (sub === "list" && positional[2]) {
+      const rawSize = flag(positional, "--block-size");
+      const blockSize = rawSize === undefined ? undefined : Number(rawSize);
+      if (blockSize !== undefined && (!Number.isInteger(blockSize) || blockSize < 100)) {
+        throw new Error(`novel album list --block-size must be an integer >= 100 (got: ${rawSize})`);
+      }
+      out(await albumList(positional[2], blockSize), pretty);
+      return;
+    }
+    throw new Error("Usage: novel album import <novel-dir> <epub-file> | novel album list <novel-dir> [--block-size N]");
   }
 
   if (cmd === "eval") {

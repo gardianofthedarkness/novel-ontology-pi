@@ -62,6 +62,22 @@ without keys. Missing credentials require secure entry, never chat.
   portable ontology data. Fork/simulate commands are separate operations;
   choose a branch point only when requested by the user.
 
+## Album (EPUB illustrations + character portraits)
+
+- `novel album import <dir> <book.epub>` imports the book's pictures:
+  a spine walk in reading order writes images to `assets/`, the
+  extracted text to `source/` (ingest THAT file — illustration anchors
+  are character offsets into it), and anchor records to
+  `ontology/illustrations.jsonl` (cover / plate / story / paratext).
+- `novel album list <dir>` resolves each anchor to its chapter, block,
+  sentence and — once ingested — scene: the scene whose orbit
+  position the picture belongs at.
+- `tools/album-portraits/portraits.py <dir>` (Python; see its README)
+  assigns each character a portrait: OCR the plates' printed captions,
+  match registry names, detect heads, crop into `assets/portraits/`,
+  record in `ontology/portraits.jsonl`. Characters with no captioned
+  plate are reported not found — never invent a portrait.
+
 ## Measure
 
 - `novel inspect <dir>` reports bundle counts, coverage and reference
