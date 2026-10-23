@@ -86,6 +86,8 @@ export type PlaygroundEvent =
   | { type: "changeset.pending"; changesetId: string; label: string; nodeIds: string[] }
   | { type: "changeset.held"; changesetId: string; nodeIds: string[] }
   | { type: "changeset.merged"; changesetId: string }
+  | { type: "entity.merged"; keepId: string; dropId: string }
+  | { type: "entity.distinct"; aId: string; bId: string }
   | { type: "graph.rebuilt" };
 
 export interface EventSource {

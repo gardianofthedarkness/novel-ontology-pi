@@ -16,13 +16,15 @@ interface Props {
   showRelations: boolean;
   resetToken: number;
   focusRequest: { node: WorldNode; sequence: number; chapterId?: string } | null;
+  join: { dropId: string; keepId: string; seq: number } | null;
+  onJoinSettled: (dropId: string) => void;
   onSelect: (inspection: OrbitalInspection | null) => void;
   onChapter: (id: string | null) => void;
   onMotion: () => void;
   onRelations: () => void;
 }
 
-export function OrbitalExplorer({ world, activityNodes, activityEdges, reducedMotion, showRelations, resetToken, focusRequest, onSelect, onChapter, onMotion, onRelations }: Props) {
+export function OrbitalExplorer({ world, activityNodes, activityEdges, reducedMotion, showRelations, resetToken, focusRequest, join, onJoinSettled, onSelect, onChapter, onMotion, onRelations }: Props) {
   const [path, setPath] = useState<OrbitalScope[]>([volumeScope]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [revealedId, setRevealedId] = useState<string | null>(null);
@@ -41,7 +43,17 @@ export function OrbitalExplorer({ world, activityNodes, activityEdges, reducedMo
   const preview = useMemo(() => parent && previewLevel ? layoutOrbitalPreview(parent, previewLevel) : { draws: [], paths: [] }, [parent, previewLevel]);
   const baseDraws = useMemo(() => [...layout.draws, ...preview.draws.filter((draw) => !layout.draws.some((entry) => entry.node.id === draw.node.id))], [layout.draws, preview.draws]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
-  const draws = useMemo(() => [...baseDraws, ...connections.draws], [baseDraws, connections.draws]);
+  /** EM join: while a match animates, the dropped draw's target pose
+   * is the survivor's position — the morph system glides it there. */
+  const [joinTarget, setJoinTarget] = useState<Map<string, Position3> | null>(null);
+  const draws = useMemo(() => {
+    const all = [...baseDraws, ...connections.draws];
+    if (!joinTarget) return all;
+    return all.map((draw) => {
+      const target = joinTarget.get(draw.node.id);
+      return target ? { ...draw, position: target } : draw;
+    });
+  }, [baseDraws, connections.draws, joinTarget]);
   const paths = useMemo(() => [...layout.paths.map((track) => {
     if (!morph) return track;
     const fromPoints = track.points.map((point) => {
@@ -72,6 +84,30 @@ export function OrbitalExplorer({ world, activityNodes, activityEdges, reducedMo
   }, [inspectedRecord, draws, edges, level.sourceNodes, onSelect]);
 
   const snapshot = () => new Map(draws.map((draw): [string, OrbitalPose] => [draw.node.id, { position: bus.positions.get(draw.node.id) ?? draw.position, radius: draw.radius }]));
+  /** EM join animation: retarget the dropped draw onto its survivor
+   * and let the morph glide it in; settle when the glide lands. If
+   * either record is not in this level, settle at once. */
+  const joinSeq = useRef(0);
+  useEffect(() => {
+    if (!join || joinSeq.current === join.seq) return;
+    joinSeq.current = join.seq;
+    const drop = draws.find((draw) => draw.node.id === join.dropId);
+    const keep = draws.find((draw) => draw.node.id === join.keepId);
+    if (!drop || !keep) {
+      onJoinSettled(join.dropId);
+      return;
+    }
+    setMorph({ startedAt: performance.now(), from: snapshot() });
+    setJoinTarget(new Map([[join.dropId, keep.position]]));
+    const timer = setTimeout(() => {
+      setJoinTarget(null);
+      onJoinSettled(join.dropId);
+    }, reducedMotion ? 0 : ORBITAL_TRANSITION_MS + 80);
+    return () => clearTimeout(timer);
+    // draws/snapshot are read from the render that delivered this
+    // join; re-running on their identity changes would restart it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [join]);
   const focus = useCallback((draw: OrbitalDraw) => {
     const center = bus.positions.get(draw.node.id) ?? draw.position;
     framePositions(graphRef, [center], 1.2, !reducedMotion, { focusRadius: draw.radius });
