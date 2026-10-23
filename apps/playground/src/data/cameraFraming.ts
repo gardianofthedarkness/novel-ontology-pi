@@ -8,6 +8,8 @@ interface FrameOptions {
   margin?: number;
   inset?: { left: number; right: number; top: number; bottom: number };
   direction?: Position3;
+  up?: Position3;
+  zoom?: number;
 }
 
 const dot = (first: Position3, second: Position3) => first.reduce((sum, value, axis) => sum + value * second[axis], 0);
@@ -17,22 +19,53 @@ const unit = (value: Position3): Position3 => {
   return length > 0.001 && Number.isFinite(length) ? value.map((coordinate) => coordinate / length) as Position3 : [0, 0, 1];
 };
 
+export function cameraBasis(direction: Position3, up: Position3 = [0, 1, 0]): { right: Position3; up: Position3; direction: Position3 } {
+  const forward = unit(direction);
+  const requestedUp = unit(up);
+  const safeUp: Position3 = Math.abs(dot(requestedUp, forward)) > 0.999 ? Math.abs(forward[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0] : requestedUp;
+  const right = unit(cross(safeUp, forward));
+  return { right, up: unit(cross(forward, right)), direction: forward };
+}
+
+function viewport(options: FrameOptions) {
+  const width = Math.max(1, options.width), height = Math.max(1, options.height);
+  const inset = options.inset ?? { left: 0, right: 0, top: 0, bottom: 0 };
+  const usableWidth = Math.max(1, width - inset.left - inset.right);
+  const usableHeight = Math.max(1, height - inset.top - inset.bottom);
+  const { direction, right, up } = cameraBasis(options.direction ?? [0.8, 0.42, 1], options.up);
+  const tangent = Math.tan(Math.max(1, Math.min(150, options.fov)) * Math.PI / 360) / Math.max(0.001, options.zoom ?? 1);
+  const horizontal = (inset.left + usableWidth / 2) / width * 2 - 1;
+  const vertical = 1 - (inset.top + usableHeight / 2) / height * 2;
+  return { width, height, usableWidth, usableHeight, direction, right, up, tangent, horizontal, vertical };
+}
+
+function frameAt(center: Position3, distance: number, view: ReturnType<typeof viewport>) {
+  const { right, up, direction, horizontal, vertical, tangent, width, height } = view;
+  const target = center.map((value, axis) => value - right[axis] * horizontal * distance * tangent * width / height - up[axis] * vertical * distance * tangent) as Position3;
+  return { center, target, position: target.map((value, axis) => value + direction[axis] * distance) as Position3 };
+}
+
 export function cameraFrame(points: Position3[], options: FrameOptions): { target: Position3; position: Position3; center: Position3 } | null {
   const valid = points.filter((point) => point.every(Number.isFinite));
   if (!valid.length) return null;
-  const width = Math.max(1, options.width), height = Math.max(1, options.height);
-  const inset = options.inset ?? { left: 0, right: 0, top: 0, bottom: 0 };
-  const usableWidth = Math.max(width * 0.2, width - inset.left - inset.right);
-  const usableHeight = Math.max(height * 0.2, height - inset.top - inset.bottom);
-  const direction = unit(options.direction ?? [0.8, 0.42, 1]);
-  const right = unit(cross(Math.abs(direction[1]) > 0.98 ? [0, 0, 1] : [0, 1, 0], direction));
-  const up = unit(cross(direction, right));
+  const view = viewport(options);
+  const { right, up, direction, tangent, width, height, usableWidth, usableHeight } = view;
   const center = [0, 1, 2].map((axis) => (Math.min(...valid.map((point) => point[axis])) + Math.max(...valid.map((point) => point[axis]))) / 2) as Position3;
   const extent = (basis: Position3) => Math.max(...valid.map((point) => Math.abs(dot(point.map((value, axis) => value - center[axis]) as Position3, basis)))) + (options.margin ?? 160);
-  const tangent = Math.tan(Math.max(1, Math.min(150, options.fov)) * Math.PI / 360);
   const distance = Math.max(extent(right) / (tangent * width / height * usableWidth / width), extent(up) / (tangent * usableHeight / height)) * (options.padding ?? 1.18) + extent(direction);
-  const horizontal = (inset.left + usableWidth / 2) / width * 2 - 1;
-  const vertical = 1 - (inset.top + usableHeight / 2) / height * 2;
-  const target = center.map((value, axis) => value - right[axis] * horizontal * distance * tangent * width / height - up[axis] * vertical * distance * tangent) as Position3;
-  return { center, target, position: target.map((value, axis) => value + direction[axis] * distance) as Position3 };
+  return frameAt(center, distance, view);
+}
+
+export function cameraFocus(center: Position3, radius: number, position: Position3, options: FrameOptions): ReturnType<typeof cameraFrame> {
+  if (!center.every(Number.isFinite) || !position.every(Number.isFinite) || !Number.isFinite(radius) || radius <= 0) return null;
+  const view = viewport({ ...options, zoom: 1 });
+  const available = Math.min(view.usableWidth, view.usableHeight);
+  const minimumPixels = Math.max(12, Math.min(28, available * 0.12));
+  const maximumPixels = Math.max(minimumPixels, Math.min(180, available * 0.38));
+  const readablePixels = Math.min(maximumPixels, Math.max(minimumPixels, available * 0.24));
+  const depth = dot(position.map((value, axis) => value - center[axis]) as Position3, view.direction) / Math.max(0.001, options.zoom ?? 1);
+  const pixelScale = radius * view.height / (2 * view.tangent);
+  const pixels = depth > radius ? pixelScale / depth : Infinity;
+  const distance = pixels < minimumPixels ? pixelScale / readablePixels : pixels > maximumPixels ? pixelScale / maximumPixels : depth;
+  return frameAt(center, Math.max(16, Math.min(1000000, Math.max(radius * 1.1, distance))), view);
 }

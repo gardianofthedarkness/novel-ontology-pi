@@ -39,6 +39,24 @@ export function sceneContext(inputNodes, inputEdges, scenes, events) {
     for (const id of scene.charactersPresent ?? []) link(id, scene.id, 'contains', 'Present in scene', 1.4);
     for (const id of scene.charactersMentioned ?? []) link(id, scene.id, 'cross', 'Mentioned in scene', 0.35);
     if (scene.locationId) link(scene.id, scene.locationId, 'contains', 'Scene location', 1.2);
+    for (const [turnIndex, turn] of (scene.turns ?? []).entries()) {
+      const id = `view-turn:${scene.id}:${turnIndex}`;
+      const speaker = byId.get(turn.speakerId);
+      const covered = new Set(turn.sentenceIds ?? []);
+      const matched = ordered.find((event) => event.evidence?.sentenceIds?.some((sentence) => covered.has(sentence)));
+      if (!byId.has(id)) {
+        const dialogue = {
+          ...node, id, kind: 'dialogue', label: `#${turnIndex + 1}${speaker ? ` · ${speaker.label}` : ''}`,
+          chrono: (Number.isFinite(node.chrono) ? node.chrono : 0) + (turnIndex + 1) / ((scene.turns.length + 1) * 100),
+          summary: clean(matched?.summaryEn) || undefined, relatedSummaries: undefined,
+          dialogue: { turn: turnIndex, speakerId: turn.speakerId ?? null, ...(speaker ? { speakerLabel: speaker.label } : {}) },
+        };
+        nodes.push(dialogue);
+        byId.set(id, dialogue);
+      }
+      link(scene.id, id, 'contains', 'Stored dialogue turn', 1.4);
+      if (speaker) link(speaker.id, id, 'speaks', 'Stored turn speaker', 1.2);
+    }
   }
   for (const node of nodes) {
     if (node.kind !== 'character') continue;

@@ -8,6 +8,8 @@ import { FileEventSource } from "./events/fileSource";
 import { SseEventSource } from "./events/sseSource";
 import { RecordInspector } from "./components/RecordInspector";
 import { ExplorerNavigation } from "./components/ExplorerNavigation";
+import { OrbitalExplorer, type OrbitalInspection } from "./components/OrbitalExplorer";
+import "./orbital.css";
 import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
 import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
@@ -29,6 +31,12 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState<ViewState>({ mode: "lanes" });
   const [showRelations, setShowRelations] = useState(true);
+  const [orbitalMode, setOrbitalMode] = useState(true);
+  const [orbitalReset, setOrbitalReset] = useState(0);
+  const [orbitalInspection, setOrbitalInspection] = useState<OrbitalInspection | null>(null);
+  const [orbitalFocus, setOrbitalFocus] = useState<{ node: WorldNode; sequence: number; chapterId?: string } | null>(null);
+  const inspectOrbital = useCallback((inspection: OrbitalInspection | null) => { setOrbitalInspection(inspection); if (inspection?.inspect !== false && inspection) setPanel("record"); setInspectorOpen(!!inspection && inspection.inspect !== false); }, []);
+  const chapterOrbital = useCallback((id: string | null) => setView((current) => id ? current.mode === "interior" && current.bigEventId === id ? current : { mode: "interior", bigEventId: id } : current.mode === "lanes" ? current : { mode: "lanes" }), []);
   const [selectedId, setSelectedId] = useState<string | null>("be_return");
   const [panel, setPanel] = useState<"record" | "activity" | "review">("record");
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -204,6 +212,8 @@ export default function App() {
 
   /** Guided flight: wherever the user is, take the camera to the knitting site. */
   const flyToSite = useCallback(() => {
+    const target = world?.interiors[KNIT_SITE]?.nodes[0];
+    if (orbitalMode && target) setOrbitalFocus((current) => ({ node: target, chapterId: KNIT_SITE, sequence: (current?.sequence ?? 0) + 1 }));
     setView({ mode: "interior", bigEventId: KNIT_SITE });
     setSelectedId(world?.interiors[KNIT_SITE]?.nodes[0]?.id ?? null);
     setPanel("review");
@@ -212,7 +222,7 @@ export default function App() {
     if (viewRef.current.mode === "interior" && viewRef.current.bigEventId === KNIT_SITE) {
       framePositions(graphRef, [...labelBus.positions.values()], 1.18, !reducedMotion);
     }
-  }, [world, reducedMotion, labelBus]);
+  }, [world, reducedMotion, labelBus, orbitalMode]);
 
   const openNode = useCallback(
     (node: WorldNode) => {
@@ -249,8 +259,9 @@ export default function App() {
   const openableIds = useMemo(() => [...Object.keys(world?.interiors ?? {}), ...nodes.filter((node) => (node.cluster || node.kind === "scene") && !explorer.path.some((scope) => scope.key === node.id)).map((node) => node.id)], [world, nodes, explorer.path]);
   const visibleEdges = useMemo(() => showRelations ? edges : [], [edges, showRelations]);
 
-  const selected = nodes.find((node) => node.id === selectedId) ?? nodes[0];
-  const selectedIndex = selected ? nodes.indexOf(selected) : 0;
+  const displayNodes = orbitalMode && orbitalInspection ? orbitalInspection.nodes : nodes;
+  const selected = orbitalMode && orbitalInspection ? orbitalInspection.node : nodes.find((node) => node.id === selectedId) ?? nodes[0];
+  const selectedIndex = selected ? Math.max(0, displayNodes.findIndex((node) => node.id === selected.id)) : 0;
   const pendingCount = changesets.filter((changeset) => changeset.status === "pending").length;
   useEffect(() => {
     inspectorRef.current?.scrollTo(0, 0);
@@ -279,10 +290,17 @@ export default function App() {
     }
     selectNode(node);
   };
+  const requestOrbitalFocus = (node: WorldNode) => {
+    if (orbitalInspection) setOrbitalInspection({ ...orbitalInspection, node });
+    setOrbitalFocus({ node, sequence: Date.now() });
+  };
   const stepRecord = (step: number) => {
+    if (orbitalMode && displayNodes.length) { requestOrbitalFocus(displayNodes[(selectedIndex + step + displayNodes.length) % displayNodes.length]); return; }
     if (nodes.length) activateNode(nodes[(selectedIndex + step + nodes.length) % nodes.length]);
   };
   const overview = () => {
+    setOrbitalReset((current) => current + 1);
+    setOrbitalInspection(null);
     if (view.mode === "interior") setSelectedId(view.bigEventId);
     setView({ mode: "lanes" });
     setPanel("record");
@@ -315,7 +333,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${reducedMotion ? " reduce-motion" : ""}`}>
+    <div className={`app${orbitalMode ? " orbital-active" : ""}${reducedMotion ? " reduce-motion" : ""}`}>
       <header className="topbar">
         <button className="brand" onClick={overview} aria-label="Return to archive overview"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 32V8h7l18 24h7V8M4 32h7V18l18 14M19 8h17" fill="none" stroke="currentColor" strokeWidth="3" /></svg><span>NOVEL<span>ONTOLOGY / PI</span></span></button>
         <nav aria-label="Workspace navigation">
@@ -331,6 +349,8 @@ export default function App() {
       </div>
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
+          <button className="design-switch" aria-pressed={orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setInspectorOpen(false); }}>{orbitalMode ? "Orbital / switch to classic" : "Classic / switch to orbital"}</button>
+          {orbitalMode ? <OrbitalExplorer world={world} activityNodes={dynNodes} activityEdges={dynEdges} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
           <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
             <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
             <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>
@@ -355,6 +375,7 @@ export default function App() {
             <div className="stage-bottom"><span>CLICK TO INSPECT / SCROLL TO ZOOM</span><span>{view.mode === "interior" ? explorer.structure.toUpperCase() : `${timeline.tracks.length} TRACKS`} · {nodes.length} SHOWN</span></div>
           </div>
           <div className="scene-legend"><span><i className="canon" />Canon</span><span><i className="branch" />Branch</span><span><i className="proposed" />Proposed</span><span><i className="held" />Held</span><button aria-pressed={reducedMotion} onClick={() => setReducedMotion(!reducedMotion)}>{reducedMotion ? "Motion reduced" : "Motion on"}</button></div>
+          </>}
         </section>
         <aside className={`inspector${inspectorOpen ? " is-open" : ""}`} aria-label="Record and processing details">
           <div className="inspector-tabs" role="tablist" aria-orientation="vertical" aria-label="Inspector">
@@ -370,7 +391,7 @@ export default function App() {
           <div className="inspector-sheet" hidden={!inspectorOpen}>
           <div className="sheet-heading"><span className="eyebrow">ARCHIVE / {panel}</span><button aria-label="Close details" onClick={() => { setInspectorOpen(false); document.getElementById(`tab-${panel}`)?.focus(); }}>×</button></div>
           <div ref={inspectorRef} className="inspector-body" id={`panel-${panel}`} role="tabpanel" aria-labelledby={`tab-${panel}`}>
-            {panel === "record" && <RecordInspector selected={selected} nodes={nodes} lookupNodes={sourceNodes} edges={selected?.cluster ? edges : sourceEdges} childCount={selected ? (world.interiors[selected.id]?.nodes.length ?? 0) + dynNodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!world.interiors[selected.id]} onSelect={activateNode} />}
+            {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? "api/record-source" : undefined} childCount={selected ? (world.interiors[selected.id]?.nodes.length ?? 0) + dynNodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!world.interiors[selected.id]} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
             {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? (liveUrl ? "Connected to the live watch stream." : "Waiting for the sample session.")}</p><button onClick={startSession}>{liveUrl ? "Reconnect live" : "Replay sample ↻"}</button></div><DecisionFeed entries={feed} /></>}
             {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>Review the sample proposals. Held records stay separate when the rest merge.</p></div><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></>}
           </div>
@@ -380,7 +401,7 @@ export default function App() {
       </main>
       <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} />
       <footer className="transport">
-        <div className="selection-counter"><span className="eyebrow">RECORD / SELECT</span><div>{String(selected ? selectedIndex + 1 : 0).padStart(2, "0")}<small>/ {String(nodes.length).padStart(2, "0")}</small></div></div>
+        <div className="selection-counter"><span className="eyebrow">RECORD / SELECT</span><div>{String(selected ? selectedIndex + 1 : 0).padStart(2, "0")}<small>/ {String(displayNodes.length).padStart(2, "0")}</small></div></div>
         <div className="record-transport"><button className="arrow-button" aria-label="Previous record" disabled={!nodes.length} onClick={() => stepRecord(-1)}>←</button><div><strong>{selected?.label ?? "Archive"}</strong><span>{selected ? `${KIND_LABEL[selected.kind]} / ${selected.lane}` : "No records"}</span></div><button className="arrow-button" aria-label="Next record" disabled={!nodes.length} onClick={() => stepRecord(1)}>→</button></div>
         <div className="session-controls"><span className="eyebrow">{liveUrl ? "LIVE / NOVEL WATCH" : "LOCAL FILE REPLAY / DEMO"}</span><button onClick={startSession}>{liveUrl ? "Reconnect live" : "Replay session ↻"}</button></div>
       </footer>

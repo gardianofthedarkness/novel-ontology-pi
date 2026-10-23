@@ -6,7 +6,7 @@ import { ArchiveNode } from "./ArchiveNode";
 import { recordColor } from "../archive";
 import type { WorldEdge, WorldNode } from "../types";
 import type { TimelineTrack } from "../data/timelineLayout";
-import { cameraFrame } from "../data/cameraFraming";
+import { cameraFocus, cameraFrame } from "../data/cameraFraming";
 
 export const SCALE = 3;
 
@@ -23,16 +23,16 @@ export function framePositions(
   positions: [number, number, number][],
   pad = 1.18,
   animated = true,
+  options?: { margin?: number; direction?: [number, number, number]; preserveDirection?: boolean; focusRadius?: number },
 ): void {
   if (!positions.length) return;
-  const controls = ref.current?.getControls?.() as {
-    camera: { fov: number; aspect: number };
-    getPosition: (position: Vector3) => Vector3;
-    getTarget: (position: Vector3) => Vector3;
-    setTarget: (horizontal: number, vertical: number, depth: number, transition?: boolean) => unknown;
-    setPosition: (horizontal: number, vertical: number, depth: number, transition?: boolean) => unknown;
-  } | undefined;
+  const controls = ref.current?.getControls?.();
   if (!controls) return;
+  const camera = controls.camera as PerspectiveCamera;
+  const currentPosition = controls.getPosition(new Vector3(), false);
+  const currentTarget = controls.getTarget(new Vector3(), false);
+  controls.stop();
+  void controls.setLookAt(...currentPosition.toArray(), ...currentTarget.toArray(), false);
   const stage = document.querySelector<HTMLElement>(".stage");
   const height = stage?.clientHeight || window.innerHeight;
   const width = stage?.clientWidth || window.innerWidth;
@@ -46,13 +46,17 @@ export function framePositions(
     if (sheet.width > width * 0.55) inset.bottom = Math.max(inset.bottom, bounds.bottom - sheet.top + 16);
     else inset.right = Math.max(inset.right, bounds.right - sheet.left + 18);
   }
-  const direction = positions.length === 1
-    ? controls.getPosition(new Vector3()).sub(controls.getTarget(new Vector3())).toArray() as [number, number, number]
-    : document.querySelector('.structure-switch button[aria-pressed="true"]')?.textContent?.includes("Chronology") ? [0.08, 0.25, 1] as [number, number, number] : undefined;
-  const frame = cameraFrame(positions, { width, height, fov: controls.camera.fov || 45, inset, padding: pad, margin: positions.length === 1 ? 105 : 190, direction });
+  const direction = options?.direction ?? (positions.length === 1 || options?.preserveDirection
+    ? camera.getWorldDirection(new Vector3()).negate().toArray() as [number, number, number]
+    : document.querySelector('.structure-switch button[aria-pressed="true"]')?.textContent?.includes("Chronology") ? [0.08, 0.25, 1] as [number, number, number] : undefined);
+  const framing = { width, height, fov: camera.fov || 45, inset, padding: pad, margin: options?.margin ?? (positions.length === 1 ? 105 : 190), direction, up: camera.up.toArray() as [number, number, number] };
+  const frame = options?.focusRadius !== undefined
+    ? cameraFocus(positions[0], options.focusRadius, currentPosition.toArray() as [number, number, number], { ...framing, zoom: camera.zoom })
+    : cameraFrame(positions, framing);
   if (!frame) return;
-  void controls.setTarget(...frame.target, animated);
-  void controls.setPosition(...frame.position, animated);
+  void controls.zoomTo(1, false);
+  void controls.setFocalOffset(0, 0, 0, false);
+  void controls.setLookAt(...frame.position, ...frame.target, animated);
 }
 
 export function scaledPos(node: WorldNode, interior: boolean): [number, number, number] {

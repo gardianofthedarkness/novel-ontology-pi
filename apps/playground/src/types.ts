@@ -25,6 +25,7 @@ export interface WorldNode {
   subLabel?: string;
   summary?: string;
   relatedSummaries?: { id: string; text: string }[];
+  dialogue?: { turn: number; speakerId: string | null; speakerLabel?: string; text?: string };
   cluster?: {
     kind: "scenes" | "records";
     ids: string[];
