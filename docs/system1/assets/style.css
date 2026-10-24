@@ -150,8 +150,23 @@ button.replay:hover{background:#1d2740}
 .oq li span{color:var(--dim);display:block;font-size:13px}
 
 /* ---------- sector pages: shared template ---------- */
-nav.site .links{display:flex;gap:6px;overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px;scrollbar-width:thin;align-items:center}
-nav.site .navgroup{color:var(--faint);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;margin-left:10px}
+nav.site .links{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:4px;align-items:center}
+nav.site .menu{position:relative}
+nav.site .menubtn{font:inherit;color:var(--dim);background:none;cursor:pointer;
+  padding:5px 12px;border:1px solid var(--line);border-radius:99px;font-size:13.5px;white-space:nowrap}
+nav.site .menubtn:hover{color:var(--ink);border-color:var(--teal)}
+nav.site .menubtn.here{color:#0b0e14;background:var(--teal);border-color:var(--teal);font-weight:600}
+nav.site .menubtn .caret{font-size:10px;opacity:.7}
+nav.site .dropdown{position:absolute;top:calc(100% + 6px);left:0;z-index:60;display:none;
+  flex-direction:column;gap:2px;min-width:220px;padding:6px;
+  background:var(--panel2);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 14px 34px rgba(0,0,0,.5)}
+nav.site .menu.open .dropdown{display:flex}
+@media (hover:hover){ nav.site .menu:hover .dropdown{display:flex} }
+nav.site .dropdown a{color:var(--dim);text-decoration:none;font-size:13.5px;
+  padding:7px 10px;border-radius:8px;white-space:nowrap}
+nav.site .dropdown a:hover{background:#1d2639;color:var(--ink)}
+nav.site .dropdown a.here{background:var(--teal);color:#0b0e14;font-weight:600}
 nav.site .links a.page{white-space:nowrap}
 .sectorno{font-size:44px;font-weight:800;color:var(--panel2);-webkit-text-stroke:1px var(--teal);
   line-height:1;float:right;margin-left:14px}

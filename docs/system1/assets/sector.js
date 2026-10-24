@@ -33,19 +33,38 @@ function renderNav() {
   const here = location.pathname.split("/").pop() || "index.html";
   const nav = document.getElementById("sitenav");
   if (!nav) return;
-  const sectorLinks = GROUPS.flatMap((grp) => [
-    `<span class="navgroup">${grp.label}</span>`,
-    ...SECTORS.filter((s) => s.g === grp.g).map(
-      (s) =>
-        `<a class="page ${here === s.slug + ".html" ? "here" : ""}" href="${s.slug}.html">${s.n} ${s.label}</a>`,
-    ),
-  ]);
-  const links = [
-    `<a class="page ${here === "index.html" ? "here" : ""}" href="index.html">Overview</a>`,
-    `<a class="page ${here === "roadmap.html" ? "here" : ""}" href="roadmap.html">🗺 Roadmap</a>`,
-    ...sectorLinks,
-  ].join("");
-  nav.innerHTML = `<a class="brand" href="index.html">novel-ontology-pi<small>Skill + CLI + Adaptor + Frontend</small></a><div class="links">${links}</div>`;
+  /* The top bar carries only the hierarchy: Overview, Roadmap, and one
+     dropdown per group. The 13 sector pages live inside the dropdowns —
+     never as 13 loose pills in a row. */
+  const menus = GROUPS.map((grp) => {
+    const items = SECTORS.filter((s) => s.g === grp.g);
+    const active = items.some((s) => here === s.slug + ".html");
+    const links = items
+      .map(
+        (s) =>
+          `<a class="${here === s.slug + ".html" ? "here" : ""}" href="${s.slug}.html">${s.n} · ${s.label}</a>`,
+      )
+      .join("");
+    return `<div class="menu"><button type="button" class="menubtn ${active ? "here" : ""}" aria-haspopup="true">${grp.label} <span class="caret">▾</span></button><div class="dropdown">${links}</div></div>`;
+  }).join("");
+  nav.innerHTML = `<a class="brand" href="index.html">novel-ontology-pi<small>Skill + CLI + Adaptor + Frontend</small></a><div class="links"><a class="page ${here === "index.html" ? "here" : ""}" href="index.html">Overview</a><a class="page ${here === "roadmap.html" ? "here" : ""}" href="roadmap.html">🗺 Roadmap</a>${menus}</div>`;
+  // Touch/click support: tap a group to open it, tap anywhere else to close.
+  nav.querySelectorAll(".menubtn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const menu = btn.parentElement;
+      const wasOpen = menu.classList.contains("open");
+      nav.querySelectorAll(".menu.open").forEach((m) => m.classList.remove("open"));
+      if (!wasOpen) menu.classList.add("open");
+    });
+  });
+  document.addEventListener("click", () => {
+    nav.querySelectorAll(".menu.open").forEach((m) => m.classList.remove("open"));
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape")
+      nav.querySelectorAll(".menu.open").forEach((m) => m.classList.remove("open"));
+  });
 }
 
 function renderPager() {
