@@ -10,11 +10,13 @@ import { loadCorrections } from "../maintenance/corrections.js";
 import { resolveJevKey } from "../connectors/secrets.js";
 import { EventLog } from "../events/log.js";
 import { listChangeSets } from "../merge/changesetStore.js";
-import type { Entity } from "../ontology/types.js";
+import type { Entity, OntEvent, Relation, Scene } from "../ontology/types.js";
 import { loadExtractionCounts } from "../processing/counts.js";
+import { facultyOptionsFromEnv } from "../processing/facultyOptions.js";
+import { runEntityMatching, loadMatchMemory, saveMatchMemory } from "../matching/emFaculty.js";
 
 export interface IngestOptions {
-  /** Approve every ChangeSet at the merge gate (smoke runs, trusted batches). */
+  /** Legacy miniloop-only smoke option; a configured work model requires fact review. */
   autoApprove?: boolean;
   /** Stop after this many blocks. */
   maxBlocks?: number;
@@ -36,9 +38,8 @@ export interface IngestOptions {
  *    `novel changeset approve` to apply it, and re-run ingest to roll on.
  *    This is the main-agent workflow: the agent reads each ChangeSet and
  *    only then lets the run continue.
- *  - --auto-approve: every ChangeSet is approved and applied in-process.
- *    For smoke tests and trusted batches; the gate still exists — the
- *    reviewer is just the flag.
+ *  - --auto-approve: legacy miniloop-only smoke runs apply in-process.
+ *    Work-model extraction rejects this flag; use the fact-review gate.
  *
  * The known-entity registry is the bundle itself: entities.jsonl is
  * re-read (last write wins) before every block, so names merged by
@@ -50,6 +51,7 @@ export async function ingestNovel(
   opts: IngestOptions = {},
 ) {
   const env = opts.env ?? process.env;
+  const facultyGraph = facultyOptionsFromEnv(env);
   const ontologyDir = join(novelDir, "ontology");
   try {
     await stat(join(ontologyDir, "manifest.json"));
@@ -120,7 +122,9 @@ export async function ingestNovel(
 
   const review = async (): Promise<ReviewDecision> =>
     opts.autoApprove ? "approved" : "held";
+  if (opts.autoApprove && workModel) throw new Error("Live semantic extraction requires fact review; --auto-approve cannot bypass it");
 
+  const emPerBlock: { blockId: string; nominated: number; merged: number; distinct: number; uncertain: number }[] = [];
   const processor = new BlockProcessor(bundle, jevFromEnv(env), review, {
     novelDir,
     emit: log.emit,
@@ -128,11 +132,59 @@ export async function ingestNovel(
     loadCounts,
     loadCorrections: () => loadCorrections(novelDir),
     workModel: workModel ?? undefined,
+    facultyGraph,
+    semanticReview: !!workModel,
+    entityMatching: true,
+    onEntityMatching: (blockId, summary) => emPerBlock.push({
+      blockId,
+      nominated: summary.nominated,
+      merged: summary.merged.length,
+      distinct: summary.distinct.length,
+      uncertain: summary.uncertain.length,
+    }),
   });
 
   const result = await processor.processNovel(
     blocks.map((b) => ({ blockId: b.id, text: b.text, chapterIndex: b.chapterIndex, sectionIndex: b.index })),
   );
+
+  // Chapter-completion sweep (owner cadence, 2026-10-23): old x old
+  // pairs are reviewed only when a whole first-level node completes.
+  // Completion is observed as full coverage of the file's blocks by
+  // (merged in this run ∪ applied in earlier runs and skipped now),
+  // with canon changed since the last sweep — in gate mode applies
+  // land via `novel changeset approve` between runs, and the
+  // post-apply EM pass marks that in matching.json (sweepPending).
+  let emChapterSweep: { nominated: number; merged: number; distinct: number; uncertain: number } | null = null;
+  const coveredBlocks = new Set([...result.mergedBlocks, ...skippedBlocks]);
+  if (selectedBlocks.length > 0 && selectedBlocks.every((b) => coveredBlocks.has(b.id))) {
+    const memory = await loadMatchMemory(novelDir);
+    if (result.mergedBlocks.length > 0 || memory.sweepPending) {
+      try {
+        const summary = await runEntityMatching({
+          novelDir,
+          decisions: jevFromEnv(env),
+          events: log.emit,
+          data: {
+            entities: await loadKnownEntities(),
+            events: await bundle.loadFile<OntEvent>("events.jsonl"),
+            scenes: await bundle.loadFile<Scene>("scenes.jsonl"),
+            relations: await bundle.loadFile<Relation>("relations.jsonl"),
+          },
+        });
+        emChapterSweep = {
+          nominated: summary.nominated,
+          merged: summary.merged.length,
+          distinct: summary.distinct.length,
+          uncertain: summary.uncertain.length,
+        };
+        const after = await loadMatchMemory(novelDir);
+        await saveMatchMemory(novelDir, { ...after, sweepPending: false });
+      } catch {
+        emChapterSweep = null;
+      }
+    }
+  }
 
   let graph: Awaited<ReturnType<typeof buildGraphFromBundle>> | null = null;
   if (result.mergedBlocks.length > 0) {
@@ -156,6 +208,7 @@ export async function ingestNovel(
     mergedBlocks: result.mergedBlocks,
     stoppedAt: result.stoppedAt,
     stopReason: result.stopReason,
+    entityMatching: { perBlock: emPerBlock, chapterSweep: emChapterSweep },
     graph,
   };
 }

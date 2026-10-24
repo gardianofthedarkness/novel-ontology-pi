@@ -48,8 +48,11 @@ export type ProcessingEvent =
       target: "store";
       processed: number;
       unsupportedProposalIds: string[];
+      deferredFactIds?: string[];
     }
   | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate" }
+  | { type: "entity.merged"; keepId: string; dropId: string }
+  | { type: "entity.distinct"; aId: string; bId: string }
   | { type: "changeset.merged"; changesetId: string; target: "store" }
   | {
       type: "graph.rebuilt";
@@ -112,9 +115,9 @@ export function projectProcessingEvent(event: ProcessingEvent): PlaygroundEvent[
     case "changeset.accumulating":
       return [];
     case "changeset.applied": {
-      const skipped = event.unsupportedProposalIds.length
+      const skipped = (event.unsupportedProposalIds.length
         ? ` · ${event.unsupportedProposalIds.length} deferred`
-        : "";
+        : "") + (event.deferredFactIds?.length ? ` · ${event.deferredFactIds.length} facts held` : "");
       return [
         {
           type: "verdict",
@@ -125,6 +128,13 @@ export function projectProcessingEvent(event: ProcessingEvent): PlaygroundEvent[
     }
     case "changeset.merged":
       return [{ type: "changeset.merged", changesetId: event.changesetId }];
+    case "entity.merged":
+      // Ids only: the app resolves labels from the world it holds and
+      // runs the join animation (the dropped node flies into the
+      // survivor) before the merged graph state settles.
+      return [{ type: "entity.merged", keepId: event.keepId, dropId: event.dropId }];
+    case "entity.distinct":
+      return [{ type: "entity.distinct", aId: event.aId, bId: event.bId }];
     case "draft.updated":
       // Transport fact only: the fact itself renders nothing. The SSE
       // source intercepts it, fetches the working draft, and projects

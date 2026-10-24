@@ -66,7 +66,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     };
     for (const entity of entityMap.values()) {
       const ownChapter = provenanceChapter.get(entity.id);
-      const presentInChapter = [...eventMap.values()].some((event) => event.chapterIndex === chapter.index && [...(event.primaryActors ?? []), ...(event.affectedCharacters ?? [])].includes(entity.id)) || [...sceneMap.values()].some((scene) => scene.chapterIndex === chapter.index && (scene.locationId === entity.id || (scene.charactersPresent ?? []).includes(entity.id)));
+      const presentInChapter = [...eventMap.values()].some((event) => event.chapterIndex === chapter.index && [...(event.primaryActors ?? []), ...(event.affectedCharacters ?? [])].includes(entity.id)) || [...sceneMap.values()].some((scene) => scene.chapterIndex === chapter.index && (scene.locationId === entity.id || (scene.charactersPresent ?? []).includes(entity.id) || scene.dialogues?.some(card => card.participantIds.includes(entity.id))));
       if (ownChapter === chapter.index || presentInChapter) add(entity, 'entity', 'canon');
     }
     for (const event of eventMap.values()) if (event.chapterIndex === chapter.index) add(event, 'event', 'canon');
@@ -90,7 +90,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
         for (const unit of draft.dialogueUnits.filter((unit) => span.includes(unit[0]))) {
           const dialogueId = `draft:${draft.blockId}:dialogue:${unit[0]}`;
           const turn = draft.turns.find((entry) => entry.sentenceIds.includes(unit[0]));
-          add({ id: dialogueId, summaryEn: `Dialogue · ${unit.length} sentence${unit.length === 1 ? '' : 's'} · ${turn?.speakerId ? 'speaker attributed' : 'speaker unresolved'}`, eventType: 'dialogue' }, 'event', 'proposed', Number(unit[0]?.split('_s')[1] ?? 0));
+          add({ id: dialogueId, summaryEn: `Dialogue exchange · ${unit.length} sentence${unit.length === 1 ? '' : 's'} · ${draft.dialogueCards ? 'participant membership' : turn?.speakerId ? 'legacy speaker attributed' : 'membership pending'}`, eventType: 'dialogue' }, 'event', 'proposed', Number(unit[0]?.split('_s')[1] ?? 0));
           draftLinks.push([id, dialogueId, 'contains']);
           if (turn?.speakerId && entityMap.has(turn.speakerId)) {
             add(entityMap.get(turn.speakerId), 'entity', 'canon');
@@ -122,7 +122,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     }
     for (const changeset of chapterSets.filter((entry) => !workingBlocks.has(entry.blockId))) {
       const applied = processing.map((record) => record.event).findLast((event) => event.type === 'changeset.applied' && event.changesetId === changeset.id);
-      const deferred = applied?.unsupportedProposalIds?.length ?? 0;
+      const deferred = (applied?.unsupportedProposalIds?.length ?? 0) + (applied?.deferredFactIds?.length ?? 0);
       gates.push({ id: changeset.id, label: `Chapter ${chapter.index} · ${changeset.id}`, status: changeset.status === 'approved' ? deferred ? 'applied' : 'merged' : changeset.status === 'held' ? 'held' : 'pending', nodeIds: changeset.proposals.map((proposal) => proposal.id), deferred });
     }
   }
@@ -135,7 +135,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     if (event.type === 'block.started') label = `CLI started ${event.blockId}`;
     if (event.type === 'sectioned') label = `${event.blockId} sectioned · ${event.sentences} sentences`;
     if (event.type === 'proposal.added') { label = `${event.proposal.kind} proposed · ${Math.round(event.proposal.confidence * 100)}% · ${event.proposal.id}`; tone = 'jev'; }
-    if (event.type.startsWith('changeset.')) { label = `${event.changesetId} · ${event.type.slice(10)}${event.type === 'changeset.applied' ? ` · ${event.processed - event.unsupportedProposalIds.length} supported / ${event.unsupportedProposalIds.length} deferred` : ''}`; tone = event.type === 'changeset.held' ? 'warn' : 'ok'; }
+    if (event.type.startsWith('changeset.')) { label = `${event.changesetId} · ${event.type.slice(10)}${event.type === 'changeset.applied' ? ` · ${event.processed - event.unsupportedProposalIds.length} supported / ${event.unsupportedProposalIds.length} deferred · ${event.deferredFactIds?.length ?? 0} facts held` : ''}`; tone = event.type === 'changeset.held' ? 'warn' : 'ok'; }
     if (event.type === 'graph.rebuilt') { label = `Graph rebuilt · ${event.counts.entities} entities · ${event.counts.events} events · ${event.counts.relations} relations`; tone = 'ok'; }
     if (label) journal.push({ id: `cli-${record.id}`, timestamp: record.timestamp, text: text(label, 220), tone });
   }

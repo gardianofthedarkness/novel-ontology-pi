@@ -58,3 +58,18 @@ test('full-volume scopes permit only the current block in the selected workspace
     "novel fix correct /tmp/authorized-volume-2 --block b0009 --key x --key y --value '{}' --reason test",
   ]) assert.throws(() => authorize(command, scope), command);
 });
+
+test('fact decisions remain workspace-scoped and require a revision without shell access', () => {
+  const reference = `${skill.replace(/\/SKILL.md$/, '')}/references/semantic-review.md`;
+  const scope = { novel: '/tmp/novel', input: '/tmp/source.txt', skill, sourcePaths: [skill, reference], blockIds: ['b0001'], maxBlocks: 1 };
+  assert.equal(authorizeScoped(`cat '${reference}'`, scope).kind, 'read');
+  assert.equal(authorizeScoped('novel changeset facts /tmp/novel cs_b0001 --offset 0 --limit 20', scope).kind, 'cli');
+  assert.equal(authorizeScoped(`novel changeset decide /tmp/novel cs_b0001 --revision ${'a'.repeat(64)} --decisions '[]'`, scope).kind, 'cli');
+  for (const command of [
+    'novel changeset facts /tmp/other cs_b0001',
+    'novel changeset facts /tmp/novel cs_b0001 --limit 300',
+    'novel changeset facts /tmp/novel cs_b0001 --output /tmp/leak',
+    "novel changeset decide /tmp/novel cs_b0001 --revision stale --decisions '[]'",
+    `novel changeset decide /tmp/novel cs_b0002 --revision ${'a'.repeat(64)} --decisions '[]'`,
+  ]) assert.throws(() => authorizeScoped(command, scope));
+});

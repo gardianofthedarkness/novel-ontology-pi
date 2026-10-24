@@ -182,3 +182,15 @@ test("draft.updated: BlockProcessor announces every published draft batch; the l
   assert.equal(onDisk.stage, "gate");
   assert.notEqual(drafts.at(-1)!.type === "draft.updated" && drafts.at(-1)!.stage, "gate");
 });
+
+test("projectEvent passes entity match facts through with ids only", async () => {
+  const { projectEvent } = await import("../src/events/types.js");
+  assert.deepEqual(
+    projectEvent({ type: "entity.merged", keepId: "char_a", dropId: "char_b" }),
+    { type: "entity.merged", keepId: "char_a", dropId: "char_b" },
+  );
+  assert.deepEqual(
+    projectEvent({ type: "entity.distinct", aId: "char_a", bId: "char_b" }),
+    { type: "entity.distinct", aId: "char_a", bId: "char_b" },
+  );
+});

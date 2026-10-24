@@ -3,6 +3,7 @@ import type { Entity } from "../../ontology/types.js";
 import type { DecisionPatch, PatchContext, PatchOutcome } from "./types.js";
 import { EMPTY_OUTCOME } from "./types.js";
 import type { ChangeProposal } from "../../merge/changeset.js";
+import { containmentTargets } from "../../matching/fragmentMatch.js";
 
 /**
  * Name Detector patch.
@@ -104,20 +105,33 @@ export const nameDetector: DecisionPatch = {
 
   buildQuestions(ctx: PatchContext): DecisionQuestion[] {
     const candidates = (ctx.accepted["nameCandidates"] as string[] | undefined) ?? [];
-    const known = ctx.knownEntities.filter((entity) => entity.kind === "Character").map((entity) => entity.id);
+    const knownChars = ctx.knownEntities.filter((entity) => entity.kind === "Character");
+    const known = knownChars.map((entity) => entity.id);
     const qs: DecisionQuestion[] = [];
     for (const c of candidates) {
+      // Fragment-at-birth, miniloop site: when the candidate
+      // containment-matches a known character's name, that evidence
+      // is injected into the EXISTING questions (no new round). A
+      // fragment of a known name usually denotes that character —
+      // but can be a relative, a clone, or a namesake, so the
+      // passage still decides.
+      const fragTargets = containmentTargets(c, knownChars.map((e) => ({
+        id: e.id, name: e.names[0]?.text ?? e.id, forms: e.names.map((n) => n.text),
+      })));
+      const fragNote = fragTargets.length
+        ? ` Note: "${c}" overlaps the name of known character(s) ${fragTargets.map((t) => t.name).join(", ")} (containment match). If "${c}" is a shortened form referring to that same person (surname-only or given-name-only reference), it belongs to them, not to a new character; but a contained name can also be a DIFFERENT person — a relative sharing the surname, a clone, or a namesake. Judge from the passage.`
+        : "";
       qs.push({
         key: `newname:${c}`,
         primitive: "noul",
-        instructions: `Is "${c}" a character's name (a person being referred to) that does NOT belong to any already-known character?`,
+        instructions: `Is "${c}" a character's name (a person being referred to) that does NOT belong to any already-known character?${fragNote}`,
         criteria:
           "Place names, item names, and generic nouns (e.g. 'the teacher') are not character names.",
       });
       qs.push({
         key: `nick:${c}`,
         primitive: "choice",
-        instructions: `If "${c}" is a nickname, epithet or title for an already-known character, which one?`,
+        instructions: `If "${c}" is a nickname, epithet or title for an already-known character, which one?${fragNote}`,
         options: [...known, "none"],
       });
     }

@@ -25,7 +25,7 @@ export interface WorldNode {
   subLabel?: string;
   summary?: string;
   relatedSummaries?: { id: string; text: string }[];
-  dialogue?: { turn: number; speakerId: string | null; speakerLabel?: string; text?: string };
+  dialogue?: { cardId?: string; participantIds?: string[]; participantLabels?: string[]; turn?: number; speakerId?: string | null; speakerLabel?: string; text?: string };
   cluster?: {
     kind: "scenes" | "records";
     ids: string[];
@@ -86,6 +86,8 @@ export type PlaygroundEvent =
   | { type: "changeset.pending"; changesetId: string; label: string; nodeIds: string[] }
   | { type: "changeset.held"; changesetId: string; nodeIds: string[] }
   | { type: "changeset.merged"; changesetId: string }
+  | { type: "entity.merged"; keepId: string; dropId: string }
+  | { type: "entity.distinct"; aId: string; bId: string }
   | { type: "graph.rebuilt" };
 
 export interface EventSource {

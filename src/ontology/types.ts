@@ -93,6 +93,14 @@ export interface DialogueTurn {
   sentenceIds: string[];
 }
 
+export interface DialogueCard {
+  id: string;
+  sentenceIds: string[];
+  participantIds: string[];
+  unresolvedParticipantIds?: string[];
+  summary?: string;
+}
+
 export interface Scene {
   id: string;
   chapterIndex: number;
@@ -100,6 +108,7 @@ export interface Scene {
   charactersPresent: string[]; // entity IDs — decided by the presence patch
   charactersMentioned: string[]; // mentioned is NOT present
   turns: DialogueTurn[];
+  dialogues?: DialogueCard[];
   locationId: string | null;
   summary?: string;
 }

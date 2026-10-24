@@ -1,5 +1,11 @@
 # Pending repair and recall
 
+These bulk edits are for legacy packets only. Semantic packets use targeted
+`facts` / `decide` instead; bulk revision is rejected to protect speakers.
+For a legacy packet, read every source line and every proposal/note page,
+including after each revision, before approval. Do not retrofit an old
+approval into a semantic verification receipt.
+
 `novel changeset revise <dir> <id> --edits '<JSON>' --reason '<reason>'`
 preserves the predecessor, records an audit and leaves a fresh held packet.
 Review the entire fresh revision before approval. Batch related verified

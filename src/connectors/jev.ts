@@ -46,7 +46,7 @@ export interface DecisionModel {
    * Evaluate a BATCH of questions against one shared state snapshot.
    * One API call per window — never one call per question.
    */
-  decide(state: string, questions: DecisionQuestion[]): Promise<DecisionAnswer[]>;
+  decide(state: string, questions: DecisionQuestion[], options?: { signal?: AbortSignal }): Promise<DecisionAnswer[]>;
 }
 
 export interface JevConfig {
@@ -62,7 +62,7 @@ export class JevClient implements DecisionModel {
     this.modelId = cfg.model;
   }
 
-  async decide(state: string, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> {
+  async decide(state: string, questions: DecisionQuestion[], options: { signal?: AbortSignal } = {}): Promise<DecisionAnswer[]> {
     if (!this.cfg.apiKey) {
       throw new Error(
         "Jev API key missing. Run `novel jev login`, or set TYPESAFE_API_KEY (never hard-code the key).",
@@ -77,6 +77,7 @@ export class JevClient implements DecisionModel {
     // (429/529 per the provider docs, other 5xx, network), max 3 attempts.
     let lastError: Error | null = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
+      options.signal?.throwIfAborted();
       try {
         const res = await fetch(this.cfg.endpoint, {
           method: "POST",
@@ -85,6 +86,7 @@ export class JevClient implements DecisionModel {
             Authorization: `Bearer ${this.cfg.apiKey}`,
           },
           body,
+          signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
         });
         if (res.ok) {
           const payload = (await res.json()) as { answers?: Record<string, WireAnswer> };
@@ -95,6 +97,7 @@ export class JevClient implements DecisionModel {
         if (res.status < 500 && res.status !== 429) throw err;
         lastError = err;
       } catch (err) {
+        options.signal?.throwIfAborted();
         if (err instanceof Error && err.message.startsWith("Jev request failed: 4")) {
           throw err;
         }

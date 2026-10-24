@@ -98,9 +98,9 @@ the miniloop or extraction. Sharing an ontology = copying the folder.
 
 - Identity: opaque IDs only (`char_000123`, `evt_…`). Names are data:
   `names: [{ text, lang, kind: canonical|alias|nickname|title }]`.
-- Semantics in English, evidence in the original: every event/scene
-  stores an English `summary` + the original-language quote + sentence
-  offsets as provenance.
+- Schema keys are English; names, summaries and verbatim source retain the
+  novel's original language/script. Sentence IDs/offsets are provenance,
+  not mandatory speaker-assignment units.
 - Node tables: `Character | Location | Organization | Item | Concept |
   Event | Scene | Timeline | Branch`
 - Relations: `CAUSES | CAUSED_BY | PARTICIPATES_IN | PRESENT_IN |
@@ -113,6 +113,42 @@ the miniloop or extraction. Sharing an ontology = copying the folder.
 - Fork: `Branch { id, parent_timeline_id, fork_event_id, label }`
   shares the canon prefix (no copying), snapshots state at the fork
   event, then appends only its own delta events. Canon is never mutated.
+
+### Dialogue cards: exchange-level participation (owner decision, 23 October 2026)
+
+A dialogue card is an exchange, not a single-speaker turn. Two or more
+people may speak inside it; monologues are also valid. Store a stable card
+ID, original source sentence IDs, an unordered set of participating Character
+IDs and an optional source-language summary. Do not assign individual
+sentences to speakers/addressees or split an exchange when the voice changes.
+Brief intervening narration is acceptable; source text remains available in full.
+
+Dialogue selection runs independently of scene segmentation. Participation
+waits for the selected exchange and source-grounded identity candidates, then
+uses bounded original/neighbor context: S1 membership questions per candidate,
+bounded S1 context widening for uncertain membership, then S2 only for unresolved
+membership. This is a set-valued task, never one winner among all characters.
+Scene joins preserve card identity and source provenance rather than inventing
+speaker labels. Legacy turn records remain readable, not retroactively verified.
+
+Pi reviews each participant's membership independently, not text organization
+or a sentence-speaker map. Hold an uncertain member, not the entire exchange
+or its supported members. Merely mentioned people and bystanders are not
+automatically dialogue participants. Card co-membership does not imply physical
+presence, a directed utterance, KNOWS/SPEAKS_TO, an emotion or a relationship.
+Those consequential assertions still require their own source support.
+
+Entity matching is upstream identity resolution, not evidence of participation.
+PR36's alias/fragment-at-birth and matching backstop are relevant, but confidence
+alone must not bypass the semantic merge gate or silently fuse distinct people.
+ID remaps must preserve card membership, deduplicate members and invalidate
+pending decisions tied to earlier canonical context. PR36 is not implicitly merged.
+
+The product benchmark is participant precision/recall, exact participant sets,
+wrong members, missing/held members and identity conflations per dialogue card.
+Report raw extraction and applied canon separately. The old 38-sentence speaker
+scores remain historical diagnostics, not product acceptance criteria. See
+[dialogue-card benchmark protocol](docs/dialogue-card-benchmark.md).
 
 ## 5. The processing model — blocks and the merge gate
 
@@ -151,14 +187,14 @@ approved you."
 - **Decision patches.** Each functionality is an independent patch with
   its own Jev questions, primitives, and confidence gates:
   `scene-boundary`, `dialogue-detector`, `name-detector`,
-  `presence-detector`, `speaker-attribution`, … Adding a functionality
+  `presence-detector`, `dialogue-participants`, … Adding a functionality
   = adding a patch. Patches run in a fixed order and pass accepted
   decisions to each other.
 - **Rule zero:** never ask a model what code can compute exactly.
   Sectioning, offsets, and scanning for *known* names are code. The
   decision model only judges what is genuinely ambiguous: which
   sentences are dialogue, whether a candidate is a *new* name or a
-  nickname, who is present vs. merely mentioned, who speaks a line.
+  nickname, who is present vs. merely mentioned, who participates in an exchange.
 - **Primitives:** `noul` (yes/no → probability), `choice` (one pick from
   a fixed set), `score` (ordered scale). Presence must be one `noul`
   per candidate — `choice` can only return a single pick.
@@ -166,7 +202,7 @@ approved you."
   expand the context window and re-ask; split/low or a discovery →
   subdivide, or escalate that unit only to the work LLM.
 - **Output is structure + proposals**, never text and never writes:
-  scenes, turns, and a ChangeSet.
+  scenes, multi-participant dialogue cards, and a ChangeSet.
 - The full patch catalog (state changes, event-worthiness, causal
   candidates, foreshadowing, …) and the animated walkthrough are on the
   System 1 page — kept as an **open discussion list** to cut, keep, and

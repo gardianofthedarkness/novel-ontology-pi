@@ -36,6 +36,7 @@ export interface WorkingDraftView {
   sceneSpans: string[][];
   dialogueUnits: string[][];
   turns: { speakerId: string | null; addresseeId: string | null; sentenceIds: string[] }[];
+  dialogueCards?: { id: string; sentenceIds: string[]; participantNames: string[]; unresolvedNames: string[] }[];
   completedScenes: number;
   totalScenes: number;
 }
@@ -202,7 +203,7 @@ export function createDraftProjector(): DraftProjector {
         ghostNode({
           id,
           label: `Dialogue · ${unit.length} sentence${unit.length === 1 ? "" : "s"}`,
-          subLabel: `dialogue · proposed · ${turn?.speakerId ? "speaker attributed" : "speaker unresolved"}`,
+          subLabel: `dialogue · proposed · ${draft.dialogueCards ? "participant membership" : turn?.speakerId ? "legacy speaker attributed" : "membership pending"}`,
           kind: "dialogue",
           chrono: sentenceOrdinal(unit[0]),
         }),

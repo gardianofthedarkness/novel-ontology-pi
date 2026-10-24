@@ -26,6 +26,37 @@ const KNIT_SITE = "be_found"; // the branch big event System 1 knits in this ses
 const DB = "/db/novel";
 let feedSeq = 0;
 
+/** Follow a merge chain (a keeper can itself be merged away later). */
+function resolveKept(id: string, merges: Map<string, string>): string {
+  let current = id;
+  const seen = new Set<string>();
+  while (merges.has(current) && !seen.has(current)) {
+    seen.add(current);
+    current = merges.get(current)!;
+  }
+  return current;
+}
+
+/**
+ * The graph state after settled EM merges: dropped records are gone,
+ * their edges retargeted onto the survivor (self-loops and edges to
+ * vanished nodes dropped). Applied to the loaded world and to the
+ * session's ghost layer alike — one graph, merges included.
+ */
+function applyMergesToSet(
+  nodes: WorldNode[],
+  edges: WorldEdge[],
+  merges: Map<string, string>,
+): { nodes: WorldNode[]; edges: WorldEdge[] } {
+  if (merges.size === 0) return { nodes, edges };
+  const keptNodes = nodes.filter((n) => !merges.has(n.id));
+  const keptIds = new Set(keptNodes.map((n) => n.id));
+  const keptEdges = edges
+    .map((e) => ({ ...e, from: resolveKept(e.from, merges), to: resolveKept(e.to, merges) }))
+    .filter((e) => e.from !== e.to && keptIds.has(e.from) && keptIds.has(e.to));
+  return { nodes: keptNodes, edges: keptEdges };
+}
+
 export default function App() {
   const [world, setWorld] = useState<LoadedWorld | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -49,6 +80,12 @@ export default function App() {
   const [processingStatus, setProcessingStatus] = useState<"idle" | "working" | "review" | "complete" | "error">("idle");
   const [changesets, setChangesets] = useState<ChangeSet[]>([]);
   const [heldMap, setHeldMap] = useState<Record<string, string[]>>({});
+  /** Settled EM merges (dropId -> keepId) and the join now animating. */
+  const [merges, setMerges] = useState<Map<string, string>>(new Map());
+  const [join, setJoin] = useState<{ dropId: string; keepId: string; seq: number } | null>(null);
+  const joinRef = useRef<{ dropId: string; keepId: string } | null>(null);
+  const joinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const labelsRef = useRef<Record<string, string>>({});
   const [activity, setActivity] = useState({ count: 0, shine: false, caughtUp: false });
   const [blockLabel, setBlockLabel] = useState<string | null>(null);
   const sourceRef = useRef<PlaygroundEventSource | null>(null);
@@ -87,6 +124,48 @@ export default function App() {
     if (atSite && !alwaysShine) return;
     setActivity((a) => ({ count: a.count + 1, shine: true, caughtUp: false }));
   }, []);
+
+  /** The world as currently settled: EM-merged records already joined. */
+  const displayWorld = useMemo<LoadedWorld | null>(() => {
+    if (!world) return null;
+    if (merges.size === 0) return world;
+    const lanes = applyMergesToSet(world.laneNodes, world.laneEdges, merges);
+    const interiors: LoadedWorld["interiors"] = {};
+    for (const [id, group] of Object.entries(world.interiors)) {
+      interiors[id] = applyMergesToSet(group.nodes, group.edges, merges);
+    }
+    return { laneNodes: lanes.nodes, laneEdges: lanes.edges, interiors, bigEventLabels: world.bigEventLabels };
+  }, [world, merges]);
+
+  const visibleDyn = useMemo(
+    () => applyMergesToSet(dynNodes, dynEdges, merges),
+    [dynNodes, dynEdges, merges],
+  );
+
+  /** A join animation finished (or cannot run here): settle the merge. */
+  const settleJoin = useCallback((dropId: string) => {
+    const current = joinRef.current;
+    if (!current || current.dropId !== dropId) return;
+    joinRef.current = null;
+    if (joinTimer.current) {
+      clearTimeout(joinTimer.current);
+      joinTimer.current = null;
+    }
+    setJoin(null);
+    setMerges((m) => new Map(m).set(current.dropId, current.keepId));
+  }, []);
+
+  const beginJoin = useCallback(
+    (dropId: string, keepId: string) => {
+      if (joinRef.current) settleJoin(joinRef.current.dropId);
+      joinRef.current = { dropId, keepId };
+      setJoin({ dropId, keepId, seq: Date.now() });
+      // Backstop: if neither renderer can animate this pair (off-view
+      // in both), the merge still settles promptly.
+      joinTimer.current = setTimeout(() => settleJoin(dropId), 2600);
+    },
+    [settleJoin],
+  );
 
   const handleEvent = useCallback(
     (ev: PlaygroundEvent) => {
@@ -155,17 +234,38 @@ export default function App() {
           setProcessingStatus("complete");
           pushFeed(`✓ ${ev.changesetId} merged — graph rebuilt`, "ok");
           break;
+        case "entity.merged": {
+          const dropLabel = labelsRef.current[ev.dropId] ?? ev.dropId;
+          const keepLabel = labelsRef.current[ev.keepId] ?? ev.keepId;
+          pushFeed(`⬢ EM matched — ${dropLabel} joins ${keepLabel} (same entity)`, "jev");
+          noteActivity(false); // knitting, not an escalation: no forced shine
+          beginJoin(ev.dropId, ev.keepId);
+          break;
+        }
+        case "entity.distinct": {
+          const aLabel = labelsRef.current[ev.aId] ?? ev.aId;
+          const bLabel = labelsRef.current[ev.bId] ?? ev.bId;
+          pushFeed(`⬢ EM — ${aLabel} ≠ ${bLabel} (kept distinct)`);
+          break;
+        }
         case "graph.rebuilt":
           pushFeed("✓ graph rebuilt from bundle", "ok");
           break;
       }
     },
-    [noteActivity, pushFeed],
+    [noteActivity, pushFeed, beginJoin],
   );
 
   const startSession = useCallback(() => {
     sourceRef.current?.stop();
     lastKnitRef.current = null;
+    joinRef.current = null;
+    if (joinTimer.current) {
+      clearTimeout(joinTimer.current);
+      joinTimer.current = null;
+    }
+    setJoin(null);
+    setMerges(new Map());
     setDynNodes([]);
     setDynEdges([]);
     setProposalsByCs({});
@@ -225,7 +325,7 @@ export default function App() {
     // latest ghost in its own chapter interior — the demo world's
     // fixed knit site is only the fallback.
     const knit = lastKnitRef.current;
-    if (knit && world?.interiors[knit.chapterId]) {
+    if (knit && displayWorld?.interiors[knit.chapterId]) {
       if (orbitalMode) setOrbitalFocus((current) => ({ node: knit.node, chapterId: knit.chapterId, sequence: (current?.sequence ?? 0) + 1 }));
       setView({ mode: "interior", bigEventId: knit.chapterId });
       setSelectedId(knit.node.id);
@@ -234,21 +334,21 @@ export default function App() {
       setActivity((a) => ({ ...a, count: 0, shine: false }));
       return;
     }
-    const target = world?.interiors[KNIT_SITE]?.nodes[0];
+    const target = displayWorld?.interiors[KNIT_SITE]?.nodes[0];
     if (orbitalMode && target) setOrbitalFocus((current) => ({ node: target, chapterId: KNIT_SITE, sequence: (current?.sequence ?? 0) + 1 }));
     setView({ mode: "interior", bigEventId: KNIT_SITE });
-    setSelectedId(world?.interiors[KNIT_SITE]?.nodes[0]?.id ?? null);
+    setSelectedId(displayWorld?.interiors[KNIT_SITE]?.nodes[0]?.id ?? null);
     setPanel("review");
     setInspectorOpen(true);
     setActivity((a) => ({ ...a, count: 0, shine: false }));
     if (viewRef.current.mode === "interior" && viewRef.current.bigEventId === KNIT_SITE) {
       framePositions(graphRef, [...labelBus.positions.values()], 1.18, !reducedMotion);
     }
-  }, [world, reducedMotion, labelBus, orbitalMode]);
+  }, [displayWorld, reducedMotion, labelBus, orbitalMode]);
 
   const openNode = useCallback(
     (node: WorldNode) => {
-      if (node.kind === "bigEvent" && world?.interiors[node.id]) {
+      if (node.kind === "bigEvent" && displayWorld?.interiors[node.id]) {
         setView({ mode: "interior", bigEventId: node.id });
         setSelectedId(null);
         setPanel("record");
@@ -258,27 +358,27 @@ export default function App() {
         }
       }
     },
-    [world],
+    [displayWorld],
   );
 
   const { nodes: sourceNodes, edges: sourceEdges } = useMemo(() => {
-    if (!world) return { nodes: [] as WorldNode[], edges: [] as WorldEdge[] };
+    if (!displayWorld) return { nodes: [] as WorldNode[], edges: [] as WorldEdge[] };
     if (view.mode === "lanes") {
-      return withOverviewActivity(world.laneNodes, world.laneEdges, dynNodes, dynEdges);
+      return withOverviewActivity(displayWorld.laneNodes, displayWorld.laneEdges, visibleDyn.nodes, visibleDyn.edges);
     }
-    const interior = world.interiors[view.bigEventId];
-    const mine = dynNodes.filter((n) => n.parent === view.bigEventId);
-    const myEdges = dynEdges.filter((e) => e.parent === view.bigEventId);
+    const interior = displayWorld.interiors[view.bigEventId];
+    const mine = visibleDyn.nodes.filter((n) => n.parent === view.bigEventId);
+    const myEdges = visibleDyn.edges.filter((e) => e.parent === view.bigEventId);
     return {
       nodes: [...(interior?.nodes ?? []), ...mine],
       edges: [...(interior?.edges ?? []), ...myEdges],
     };
-  }, [world, view, dynNodes, dynEdges]);
+  }, [displayWorld, view, visibleDyn]);
 
   const explorer = useSceneExplorer(sourceNodes, sourceEdges, view.mode === "interior", view.mode === "lanes" ? "lanes" : view.bigEventId);
   const { nodes, edges } = explorer;
   const timeline = useMemo(() => explorer.timeline ?? arrangeTimeline(nodes, edges, view.mode === "interior", explorer.structure), [nodes, edges, view.mode, explorer.structure, explorer.timeline]);
-  const openableIds = useMemo(() => [...Object.keys(world?.interiors ?? {}), ...nodes.filter((node) => (node.cluster || node.kind === "scene") && !explorer.path.some((scope) => scope.key === node.id)).map((node) => node.id)], [world, nodes, explorer.path]);
+  const openableIds = useMemo(() => [...Object.keys(displayWorld?.interiors ?? {}), ...nodes.filter((node) => (node.cluster || node.kind === "scene") && !explorer.path.some((scope) => scope.key === node.id)).map((node) => node.id)], [displayWorld, nodes, explorer.path]);
   const visibleEdges = useMemo(() => showRelations ? edges : [], [edges, showRelations]);
 
   const displayNodes = orbitalMode && orbitalInspection ? orbitalInspection.nodes : nodes;
@@ -302,7 +402,7 @@ export default function App() {
     graphRef.current?.getControls?.()?.stop();
   };
   const activateNode = (node: WorldNode) => {
-    if (node.kind === "bigEvent" && world?.interiors[node.id]) { explorer.reset(); openNode(node); return; }
+    if (node.kind === "bigEvent" && displayWorld?.interiors[node.id]) { explorer.reset(); openNode(node); return; }
     if (explorer.reveal(node) || explorer.open(node)) {
       setSelectedId(node.id);
       stopCamera();
@@ -336,17 +436,20 @@ export default function App() {
   };
 
   const labels = useMemo(() => {
-    const map: Record<string, string> = { ...(world?.bigEventLabels ?? {}) };
-    for (const n of [...(world?.laneNodes ?? []), ...dynNodes]) map[n.id] = n.label;
-    for (const group of Object.values(world?.interiors ?? {})) {
+    const map: Record<string, string> = { ...(displayWorld?.bigEventLabels ?? {}) };
+    for (const n of [...(displayWorld?.laneNodes ?? []), ...visibleDyn.nodes]) map[n.id] = n.label;
+    for (const group of Object.values(displayWorld?.interiors ?? {})) {
       for (const n of group.nodes) map[n.id] = n.label;
     }
     return map;
-  }, [world, dynNodes]);
+  }, [displayWorld, visibleDyn]);
+  labelsRef.current = labels;
 
   useEffect(() => {
     labelBus.active = new Set(nodes.map((n) => n.id));
   }, [labelBus, nodes]);
+
+  const shownWorld: LoadedWorld = displayWorld ?? (world as LoadedWorld);
 
   if (!world) {
     return (
@@ -366,13 +469,13 @@ export default function App() {
         <span className="sample-badge"><i />{liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">
-        <div><div className="eyebrow">COLLECTION 001 / INDEX SAMPLE</div><h1>{view.mode === "lanes" ? "Narrative archive." : world.bigEventLabels[view.bigEventId]}</h1></div>
+        <div><div className="eyebrow">COLLECTION 001 / INDEX SAMPLE</div><h1>{view.mode === "lanes" ? "Narrative archive." : shownWorld.bigEventLabels[view.bigEventId]}</h1></div>
         <div className={`heading-caption${view.mode === "interior" ? " interior-heading" : ""}`}>{view.mode === "lanes" ? <><span>One world. Parallel stories.</span><small>Click a file or scroll closer to enter.</small></> : <><button className="back-link" onClick={overview}>← Back to chronology</button><small>EVENT INTERIOR / {sourceNodes.length} RECORDS</small></>}</div>
       </div>
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
           <button className="design-switch" aria-pressed={orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setInspectorOpen(false); }}>{orbitalMode ? "Orbital / switch to classic" : "Classic / switch to orbital"}</button>
-          {orbitalMode ? <OrbitalExplorer world={world} activityNodes={dynNodes} activityEdges={dynEdges} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
+          {orbitalMode ? <OrbitalExplorer world={shownWorld} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} join={join} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
           <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
             <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
             <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>
@@ -385,12 +488,12 @@ export default function App() {
             if (event.key === "Enter" && selected) { event.preventDefault(); activateNode(selected); }
             if (event.key === "Escape") backLevel();
           }}>
-            <div className="graph-canvas"><WorldGraph ref={graphRef} nodes={timeline.nodes} edges={visibleEdges} tracks={timeline.tracks} contextNodeIds={explorer.rootIds} interior={view.mode === "interior"} viewId={explorer.key} openableIds={openableIds} labelBus={labelBus} selectedId={selected?.id ?? null} reducedMotion={reducedMotion} onNodeClick={activateNode} onNodeOpen={activateNode} onViewBack={backLevel} /></div>
+            <div className="graph-canvas"><WorldGraph ref={graphRef} nodes={timeline.nodes} edges={visibleEdges} tracks={timeline.tracks} contextNodeIds={explorer.rootIds} interior={view.mode === "interior"} viewId={explorer.key} openableIds={openableIds} labelBus={labelBus} selectedId={selected?.id ?? null} reducedMotion={reducedMotion} onNodeClick={activateNode} onNodeOpen={activateNode} onViewBack={backLevel} join={join} onJoinSettled={settleJoin} /></div>
             <div className="scene-coordinate" aria-hidden="true">X / Y / Z<br /><span>TIME → / RELATIONS<br />SPATIAL ONTOLOGY</span></div>
             <div className="labels-layer">
               {nodes.map((node, index) => <button key={node.id} className={`node-label k-${node.kind} s-${node.state}${selected?.id === node.id ? " is-selected" : ""}`} style={{ visibility: "hidden" }} aria-label={`${openableIds.includes(node.id) ? "Open" : "Select"} ${node.label}`} aria-pressed={selected?.id === node.id} ref={(element) => { if (element) labelBus.targets.set(node.id, element); else labelBus.targets.delete(node.id); }} onClick={() => activateNode(node)}>
                 <span className="node-code">{node.cluster ? `${node.cluster.ids.length} ${node.cluster.kind.toUpperCase()}` : node.kind === "scene" ? `SCENE ${explorer.rank.get(node.id) ?? index + 1}` : String(index + 1).padStart(2, "0")} / {node.lane.toUpperCase()}</span><b>{node.label}</b>{node.cluster && <em className="cluster-preview">{node.subLabel}</em>}<span>{node.cluster ? `${node.cluster.recordCount} records · ${explorer.path.some((scope) => scope.key === node.id) ? "collapse" : "expand"}${node.cluster.proposed ? ` · ${node.cluster.proposed} ghosts` : ""}${node.cluster.held ? ` · ${node.cluster.held} held` : ""}` : node.state !== "canon" ? node.state.toUpperCase() : KIND_LABEL[node.kind]}</span>
-                {node.kind === "bigEvent" && dynNodes.some((child) => child.parent === node.id && child.state !== "canon") && <em className="node-updates">{dynNodes.filter((child) => child.parent === node.id && child.state !== "canon").length} IN REVIEW</em>}
+                {node.kind === "bigEvent" && visibleDyn.nodes.some((child) => child.parent === node.id && child.state !== "canon") && <em className="node-updates">{visibleDyn.nodes.filter((child) => child.parent === node.id && child.state !== "canon").length} IN REVIEW</em>}
               </button>)}
             </div>
             <div className="track-labels">{timeline.tracks.map((track) => <span key={track.id} className="track-label" ref={(element) => { if (element) labelBus.trackTargets.set(track.id, element); else labelBus.trackTargets.delete(track.id); }}>{track.label}<small>SEQUENCE →</small></span>)}</div>
@@ -413,7 +516,7 @@ export default function App() {
           <div className="inspector-sheet" hidden={!inspectorOpen}>
           <div className="sheet-heading"><span className="eyebrow">ARCHIVE / {panel}</span><button aria-label="Close details" onClick={() => { setInspectorOpen(false); document.getElementById(`tab-${panel}`)?.focus(); }}>×</button></div>
           <div ref={inspectorRef} className="inspector-body" id={`panel-${panel}`} role="tabpanel" aria-labelledby={`tab-${panel}`}>
-            {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? "api/record-source" : undefined} childCount={selected ? (world.interiors[selected.id]?.nodes.length ?? 0) + dynNodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!world.interiors[selected.id]} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
+            {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? "api/record-source" : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!shownWorld.interiors[selected.id]} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
             {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? (liveUrl ? "Connected to the live watch stream." : "Waiting for the sample session.")}</p><button onClick={startSession}>{liveUrl ? "Reconnect live" : "Replay sample ↻"}</button></div><DecisionFeed entries={feed} /></>}
             {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>Review the sample proposals. Held records stay separate when the rest merge.</p></div><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></>}
           </div>

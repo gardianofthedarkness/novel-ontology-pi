@@ -5,7 +5,9 @@ import { createAgentSession, createBashToolDefinition, DefaultResourceLoader, Mo
 import { cutBlocks, splitChapters } from '../../dist/src/text/blocks.js';
 import { authorize } from './guard.mjs';
 import { observeModels } from './observe-models.mjs';
-import { reviewRevision, sourcePage } from './review-coverage.mjs';
+import { creditFacts, requireFactCoverage, reviewRevision, sourcePage } from './review-coverage.mjs';
+import { digest, semanticFacts, semanticRevision } from '../../dist/src/merge/semantic.js';
+import { semanticContext } from '../../dist/src/merge/semanticCommands.js';
 import { validateStability } from './validate-stability.mjs';
 import { root, repo, cli, skill, agentEvents } from './config.mjs';
 
@@ -45,6 +47,7 @@ const emit = (event) => {
 };
 const volumes = [];
 const coverages = new Map();
+const factCoverages = new Map();
 const sourceCoverage = new Map();
 let skillRead = false;
 let calls = 0;
@@ -57,7 +60,7 @@ async function jobState() {
     for (const block of volume.blocks) {
       const changeset = await json(`${volume.workspace}/changesets/cs_${block.id}.json`, null);
       const application = applications.get(`cs_${block.id}`);
-      states.push({ volume: volume.id, blockId: block.id, status: changeset?.status ?? 'not-started', applied: changeset?.status === 'approved' && !!application, supported: application ? application.processed - application.unsupportedProposalIds.length : 0, deferred: application?.unsupportedProposalIds.length ?? 0 });
+      states.push({ volume: volume.id, blockId: block.id, status: changeset?.status ?? 'not-started', applied: changeset?.status === 'approved' && !!application, supported: application ? application.processed - application.unsupportedProposalIds.length : 0, deferred: application?.unsupportedProposalIds.length ?? 0, deferredFacts: application?.deferredFactIds?.length ?? 0 });
     }
   }
   return states;
@@ -94,7 +97,7 @@ try {
   apiKey = process.env.WORK_LLM_API_KEY?.trim() ?? '';
   if (!apiKey) throw new Error('WORK_LLM_API_KEY is required; supply through the environment, never job JSON');
   observer = await observeModels(apiKey, emit);
-  const sourcePaths = [skill, `${repo}/skills/novel-ontology/references/repair.md`, manifestPath, 'NOVEL_JOB.json', ...volumes.flatMap((volume) => volume.blocks.map((block) => block.evidence))];
+  const sourcePaths = [skill, `${repo}/skills/novel-ontology/references/repair.md`, `${repo}/skills/novel-ontology/references/semantic-review.md`, manifestPath, 'NOVEL_JOB.json', ...volumes.flatMap((volume) => volume.blocks.map((block) => block.evidence))];
   const scopes = volumes.map((volume) => ({ novel: volume.workspace, input: volume.input, skill, sourcePaths, blockIds: volume.blocks.map((block) => block.id), maxBlocks: volume.blocks.length }));
   let queue = Promise.resolve();
   const execute = async (command, ignored, options) => {
@@ -123,7 +126,7 @@ try {
     const args = permitted.args;
     const volume = volumes.find((volume) => args.includes(volume.workspace) || args.includes(`${volume.workspace}/ontology`));
     if (volume) { volumeId = volume.id; await writeFile(`${cwd}/active-volume.json`, JSON.stringify({ volume: volumeId }), { mode: 0o600 }); }
-    const mutations = args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise'].includes(args[1]);
+    const mutations = args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise', 'decide'].includes(args[1]);
     if (volume && mutations && volume.id > 1 && (await jobState()).some((state) => state.volume < volume.id && !state.applied)) throw new Error('Earlier volumes must pass their merge gates before later-volume mutations');
     if (args[0] === 'ingest') {
       const states = (await jobState()).filter((state) => state.volume === volume.id);
@@ -141,8 +144,18 @@ try {
         const block = volume.blocks.find((block) => block.id === blockId);
         const coverage = coverages.get(`${volume.id}:${blockId}`);
         if (current.status === 'approved') throw new Error('Packet already approved; do not apply twice');
-        if (!skillRead || (sourceCoverage.get(block.evidence)?.size ?? 0) < block.lines) throw new Error('Read the skill and every current-block evidence line before approval');
-        if (coverage?.revision !== reviewRevision(current) || coverage.proposals.size < current.proposals.length || coverage.notes.size < Object.keys(current.reviewNotes).length) throw new Error('Read ALL proposal and note pages of the current revision before approval');
+        if (current.reviewSource) {
+          if (!skillRead) throw new Error('Read the ontology skill before semantic approval');
+          requireFactCoverage(factCoverages.get(`${volume.id}:${blockId}`), semanticRevision(current), current.semanticReview?.decisions ?? []);
+        } else {
+          if (!skillRead || (sourceCoverage.get(block.evidence)?.size ?? 0) < block.lines) throw new Error('Read the skill and every current-block evidence line before approval');
+          if (coverage?.revision !== reviewRevision(current) || coverage.proposals.size < current.proposals.length || coverage.notes.size < Object.keys(current.reviewNotes).length) throw new Error('Read ALL proposal and note pages of the current revision before approval');
+        }
+      }
+      if (args[1] === 'decide') {
+        const current = await json(`${volume.workspace}/changesets/cs_${blockId}.json`);
+        const decisions = JSON.parse(args[args.indexOf('--decisions') + 1]);
+        requireFactCoverage(factCoverages.get(`${volume.id}:${blockId}`), semanticRevision(current, digest(await semanticContext(volume.workspace))), decisions);
       }
     }
     if (volume && args[0] === 'fix' && !['correct', 'corrections'].includes(args[1])) {
@@ -152,7 +165,7 @@ try {
       await writeFile(`${checkpoint}/operation.json`, JSON.stringify({ args }), { mode: 0o600 });
     }
     const result = await new Promise((resolveResult, reject) => {
-      const child = spawn(process.execPath, [cli, ...args], { cwd: repo, env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'en_US.UTF-8', TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY, NOVEL_SECRETS_DIR: process.env.NOVEL_SECRETS_DIR, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME, JEV_API_KEY_ENV: process.env.JEV_API_KEY_ENV, ...(process.env.JEV_API_KEY_ENV ? { [process.env.JEV_API_KEY_ENV]: process.env[process.env.JEV_API_KEY_ENV] } : {}), WORK_LLM_API_KEY: apiKey, WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-flash', JEV_MODEL: 'jev-1.13.0', ...observer.env }, signal: options.signal, timeout: Math.min(1800000, Math.max(1, deadline - Date.now())), stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(process.execPath, [cli, ...args], { cwd: repo, env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'en_US.UTF-8', TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY, NOVEL_SECRETS_DIR: process.env.NOVEL_SECRETS_DIR, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME, JEV_API_KEY_ENV: process.env.JEV_API_KEY_ENV, NOVEL_DIALOGUE_SCOPE: process.env.NOVEL_DIALOGUE_SCOPE, ...(process.env.JEV_API_KEY_ENV ? { [process.env.JEV_API_KEY_ENV]: process.env[process.env.JEV_API_KEY_ENV] } : {}), WORK_LLM_API_KEY: apiKey, WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-flash', JEV_MODEL: 'jev-1.13.0', ...observer.env }, signal: options.signal, timeout: Math.min(1800000, Math.max(1, deadline - Date.now())), stdio: ['ignore', 'pipe', 'pipe'] });
       let output = ''; let size = 0;
       for (const stream of [child.stdout, child.stderr]) stream.on('data', (data) => { size += data.length; if (size <= 100000) output += observer.redact(data.toString()); });
       child.once('error', () => reject(new Error('Scoped CLI interrupted')));
@@ -163,7 +176,18 @@ try {
     if (!result.exitCode && volume && args[0] === 'changeset' && args[1] === 'approve') {
       const block = volume.blocks.find((entry) => entry.id === blockId);
       const coverage = coverages.get(`${volume.id}:${blockId}`);
-      await appendFile(`${jobRoot}/approval-receipts.jsonl`, JSON.stringify({ volume: volume.id, blockId, revision: coverage.revision, reviewedProposals: coverage.proposals.size, reviewedNotes: coverage.notes.size, sourceLines: block.lines, coveredSourceLines: sourceCoverage.get(block.evidence).size, timestamp: new Date().toISOString() }) + '\n', { mode: 0o600 });
+      const current = await json(`${volume.workspace}/changesets/cs_${blockId}.json`);
+      const proof = current.reviewSource ? { policy: 'semantic-v1', revision: reviewRevision(current), totalFacts: semanticFacts(current).length, reviewedFacts: factCoverages.get(`${volume.id}:${blockId}`)?.facts.size ?? 0, acceptedFactIds: current.semanticReview.decisions.filter(decision => decision.verdict === 'accept').map(decision => decision.factId), verifiedSourceFacts: [...factCoverages.get(`${volume.id}:${blockId}`)?.evidence ?? []] } : { revision: coverage.revision, reviewedProposals: coverage.proposals.size, reviewedNotes: coverage.notes.size, sourceLines: block.lines, coveredSourceLines: sourceCoverage.get(block.evidence).size };
+      await appendFile(`${jobRoot}/approval-receipts.jsonl`, JSON.stringify({ volume: volume.id, blockId, ...proof, timestamp: new Date().toISOString() }) + '\n', { mode: 0o600 });
+    }
+    if (!result.exitCode && volume && args[0] === 'changeset' && args[1] === 'facts') {
+      const current = await json(`${volume.workspace}/changesets/${args[3]}.json`);
+      const page = JSON.parse(result.output);
+      const key = `${volume.id}:${current.blockId}`;
+      const revision = semanticRevision(current, current.status === 'approved' ? current.semanticReview?.contextDigest : digest(await semanticContext(volume.workspace)));
+      const coverage = creditFacts(factCoverages.get(key), page, revision);
+      if (page.factId && page.sentences?.length && page.revision === revision) coverage.evidence.add(page.factId);
+      factCoverages.set(key, coverage);
     }
     if (!result.exitCode && volume && args[0] === 'changeset' && args[1] === 'show' && !args.includes('--summary')) {
       const current = await json(`${volume.workspace}/changesets/${args[3]}.json`);
@@ -214,7 +238,7 @@ try {
         await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status: 'review', states, stoppedAt: new Date().toISOString() }), { mode: 0o600 });
         break;
       }
-      await emit({ type: 'pi.status', status: 'complete', label: `Pi ${testChapters ? `${testChapters}-chapter stability test` : 'full-volume job'} complete · ${states.length} blocks applied · ${states.reduce((total, state) => total + state.deferred, 0)} proposals deferred` });
+      await emit({ type: 'pi.status', status: 'complete', label: `Pi ${testChapters ? `${testChapters}-chapter stability test` : 'full-volume job'} processed · ${states.length} blocks applied · ${states.reduce((total, state) => total + state.deferred, 0)} proposals deferred · ${states.reduce((total, state) => total + state.deferredFacts, 0)} semantic facts held` });
       await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status: 'complete', states, finishedAt: new Date().toISOString() }), { mode: 0o600 });
       break;
     }
@@ -228,6 +252,7 @@ try {
 } catch (error) {
   await emit({ type: 'pi.status', status: 'error', label: 'Pi full-volume job stopped · inspect private run report' });
   await writeFile(`${jobRoot}/error.json`, JSON.stringify({ reason: observer ? observer.redact(error.message) : error.message, timestamp: new Date().toISOString() }), { mode: 0o600 });
+  await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status: 'error', states: await jobState(), stoppedAt: new Date().toISOString() }), { mode: 0o600 });
   process.exitCode = 1;
 } finally {
   clearTimeout(timer);

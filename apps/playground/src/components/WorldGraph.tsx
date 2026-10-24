@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type GraphNode, type GraphEdge } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Vector3, type PerspectiveCamera } from "three";
+import { Vector3, type Object3D, type PerspectiveCamera } from "three";
 import { ArchiveNode } from "./ArchiveNode";
 import { recordColor } from "../archive";
 import type { WorldEdge, WorldNode } from "../types";
@@ -291,17 +291,81 @@ function Framing({ graphRef, positions, viewKey, reducedMotion }: {
   return null;
 }
 
+export const JOIN_MS = 1100;
+
+/**
+ * The EM join animation (classic view): when entity matching merges
+ * two records, the dropped node glides into its survivor, shrinking
+ * as it arrives while the survivor briefly swells — then the app
+ * settles the merge in the data and the dropped node is gone.
+ * Mounted LAST inside the canvas so its per-frame writes win over
+ * the layout's pinned positions. If either node is not in this view,
+ * it settles immediately (the data must never wait on a camera).
+ */
+function JoinAnimator({ join, reducedMotion, onSettled }: {
+  join: { dropId: string; keepId: string; seq: number } | null;
+  reducedMotion: boolean;
+  onSettled: (dropId: string) => void;
+}) {
+  const scene = useThree((state) => state.scene);
+  const flight = useRef<{ key: string; from: Vector3; to: Vector3; startedAt: number; settled: boolean } | null>(null);
+  useFrame(() => {
+    if (!join) {
+      flight.current = null;
+      return;
+    }
+    const key = `${join.seq}:${join.dropId}->${join.keepId}`;
+    let drop: Object3D | undefined;
+    let keep: Object3D | undefined;
+    scene.traverse((object) => {
+      if (object.userData?.type !== "node") return;
+      if (object.userData.id === join.dropId) drop = object;
+      if (object.userData.id === join.keepId) keep = object;
+    });
+    if (!drop || !keep) {
+      if (flight.current?.key !== key) {
+        flight.current = { key, from: new Vector3(), to: new Vector3(), startedAt: 0, settled: true };
+        onSettled(join.dropId);
+      }
+      return;
+    }
+    if (flight.current?.key !== key) {
+      flight.current = {
+        key,
+        from: drop.position.clone(),
+        to: keep.position.clone(),
+        startedAt: performance.now(),
+        settled: false,
+      };
+    }
+    const state = flight.current;
+    const t = reducedMotion ? 1 : Math.min(1, (performance.now() - state.startedAt) / JOIN_MS);
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    drop.position.lerpVectors(state.from, state.to, eased);
+    drop.scale.setScalar(Math.max(0.05, 1 - 0.85 * eased));
+    keep.scale.setScalar(1 + 0.18 * Math.sin(eased * Math.PI));
+    if (t >= 1 && !state.settled) {
+      state.settled = true;
+      keep.scale.setScalar(1);
+      onSettled(join.dropId);
+    }
+  });
+  return null;
+}
+
 interface Props {
   nodes: WorldNode[]; edges: WorldEdge[]; interior: boolean; viewId: string;
   tracks: TimelineTrack[]; openableIds: string[];
   contextNodeIds?: string[];
   labelBus: LabelBus; selectedId: string | null; reducedMotion: boolean;
+  join: { dropId: string; keepId: string; seq: number } | null;
+  onJoinSettled: (dropId: string) => void;
   onNodeClick: (node: WorldNode) => void; onNodeOpen: (node: WorldNode) => void;
   onViewBack: () => void;
 }
 
 export const WorldGraph = forwardRef<GraphCanvasRef, Props>(function WorldGraph(
-  { nodes, edges, tracks, interior, viewId, openableIds, contextNodeIds, labelBus, selectedId, reducedMotion, onNodeClick, onNodeOpen, onViewBack }, ref,
+  { nodes, edges, tracks, interior, viewId, openableIds, contextNodeIds, labelBus, selectedId, reducedMotion, join, onJoinSettled, onNodeClick, onNodeOpen, onViewBack }, ref,
 ) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const positions = useRef<[number, number, number][]>([]);
@@ -336,6 +400,7 @@ export const WorldGraph = forwardRef<GraphCanvasRef, Props>(function WorldGraph(
       <Framing graphRef={ref as { current: GraphCanvasRef | null }} positions={positions} viewKey={viewId} reducedMotion={reducedMotion} />
       <LabelProjector bus={labelBus} selectedId={selectedId} hoveredId={hoveredId} nodes={nodes} tracks={tracks} interior={interior} />
       <SemanticZoom key={viewId} nodes={nodes} openableIds={openableIds} onOpen={onNodeOpen} interior={interior} onExit={onViewBack} />
+      <JoinAnimator join={join} reducedMotion={reducedMotion} onSettled={onJoinSettled} />
     </GraphCanvas>
   );
 });
