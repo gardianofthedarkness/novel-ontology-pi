@@ -1,19 +1,179 @@
 {
   "laneNodes": [
-    { "id": "be_demo", "kind": "bigEvent", "label": "Demo chapter", "state": "canon", "parent": null, "lane": "canon", "chrono": 1, "lanePos": [-260, 60, 0], "interiorPos": [0, 0, 0] }
+    {
+      "id": "be_demo",
+      "kind": "bigEvent",
+      "label": "Demo chapter",
+      "state": "canon",
+      "parent": null,
+      "lane": "canon",
+      "chrono": 1,
+      "lanePos": [
+        -260,
+        60,
+        0
+      ],
+      "interiorPos": [
+        0,
+        0,
+        0
+      ]
+    }
   ],
   "laneEdges": [],
   "interiors": {
     "be_demo": {
       "nodes": [
-        { "id": "sc_1", "kind": "scene", "label": "Scene 1", "state": "canon", "parent": "be_demo", "lane": "canon", "chrono": 1, "lanePos": [0, 0, 0], "interiorPos": [-200, 0, 0], "sentenceIds": ["s0001", "s0002"] },
-        { "id": "sc_2", "kind": "scene", "label": "Scene 2", "state": "canon", "parent": "be_demo", "lane": "canon", "chrono": 2, "lanePos": [0, 0, 0], "interiorPos": [0, 0, 0], "sentenceIds": ["s0003", "s0004"] },
-        { "id": "sc_3", "kind": "scene", "label": "Scene 3", "state": "canon", "parent": "be_demo", "lane": "canon", "chrono": 3, "lanePos": [0, 0, 0], "interiorPos": [200, 0, 0], "sentenceIds": ["s0005"] },
-        { "id": "ch_aoi", "kind": "character", "label": "Aoi", "subLabel": "Demo character", "state": "canon", "parent": "be_demo", "lane": "canon", "chrono": 1.5, "lanePos": [0, 0, 0], "interiorPos": [-100, 60, 0] },
-        { "id": "ch_ren", "kind": "character", "label": "Ren", "subLabel": "Demo character", "state": "canon", "parent": "be_demo", "lane": "canon", "chrono": 2.5, "lanePos": [0, 0, 0], "interiorPos": [100, 60, 0] }
+        {
+          "id": "sc_1",
+          "kind": "scene",
+          "label": "Scene 1",
+          "state": "canon",
+          "parent": "be_demo",
+          "lane": "canon",
+          "chrono": 1,
+          "lanePos": [
+            0,
+            0,
+            0
+          ],
+          "interiorPos": [
+            -200,
+            0,
+            0
+          ],
+          "sentenceIds": [
+            "s0001",
+            "s0002"
+          ]
+        },
+        {
+          "id": "sc_2",
+          "kind": "scene",
+          "label": "Scene 2",
+          "state": "canon",
+          "parent": "be_demo",
+          "lane": "canon",
+          "chrono": 2,
+          "lanePos": [
+            0,
+            0,
+            0
+          ],
+          "interiorPos": [
+            0,
+            0,
+            0
+          ],
+          "sentenceIds": [
+            "s0003",
+            "s0004"
+          ]
+        },
+        {
+          "id": "sc_3",
+          "kind": "scene",
+          "label": "Scene 3",
+          "state": "canon",
+          "parent": "be_demo",
+          "lane": "canon",
+          "chrono": 3,
+          "lanePos": [
+            0,
+            0,
+            0
+          ],
+          "interiorPos": [
+            200,
+            0,
+            0
+          ],
+          "sentenceIds": [
+            "s0005"
+          ]
+        },
+        {
+          "id": "ch_aoi",
+          "kind": "character",
+          "label": "Aoi",
+          "subLabel": "Demo character",
+          "state": "canon",
+          "parent": "be_demo",
+          "lane": "canon",
+          "chrono": 1.5,
+          "lanePos": [
+            0,
+            0,
+            0
+          ],
+          "interiorPos": [
+            -100,
+            60,
+            0
+          ]
+        },
+        {
+          "id": "ch_ren",
+          "kind": "character",
+          "label": "Ren",
+          "subLabel": "Demo character",
+          "state": "canon",
+          "parent": "be_demo",
+          "lane": "canon",
+          "chrono": 2.5,
+          "lanePos": [
+            0,
+            0,
+            0
+          ],
+          "interiorPos": [
+            100,
+            60,
+            0
+          ]
+        }
       ],
-      "edges": []
+      "edges": [
+        {
+          "id": "e_aoi_sc1",
+          "from": "sc_1",
+          "to": "ch_aoi",
+          "kind": "contains",
+          "state": "canon",
+          "parent": "be_demo",
+          "relationLabel": "appears in"
+        },
+        {
+          "id": "e_aoi_sc2",
+          "from": "sc_2",
+          "to": "ch_aoi",
+          "kind": "contains",
+          "state": "canon",
+          "parent": "be_demo",
+          "relationLabel": "appears in"
+        },
+        {
+          "id": "e_ren_sc2",
+          "from": "sc_2",
+          "to": "ch_ren",
+          "kind": "contains",
+          "state": "canon",
+          "parent": "be_demo",
+          "relationLabel": "appears in"
+        },
+        {
+          "id": "e_ren_sc3",
+          "from": "sc_3",
+          "to": "ch_ren",
+          "kind": "contains",
+          "state": "canon",
+          "parent": "be_demo",
+          "relationLabel": "appears in"
+        }
+      ]
     }
   },
-  "bigEventLabels": { "be_demo": "Demo chapter" }
+  "bigEventLabels": {
+    "be_demo": "Demo chapter"
+  }
 }
