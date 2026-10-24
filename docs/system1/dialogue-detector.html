@@ -14,7 +14,7 @@
 <div class="kicker">sector 03 · phase A — structure · decision patch</div>
 <h1>Dialogue detector — which sentences are spoken</h1>
 <p>
-  <span class="badge v1">status: v1 patch (skeleton)</span>
+  <span class="badge v1">status: v1 patch (legacy path — span selection + dialogue cards are current)</span>
   <span class="badge">repo: <code>src/digger/autostep/patches/dialogue-detector.ts</code></span>
   <span class="badge">model: Jev · <span class="prim choice">choice</span> (span selection)</span>
 </p>
@@ -70,6 +70,7 @@ retired classify-then-stitch design.</div>
 <ul class="tight" style="font-size:14px">
   <li><code>src/digger/autostep/patches/dialogue-detector.ts</code> — two questions per sentence; groups by kind + continues flag into <code>ctx.accepted.dialogueUnits</code>.</li>
   <li>Covered by the mocked-Jev miniloop test: a dialogue sentence is grouped into a unit with zero live model calls.</li>
+  <li>Current path (decisions #11, #17): Jev <b>selects exchange spans</b> over long windows, and exchanges become <b>dialogue cards</b> — unordered participant sets, not per-sentence units. The patch questions above are the legacy miniloop path.</li>
 </ul>
 
 <h2>Open questions — dialogue detection</h2>

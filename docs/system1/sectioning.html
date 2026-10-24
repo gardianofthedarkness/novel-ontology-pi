@@ -57,6 +57,7 @@ sectioning is the provenance anchor for the entire ontology.</p>
   <li><code>src/digger/intake/sectioning.ts</code> — <code>sectionBlock(text, blockIndex)</code>; paragraph split first, then terminator scan with a closer-absorption run (。』 ?! etc.).</li>
   <li>Exposed as <code>novel section &lt;file&gt;</code> — works today, prints JSON.</li>
   <li>Tests: <code>test/sectioning.test.ts</code> — CJK quotes, English abbreviations/decimals, paragraph tracking. All passing.</li>
+  <li>Real-corpus fixes (decision #29): credit-cluster demotion, body-less heading demotion, and heading-only block merge — the real corpus went from 13 chapters / 5 tiny blocks to 7 / 0 in both volumes.</li>
 </ul>
 
 <h2>Open questions — sectioning</h2>

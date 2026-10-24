@@ -14,7 +14,7 @@
 <div class="kicker">sector 07 · phase A — structure · the engine</div>
 <h1>Miniloop engine — windows, batching, gates, recursion</h1>
 <p>
-  <span class="badge v1">status: implemented (skeleton)</span>
+  <span class="badge v1">status: implemented (legacy path — the faculty graph is the default)</span>
   <span class="badge">repo: <code>src/digger/autostep/miniloop.ts</code></span>
   <span class="badge">model: Jev connector · <code>src/ground/connectors/jev.ts</code></span>
 </p>
@@ -65,8 +65,8 @@ everything into the block's ChangeSet. It is the "autostep" in System 1's name.<
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li><code>src/digger/autostep/miniloop.ts</code> — <code>Miniloop.runBlock()</code>: window loop → patch loop → accumulate.</li>
-  <li><code>src/ground/connectors/jev.ts</code> — <code>DecisionModel</code> interface, <code>JevClient</code> (Bearer key from env, pinned model), <code>MockDecisionModel</code> for tests.</li>
+  <li><code>src/digger/autostep/miniloop.ts</code> — <code>Miniloop.runBlock()</code>: window loop → patch loop → accumulate. This is the <b>legacy path</b>; the default live path is the dependency-aware <code>FacultyGraph</code> (decision #16) in <code>src/digger/processing/</code> — Jev keeps segmentation and dialogue structure, scene faculties stream per closed scene under one bounded pool, bounded S2 adjudication for uncertain calls. The miniloop stays available via <code>facultyGraph: false</code>.</li>
+  <li><code>src/ground/connectors/jev.ts</code> — <code>DecisionModel</code> interface, <code>JevClient</code> (real System One wire format, pinned model, key resolved via the CLI secure store — env → store → env-indirection), <code>MockDecisionModel</code> for tests.</li>
   <li>Patch registry order lives in <code>src/digger/autostep/patches/index.ts</code>.</li>
 </ul>
 

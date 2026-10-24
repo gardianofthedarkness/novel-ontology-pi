@@ -14,7 +14,7 @@
 <div class="kicker">sector 04 · phase A — structure · decision patch</div>
 <h1>Name detector — known, new, and nicknamed</h1>
 <p>
-  <span class="badge v1">status: v1 patch (skeleton)</span>
+  <span class="badge v1">status: v1 patch (legacy path — hybrid scan + birth resolution are current)</span>
   <span class="badge">repo: <code>src/digger/autostep/patches/name-detector.ts</code></span>
   <span class="badge">model: code scan + Jev · <span class="prim noul">noul</span> / <span class="prim choice">choice</span></span>
 </p>
@@ -66,6 +66,7 @@ Then the <b>decision model</b> judges the leftovers: is this candidate a <b>new 
 <ul class="tight" style="font-size:14px">
   <li><code>scanKnownNames(ctx)</code> — deterministic scan over <code>ctx.knownEntities</code> name forms; covered by the miniloop test (finds 御坂美琴 with no model call).</li>
   <li><code>nameDetector</code> patch — builds the two question types per candidate from <code>ctx.accepted.nameCandidates</code>; interprets answers into proposals / escalations.</li>
+  <li>Current path (decisions #5, #18, #19): a <b>hybrid scan</b> against the cumulative per-novel name registry (zero-context LLM call only for genuinely new names), folded through the language map, with descriptive candidates and fragments resolved <b>at birth</b> under one strict Jev round. The patch questions above are the legacy miniloop path.</li>
 </ul>
 
 <h2>Open questions — name detection</h2>

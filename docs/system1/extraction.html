@@ -14,14 +14,14 @@
 <div class="kicker">sector 08 · phase B — knowledge</div>
 <h1>Extraction — from structured scenes to ontology</h1>
 <p>
-  <span class="badge open">status: designed, not yet implemented</span>
-  <span class="badge">repo: <code>src/ground/connectors/llm.ts</code> (work model) · extraction step in the block processor</span>
+  <span class="badge">status: implemented (scene faculty in the faculty graph)</span>
+  <span class="badge">repo: <code>src/digger/extraction/extraction.ts</code> · work model via <code>src/ground/connectors/llm.ts</code></span>
   <span class="badge">model: work LLM (user API #1)</span>
 </p>
 <p class="sub">Everything before this sector is structure: sentences, scenes, turns. This is where
 <b>meaning</b> enters. The work LLM reads <b>one structured scene at a time</b> — never a raw chapter —
 and proposes the ontology: events, participants, causal links, and character state changes,
-all in the English-canonical schema, each with its evidence sentences attached.</p>
+in the novel's original language (decision #7 — English is for process, not content), each with its evidence sentences attached.</p>
 
 <table class="io">
   <tr><th>Inputs</th><td>Structured scenes (spans, present cast, turns) + relevant graph context (who these characters are so far)</td></tr>
@@ -46,26 +46,28 @@ all in the English-canonical schema, each with its evidence sentences attached.<
 <h2>Design details</h2>
 <ul class="tight" style="font-size:14px">
   <li><b>Per scene, not per chapter:</b> the old system extracted 3–5 events per raw chapter and lost the thread. A scene is small, cast-bounded, and already structured — extraction quality follows.</li>
-  <li><b>English semantics, original evidence:</b> every event gets an English <code>summaryEn</code> (cross-language search and reasoning) plus the original-language quote and sentence IDs (provenance).</li>
-  <li><b>State is proposed as deltas:</b> "Mikoto: embarrassment +0.3, knowledge += patrol schedule" — state changes are proposals like everything else; the canonical state is always a fold of merged events (sector 12).</li>
+  <li><b>Original language first:</b> event summaries stay in the novel's language (decision #7); the scene's optional <code>summary</code> field is likewise original-language (decision #16). English appears only in process, never in content shown to the user.</li>
+  <li><b>State is proposed as deltas:</b> "Mikoto: embarrassment +0.3, knowledge += patrol schedule" — state changes are proposals like everything else; the canonical state is always a deterministic fold of merged events (sector 10, decision #12).</li>
   <li><b>Causality is explicit:</b> CAUSES edges are first-class proposals with confidence, not list properties on nodes — the legacy design's known weakness, fixed here.</li>
   <li><b>Same gate:</b> extraction proposals join the patches' proposals in one ChangeSet per block. One review, one merge.</li>
 </ul>
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li><code>WorkModel</code> interface in <code>src/ground/connectors/llm.ts</code> — target: Pi's provider layer (<code>@earendil-works/pi-ai</code>), so any user-provided LLM API works.</li>
-  <li>Extraction runs inside <code>BlockProcessor</code> between the miniloop and the merge gate (marked TODO in the skeleton).</li>
-  <li>Output validated against the English schema v1 (<code>src/ground/ontology/types.ts</code>) before a proposal is admitted to the ChangeSet.</li>
+  <li><code>src/digger/extraction/extraction.ts</code> — <code>buildScenePrompt</code> / <code>EXTRACTION_SYSTEM</code> / <code>SceneFacultyResult</code>: the work LLM reads one structured scene and returns events, participants, causal links and state observations. Extraction is a <b>faculty</b> in the faculty graph (decision #16): as each scene closes, it streams under the shared <code>FacultyPool</code>, not as a step wedged between a miniloop and the gate.</li>
+  <li><code>src/digger/extraction/constraints.ts</code> — the constraints channel: the reviewing agent pins corrections that extraction must honor on re-runs.</li>
+  <li>Entities are minted through the <code>formToId</code> registry over the language-map fold (decisions #19, #18): descriptive candidates and name fragments resolve <b>at birth</b> under one strict Jev round instead of minting duplicates.</li>
+  <li><code>WorkModel</code> interface in <code>src/ground/connectors/llm.ts</code> — any user-provided LLM API works as the work model.</li>
+  <li>Output validated against schema v1 (<code>src/ground/ontology/types.ts</code>) before a proposal is admitted to the ChangeSet; extraction proposals reach the reviewer through the semantic fact gate (sector 09, decision #17).</li>
 </ul>
 
 <h2>Open questions — extraction</h2>
 <div class="panel">
   <ul class="tight oq" style="font-size:14px">
     <li>Event granularity.<span>How many events per scene is right? Too few and causality thins; too many and the graph drowns in trivia. The event-worthiness candidate patch (Jev score) could pre-filter — or extraction decides alone.</span></li>
-    <li>State dimensions.<span>Which state does a character carry — emotions, knowledge, goals, relationships, location, possessions? The legacy design had all of these; the fold cost grows with each.</span></li>
+    <li>State dimensions.<span>Decided (decision #10): six dimensions — emotion, knowledge, goals, relationships, location, possessions — folded deterministically; stochastic only when simulating forward from a fork.</span></li>
     <li>Causality: propose or originate?<span>Should the causal-candidate patch pre-propose CAUSES edges for extraction to confirm, or does extraction originate them? Split of labor between Jev and the LLM is undecided.</span></li>
-    <li>Summary fidelity.<span>summaryEn is a translation AND a summary. Spot-check workflow at the merge gate, or a confidence the LLM self-reports?</span></li>
+    <li>Summary fidelity.<span>Settled in part (decisions #7, #16): summaries stay in the novel's language — no translation step to spot-check. The open part is self-reported confidence vs gate spot-checks.</span></li>
   </ul>
 </div>
 

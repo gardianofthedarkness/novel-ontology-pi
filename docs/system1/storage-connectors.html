@@ -59,7 +59,7 @@ through one <code>OntologyStore</code> interface.</p>
 <ul class="tight" style="font-size:14px">
   <li><code>src/ground/ontology/store.ts</code> — the <code>OntologyStore</code> interface every read/write passes through.</li>
   <li><code>src/ground/connectors/bundle.ts</code> — <code>BundleStore</code>: JSONL append/load, manifest. Working today.</li>
-  <li><code>src/ground/connectors/ladybug.ts</code> — <code>LadybugStore</code>: interface-complete; driver wiring (<code>@ladybugdb/core</code> + schema DDL) is the next implementation step.</li>
+  <li><code>src/ground/connectors/ladybug.ts</code> — <code>LadybugStore</code>: driver wired (<code>@ladybugdb/core</code> + schema DDL); <code>novel graph build|reindex</code> rebuilds the disposable graph from the JSONL bundle, and live runs query it.</li>
   <li>CLI surface: <code>novel graph build|reindex</code>, <code>novel bundle export|import</code>, <code>novel query</code>, <code>novel search</code>.</li>
 </ul>
 

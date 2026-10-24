@@ -14,13 +14,13 @@
 <div class="kicker">sector 06 · phase A — structure · decision patch</div>
 <h1>Speaker attribution — whose line is it</h1>
 <p>
-  <span class="badge v1">status: v1 patch (skeleton)</span>
+  <span class="badge v1">status: v1 patch (legacy path — dialogue cards are current)</span>
   <span class="badge">repo: <code>src/digger/autostep/patches/speaker-attribution.ts</code></span>
   <span class="badge">model: Jev · <span class="prim choice">choice</span></span>
 </p>
 <p class="sub">The last structural patch: it takes the dialogue units from sector 03 and decides
 <b>which character each line belongs to</b> — and, as a sub-function, who the line is addressed to.
-Its output — turns with speakers — is the skeleton extraction (08) hangs events on.</p>
+Its output — turns with speakers — is what the faculty extraction (08) hangs events on.</p>
 
 <table class="io">
   <tr><th>Inputs</th><td>Dialogue units (03) + characters present (05) + last speaker + speech-tag sentences</td></tr>
@@ -55,6 +55,7 @@ Its output — turns with speakers — is the skeleton extraction (08) hangs eve
 <ul class="tight" style="font-size:14px">
   <li><code>src/digger/autostep/patches/speaker-attribution.ts</code> — one <code>choice</code> per unit from <code>ctx.accepted.dialogueUnits</code>; unresolved units become escalations.</li>
   <li>Runs last in the v1 registry — it consumes the most context of any patch.</li>
+  <li>Current path (decision #17): speaker assignment is <b>dialogue-card level</b> — an exchange is an unordered participant set, per-candidate Jev membership ≥ 0.8, one shared S2 adjudication per card. The per-unit <code>choice</code> above is the legacy miniloop path.</li>
 </ul>
 
 <h2>Open questions — speaker attribution</h2>

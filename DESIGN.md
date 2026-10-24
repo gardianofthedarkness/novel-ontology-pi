@@ -25,7 +25,7 @@ embedded, no-Docker architecture.
 | Language / runtime | TypeScript on the Pi agent (`earendil-works/pi`) |
 | Repo | New repo; the old one stays as reference/design salvage |
 | Form factor | Pi-agent-compatible **Skill + CLI bundle**: SKILL.md teaches the Pi agent the workflows; the CLI implements *all* functionality |
-| Frontend order | CLI-first; Discord later as a thin layer over the CLI |
+| Frontend order | CLI-first; the playground frontend watches the event stream (sector 13). Discord was the legacy bot form factor, superseded by the Pi Skill + CLI bundle |
 | Ontology storage | Embedded only — no Docker, no hosted server. Canonical form is a portable JSONL bundle; Ladybug is the hot query engine rebuilt from it |
 | Internal language | All storage naming, schema, types, relations and mechanisms in **English**, so novels in any language map to the same paradigm |
 | Bring-your-own-novel | Download, drop in a novel, provide two keys, it works |
@@ -94,7 +94,7 @@ All DB access goes through one `OntologyStore` interface
 (`src/ground/ontology/store.ts`), so the engine can be swapped without touching
 the miniloop or extraction. Sharing an ontology = copying the folder.
 
-## 4. Schema v1 (English-canonical, language-neutral identity)
+## 4. Schema v1 (original-language content, English process, language-neutral identity)
 
 - Identity: opaque IDs only (`char_000123`, `evt_…`). Names are data:
   `names: [{ text, lang, kind: canonical|alias|nickname|title }]`.

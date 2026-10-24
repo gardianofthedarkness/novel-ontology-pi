@@ -14,7 +14,7 @@
 <div class="kicker">sector 11 · phase C — use</div>
 <h1>Timelines &amp; forking — parallel universes from one canon</h1>
 <p>
-  <span class="badge open">status: designed (salvaged from the legacy timeline design), not yet implemented</span>
+  <span class="badge open">status: partially implemented — timeline list/show built, fork create not yet built</span>
   <span class="badge">repo: planned <code>src/timeline/</code> · types in <code>src/ground/ontology/types.ts</code></span>
   <span class="badge">decision assist: Jev · <span class="prim score">score</span> / <span class="prim choice">choice</span></span>
 </p>
@@ -61,8 +61,8 @@ branches off there: sharing everything before the point, diverging after it, wit
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
   <li>Types ready: <code>Branch</code>, <code>CharacterStateAtPoint</code> in <code>src/ground/ontology/types.ts</code>; <code>FORKS_FROM</code> relation + <code>Branch</code> node table in schema v1.</li>
-  <li>CLI surface: <code>novel timeline list|show</code>, <code>novel fork create --at &lt;event-id&gt; --label &lt;name&gt;</code>.</li>
-  <li>State snapshot = <code>OntologyStore.getStateAt(characterId, eventId)</code> folded over the canon prefix.</li>
+  <li>CLI surface: <code>novel timeline list|show</code> — built and working. <code>novel fork create</code> does <b>not</b> exist yet; it is the simulation group's foundation work, not a shipped command.</li>
+  <li>State snapshot = the deterministic fold over the canon prefix (<code>foldStateAt</code> in <code>src/ground/ontology/state.ts</code>, decision #12) — not a store sketch method.</li>
 </ul>
 
 <h2>Open questions — timelines &amp; forking</h2>

@@ -14,7 +14,7 @@
 <div class="kicker">sector 05 · phase A — structure · decision patch</div>
 <h1>Presence detector — who is actually in the scene</h1>
 <p>
-  <span class="badge v1">status: v1 patch (skeleton)</span>
+  <span class="badge v1">status: v1 patch (legacy path — presence layering is current)</span>
   <span class="badge">repo: <code>src/digger/autostep/patches/presence-detector.ts</code></span>
   <span class="badge">model: Jev · <span class="prim noul">noul</span> × candidates</span>
 </p>
@@ -58,6 +58,7 @@ they never witnessed.</p>
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
   <li><code>src/digger/autostep/patches/presence-detector.ts</code> — one <code>noul</code> per candidate in <code>ctx.accepted.presenceCandidates</code>; splits answers into <code>charactersPresent</code> / <code>charactersMentioned</code>.</li>
+  <li>Current path (decision #9, presence layering): Jev proposes presence per window, extraction refines it per scene, and the reviewing agent breaks ties. The patch <code>noul</code> above is the legacy miniloop path.</li>
 </ul>
 
 <h2>Open questions — presence</h2>

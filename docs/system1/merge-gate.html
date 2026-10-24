@@ -14,7 +14,7 @@
 <div class="kicker">sector 09 · phase B — knowledge</div>
 <h1>Merge gate — blocks roll, proposals wait, the main agent decides</h1>
 <p>
-  <span class="badge v1">status: implemented (skeleton)</span>
+  <span class="badge v1">status: implemented</span>
   <span class="badge">repo: <code>src/solidifier/merge/</code> · <code>src/digger/processing/blockProcessor.ts</code></span>
   <span class="badge">reviewer: the main agent (System 2)</span>
 </p>
@@ -70,7 +70,9 @@ memories and capabilities — reviews: <b>approve</b> the merge, <b>hold</b> it,
 <ul class="tight" style="font-size:14px">
   <li><code>src/solidifier/merge/changeset.ts</code> — ChangeSet / ChangeProposal types and lifecycle states.</li>
   <li><code>src/solidifier/merge/apply.ts</code> — the single apply path, status-checked.</li>
-  <li><code>src/digger/processing/blockProcessor.ts</code> — the roll: section → miniloop → extract → review callback → apply / stop / revise (max 2 revision rounds in the skeleton, then it asks the user).</li>
+  <li><code>src/digger/processing/blockProcessor.ts</code> — the roll: section → faculty graph (legacy: miniloop) → review callback → apply / stop / revise. Revisions are surgical (<code>revise.ts</code>, reason required; applied packets refused).</li>
+  <li><b>Semantic fact gate (decision #17):</b> proposals decompose into per-field facts bound to a revision digest (<code>novel changeset facts|decide</code>); apply materializes only accepted facts, and the digest fails closed on pending reviews.</li>
+  <li><b>EM composition (decision #18):</b> birth-time identity output reaches the gate as ordinary identity facts; EM merges run post-apply through the audited fix path, never as gate proposals.</li>
   <li>The Skill teaches the agent its reviewer duties: <code>skills/novel-ontology/SKILL.md</code>.</li>
   <li>Review tooling (2026-10-22): <code>src/solidifier/matching/entityMatch.ts</code> + <code>novel match</code> — duplicate nomination + the System 1 batch checklist; <code>src/solidifier/maintenance/fixes.ts</code> + <code>novel fix …</code> — audited pointwise repairs with graph rebuild; <code>src/solidifier/maintenance/corrections.ts</code> + <code>novel recall</code> — pinned decisions honored on a single-block re-run.</li>
 </ul>
