@@ -14,7 +14,11 @@ export type NodeKind =
   | "location"
   | "scene"
   | "event"
-  | "dialogue";
+  | "dialogue"
+  /** An EPUB illustration: an independent node type between its neighboring scenes (album store projection, not canon). */
+  | "picture"
+  /** A bound EPUB portrait, drawn attached to its character (album store projection, not canon). */
+  | "portrait";
 
 /** canon = merged truth · proposed = ghost awaiting the gate · held = gate held it (visually distinct) */
 export type CanonState = "canon" | "proposed" | "held";
@@ -35,6 +39,11 @@ export interface WorldNode {
     focusSceneId?: string;
   };
   kind: NodeKind;
+  /** Sentence identities covered by this node (scenes only, for now).
+   * Emitted by the CLI view builder in future work; until then it is
+   * optional, and picture placement stays unplaced by design when a
+   * scene carries no coverage — pictures are never force-assigned. */
+  sentenceIds?: string[];
   state: CanonState;
   /** Which big event's interior this node lives in (null = lane-level node). */
   parent: string | null;
@@ -88,7 +97,20 @@ export type PlaygroundEvent =
   | { type: "changeset.merged"; changesetId: string }
   | { type: "entity.merged"; keepId: string; dropId: string }
   | { type: "entity.distinct"; aId: string; bId: string }
-  | { type: "graph.rebuilt" };
+  | { type: "graph.rebuilt" }
+  /** Album pre-process anchors for one block; the orbit resolves them to picture nodes at render. */
+  | { type: "album.anchored"; blockId: string; pictures: { id: string; asset: string; kind: string; sentenceId: string | null }[] }
+  /** Album portrait bindings for one block; the orbit draws each bound portrait attached to its character.
+   * Portraits with no binding emit nothing and stay hidden by design. */
+  | { type: "album.portraitBound"; blockId: string; portraits: AlbumPortrait[] };
+
+/** A portrait bound to one character entity (album store, not canon). */
+export interface AlbumPortrait {
+  id: string;
+  asset: string;
+  entityId: string;
+  entityLabel: string;
+}
 
 export interface EventSource {
   subscribe(handler: (event: PlaygroundEvent) => void): () => void;

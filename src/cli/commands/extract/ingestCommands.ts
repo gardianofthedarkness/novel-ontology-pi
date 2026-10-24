@@ -14,6 +14,7 @@ import type { Entity, OntEvent, Relation, Scene } from "../../../ground/ontology
 import { loadExtractionCounts } from "../../../digger/processing/counts.js";
 import { facultyOptionsFromEnv } from "../../../digger/processing/facultyOptions.js";
 import { runEntityMatching, loadMatchMemory, saveMatchMemory } from "../../../solidifier/matching/emFaculty.js";
+import { albumPortraits, emitAlbumAnchors } from "./albumCommands.js";
 
 export interface IngestOptions {
   /** Legacy miniloop-only smoke option; a configured work model requires fact review. */
@@ -125,6 +126,15 @@ export async function ingestNovel(
   if (opts.autoApprove && workModel) throw new Error("Live semantic extraction requires fact review; --auto-approve cannot bypass it");
 
   const emPerBlock: { blockId: string; nominated: number; merged: number; distinct: number; uncertain: number }[] = [];
+
+  // Album pre-process (intake, not a faculty, not a post-pass): when
+  // the workspace has an album, every block's pictures are known from
+  // intake data alone (offsets + sectioning) before any model runs.
+  // Never fatal to ingest: no album means nothing to emit.
+  try {
+    await emitAlbumAnchors(novelDir, allBlocks, processingLog, log.emit);
+  } catch { /* no album in this workspace: ingest is unchanged */ }
+
   const processor = new BlockProcessor(bundle, jevFromEnv(env), review, {
     novelDir,
     emit: log.emit,
@@ -195,6 +205,19 @@ export async function ingestNovel(
     );
   }
 
+  // End of everything (blocks + chapter sweep + EM, cast stable):
+  // portrait finalization. Best-effort and never fatal to ingest: no
+  // album / no portraits file means nothing to do. Portraits only ever
+  // bind to canon entities (entities.jsonl holds applied entities), so
+  // a held block's not-yet-canon figures cannot claim a portrait early.
+  let album: Awaited<ReturnType<typeof albumPortraits>> | null = null;
+  try {
+    album = await albumPortraits(novelDir, env);
+    if (!album.portraitsFile) album = null;
+  } catch {
+    album = null;
+  }
+
   return {
     status: "ok",
     novelDir,
@@ -210,5 +233,6 @@ export async function ingestNovel(
     stopReason: result.stopReason,
     entityMatching: { perBlock: emPerBlock, chapterSweep: emChapterSweep },
     graph,
+    album,
   };
 }

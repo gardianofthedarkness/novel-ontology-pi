@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type NodeRendererProps } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { BufferGeometry, Float32BufferAttribute, Line, LineSegments, LineBasicMaterial, Quaternion, Vector3, type Group } from "three";
+import { BufferGeometry, CanvasTexture, Float32BufferAttribute, Line, LineSegments, LineBasicMaterial, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
 import { recordColor } from "../archive";
 import type { WorldEdge } from "../types";
 import type { Position3 } from "../data/spatialLayout";
@@ -59,7 +59,134 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
     </mesh>}
   </group>;
 }
-function renderSphere(props: NodeRendererProps) { return <SphereGlyph {...props} />; }
+/** Canvas-generated picture card face: gradient + kind label + short id.
+ * No external image assets and no EPUB-derived art — the card is a
+ * placeholder face until real thumbnails are wired (open follow-up). */
+const pictureTextures = new Map<string, CanvasTexture>();
+function pictureTexture(kind: string, shortId: string): CanvasTexture {
+  const key = `${kind}:${shortId}`;
+  const existing = pictureTextures.get(key);
+  if (existing) return existing;
+  const canvas = document.createElement("canvas");
+  canvas.width = 512; canvas.height = 384;
+  const context = canvas.getContext("2d")!;
+  const gradient = context.createLinearGradient(0, 0, 512, 384);
+  gradient.addColorStop(0, "#1d3a52");
+  gradient.addColorStop(0.55, "#0f2236");
+  gradient.addColorStop(1, "#1a2f45");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 512, 384);
+  context.strokeStyle = "#ffd166";
+  context.lineWidth = 6;
+  context.strokeRect(14, 14, 484, 356);
+  context.strokeStyle = "#ffd16655";
+  context.lineWidth = 2;
+  context.strokeRect(34, 34, 444, 200);
+  context.fillStyle = "#ffd166";
+  context.font = "700 44px sans-serif";
+  context.textAlign = "center";
+  context.fillText(kind.toUpperCase(), 256, 300);
+  context.fillStyle = "#d8ecff";
+  context.font = "400 30px sans-serif";
+  context.fillText(shortId, 256, 344);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  pictureTextures.set(key, texture);
+  return texture;
+}
+
+/** Framed picture card that always faces the camera (billboard).
+ * Mirrors SphereGlyph's morph position/scale handling and sets
+ * userData.orbitalGlyph so the label/position bus keeps working. */
+function PictureGlyph({ node }: NodeRendererProps) {
+  const group = useRef<Group>(null);
+  const data = node.data.glyph as GlyphData;
+  const { draw, morph, reducedMotion, transparent, selected, touched } = data;
+  const { camera } = useThree();
+  useFrame(() => {
+    if (!group.current) return;
+    const from = morph?.from.get(draw.node.id);
+    const pose = from ? interpolatePose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS) : draw;
+    group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1], pose.position[2] - draw.position[2]);
+    group.current.scale.setScalar(pose.radius / draw.radius);
+    /** Fixed orientation: the card's plane stands perpendicular to the
+     * timeline tangent (draw.facing), at all times — never billboarded
+     * to the camera. Falls back to the camera only when no tangent exists. */
+    if (draw.facing) {
+      const tangent = new Vector3(draw.facing[0], draw.facing[1], draw.facing[2]);
+      if (tangent.lengthSq() > 1e-6) {
+        tangent.normalize();
+        group.current.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), tangent);
+      } else {
+        group.current.quaternion.copy(camera.quaternion);
+      }
+    } else {
+      group.current.quaternion.copy(camera.quaternion);
+    }
+  });
+  const width = draw.radius * 2;
+  const height = draw.radius * 1.5;
+  const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? 0.3 : draw.node.state === "held" ? 0.5 : 0.95;
+  const shortId = draw.node.id.replace(/^pic-?/i, "").slice(0, 18) || draw.node.id.slice(0, 18);
+  return <group ref={group} userData={{ orbitalGlyph: draw.node.id }}>
+    {touched && <mesh raycast={noRaycast}><boxGeometry args={[draw.radius * 2.7, draw.radius * 2.7, draw.radius * 2.7]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.95} toneMapped={false} depthTest={false} /></mesh>}
+    <mesh raycast={noRaycast}>
+      <boxGeometry args={[width * 1.08, height * 1.08, Math.max(1, draw.radius * 0.08)]} />
+      <meshStandardMaterial color="#0d1a26" metalness={0.2} roughness={0.6} transparent opacity={opacity} />
+    </mesh>
+    <mesh position={[0, 0, Math.max(1, draw.radius * 0.05)]}>
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial map={pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
+    </mesh>
+    {selected && <mesh raycast={noRaycast} position={[0, 0, Math.max(1, draw.radius * 0.06)]}>
+      <planeGeometry args={[width * 1.14, height * 1.14]} />
+      <meshBasicMaterial color="#ccf4ff" wireframe transparent opacity={0.65} />
+    </mesh>}
+  </group>;
+}
+/** A bound portrait: a portrait-orientation framed card billboarded next to
+ * its character's sphere. Canvas face only — no external artwork is loaded,
+ * so a simulated asset id renders exactly like a real bound portrait. */
+function PortraitGlyph({ node }: NodeRendererProps) {
+  const group = useRef<Group>(null);
+  const data = node.data.glyph as GlyphData;
+  const { draw, morph, reducedMotion, transparent, selected, touched } = data;
+  const { camera } = useThree();
+  useFrame(() => {
+    if (!group.current) return;
+    const from = morph?.from.get(draw.node.id);
+    const pose = from ? interpolatePose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS) : draw;
+    group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1], pose.position[2] - draw.position[2]);
+    group.current.scale.setScalar(pose.radius / draw.radius);
+    group.current.quaternion.copy(camera.quaternion);
+  });
+  const width = draw.radius * 1.5;
+  const height = draw.radius * 2;
+  const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? 0.3 : draw.node.state === "held" ? 0.5 : 0.95;
+  const shortId = draw.node.id.replace(/^por-?/i, "").slice(0, 18) || draw.node.id.slice(0, 18);
+  return <group ref={group} userData={{ orbitalGlyph: draw.node.id }}>
+    {touched && <mesh raycast={noRaycast}><boxGeometry args={[draw.radius * 2.7, draw.radius * 2.7, draw.radius * 2.7]} /><meshBasicMaterial color="#5eead4" wireframe transparent opacity={0.95} toneMapped={false} depthTest={false} /></mesh>}
+    <mesh raycast={noRaycast}>
+      <boxGeometry args={[width * 1.08, height * 1.08, Math.max(1, draw.radius * 0.08)]} />
+      <meshStandardMaterial color="#12211e" metalness={0.2} roughness={0.6} transparent opacity={opacity} />
+    </mesh>
+    <mesh position={[0, 0, Math.max(1, draw.radius * 0.05)]}>
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial map={pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
+    </mesh>
+    {selected && <mesh raycast={noRaycast} position={[0, 0, Math.max(1, draw.radius * 0.06)]}>
+      <planeGeometry args={[width * 1.14, height * 1.14]} />
+      <meshBasicMaterial color="#ccf4ff" wireframe transparent opacity={0.65} />
+    </mesh>}
+  </group>;
+}
+
+function renderSphere(props: NodeRendererProps) {
+  const draw = (props.node.data.glyph as GlyphData).draw;
+  if (draw.node.kind === "picture") return <PictureGlyph {...props} />;
+  if (draw.node.kind === "portrait") return <PortraitGlyph {...props} />;
+  return <SphereGlyph {...props} />;
+}
 
 function AnimatedTimePath({ path, morph, reducedMotion }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean }) {
   const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: "#51b7ff", transparent: true, opacity: path.preview ? 0.85 : 0.6, depthWrite: false })), [path]);

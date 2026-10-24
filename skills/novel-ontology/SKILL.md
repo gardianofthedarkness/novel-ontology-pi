@@ -69,6 +69,33 @@ without keys. Missing credentials require secure entry, never chat.
   portable ontology data. Fork/simulate commands are separate operations;
   choose a branch point only when requested by the user.
 
+## Album (EPUB illustrations + character portraits)
+
+- `novel album import <dir> <book.epub>` is a PRE-PROCESS at intake:
+  a spine walk in reading order writes images to `assets/`, the
+  extracted text to `source/` (ingest THAT file), and anchor records to
+  `ontology/illustrations.jsonl` (cover / plate / story / paratext).
+  Anchors are sentence identities carried through sectioning, never raw
+  character offsets; `novel album list <dir>` resolves each anchor to
+  chapter / block / sentence / scene (scene once the block is ingested).
+  During `novel ingest`, each picture-bearing block emits an
+  `album.anchored` event with its pictures' anchor sentences.
+- Pictures render in the playground as an INDEPENDENT node type between
+  their neighboring scenes (anchor scene + next scene, fractional orbit
+  slot), resolved positionally at render — never force-assigned to a
+  scene, never canon entities, never gate proposals.
+- Portraits are HIDDEN UNTIL BOUND. `tools/album-portraits/portraits.py
+  <dir>` (Python; see its README) crops heads from the plates and
+  writes `ontology/portraits.jsonl`; records with no entity are the
+  orphan pool. Binding is: exact language-map fold match to a single
+  entity at end of run, portraits follow EM merges to the survivor, and
+  — only for characters still without a portrait after everything —
+  reviewer tasks in `ontology/portrait-tasks.jsonl` for the MAIN AGENT
+  to assign, and ONLY if that host agent supports visual input
+  (`NOVEL_HOST_VISION=1`; `=0` means no tasks, portraits stay hidden).
+  Never ask the user to assign a portrait, and never invent one.
+  `novel album portraits <dir>` runs the same finalization standalone.
+
 ## Measure
 
 - `novel inspect <dir>` reports bundle counts, coverage and reference

@@ -10,6 +10,10 @@ export interface OrbitalDraw {
   radius: number;
   role: "main" | "nebula" | "preview" | "connection";
   previewParentId?: string;
+  /** Direction the glyph's +Z faces (picture cards: the timeline tangent,
+   * so the card plane stands perpendicular to the timeline). When absent,
+   * glyphs fall back to camera billboarding. */
+  facing?: Position3;
 }
 export interface OrbitalPath { id: string; points: Position3[]; preview?: boolean; fromPoints?: Position3[] }
 export interface OrbitalPose { position: Position3; radius: number }
