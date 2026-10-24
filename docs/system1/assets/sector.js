@@ -22,7 +22,9 @@ const SECTORS = [
   { n: "06", slug: "speaker-attribution", label: "Speakers", g: "digger" },
   { n: "07", slug: "miniloop-engine", label: "Miniloop engine", g: "digger" },
   { n: "08", slug: "extraction", label: "Extraction", g: "digger" },
-  { n: "09", slug: "merge-gate", label: "Merge gate & EM", g: "solidifier" },
+  { n: "08a", slug: "em-at-birth", label: "EM at birth", g: "digger" },
+  { n: "09", slug: "merge-gate", label: "Merge gate", g: "solidifier" },
+  { n: "09a", slug: "em-global", label: "EM across the novel", g: "solidifier" },
   { n: "10", slug: "storage-connectors", label: "Storage", g: "ground" },
   { n: "11", slug: "timeline-forking", label: "Timelines & forks", g: "simulation" },
   { n: "12", slug: "simulation", label: "Simulation", g: "simulation" },
@@ -34,8 +36,8 @@ function renderNav() {
   const nav = document.getElementById("sitenav");
   if (!nav) return;
   /* The top bar carries only the hierarchy: Overview, Roadmap, and one
-     dropdown per group. The 13 sector pages live inside the dropdowns —
-     never as 13 loose pills in a row. */
+     dropdown per group. The 15 sector pages live inside the dropdowns —
+     never as 15 loose pills in a row. */
   const menus = GROUPS.map((grp) => {
     const items = SECTORS.filter((s) => s.g === grp.g);
     const active = items.some((s) => here === s.slug + ".html");

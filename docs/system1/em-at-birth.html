@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>08a EM at birth — novel-ontology-pi design</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="site" id="sitenav"></nav>
+
+<div class="sectorno">08a</div>
+<div class="kicker">sector 08a · Digger — identity at birth</div>
+<h1>EM at birth — resolve identity before minting</h1>
+<p>
+  <span class="badge">status: implemented</span>
+  <span class="badge">repo: <code>src/digger/extraction/extraction.ts</code> · <code>src/solidifier/matching/fragmentMatch.ts</code> · <code>src/solidifier/matching/entityMatch.ts</code></span>
+  <span class="badge">model: one strict Jev round · attach at confidence ≥ 0.85</span>
+</p>
+<p class="sub">When extraction meets a name it has not seen — a descriptive phrase
+("the silver-haired girl") or a name fragment ("美琴" for 御坂美琴) — it does
+<b>not</b> mint a new entity first and sort it out later. Identity is resolved
+<b>at birth</b>: one strict Jev round checks whether the candidate belongs to
+someone already in the graph. Only true newcomers mint. This is decision #18's
+first layer, and it runs inside the Digger, while the block is still being dug.</p>
+
+<table class="io">
+  <tr><th>Inputs</th><td>A candidate (descriptive text or name form) + the existing entities + the scene it appeared in</td></tr>
+  <tr><th>Outputs</th><td>Either an alias attached to an existing entity (confidence ≥ 0.85), or a newly minted entity; variant spellings recorded as forms, stored names never rewritten</td></tr>
+  <tr><th>Depends on</th><td>04 Names (registry + language-map fold), 08 Extraction</td></tr>
+  <tr><th>Feeds into</th><td>09 Merge gate (birth output arrives as identity facts); 09a Global EM (the backstop for what birth misses)</td></tr>
+</table>
+
+<h2>Demo — a description finds its owner</h2>
+<div class="panel">
+  <div class="caption" id="caption"><span class="stepno">▶</span>The demo plays and loops on its own.</div>
+  <div class="progressdots" id="dots"></div>
+  <div class="stage">
+    <div class="card" style="margin:0 0 10px"><h3 style="font-size:13.5px">Scene C · s0012–s0014 · station</h3>
+      <p style="margin:2px 0">known cast: 御坂美琴 · candidate: 「银发的少女」("the silver-haired girl")</p></div>
+    <div id="events"></div>
+    <div class="items" id="props"></div>
+  </div>
+  <p style="margin-top:12px"><button class="replay" id="replay">↻ Replay</button></p>
+</div>
+
+<h2>Design details</h2>
+<ul class="tight" style="font-size:14px">
+  <li><b>Reading beats derived features:</b> the identity pass reads the passage first. Structural features inherit extraction noise, so they are the backstop (09a), not the first check.</li>
+  <li><b>One strict round:</b> a descriptive candidate gets exactly one strict Jev round; at confidence ≥ 0.85 the description attaches as an alias. Below that, it stays a candidate — the global pass will re-check it later.</li>
+  <li><b>Fragments fold at birth:</b> a name fragment folds through a variant-folded containment trigger plus the same strict Jev round. The round is load-bearing: naive substring folding can mis-attach ("美琴" is safe; a bare shared character is not).</li>
+  <li><b>Names are never rewritten:</b> variant spellings resolve through the language-map fold (decision #19) and are recorded as forms. The stored name stays exactly as the novel wrote it.</li>
+  <li><b>Transient figures stay out:</b> the transient rule (decision #8) still applies — an unnamed figure with no setup behind it is not minted, even if it arrives with a description.</li>
+</ul>
+
+<h2>Implementation</h2>
+<ul class="tight" style="font-size:14px">
+  <li><code>src/digger/extraction/extraction.ts</code> — extraction mints through <code>mintEntity</code> with aliases attached; descriptive candidates arrive flagged (<code>descriptive: boolean</code>) in the scene result, and alias proposals (<code>add_alias</code>) are separated from new-entity proposals before the ChangeSet is built.</li>
+  <li><code>src/solidifier/matching/fragmentMatch.ts</code> — <code>containmentTargets</code>: the variant-folded containment trigger for fragment candidates.</li>
+  <li><code>src/solidifier/matching/entityMatch.ts</code> — <code>CONFIDENT_THRESHOLD = 0.85</code>: the attach bar for the strict round. The <code>formToId</code> registry is keyed by the language-map fold, so variant spellings resolve at ingest instead of minting duplicates.</li>
+  <li>Birth output reaches the reviewer as ordinary identity facts under the semantic fact gate (sector 09, decision #17) — it is not a side channel around the gate.</li>
+</ul>
+
+<h2>Open questions — EM at birth</h2>
+<div class="panel">
+  <ul class="tight oq" style="font-size:14px">
+    <li>Birth-order races.<span>Two candidates for the same person can arrive in the same block before either is attached. Known v1 limit; the global pass (09a) is the current safety net.</span></li>
+    <li>Guarding the cast-name mint path.<span>Extraction's unguarded cast-name mint path should get the same fragment round (v2). Spec written, awaiting ratification.</span></li>
+    <li>Cross-script pairs.<span>安娜 vs "Anna Sprengel" cannot fold through the language map — co-presence nomination is the open design item, shared with 09a.</span></li>
+  </ul>
+</div>
+
+<div class="pager" id="pager"></div>
+<footer>novel-ontology-pi · design by sector · 2026-10-24</footer>
+</div>
+<script src="assets/sector.js"></script>
+<script>
+function resetAll(){document.getElementById('events').innerHTML='';document.getElementById('props').innerHTML='';}
+const steps=[
+ {t:2800,cap:["A descriptive candidate arrives","Extraction proposes a figure it has never seen as a name: 「银发的少女」. Before anything is minted, the birth pass asks one strict question — does this description belong to someone already in the graph?"],run(){document.getElementById('events').innerHTML='<div class="verdict warn on">Candidate · <b>「银发的少女」</b> — descriptive, no registry hit <span style="color:var(--faint)">strict Jev round: does it belong to 御坂美琴?</span></div>';}},
+ {t:2800,cap:["Strict round attaches, nothing mints","Confidence 0.91 — above the 0.85 bar. The description attaches as an alias on 御坂美琴. No duplicate entity, no later merge to clean up."],run(){document.getElementById('events').innerHTML+='<div class="verdict good on">Alias attached · <b>「银发的少女」 → 御坂美琴</b> <span style="color:var(--faint)">confidence 0.91 · stored name unchanged</span></div>';}},
+ {t:2200,cap:["A true newcomer still mints","A second candidate — a station clerk with no match anywhere — fails the round and mints cleanly. Birth resolution is a filter, not a ban on new entities."],run(){document.getElementById('props').innerHTML='<span class="chip">＋ add_alias ×1</span> <span class="chip">＋ upsert_entity ×1 (newcomer)</span>';}},
+];
+runSectorDemo(steps.map(s=>({...s,reset:resetAll})));
+</script>
+</body>
+</html>

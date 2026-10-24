@@ -35,7 +35,9 @@ const PAGES = [
   "speaker-attribution.html",
   "miniloop-engine.html",
   "extraction.html",
+  "em-at-birth.html",
   "merge-gate.html",
+  "em-global.html",
   "storage-connectors.html",
   "timeline-forking.html",
   "simulation.html",
@@ -116,14 +118,14 @@ const LABELS = { "index.html": "Overview", "roadmap.html": "🗺 Roadmap", "play
   "scene-boundary.html": "02 Scene boundary", "dialogue-detector.html": "03 Dialogue",
   "name-detector.html": "04 Names", "presence-detector.html": "05 Presence",
   "speaker-attribution.html": "06 Speakers", "miniloop-engine.html": "07 Miniloop engine",
-  "extraction.html": "08 Extraction", "merge-gate.html": "09 Merge gate & EM",
+  "extraction.html": "08 Extraction", "em-at-birth.html": "08a EM at birth", "merge-gate.html": "09 Merge gate", "em-global.html": "09a EM across the novel",
   "storage-connectors.html": "10 Storage", "timeline-forking.html": "11 Timelines & forks",
   "simulation.html": "12 Simulation" };
 /* The bar carries only the hierarchy: Overview, Roadmap, and one
-   dropdown per group — the 13 sector pages live inside the dropdowns. */
+   dropdown per group — the 15 sector pages live inside the dropdowns. */
 const GROUPS = [
-  { label: "⛏ Digger", pages: ["sectioning.html", "scene-boundary.html", "dialogue-detector.html", "name-detector.html", "presence-detector.html", "speaker-attribution.html", "miniloop-engine.html", "extraction.html"] },
-  { label: "🧱 Solidifier", pages: ["merge-gate.html"] },
+  { label: "⛏ Digger", pages: ["sectioning.html", "scene-boundary.html", "dialogue-detector.html", "name-detector.html", "presence-detector.html", "speaker-attribution.html", "miniloop-engine.html", "extraction.html", "em-at-birth.html"] },
+  { label: "🧱 Solidifier", pages: ["merge-gate.html", "em-global.html"] },
   { label: "📦 Ground", pages: ["storage-connectors.html"] },
   { label: "Simulation group", pages: ["timeline-forking.html", "simulation.html"] },
   { label: "Frontend", pages: ["playground-frontend.html"] },

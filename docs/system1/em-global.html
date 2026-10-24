@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>09a EM across the novel — novel-ontology-pi design</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="site" id="sitenav"></nav>
+
+<div class="sectorno">09a</div>
+<div class="kicker">sector 09a · Solidifier — identity across the novel</div>
+<h1>EM across the novel — the strict backstop</h1>
+<p>
+  <span class="badge">status: implemented</span>
+  <span class="badge">repo: <code>src/solidifier/matching/</code> (structuralMatch, emFaculty, entityMatch)</span>
+  <span class="badge">CLI: <code>novel match</code> · <code>novel fix merge</code></span>
+</p>
+<p class="sub">Birth resolution (08a) catches most duplicates. What it misses — spelling
+twins, under-threshold declines, referents named only in later chapters — is the
+EM faculty's job. It re-checks identity <b>structurally</b>, across the whole
+graph, and it is deliberately strict: a miss is cheap, because the check re-runs
+every block and scores only grow — while a bad merge is permanent.</p>
+
+<table class="io">
+  <tr><th>Inputs</th><td>Entity pairs + graph structure (shared scenes, shared neighbors, co-actor events) + the verdict memory in <code>&lt;novelDir&gt;/matching.json</code></td></tr>
+  <tr><th>Outputs</th><td>A merge through the audited fix path, or a distinct verdict remembered until the evidence grows</td></tr>
+  <tr><th>Depends on</th><td>08a EM at birth (what it missed), 09 Merge gate (post-apply composition), 10 Storage</td></tr>
+  <tr><th>Feeds into</th><td>Canon (audited merges) · the playground join animation · <code>novel match</code> retries</td></tr>
+</table>
+
+<h2>Demo — a score grows until it merges</h2>
+<div class="panel">
+  <div class="caption" id="caption"><span class="stepno">▶</span>The demo plays and loops on its own.</div>
+  <div class="progressdots" id="dots"></div>
+  <div class="stage">
+    <div class="card" style="margin:0 0 10px"><h3 style="font-size:13.5px">Pair under watch · 御坂美琴 × "Misaka" (spelling twin)</h3>
+      <p style="margin:2px 0">birth missed it: the twin arrived in a later chapter, under threshold. Structure will catch it.</p></div>
+    <div id="events"></div>
+    <div class="items" id="props"></div>
+  </div>
+  <p style="margin-top:12px"><button class="replay" id="replay">↻ Replay</button></p>
+</div>
+
+<h2>Design details</h2>
+<ul class="tight" style="font-size:14px">
+  <li><b>Structural nomination, strict bar:</b> score ≥ 0.6, with a support floor of ≥ 2 shared scenes or ≥ 3 shared neighbors. Zero co-actor events is a veto — two figures who act together are not the same person. Alias-linked pairs are excluded outright.</li>
+  <li><b>One batched checklist per pass:</b> nominated pairs go through a single batched Jev checklist, not one call per pair. The checklist is the only model step; nomination itself is code.</li>
+  <li><b>Two rhythms:</b> per block, only pairs touching new entities are checked. At chapter close, the old × old sweep runs over every pair the block passes skipped.</li>
+  <li><b>Distinct verdicts are remembered:</b> a pair judged distinct is written to <code>matching.json</code> and skipped until its shared evidence grows by +2. Scores only grow, so a miss today can become a merge next chapter — safely.</li>
+  <li><b>Merges never bypass the audit:</b> a confirmed merge goes through the audited post-apply <code>mergeEntities</code> path, never as a gate proposal. EM composes under the semantic fact gate (decision #17): the revision digest fails closed on pending reviews.</li>
+</ul>
+
+<h2>Implementation</h2>
+<ul class="tight" style="font-size:14px">
+  <li><code>src/solidifier/matching/structuralMatch.ts</code> — <code>buildStructuralIndex</code> / <code>nominateStructuralCandidates</code>: the nomination pass over shared scenes and neighbors.</li>
+  <li><code>src/solidifier/matching/emFaculty.ts</code> — the EM faculty: per-block passes over new-entity pairs, the chapter-close old × old sweep, and the <code>matching.json</code> memory (read/write, +2 growth rule).</li>
+  <li><code>src/solidifier/matching/entityMatch.ts</code> — thresholds: <code>CONFIDENT_THRESHOLD = 0.85</code>, <code>UNCERTAIN_THRESHOLD = 0.45</code>, <code>DISTINCT_THRESHOLD = 0.6</code>; <code>nominateMatchCandidates</code> for the <code>novel match</code> CLI surface.</li>
+  <li><code>src/solidifier/maintenance/fixes.ts</code> — <code>mergeEntities</code>: the audited merge path. Follow-up open: <code>novel fix merge</code> does not emit join events yet.</li>
+  <li>Matched entities get a playground join animation (orbital morph + classic glide) — the user sees the merge happen in the graph (sector 13).</li>
+</ul>
+
+<h2>Open questions — EM across the novel</h2>
+<div class="panel">
+  <ul class="tight oq" style="font-size:14px">
+    <li>Volume-scale thresholds.<span>Nomination score, support floor and the +2 rule were set on small runs. They need a volume-scale retest — that rides on the Phase 3 whole-novel run, currently paused.</span></li>
+    <li>Cross-script pairs.<span>安娜 vs "Anna Sprengel" is invisible to both the language map and structural nomination until the two appear together — co-presence nomination is the open design item, shared with 08a.</span></li>
+    <li>Join events for manual merges.<span><code>novel fix merge</code> merges without emitting the playground join animation. Small follow-up, not yet built.</span></li>
+  </ul>
+</div>
+
+<div class="pager" id="pager"></div>
+<footer>novel-ontology-pi · design by sector · 2026-10-24</footer>
+</div>
+<script src="assets/sector.js"></script>
+<script>
+function resetAll(){document.getElementById('events').innerHTML='';document.getElementById('props').innerHTML='';}
+const steps=[
+ {t:2800,cap:["A pair the birth pass missed","The spelling twin \"Misaka\" arrived chapters later and slipped under the birth threshold. It shares scenes and neighbors with 御坂美琴 — structure notices what names missed."],run(){document.getElementById('events').innerHTML='<div class="verdict warn on">Nominated · <b>御坂美琴 × "Misaka"</b> <span style="color:var(--faint)">shared scenes: 1 · shared neighbors: 2 · score 0.52 — below bar</span></div>';}},
+ {t:2800,cap:["Scores only grow","Two chapters later the pair shares a second scene. Score 0.67 — past the 0.6 bar, support floor met. The batched checklist confirms: same person."],run(){document.getElementById('events').innerHTML+='<div class="verdict good on">Checklist confirms · <b>same entity</b> <span style="color:var(--faint)">score 0.67 · shared scenes 2 · no co-actor events</span></div>';}},
+ {t:2200,cap:["Audited merge, visible join","The merge runs through the audited fix path — never as a gate proposal — and the playground plays the join animation. One entity, two names, full history."],run(){document.getElementById('props').innerHTML='<span class="chip">＋ mergeEntities (audited)</span> <span class="chip">＋ join animation</span>';}},
+];
+runSectorDemo(steps.map(s=>({...s,reset:resetAll})));
+</script>
+</body>
+</html>
