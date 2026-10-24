@@ -93,6 +93,34 @@ test("one stored turn per sphere appears only below its scene; legacy summary di
   assert.deepEqual(orbitalContents(nodes[0], bottom).map((node) => node.id), ["turn-0", "turn-1"]);
 });
 
+test("terminal scenes expose all events and dialogue without record or dialogue child pages", () => {
+  const scene = record("scene", "scene");
+  const event = record("event", "event", -1);
+  const turns = Array.from({ length: 85 }, (_, index) => ({ ...record(`turn-${index}`, "dialogue", index), dialogue: { turn: index, speakerId: null }, state: index === 42 ? "held" as const : "canon" as const }));
+  const nodes = [scene, event, ...turns, record("legacy", "dialogue"), record("person", "character"), record("place", "location"), record("unrelated", "event")];
+  const edges = [relation(scene.id, event.id), ...turns.map(turn => relation(event.id, turn.id)), relation(scene.id, "legacy"), relation("person", scene.id), relation("place", event.id), { ...relation(scene.id, "unrelated"), id: "view-membership" }];
+  const world = worldWith(nodes, edges);
+  const before = structuredClone(world);
+  const overview = orbitalLevel(world, chapter);
+  const bottom = orbitalLevel(world, overview.main.find(entry => entry.node.id === scene.id)!.scope);
+  assert.deepEqual(bottom.main.map(entry => entry.node.id), [event.id, ...turns.map(turn => turn.id)]);
+  assert.ok(bottom.main.every(entry => !entry.scope && !entry.node.cluster));
+  assert.deepEqual(orbitalContents(scene, bottom), bottom.main.map(entry => entry.node));
+  assert.equal(bottom.main.find(entry => entry.node.id === "turn-42")?.node.state, "held");
+  assert.deepEqual(bottom.nebula.map(node => node.id), ["person", "place"]);
+  assert.ok(overview.main.every(entry => entry.node.kind === "scene" || entry.node.id === "unrelated"));
+  assert.deepEqual(world, before);
+});
+
+test("unassigned events and dialogues appear directly in chapter chronology until a scene arrives", () => {
+  const loose = Array.from({ length: 45 }, (_, index) => record(`loose-${index}`, index % 2 ? "dialogue" : "event", index));
+  const world = worldWith([...scenes(21).map(node => ({ ...node, chrono: node.chrono * 3 })), ...loose]);
+  const level = orbitalLevel(world, chapter);
+  assert.ok(loose.every(node => level.main.some(entry => entry.node.id === node.id && !entry.scope && !entry.node.cluster)));
+  assert.equal(level.main.filter(entry => entry.scope).length, 20);
+  assert.deepEqual(level.main.map(entry => entry.node.chrono), level.main.map(entry => entry.node.chrono).sort((first, second) => first - second));
+});
+
 test("relations show only selected visible endpoints and never projected aggregates or time links", () => {
   const level = orbitalLevel(worldWith([record("scene", "scene"), record("person", "character")]), chapter);
   const draws = layoutOrbitalLevel(level).draws;

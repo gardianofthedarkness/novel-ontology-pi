@@ -1,4 +1,5 @@
 import { sectionBlock } from "../text/sectioning.js";
+import { randomUUID } from "node:crypto";
 import { Miniloop } from "../autostep/miniloop.js";
 import {
   pinsForBlock,
@@ -18,7 +19,7 @@ import { applyChangeSet } from "../merge/apply.js";
 import { saveChangeSet } from "../merge/changesetStore.js";
 import { EventLog } from "../events/log.js";
 import type { EventSink } from "../events/types.js";
-import { saveWorkingDraft, type WorkingDraft } from "./draft.js";
+import { saveWorkingDraft, touchedDraftIds, type WorkingDraft } from "./draft.js";
 import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../extraction/constraints.js";
 import { FacultyGraph, type FacultyGraphOptions } from "./facultyGraph.js";
 import { groundFacultyProposals } from "./facultyGrounding.js";
@@ -117,6 +118,7 @@ export class BlockProcessor {
       ? await this.observation.loadCorrections()
       : [];
     for (const [blockIndex, block] of blocks.entries()) {
+      const observationId = randomUUID();
       await emit?.({ type: "block.started", blockId: block.blockId });
       const { sentences } = sectionBlock(block.text, block.sectionIndex ?? mergedBlocks.length);
       await emit?.({ type: "sectioned", blockId: block.blockId, sentences: sentences.length });
@@ -130,6 +132,7 @@ export class BlockProcessor {
         let publishing = Promise.resolve();
         const publish = (update: Partial<WorkingDraft>, announce = false) => {
           publishing = publishing.then(async () => {
+            const previous = draft;
             draft = { ...draft, ...update, updatedAt: new Date().toISOString() };
             if (this.observation.novelDir) {
               await saveWorkingDraft(this.observation.novelDir, draft);
@@ -139,7 +142,7 @@ export class BlockProcessor {
               // decisions landed", never the empty initial draft or the
               // gate transition (changeset.pending already says that).
               if (announce) {
-                await emit?.({ type: "draft.updated", blockId: draft.blockId, patchId: draft.patchId, stage: draft.stage });
+                await emit?.({ type: "draft.updated", blockId: draft.blockId, patchId: draft.patchId, stage: draft.stage, touchedIds: touchedDraftIds(previous, draft) });
               }
             }
           });
@@ -153,8 +156,30 @@ export class BlockProcessor {
         const constraintsValue = corrections.find(correction => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)?.value;
         const constraints = constraintsValue ? parseExtractionConstraints(constraintsValue) : undefined;
         const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
+        let callSequence = 0;
+        let telemetry = Promise.resolve();
+        const observedDecisions: DecisionModel = {
+          modelId: this.decisions.modelId,
+          decide: async (state, questions, options) => {
+            const callId = `${observationId}:system1:${revisionRounds}:${++callSequence}`;
+            const faculty = (questions[0]?.key.split(":")[0] ?? "decisions").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+            await emit?.({ type: "faculty.activity", blockId: block.blockId, callId, faculty, system: "system1", status: "started" });
+            try {
+              const result = await this.decisions.decide(state, questions, options);
+              await emit?.({ type: "faculty.activity", blockId: block.blockId, callId, faculty, system: "system1", status: "completed" });
+              return result;
+            } catch (error) {
+              await emit?.({ type: "faculty.activity", blockId: block.blockId, callId, faculty, system: "system1", status: "failed" });
+              throw error;
+            }
+          },
+        };
+        const graphOptions = this.observation.facultyGraph || {};
         const graph = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
-          ? new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}) : undefined;
+          ? new FacultyGraph(observedDecisions, this.observation.workModel, { ...graphOptions, onCall: call => {
+            graphOptions.onCall?.(call);
+            telemetry = telemetry.then(() => emit?.({ type: "faculty.activity", blockId: block.blockId, callId: `${observationId}:${revisionRounds}:${call.callId}`, faculty: call.faculty, system: call.system ?? "work", status: call.status }));
+          } }) : undefined;
         const margin = graph?.router.contextWindow(["scene-boundaries", "dialogue-boundaries", "dialogue-attribution", "dialogue-participants"]) ?? 0;
         const contextSentences = margin > 0 ? [
           ...(blockIndex > 0 ? sectionBlock(blocks[blockIndex - 1].text, blocks[blockIndex - 1].sectionIndex ?? blockIndex - 1).sentences.slice(-margin) : []),
@@ -219,6 +244,7 @@ export class BlockProcessor {
         }
         if (this.observation.semanticReview) result.changeset.reviewSource = sentences;
         if (this.observation.novelDir) await saveChangeSet(this.observation.novelDir, result.changeset);
+        await telemetry;
         await publish({ stage: "gate", patchId: "merge-gate", proposals: result.changeset.proposals });
         // No event emissions here: saveChangeSet is the emitter of record
         // for proposal.added / changeset.<status> — it fires them only

@@ -39,7 +39,10 @@ node tools/pi-review/run.mjs /private/job.json
 - `volumes` is an ordered list of `{id, input, workspace?}`. Each volume
   gets a separate database. Omitted workspaces are fresh and private
   inside this attempt. Specify a workspace deliberately to resume it;
-  original input and 24,000-character block boundaries must be unchanged.
+  original input basename, applied prefix and 24,000-character block boundaries
+  must be unchanged. The manifest assigns only unapplied blocks while the
+  viewer retains every chapter; approval/application audit and stored source
+  are checked before skipping an applied block.
 - `minutes` bounds the run. `limits` sets recalls/revisions per block and
   total command calls. The example's 2 recalls / 3 revisions are historical
   test settings, **not recommended universal limits for large packets**.
@@ -112,8 +115,12 @@ chat or a breakpoint debugger. No server or public tunnel is opened.
 working drafts into ghosts, chapter grouping, graph edges, gate statuses,
 and metadata-only activity for an authorized frontend. It intentionally
 contains derived names/summaries: **it is not a source-free public export**.
-Never serve arbitrary workspace files. The task-local tunnel/polling UI
-is not packaged here; existing frontend transport contracts are unchanged.
+Never serve arbitrary workspace files. `serve.mjs` provides a loopback-only,
+expiring private viewer; public tunnel provisioning remains separate. A host
+can also mount `streamSnapshots` from `live-stream.mjs` at the private
+`api/live/stream` endpoint, using its existing authorized snapshot reader and
+explicit expiry. The phone viewer prefers this stream and falls back to its
+existing `api/live` polling endpoint when streaming is unavailable.
 
 Structural validation rejects dangling/mistyped references and overlapping
 scene presence/mentions. The CJK-summary heuristic is only a warning check
@@ -121,4 +128,90 @@ for Chinese-containing inputs, not a general language detector or semantic
 validation. Full-volume stability and automatic semantic correctness are
 not established by a single integration test.
 
+### Live construction activity
+
+The phone snapshot includes `activity`: actual observed faculty calls, the active
+construction chapter, ordered visible touches, and ID-only EM merge/distinct
+events. `faculty.activity` records correlate S1 decisions, ordinary CLI work and
+actual S2 fallback starts/completions/failures. `draft.updated.touchedIds` names
+only newly created or edited draft records; source text and model payloads are
+not transported. Several records published together are explicitly a batch,
+not an invented ordering of parallel model decisions.
+
+Activity follow frames the overview once when its actual page changes, never
+re-centering the camera on consecutive edits in the same page. Scene pages are
+terminal: all their event/dialogue spheres appear together without deeper
+record/dialogue pages. A refresh cursor collects every visible touched ID since
+the preceding snapshot; containing nodes and a shared blue bound highlight the
+whole batch. Cross-scene batches choose their shared ancestor page. Headings,
+breadcrumbs and edit captions follow the active page and current processor step.
+
+The activity toggle follows work inside the existing orbital universe, navigating
+the ordinary chapter, scene-group and terminal scene layers without flattening
+them or mounting another graph. Toggle again to restore the bookmarked orbital
+path, selected/revealed record, camera position/target, zoom, focal offset and
+inspector. A blue wire box and readable label mark the latest visible touch or
+its containing orbital node. Parallel dialogue ghosts can appear before scene
+segmentation and attach in place once their parent scene arrives. Faculty
+activity expands into the observed call graph; completed calls
+are not presented as still running. EM notifications require real new events,
+not replays of historical merges on reconnect. Historical sessions without
+faculty-level telemetry explicitly cannot distinguish System 2 fallback from
+ordinary CLI work-model calls. New instrumentation does not recover absent past
+metadata or require restarting an in-flight paid job.
+
+Live snapshots are pushed after file changes with a 100 ms coalescing window,
+one projection in flight, and a two-second safety check for missed notifications.
+The initial snapshot is followed by changed fields only; unchanged chapters are
+not resent or re-laid out for faculty/counter updates. Gzip is flushed per SSE
+frame to avoid tunnel buffering. Disconnects release file watchers; reconnects
+receive current truth rather than queued obsolete animations. Slow clients are
+disconnected instead of accumulating an unbounded stream backlog.
+The activity count measures construction log records, not model calls: a real
+packet can publish hundreds of proposals at once. Such batches are not slowed
+down or split into fabricated intermediate agent steps.
+
+### Interactive Pi console
+
+`PiConsole` is an expandable glass overlay showing actual command/status entries
+and user/assistant messages. It uses private host endpoints `GET api/pi` and
+`POST api/pi/messages`, not an unrestricted terminal. Hosts mount `createPiConsole`
+from `pi-console.mjs` behind the existing private viewer path. POST additionally
+requires an independent `X-Pi-Control` capability and an exact allowed Origin;
+the operator link supplies that capability in its fragment, never a query string.
+Keep the queue/configuration outside the public web root and set explicit expiry.
+
+`runConsoleSession` serially delivers queued messages to the real Pi SDK session.
+It makes no model calls until a user message arrives. Existing scoped Bash and
+review/merge guards wrap that session unchanged. `run.mjs --interactive` uses the
+same database and remaining source blocks, not a replay or a new extraction
+pipeline. It generates the private console capability after checking credentials.
+
+Build the CLI/frontend and install the optional SDK first, then use the same
+private home for the runner and viewer in separate terminals:
+
+```sh
+npm run build --prefix apps/playground
+NOVEL_REVIEW_HOME=/private/review-home node tools/pi-review/run.mjs \
+  /private/job.json --interactive
+NOVEL_REVIEW_HOME=/private/review-home node tools/pi-review/serve.mjs \
+  --port 4324 --minutes 90
+```
+
+Open the printed operator link, expand **Pi console**, and send your instruction.
+Starting either process never sends a continuation prompt. For an independently
+authorized tunnel, set `--origin https://your-tunnel-host` explicitly; the server
+still binds only `127.0.0.1`. Do not share the operator capability in PRs/issues.
+Keep `minutes` within the runner's job window. Server/worker expiry and stale
+heartbeat checks disable messages rather than silently extending access.
+
+Queue records are private, bounded and UUID-deduplicated across processes and
+restarts. Queued, processing, consumed and failed are distinct; ambiguous claims
+are retained without automatic paid replay. A worker heartbeat controls whether
+the composer accepts messages. Replies are bounded text; command arguments,
+raw tool outputs, credentials and private review payloads are not exported by
+the transcript projector. Messages arriving during a turn wait for that turn to
+finish; opening or expanding the viewer never starts the next chapter.
+
 See the [real live-test report](../../docs/reports/pi-review-live-2026-10-22.md).
+See also the [orbital activity and console validation](../../docs/reports/orbital-live-console-2026-10-24.md).

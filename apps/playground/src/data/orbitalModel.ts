@@ -9,7 +9,7 @@ export interface OrbitalWorld {
 export interface OrbitalScope {
   key: string;
   label: string;
-  kind: "volume" | "chapter" | "scenes" | "scene" | "records" | "dialogue";
+  kind: "volume" | "chapter" | "scenes" | "scene";
   chapterId?: string;
   ids?: string[];
   sceneId?: string;
@@ -32,6 +32,30 @@ export const isNebula = (node: WorldNode) => node.kind === "character" || node.k
 export const isSourceRelation = (edge: WorldEdge) => !edge.id.includes(":narrative-order:") && !edge.id.startsWith("view-");
 const order = (first: WorldNode, second: WorldNode) => first.chrono - second.chrono || first.id.localeCompare(second.id);
 
+function sceneRecords(nodes: WorldNode[], edges: WorldEdge[], sceneIds: string[]): WorldNode[] {
+  const records = new Map(nodes.filter((node) => node.kind === "event" || node.kind === "dialogue").map((node) => [node.id, node]));
+  const children = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (edge.kind !== "contains" || !isSourceRelation(edge) || !records.has(edge.to)) continue;
+    const ids = children.get(edge.from) ?? [];
+    ids.push(edge.to);
+    children.set(edge.from, ids);
+  }
+  const found = new Set<string>();
+  const pending = [...sceneIds];
+  for (let index = 0; index < pending.length; index++) {
+    for (const id of children.get(pending[index]) ?? []) {
+      if (found.has(id)) continue;
+      found.add(id);
+      pending.push(id);
+    }
+  }
+  return [...found].map((id) => records.get(id)!).sort(order);
+}
+
+const visibleRecords = (records: WorldNode[]) => records.some((node) => node.dialogue) ? records.filter((node) => node.kind !== "dialogue" || node.dialogue) : records;
+const recordEntry = (node: WorldNode): OrbitalEntry => ({ node, members: [node.id] });
+
 export function representativeScene(nodes: WorldNode[], edges: WorldEdge[], candidates = nodes.filter((node) => node.kind === "scene")): WorldNode | undefined {
   const affinity = relationshipAffinities(nodes, edges.filter(isSourceRelation));
   const scores = new Map<string, number>();
@@ -46,9 +70,7 @@ export function orbitalContents(node: WorldNode, level: OrbitalLevel): WorldNode
     return level.sourceNodes.filter((entry) => ids.has(entry.id)).sort(order);
   }
   if (node.kind !== "scene") return [];
-  const ids = new Set(level.sourceEdges.filter((edge) => edge.from === node.id && edge.kind === "contains" && isSourceRelation(edge)).map((edge) => edge.to));
-  const records = level.sourceNodes.filter((entry) => ids.has(entry.id) && !isNebula(entry));
-  return records.filter((entry) => !records.some((node) => node.dialogue) || entry.kind !== "dialogue" || entry.dialogue).sort(order);
+  return visibleRecords(sceneRecords(level.sourceNodes, level.sourceEdges, [node.id]));
 }
 
 export function progressiveNebula(level: OrbitalLevel, depth: number, selectedId: string | null = null): { nodes: WorldNode[]; eligible: number } {
@@ -65,7 +87,7 @@ export function progressiveNebula(level: OrbitalLevel, depth: number, selectedId
     }
   }
   const ranked = [...entities.values()].filter((node) => (scores.get(node.id) ?? 0) > 0 || node.id === selectedId || node.state !== "canon" && (level.scope.kind === "volume" || level.scope.kind === "chapter")).sort((first, second) => (scores.get(second.id) ?? 0) - (scores.get(first.id) ?? 0) || first.id.localeCompare(second.id));
-  const bottom = level.scope.kind === "scene" || level.scope.kind === "records" || level.scope.kind === "dialogue";
+  const bottom = level.scope.kind === "scene";
   const limit = bottom ? ranked.length : Math.min(ranked.length, 5 + Math.max(0, depth - 1) * 5);
   const pending = ranked.filter((node) => node.state !== "canon").slice(0, Math.min(2, limit));
   const shown = [...pending, ...ranked.filter((node) => !pending.includes(node)).slice(0, limit - pending.length)];
@@ -74,17 +96,14 @@ export function progressiveNebula(level: OrbitalLevel, depth: number, selectedId
   return { nodes: shown, eligible: ranked.length };
 }
 
-function groupEntries(records: WorldNode[], scope: OrbitalScope, sourceNodes: WorldNode[], sourceEdges: WorldEdge[], kind: "scenes" | "records" | "dialogue", forceGroup = false): OrbitalEntry[] {
+function groupEntries(records: WorldNode[], scope: OrbitalScope, sourceNodes: WorldNode[], sourceEdges: WorldEdge[]): OrbitalEntry[] {
   const sorted = [...records].sort(order);
   const individual = (node: WorldNode): OrbitalEntry => ({ node, members: [node.id], ...(node.kind === "scene" ? { scope: { key: `orbital:scene:${node.id}`, label: node.summary ?? node.label, kind: "scene", chapterId: scope.chapterId, sceneId: node.id } as OrbitalScope } : {}) });
-  if (!forceGroup && sorted.length <= ORBITAL_PAGE_SIZE) return sorted.map(individual);
-  if (!sorted.length) return [];
+  if (sorted.length <= ORBITAL_PAGE_SIZE) return sorted.map(individual);
   const tracks = [...new Set(sorted.map((node) => `${node.lane}:${node.trackId ?? "story"}`))];
   const partitions = tracks.length <= ORBITAL_PAGE_SIZE ? tracks.map((track) => sorted.filter((node) => `${node.lane}:${node.trackId ?? "story"}` === track)) : [sorted];
   const allocations = partitions.map(() => 1);
-  const slots = forceGroup ? 1 : ORBITAL_PAGE_SIZE;
-  if (forceGroup) partitions.splice(0, partitions.length, sorted);
-  for (let remaining = slots - partitions.length; remaining > 0; remaining--) {
+  for (let remaining = ORBITAL_PAGE_SIZE - partitions.length; remaining > 0; remaining--) {
     const target = partitions.reduce((best, members, position) => members.length / allocations[position] > partitions[best].length / allocations[best] ? position : best, 0);
     allocations[target]++;
   }
@@ -93,20 +112,20 @@ function groupEntries(records: WorldNode[], scope: OrbitalScope, sourceNodes: Wo
     const count = Math.min(partition.length, allocations[partitionIndex]);
     for (let groupIndex = 0; groupIndex < count; groupIndex++) {
       const members = partition.slice(Math.floor(groupIndex * partition.length / count), Math.floor((groupIndex + 1) * partition.length / count));
-      if (members.length === 1 && !forceGroup) { entries.push(individual(members[0])); continue; }
+      if (members.length === 1) { entries.push(individual(members[0])); continue; }
       const memberIds = members.map((node) => node.id);
       const representative = representativeScene(sourceNodes, sourceEdges, members) ?? [...members].filter((node) => node.summary).sort(order)[0] ?? members[0];
       const id = `orbital:group:${scope.key}:${encodeURIComponent(members[0].id)}:${encodeURIComponent(members.at(-1)!.id)}`;
       const sharedTrack = members.every((node) => node.trackId === members[0].trackId && node.lane === members[0].lane);
       const node: WorldNode = {
-        ...representative, id, kind: kind === "scenes" ? "scene" : "event", chrono: members[0].chrono, dialogue: undefined,
+        ...representative, id, kind: "scene", chrono: members[0].chrono, dialogue: undefined,
         label: (representative.summary ?? representative.label).slice(0, 72), summary: representative.summary,
-        subLabel: `${members.length} ${kind} · ${members[0].chrono}–${members.at(-1)!.chrono}`,
+        subLabel: `${members.length} scenes · ${members[0].chrono}–${members.at(-1)!.chrono}`,
         state: members.some((entry) => entry.state === "held") ? "held" : members.some((entry) => entry.state === "proposed") ? "proposed" : "canon",
         trackId: sharedTrack ? members[0].trackId : "combined-tracks", trackLabel: sharedTrack ? members[0].trackLabel : "Multiple tracks · reveal to separate",
-        cluster: { kind: kind === "scenes" ? "scenes" : "records", ids: memberIds, recordCount: members.length, proposed: members.filter((entry) => entry.state === "proposed").length, held: members.filter((entry) => entry.state === "held").length },
+        cluster: { kind: "scenes", ids: memberIds, recordCount: members.length, proposed: members.filter((entry) => entry.state === "proposed").length, held: members.filter((entry) => entry.state === "held").length },
       };
-      entries.push({ node, members: memberIds, scope: { ...scope, key: id, label: node.summary ?? node.label, kind, ids: memberIds } });
+      entries.push({ node, members: memberIds, scope: { ...scope, key: id, label: node.summary ?? node.label, kind: "scenes", ids: memberIds } });
     }
   }
   return entries.sort((first, second) => order(first.node, second.node));
@@ -129,26 +148,18 @@ export function orbitalLevel(world: OrbitalWorld, scope: OrbitalScope = volumeSc
   const sourceEdges = [...(interior?.edges ?? []), ...activityEdges.filter((edge) => edge.parent === scope.chapterId)];
   const nebula = sourceNodes.filter(isNebula).sort(order);
   const scenes = sourceNodes.filter((node) => node.kind === "scene");
-  let records: WorldNode[];
   let main: OrbitalEntry[];
   if (scope.kind === "scene") {
-    const connected = new Set(sourceEdges.filter((edge) => isSourceRelation(edge) && (edge.from === scope.sceneId || edge.to === scope.sceneId)).flatMap((edge) => [edge.from, edge.to]));
-    records = sourceNodes.filter((node) => connected.has(node.id) && !isNebula(node) && node.kind !== "scene");
-    if (records.some((node) => node.dialogue)) records = records.filter((node) => node.kind !== "dialogue" || node.dialogue);
-    main = groupEntries(records, scope, sourceNodes, sourceEdges, "records");
+    main = visibleRecords(sceneRecords(sourceNodes, sourceEdges, [scope.sceneId ?? ""])).map(recordEntry);
   } else if (scope.ids) {
     const ids = new Set(scope.ids);
-    records = sourceNodes.filter((node) => ids.has(node.id) && !isNebula(node));
-    main = groupEntries(records, scope, sourceNodes, sourceEdges, scope.kind === "scenes" ? "scenes" : scope.kind === "dialogue" ? "dialogue" : "records");
+    main = groupEntries(scenes.filter((node) => ids.has(node.id)), scope, sourceNodes, sourceEdges);
   } else {
-    main = groupEntries(scenes, scope, sourceNodes, sourceEdges, "scenes");
-    const sceneIds = new Set(scenes.map((node) => node.id));
-    const assigned = new Set(sourceEdges.filter((edge) => isSourceRelation(edge) && (sceneIds.has(edge.from) || sceneIds.has(edge.to))).flatMap((edge) => [edge.from, edge.to]));
+    main = groupEntries(scenes, scope, sourceNodes, sourceEdges);
+    const assigned = new Set(sceneRecords(sourceNodes, sourceEdges, scenes.map((node) => node.id)).map((node) => node.id));
     const unassigned = sourceNodes.filter((node) => !isNebula(node) && node.kind !== "scene" && !assigned.has(node.id));
-    for (const dialogue of [false, true]) {
-      const loose = unassigned.filter((node) => (node.kind === "dialogue") === dialogue);
-      main.push(...groupEntries(loose, scope, sourceNodes, sourceEdges, dialogue ? "dialogue" : "records", true));
-    }
+    main.push(...unassigned.map(recordEntry));
+    main.sort((first, second) => order(first.node, second.node));
   }
   return { scope, main, nebula, sourceNodes, sourceEdges };
 }

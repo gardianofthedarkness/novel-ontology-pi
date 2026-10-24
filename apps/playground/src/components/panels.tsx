@@ -76,21 +76,23 @@ interface TabProps {
   shine: boolean;
   caughtUp: boolean;
   onClick: () => void;
+  active?: boolean;
 }
 
 /**
  * The activity tab: quiet while nothing matters, shining when the agent
  * is knitting somewhere the user is not looking. Click = guided flight.
  */
-export function ActivityTab({ count, shine, caughtUp, onClick }: TabProps) {
+export function ActivityTab({ count, shine, caughtUp, active, onClick }: TabProps) {
   return (
     <button
       className={`activity-tab ${shine ? "shine" : ""} ${caughtUp ? "caught" : ""}`}
       onClick={onClick}
-      title="Fly to where the agent is working"
+      title={active ? "Return to your previous reading position" : "Follow live activity through the orbital timeline layers"}
+      aria-pressed={active ?? false}
     >
-      {caughtUp ? "✓ Caught up" : "✦ Agent activity"}
-      <span className="badge">{count}</span>
+      {active ? "← Return to reading" : "✦ Agent activity"}
+      <span className="badge" title="Recorded construction updates, not model calls. One packet can publish many proposals together.">{count}</span>
     </button>
   );
 }

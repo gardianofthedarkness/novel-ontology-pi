@@ -21,6 +21,24 @@ const proposals = [
   { id: 'p4', kind: 'set_state_change', payload: { emotions: { happy: 1 } } },
 ];
 
+test('parallel dialogue drafts appear before scene segmentation and attach in place when the scene arrives', () => fixture(async (directory, runtime) => {
+  await mkdir(`${directory}/working`);
+  const draft = { version: 1, blockId: 'b0001', chapterIndex: 0, stage: 'miniloop', patchId: 'dialogue-structure', updatedAt: new Date().toISOString(), sceneSpans: [], dialogueUnits: [['b0000_s0001']], turns: [], completedScenes: 0, totalScenes: 0, proposals: [] };
+  const path = `${directory}/working/b0001.json`;
+  await writeFile(path, JSON.stringify(draft));
+  const initial = await snapshot(directory, runtime);
+  const id = 'draft:b0001:dialogue:b0000_s0001';
+  assert.ok(initial.world.interiors.chapter_0.nodes.some(node => node.id === id && node.kind === 'dialogue' && node.state === 'proposed'));
+  draft.sceneSpans = [['b0000_s0000', 'b0000_s0001']];
+  draft.totalScenes = 1;
+  await writeFile(path, JSON.stringify(draft));
+  const linked = await snapshot(directory, runtime);
+  const graph = linked.world.interiors.chapter_0;
+  assert.equal(graph.nodes.filter(node => node.id === id).length, 1);
+  assert.ok(graph.edges.some(edge => edge.from === 'draft:b0001:scene:b0000_s0000' && edge.to === id && edge.kind === 'contains'));
+  assert.ok(!JSON.stringify(linked).includes('sentenceIds'));
+}));
+
 test('fresh database contains no sample ontology', () => fixture(async (directory, runtime) => {
   const result = await snapshot(directory, runtime);
   assert.deepEqual(result.counts, { entities: 0, events: 0, scenes: 0, relations: 0, repairs: 0, ghosts: 0 });

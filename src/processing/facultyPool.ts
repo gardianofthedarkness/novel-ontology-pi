@@ -3,6 +3,8 @@ import type { WorkModel } from "../connectors/llm.js";
 
 export interface FacultyCall {
   faculty: string;
+  callId?: string;
+  system?: "system2" | "work";
   status: "started" | "completed" | "failed";
   inputBytes: number;
   queueMs: number;
@@ -43,7 +45,7 @@ export class FacultyPool {
         this.metrics.peakActive = Math.max(this.metrics.peakActive, this.active);
         this.metrics.maxInputBytes = Math.max(this.metrics.maxInputBytes, bytes);
         const began = performance.now();
-        const base = { faculty, inputBytes: bytes, queueMs: Math.round(began - queuedAt) };
+        const base = { faculty, callId: `${faculty}:${this.metrics.calls}`, system: priority >= 2 ? "system2" as const : "work" as const, inputBytes: bytes, queueMs: Math.round(began - queuedAt) };
         this.observe({ ...base, status: "started" });
         const signal = AbortSignal.timeout(this.options.timeoutMs ?? 45_000);
         void Promise.resolve().then(() => this.work.generate({ ...request, signal })).then(value => {
