@@ -8,6 +8,7 @@ import { loadWorld, type LoadedWorld } from "./data/loadWorld";
 import { FileEventSource } from "./events/fileSource";
 import { SseEventSource } from "./events/sseSource";
 import { RecordInspector } from "./components/RecordInspector";
+import { AlbumPanel, type AlbumPanelPicture } from "./components/AlbumPanel";
 import { ExplorerNavigation } from "./components/ExplorerNavigation";
 import { OrbitalExplorer, type OrbitalInspection } from "./components/OrbitalExplorer";
 import type { OrbitIllustration } from "./data/pictureNodes";
@@ -87,10 +88,11 @@ export default function App() {
   const [orbitalPage, setOrbitalPage] = useState<{ key: string; label: string; kind: string; chapterId?: string } | null>(null);
   const reportOrbitalPage = useCallback((page: { key: string; label: string; kind: string; chapterId?: string }) => setOrbitalPage(current => current?.key === page.key && current.label === page.label ? current : page), []);
   const [orbitalFocus, setOrbitalFocus] = useState<{ node: WorldNode; sequence: number; chapterId?: string } | null>(null);
-  const inspectOrbital = useCallback((inspection: OrbitalInspection | null) => { setOrbitalInspection(inspection); if (inspection?.passive) return; if (inspection?.inspect !== false && inspection) setPanel("record"); setInspectorOpen(!!inspection && inspection.inspect !== false); }, []);
+  const [albumInfo, setAlbumInfo] = useState<AlbumPanelPicture[]>([]);
+  const inspectOrbital = useCallback((inspection: OrbitalInspection | null) => { setOrbitalInspection(inspection); if (inspection?.album) setAlbumInfo(inspection.album); if (inspection?.passive) return; if (inspection?.inspect !== false && inspection) setPanel(inspection.node.kind === "picture" ? "album" : "record"); setInspectorOpen(!!inspection && inspection.inspect !== false); }, []);
   const chapterOrbital = useCallback((id: string | null) => setView((current) => id ? current.mode === "interior" && current.bigEventId === id ? current : { mode: "interior", bigEventId: id } : current.mode === "lanes" ? current : { mode: "lanes" }), []);
   const [selectedId, setSelectedId] = useState<string | null>("chapter_0");
-  const [panel, setPanel] = useState<"record" | "activity" | "review">("record");
+  const [panel, setPanel] = useState<"record" | "activity" | "review" | "album">("record");
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [dynNodes, setDynNodes] = useState<WorldNode[]>([]);
@@ -126,7 +128,7 @@ export default function App() {
   const seenMerges = useRef(new Set<string>());
   const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
   const [followingActivity, setFollowingActivity] = useState(false);
-  const readingPanelBookmark = useRef<{ inspection: OrbitalInspection | null; panel: "record" | "activity" | "review"; open: boolean; selectedId: string | null } | null>(null);
+  const readingPanelBookmark = useRef<{ inspection: OrbitalInspection | null; panel: "record" | "activity" | "review" | "album"; open: boolean; selectedId: string | null } | null>(null);
   const identityBaseline = useRef(false);
   const [identityNotice, setIdentityNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -568,6 +570,18 @@ export default function App() {
     if (orbitalInspection) setOrbitalInspection({ ...orbitalInspection, node });
     setOrbitalFocus({ node, sequence: Date.now() });
   };
+  /** Album strip click: a placed picture also focuses its 3D card (which
+   * re-opens the album panel on it); an unplaced picture has no card, so
+   * the panel just shows it locally. */
+  const albumThumbnailSelect = (id: string) => {
+    const picture = albumInfo.find((entry) => entry.id === id);
+    if (!picture?.placed) return;
+    if (orbitalMode) {
+      requestOrbitalFocus({ id, label: picture.label, kind: "picture", state: "canon", parent: null, lane: "canon", chrono: picture.chrono ?? 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] });
+    } else {
+      setSelectedId(id);
+    }
+  };
   const stepRecord = (step: number) => {
     if (orbitalMode && displayNodes.length) { requestOrbitalFocus(displayNodes[(selectedIndex + step + displayNodes.length) % displayNodes.length]); return; }
     if (nodes.length) activateNode(nodes[(selectedIndex + step + nodes.length) % nodes.length]);
@@ -656,14 +670,14 @@ export default function App() {
         </section>
         <aside className={`inspector${inspectorOpen ? " is-open" : ""}`} aria-label="Record and processing details">
           <div className="inspector-tabs" role="tablist" aria-orientation="vertical" aria-label="Inspector">
-            {(["record", "activity", "review"] as const).map((tab, index, tabs) => <button key={tab} id={`tab-${tab}`} role="tab" tabIndex={panel === tab ? 0 : -1} aria-selected={inspectorOpen && panel === tab} aria-controls={`panel-${tab}`} onClick={() => { setInspectorOpen(panel === tab ? !inspectorOpen : true); setPanel(tab); }} onKeyDown={(event) => {
+            {(["record", "activity", "review", "album"] as const).map((tab, index, tabs) => <button key={tab} id={`tab-${tab}`} role="tab" tabIndex={panel === tab ? 0 : -1} aria-selected={inspectorOpen && panel === tab} aria-controls={`panel-${tab}`} onClick={() => { setInspectorOpen(panel === tab ? !inspectorOpen : true); setPanel(tab); }} onKeyDown={(event) => {
               if (!["ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
               event.preventDefault();
               const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + tabs.length) % tabs.length;
               setPanel(tabs[next]);
               setInspectorOpen(true);
               document.getElementById(`tab-${tabs[next]}`)?.focus();
-            }}>{tab}{tab === "review" && pendingCount > 0 && <span>{pendingCount}</span>}</button>)}
+            }}>{tab}{tab === "review" && pendingCount > 0 && <span>{pendingCount}</span>}{tab === "album" && (albumInfo.length || albumPictures.length) > 0 && <span>{albumInfo.length || albumPictures.length}</span>}</button>)}
           </div>
           <div className="inspector-sheet" hidden={!inspectorOpen}>
           <div className="sheet-heading"><span className="eyebrow">ARCHIVE / {panel}</span><button aria-label="Close details" onClick={() => { setInspectorOpen(false); document.getElementById(`tab-${panel}`)?.focus(); }}>×</button></div>
@@ -671,6 +685,7 @@ export default function App() {
             {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? "api/record-source" : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!shownWorld.interiors[selected.id]} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
             {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? "Waiting for the live stream."}</p><a href="replay/">Pi session replay ↗</a>{!phoneLive && <button onClick={startSession}>Reconnect</button>}</div><DecisionFeed entries={feed} /></>}
             {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>{phoneLive ? "Read-only live viewer. Pi reviews consequential facts; held facts stay outside canon." : "Review sample proposals."}</p></div><div inert={phoneLive ? true : undefined}><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></div></>}
+            {panel === "album" && <AlbumPanel pictures={albumInfo.length ? albumInfo : albumPictures.map((picture) => ({ id: picture.id, asset: picture.asset, kind: picture.kind, label: picture.kind ? picture.kind[0].toUpperCase() + picture.kind.slice(1) : "Picture", placed: false, prevSceneLabel: null, nextSceneLabel: null, chrono: null }))} selectedId={selected?.id ?? null} onSelect={albumThumbnailSelect} />}
           </div>
           </div>
         </aside>
