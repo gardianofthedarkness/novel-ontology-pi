@@ -12,6 +12,7 @@ import type {
   Scene,
 } from "../ontology/types.js";
 import type { Sentence } from "../text/sectioning.js";
+import { formKey } from "../text/nameForms.js";
 import type { NamedDialogueCard } from "../processing/dialogueCards.js";
 import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints, type ExtractionConstraints } from "./constraints.js";
 
@@ -281,11 +282,14 @@ export function createExtractor(work: WorkModel) {
     const nameHits = (input.miniloop.accepted["nameHits"] as NameScanHit[] | undefined) ?? [];
 
     // --- name resolution state (grows as scenes mint entities) ---
+    // formToId keys are formKey() folds under the ACTIVE LANGUAGE MAP
+    // (text/languageMap.ts): a variant spelling resolves to the known
+    // entity; the spelling itself is still recorded as its own form.
     const entityById = new Map<string, Entity>();
     const formToId = new Map<string, string>();
     for (const e of input.knownEntities) {
       entityById.set(e.id, e);
-      for (const n of e.names) formToId.set(n.text, e.id);
+      for (const n of e.names) formToId.set(formKey(n.text), e.id);
     }
     const suffixBase = new Map<string, number>();
     for (const id of [...input.knownEntities.map((entity) => entity.id), ...input.counts.reservedEntityIds ?? []]) {
@@ -307,7 +311,7 @@ export function createExtractor(work: WorkModel) {
         confidence: EXTRACTION_CONFIDENCE,
       };
       entityById.set(entity.id, entity);
-      for (const n of entity.names) formToId.set(n.text, entity.id);
+      for (const n of entity.names) formToId.set(formKey(n.text), entity.id);
       return entity;
     };
 
@@ -348,7 +352,7 @@ export function createExtractor(work: WorkModel) {
         notes[`extraction:rejected:${name}`] = `${origin}: reviewer rejected this Character placeholder; no identity was guessed.`;
         return undefined;
       }
-      const known = formToId.get(name);
+      const known = formToId.get(formKey(name));
       if (known) return entityById.get(known)!;
       if (input.sceneResults) {
         notes[`faculty:unresolved-reference:${name}`] = `${origin}: identity faculty did not resolve this name; no placeholder entity was invented.`;
@@ -387,7 +391,7 @@ export function createExtractor(work: WorkModel) {
         }
         const aliasForms = (ne.aliases ?? []).filter((alias) => {
           if (!alias.text) return false;
-          const owner = formToId.get(alias.text);
+          const owner = formToId.get(formKey(alias.text));
           const ownerNames = owner ? entityById.get(owner)!.names.map((name) => name.text) : [alias.text];
           const conflict = distinct([ne.name!], ownerNames) || distinct([ne.name!], [alias.text]);
           if (conflict) notes[`extraction:alias-conflict:${ne.name}:${alias.text}`] = "Alias omitted because it would fuse identities the reviewer declared distinct.";
@@ -402,7 +406,7 @@ export function createExtractor(work: WorkModel) {
         }));
         const declaredForms = [ne.name, ...aliases.map((a) => a.text)];
         const existingId = declaredForms
-          .map((f) => formToId.get(f))
+          .map((f) => formToId.get(formKey(f)))
           .find((id) => id !== undefined);
         if (existingId) {
           const base = entityById.get(existingId)!;
@@ -429,7 +433,7 @@ export function createExtractor(work: WorkModel) {
                 provenance: { blockId: input.blockId, sentenceIds: sourceIds, patchId: "extraction" },
               });
             }
-            for (const f of declaredForms) formToId.set(f, existingId);
+            for (const f of declaredForms) formToId.set(formKey(f), existingId);
             entityById.set(existingId, entityUpserts.get(existingId)!.payload as Entity);
           }
           continue;
@@ -461,7 +465,7 @@ export function createExtractor(work: WorkModel) {
       }
       const aliases = (Array.isArray(declaration.aliases) ? declaration.aliases : []).filter(alias => alias && typeof alias.text === "string" && !!alias.text.trim() && input.sentences.some(sentence => sentence.text.includes(alias.text!)));
       const forms = [declaration.name, ...aliases.map(alias => alias.text!)];
-      const owners = [...new Set(forms.map(form => formToId.get(form)).filter((id): id is string => !!id))];
+      const owners = [...new Set(forms.map(form => formToId.get(formKey(form))).filter((id): id is string => !!id))];
       if (owners.length > 1 || owners.some(id => entityById.get(id)?.kind !== declaration.kind)) {
         notes[`faculty:block-identity-conflict:${declaration.name}`] = "Block identity declaration conflicts with existing identity owners or kinds; no identities were fused.";
         continue;
@@ -629,7 +633,7 @@ export function createExtractor(work: WorkModel) {
           if (!character || character.kind !== "Character") continue;
           const relationships: Record<string, number> = {};
           for (const [name, v] of Object.entries(sc.relationships ?? {})) {
-            const target = formToId.get(name);
+            const target = formToId.get(formKey(name));
             if (target) relationships[target] = clampDelta(v);
           }
           stateProposals.push({
@@ -659,7 +663,7 @@ export function createExtractor(work: WorkModel) {
       for (const hit of nameHits) if (spanIds.includes(hit.sentenceId)) mentionedIds.add(hit.entityId);
       for (const [names, destination] of [[llm.charactersPresent, castIds], [llm.charactersMentioned, mentionedIds]] as const) {
         for (const name of strList(names)) {
-          const entityId = formToId.get(name);
+          const entityId = formToId.get(formKey(name));
           if (entityId && entityById.get(entityId)?.kind === "Character") destination.add(entityId);
           else notes[`extraction:roster:${sceneId}:${name}`] = "Scene roster name did not resolve to a Character; reference left unknown.";
         }
@@ -667,8 +671,8 @@ export function createExtractor(work: WorkModel) {
       if (!Array.isArray(llm.charactersPresent) || !Array.isArray(llm.charactersMentioned)) notes[`extraction:roster:${sceneId}`] = "Scene-specific roster fields missing; no physical presence inferred from window hints or event actors.";
       if (faculty) {
         turns = faculty.turns.map(turn => ({
-          speakerId: turn.speakerName ? formToId.get(turn.speakerName) ?? null : null,
-          addresseeId: turn.addresseeName ? formToId.get(turn.addresseeName) ?? null : null,
+          speakerId: turn.speakerName ? formToId.get(formKey(turn.speakerName)) ?? null : null,
+          addresseeId: turn.addresseeName ? formToId.get(formKey(turn.addresseeName)) ?? null : null,
           sentenceIds: [...turn.sentenceIds],
         }));
         for (let index = 0; index < turns.length; index++) if (!turns[index].speakerId) notes[`faculty:unknown-speaker:${sceneId}:${index}`] = "Speaker remains unresolved; source was preserved without inventing an identity.";
@@ -708,7 +712,7 @@ export function createExtractor(work: WorkModel) {
     for (const { scene, cards } of pendingCardScenes) {
       scene.dialogues = cards.map(card => {
         const resolveMembers = (names: string[]) => [...new Set(names.flatMap(name => {
-          const id = formToId.get(name);
+          const id = formToId.get(formKey(name));
           if (id && entityById.get(id)?.kind === "Character") return [id];
           notes[`faculty:unknown-member:${card.id}:${name}`] = "Dialogue participant identity did not resolve; source retained without minting or guessing a person.";
           return [];
@@ -737,7 +741,7 @@ export function createExtractor(work: WorkModel) {
         continue;
       }
       if (entity.names.some((n) => n.text === payload.aliasText)) continue;
-      const owner = formToId.get(payload.aliasText);
+      const owner = formToId.get(formKey(payload.aliasText));
       if (owner && owner !== entity.id) {
         notes[ap.id] = "Alias omitted because extraction already resolved this form to another entity; reviewer must decide the identity conflict.";
         continue;

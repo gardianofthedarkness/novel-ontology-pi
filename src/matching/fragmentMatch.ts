@@ -1,4 +1,4 @@
-import { foldVariants } from "./entityMatch.js";
+import { foldVariants } from "../text/nameForms.js";
 
 /**
  * Fragment-at-birth (identification policy, 2026-10-23): a new name
