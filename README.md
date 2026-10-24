@@ -5,8 +5,17 @@ language — into a queryable **ontology** of characters, events, causality
 and timelines, powering **character simulation** and **parallel-universe
 story forking** at a time point the user chooses.
 
-No Docker. No hosted database. Download it, drop in your novel, provide
+No Docker or hosted database required. Download it, drop in your novel, provide
 two API keys (one work LLM + one decision model), and start.
+
+## Optional team playground
+
+The root-level [playground/](playground/README.md) contains the separate team
+development harness: original CC0 synthetic data, an illustrative snapshot, a
+fresh idle Pi workspace, and backend-connected frontend HMR. Docker Compose is
+an optional team setup, not an end-user dependency; native setup is supported.
+Viewing needs no keys, and processing starts only when you send Pi a task.
+No private commercial-novel data is distributed.
 
 ## How it works
 

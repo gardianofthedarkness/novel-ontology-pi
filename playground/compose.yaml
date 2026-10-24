@@ -1,0 +1,21 @@
+services:
+  playground:
+    build:
+      context: ..
+      dockerfile: playground/Dockerfile
+    init: true
+    ports:
+      - "127.0.0.1:${PLAYGROUND_PORT:-5180}:8080"
+    environment:
+      PLAYGROUND_MODE: ${PLAYGROUND_MODE:-view}
+      PLAYGROUND_MINUTES: ${PLAYGROUND_MINUTES:-120}
+      PLAYGROUND_ORIGIN: http://127.0.0.1:${PLAYGROUND_PORT:-5180}
+      WORK_LLM_API_KEY: ${WORK_LLM_API_KEY:-}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+    volumes:
+      - playground-data:/data
+      - ../apps/playground/src:/app/apps/playground/src:ro
+    stop_grace_period: 20s
+    restart: "no"
+volumes:
+  playground-data:
