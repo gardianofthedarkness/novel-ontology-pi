@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GraphCanvasRef } from "reagraph";
 import { ActivityTab, DecisionFeed, GateQueue, type FeedEntry } from "./components/panels";
 import { PipelineStrip } from "./components/PipelineStrip";
+import { PiConsole } from "./components/PiConsole";
 import { WorldGraph, framePositions, scaledPos, type LabelBus } from "./components/WorldGraph";
 import { loadWorld, type LoadedWorld } from "./data/loadWorld";
 import { FileEventSource } from "./events/fileSource";
@@ -10,6 +11,9 @@ import { RecordInspector } from "./components/RecordInspector";
 import { ExplorerNavigation } from "./components/ExplorerNavigation";
 import { OrbitalExplorer, type OrbitalInspection } from "./components/OrbitalExplorer";
 import "./orbital.css";
+import "./live.css";
+import type { LiveActivity } from "./data/liveActivity";
+import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
 import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
 import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
@@ -22,9 +26,22 @@ import type {
   WorldNode,
 } from "./types";
 
-const KNIT_SITE = "be_found"; // the branch big event System 1 knits in this session
-const DB = "/db/novel";
+const KNIT_SITE = "chapter_0";
+const DB = "db/novel";
 let feedSeq = 0;
+interface LiveSnapshot {
+  world: LoadedWorld;
+  activity?: LiveActivity;
+  gates: ChangeSet[];
+  feed: FeedEntry[];
+  status: "idle" | "working" | "review" | "complete" | "error";
+  stage: number;
+  label: string;
+  volume?: number;
+  jobLabel?: string;
+  counts: { entities: number; events: number; repairs: number; ghosts: number };
+  workSite?: string;
+}
 
 /** Follow a merge chain (a keeper can itself be merged away later). */
 function resolveKept(id: string, merges: Map<string, string>): string {
@@ -65,10 +82,12 @@ export default function App() {
   const [orbitalMode, setOrbitalMode] = useState(true);
   const [orbitalReset, setOrbitalReset] = useState(0);
   const [orbitalInspection, setOrbitalInspection] = useState<OrbitalInspection | null>(null);
+  const [orbitalPage, setOrbitalPage] = useState<{ key: string; label: string; kind: string; chapterId?: string } | null>(null);
+  const reportOrbitalPage = useCallback((page: { key: string; label: string; kind: string; chapterId?: string }) => setOrbitalPage(current => current?.key === page.key && current.label === page.label ? current : page), []);
   const [orbitalFocus, setOrbitalFocus] = useState<{ node: WorldNode; sequence: number; chapterId?: string } | null>(null);
-  const inspectOrbital = useCallback((inspection: OrbitalInspection | null) => { setOrbitalInspection(inspection); if (inspection?.inspect !== false && inspection) setPanel("record"); setInspectorOpen(!!inspection && inspection.inspect !== false); }, []);
+  const inspectOrbital = useCallback((inspection: OrbitalInspection | null) => { setOrbitalInspection(inspection); if (inspection?.passive) return; if (inspection?.inspect !== false && inspection) setPanel("record"); setInspectorOpen(!!inspection && inspection.inspect !== false); }, []);
   const chapterOrbital = useCallback((id: string | null) => setView((current) => id ? current.mode === "interior" && current.bigEventId === id ? current : { mode: "interior", bigEventId: id } : current.mode === "lanes" ? current : { mode: "lanes" }), []);
-  const [selectedId, setSelectedId] = useState<string | null>("be_return");
+  const [selectedId, setSelectedId] = useState<string | null>("chapter_0");
   const [panel, setPanel] = useState<"record" | "activity" | "review">("record");
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -95,6 +114,22 @@ export default function App() {
     [],
   );
   const graphRef = useRef<GraphCanvasRef>(null);
+  const phoneLive = useMemo(() => new URLSearchParams(window.location.search).has("phone"), []);
+  const [liveLabel, setLiveLabel] = useState("Fresh database · connecting to Pi");
+  const [liveCollection, setLiveCollection] = useState("Live novel / connecting");
+  const [liveCounts, setLiveCounts] = useState({ entities: 0, events: 0, repairs: 0, ghosts: 0 });
+  const [workSite, setWorkSite] = useState("chapter_0");
+  const seenMerges = useRef(new Set<string>());
+  const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
+  const [followingActivity, setFollowingActivity] = useState(false);
+  const readingPanelBookmark = useRef<{ inspection: OrbitalInspection | null; panel: "record" | "activity" | "review"; open: boolean; selectedId: string | null } | null>(null);
+  const identityBaseline = useRef(false);
+  const [identityNotice, setIdentityNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!identityNotice) return;
+    const timer = setTimeout(() => setIdentityNotice(null), 6500);
+    return () => clearTimeout(timer);
+  }, [identityNotice]);
   const focusFlight = useRef<number | null>(null);
   /** The most recently emerged ghost node — where System 1 is knitting right now (Phase B). */
   const lastKnitRef = useRef<{ node: WorldNode; chapterId: string } | null>(null);
@@ -295,13 +330,92 @@ export default function App() {
   }, [handleEvent, pushFeed, liveUrl]);
 
   useEffect(() => {
-    if (world) startSession();
+    if (!phoneLive) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let current: LiveSnapshot | null = null;
+    let previousWorld: LoadedWorld | null = null;
+    let stream: EventSource | null = null;
+    let polling = false;
+    let request: AbortController | null = null;
+    const receive = (data: LiveSnapshot) => {
+        if (stopped) return;
+        current = data;
+        if (data.world !== previousWorld) {
+          previousWorld = data.world;
+          setWorld(data.world);
+        }
+        for (const record of data.activity?.identityEvents ?? []) {
+          if (seenMerges.current.has(record.id)) continue;
+          seenMerges.current.add(record.id);
+          if (identityBaseline.current) {
+            handleEvent(record.event);
+            setIdentityNotice(record.event.type === "entity.merged" ? `EM joined ${record.event.dropId} → ${record.event.keepId}` : `EM kept ${record.event.aId} and ${record.event.bId} distinct`);
+          }
+        }
+        identityBaseline.current = true;
+        setLiveActivity(data.activity ?? null);
+        setChangesets(data.gates);
+        setFeed(data.feed);
+        setProcessingStatus(data.status);
+        setStage(data.stage);
+        setLiveLabel(data.label);
+        setLiveCollection(`Volume ${data.volume ?? 1} / ${data.jobLabel ?? "Live processing"}`);
+        setLiveCounts(data.counts);
+        setWorkSite(data.workSite ?? "chapter_0");
+        setBlockLabel(data.label);
+        setLoadError(null);
+        setActivity(currentActivity => ({ ...currentActivity, count: data.activity?.count ?? 0, shine: data.status === "working", caughtUp: data.status === "complete" }));
+    };
+    const poll = async () => {
+      if (stopped || !polling) return;
+      try {
+        request = new AbortController();
+        const response = await fetch("api/live", { cache: "no-store", signal: request.signal });
+        if (!response.ok) throw new Error(`Live connection: HTTP ${response.status}`);
+        const data = await response.json() as LiveSnapshot;
+        if (polling) receive(data);
+      } catch (error) {
+        if (!stopped && polling) setLiveLabel(`Connection interrupted · retrying: ${(error as Error).message}`);
+      } finally {
+        if (!stopped && polling) timer = setTimeout(poll, 1000);
+      }
+    };
+    const fallback = () => {
+      if (stopped || polling) return;
+      polling = true;
+      void poll();
+    };
+    const reconnect = () => {
+      if (stopped) return;
+      stream?.close();
+      stream = new EventSource("api/live/stream");
+      stream.addEventListener("snapshot", event => {
+        polling = false;
+        request?.abort();
+        clearTimeout(timer);
+        receive(JSON.parse((event as MessageEvent).data) as LiveSnapshot);
+      });
+      stream.addEventListener("patch", event => {
+        if (current) receive(applySnapshotChanges(current, JSON.parse((event as MessageEvent).data)) as LiveSnapshot);
+      });
+      stream.onerror = fallback;
+    };
+    if (typeof EventSource === "undefined") fallback();
+    else reconnect();
+    timer = setTimeout(() => { if (!current) fallback(); }, 4000);
+    return () => { stopped = true; clearTimeout(timer); stream?.close(); request?.abort(); };
+  }, [phoneLive, handleEvent]);
+
+  useEffect(() => {
+    if (world && !phoneLive) startSession();
     return () => sourceRef.current?.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world]);
 
   const approve = useCallback(
     (changesetId: string) => {
+      if (phoneLive) return;
       const held = heldMap[changesetId] ?? [];
       const ids = proposalsByCs[changesetId] ?? [];
       setDynNodes((ns) =>
@@ -316,11 +430,27 @@ export default function App() {
       handleEvent({ type: "changeset.merged", changesetId });
       setActivity({ count: 0, shine: false, caughtUp: true });
     },
-    [handleEvent, heldMap, proposalsByCs],
+    [handleEvent, heldMap, proposalsByCs, phoneLive],
   );
 
   /** Guided flight: wherever the user is, take the camera to the knitting site. */
   const flyToSite = useCallback(() => {
+    if (phoneLive) {
+      if (!followingActivity) {
+        readingPanelBookmark.current = { inspection: orbitalInspection, panel, open: inspectorOpen, selectedId };
+        setInspectorOpen(false);
+        setOrbitalMode(true);
+      } else if (readingPanelBookmark.current) {
+        const saved = readingPanelBookmark.current;
+        setOrbitalInspection(saved.inspection);
+        setPanel(saved.panel);
+        setInspectorOpen(saved.open);
+        setSelectedId(saved.selectedId);
+        readingPanelBookmark.current = null;
+      }
+      setFollowingActivity(!followingActivity);
+      return;
+    }
     // Phase B: if real work has emerged this session, fly to the
     // latest ghost in its own chapter interior — the demo world's
     // fixed knit site is only the fallback.
@@ -344,7 +474,7 @@ export default function App() {
     if (viewRef.current.mode === "interior" && viewRef.current.bigEventId === KNIT_SITE) {
       framePositions(graphRef, [...labelBus.positions.values()], 1.18, !reducedMotion);
     }
-  }, [displayWorld, reducedMotion, labelBus, orbitalMode]);
+  }, [displayWorld, reducedMotion, labelBus, orbitalMode, phoneLive, workSite, followingActivity, orbitalInspection, panel, inspectorOpen, selectedId]);
 
   const openNode = useCallback(
     (node: WorldNode) => {
@@ -458,7 +588,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${orbitalMode ? " orbital-active" : ""}${reducedMotion ? " reduce-motion" : ""}`}>
+    <div className={`app${orbitalMode ? " orbital-active" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}`}>
       <header className="topbar">
         <button className="brand" onClick={overview} aria-label="Return to archive overview"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 32V8h7l18 24h7V8M4 32h7V18l18 14M19 8h17" fill="none" stroke="currentColor" strokeWidth="3" /></svg><span>NOVEL<span>ONTOLOGY / PI</span></span></button>
         <nav aria-label="Workspace navigation">
@@ -466,16 +596,16 @@ export default function App() {
           <button className={inspectorOpen && panel === "activity" ? "active" : ""} onClick={() => { setPanel("activity"); setInspectorOpen(true); }}>Activity <span>/</span></button>
           <button className={inspectorOpen && panel === "review" ? "active" : ""} onClick={() => { setPanel("review"); setInspectorOpen(true); }}>Review <span>{String(pendingCount).padStart(2, "0")}</span></button>
         </nav>
-        <span className="sample-badge"><i />{liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
+        <span className="sample-badge"><i />{phoneLive || liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">
-        <div><div className="eyebrow">COLLECTION 001 / INDEX SAMPLE</div><h1>{view.mode === "lanes" ? "Narrative archive." : shownWorld.bigEventLabels[view.bigEventId]}</h1></div>
+        <div><div className="eyebrow">{phoneLive ? liveCollection : "COLLECTION 001 / INDEX SAMPLE"}{followingActivity && orbitalPage ? ` / ${orbitalPage.kind.toUpperCase()} OVERVIEW` : ""}</div><h1>{followingActivity && orbitalPage ? orbitalPage.label : view.mode === "lanes" ? "Narrative archive." : shownWorld.bigEventLabels[view.bigEventId]}</h1>{phoneLive && <p className="live-runtime-status" role="status">{followingActivity ? liveActivity?.phase ?? liveLabel : liveLabel}<small>{liveCounts.ghosts} ghosts · {liveCounts.entities} canonical entities · {liveCounts.events} events · {liveCounts.repairs} audited operations · live updates</small></p>}</div>
         <div className={`heading-caption${view.mode === "interior" ? " interior-heading" : ""}`}>{view.mode === "lanes" ? <><span>One world. Parallel stories.</span><small>Click a file or scroll closer to enter.</small></> : <><button className="back-link" onClick={overview}>← Back to chronology</button><small>EVENT INTERIOR / {sourceNodes.length} RECORDS</small></>}</div>
       </div>
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
-          <button className="design-switch" aria-pressed={orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setInspectorOpen(false); }}>{orbitalMode ? "Orbital / switch to classic" : "Classic / switch to orbital"}</button>
-          {orbitalMode ? <OrbitalExplorer world={shownWorld} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} join={join} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
+          <button className="design-switch" disabled={followingActivity} aria-pressed={orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setInspectorOpen(false); }}>{orbitalMode ? "Orbital / switch to classic" : "Classic / switch to orbital"}</button>
+          {orbitalMode ? <OrbitalExplorer world={shownWorld} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} join={join} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
           <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
             <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
             <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>
@@ -517,18 +647,20 @@ export default function App() {
           <div className="sheet-heading"><span className="eyebrow">ARCHIVE / {panel}</span><button aria-label="Close details" onClick={() => { setInspectorOpen(false); document.getElementById(`tab-${panel}`)?.focus(); }}>×</button></div>
           <div ref={inspectorRef} className="inspector-body" id={`panel-${panel}`} role="tabpanel" aria-labelledby={`tab-${panel}`}>
             {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? "api/record-source" : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!shownWorld.interiors[selected.id]} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
-            {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? (liveUrl ? "Connected to the live watch stream." : "Waiting for the sample session.")}</p><button onClick={startSession}>{liveUrl ? "Reconnect live" : "Replay sample ↻"}</button></div><DecisionFeed entries={feed} /></>}
-            {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>Review the sample proposals. Held records stay separate when the rest merge.</p></div><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></>}
+            {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? "Waiting for the live stream."}</p><a href="replay/">Pi session replay ↗</a>{!phoneLive && <button onClick={startSession}>Reconnect</button>}</div><DecisionFeed entries={feed} /></>}
+            {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>{phoneLive ? "Read-only live viewer. Pi reviews consequential facts; held facts stay outside canon." : "Review sample proposals."}</p></div><div inert={phoneLive ? true : undefined}><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></div></>}
           </div>
           </div>
         </aside>
-        <div className="activity-dock"><ActivityTab count={activity.count} shine={activity.shine} caughtUp={activity.caughtUp} onClick={flyToSite} /></div>
+        <div className="activity-dock"><ActivityTab count={activity.count} shine={activity.shine} caughtUp={activity.caughtUp} active={followingActivity} onClick={flyToSite} /></div>
       </main>
-      <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} />
+      <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} faculties={liveActivity?.faculties} telemetryNote={liveActivity?.telemetryNote} />
+      {phoneLive && <PiConsole />}
+      {identityNotice && <div className="identity-notice" role="status">{identityNotice}</div>}
       <footer className="transport">
         <div className="selection-counter"><span className="eyebrow">RECORD / SELECT</span><div>{String(selected ? selectedIndex + 1 : 0).padStart(2, "0")}<small>/ {String(displayNodes.length).padStart(2, "0")}</small></div></div>
         <div className="record-transport"><button className="arrow-button" aria-label="Previous record" disabled={!nodes.length} onClick={() => stepRecord(-1)}>←</button><div><strong>{selected?.label ?? "Archive"}</strong><span>{selected ? `${KIND_LABEL[selected.kind]} / ${selected.lane}` : "No records"}</span></div><button className="arrow-button" aria-label="Next record" disabled={!nodes.length} onClick={() => stepRecord(1)}>→</button></div>
-        <div className="session-controls"><span className="eyebrow">{liveUrl ? "LIVE / NOVEL WATCH" : "LOCAL FILE REPLAY / DEMO"}</span><button onClick={startSession}>{liveUrl ? "Reconnect live" : "Replay session ↻"}</button></div>
+        <div className="session-controls"><span className="eyebrow">{phoneLive || liveUrl ? "LIVE / NOVEL WATCH" : "LOCAL FILE REPLAY / DEMO"}</span>{phoneLive ? <a href="replay/">Session replay ↗</a> : <button onClick={startSession}>Replay session ↻</button>}</div>
       </footer>
     </div>
   );

@@ -35,3 +35,21 @@ export async function saveWorkingDraft(novelDir: string, draft: WorkingDraft): P
     await unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
   }
 }
+
+export function touchedDraftIds(previous: WorkingDraft, current: WorkingDraft): string[] {
+  const ids: string[] = [];
+  const old = new Map(previous.proposals.map(proposal => [proposal.id, JSON.stringify(proposal)]));
+  for (const proposal of current.proposals) {
+    if (old.get(proposal.id) === JSON.stringify(proposal)) continue;
+    const payload = proposal.payload as Record<string, unknown>;
+    const id = payload.needsExtraction ? `draft:${proposal.id}` : payload.id ?? payload.characterId ?? payload.entityId;
+    if (typeof id === "string") ids.push(id);
+  }
+  const spans = new Set(previous.sceneSpans.map(span => JSON.stringify(span)));
+  for (const span of current.sceneSpans.slice(current.completedScenes)) if (!spans.has(JSON.stringify(span))) ids.push(`draft:${current.blockId}:scene:${span[0]}`);
+  const units = new Set(previous.dialogueUnits.map(unit => JSON.stringify(unit)));
+  for (const unit of current.dialogueUnits) if (!units.has(JSON.stringify(unit))) ids.push(`draft:${current.blockId}:dialogue:${unit[0]}`);
+  const cards = new Map(previous.dialogueCards?.map(card => [card.id, JSON.stringify(card)]) ?? []);
+  for (const card of current.dialogueCards ?? []) if (cards.get(card.id) !== JSON.stringify(card)) ids.push(`draft:${current.blockId}:dialogue:${card.sentenceIds[0]}`);
+  return [...new Set(ids)];
+}

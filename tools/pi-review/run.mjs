@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { appendFile, cp, mkdir, open, readFile, unlink, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { createAgentSession, createBashToolDefinition, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from '@earendil-works/pi-coding-agent';
 import { cutBlocks, splitChapters } from '../../dist/src/text/blocks.js';
 import { authorize } from './guard.mjs';
@@ -10,10 +11,14 @@ import { digest, semanticFacts, semanticRevision } from '../../dist/src/merge/se
 import { semanticContext } from '../../dist/src/merge/semanticCommands.js';
 import { validateStability } from './validate-stability.mjs';
 import { root, repo, cli, skill, agentEvents } from './config.mjs';
+import { createPiConsole } from './pi-console.mjs';
+import { runConsoleSession } from './pi-session-loop.mjs';
 
 import { loadJob } from './job.mjs';
 
 const job = await loadJob(process.argv[2]);
+const interactive = process.argv[3] === '--interactive';
+if (process.argv.length > (interactive ? 4 : 3)) throw new Error('Usage: node tools/pi-review/run.mjs /private/job.json [--interactive]');
 const cwd = `${root}runtime`;
 const manifestPath = `${cwd}/NOVEL_JOB.json`;
 const startedAt = new Date();
@@ -34,6 +39,8 @@ let observer;
 let runtime;
 let apiKey = '';
 let timer;
+let consoleChannel;
+let interactiveDeadline = deadline;
 const workspaceLocks = [];
 let volumeId = 1;
 const emit = (event) => {
@@ -78,18 +85,31 @@ try {
     const text = await readFile(input, 'utf8');
     const directory = `${jobRoot}/volume-${id}`;
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    const blocks = [];
+    const allBlocks = [];
     for (const block of cutBlocks(text).filter((block) => testChapters === null || block.chapterIndex < testChapters)) {
       const evidence = `${directory}/${block.id}.txt`;
       await writeFile(evidence, block.text, { mode: 0o600 });
-      blocks.push({ id: block.id, index: block.index, chapterIndex: block.chapterIndex, evidence, lines: block.text.split('\n').length });
+      allBlocks.push({ id: block.id, index: block.index, chapterIndex: block.chapterIndex, evidence, lines: block.text.split('\n').length });
     }
-    if (!blocks.length) throw new Error('No blocks in assigned target');
-    const chapters = splitChapters(text).filter((chapter) => testChapters === null || chapter.index < testChapters).map((chapter) => ({ index: chapter.index, title: chapter.title ?? `Chapter ${chapter.index}`, characters: chapter.text.length, blockIds: blocks.filter((block) => block.chapterIndex === chapter.index).map((block) => block.id) }));
+    if (!allBlocks.length) throw new Error('No blocks in assigned target');
+    const applications = new Set((await rows(`${workspace}/events.jsonl`)).filter(record => record.event.type === 'changeset.applied').map(record => record.event.changesetId));
+    let previousBlocks;
+    const blocks = [];
+    for (const block of allBlocks) {
+      const packet = await json(`${workspace}/changesets/cs_${block.id}.json`, null);
+      if (packet?.status === 'approved') {
+        if (!applications.has(`cs_${block.id}`)) throw new Error('Approved packet is missing its application audit');
+        previousBlocks ??= cutBlocks(await readFile(`${workspace}/source/${basename(input)}`, 'utf8'));
+        const original = previousBlocks.find(entry => entry.id === block.id);
+        if (!original || original.chapterIndex !== block.chapterIndex || original.text !== await readFile(block.evidence, 'utf8')) throw new Error('Applied source prefix differs; resume requires unchanged source and input basename');
+      } else blocks.push(block);
+    }
+    if (!interactive && !blocks.length) throw new Error('Assigned target is already applied; no new paid run started');
+    const chapters = splitChapters(text).filter((chapter) => testChapters === null || chapter.index < testChapters).map((chapter) => ({ index: chapter.index, title: chapter.title ?? `Chapter ${chapter.index}`, characters: chapter.text.length, blockIds: allBlocks.filter((block) => block.chapterIndex === chapter.index).map((block) => block.id) }));
     await writeFile(`${directory}/chapters.json`, JSON.stringify(chapters), { mode: 0o600 });
-    volumes.push({ id, workspace, input, blockSize: 24000, maxBlocks: blocks.length, blocks, metadataDirectory: directory, label: testChapters ? `${testChapters}-chapter stability test` : 'Full volume' });
+    volumes.push({ id, workspace, input, blockSize: 24000, maxBlocks: allBlocks.length, blocks, metadataDirectory: directory, label: interactive ? 'Interactive Pi session' : testChapters ? `${testChapters}-chapter stability test` : 'Full volume' });
   }
-  const manifest = { version: 1, purpose: testChapters ? 'Fresh-database stability validation; never infer full-volume completion' : 'Full-volume processing', startedAt: startedAt.toISOString(), deadline: new Date(deadline).toISOString(), limits: job.limits, volumes };
+  const manifest = { version: 1, purpose: interactive ? 'Wait for user messages. Process only assigned unapplied blocks using the installed skill; applied prefix remains immutable. Held semantic facts are not verified canon.' : 'Process assigned unapplied source blocks; validate this attempt independently of the already-applied prefix. Processing completion is distinct from held semantic facts.', startedAt: startedAt.toISOString(), deadline: new Date(deadline).toISOString(), limits: job.limits, volumes };
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2), { mode: 0o600 });
   await writeFile(`${jobRoot}/job.json`, JSON.stringify(manifest, null, 2), { mode: 0o600 });
   await writeFile(`${cwd}/live-volumes.json`, JSON.stringify(volumes.map(({ id, workspace, metadataDirectory, label }) => ({ id, workspace, metadataDirectory, label }))), { mode: 0o600 });
@@ -97,8 +117,17 @@ try {
   apiKey = process.env.WORK_LLM_API_KEY?.trim() ?? '';
   if (!apiKey) throw new Error('WORK_LLM_API_KEY is required; supply through the environment, never job JSON');
   observer = await observeModels(apiKey, emit);
+  if (interactive) {
+    const path = `${cwd}/pi-control.json`;
+    const previous = await json(path, null);
+    const control = previous && /^[A-Za-z0-9_-]{43}$/.test(previous.token) && Date.parse(previous.expiresAt) > Date.now()
+      ? previous : { token: randomBytes(32).toString('base64url'), expiresAt: new Date(deadline).toISOString() };
+    await writeFile(path, JSON.stringify(control), { mode: 0o600 });
+    interactiveDeadline = Math.min(deadline, Date.parse(control.expiresAt));
+    consoleChannel = createPiConsole({ directory: `${cwd}/pi-console`, agentEvents, controlToken: control.token, expiresAt: interactiveDeadline });
+  }
   const sourcePaths = [skill, `${repo}/skills/novel-ontology/references/repair.md`, `${repo}/skills/novel-ontology/references/semantic-review.md`, manifestPath, 'NOVEL_JOB.json', ...volumes.flatMap((volume) => volume.blocks.map((block) => block.evidence))];
-  const scopes = volumes.map((volume) => ({ novel: volume.workspace, input: volume.input, skill, sourcePaths, blockIds: volume.blocks.map((block) => block.id), maxBlocks: volume.blocks.length }));
+  const scopes = volumes.map((volume) => ({ novel: volume.workspace, input: volume.input, skill, sourcePaths, blockIds: volume.blocks.map((block) => block.id), maxBlocks: volume.maxBlocks }));
   let queue = Promise.resolve();
   const execute = async (command, ignored, options) => {
     if (cancelled || Date.now() >= deadline || ++calls > manifest.limits.commands) throw new Error('Run window or command budget exhausted');
@@ -158,7 +187,7 @@ try {
         requireFactCoverage(factCoverages.get(`${volume.id}:${blockId}`), semanticRevision(current, digest(await semanticContext(volume.workspace))), decisions);
       }
     }
-    if (volume && args[0] === 'fix' && !['correct', 'corrections'].includes(args[1])) {
+    if (volume && (args[0] === 'ingest' || args[0] === 'changeset' && args[1] === 'approve' || args[0] === 'fix' && !['correct', 'corrections'].includes(args[1]))) {
       const checkpoint = `${jobRoot}/checkpoints/${Date.now()}-${calls}`;
       await mkdir(checkpoint, { recursive: true, mode: 0o700 });
       await cp(`${volume.workspace}/ontology`, `${checkpoint}/ontology`, { recursive: true, filter: (path) => !path.split('/').at(-1).startsWith('graph.lbug') });
@@ -217,37 +246,56 @@ try {
   bashTool.description = 'Run ONE scoped novel CLI command, not a general shell. Read paths and limits with cat NOVEL_JOB.json. Read the supplied absolute skill/reference and evidence paths with cat, wc -l or sed -n (1–150 lines per page). Shell joins, pipes, expansions, scripts and unrelated files are unavailable. Novel commands use exact manifest workspace paths. Quote JSON arguments and give reasons as separate flags.';
   const created = await createAgentSession({ cwd, agentDir, modelRuntime: runtime, model: runtime.getModel('novel-deepseek', 'deepseek-flash'), thinkingLevel: 'off', settingsManager, resourceLoader: loader, tools: ['bash'], customTools: [bashTool], sessionManager: SessionManager.create(cwd, `${jobRoot}/sessions`) });
   session = created.session;
-  timer = setTimeout(() => { cancelled = true; session.abort(); }, Math.max(1, deadline - Date.now()));
+  timer = setTimeout(() => { cancelled = true; session.abort(); }, Math.max(1, interactiveDeadline - Date.now()));
   process.once('SIGTERM', () => { cancelled = true; session.abort(); });
   process.once('SIGINT', () => { cancelled = true; session.abort(); });
-  await emit({ type: 'pi.status', status: 'working', label: 'Pi full-volume job · skill loaded · independent merge gates' });
-  let interrupted = 0;
-  for (;;) {
-    await session.prompt('Continue processing the full volumes using the novel-ontology skill.');
-    const last = session.messages.filter((message) => message.role === 'assistant').at(-1);
-    if (last?.stopReason === 'length' && interrupted++ < 2 && !cancelled) { await session.compact(); continue; }
-    if (['length', 'error', 'aborted'].includes(last?.stopReason) || cancelled) throw new Error('Pi run interrupted; no approval or completion inferred');
-    interrupted = 0;
-    const states = await jobState();
-    await writeFile(`${jobRoot}/result.md`, observer.redact(session.getLastAssistantText() ?? ''), { mode: 0o600 });
-    if (states.every((state) => state.applied)) {
-      const proof = await validateStability(jobRoot, manifest);
-      await writeFile(`${jobRoot}/validation.json`, JSON.stringify(proof, null, 2), { mode: 0o600 });
-      if (!proof.complete) {
-        await emit({ type: 'pi.status', status: 'review', label: 'Applied target needs validation review; no completion inferred' });
+  if (interactive) {
+    await runConsoleSession({
+      console: consoleChannel, session, deadline: interactiveDeadline, stopped: () => cancelled, redact: observer.redact,
+      onIdle: () => emit({ type: 'pi.status', status: 'idle', label: 'Pi ready · waiting for your console message' }),
+      onBusy: () => emit({ type: 'pi.status', status: 'working', label: 'Pi responding · skill loaded · scoped CLI and independent merge gates' }),
+      afterTurn: async () => {
+        const states = await jobState();
+        let proof = null;
+        if (states.length && states.every(state => state.applied)) {
+          proof = await validateStability(jobRoot, manifest);
+          await writeFile(`${jobRoot}/validation.json`, JSON.stringify(proof, null, 2), { mode: 0o600 });
+        }
+        const status = proof?.complete ? 'complete' : states.some(state => state.status !== 'not-started' && !state.applied) ? 'review' : 'waiting';
+        await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status, states, updatedAt: new Date().toISOString() }), { mode: 0o600 });
+        await consoleChannel.record({ kind: 'status', text: `${states.filter(state => state.applied).length}/${states.length} assigned blocks applied · ${states.reduce((sum, state) => sum + state.deferredFacts, 0)} semantic facts held · ${states.reduce((sum, state) => sum + state.deferred, 0)} proposals deferred`, status });
+      },
+    });
+  } else {
+    await emit({ type: 'pi.status', status: 'working', label: 'Pi full-volume job · skill loaded · independent merge gates' });
+    let interrupted = 0;
+    for (;;) {
+      await session.prompt('Continue processing the full volumes using the novel-ontology skill.');
+      const last = session.messages.filter((message) => message.role === 'assistant').at(-1);
+      if (last?.stopReason === 'length' && interrupted++ < 2 && !cancelled) { await session.compact(); continue; }
+      if (['length', 'error', 'aborted'].includes(last?.stopReason) || cancelled) throw new Error('Pi run interrupted; no approval or completion inferred');
+      interrupted = 0;
+      const states = await jobState();
+      await writeFile(`${jobRoot}/result.md`, observer.redact(session.getLastAssistantText() ?? ''), { mode: 0o600 });
+      if (states.every((state) => state.applied)) {
+        const proof = await validateStability(jobRoot, manifest);
+        await writeFile(`${jobRoot}/validation.json`, JSON.stringify(proof, null, 2), { mode: 0o600 });
+        if (!proof.complete) {
+          await emit({ type: 'pi.status', status: 'review', label: 'Applied target needs validation review; no completion inferred' });
+          await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status: 'review', states, stoppedAt: new Date().toISOString() }), { mode: 0o600 });
+          break;
+        }
+        await emit({ type: 'pi.status', status: 'complete', label: `Pi ${testChapters ? `${testChapters}-chapter stability test` : 'full-volume job'} processed · ${states.length} blocks applied · ${states.reduce((total, state) => total + state.deferred, 0)} proposals deferred · ${states.reduce((total, state) => total + state.deferredFacts, 0)} semantic facts held` });
+        await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status: 'complete', states, finishedAt: new Date().toISOString() }), { mode: 0o600 });
+        break;
+      }
+      if (states.some((state) => !state.applied && state.status !== 'not-started')) {
+        await emit({ type: 'pi.status', status: 'review', label: 'Pi full-volume job held · review required · no gate bypass' });
         await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status: 'review', states, stoppedAt: new Date().toISOString() }), { mode: 0o600 });
         break;
       }
-      await emit({ type: 'pi.status', status: 'complete', label: `Pi ${testChapters ? `${testChapters}-chapter stability test` : 'full-volume job'} processed · ${states.length} blocks applied · ${states.reduce((total, state) => total + state.deferred, 0)} proposals deferred · ${states.reduce((total, state) => total + state.deferredFacts, 0)} semantic facts held` });
-      await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status: 'complete', states, finishedAt: new Date().toISOString() }), { mode: 0o600 });
-      break;
+      await session.compact();
     }
-    if (states.some((state) => !state.applied && state.status !== 'not-started')) {
-      await emit({ type: 'pi.status', status: 'review', label: 'Pi full-volume job held · review required · no gate bypass' });
-      await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status: 'review', states, stoppedAt: new Date().toISOString() }), { mode: 0o600 });
-      break;
-    }
-    await session.compact();
   }
 } catch (error) {
   await emit({ type: 'pi.status', status: 'error', label: 'Pi full-volume job stopped · inspect private run report' });
