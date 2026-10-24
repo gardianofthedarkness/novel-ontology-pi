@@ -401,3 +401,58 @@ test("candidate refiner expands spans, drops NONEs, and falls back on failure", 
   });
   assert.deepEqual(await failing(nominations, sentences as never), ["美琴", "大家"]);
 });
+
+test("repeated evidence sentence IDs from the work model are deduplicated before semantic review", async () => {
+  const { input, ids } = makeInput({ text: "小明走来。\n小明坐下。\n小明离开。", known: [], reply: "{}" });
+  const scene = {
+    newEntities: [{ name: "小明", kind: "Character", aliases: [] }],
+    charactersPresent: ["小明"], charactersMentioned: [],
+    events: [{ summaryEn: "小明走来又坐下。", actors: ["小明"], affected: [], evidence: [ids[0], ids[0], ids[1], ids[1]] }],
+  };
+  const output = await createExtractor(stubWork(JSON.stringify(scene)))({ ...input });
+  const events = output.proposals.filter(proposal => proposal.kind === "create_event").map(proposal => proposal.payload as OntEvent);
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0].evidence.sentenceIds, [ids[0], ids[1]]);
+  const packet = newChangeSet(input.blockId);
+  packet.reviewSource = input.sentences;
+  packet.proposals = output.proposals;
+  assert.doesNotThrow(() => validateStructure(packet));
+});
+
+test("a dialogue card straddling two scenes keeps identical membership in every fragment", async () => {
+  const { sentences } = sectionBlock("看守的男人站在门口。\n他环顾四周。\n门卫走了过来。\n两人交谈起来。", 0);
+  const ids = sentences.map((s) => s.id);
+  const cardId = `dialogue:b0001:${ids[0]}`;
+  const card = (sentenceIds: string[]) => ({ id: cardId, sentenceIds, participantNames: ["看守的男人", "门卫"], unresolvedNames: [] });
+  const sceneResults = new Map([
+    [ids[0], Promise.resolve({
+      scene: { newEntities: [{ name: "看守的男人", kind: "Character", aliases: [] }], charactersPresent: ["看守的男人"], charactersMentioned: [], events: [] },
+      turns: [], dialogues: [card([ids[0], ids[1]])], notes: [],
+    })],
+    [ids[2], Promise.resolve({
+      // The second scene registers the first scene's name as an
+      // alias of a new declaration — the registry mutation that used
+      // to split the shared card's fragments mid-loop.
+      scene: { newEntities: [{ name: "门卫", kind: "Character", aliases: [{ text: "看守的男人", kind: "alias" }] }], charactersPresent: ["门卫"], charactersMentioned: [], events: [] },
+      turns: [], dialogues: [card([ids[2], ids[3]])], notes: [],
+    })],
+  ]);
+  const miniloop: MiniloopResult = {
+    changeset: newChangeSet("b0001"), escalations: [],
+    accepted: { sceneSpans: [[ids[0], ids[1]], [ids[2], ids[3]]], nameHits: [] }, windows: [],
+  };
+  const output = await createExtractor(stubWork("{}"))({
+    blockId: "b0001", chapterIndex: 0, sentences, miniloop,
+    knownEntities: [], proposals: [], counts: { events: 0, scenes: 0 }, sceneResults,
+  });
+  const sceneProposals = output.proposals.filter(proposal => proposal.kind === "create_scene");
+  assert.equal(sceneProposals.length, 2);
+  const fragments = sceneProposals.map(proposal => (proposal.payload as Scene).dialogues?.[0]);
+  assert.ok(fragments[0] && fragments[1], "both fragments carry the shared card");
+  const signature = (c: typeof fragments[0]) => JSON.stringify([[...(c?.participantIds ?? [])].sort(), [...(c?.unresolvedParticipantIds ?? [])].sort()]);
+  assert.equal(signature(fragments[0]), signature(fragments[1]));
+  const packet = newChangeSet("b0001");
+  packet.reviewSource = sentences;
+  packet.proposals = output.proposals;
+  assert.doesNotThrow(() => validateStructure(packet));
+});

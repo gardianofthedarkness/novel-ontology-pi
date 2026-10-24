@@ -7,9 +7,12 @@ import { loadChangeSet } from "../merge/changesetStore.js";
 import {
   checkMatches,
   nominateMatchCandidates,
+  type MatchCandidate,
   type MatchVerdict,
 } from "../matching/entityMatch.js";
-import type { Entity, OntEvent } from "../ontology/types.js";
+import { nominateStructuralCandidates } from "../matching/structuralMatch.js";
+import { loadDistinctMemory, saveDistinctMemory } from "../matching/emFaculty.js";
+import type { Entity, OntEvent, Relation, Scene } from "../ontology/types.js";
 
 export interface MatchPacket {
   status: "ok";
@@ -68,8 +71,28 @@ export async function runMatch(
   }
   const entities = [...byId.values()];
   const events = await bundle.loadFile<OntEvent>("events.jsonl");
+  const scenes = await bundle.loadFile<Scene>("scenes.jsonl");
+  const relations = await bundle.loadFile<Relation>("relations.jsonl");
 
   let candidates = nominateMatchCandidates(entities);
+  // Structural nomination joins the pool (EM faculty): pairs sharing
+  // no name form at all — cross-script twins, descriptive records.
+  // Pairs already form-nominated are not duplicated.
+  const formPairs = new Set(candidates.map((c) => [c.aId, c.bId].sort().join("|")));
+  const remembered = await loadDistinctMemory(novelDir);
+  const structural = nominateStructuralCandidates(entities, events, scenes, relations, { distinct: remembered });
+  const structuralFeatures = new Map<string, (typeof structural)[number]["features"]>();
+  for (const c of structural) {
+    const key = [c.aId, c.bId].sort().join("|");
+    if (formPairs.has(key)) continue;
+    structuralFeatures.set(key, c.features);
+    candidates.push({
+      aId: c.aId, bId: c.bId, kind: c.kind,
+      aForms: byId.get(c.aId)?.names.map((n) => n.text) ?? [],
+      bForms: byId.get(c.bId)?.names.map((n) => n.text) ?? [],
+      reasons: c.reasons, codeScore: c.features.score,
+    } satisfies MatchCandidate);
+  }
   if (opts.changesetId) {
     const cs = await loadChangeSet(novelDir, opts.changesetId);
     const proposedIds = new Set(
@@ -84,6 +107,24 @@ export async function runMatch(
   }
 
   const verdicts = await checkMatches(jevFromEnv(env), candidates, entities, events);
+  // Remember structural DISTINCT verdicts so the EM faculty and
+  // future sweeps skip the pair until its evidence grows.
+  const distinctVerdicts = verdicts.filter((v) => v.verdict === "distinct");
+  const newRecords = distinctVerdicts.flatMap((v) => {
+    const key = [v.aId, v.bId].sort().join("|");
+    const f = structuralFeatures.get(key);
+    if (!f) return [];
+    const [a, b] = key.split("|");
+    return [{ a, b, sharedScenes: f.sharedScenes, sharedNeighbors: f.sharedNeighbors, ts: new Date().toISOString() }];
+  });
+  if (newRecords.length) {
+    const merged = [...remembered];
+    for (const r of newRecords) {
+      const i = merged.findIndex((d) => [d.a, d.b].sort().join("|") === [r.a, r.b].sort().join("|"));
+      if (i >= 0) merged[i] = r; else merged.push(r);
+    }
+    await saveDistinctMemory(novelDir, merged);
+  }
   const withFix = (v: MatchVerdict) => ({
     ...v,
     suggestedFix: `novel fix merge ${novelDir} ${v.keepId} ${v.dropId}`,

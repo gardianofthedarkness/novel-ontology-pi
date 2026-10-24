@@ -46,6 +46,8 @@ import { applyChangeSet } from "./merge/apply.js";
 import { reviewPage } from "./merge/reviewPage.js";
 import { reviseProposals } from "./merge/revise.js";
 import { decideFacts, prepareSemantic, semanticPage } from "./merge/semanticCommands.js";
+import { runEmPassAfterApply } from "./matching/emFaculty.js";
+import { jevFromEnv } from "./connectors/jev.js";
 import {
   listChangeSets,
   loadChangeSet,
@@ -361,6 +363,17 @@ async function main(): Promise<void> {
       let cs = await setChangeSetStatus(novelDir, id, "approved");
       const bundle = new BundleStore(ontologyDir);
       const application = await applyChangeSet(bundle, cs, new EventLog(novelDir).emit, context);
+      // EM faculty cadence (sector 04): the per-block pass is homed
+      // on the apply, wherever it happens — in gate mode that is
+      // here, not BlockProcessor. Advisory: the helper never throws,
+      // and a Jev failure must not fail an approval that landed.
+      let entityMatching: Awaited<ReturnType<typeof runEmPassAfterApply>> = null;
+      try {
+        entityMatching = await runEmPassAfterApply({ novelDir, decisions: jevFromEnv(process.env), changeset: cs });
+      } catch {
+        // No Jev configured for this shell: the pass is skipped and
+        // retried by the chapter sweep or `novel match`.
+      }
       const counts = await buildGraphFromBundle(
         ontologyDir,
         join(ontologyDir, "graph.lbug"),
@@ -368,7 +381,7 @@ async function main(): Promise<void> {
       );
       cs = await loadChangeSet(novelDir, id);
       out(
-        { id: cs.id, status: cs.status, ...application, graph: counts },
+        { id: cs.id, status: cs.status, ...application, graph: counts, ...(entityMatching ? { entityMatching: { nominated: entityMatching.nominated, merged: entityMatching.merged.length, distinct: entityMatching.distinct.length, uncertain: entityMatching.uncertain.length } } : {}) },
         pretty,
       );
       return;

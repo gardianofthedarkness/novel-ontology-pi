@@ -23,6 +23,10 @@ import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../extra
 import { FacultyGraph, type FacultyGraphOptions } from "./facultyGraph.js";
 import { groundFacultyProposals } from "./facultyGrounding.js";
 import { previewFacultyStates } from "./facultyContinuity.js";
+import { join } from "node:path";
+import { BundleStore } from "../connectors/bundle.js";
+import type { OntEvent, Relation, Scene } from "../ontology/types.js";
+import { runEmPassAfterApply, loadMatchMemory, saveMatchMemory, type EmSummary } from "../matching/emFaculty.js";
 
 export type ReviewDecision = "approved" | "held" | "revision_requested";
 
@@ -72,6 +76,16 @@ export class BlockProcessor {
        */
       workModel?: WorkModel;
       facultyGraph?: false | FacultyGraphOptions;
+      /**
+       * The EM faculty (sector 04): after each block is applied, run
+       * the strict structural entity-matching pass over pairs that
+       * touch the block's entities (new x registry, new x new).
+       * Confident Jev verdicts merge through the audited maintenance
+       * path; distinct verdicts are remembered per novel. Only the
+       * ingest CLI enables this; EM failures never block ingestion.
+       */
+      entityMatching?: boolean;
+      onEntityMatching?: (blockId: string, summary: EmSummary) => void;
       /** Distinct event/scene counts in the bundle, for ID/order sequencing. */
       loadCounts?: () => Promise<{ events: number; scenes: number; reservedEntityIds?: string[] }>;
       /**
@@ -147,7 +161,19 @@ export class BlockProcessor {
           ...sentences,
           ...(blockIndex + 1 < blocks.length ? sectionBlock(blocks[blockIndex + 1].text, blocks[blockIndex + 1].sectionIndex ?? blockIndex + 1).sentences.slice(0, margin) : []),
         ] : sentences;
-        const faculty = await graph?.run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, contextSentences, knownEntities, pins, constraints, onProgress: async progress => publish(progress, true) });
+        const faculty = await graph?.run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, contextSentences, knownEntities, pins, constraints, fragmentDeclines: graph && this.observation.novelDir ? (await loadMatchMemory(this.observation.novelDir)).fragmentDeclines : [], onProgress: async progress => publish(progress, true) });
+        if (faculty && faculty.fragmentDeclines.length && this.observation.novelDir) {
+          // Remember fragment-at-birth declines per novel so later
+          // blocks do not re-ask the same pair (matching.json).
+          const memory = await loadMatchMemory(this.observation.novelDir);
+          const known = new Set(memory.fragmentDeclines.map((fd) => `${fd.form}|${fd.entityId}`));
+          for (const fd of faculty.fragmentDeclines) {
+            if (!known.has(`${fd.form}|${fd.entityId}`)) {
+              memory.fragmentDeclines.push({ ...fd, ts: new Date().toISOString() });
+            }
+          }
+          await saveMatchMemory(this.observation.novelDir, memory);
+        }
         const result = faculty?.miniloop ?? await miniloop.runBlock({
           blockId: block.blockId,
           sentences,
@@ -204,6 +230,18 @@ export class BlockProcessor {
           result.changeset.status = "approved";
           await applyChangeSet(this.store, result.changeset, emit);
           mergedBlocks.push(block.blockId);
+          if (this.observation.entityMatching && this.observation.novelDir) {
+            const summary = await runEmPassAfterApply({
+              novelDir: this.observation.novelDir,
+              decisions: this.decisions,
+              changeset: result.changeset,
+            });
+            if (summary && summary.nominated > 0) {
+              result.changeset.reviewNotes["em-faculty"] =
+                `EM pass after apply: ${summary.nominated} nominated, ${summary.merged.length} merged, ${summary.distinct.length} distinct (remembered), ${summary.uncertain.length} uncertain.`;
+              this.observation.onEntityMatching?.(block.blockId, summary);
+            }
+          }
           break;
         }
         if (decision === "held") {

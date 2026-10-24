@@ -12,6 +12,7 @@ import type {
   Scene,
 } from "../ontology/types.js";
 import type { Sentence } from "../text/sectioning.js";
+import type { NamedDialogueCard } from "../processing/dialogueCards.js";
 import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints, type ExtractionConstraints } from "./constraints.js";
 
 /**
@@ -95,7 +96,7 @@ export interface LlmScene {
   charactersPresent?: string[];
   charactersMentioned?: string[];
   events?: LlmEvent[];
-  newEntities?: { name?: string; kind?: string; aliases?: { text?: string; kind?: string }[] }[];
+  newEntities?: { name?: string; kind?: string; descriptive?: boolean; aliases?: { text?: string; kind?: string }[] }[];
 }
 
 export interface NamedTurn {
@@ -326,6 +327,9 @@ export function createExtractor(work: WorkModel) {
     // --- proposal buckets, composed at the end ---
     const entityUpserts = new Map<string, ChangeProposal>();
     const sceneProposals: ChangeProposal[] = [];
+    /** Dialogue cards are resolved after the scene loop, against
+     * the block-final registry (see below). */
+    const pendingCardScenes: { scene: Scene; cards: NamedDialogueCard[] }[] = [];
     const eventProposals: ChangeProposal[] = [];
     const relationProposals: ChangeProposal[] = [];
     const stateProposals: ChangeProposal[] = [];
@@ -546,7 +550,7 @@ export function createExtractor(work: WorkModel) {
       for (let ei = 0; ei < llmEvents.length; ei++) {
         const le = llmEvents[ei];
         if (!le.summaryEn) continue;
-        const evidenceIds = strList(le.evidence).filter((id) => spanIds.includes(id));
+        const evidenceIds = [...new Set(strList(le.evidence).filter((id) => spanIds.includes(id)))];
         if (input.sceneResults && !evidenceIds.length) {
           notes[`faculty:missing-evidence:${sceneId}:${ei}`] = "Event omitted: no valid source evidence was supplied; no first-sentence citation was fabricated.";
           continue;
@@ -676,19 +680,10 @@ export function createExtractor(work: WorkModel) {
         charactersPresent: [...castIds].filter((id) => entityById.get(id)?.kind === "Character"),
         charactersMentioned: [...mentionedIds].filter((id) => !castIds.has(id) && entityById.get(id)?.kind === "Character"),
         turns: turns.map((turn) => ({ ...turn, speakerId: turn.speakerId && entityById.get(turn.speakerId)?.kind === "Character" ? turn.speakerId : null, addresseeId: turn.addresseeId && entityById.get(turn.addresseeId)?.kind === "Character" ? turn.addresseeId : null })),
-        ...(faculty?.dialogues ? { dialogues: faculty.dialogues.map(card => {
-          const resolveMembers = (names: string[]) => [...new Set(names.flatMap(name => {
-            const id = formToId.get(name);
-            if (id && entityById.get(id)?.kind === "Character") return [id];
-            notes[`faculty:unknown-member:${card.id}:${name}`] = "Dialogue participant identity did not resolve; source retained without minting or guessing a person.";
-            return [];
-          }))];
-          const participantIds = resolveMembers(card.participantNames);
-          return { id: card.id, sentenceIds: [...card.sentenceIds], participantIds, unresolvedParticipantIds: resolveMembers(card.unresolvedNames).filter(id => !participantIds.includes(id)) };
-        }) } : {}),
         locationId,
         ...(faculty && llm.summary ? { summary: llm.summary } : {}),
       };
+      if (faculty?.dialogues) pendingCardScenes.push({ scene, cards: faculty.dialogues });
       sceneProposals.push({
         id: `${input.blockId}_${sceneId}`,
         kind: "create_scene",
@@ -700,6 +695,26 @@ export function createExtractor(work: WorkModel) {
         proposals: [...otherProposals, ...entityUpserts.values(), ...sceneProposals, ...eventProposals, ...relationProposals, ...stateProposals, ...stubByCandidate.values()],
         completedScenes: si + 1,
         totalScenes: sceneSpans.length,
+      });
+    }
+
+    // --- dialogue cards: resolve members against the block-final
+    // registry. A card is one logical block-level object; its scene
+    // fragments must carry identical candidate sets for semantic
+    // review. Resolving per scene, while formToId is still mutating,
+    // lets a later scene's fold or alias registration remap a name
+    // and splits the fragments' membership signatures (deadlocking
+    // the gate on its own pipeline's output). ---
+    for (const { scene, cards } of pendingCardScenes) {
+      scene.dialogues = cards.map(card => {
+        const resolveMembers = (names: string[]) => [...new Set(names.flatMap(name => {
+          const id = formToId.get(name);
+          if (id && entityById.get(id)?.kind === "Character") return [id];
+          notes[`faculty:unknown-member:${card.id}:${name}`] = "Dialogue participant identity did not resolve; source retained without minting or guessing a person.";
+          return [];
+        }))];
+        const participantIds = resolveMembers(card.participantNames);
+        return { id: card.id, sentenceIds: [...card.sentenceIds], participantIds, unresolvedParticipantIds: resolveMembers(card.unresolvedNames).filter(id => !participantIds.includes(id)) };
       });
     }
 
