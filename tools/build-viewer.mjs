@@ -22,10 +22,11 @@ const site = join(root, "docs", "system1");
 const css = await readFile(join(site, "assets", "style.css"), "utf8");
 const sectorJs = await readFile(join(site, "assets", "sector.js"), "utf8");
 
+/* Pipeline order; the viewer bar groups these under the dashboard
+   hierarchy (decision #21) — see GROUPS in the shell below. */
 const PAGES = [
   "index.html",
   "roadmap.html",
-  "playground-frontend.html",
   "sectioning.html",
   "scene-boundary.html",
   "dialogue-detector.html",
@@ -38,6 +39,7 @@ const PAGES = [
   "storage-connectors.html",
   "timeline-forking.html",
   "simulation.html",
+  "playground-frontend.html",
 ];
 
 const BRIDGE = `
@@ -87,6 +89,16 @@ const shell = `<!DOCTYPE html>
     padding:4px 11px;font-size:12.5px;cursor:pointer;white-space:nowrap}
   button:hover{color:#e8ecf4;border-color:#2dd4bf}
   button.here{background:#2dd4bf;color:#0b0e14;border-color:#2dd4bf;font-weight:600}
+  .menu{position:relative}
+  .dropdown{position:absolute;top:calc(100% + 6px);left:0;z-index:60;display:none;
+    flex-direction:column;gap:2px;min-width:220px;padding:6px;
+    background:#171e2e;border:1px solid #26304a;border-radius:12px;
+    box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .menu.open .dropdown{display:flex}
+  @media (hover:hover){ .menu:hover .dropdown{display:flex} }
+  .dropdown button{border-radius:8px;text-align:left;border-color:transparent;background:none}
+  .dropdown button:hover{background:#1d2639}
+  .dropdown button.here{background:#2dd4bf;color:#0b0e14}
   iframe{width:100%;height:calc(100vh - 57px);border:0;display:block;background:#0b0e14}
   #note{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:#171e2e;
     border:1px solid #fbbf24;color:#e8ecf4;border-radius:10px;padding:8px 14px;font-size:13px;
@@ -104,17 +116,36 @@ const LABELS = { "index.html": "Overview", "roadmap.html": "🗺 Roadmap", "play
   "scene-boundary.html": "02 Scene boundary", "dialogue-detector.html": "03 Dialogue",
   "name-detector.html": "04 Names", "presence-detector.html": "05 Presence",
   "speaker-attribution.html": "06 Speakers", "miniloop-engine.html": "07 Miniloop engine",
-  "extraction.html": "08 Extraction", "merge-gate.html": "09 Merge gate",
+  "extraction.html": "08 Extraction", "merge-gate.html": "09 Merge gate & EM",
   "storage-connectors.html": "10 Storage", "timeline-forking.html": "11 Timelines & forks",
   "simulation.html": "12 Simulation" };
+/* The bar carries only the hierarchy: Overview, Roadmap, and one
+   dropdown per group — the 13 sector pages live inside the dropdowns. */
+const GROUPS = [
+  { label: "⛏ Digger", pages: ["sectioning.html", "scene-boundary.html", "dialogue-detector.html", "name-detector.html", "presence-detector.html", "speaker-attribution.html", "miniloop-engine.html", "extraction.html"] },
+  { label: "🧱 Solidifier", pages: ["merge-gate.html"] },
+  { label: "📦 Ground", pages: ["storage-connectors.html"] },
+  { label: "Simulation group", pages: ["timeline-forking.html", "simulation.html"] },
+  { label: "Frontend", pages: ["playground-frontend.html"] },
+];
+const GROUP_OF = {};
+GROUPS.forEach((g, i) => g.pages.forEach(p => GROUP_OF[p] = i));
 const bar = document.getElementById('bar');
 const frame = document.getElementById('frame');
-bar.innerHTML = '<b>novel-ontology-pi<small>System 1 · single-file viewer</small></b>' +
-  ORDER.map(p => '<button data-p="' + p + '">' + LABELS[p] + '</button>').join('');
+bar.innerHTML = '<b>novel-ontology-pi<small>Skill + CLI + Adaptor + Frontend · viewer</small></b>' +
+  '<button data-p="index.html">Overview</button>' +
+  '<button data-p="roadmap.html">🗺 Roadmap</button>' +
+  GROUPS.map((g, i) =>
+    '<span class="menu"><button class="menubtn" data-g="' + i + '">' + g.label + ' ▾</button>' +
+    '<span class="dropdown">' + g.pages.map(p => '<button data-p="' + p + '">' + LABELS[p] + '</button>').join('') + '</span></span>'
+  ).join('');
+function closeMenus() { bar.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open')); }
 function go(p) {
-  if (!PAGES[p]) { note('That link points to DESIGN.md in the repo — not part of this viewer.'); return; }
+  if (!PAGES[p]) { note('That link points outside the viewer pages — open it in the repo.'); return; }
   frame.srcdoc = PAGES[p];
-  document.querySelectorAll('#bar button').forEach(b => b.classList.toggle('here', b.dataset.p === p));
+  bar.querySelectorAll('button[data-p]').forEach(b => b.classList.toggle('here', b.dataset.p === p));
+  bar.querySelectorAll('.menubtn').forEach(b => b.classList.toggle('here', GROUP_OF[p] === Number(b.dataset.g)));
+  closeMenus();
   if (location.hash !== '#' + p) history.replaceState(null, '', '#' + p);
 }
 let noteTimer;
@@ -123,7 +154,20 @@ function note(msg) {
   n.textContent = msg; n.style.display = 'block';
   clearTimeout(noteTimer); noteTimer = setTimeout(() => n.style.display = 'none', 3500);
 }
-bar.addEventListener('click', e => { const b = e.target.closest('button[data-p]'); if (b) go(b.dataset.p); });
+bar.addEventListener('click', e => {
+  const mb = e.target.closest('.menubtn');
+  if (mb) {
+    const menu = mb.parentElement;
+    const wasOpen = menu.classList.contains('open');
+    closeMenus();
+    if (!wasOpen) menu.classList.add('open');
+    e.stopPropagation();
+    return;
+  }
+  const b = e.target.closest('button[data-p]');
+  if (b) go(b.dataset.p);
+});
+document.addEventListener('click', e => { if (!e.target.closest('.menu')) closeMenus(); });
 window.addEventListener('message', e => {
   if (e.data && e.data.nav) {
     const target = String(e.data.nav).split('/').pop();
