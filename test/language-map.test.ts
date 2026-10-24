@@ -8,8 +8,8 @@ import {
   resolveLanguageMap,
   setActiveLanguageMap,
   LANGUAGE_MAP_ENV,
-} from "../src/text/languageMap.js";
-import { foldVariants, formKey } from "../src/text/nameForms.js";
+} from "../src/ground/language/languageMap.js";
+import { foldVariants, formKey } from "../src/ground/language/nameForms.js";
 
 test("the registry ships the zh variant map as default plus an identity map", () => {
   const ids = listLanguageMaps().map((m) => m.id);

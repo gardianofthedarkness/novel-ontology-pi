@@ -3,20 +3,20 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { containmentTargets } from "../src/matching/fragmentMatch.js";
+import { containmentTargets } from "../src/solidifier/matching/fragmentMatch.js";
 import {
   loadMatchMemory,
   loadDistinctMemory,
   saveMatchMemory,
   saveDistinctMemory,
-} from "../src/matching/emFaculty.js";
-import { nameDetector } from "../src/autostep/patches/name-detector.js";
-import type { PatchContext } from "../src/autostep/patches/types.js";
-import { FacultyGraph } from "../src/processing/facultyGraph.js";
-import { sectionBlock } from "../src/text/sectioning.js";
-import type { DecisionModel } from "../src/connectors/jev.js";
-import type { WorkModel } from "../src/connectors/llm.js";
-import type { Entity } from "../src/ontology/types.js";
+} from "../src/solidifier/matching/emFaculty.js";
+import { nameDetector } from "../src/digger/autostep/patches/name-detector.js";
+import type { PatchContext } from "../src/digger/autostep/patches/types.js";
+import { FacultyGraph } from "../src/digger/processing/facultyGraph.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
+import type { DecisionModel } from "../src/ground/connectors/jev.js";
+import type { WorkModel } from "../src/ground/connectors/llm.js";
+import type { Entity } from "../src/ground/ontology/types.js";
 
 const shokuhou: Entity = {
   id: "char_000100", kind: "Character", properties: {}, confidence: 1,

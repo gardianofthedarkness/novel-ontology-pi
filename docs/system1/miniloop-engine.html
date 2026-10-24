@@ -15,8 +15,8 @@
 <h1>Miniloop engine — windows, batching, gates, recursion</h1>
 <p>
   <span class="badge v1">status: implemented (skeleton)</span>
-  <span class="badge">repo: <code>src/autostep/miniloop.ts</code></span>
-  <span class="badge">model: Jev connector · <code>src/connectors/jev.ts</code></span>
+  <span class="badge">repo: <code>src/digger/autostep/miniloop.ts</code></span>
+  <span class="badge">model: Jev connector · <code>src/ground/connectors/jev.ts</code></span>
 </p>
 <p class="sub">The patches (02–06) are the questions; this sector is the <b>loop that asks them</b>:
 it slides a window over the block's sentences, batches each patch's questions into one Jev call,
@@ -65,9 +65,9 @@ everything into the block's ChangeSet. It is the "autostep" in System 1's name.<
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li><code>src/autostep/miniloop.ts</code> — <code>Miniloop.runBlock()</code>: window loop → patch loop → accumulate.</li>
-  <li><code>src/connectors/jev.ts</code> — <code>DecisionModel</code> interface, <code>JevClient</code> (Bearer key from env, pinned model), <code>MockDecisionModel</code> for tests.</li>
-  <li>Patch registry order lives in <code>src/autostep/patches/index.ts</code>.</li>
+  <li><code>src/digger/autostep/miniloop.ts</code> — <code>Miniloop.runBlock()</code>: window loop → patch loop → accumulate.</li>
+  <li><code>src/ground/connectors/jev.ts</code> — <code>DecisionModel</code> interface, <code>JevClient</code> (Bearer key from env, pinned model), <code>MockDecisionModel</code> for tests.</li>
+  <li>Patch registry order lives in <code>src/digger/autostep/patches/index.ts</code>.</li>
 </ul>
 
 <h2>Open questions — the engine</h2>

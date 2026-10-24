@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FacultyPool, type FacultyCall } from "../src/processing/facultyPool.js";
-import { touchedDraftIds, type WorkingDraft } from "../src/processing/draft.js";
-import { projectEvent } from "../src/events/types.js";
+import { FacultyPool, type FacultyCall } from "../src/digger/processing/facultyPool.js";
+import { touchedDraftIds, type WorkingDraft } from "../src/digger/processing/draft.js";
+import { projectEvent } from "../src/ground/events/types.js";
 
 test("faculty calls distinguish actual fallback work and correlate their starts with completions", async () => {
   const observed: FacultyCall[] = [];

@@ -5,9 +5,9 @@ import { mkdtemp, mkdir, readFile, writeFile, appendFile, rm, readdir, rename } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { startWatch } from "../src/watch/server.js";
-import { EventLog, cursorId } from "../src/events/log.js";
-import type { EventRecord } from "../src/events/types.js";
+import { startWatch } from "../src/ground/watch/server.js";
+import { EventLog, cursorId } from "../src/ground/events/log.js";
+import type { EventRecord } from "../src/ground/events/types.js";
 
 async function stream(url: string, lastId?: string) {
   const frames: string[] = [];

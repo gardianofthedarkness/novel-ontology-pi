@@ -1,0 +1,786 @@
+import type { WorkModel } from "../../ground/connectors/llm.js";
+import type { MiniloopResult } from "../autostep/miniloop.js";
+import type { CandidateNomination, NameScanHit } from "../autostep/patches/name-detector.js";
+import type { ChangeProposal } from "../../solidifier/merge/changeset.js";
+import type {
+  Entity,
+  EntityKind,
+  EventType,
+  NameForm,
+  OntEvent,
+  Relation,
+  Scene,
+} from "../../ground/ontology/types.js";
+import type { Sentence } from "../intake/sectioning.js";
+import { formKey } from "../../ground/language/nameForms.js";
+import type { NamedDialogueCard } from "../processing/dialogueCards.js";
+import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints, type ExtractionConstraints } from "./constraints.js";
+
+/**
+ * Sector 08 — extraction: from structured scenes to ontology.
+ *
+ * The work LLM reads ONE structured scene at a time (span + decided
+ * cast + attributed turns + graph context) and describes its events in
+ * source-language text in schema-keyed JSON. Everything after the call is deterministic:
+ * name resolution, ID minting, validation, and proposal assembly
+ * happen here, never in the model.
+ *
+ * Design defaults honored (decision sheet, sector 08):
+ *  - event granularity is the model's call, soft target 3–5 per scene;
+ *  - CAUSES edges originate here (no Jev pre-pass in v1);
+ *  - state deltas carry all six dimensions (emotions, knowledge,
+ *    goals, relationships, location, possessions) as set_state_change
+ *    proposals — gate-visible; the fold into state-at-a-point is
+ *    sector 12's work, and apply treats them as deferred until then;
+ *  - NO model self-reported confidence: extraction proposals carry
+ *    EXTRACTION_CONFIDENCE, a policy constant. The merge gate is the
+ *    fidelity check (it spotlights new entities + these proposals).
+ *
+ * Name flow (sector 04): stubs the name patch proposed
+ * (upsert_entity with a candidateName payload) are FLESHED OUT here —
+ * replaced by full entity proposals when extraction confirms the
+ * character, dropped with a review note when it does not. add_alias
+ * proposals are folded into upsert_entity name lists, as apply.ts
+ * requires. A participant name that resolves to nothing known is
+ * minted as a new entity and NOTED as extraction-originated (never
+ * Jev-judged) so the gate can scrutinize it.
+ */
+export const EXTRACTION_CONFIDENCE = 0.7;
+export const CANON_TIMELINE_ID = "tl_canon";
+
+export interface ExtractionInput {
+  blockId: string;
+  chapterIndex: number;
+  sentences: Sentence[];
+  miniloop: MiniloopResult;
+  knownEntities: Entity[];
+  /** The block's ChangeSet proposals as the miniloop left them. */
+  proposals: ChangeProposal[];
+  /** Distinct entity/event/scene counts already in the bundle. */
+  counts: { events: number; scenes: number; reservedEntityIds?: string[] };
+  constraints?: ExtractionConstraints;
+  sceneResults?: Map<string, Promise<SceneFacultyResult>>;
+  onProgress?: (progress: { proposals: ChangeProposal[]; completedScenes: number; totalScenes: number }) => Promise<void>;
+}
+
+export interface ExtractionOutput {
+  proposals: ChangeProposal[];
+  /** Review notes keyed by proposal id (or a synthetic extraction key). */
+  notes: Record<string, string>;
+}
+
+interface LlmStateChange {
+  character?: string;
+  emotions?: Record<string, number>;
+  knowledgeAdd?: string[];
+  goalsAdd?: string[];
+  relationships?: Record<string, number>;
+  location?: string | null;
+  possessionsAdd?: string[];
+  possessionsRemove?: string[];
+}
+
+interface LlmEvent {
+  summaryEn?: string;
+  eventType?: string;
+  importance?: number;
+  actors?: string[];
+  affected?: string[];
+  evidence?: string[];
+  causes?: number | null;
+  stateChanges?: LlmStateChange[];
+}
+
+export interface LlmScene {
+  summary?: string;
+  locationName?: string | null;
+  charactersPresent?: string[];
+  charactersMentioned?: string[];
+  events?: LlmEvent[];
+  newEntities?: { name?: string; kind?: string; descriptive?: boolean; aliases?: { text?: string; kind?: string }[] }[];
+}
+
+export interface NamedTurn {
+  speakerName: string | null;
+  addresseeName: string | null;
+  sentenceIds: string[];
+  continuesPrevious?: boolean;
+}
+
+export interface SceneFacultyResult {
+  scene: LlmScene;
+  turns: NamedTurn[];
+  dialogues?: import("../processing/dialogueCards.js").NamedDialogueCard[];
+  notes: string[];
+}
+
+export const EXTRACTION_SYSTEM = `You are the extraction step of a novel-ontology pipeline. You receive ONE structured scene from a novel: its sentences (with stable ids) and the characters the system already knows. Dialogue cards are multi-person exchanges, not single-speaker turns. You output ONLY a JSON object describing the scene's ontology: events, participants, causal links, character state changes, and any genuinely new entities.
+
+Rules:
+- Do not assign individual sentences to speakers or addressees. Shared dialogue membership does not establish a directed utterance, relationship or emotion; derive such claims only from explicit original evidence.
+- Animal entities are outside the project's current scope; do not mint animal nodes or invent human replacements. Preserve relevant source evidence and human-story events. Households/families acting as groups are Organizations, not individual Characters. A person merely mentioned can still be a Character, but mentioning them does not establish physical presence or speaking.
+- Write every summary and narrative state fact in the language of the scene's surrounding narration, not English by default. The legacy JSON key summaryEn still holds a source-language summary. Keep schema keys and enum values unchanged.
+- Names and aliases must be copied exactly in their original surface form and script from the text or known-cast list. Do not translate or romanize names. Preserve original names in mixed-language passages too.
+- Reference characters ONLY by name forms that appear in the scene text or the known-cast list. Never invent an id.
+- List charactersPresent and charactersMentioned for THIS scene only, using name forms. Known cast and wider-window decisions are context, not proof of presence. Do not copy a previous roster. A name match, comparison, memory, advertisement or event actor alone does not establish physical presence. Leave unsupported presence empty.
+- Extract 3-5 events for the scene (fewer if the scene is genuinely smaller). An event is something that happens or is revealed — not a mood, not pure description.
+- Evidence: each event lists the ids of the sentences that directly support it, copied from the scene's sentence list. Never invent sentence ids.
+- Causality: an event's "causes" is the 0-based index, within your events array, of an earlier event in this scene that directly causes it, or null. Only when the text supports a direct causal link.
+- State changes: only changes the text actually shows — emotions (deltas -1..1), knowledge gained (short source-language facts), goals gained, relationship shifts toward another named character (-1..1), a location the character ends up in, possessions gained or lost. Write free-text goals and possessions in the narrative's language too.
+- New entities: people, places, organizations, or significant items in this scene that are NOT in the known-cast list. Give the fullest name form used in the text, plus any alias/nickname/title forms used for them in this scene.
+- locationName: the original-form name of the place the scene happens in, if the text establishes one, else null.
+- Output JSON only, in exactly the shape requested. No commentary.`;
+
+export function buildScenePrompt(input: {
+  sceneIndex: number;
+  chapterIndex: number;
+  sentences: Sentence[];
+  cast: { id: string; forms: string[] }[];
+  turns: { speakerId: string | null; sentenceIds: string[] }[];
+  pendingCandidates: string[];
+  registry?: { id: string; forms: string[] }[];
+  constraints?: ExtractionConstraints;
+}): string {
+  const castLines = input.cast.length
+    ? input.cast.map((c) => `- ${c.id} — ${c.forms.join(" / ")}`).join("\n")
+    : "(none known yet)";
+  const turnLines = input.turns.length
+    ? input.turns
+        .map((t) => `- sentences ${t.sentenceIds.join(", ")} — speaker: ${t.speakerId ?? "unknown"}`)
+        .join("\n")
+    : "Multi-person exchanges are resolved independently; no sentence-speaker map is supplied.";
+  const sentenceLines = input.sentences.map((s) => `${s.id}: ${s.text}`).join("\n");
+  return [
+    `SCENE ${input.sceneIndex} (chapter ${input.chapterIndex})`,
+    `WINDOW CAST HINTS (id — name forms; verify against this scene, not proof of physical presence):\n${castLines}`,
+    input.registry?.length
+      ? `KNOWN IDENTITY REGISTRY (not evidence of presence in this scene):\n${input.registry.map((entity) => `- ${entity.id} — ${entity.forms.join(" / ")}`).join("\n")}`
+      : "",
+    input.constraints
+      ? `REVIEWER CORRECTIONS (honor these; do not fuse distinct identities or mint rejected Character placeholders; leave unresolved actors unattributed):\n${JSON.stringify(input.constraints)}`
+      : "",
+    input.pendingCandidates.length
+      ? `NEW-NAME CANDIDATES a decision model judged likely new (if they appear, describe them under newEntities): ${input.pendingCandidates.join(", ")}`
+      : "",
+    `${input.turns.length ? "LEGACY ATTRIBUTION" : "DIALOGUE CARDS"}:\n${turnLines}`,
+    `SENTENCES:\n${sentenceLines}`,
+    `Respond with JSON of exactly this shape:
+{"locationName": string|null, "charactersPresent": [name forms], "charactersMentioned": [name forms], "events": [{"summaryEn": string, "eventType": "dialogue"|"action"|"revelation"|"conflict"|"movement"|"decision"|"introduction"|"resolution"|"other", "importance": number 0..1, "actors": [name forms], "affected": [name forms], "evidence": [sentence ids], "causes": number|null, "stateChanges": [{"character": name form, "emotions": {string: number}, "knowledgeAdd": [string], "goalsAdd": [string], "relationships": {name form: number}, "location": string|null, "possessionsAdd": [string], "possessionsRemove": [string]}]}], "newEntities": [{"name": string, "kind": "Character"|"Location"|"Organization"|"Item"|"Concept", "aliases": [{"text": string, "kind": "alias"|"nickname"|"title"}]}]}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export const REFINER_SYSTEM = `You extract person names from isolated text spans. You receive numbered spans, each with the single sentence it came from. You know nothing about the story and must not guess beyond the sentence. For each span, reply with the fullest person-name form the span refers to (a partial or suffixed form expanded to the full name as written in the sentence), or NONE if the span is not a person. Output one line per span: N: <name or NONE>. Nothing else.`;
+
+/**
+ * The zero-context candidate refiner (sector 04): one work-LLM call
+ * per block, carrying ONLY the nominated spans and their sentences —
+ * no accumulated story context, so nothing biases it toward an
+ * existing character. Unparseable items keep their raw span; Jev is
+ * still the judge of every candidate that comes out of here.
+ */
+export function createCandidateRefiner(work: WorkModel) {
+  return async (
+    nominations: CandidateNomination[],
+    sentences: Sentence[],
+  ): Promise<string[]> => {
+    if (nominations.length === 0) return [];
+    const byId = new Map(sentences.map((s) => [s.id, s.text]));
+    const listing = nominations
+      .map((n, i) => `${i + 1}. span: 「${n.span}」 sentence: ${byId.get(n.sentenceId) ?? ""}`)
+      .join("\n");
+    try {
+      const raw = await work.generate({
+        system: REFINER_SYSTEM,
+        prompt: listing,
+        maxTokens: 800,
+      });
+      const refined = new Map<number, string | null>();
+      for (const line of raw.split("\n")) {
+        const m = line.match(/^\s*(\d+)\s*[:：]\s*(.+?)\s*$/);
+        if (!m) continue;
+        const idx = Number(m[1]) - 1;
+        const value = m[2].replace(/^「|」$/g, "");
+        // NONE is a verdict (drop the span); a missing line is a parse
+        // gap and keeps the raw span for Jev to judge.
+        if (value) refined.set(idx, value === "NONE" ? null : value);
+      }
+      const out: string[] = [];
+      nominations.forEach((n, i) => {
+        const v = refined.has(i) ? refined.get(i) : n.span;
+        if (v && !out.includes(v)) out.push(v);
+      });
+      return out;
+    } catch {
+      // Refinement is an optimization; the raw spans still get judged.
+      return nominations.map((n) => n.span);
+    }
+  };
+}
+
+const KIND_PREFIX: Record<string, string> = {
+  Character: "char",
+  Location: "loc",
+  Organization: "org",
+  Item: "item",
+  Concept: "concept",
+};
+const EVENT_TYPES = new Set<string>([
+  "dialogue", "action", "revelation", "conflict", "movement",
+  "decision", "introduction", "resolution", "other",
+]);
+
+function guessLang(text: string): string {
+  if (/[぀-ヿ]/.test(text)) return "ja";
+  if (/[一-鿿]/.test(text)) return "zh";
+  if (/[A-Za-z]/.test(text)) return "en";
+  return "und";
+}
+
+function parseSceneJson(raw: string): LlmScene | null {
+  const cleaned = raw.replace(/```(?:json)?/g, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(cleaned.slice(start, end + 1)) as LlmScene;
+  } catch {
+    return null;
+  }
+}
+
+const clamp01 = (v: unknown, fallback: number): number =>
+  typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback;
+const clampDelta = (v: unknown): number =>
+  typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(-1, v)) : 0;
+const strList = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+
+/**
+ * Builds the BlockProcessor extraction step backed by a WorkModel.
+ * Sequential per scene: entities minted in scene N are known cast for
+ * scene N+1 of the same block, which is what the design means by
+ * "relevant graph context".
+ */
+export function createExtractor(work: WorkModel) {
+  return async (input: ExtractionInput): Promise<ExtractionOutput> => {
+    const notes: Record<string, string> = {};
+    const constraints = input.constraints ? parseExtractionConstraints(input.constraints) : undefined;
+    const rejected = new Set(constraints?.rejectCharacterNames ?? []);
+    const distinct = (left: string[], right: string[]) => (constraints?.distinctNames ?? []).some(
+      (group) => left.some((name) => group.includes(name))
+        && right.some((name) => group.includes(name) && !left.includes(name)),
+    );
+    if (constraints) notes[`recall:pin:${EXTRACTION_CONSTRAINTS_KEY}`] = "Reviewer extraction constraints were applied to the scene prompts and identity resolver; review the fresh proposals before approval.";
+    const sentenceById = new Map(input.sentences.map((s) => [s.id, s]));
+    const spans =
+      (input.miniloop.accepted["sceneSpans"] as string[][] | undefined)?.filter(
+        (sp) => sp.length > 0,
+      ) ?? [];
+    const sceneSpans = spans.length ? spans : [input.sentences.map((s) => s.id)];
+    const nameHits = (input.miniloop.accepted["nameHits"] as NameScanHit[] | undefined) ?? [];
+
+    // --- name resolution state (grows as scenes mint entities) ---
+    // formToId keys are formKey() folds under the ACTIVE LANGUAGE MAP
+    // (text/languageMap.ts): a variant spelling resolves to the known
+    // entity; the spelling itself is still recorded as its own form.
+    const entityById = new Map<string, Entity>();
+    const formToId = new Map<string, string>();
+    for (const e of input.knownEntities) {
+      entityById.set(e.id, e);
+      for (const n of e.names) formToId.set(formKey(n.text), e.id);
+    }
+    const suffixBase = new Map<string, number>();
+    for (const id of [...input.knownEntities.map((entity) => entity.id), ...input.counts.reservedEntityIds ?? []]) {
+      const m = id.match(/^([a-z]+)_(\d+)$/);
+      if (m) suffixBase.set(m[1], Math.max(suffixBase.get(m[1]) ?? 0, Number(m[2])));
+    }
+    const mintEntity = (name: string, kind: EntityKind, aliases: NameForm[]): Entity => {
+      const prefix = KIND_PREFIX[kind] ?? "char";
+      const next = (suffixBase.get(prefix) ?? 0) + 1;
+      suffixBase.set(prefix, next);
+      const entity: Entity = {
+        id: `${prefix}_${String(next).padStart(6, "0")}`,
+        kind,
+        names: [
+          { text: name, lang: guessLang(name), kind: "canonical" },
+          ...aliases.filter((a) => a.text !== name),
+        ],
+        properties: {},
+        confidence: EXTRACTION_CONFIDENCE,
+      };
+      entityById.set(entity.id, entity);
+      for (const n of entity.names) formToId.set(formKey(n.text), entity.id);
+      return entity;
+    };
+
+    // --- partition the miniloop's proposals ---
+    const stubs = input.proposals.filter(
+      (p) => p.kind === "upsert_entity" && (p.payload as { needsExtraction?: boolean }).needsExtraction,
+    );
+    const stubByCandidate = new Map<string, ChangeProposal>();
+    for (const s of stubs) {
+      stubByCandidate.set((s.payload as { candidateName: string }).candidateName, s);
+    }
+    const aliasProposals = input.proposals.filter((p) => p.kind === "add_alias");
+    const otherProposals = input.proposals.filter(
+      (p) => !stubs.includes(p) && !aliasProposals.includes(p),
+    );
+
+    // --- proposal buckets, composed at the end ---
+    const entityUpserts = new Map<string, ChangeProposal>();
+    const sceneProposals: ChangeProposal[] = [];
+    /** Dialogue cards are resolved after the scene loop, against
+     * the block-final registry (see below). */
+    const pendingCardScenes: { scene: Scene; cards: NamedDialogueCard[] }[] = [];
+    const eventProposals: ChangeProposal[] = [];
+    const relationProposals: ChangeProposal[] = [];
+    const stateProposals: ChangeProposal[] = [];
+
+    const upsertFor = (entity: Entity, proposal: ChangeProposal): void => {
+      if (!entityUpserts.has(entity.id)) entityUpserts.set(entity.id, proposal);
+    };
+    /** Resolve a name form to an entity, minting (and noting) if new. */
+    const resolveOrMint = (
+      name: string,
+      kind: EntityKind,
+      aliases: NameForm[],
+      origin: string,
+    ): Entity | undefined => {
+      if (kind === "Character" && rejected.has(name)) {
+        notes[`extraction:rejected:${name}`] = `${origin}: reviewer rejected this Character placeholder; no identity was guessed.`;
+        return undefined;
+      }
+      const known = formToId.get(formKey(name));
+      if (known) return entityById.get(known)!;
+      if (input.sceneResults) {
+        notes[`faculty:unresolved-reference:${name}`] = `${origin}: identity faculty did not resolve this name; no placeholder entity was invented.`;
+        return undefined;
+      }
+      const entity = mintEntity(name, kind, aliases);
+      const stub = stubByCandidate.get(name);
+      if (stub) {
+        // A Jev-judged candidate, confirmed by use: the stub becomes
+        // the full entity, keeping its proposal id and Jev confidence.
+        upsertFor(entity, { ...stub, payload: entity });
+        stubByCandidate.delete(name);
+        return entity;
+      }
+      upsertFor(entity, {
+        id: `${input.blockId}_mint_${entity.id}`,
+        kind: "upsert_entity",
+        payload: entity,
+        confidence: EXTRACTION_CONFIDENCE,
+        provenance: { blockId: input.blockId, sentenceIds: [], patchId: "extraction" },
+      });
+      notes[`extraction:new-entity:${entity.id}`] =
+        `${origin}: "${name}" was minted by extraction without a Jev new-name judgment — the gate should scrutinize this identity.`;
+      return entity;
+    };
+
+    const registerDeclarations = (declarations: NonNullable<LlmScene["newEntities"]>, sourceIds: string[], origin: string): void => {
+      for (const ne of declarations) {
+        if (!ne.name) continue;
+        const kind = (Object.keys(KIND_PREFIX).includes(ne.kind ?? "")
+          ? ne.kind
+          : "Character") as EntityKind;
+        if (kind === "Character" && rejected.has(ne.name)) {
+          notes[`extraction:rejected:${ne.name}`] = "Reviewer rejected this Character placeholder; declaration omitted without guessing an identity.";
+          continue;
+        }
+        const aliasForms = (ne.aliases ?? []).filter((alias) => {
+          if (!alias.text) return false;
+          const owner = formToId.get(formKey(alias.text));
+          const ownerNames = owner ? entityById.get(owner)!.names.map((name) => name.text) : [alias.text];
+          const conflict = distinct([ne.name!], ownerNames) || distinct([ne.name!], [alias.text]);
+          if (conflict) notes[`extraction:alias-conflict:${ne.name}:${alias.text}`] = "Alias omitted because it would fuse identities the reviewer declared distinct.";
+          return !conflict && !(kind === "Character" && rejected.has(alias.text));
+        });
+        const aliases: NameForm[] = aliasForms.map((a) => ({
+          text: a.text!,
+          lang: guessLang(a.text!),
+          kind: (["alias", "nickname", "title"].includes(a.kind ?? "")
+            ? a.kind
+            : "alias") as NameForm["kind"],
+        }));
+        const declaredForms = [ne.name, ...aliases.map((a) => a.text)];
+        const existingId = declaredForms
+          .map((f) => formToId.get(formKey(f)))
+          .find((id) => id !== undefined);
+        if (existingId) {
+          const base = entityById.get(existingId)!;
+          const missing = declaredForms.filter(
+            (f) => !base.names.some((n) => n.text === f),
+          );
+          if (missing.length > 0) {
+            const foldedForms: NameForm[] = missing.map((text, i) => ({
+              text,
+              lang: guessLang(text),
+              kind: i === 0 && text === ne.name ? "alias" : (aliases.find((a) => a.text === text)?.kind ?? "alias"),
+            }));
+            const existingUpsert = entityUpserts.get(existingId);
+            if (existingUpsert) {
+              const payload = existingUpsert.payload as Entity;
+              payload.names = [...payload.names, ...foldedForms];
+              existingUpsert.provenance = { ...existingUpsert.provenance, sentenceIds: [...new Set([...existingUpsert.provenance.sentenceIds, ...sourceIds])] };
+            } else {
+              entityUpserts.set(existingId, {
+                id: `${input.blockId}_forms_${existingId}`,
+                kind: "upsert_entity",
+                payload: { ...base, names: [...base.names, ...foldedForms] },
+                confidence: EXTRACTION_CONFIDENCE,
+                provenance: { blockId: input.blockId, sentenceIds: sourceIds, patchId: "extraction" },
+              });
+            }
+            for (const f of declaredForms) formToId.set(formKey(f), existingId);
+            entityById.set(existingId, entityUpserts.get(existingId)!.payload as Entity);
+          }
+          continue;
+        }
+        const entity = mintEntity(ne.name, kind, aliases);
+        const stub = stubByCandidate.get(ne.name);
+        if (stub) {
+          upsertFor(entity, { ...stub, payload: entity });
+          stubByCandidate.delete(ne.name);
+        } else {
+          upsertFor(entity, {
+            id: `${input.blockId}_mint_${entity.id}`,
+            kind: "upsert_entity",
+            payload: entity,
+            confidence: EXTRACTION_CONFIDENCE,
+            provenance: { blockId: input.blockId, sentenceIds: sourceIds, patchId: "extraction" },
+          });
+          notes[`extraction:new-entity:${entity.id}`] =
+            `Declared in extraction's newEntities for ${origin} without a Jev new-name judgment — the gate should scrutinize this identity.`;
+        }
+      }
+    };
+
+    const blockDeclarations = input.miniloop.accepted["blockIdentityDeclarations"] as LlmScene["newEntities"] | undefined;
+    if (Array.isArray(blockDeclarations)) for (const declaration of blockDeclarations) {
+      if (!declaration || typeof declaration.name !== "string" || !declaration.name.trim() || !["Character", "Location", "Organization", "Item", "Concept"].includes(declaration.kind ?? "") || !input.sentences.some(sentence => sentence.text.includes(declaration.name!))) {
+        notes["faculty:block-identity-unsupported"] = "Unsupported block identity omitted; no name or source evidence was guessed.";
+        continue;
+      }
+      const aliases = (Array.isArray(declaration.aliases) ? declaration.aliases : []).filter(alias => alias && typeof alias.text === "string" && !!alias.text.trim() && input.sentences.some(sentence => sentence.text.includes(alias.text!)));
+      const forms = [declaration.name, ...aliases.map(alias => alias.text!)];
+      const owners = [...new Set(forms.map(form => formToId.get(formKey(form))).filter((id): id is string => !!id))];
+      if (owners.length > 1 || owners.some(id => entityById.get(id)?.kind !== declaration.kind)) {
+        notes[`faculty:block-identity-conflict:${declaration.name}`] = "Block identity declaration conflicts with existing identity owners or kinds; no identities were fused.";
+        continue;
+      }
+      const evidence = input.sentences.filter(sentence => forms.some(form => sentence.text.includes(form))).map(sentence => sentence.id);
+      registerDeclarations([{ ...declaration, aliases }], evidence, "independent block identity discovery");
+    }
+
+    let eventSeq = input.counts.events;
+    let sceneSeq = input.counts.scenes;
+
+    for (let si = 0; si < sceneSpans.length; si++) {
+      const spanIds = sceneSpans[si];
+      const spanSentences = spanIds
+        .map((id) => sentenceById.get(id))
+        .filter((s): s is Sentence => !!s);
+      if (spanSentences.length === 0) continue;
+      const sceneId = `scene_${String(++sceneSeq).padStart(6, "0")}`;
+
+      // Cast: scan hits inside the span + presence from covering windows.
+      const castIds = new Set<string>();
+      const mentionedIds = new Set<string>();
+      for (const h of nameHits) if (spanIds.includes(h.sentenceId)) castIds.add(h.entityId);
+      for (const w of input.miniloop.windows) {
+        if (!w.sentenceIds.some((id) => spanIds.includes(id))) continue;
+        for (const id of w.charactersPresent) castIds.add(id);
+        for (const id of w.charactersMentioned) mentionedIds.add(id);
+      }
+      let turns = input.miniloop.windows
+        .flatMap((w) => w.turns)
+        .filter((t) => t.sentenceIds.some((id) => spanIds.includes(id)));
+
+      let llm: LlmScene | null = null;
+      let faculty: SceneFacultyResult | undefined;
+      try {
+        if (input.sceneResults) {
+          faculty = await input.sceneResults.get(spanIds[0]);
+          if (!faculty) throw new Error("Missing scene faculty result");
+          llm = faculty.scene;
+          faculty.notes.forEach((note, index) => { notes[`faculty:${sceneId}:${index}`] = note; });
+        } else {
+          const raw = await work.generate({
+            system: EXTRACTION_SYSTEM,
+            prompt: buildScenePrompt({
+              sceneIndex: si + 1,
+              chapterIndex: input.chapterIndex,
+              sentences: spanSentences,
+              cast: [...castIds].map((id) => ({
+                id,
+                forms: (entityById.get(id)?.names ?? []).map((n) => n.text),
+              })),
+              turns,
+              pendingCandidates: [...stubByCandidate.keys()],
+              registry: [...entityById.values()].map((entity) => ({ id: entity.id, forms: entity.names.map((name) => name.text) })),
+              constraints,
+            }),
+            jsonSchema: { type: "object" },
+            maxTokens: 4000,
+          });
+          llm = parseSceneJson(raw);
+          if (!llm) notes[`extraction:scene:${sceneId}`] = "Work model returned unparseable JSON; scene contributed no proposals.";
+        }
+      } catch (err) {
+        notes[`extraction:scene:${sceneId}`] = `Work model call failed: ${(err as Error).message.slice(0, 160)}`;
+      }
+      if (!llm && !input.sceneResults) continue;
+      if (!llm) llm = { events: [], newEntities: [], charactersPresent: [], charactersMentioned: [] };
+
+      // Register the model's declared new entities first, so event
+      // actors resolve to them (and to stubs they flesh out).
+      registerDeclarations(llm.newEntities ?? [], spanIds, `scene ${sceneId}`);
+
+      // Location: resolve or mint a Location entity.
+      let locationId: string | null = null;
+      if (llm.locationName) {
+        const loc = resolveOrMint(llm.locationName, "Location", [], `Scene ${sceneId} location`);
+        locationId = loc?.kind === "Location" ? loc.id : null;
+        if (loc && !locationId) notes[`extraction:location-type:${sceneId}`] = "Known entity is not a Location; location left unresolved instead of assigning the wrong kind.";
+      }
+
+      // Events, in the model's order; CAUSES refers back by the
+      // model's own event index, mapped to minted ids (skipped model
+      // events never enter the map, so indices cannot misalign).
+      const llmIndexToEventId = new Map<number, string>();
+      const llmEvents = llm.events ?? [];
+      for (let ei = 0; ei < llmEvents.length; ei++) {
+        const le = llmEvents[ei];
+        if (!le.summaryEn) continue;
+        const evidenceIds = [...new Set(strList(le.evidence).filter((id) => spanIds.includes(id)))];
+        if (input.sceneResults && !evidenceIds.length) {
+          notes[`faculty:missing-evidence:${sceneId}:${ei}`] = "Event omitted: no valid source evidence was supplied; no first-sentence citation was fabricated.";
+          continue;
+        }
+        const eventId = `evt_${String(++eventSeq).padStart(6, "0")}`;
+        llmIndexToEventId.set(ei, eventId);
+        const actorIds = [...new Set(strList(le.actors).flatMap(
+          (name) => { const actor = resolveOrMint(name, "Character", [], `Actor of event ${eventId}`); return actor?.kind === "Character" ? actor.id : []; },
+        ))];
+        const affectedIds = [...new Set(strList(le.affected).flatMap(
+          (name) => { const actor = resolveOrMint(name, "Character", [], `Affected by event ${eventId}`); return actor?.kind === "Character" ? actor.id : []; },
+        ))];
+        const evidence = evidenceIds.length
+          ? evidenceIds
+          : [spanIds[0]];
+        const event: OntEvent = {
+          id: eventId,
+          timelineId: CANON_TIMELINE_ID,
+          chapterIndex: input.chapterIndex,
+          chronologicalOrder: eventSeq,
+          eventType: (EVENT_TYPES.has(le.eventType ?? "") ? le.eventType : "other") as EventType,
+          summaryEn: le.summaryEn,
+          evidence: {
+            text: sentenceById.get(evidence[0])?.text ?? "",
+            sentenceIds: evidence,
+          },
+          importance: clamp01(le.importance, 0.5),
+          primaryActors: actorIds,
+          affectedCharacters: affectedIds,
+          confidence: EXTRACTION_CONFIDENCE,
+        };
+        eventProposals.push({
+          id: `${input.blockId}_${eventId}`,
+          kind: "create_event",
+          payload: event,
+          confidence: EXTRACTION_CONFIDENCE,
+          provenance: { blockId: input.blockId, sentenceIds: evidence, patchId: "extraction" },
+        });
+        for (const actorId of actorIds) {
+          const rel: Relation = {
+            fromId: actorId,
+            toId: eventId,
+            type: "PARTICIPATES_IN",
+            properties: {},
+            confidence: EXTRACTION_CONFIDENCE,
+          };
+          relationProposals.push({
+            id: `${input.blockId}_${eventId}_part_${actorId}`,
+            kind: "add_relation",
+            payload: rel,
+            confidence: EXTRACTION_CONFIDENCE,
+            provenance: { blockId: input.blockId, sentenceIds: evidence, patchId: "extraction" },
+          });
+        }
+        const causeId =
+          typeof le.causes === "number" ? llmIndexToEventId.get(le.causes) : undefined;
+        if (causeId && causeId !== eventId) {
+          const rel: Relation = {
+            fromId: causeId,
+            toId: eventId,
+            type: "CAUSES",
+            properties: {},
+            confidence: EXTRACTION_CONFIDENCE,
+          };
+          relationProposals.push({
+            id: `${input.blockId}_${eventId}_causes`,
+            kind: "add_relation",
+            payload: rel,
+            confidence: EXTRACTION_CONFIDENCE,
+            provenance: { blockId: input.blockId, sentenceIds: evidence, patchId: "extraction" },
+          });
+        }
+        for (const sc of le.stateChanges ?? []) {
+          if (!sc.character) continue;
+          const character = resolveOrMint(sc.character, "Character", [], `State change in event ${eventId}`);
+          if (!character || character.kind !== "Character") continue;
+          const relationships: Record<string, number> = {};
+          for (const [name, v] of Object.entries(sc.relationships ?? {})) {
+            const target = formToId.get(formKey(name));
+            if (target) relationships[target] = clampDelta(v);
+          }
+          stateProposals.push({
+            id: `${input.blockId}_${eventId}_state_${character.id}`,
+            kind: "set_state_change",
+            payload: {
+              characterId: character.id,
+              afterEventId: eventId,
+              emotions: Object.fromEntries(
+                Object.entries(sc.emotions ?? {}).map(([k, v]) => [k, clampDelta(v)]),
+              ),
+              knowledgeAdd: strList(sc.knowledgeAdd),
+              goalsAdd: strList(sc.goalsAdd),
+              relationships,
+              location: sc.location ?? null,
+              possessionsAdd: strList(sc.possessionsAdd),
+              possessionsRemove: strList(sc.possessionsRemove),
+            },
+            confidence: EXTRACTION_CONFIDENCE,
+            provenance: { blockId: input.blockId, sentenceIds: evidence, patchId: "extraction" },
+          });
+        }
+      }
+
+      castIds.clear();
+      mentionedIds.clear();
+      for (const hit of nameHits) if (spanIds.includes(hit.sentenceId)) mentionedIds.add(hit.entityId);
+      for (const [names, destination] of [[llm.charactersPresent, castIds], [llm.charactersMentioned, mentionedIds]] as const) {
+        for (const name of strList(names)) {
+          const entityId = formToId.get(formKey(name));
+          if (entityId && entityById.get(entityId)?.kind === "Character") destination.add(entityId);
+          else notes[`extraction:roster:${sceneId}:${name}`] = "Scene roster name did not resolve to a Character; reference left unknown.";
+        }
+      }
+      if (!Array.isArray(llm.charactersPresent) || !Array.isArray(llm.charactersMentioned)) notes[`extraction:roster:${sceneId}`] = "Scene-specific roster fields missing; no physical presence inferred from window hints or event actors.";
+      if (faculty) {
+        turns = faculty.turns.map(turn => ({
+          speakerId: turn.speakerName ? formToId.get(formKey(turn.speakerName)) ?? null : null,
+          addresseeId: turn.addresseeName ? formToId.get(formKey(turn.addresseeName)) ?? null : null,
+          sentenceIds: [...turn.sentenceIds],
+        }));
+        for (let index = 0; index < turns.length; index++) if (!turns[index].speakerId) notes[`faculty:unknown-speaker:${sceneId}:${index}`] = "Speaker remains unresolved; source was preserved without inventing an identity.";
+      }
+      const scene: Scene = {
+        id: sceneId,
+        chapterIndex: input.chapterIndex,
+        sentenceIds: spanIds,
+        charactersPresent: [...castIds].filter((id) => entityById.get(id)?.kind === "Character"),
+        charactersMentioned: [...mentionedIds].filter((id) => !castIds.has(id) && entityById.get(id)?.kind === "Character"),
+        turns: turns.map((turn) => ({ ...turn, speakerId: turn.speakerId && entityById.get(turn.speakerId)?.kind === "Character" ? turn.speakerId : null, addresseeId: turn.addresseeId && entityById.get(turn.addresseeId)?.kind === "Character" ? turn.addresseeId : null })),
+        locationId,
+        ...(faculty && llm.summary ? { summary: llm.summary } : {}),
+      };
+      if (faculty?.dialogues) pendingCardScenes.push({ scene, cards: faculty.dialogues });
+      sceneProposals.push({
+        id: `${input.blockId}_${sceneId}`,
+        kind: "create_scene",
+        payload: scene,
+        confidence: EXTRACTION_CONFIDENCE,
+        provenance: { blockId: input.blockId, sentenceIds: spanIds, patchId: "extraction" },
+      });
+      await input.onProgress?.({
+        proposals: [...otherProposals, ...entityUpserts.values(), ...sceneProposals, ...eventProposals, ...relationProposals, ...stateProposals, ...stubByCandidate.values()],
+        completedScenes: si + 1,
+        totalScenes: sceneSpans.length,
+      });
+    }
+
+    // --- dialogue cards: resolve members against the block-final
+    // registry. A card is one logical block-level object; its scene
+    // fragments must carry identical candidate sets for semantic
+    // review. Resolving per scene, while formToId is still mutating,
+    // lets a later scene's fold or alias registration remap a name
+    // and splits the fragments' membership signatures (deadlocking
+    // the gate on its own pipeline's output). ---
+    for (const { scene, cards } of pendingCardScenes) {
+      scene.dialogues = cards.map(card => {
+        const resolveMembers = (names: string[]) => [...new Set(names.flatMap(name => {
+          const id = formToId.get(formKey(name));
+          if (id && entityById.get(id)?.kind === "Character") return [id];
+          notes[`faculty:unknown-member:${card.id}:${name}`] = "Dialogue participant identity did not resolve; source retained without minting or guessing a person.";
+          return [];
+        }))];
+        const participantIds = resolveMembers(card.participantNames);
+        return { id: card.id, sentenceIds: [...card.sentenceIds], participantIds, unresolvedParticipantIds: resolveMembers(card.unresolvedNames).filter(id => !participantIds.includes(id)) };
+      });
+    }
+
+    // --- stubs extraction never confirmed: drop, but leave a note ---
+    for (const [candidate, stub] of stubByCandidate) {
+      notes[stub.id] =
+        `Name candidate "${candidate}" was judged new by Jev but extraction did not confirm it in this block; stub dropped rather than merged as a malformed entity.`;
+    }
+
+    // --- fold add_alias proposals into entity upserts (apply.ts) ---
+    for (const ap of aliasProposals) {
+      const payload = ap.payload as { entityId: string; aliasText: string };
+      const entity = input.knownEntities.find((e) => e.id === payload.entityId);
+      if (!entity) {
+        notes[ap.id] = `Alias "${payload.aliasText}" targeted unknown entity ${payload.entityId}; dropped at extraction fold.`;
+        continue;
+      }
+      if (distinct(entity.names.map((name) => name.text), [payload.aliasText]) || rejected.has(payload.aliasText)) {
+        notes[ap.id] = "Alias omitted because it conflicts with the reviewer's extraction constraints.";
+        continue;
+      }
+      if (entity.names.some((n) => n.text === payload.aliasText)) continue;
+      const owner = formToId.get(formKey(payload.aliasText));
+      if (owner && owner !== entity.id) {
+        notes[ap.id] = "Alias omitted because extraction already resolved this form to another entity; reviewer must decide the identity conflict.";
+        continue;
+      }
+      const aliasForm: NameForm = {
+        text: payload.aliasText,
+        lang: entity.names[0]?.lang ?? "und",
+        kind: "alias",
+      };
+      const existing = entityUpserts.get(entity.id);
+      if (existing) {
+        // Merge into the upsert already proposed for this entity
+        // (e.g. forms folded in during extraction) rather than
+        // replacing its payload and losing them.
+        const current = existing.payload as Entity;
+        if (!current.names.some((n) => n.text === payload.aliasText)) {
+          current.names = [...current.names, aliasForm];
+        }
+      } else {
+        entityUpserts.set(entity.id, {
+          id: ap.id.replace(/_alias_/, "_aliasfold_"),
+          kind: "upsert_entity",
+          payload: { ...entity, names: [...entity.names, aliasForm] },
+          confidence: ap.confidence,
+          provenance: ap.provenance,
+        });
+      }
+    }
+
+    return {
+      proposals: [
+        ...otherProposals,
+        ...entityUpserts.values(),
+        ...sceneProposals,
+        ...eventProposals,
+        ...relationProposals,
+        ...stateProposals,
+      ],
+      notes,
+    };
+  };
+}

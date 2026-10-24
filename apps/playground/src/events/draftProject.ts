@@ -24,7 +24,7 @@ import type { PlaygroundEvent, WorldEdge, WorldNode } from "../types.js";
  * held changeset lights up its actual ghost nodes.
  */
 
-/** Mirror of the CLI's WorkingDraft (src/processing/draft.ts). */
+/** Mirror of the CLI's WorkingDraft (src/digger/processing/draft.ts). */
 export interface WorkingDraftView {
   version: 1;
   blockId: string;

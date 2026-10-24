@@ -5,10 +5,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { inspectNovel } from "../src/commands/inspectCommands.js";
-import { initWorkspace } from "../src/workspace/init.js";
+import { inspectNovel } from "../src/cli/commands/extract/inspectCommands.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
 
-const cli = fileURLToPath(new URL("../src/cli.js", import.meta.url));
+const cli = fileURLToPath(new URL("../src/cli/cli.js", import.meta.url));
 
 function runCli(args: string[]) {
   const noNetwork = "data:text/javascript," + encodeURIComponent(

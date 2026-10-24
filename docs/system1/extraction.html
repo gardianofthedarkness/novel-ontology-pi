@@ -15,7 +15,7 @@
 <h1>Extraction — from structured scenes to ontology</h1>
 <p>
   <span class="badge open">status: designed, not yet implemented</span>
-  <span class="badge">repo: <code>src/connectors/llm.ts</code> (work model) · extraction step in the block processor</span>
+  <span class="badge">repo: <code>src/ground/connectors/llm.ts</code> (work model) · extraction step in the block processor</span>
   <span class="badge">model: work LLM (user API #1)</span>
 </p>
 <p class="sub">Everything before this sector is structure: sentences, scenes, turns. This is where
@@ -54,9 +54,9 @@ all in the English-canonical schema, each with its evidence sentences attached.<
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li><code>WorkModel</code> interface in <code>src/connectors/llm.ts</code> — target: Pi's provider layer (<code>@earendil-works/pi-ai</code>), so any user-provided LLM API works.</li>
+  <li><code>WorkModel</code> interface in <code>src/ground/connectors/llm.ts</code> — target: Pi's provider layer (<code>@earendil-works/pi-ai</code>), so any user-provided LLM API works.</li>
   <li>Extraction runs inside <code>BlockProcessor</code> between the miniloop and the merge gate (marked TODO in the skeleton).</li>
-  <li>Output validated against the English schema v1 (<code>src/ontology/types.ts</code>) before a proposal is admitted to the ChangeSet.</li>
+  <li>Output validated against the English schema v1 (<code>src/ground/ontology/types.ts</code>) before a proposal is admitted to the ChangeSet.</li>
 </ul>
 
 <h2>Open questions — extraction</h2>

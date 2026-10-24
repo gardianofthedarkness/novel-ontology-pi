@@ -15,7 +15,7 @@
 <h1>Storage connectors — upload, query, rebuild</h1>
 <p>
   <span class="badge v1">status: bundle implemented · Ladybug interface defined</span>
-  <span class="badge">repo: <code>src/connectors/bundle.ts</code> · <code>src/connectors/ladybug.ts</code> · <code>src/ontology/</code></span>
+  <span class="badge">repo: <code>src/ground/connectors/bundle.ts</code> · <code>src/ground/connectors/ladybug.ts</code> · <code>src/ground/ontology/</code></span>
   <span class="badge">engines: JSONL bundle + Ladybug (embedded)</span>
 </p>
 <p class="sub">The connectors that upload to and query from the databases — the sector that replaced
@@ -49,17 +49,17 @@ through one <code>OntologyStore</code> interface.</p>
 <ul class="tight" style="font-size:14px">
   <li><b>Why two layers:</b> the bundle is diffable, git-friendly, shareable by copying a folder, and engine-independent — insurance if Ladybug is ever swapped. Ladybug is a disposable cache: delete <code>graph.lbug</code>, rebuild, same answers.</li>
   <li><b>GraphRAG in one engine:</b> a question seeds via vector similarity (event summaries) and FTS (exact names), then Cypher traverses — causal chains, presence, timeline order — from the seeds.</li>
-  <li><b>Closed schema, designed once:</b> Ladybug requires declared node/relation tables (<code>src/ontology/schema.ts</code>). The English vocabulary is schema v1; new types arrive as CLI migrations.</li>
+  <li><b>Closed schema, designed once:</b> Ladybug requires declared node/relation tables (<code>src/ground/ontology/schema.ts</code>). The English vocabulary is schema v1; new types arrive as CLI migrations.</li>
   <li><b>One writer, many readers:</b> only the merge gate writes; queries open read-only. That matches Ladybug's concurrency model exactly — and the CLI's.</li>
-  <li><b>Retrieval is GRAPH-FIRST (decided 2026-10-21, embeddings deferred):</b> every current need — presence, co-presence, causal chains, scene location, event streams, fork points — is a relational Cypher traversal (<code>src/ontology/retrieval.ts</code>, implemented and tested). No embedding model gets chosen until one of those provably falls short. The fallback design, if that day comes: a lightweight local model on CPU (~500–1000 dims) for wide recall, <b>Jev post-selecting among the top 32</b> for precision.</li>
+  <li><b>Retrieval is GRAPH-FIRST (decided 2026-10-21, embeddings deferred):</b> every current need — presence, co-presence, causal chains, scene location, event streams, fork points — is a relational Cypher traversal (<code>src/ground/ontology/retrieval.ts</code>, implemented and tested). No embedding model gets chosen until one of those provably falls short. The fallback design, if that day comes: a lightweight local model on CPU (~500–1000 dims) for wide recall, <b>Jev post-selecting among the top 32</b> for precision.</li>
   <li><b>Vector dimension is manifest data:</b> the embedding model + dimension are recorded per novel; changing models triggers <code>novel graph reindex</code>, not silent corruption.</li>
 </ul>
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li><code>src/ontology/store.ts</code> — the <code>OntologyStore</code> interface every read/write passes through.</li>
-  <li><code>src/connectors/bundle.ts</code> — <code>BundleStore</code>: JSONL append/load, manifest. Working today.</li>
-  <li><code>src/connectors/ladybug.ts</code> — <code>LadybugStore</code>: interface-complete; driver wiring (<code>@ladybugdb/core</code> + schema DDL) is the next implementation step.</li>
+  <li><code>src/ground/ontology/store.ts</code> — the <code>OntologyStore</code> interface every read/write passes through.</li>
+  <li><code>src/ground/connectors/bundle.ts</code> — <code>BundleStore</code>: JSONL append/load, manifest. Working today.</li>
+  <li><code>src/ground/connectors/ladybug.ts</code> — <code>LadybugStore</code>: interface-complete; driver wiring (<code>@ladybugdb/core</code> + schema DDL) is the next implementation step.</li>
   <li>CLI surface: <code>novel graph build|reindex</code>, <code>novel bundle export|import</code>, <code>novel query</code>, <code>novel search</code>.</li>
 </ul>
 

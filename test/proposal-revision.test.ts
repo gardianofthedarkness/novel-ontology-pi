@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initWorkspace } from "../src/workspace/init.js";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { newChangeSet, type ChangeProposal } from "../src/merge/changeset.js";
-import { loadChangeSet, saveChangeSet } from "../src/merge/changesetStore.js";
-import { reviseProposals } from "../src/merge/revise.js";
-import type { Entity, OntEvent, Scene } from "../src/ontology/types.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { newChangeSet, type ChangeProposal } from "../src/solidifier/merge/changeset.js";
+import { loadChangeSet, saveChangeSet } from "../src/solidifier/merge/changesetStore.js";
+import { reviseProposals } from "../src/solidifier/merge/revise.js";
+import type { Entity, OntEvent, Scene } from "../src/ground/ontology/types.js";
 
 test("pending revision removes selected defects and dependent references without canonical writes or inferred facts", async (context) => {
   const parent = await mkdtemp(join(tmpdir(), "novel-revision-"));

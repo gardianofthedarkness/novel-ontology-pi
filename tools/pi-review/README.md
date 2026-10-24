@@ -17,7 +17,7 @@ npm test --prefix tools/pi-review
 
 Supply `WORK_LLM_API_KEY` through your environment or secret manager.
 TypeSafe uses `TYPESAFE_API_KEY` or the CLI's existing secure store
-(`node dist/src/cli.js jev login`). Never put either key in job JSON,
+(`node dist/src/cli/cli.js jev login`). Never put either key in job JSON,
 source control, command arguments, reports, or session shares.
 
 The runner pins Pi SDK 1.4.0, requests `deepseek-flash` for Pi and CLI

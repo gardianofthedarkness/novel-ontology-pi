@@ -5,11 +5,11 @@ import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BundleStore, type BundleManifest } from "../src/connectors/bundle.js";
-import { listChangeSets } from "../src/merge/changesetStore.js";
-import { initWorkspace } from "../src/workspace/init.js";
+import { BundleStore, type BundleManifest } from "../src/ground/connectors/bundle.js";
+import { listChangeSets } from "../src/solidifier/merge/changesetStore.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
 
-const cli = fileURLToPath(new URL("../src/cli.js", import.meta.url));
+const cli = fileURLToPath(new URL("../src/cli/cli.js", import.meta.url));
 
 async function tempRoot(t: TestContext): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "novel-init-"));

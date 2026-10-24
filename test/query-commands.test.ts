@@ -5,17 +5,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { buildGraphFromBundle } from "../src/connectors/ladybug.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { buildGraphFromBundle } from "../src/ground/connectors/ladybug.js";
 import {
   novelQuery,
   novelSearch,
   timelineList,
   timelineShow,
-} from "../src/commands/queryCommands.js";
-import type { Entity, OntEvent, Scene } from "../src/ontology/types.js";
+} from "../src/cli/commands/shared/queryCommands.js";
+import type { Entity, OntEvent, Scene } from "../src/ground/ontology/types.js";
 
-const cli = fileURLToPath(new URL("../src/cli.js", import.meta.url));
+const cli = fileURLToPath(new URL("../src/cli/cli.js", import.meta.url));
 
 const char = (id: string, name: string): Entity => ({
   id,

@@ -3,24 +3,24 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { LadybugStore, buildGraphFromBundle } from "../src/connectors/ladybug.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { LadybugStore, buildGraphFromBundle } from "../src/ground/connectors/ladybug.js";
 import {
   causalAncestors,
   causalDescendants,
   charactersPresent,
   coPresentCharacters,
   sceneLocation,
-} from "../src/ontology/retrieval.js";
-import { newChangeSet } from "../src/merge/changeset.js";
+} from "../src/ground/ontology/retrieval.js";
+import { newChangeSet } from "../src/solidifier/merge/changeset.js";
 import {
   listChangeSets,
   loadChangeSet,
   saveChangeSet,
   setChangeSetStatus,
-} from "../src/merge/changesetStore.js";
-import { applyChangeSet } from "../src/merge/apply.js";
-import type { Entity, OntEvent, Scene } from "../src/ontology/types.js";
+} from "../src/solidifier/merge/changesetStore.js";
+import { applyChangeSet } from "../src/solidifier/merge/apply.js";
+import type { Entity, OntEvent, Scene } from "../src/ground/ontology/types.js";
 
 const char = (id: string, name: string): Entity => ({
   id,

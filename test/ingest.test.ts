@@ -4,15 +4,15 @@ import { createServer, type Server } from "node:http";
 import { mkdtemp, readFile, writeFile, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initWorkspace } from "../src/workspace/init.js";
-import { ingestNovel } from "../src/commands/ingestCommands.js";
-import { listChangeSets, setChangeSetStatus } from "../src/merge/changesetStore.js";
-import { applyChangeSet } from "../src/merge/apply.js";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { EventLog } from "../src/events/log.js";
-import { semanticFacts, semanticRevision } from "../src/merge/semantic.js";
-import { decideFacts, prepareSemantic, semanticPage } from "../src/merge/semanticCommands.js";
-import { buildGraphFromBundle } from "../src/connectors/ladybug.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
+import { ingestNovel } from "../src/cli/commands/extract/ingestCommands.js";
+import { listChangeSets, setChangeSetStatus } from "../src/solidifier/merge/changesetStore.js";
+import { applyChangeSet } from "../src/solidifier/merge/apply.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { EventLog } from "../src/ground/events/log.js";
+import { semanticFacts, semanticRevision } from "../src/solidifier/merge/semantic.js";
+import { decideFacts, prepareSemantic, semanticPage } from "../src/solidifier/merge/semanticCommands.js";
+import { buildGraphFromBundle } from "../src/ground/connectors/ladybug.js";
 
 /**
  * End-to-end ingest over a LOOPBACK Jev wire mock: the real JevClient
