@@ -204,6 +204,8 @@ authorized tunnel, set `--origin https://your-tunnel-host` explicitly; the serve
 still binds only `127.0.0.1`. Do not share the operator capability in PRs/issues.
 Keep `minutes` within the runner's job window. Server/worker expiry and stale
 heartbeat checks disable messages rather than silently extending access.
+The portable host does not mount session replay; use the source-redacted CLI
+export described earlier when needed. It never serves raw source or reports.
 
 Queue records are private, bounded and UUID-deduplicated across processes and
 restarts. Queued, processing, consumed and failed are distinct; ambiguous claims

@@ -55,6 +55,12 @@ was given control. That live connection initially used the task-local host.
 
 ## Reproducible offline checks
 
+The rebased implementation passed an isolated checkout validation against main
+`7c6beb1`: 299 core tests, 12 console-component tests and 71 review/queue/stream/
+server tests (382 total), plus the frontend production build. Isolation kept
+builds away from the running private Pi session. No new paid model calls were
+needed for PR packaging or this validation.
+
 - Core CLI and orbital model/routing tests, including same-page retention,
   cross-page/cross-chapter batches, terminal scenes and reading bookmarks.
 - Snapshot tests for ghosts appearing before ontology application, parallel
@@ -69,6 +75,8 @@ was given control. That live connection initially used the task-local host.
   serial delivery and no automatic retry of failed turns.
 - Portable runner tests for unchanged-source resume, retained chapter metadata,
   skipped audited applications and fail-closed credential handling.
+- Portable viewer tests for scoped resources, host/Origin validation, read-only
+  versus operator access, streamed batches, expiry and shutdown cleanup.
 
 ```sh
 npm test
