@@ -109,7 +109,20 @@ function PictureGlyph({ node }: NodeRendererProps) {
     const pose = from ? interpolatePose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS) : draw;
     group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1], pose.position[2] - draw.position[2]);
     group.current.scale.setScalar(pose.radius / draw.radius);
-    group.current.quaternion.copy(camera.quaternion);
+    /** Fixed orientation: the card's plane stands perpendicular to the
+     * timeline tangent (draw.facing), at all times — never billboarded
+     * to the camera. Falls back to the camera only when no tangent exists. */
+    if (draw.facing) {
+      const tangent = new Vector3(draw.facing[0], draw.facing[1], draw.facing[2]);
+      if (tangent.lengthSq() > 1e-6) {
+        tangent.normalize();
+        group.current.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), tangent);
+      } else {
+        group.current.quaternion.copy(camera.quaternion);
+      }
+    } else {
+      group.current.quaternion.copy(camera.quaternion);
+    }
   });
   const width = draw.radius * 2;
   const height = draw.radius * 1.5;
@@ -131,9 +144,47 @@ function PictureGlyph({ node }: NodeRendererProps) {
     </mesh>}
   </group>;
 }
+/** A bound portrait: a portrait-orientation framed card billboarded next to
+ * its character's sphere. Canvas face only — no external artwork is loaded,
+ * so a simulated asset id renders exactly like a real bound portrait. */
+function PortraitGlyph({ node }: NodeRendererProps) {
+  const group = useRef<Group>(null);
+  const data = node.data.glyph as GlyphData;
+  const { draw, morph, reducedMotion, transparent, selected, touched } = data;
+  const { camera } = useThree();
+  useFrame(() => {
+    if (!group.current) return;
+    const from = morph?.from.get(draw.node.id);
+    const pose = from ? interpolatePose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS) : draw;
+    group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1], pose.position[2] - draw.position[2]);
+    group.current.scale.setScalar(pose.radius / draw.radius);
+    group.current.quaternion.copy(camera.quaternion);
+  });
+  const width = draw.radius * 1.5;
+  const height = draw.radius * 2;
+  const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? 0.3 : draw.node.state === "held" ? 0.5 : 0.95;
+  const shortId = draw.node.id.replace(/^por-?/i, "").slice(0, 18) || draw.node.id.slice(0, 18);
+  return <group ref={group} userData={{ orbitalGlyph: draw.node.id }}>
+    {touched && <mesh raycast={noRaycast}><boxGeometry args={[draw.radius * 2.7, draw.radius * 2.7, draw.radius * 2.7]} /><meshBasicMaterial color="#5eead4" wireframe transparent opacity={0.95} toneMapped={false} depthTest={false} /></mesh>}
+    <mesh raycast={noRaycast}>
+      <boxGeometry args={[width * 1.08, height * 1.08, Math.max(1, draw.radius * 0.08)]} />
+      <meshStandardMaterial color="#12211e" metalness={0.2} roughness={0.6} transparent opacity={opacity} />
+    </mesh>
+    <mesh position={[0, 0, Math.max(1, draw.radius * 0.05)]}>
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial map={pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
+    </mesh>
+    {selected && <mesh raycast={noRaycast} position={[0, 0, Math.max(1, draw.radius * 0.06)]}>
+      <planeGeometry args={[width * 1.14, height * 1.14]} />
+      <meshBasicMaterial color="#ccf4ff" wireframe transparent opacity={0.65} />
+    </mesh>}
+  </group>;
+}
+
 function renderSphere(props: NodeRendererProps) {
   const draw = (props.node.data.glyph as GlyphData).draw;
   if (draw.node.kind === "picture") return <PictureGlyph {...props} />;
+  if (draw.node.kind === "portrait") return <PortraitGlyph {...props} />;
   return <SphereGlyph {...props} />;
 }
 

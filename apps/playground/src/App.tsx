@@ -19,6 +19,7 @@ import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
 import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
 import type {
+  AlbumPortrait,
   ChangeSet,
   EventSource as PlaygroundEventSource,
   PlaygroundEvent,
@@ -95,6 +96,7 @@ export default function App() {
   const [dynNodes, setDynNodes] = useState<WorldNode[]>([]);
   const [dynEdges, setDynEdges] = useState<WorldEdge[]>([]);
   const [albumPictures, setAlbumPictures] = useState<OrbitIllustration[]>([]);
+  const [albumPortraits, setAlbumPortraits] = useState<AlbumPortrait[]>([]);
   const [proposalsByCs, setProposalsByCs] = useState<Record<string, string[]>>({});
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [stage, setStage] = useState(0);
@@ -296,6 +298,14 @@ export default function App() {
           ]);
           pushFeed(`▸ album — ${ev.pictures.length} picture${ev.pictures.length === 1 ? "" : "s"} anchored (${ev.blockId})`);
           break;
+        case "album.portraitBound":
+          // Dedup by id, same as pictures. Unbound portraits emit nothing.
+          setAlbumPortraits((prev) => [
+            ...prev.filter((por) => !ev.portraits.some((next) => next.id === por.id)),
+            ...ev.portraits.map((por) => ({ ...por })),
+          ]);
+          pushFeed(`▸ album — ${ev.portraits.length} portrait${ev.portraits.length === 1 ? "" : "s"} bound (${ev.blockId})`);
+          break;
       }
     },
     [noteActivity, pushFeed, beginJoin],
@@ -314,6 +324,7 @@ export default function App() {
     setDynNodes([]);
     setDynEdges([]);
     setAlbumPictures([]);
+    setAlbumPortraits([]);
     setProposalsByCs({});
     setFeed([]);
     setChangesets([]);
@@ -616,7 +627,7 @@ export default function App() {
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
           <button className="design-switch" disabled={followingActivity} aria-pressed={orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setInspectorOpen(false); }}>{orbitalMode ? "Orbital / switch to classic" : "Classic / switch to orbital"}</button>
-          {orbitalMode ? <OrbitalExplorer world={shownWorld} albumPictures={albumPictures} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} join={join} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
+          {orbitalMode ? <OrbitalExplorer world={shownWorld} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} join={join} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
           <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
             <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
             <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>

@@ -16,7 +16,9 @@ export type NodeKind =
   | "event"
   | "dialogue"
   /** An EPUB illustration: an independent node type between its neighboring scenes (album store projection, not canon). */
-  | "picture";
+  | "picture"
+  /** A bound EPUB portrait, drawn attached to its character (album store projection, not canon). */
+  | "portrait";
 
 /** canon = merged truth · proposed = ghost awaiting the gate · held = gate held it (visually distinct) */
 export type CanonState = "canon" | "proposed" | "held";
@@ -97,7 +99,18 @@ export type PlaygroundEvent =
   | { type: "entity.distinct"; aId: string; bId: string }
   | { type: "graph.rebuilt" }
   /** Album pre-process anchors for one block; the orbit resolves them to picture nodes at render. */
-  | { type: "album.anchored"; blockId: string; pictures: { id: string; asset: string; kind: string; sentenceId: string | null }[] };
+  | { type: "album.anchored"; blockId: string; pictures: { id: string; asset: string; kind: string; sentenceId: string | null }[] }
+  /** Album portrait bindings for one block; the orbit draws each bound portrait attached to its character.
+   * Portraits with no binding emit nothing and stay hidden by design. */
+  | { type: "album.portraitBound"; blockId: string; portraits: AlbumPortrait[] };
+
+/** A portrait bound to one character entity (album store, not canon). */
+export interface AlbumPortrait {
+  id: string;
+  asset: string;
+  entityId: string;
+  entityLabel: string;
+}
 
 export interface EventSource {
   subscribe(handler: (event: PlaygroundEvent) => void): () => void;
