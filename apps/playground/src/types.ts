@@ -37,6 +37,11 @@ export interface WorldNode {
     focusSceneId?: string;
   };
   kind: NodeKind;
+  /** Sentence identities covered by this node (scenes only, for now).
+   * Emitted by the CLI view builder in future work; until then it is
+   * optional, and picture placement stays unplaced by design when a
+   * scene carries no coverage — pictures are never force-assigned. */
+  sentenceIds?: string[];
   state: CanonState;
   /** Which big event's interior this node lives in (null = lane-level node). */
   parent: string | null;

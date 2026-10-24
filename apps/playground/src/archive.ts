@@ -2,12 +2,13 @@ import type { WorldNode } from "./types";
 
 export const KIND_LABEL: Record<WorldNode["kind"], string> = {
   bigEvent: "Event file", character: "Character", location: "Location",
-  scene: "Scene", event: "Event", dialogue: "Dialogue",
+  scene: "Scene", event: "Event", dialogue: "Dialogue", picture: "Picture",
 };
 
 export const KIND_COLOR: Record<WorldNode["kind"], string> = {
   bigEvent: "#8ee9d1", character: "#bba7ff", location: "#75caff",
   scene: "#63ddd3", event: "#ffc777", dialogue: "#e6adf4",
+  picture: "#ffd166",
 };
 
 export function recordColor(node: WorldNode): string {

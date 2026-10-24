@@ -9,10 +9,16 @@ import { framePositions, type LabelBus } from "./WorldGraph";
 import { OrbitalGraph, ORBITAL_TRANSITION_MS } from "./OrbitalGraph";
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalTouchAncestors, type OrbitalReadingBookmark } from "../data/orbitalActivity";
 import type { LiveActivity } from "../data/liveActivity";
+import { placePictures, type OrbitIllustration } from "../data/pictureNodes";
+
+const PICTURE_KIND_LABELS: Record<string, string> = { cover: "Cover", plate: "Plate", story: "Illustration", paratext: "Paratext" };
+const pictureKindLabel = (kind: string) => PICTURE_KIND_LABELS[kind] ?? (kind ? kind[0].toUpperCase() + kind.slice(1) : "Picture");
 
 export interface OrbitalInspection { node: WorldNode; nodes: WorldNode[]; edges: WorldEdge[]; lookupNodes: WorldNode[]; contents: WorldNode[]; inspect?: boolean; passive?: boolean }
 interface Props {
   world: OrbitalWorld;
+  /** Album illustrations from album.anchored events (App state, deduped by id). */
+  albumPictures?: OrbitIllustration[];
   activityNodes: WorldNode[];
   activityEdges: WorldEdge[];
   activity?: LiveActivity | null;
@@ -30,7 +36,7 @@ interface Props {
   onRelations: () => void;
 }
 
-export function OrbitalExplorer({ world, activityNodes, activityEdges, activity = null, followingActivity = false, reducedMotion, showRelations, resetToken, focusRequest, join, onJoinSettled, onSelect, onChapter, onPage, onMotion, onRelations }: Props) {
+export function OrbitalExplorer({ world, albumPictures = [], activityNodes, activityEdges, activity = null, followingActivity = false, reducedMotion, showRelations, resetToken, focusRequest, join, onJoinSettled, onSelect, onChapter, onPage, onMotion, onRelations }: Props) {
   const [path, setPath] = useState<OrbitalScope[]>([volumeScope]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [revealedId, setRevealedId] = useState<string | null>(null);
@@ -53,18 +59,68 @@ export function OrbitalExplorer({ world, activityNodes, activityEdges, activity 
   const previewLevel = useMemo(() => parent?.entry?.scope ? orbitalLevel(world, parent.entry.scope, activityNodes, activityEdges) : null, [world, parent, activityNodes, activityEdges]);
   const preview = useMemo(() => parent && previewLevel ? layoutOrbitalPreview(parent, previewLevel) : { draws: [], paths: [] }, [parent, previewLevel]);
   const baseDraws = useMemo(() => [...layout.draws, ...preview.draws.filter((draw) => !layout.draws.some((entry) => entry.node.id === draw.node.id))], [layout.draws, preview.draws]);
+  /** Picture draws: placePictures resolves each album illustration
+   * against the level's scene-kind nodes; a placed picture becomes a
+   * main-role "picture" draw interpolated between its neighboring
+   * scene draws. Unplaced pictures (anchor sentence in no scene) and
+   * pictures whose prev scene has no draw in this level produce no
+   * draw — never force-assigned. */
+  const pictureDraws = useMemo(() => {
+    if (!albumPictures.length) return [];
+    const scenes = level.sourceNodes
+      .filter((node) => node.kind === "scene")
+      .sort((first, second) => first.chrono - second.chrono)
+      .map((node) => ({ id: node.id, chrono: node.chrono, sentenceIds: node.sentenceIds ?? [] }));
+    if (!scenes.length) return [];
+    const known = new Set(baseDraws.map((draw) => draw.node.id));
+    const sceneDraws = baseDraws
+      .filter((draw) => draw.node.kind === "scene")
+      .sort((first, second) => first.node.chrono - second.node.chrono);
+    const drawForScene = (sceneId: string) =>
+      baseDraws.find((draw) => draw.node.id === sceneId)
+      ?? baseDraws.find((draw) => draw.node.cluster?.ids.includes(sceneId));
+    const draws: OrbitalDraw[] = [];
+    for (const placement of placePictures(scenes, albumPictures)) {
+      if (!placement.placed || known.has(placement.pictureId)) continue;
+      const prevDraw = drawForScene(placement.prevSceneId);
+      if (!prevDraw) continue;
+      const nextDraw = placement.nextSceneId ? drawForScene(placement.nextSceneId) : undefined;
+      const prevScene = scenes.find((scene) => scene.id === placement.prevSceneId)!;
+      const nextScene = placement.nextSceneId ? scenes.find((scene) => scene.id === placement.nextSceneId) : undefined;
+      const fraction = nextScene && nextScene.chrono > prevScene.chrono
+        ? (placement.chrono - prevScene.chrono) / (nextScene.chrono - prevScene.chrono)
+        : 1;
+      let position: Position3;
+      if (nextDraw) {
+        position = prevDraw.position.map((value, axis) => value + (nextDraw.position[axis] - value) * fraction) as Position3;
+      } else {
+        const prevIndex = sceneDraws.findIndex((draw) => draw.node.id === prevDraw.node.id);
+        const prevPrev = prevIndex > 0 ? sceneDraws[prevIndex - 1] : undefined;
+        position = prevPrev
+          ? prevDraw.position.map((value, axis) => value + (value - prevPrev.position[axis])) as Position3
+          : [prevDraw.position[0], prevDraw.position[1] + 60, prevDraw.position[2]];
+      }
+      draws.push({
+        node: { id: placement.pictureId, label: pictureKindLabel(placement.kind), kind: "picture", state: "canon", parent: null, lane: "canon", chrono: placement.chrono, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] },
+        role: "main",
+        radius: prevDraw.radius * 0.9 || 16,
+        position,
+      });
+    }
+    return draws;
+  }, [albumPictures, level.sourceNodes, baseDraws]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
   /** EM join: while a match animates, the dropped draw's target pose
    * is the survivor's position — the morph system glides it there. */
   const [joinTarget, setJoinTarget] = useState<Map<string, Position3> | null>(null);
   const draws = useMemo(() => {
-    const all = [...baseDraws, ...connections.draws];
+    const all = [...baseDraws, ...connections.draws, ...pictureDraws];
     if (!joinTarget) return all;
     return all.map((draw) => {
       const target = joinTarget.get(draw.node.id);
       return target ? { ...draw, position: target } : draw;
     });
-  }, [baseDraws, connections.draws, joinTarget]);
+  }, [baseDraws, connections.draws, pictureDraws, joinTarget]);
   const paths = useMemo(() => [...layout.paths.map((track) => {
     if (!morph) return track;
     const fromPoints = track.points.map((point) => {
