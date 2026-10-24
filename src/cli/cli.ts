@@ -34,6 +34,7 @@ import {
 } from "./commands/shared/jevCommands.js";
 import { resolveJevKey } from "../ground/connectors/secrets.js";
 import { inspectNovel } from "./commands/extract/inspectCommands.js";
+import { albumImport, albumList, albumPortraits } from "./commands/extract/albumCommands.js";
 import { evalExtract, evalRun } from "./commands/extract/evalCommands.js";
 import { evalDialogueCards } from "./commands/extract/dialogueEval.js";
 import { sectionBlock } from "../digger/intake/sectioning.js";
@@ -104,6 +105,12 @@ const COMMANDS: Record<string, string> = {
   "novel jev ping": "Jev smoke test: one tiny live decision via the resolved key",
   "novel inspect <novel-dir>":
     "Corpus diagnostics over a novel bundle (counts, coverage, integrity tallies — no judgments)",
+  "novel album import <novel-dir> <epub-file>":
+    "Pre-process at intake: spine-walk an EPUB in reading order, images to assets/, extracted text to source/ (ingest that file), sentence-identity anchors to ontology/illustrations.jsonl",
+  "novel album list <novel-dir> [--block-size N]":
+    "List illustrations with each anchor resolved to chapter / block / sentence / scene (scene once the block is ingested)",
+  "novel album portraits <novel-dir>":
+    "Portrait finalization: EM-merge follow, birth fold-match binding, then reviewer tasks for characters still without a portrait (skipped when the host is known not to support visual input; portraits stay hidden until bound)",
   "novel eval run <dataset-dir> <predictions-dir>":
     "Score prediction files against a golden-chapter dataset (precision/recall; metrics only, no thresholds)",
   "novel eval dialogues <gold-cards.json> <predicted-cards.json>":
@@ -206,6 +213,27 @@ async function main(): Promise<void> {
     }
     out(await inspectNovel(sub), pretty);
     return;
+  }
+
+  if (cmd === "album") {
+    if (sub === "import" && positional[2] && positional[3] && !positional[3].startsWith("--")) {
+      out(await albumImport(positional[2], positional[3]), pretty);
+      return;
+    }
+    if (sub === "list" && positional[2]) {
+      const rawSize = flag(positional, "--block-size");
+      const blockSize = rawSize === undefined ? undefined : Number(rawSize);
+      if (blockSize !== undefined && (!Number.isInteger(blockSize) || blockSize < 100)) {
+        throw new Error(`novel album list --block-size must be an integer >= 100 (got: ${rawSize})`);
+      }
+      out(await albumList(positional[2], blockSize), pretty);
+      return;
+    }
+    if (sub === "portraits" && positional[2]) {
+      out(await albumPortraits(positional[2]), pretty);
+      return;
+    }
+    throw new Error("Usage: novel album import <novel-dir> <epub-file> | novel album list <novel-dir> [--block-size N] | novel album portraits <novel-dir>");
   }
 
   if (cmd === "eval") {

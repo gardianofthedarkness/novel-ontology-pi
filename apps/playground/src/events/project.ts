@@ -54,6 +54,7 @@ export type ProcessingEvent =
   | { type: "faculty.activity"; blockId: string; callId: string; faculty: string; system: "system1" | "system2" | "work"; status: "started" | "completed" | "failed" }
   | { type: "entity.merged"; keepId: string; dropId: string }
   | { type: "entity.distinct"; aId: string; bId: string }
+  | { type: "album.anchored"; blockId: string; pictures: { id: string; asset: string; kind: string; sentenceId: string | null }[] }
   | { type: "changeset.merged"; changesetId: string; target: "store" }
   | {
       type: "graph.rebuilt";
@@ -137,6 +138,10 @@ export function projectProcessingEvent(event: ProcessingEvent): PlaygroundEvent[
       return [{ type: "entity.merged", keepId: event.keepId, dropId: event.dropId }];
     case "entity.distinct":
       return [{ type: "entity.distinct", aId: event.aId, bId: event.bId }];
+    case "album.anchored":
+      // Transport fact only: the orbit holds the anchors and resolves
+      // them to picture nodes via ./data/pictureNodes as scenes arrive.
+      return [{ type: "album.anchored", blockId: event.blockId, pictures: event.pictures }];
     case "draft.updated":
       // Transport fact only: the fact itself renders nothing. The SSE
       // source intercepts it, fetches the working draft, and projects

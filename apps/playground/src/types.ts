@@ -14,7 +14,9 @@ export type NodeKind =
   | "location"
   | "scene"
   | "event"
-  | "dialogue";
+  | "dialogue"
+  /** An EPUB illustration: an independent node type between its neighboring scenes (album store projection, not canon). */
+  | "picture";
 
 /** canon = merged truth · proposed = ghost awaiting the gate · held = gate held it (visually distinct) */
 export type CanonState = "canon" | "proposed" | "held";
@@ -88,7 +90,9 @@ export type PlaygroundEvent =
   | { type: "changeset.merged"; changesetId: string }
   | { type: "entity.merged"; keepId: string; dropId: string }
   | { type: "entity.distinct"; aId: string; bId: string }
-  | { type: "graph.rebuilt" };
+  | { type: "graph.rebuilt" }
+  /** Album pre-process anchors for one block; the orbit resolves them to picture nodes at render. */
+  | { type: "album.anchored"; blockId: string; pictures: { id: string; asset: string; kind: string; sentenceId: string | null }[] };
 
 export interface EventSource {
   subscribe(handler: (event: PlaygroundEvent) => void): () => void;

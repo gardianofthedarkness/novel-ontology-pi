@@ -1,4 +1,5 @@
 import type { ChangeProposal } from "../../solidifier/merge/changeset.js";
+import type { IllustrationKind } from "../../digger/intake/album/album.js";
 
 /** Transport facts, not the Playground's layout-dependent view model. */
 export type ProcessingEvent =
@@ -12,7 +13,9 @@ export type ProcessingEvent =
   | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate"; touchedIds?: string[] }
   | { type: "faculty.activity"; blockId: string; callId: string; faculty: string; system: "system1" | "system2" | "work"; status: "started" | "completed" | "failed" }
   | { type: "entity.merged"; keepId: string; dropId: string }
-  | { type: "entity.distinct"; aId: string; bId: string };
+  | { type: "entity.distinct"; aId: string; bId: string }
+  /** Album pre-process: intake-known picture anchors for one block (sentence identities, not canon). */
+  | { type: "album.anchored"; blockId: string; pictures: { id: string; asset: string; kind: IllustrationKind; sentenceId: string | null }[] };
 
 export interface EventRecord {
   version: 1;
@@ -49,6 +52,7 @@ export function projectEvent(event: ProcessingEvent): ProcessingEvent {
     case "faculty.activity": return { type: event.type, blockId: event.blockId, callId: event.callId, faculty: event.faculty, system: event.system, status: event.status };
     case "entity.merged": return { type: event.type, keepId: event.keepId, dropId: event.dropId };
     case "entity.distinct": return { type: event.type, aId: event.aId, bId: event.bId };
+    case "album.anchored": return { type: event.type, blockId: event.blockId, pictures: event.pictures.map((p) => ({ id: p.id, asset: p.asset, kind: p.kind, sentenceId: p.sentenceId })) };
     default: throw new Error("Unsupported processing event");
   }
 }
