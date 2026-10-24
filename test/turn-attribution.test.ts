@@ -1,15 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { turnContext, joinAttributedTurns, attributeBlockTurns } from "../src/processing/turnAttribution.js";
-import { DecisionRouter } from "../src/processing/decisionRouter.js";
-import { FacultyPool } from "../src/processing/facultyPool.js";
-import type { Sentence } from "../src/text/sectioning.js";
-import type { NamedTurn } from "../src/extraction/extraction.js";
-import { FacultyGraph } from "../src/processing/facultyGraph.js";
-import { sectionBlock } from "../src/text/sectioning.js";
-import { createExtractor } from "../src/extraction/extraction.js";
-import type { Entity, Scene } from "../src/ontology/types.js";
-import { newChangeSet } from "../src/merge/changeset.js";
+import { turnContext, joinAttributedTurns, attributeBlockTurns } from "../src/digger/processing/turnAttribution.js";
+import { DecisionRouter } from "../src/digger/processing/decisionRouter.js";
+import { FacultyPool } from "../src/digger/processing/facultyPool.js";
+import type { Sentence } from "../src/digger/intake/sectioning.js";
+import type { NamedTurn } from "../src/digger/extraction/extraction.js";
+import { FacultyGraph } from "../src/digger/processing/facultyGraph.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
+import { createExtractor } from "../src/digger/extraction/extraction.js";
+import type { Entity, Scene } from "../src/ground/ontology/types.js";
+import { newChangeSet } from "../src/solidifier/merge/changeset.js";
 
 const sentences: Sentence[] = ["小明走来。", "他停下。", "「你好。」", "她回答。", "小红微笑。"].map((text, index) => ({ id: `b0001_s${String(index).padStart(4, "0")}`, index, paragraphIndex: index, text, startOffset: index * 10, endOffset: index * 10 + text.length }));
 
@@ -141,7 +141,7 @@ test("the experimental graph attributes block turns independently and only then 
   assert.deepEqual((result.miniloop.accepted.blockNamedTurns as NamedTurn[]).map(turn => turn.speakerName), ["小樱", "小樱"]);
   assert.deepEqual((await result.sceneResults.get(ids[0]))?.turns.map(turn => turn.sentenceIds), [[ids[0]]]);
   assert.deepEqual((await result.sceneResults.get(ids[2]))?.turns.map(turn => turn.sentenceIds), [[ids[2]]]);
-  const declarations = result.miniloop.accepted.blockIdentityDeclarations as NonNullable<import("../src/extraction/extraction.js").LlmScene["newEntities"]>;
+  const declarations = result.miniloop.accepted.blockIdentityDeclarations as NonNullable<import("../src/digger/extraction/extraction.js").LlmScene["newEntities"]>;
   declarations.push({ name: "无来源的名字", kind: "Character" });
   for (const [key, pending] of result.sceneResults) {
     const value = await pending;

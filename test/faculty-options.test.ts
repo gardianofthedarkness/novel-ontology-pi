@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { facultyOptionsFromEnv } from "../src/processing/facultyOptions.js";
-import { ingestNovel } from "../src/commands/ingestCommands.js";
-import { runRecall } from "../src/commands/recallCommands.js";
+import { facultyOptionsFromEnv } from "../src/digger/processing/facultyOptions.js";
+import { ingestNovel } from "../src/cli/commands/extract/ingestCommands.js";
+import { runRecall } from "../src/cli/commands/extract/recallCommands.js";
 
 test("CLI faculty scope defaults to dialogue cards and retains explicit historical modes", () => {
   assert.deepEqual(facultyOptionsFromEnv({}), { dialogueScope: "card" });

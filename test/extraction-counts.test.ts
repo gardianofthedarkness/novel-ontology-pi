@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { initWorkspace } from "../src/workspace/init.js";
-import { newChangeSet } from "../src/merge/changeset.js";
-import { saveChangeSet } from "../src/merge/changesetStore.js";
-import { loadExtractionCounts } from "../src/processing/counts.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
+import { newChangeSet } from "../src/solidifier/merge/changeset.js";
+import { saveChangeSet } from "../src/solidifier/merge/changesetStore.js";
+import { loadExtractionCounts } from "../src/digger/processing/counts.js";
 
 test("sequencing reserves approved identities and high-water marks after canonical deletion", async (context) => {
   const parent = await mkdtemp(join(tmpdir(), "novel-sequence-"));

@@ -15,7 +15,7 @@
 <h1>Timelines &amp; forking — parallel universes from one canon</h1>
 <p>
   <span class="badge open">status: designed (salvaged from the legacy timeline design), not yet implemented</span>
-  <span class="badge">repo: planned <code>src/timeline/</code> · types in <code>src/ontology/types.ts</code></span>
+  <span class="badge">repo: planned <code>src/timeline/</code> · types in <code>src/ground/ontology/types.ts</code></span>
   <span class="badge">decision assist: Jev · <span class="prim score">score</span> / <span class="prim choice">choice</span></span>
 </p>
 <p class="sub">Canon is an event-sourced timeline: immutable, totally ordered. A <b>fork</b> is what the
@@ -60,7 +60,7 @@ branches off there: sharing everything before the point, diverging after it, wit
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li>Types ready: <code>Branch</code>, <code>CharacterStateAtPoint</code> in <code>src/ontology/types.ts</code>; <code>FORKS_FROM</code> relation + <code>Branch</code> node table in schema v1.</li>
+  <li>Types ready: <code>Branch</code>, <code>CharacterStateAtPoint</code> in <code>src/ground/ontology/types.ts</code>; <code>FORKS_FROM</code> relation + <code>Branch</code> node table in schema v1.</li>
   <li>CLI surface: <code>novel timeline list|show</code>, <code>novel fork create --at &lt;event-id&gt; --label &lt;name&gt;</code>.</li>
   <li>State snapshot = <code>OntologyStore.getStateAt(characterId, eventId)</code> folded over the canon prefix.</li>
 </ul>

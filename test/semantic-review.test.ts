@@ -5,17 +5,17 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { newChangeSet, type ChangeProposal } from "../src/merge/changeset.js";
-import { materializeSemantic, semanticFacts, semanticRevision, validateStructure, type FactDecision } from "../src/merge/semantic.js";
-import { decideFacts, prepareSemantic, semanticPage } from "../src/merge/semanticCommands.js";
-import { saveChangeSet, loadChangeSet, setChangeSetStatus } from "../src/merge/changesetStore.js";
-import { applyChangeSet } from "../src/merge/apply.js";
-import { reviseProposals } from "../src/merge/revise.js";
-import { initWorkspace } from "../src/workspace/init.js";
-import { sectionBlock } from "../src/text/sectioning.js";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { loadExtractionCounts } from "../src/processing/counts.js";
-import type { Entity, Scene, OntEvent, StateChange } from "../src/ontology/types.js";
+import { newChangeSet, type ChangeProposal } from "../src/solidifier/merge/changeset.js";
+import { materializeSemantic, semanticFacts, semanticRevision, validateStructure, type FactDecision } from "../src/solidifier/merge/semantic.js";
+import { decideFacts, prepareSemantic, semanticPage } from "../src/solidifier/merge/semanticCommands.js";
+import { saveChangeSet, loadChangeSet, setChangeSetStatus } from "../src/solidifier/merge/changesetStore.js";
+import { applyChangeSet } from "../src/solidifier/merge/apply.js";
+import { reviseProposals } from "../src/solidifier/merge/revise.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { loadExtractionCounts } from "../src/digger/processing/counts.js";
+import type { Entity, Scene, OntEvent, StateChange } from "../src/ground/ontology/types.js";
 
 function fixture() {
   const packet = newChangeSet("b0001");
@@ -121,7 +121,7 @@ test("real CLI pages, targeted decisions, partial approval and graph queries use
   const { packet } = fixture();
   await saveChangeSet(directory, packet);
   const execute = promisify(execFile);
-  const cli = (...args: string[]) => execute(process.execPath, [resolve("dist/src/cli.js"), ...args], { env: { ...process.env, WORK_LLM_API_KEY: "", TYPESAFE_API_KEY: "" } });
+  const cli = (...args: string[]) => execute(process.execPath, [resolve("dist/src/cli/cli.js"), ...args], { env: { ...process.env, WORK_LLM_API_KEY: "", TYPESAFE_API_KEY: "" } });
   await assert.rejects(cli("changeset", "approve", directory, packet.id), /decisions are missing/);
   assert.equal((await loadChangeSet(directory, packet.id)).status, "held");
   const page = JSON.parse((await cli("changeset", "facts", directory, packet.id, "--limit", "20")).stdout);

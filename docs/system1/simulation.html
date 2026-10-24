@@ -51,7 +51,7 @@ different people.</p>
 
 <h2>Design details</h2>
 <ul class="tight" style="font-size:14px">
-  <li><b>Materialization v1 landed (2026-10-22):</b> state deltas persist as bundle records (<code>state-changes.jsonl</code>) at apply time and the fold is implemented (<code>src/ontology/state.ts</code>, <code>novel state</code> CLI) — emotions/relationships additive and clamped to [-1, 1], knowledge/goals/possessions set add/remove, location replaces on non-null. Simulation itself (generate forward from a folded snapshot at a fork) remains Phase 4.</li>
+  <li><b>Materialization v1 landed (2026-10-22):</b> state deltas persist as bundle records (<code>state-changes.jsonl</code>) at apply time and the fold is implemented (<code>src/ground/ontology/state.ts</code>, <code>novel state</code> CLI) — emotions/relationships additive and clamped to [-1, 1], knowledge/goals/possessions set add/remove, location replaces on non-null. Simulation itself (generate forward from a folded snapshot at a fork) remains Phase 4.</li>
   <li><b>State = fold, never a row:</b> emotions, knowledge, goals and relationships are computed by replaying events up to the point. Move the point, the person changes — on canon and on every branch, consistently.</li>
   <li><b>Ignorance is a feature:</b> the fold is also a wall. Facts from later chapters or other branches are not in the prompt, so the character cannot leak them.</li>
   <li><b>Voice from evidence:</b> speech style is grounded in the character's own attributed turns (06) — forms of address, verbal tics, sentence length — not in a hand-written persona sketch.</li>
@@ -62,7 +62,7 @@ different people.</p>
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
   <li>State fold: <code>OntologyStore.getStateAt()</code> (10) over the timeline prefix (11).</li>
-  <li>Generation: the work LLM via <code>src/connectors/llm.ts</code>, prompted with folded state + retrieved turns + scene context from Ladybug hybrid search.</li>
+  <li>Generation: the work LLM via <code>src/ground/connectors/llm.ts</code>, prompted with folded state + retrieved turns + scene context from Ladybug hybrid search.</li>
   <li>CLI surface: <code>novel simulate &lt;character&gt; [--branch &lt;id&gt;] [--at &lt;event-id&gt;]</code>; Discord later becomes a thin client of this command.</li>
 </ul>
 

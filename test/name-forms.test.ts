@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { foldVariants } from "../src/text/nameForms.js";
-import { nominateMatchCandidates } from "../src/matching/entityMatch.js";
-import type { Entity } from "../src/ontology/types.js";
+import { foldVariants } from "../src/ground/language/nameForms.js";
+import { nominateMatchCandidates } from "../src/solidifier/matching/entityMatch.js";
+import type { Entity } from "../src/ground/ontology/types.js";
 
 test("variant fold: shinjitai and traditional forms share one key", () => {
   assert.equal(foldVariants("白井黒子"), "白井黑子");

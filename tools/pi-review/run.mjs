@@ -2,12 +2,12 @@ import { spawn } from 'node:child_process';
 import { appendFile, cp, mkdir, open, readFile, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createAgentSession, createBashToolDefinition, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from '@earendil-works/pi-coding-agent';
-import { cutBlocks, splitChapters } from '../../dist/src/text/blocks.js';
+import { cutBlocks, splitChapters } from '../../dist/src/digger/intake/blocks.js';
 import { authorize } from './guard.mjs';
 import { observeModels } from './observe-models.mjs';
 import { creditFacts, requireFactCoverage, reviewRevision, sourcePage } from './review-coverage.mjs';
-import { digest, semanticFacts, semanticRevision } from '../../dist/src/merge/semantic.js';
-import { semanticContext } from '../../dist/src/merge/semanticCommands.js';
+import { digest, semanticFacts, semanticRevision } from '../../dist/src/solidifier/merge/semantic.js';
+import { semanticContext } from '../../dist/src/solidifier/merge/semanticCommands.js';
 import { validateStability } from './validate-stability.mjs';
 import { root, repo, cli, skill, agentEvents } from './config.mjs';
 

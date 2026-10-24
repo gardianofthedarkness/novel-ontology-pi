@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { nominateStructuralCandidates } from "../src/matching/structuralMatch.js";
-import { loadDistinctMemory, runEntityMatching } from "../src/matching/emFaculty.js";
-import type { ProcessingEvent } from "../src/events/types.js";
-import { FacultyGraph } from "../src/processing/facultyGraph.js";
-import { sectionBlock } from "../src/text/sectioning.js";
-import type { DecisionModel } from "../src/connectors/jev.js";
-import type { WorkModel } from "../src/connectors/llm.js";
-import type { Entity, OntEvent, Relation, Scene } from "../src/ontology/types.js";
+import { nominateStructuralCandidates } from "../src/solidifier/matching/structuralMatch.js";
+import { loadDistinctMemory, runEntityMatching } from "../src/solidifier/matching/emFaculty.js";
+import type { ProcessingEvent } from "../src/ground/events/types.js";
+import { FacultyGraph } from "../src/digger/processing/facultyGraph.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
+import type { DecisionModel } from "../src/ground/connectors/jev.js";
+import type { WorkModel } from "../src/ground/connectors/llm.js";
+import type { Entity, OntEvent, Relation, Scene } from "../src/ground/ontology/types.js";
 
 const ent = (id: string, canonical: string, extraForms: string[] = []): Entity => ({
   id, kind: "Character", confidence: 0.9, properties: {},

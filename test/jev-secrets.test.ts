@@ -16,18 +16,18 @@ import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "../src/config.js";
-import { JevClient } from "../src/connectors/jev.js";
+import { loadConfig } from "../src/cli/config.js";
+import { JevClient } from "../src/ground/connectors/jev.js";
 import {
   deleteStoredSecret,
   getStoredSecret,
   resolveJevKey,
   secretStorePath,
   setStoredSecret,
-} from "../src/connectors/secrets.js";
-import { jevStatus } from "../src/commands/jevCommands.js";
+} from "../src/ground/connectors/secrets.js";
+import { jevStatus } from "../src/cli/commands/shared/jevCommands.js";
 
-const cli = fileURLToPath(new URL("../src/cli.js", import.meta.url));
+const cli = fileURLToPath(new URL("../src/cli/cli.js", import.meta.url));
 const FAKE_KEY = ["sk", "test", "fake", "key", "0000000000"].join("-");
 
 function tempEnv(t: TestContext): NodeJS.ProcessEnv {

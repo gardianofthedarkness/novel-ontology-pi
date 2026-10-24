@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { cutBlocks, splitChapters } from "../src/text/blocks.js";
+import { cutBlocks, splitChapters } from "../src/digger/intake/blocks.js";
 
 const fixture = fileURLToPath(
   new URL("../../test/fixtures/sample-novel.txt", import.meta.url),

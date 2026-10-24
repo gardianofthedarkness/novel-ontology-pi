@@ -7,12 +7,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { buildGraphFromBundle } from "../src/connectors/ladybug.js";
-import { EventLog, readEventBatch } from "../src/events/log.js";
-import { newChangeSet } from "../src/merge/changeset.js";
-import { saveChangeSet, loadChangeSet } from "../src/merge/changesetStore.js";
+import { buildGraphFromBundle } from "../src/ground/connectors/ladybug.js";
+import { EventLog, readEventBatch } from "../src/ground/events/log.js";
+import { newChangeSet } from "../src/solidifier/merge/changeset.js";
+import { saveChangeSet, loadChangeSet } from "../src/solidifier/merge/changesetStore.js";
 
-const cli = fileURLToPath(new URL("../src/cli.js", import.meta.url));
+const cli = fileURLToPath(new URL("../src/cli/cli.js", import.meta.url));
 
 test("CLI watch exits cleanly on SIGTERM; it rejects public bind options", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "novel-watch-cli-"));

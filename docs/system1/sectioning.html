@@ -15,7 +15,7 @@
 <h1>Sectioning — intake &amp; auto sentence segregation</h1>
 <p>
   <span class="badge v1">status: implemented</span>
-  <span class="badge">repo: <code>src/text/sectioning.ts</code></span>
+  <span class="badge">repo: <code>src/digger/intake/sectioning.ts</code></span>
   <span class="badge">model: none — deterministic code</span>
 </p>
 <p class="sub">The front door of the whole system. A novel arrives as one big text; this sector cuts it
@@ -54,7 +54,7 @@ sectioning is the provenance anchor for the entire ontology.</p>
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li><code>src/text/sectioning.ts</code> — <code>sectionBlock(text, blockIndex)</code>; paragraph split first, then terminator scan with a closer-absorption run (。』 ?! etc.).</li>
+  <li><code>src/digger/intake/sectioning.ts</code> — <code>sectionBlock(text, blockIndex)</code>; paragraph split first, then terminator scan with a closer-absorption run (。』 ?! etc.).</li>
   <li>Exposed as <code>novel section &lt;file&gt;</code> — works today, prints JSON.</li>
   <li>Tests: <code>test/sectioning.test.ts</code> — CJK quotes, English abbreviations/decimals, paragraph tracking. All passing.</li>
 </ul>

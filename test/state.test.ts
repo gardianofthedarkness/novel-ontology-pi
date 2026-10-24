@@ -3,11 +3,11 @@ import { test } from "node:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { foldStateAt } from "../src/ontology/state.js";
-import type { Entity, OntEvent, StateChange } from "../src/ontology/types.js";
-import { applyChangeSet } from "../src/merge/apply.js";
-import type { ChangeSet } from "../src/merge/changeset.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { foldStateAt } from "../src/ground/ontology/state.js";
+import type { Entity, OntEvent, StateChange } from "../src/ground/ontology/types.js";
+import { applyChangeSet } from "../src/solidifier/merge/apply.js";
+import type { ChangeSet } from "../src/solidifier/merge/changeset.js";
 
 const ev = (id: string, order: number): OntEvent => ({
   id,

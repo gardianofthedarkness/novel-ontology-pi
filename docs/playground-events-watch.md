@@ -58,7 +58,7 @@ PR #4 的 [CI run #7](https://github.com/gardianofthedarkness/novel-ontology-pi/
 - 每条业务帧为 `id: <ID>` + `data: <EventRecord JSON>` + 空行；使用默认 message 事件，
   因此浏览器 `onmessage` 解析 `record.event`，不能把整个 record 当 PlaygroundEvent。
 - EventRecord：`{version: 1, id: string, timestamp: ISO时间, event: ProcessingEvent}`。
-  类型在 `src/events/types.ts`；本轮与未合并前端没有包依赖。
+  类型在 `src/ground/events/types.ts`；本轮与未合并前端没有包依赖。
 - ID 为该 JSONL 完整记录换行符之后的 UTF-8 **字节偏移**，固定 16 位补零十进制字符串。
   不要把 JS 字符数当偏移，不要拿时间戳排序。存储和 SSE 使用同一 ID。
 - 首次不带游标，从文件开头重放，然后继续追踪追加；日志不存在则等待，不创建文件。
@@ -118,7 +118,7 @@ NAS 使用已经有 ontology/changesets 的真实 novel 目录；watch 不创建
 cd /tmp/novel-ontology-events-watch-v2
 npm run build
 npm test
-node dist/src/cli.js watch /absolute/path/to/novel --port 4317
+node dist/src/cli/cli.js watch /absolute/path/to/novel --port 4317
 ```
 
 Mac 另开终端，替换用户和 NAS 主机名，保持 SSH 运行：
@@ -139,7 +139,7 @@ curl -N -H 'Last-Event-ID: REPLACE_WITH_LAST_ID' http://127.0.0.1:4317/events
 
 ```bash
 cd /tmp/novel-ontology-events-watch-v2
-node dist/src/cli.js graph build /absolute/path/to/novel/ontology
+node dist/src/cli/cli.js graph build /absolute/path/to/novel/ontology
 ```
 
 这条命令会写本地可重建的 graph 缓存与处理日志；watch 本身始终只读。
@@ -170,6 +170,6 @@ cd /tmp/novel-ontology-events-watch-v2
 git branch --show-current
 git status --short
 git diff --check
-git diff -- src/cli.ts src/connectors/ladybug.ts src/merge src/processing
+git diff -- src/cli/cli.ts src/ground/connectors/ladybug.ts src/solidifier/merge src/digger/processing
 less /tmp/novel-events-watch-v2.diff
 ```

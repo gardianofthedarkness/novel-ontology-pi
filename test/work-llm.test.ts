@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "../src/config.js";
-import { HttpWorkModel } from "../src/connectors/workModel.js";
+import { loadConfig } from "../src/cli/config.js";
+import { HttpWorkModel } from "../src/ground/connectors/workModel.js";
 
-const cli = fileURLToPath(new URL("../src/cli.js", import.meta.url));
+const cli = fileURLToPath(new URL("../src/cli/cli.js", import.meta.url));
 const FAKE_KEY = "sk-test-fake-key-value";
 
 interface MockRequest {

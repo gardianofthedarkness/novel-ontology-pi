@@ -137,7 +137,7 @@ flight carries your camera out, across lanes, to the knitting site, arriving as 
 <table>
   <tr><th>Piece</th><th>Lands as</th></tr>
   <tr><td>Playground app</td><td><code>apps/playground/</code> — Vite + React + TS, Reagraph + React Flow deps</td></tr>
-  <tr><td>Event emission</td><td>CLI: block processor + miniloop + changeset store emit <code>PlaygroundEvent</code> records (<code>src/events/</code>)</td></tr>
+  <tr><td>Event emission</td><td>CLI: block processor + miniloop + changeset store emit <code>PlaygroundEvent</code> records (<code>src/ground/events/</code>)</td></tr>
   <tr><td>Live transport</td><td><code>novel watch &lt;novel-dir&gt;</code> — tails events.jsonl, serves SSE + the built frontend</td></tr>
   <tr><td>Graph data</td><td>CLI query endpoints over LadybugStore/retrieval (initial snapshot + deltas)</td></tr>
   <tr><td>Gate actions</td><td>UI calls the same changeset approve/hold path as the CLI — one gate, two doors</td></tr>

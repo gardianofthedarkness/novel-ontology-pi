@@ -5,9 +5,9 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { evalRun } from "../src/commands/evalCommands.js";
+import { evalRun } from "../src/cli/commands/extract/evalCommands.js";
 
-const cli = fileURLToPath(new URL("../src/cli.js", import.meta.url));
+const cli = fileURLToPath(new URL("../src/cli/cli.js", import.meta.url));
 // Tests run compiled, from dist/test/ — ../../ is the repo root.
 const exampleDataset = fileURLToPath(new URL("../../eval/examples/golden-chapter", import.meta.url));
 const examplePredictions = join(exampleDataset, "predictions");

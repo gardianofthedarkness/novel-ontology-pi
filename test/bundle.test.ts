@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BundleStore } from "../src/connectors/bundle.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
 
 test("loadFile reports the filename and physical line of corrupt JSONL", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "novel-bundle-"));
