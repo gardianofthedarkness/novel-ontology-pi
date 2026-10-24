@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Overview — System 1 Design · novel-ontology-pi</title>
+<title>Overview — novel-ontology-pi design dashboard</title>
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -11,21 +11,26 @@
 
 <nav class="site" id="sitenav"></nav>
 
-<div class="kicker">detailed design · overview</div>
-<h1>System 1 — The Autostep Miniloop</h1>
-<p class="sub">The fast, local decision system inside the CLI. It reads a novel the way a careful
-reader skims structure — where scenes break, which sentences are dialogue, whose names appear,
-who is actually in the room, who is speaking. It <b>decides structure</b>; it never writes the
-ontology. Everything it concludes becomes a proposal for the main agent to approve at the merge gate.</p>
+<div class="kicker">design dashboard · overview</div>
+<h1>Digging a tunnel through a novel</h1>
+<p class="sub">novel-ontology-pi turns a novel into a living ontology — characters, events,
+timelines that can fork. The product has <b>four parts</b>: a <b>Skill</b> that teaches an
+agent the workflows, a <b>CLI</b> that does the work, one <b>Adaptor</b> that makes both
+installable into any popular agent host, and a <b>Frontend</b> where the work is watched.
+Inside the CLI, data extraction is told the way tunnels are built: the <b>⛏ Digger</b>
+(miniloop + faculty graph) chews through the raw earth of the text and advances along the
+timeline; the <b>🧱 Solidifier</b> (merge-gate review, EM, cross-sectional EM) lines the
+tunnel behind the face so what was dug becomes permanent canon. The simulation group is
+kept — deliberately empty for now.</p>
 <p>
-  <span class="badge v1">design v0.1</span>
-  <span class="badge open">patch catalog: open for discussion</span>
+  <span class="badge v1">hierarchy v2 · 2026-10-24</span>
   <span class="badge">companion: <a href="../../DESIGN.md">DESIGN.md</a></span>
+  <span class="badge">roadmap: <a href="roadmap.html">decisions &amp; tracks</a></span>
 </p>
 
-<h2>The architecture</h2>
+<h2>The hierarchy — one picture</h2>
 <div class="panel" style="padding:10px">
-<svg class="arch" viewBox="0 0 1180 640" role="img" aria-label="Architecture graph of novel-ontology-pi">
+<svg class="arch" viewBox="0 0 1180 950" role="img" aria-label="Hierarchy graph of novel-ontology-pi: Skill, CLI, Adaptor, Frontend; the CLI's data-extraction group as Digger and Solidifier, and an empty simulation group">
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#3d4a6b"></path>
@@ -33,109 +38,158 @@ ontology. Everything it concludes becomes a proposal for the main agent to appro
   </defs>
 
   <!-- USER -->
-  <rect class="box" x="16" y="270" width="158" height="120" rx="12"></rect>
-  <text class="title" x="95" y="298" text-anchor="middle">👤 User</text>
-  <text class="small" x="95" y="320" text-anchor="middle">drops in a novel</text>
-  <text class="small" x="95" y="338" text-anchor="middle">provides 2 API keys</text>
-  <text class="small" x="95" y="356" text-anchor="middle">selects fork points</text>
-  <text class="small" x="95" y="374" text-anchor="middle">asks · simulates</text>
+  <rect class="box" x="16" y="400" width="150" height="120" rx="12"></rect>
+  <text class="title" x="91" y="428" text-anchor="middle">👤 User</text>
+  <text class="small" x="91" y="450" text-anchor="middle">drops in a novel</text>
+  <text class="small" x="91" y="468" text-anchor="middle">provides 2 API keys</text>
+  <text class="small" x="91" y="486" text-anchor="middle">reviews at the gate</text>
+  <text class="small" x="91" y="504" text-anchor="middle">selects fork points</text>
 
-  <!-- SYSTEM 2 ZONE -->
-  <rect class="zone" x="206" y="14" width="660" height="104" rx="16"></rect>
-  <text class="zonelabel" x="222" y="36">SYSTEM 2 — MAIN AGENT</text>
-  <rect class="box sys2" x="330" y="44" width="340" height="56" rx="12"></rect>
-  <text class="title" x="500" y="69" text-anchor="middle">Pi agent + SKILL.md</text>
-  <text class="small" x="500" y="87" text-anchor="middle">workflows · merge reviewer · memory + context</text>
+  <!-- AGENT HOSTS -->
+  <rect class="zone" x="200" y="14" width="700" height="88" rx="16"></rect>
+  <text class="zonelabel" x="216" y="36">AGENT HOSTS — ANY POPULAR AGENT</text>
+  <rect class="box" x="216" y="46" width="150" height="42" rx="10"></rect>
+  <text class="title" x="291" y="73" text-anchor="middle">Pi</text>
+  <rect class="box" x="382" y="46" width="150" height="42" rx="10"></rect>
+  <text class="title" x="457" y="73" text-anchor="middle">Codex</text>
+  <rect class="box" x="548" y="46" width="170" height="42" rx="10"></rect>
+  <text class="title" x="633" y="73" text-anchor="middle">Claude Code</text>
+  <rect class="box" x="734" y="46" width="150" height="42" rx="10"></rect>
+  <text class="title" x="809" y="73" text-anchor="middle">… and peers</text>
 
-  <!-- SYSTEM 1 ZONE -->
-  <rect class="zone" x="206" y="140" width="660" height="330" rx="16"></rect>
-  <text class="zonelabel" x="222" y="162">SYSTEM 1 — THE CLI</text>
+  <!-- ADAPTOR -->
+  <rect class="box" x="200" y="118" width="700" height="56" rx="12" style="stroke:var(--amber)"></rect>
+  <text class="title" x="550" y="142" text-anchor="middle">🔌 Agent Adaptor — ONE adaptor, every host</text>
+  <text class="small" x="550" y="160" text-anchor="middle">translates Skill + CLI into each host's native format · one-step install · key entry</text>
 
-  <rect class="box" x="226" y="186" width="180" height="62" rx="12"></rect>
-  <text class="title" x="316" y="211" text-anchor="middle">✂️ Sectioning</text>
-  <text class="small" x="316" y="229" text-anchor="middle">code only · sentences + IDs</text>
+  <!-- SKILL / SYSTEM 2 -->
+  <rect class="zone" x="200" y="190" width="700" height="100" rx="16"></rect>
+  <text class="zonelabel" x="216" y="212">SYSTEM 2 — THE SKILL (RUNS IN THE HOST AGENT)</text>
+  <rect class="box sys2" x="216" y="222" width="668" height="54" rx="12"></rect>
+  <text class="title" x="550" y="245" text-anchor="middle">📜 novel-ontology Skill — workflows · gate staffing · tie-breaks · repairs</text>
+  <text class="small" x="550" y="263" text-anchor="middle">subskills mirror the CLI: data-extraction ▸ digger / solidifier · simulation (empty)</text>
 
-  <rect class="box sys1" x="446" y="186" width="210" height="62" rx="12"></rect>
-  <text class="title" x="551" y="211" text-anchor="middle">🧠 Autostep miniloop</text>
-  <text class="small" x="551" y="229" text-anchor="middle">decision patches over Jev</text>
+  <!-- CLI -->
+  <rect class="zone" x="200" y="306" width="700" height="462" rx="16"></rect>
+  <text class="zonelabel" x="216" y="328">THE CLI — TWO COMMAND GROUPS</text>
 
-  <rect class="box" x="686" y="186" width="164" height="62" rx="12"></rect>
-  <text class="title" x="768" y="211" text-anchor="middle">📚 Extraction</text>
-  <text class="small" x="768" y="229" text-anchor="middle">work LLM, per scene</text>
+  <!-- DATA EXTRACTION GROUP -->
+  <rect class="zone" x="216" y="338" width="440" height="414" rx="14"></rect>
+  <text class="zonelabel" x="232" y="360">CLI GROUP · DATA EXTRACTION</text>
 
-  <rect class="box" x="226" y="286" width="180" height="62" rx="12"></rect>
-  <text class="title" x="316" y="311" text-anchor="middle">⌘ CLI commands</text>
-  <text class="small" x="316" y="329" text-anchor="middle">query · fork · simulate</text>
+  <!-- DIGGER -->
+  <rect class="zone" x="232" y="370" width="408" height="192" rx="12" style="stroke:var(--teal)"></rect>
+  <text class="zonelabel" x="248" y="392" style="fill:var(--teal)">⛏ THE DIGGER — MINILOOP + FACULTY GRAPH</text>
+  <rect class="box" x="248" y="402" width="180" height="54" rx="10"></rect>
+  <text class="title" x="338" y="425" text-anchor="middle">✂️ Sectioning</text>
+  <text class="small" x="338" y="443" text-anchor="middle">code only · sentences + IDs</text>
+  <rect class="box sys1" x="444" y="402" width="180" height="54" rx="10"></rect>
+  <text class="title" x="534" y="425" text-anchor="middle">🧠 Faculty graph</text>
+  <text class="small" x="534" y="443" text-anchor="middle">S1: Jev decision patches</text>
+  <rect class="box" x="248" y="470" width="180" height="54" rx="10"></rect>
+  <text class="title" x="338" y="493" text-anchor="middle">📚 Extraction</text>
+  <text class="small" x="338" y="511" text-anchor="middle">work-LLM faculties, per scene</text>
+  <rect class="box sys2" x="444" y="470" width="180" height="54" rx="10"></rect>
+  <text class="title" x="534" y="493" text-anchor="middle">⚖️ S2 adjudication</text>
+  <text class="small" x="534" y="511" text-anchor="middle">bounded · unresolved only</text>
+  <text class="small" x="436" y="546" text-anchor="middle">digs one block at a time · the face advances along the timeline →</text>
 
-  <rect class="box" x="446" y="286" width="210" height="62" rx="12"></rect>
-  <text class="title" x="551" y="311" text-anchor="middle">📝 ChangeSet</text>
-  <text class="small" x="551" y="329" text-anchor="middle">proposals accumulate per block</text>
+  <!-- CHANGESET -->
+  <rect class="box" x="232" y="574" width="408" height="42" rx="10"></rect>
+  <text class="title" x="436" y="592" text-anchor="middle">📝 ChangeSet — proposals per block</text>
+  <text class="small" x="436" y="608" text-anchor="middle">the loose rock: dug out, not yet canon</text>
 
-  <rect class="box sys1" x="686" y="286" width="164" height="62" rx="12"></rect>
-  <text class="title" x="768" y="311" text-anchor="middle">🛂 Merge gate</text>
-  <text class="small" x="768" y="329" text-anchor="middle">applies on approval only</text>
+  <!-- SOLIDIFIER -->
+  <rect class="zone" x="232" y="628" width="408" height="108" rx="12" style="stroke:var(--amber)"></rect>
+  <text class="zonelabel" x="248" y="650" style="fill:var(--amber)">🧱 THE SOLIDIFIER — MAKE IT CANON</text>
+  <rect class="box sys1" x="248" y="660" width="180" height="54" rx="10"></rect>
+  <text class="title" x="338" y="683" text-anchor="middle">🛂 Merge gate</text>
+  <text class="small" x="338" y="701" text-anchor="middle">semantic fact review</text>
+  <rect class="box" x="444" y="660" width="180" height="54" rx="10"></rect>
+  <text class="title" x="534" y="683" text-anchor="middle">🧲 EM faculty</text>
+  <text class="small" x="534" y="701" text-anchor="middle">per-block · cross-sectional sweep</text>
 
-  <!-- STORAGE ZONE -->
-  <rect class="zone" x="206" y="492" width="660" height="118" rx="16"></rect>
-  <text class="zonelabel" x="222" y="514">ONTOLOGY STORAGE — EMBEDDED, NO DOCKER</text>
-  <rect class="box" x="226" y="524" width="280" height="62" rx="12"></rect>
-  <text class="title" x="366" y="549" text-anchor="middle">📦 Bundle (JSONL)</text>
-  <text class="small" x="366" y="567" text-anchor="middle">source of truth · portable · git-friendly</text>
-  <rect class="box" x="546" y="524" width="300" height="62" rx="12"></rect>
-  <text class="title" x="696" y="549" text-anchor="middle">🐞 Ladybug — graph.lbug</text>
-  <text class="small" x="696" y="567" text-anchor="middle">Cypher · vector index · full-text search</text>
+  <!-- SIMULATION GROUP -->
+  <rect class="zone" x="672" y="338" width="212" height="414" rx="14"></rect>
+  <text class="zonelabel" x="688" y="360">CLI GROUP · SIMULATION</text>
+  <rect class="box ext" x="688" y="370" width="180" height="110" rx="12"></rect>
+  <text class="title" x="778" y="412" text-anchor="middle">— empty for now —</text>
+  <text class="small" x="778" y="434" text-anchor="middle">timelines &amp; forks (11)</text>
+  <text class="small" x="778" y="452" text-anchor="middle">are the foundation;</text>
+  <text class="small" x="778" y="470" text-anchor="middle">simulation (12) lands later</text>
+
+  <!-- FRONTEND -->
+  <rect class="box" x="916" y="338" width="248" height="96" rx="12" style="stroke:var(--rose)"></rect>
+  <text class="title" x="1040" y="366" text-anchor="middle">🖥️ Frontend — playground</text>
+  <text class="small" x="1040" y="386" text-anchor="middle">Live Theater · gate queue</text>
+  <text class="small" x="1040" y="404" text-anchor="middle">join animations · 3D graph</text>
+  <text class="small" x="1040" y="422" text-anchor="middle">watches the CLI event stream</text>
 
   <!-- EXTERNAL APIS -->
-  <rect class="box ext" x="896" y="186" width="268" height="62" rx="12"></rect>
-  <text class="title" x="1030" y="211" text-anchor="middle">🎯 Jev — decision model</text>
-  <text class="small" x="1030" y="229" text-anchor="middle">noul · choice · score — user API #2</text>
-  <rect class="box ext" x="896" y="286" width="268" height="62" rx="12"></rect>
-  <text class="title" x="1030" y="311" text-anchor="middle">✍️ Work LLM</text>
-  <text class="small" x="1030" y="329" text-anchor="middle">generation model — user API #1</text>
+  <rect class="box ext" x="916" y="470" width="248" height="54" rx="12"></rect>
+  <text class="title" x="1040" y="493" text-anchor="middle">🎯 Jev — decision model</text>
+  <text class="small" x="1040" y="511" text-anchor="middle">noul · choice · score — user API #2</text>
+  <rect class="box ext" x="916" y="538" width="248" height="54" rx="12"></rect>
+  <text class="title" x="1040" y="561" text-anchor="middle">✍️ Work LLM</text>
+  <text class="small" x="1040" y="579" text-anchor="middle">generation model — user API #1</text>
+
+  <!-- STORAGE -->
+  <rect class="zone" x="200" y="784" width="700" height="112" rx="16"></rect>
+  <text class="zonelabel" x="216" y="806">ONTOLOGY STORAGE — EMBEDDED, NO DOCKER</text>
+  <rect class="box" x="216" y="816" width="330" height="58" rx="12"></rect>
+  <text class="title" x="381" y="841" text-anchor="middle">📦 Bundle (JSONL)</text>
+  <text class="small" x="381" y="859" text-anchor="middle">source of truth · portable · git-friendly</text>
+  <rect class="box" x="562" y="816" width="322" height="58" rx="12"></rect>
+  <text class="title" x="723" y="841" text-anchor="middle">🐞 Ladybug — graph.lbug</text>
+  <text class="small" x="723" y="859" text-anchor="middle">disposable index · rebuilt from the bundle · Cypher</text>
 
   <!-- EDGES -->
-  <path id="pIn" class="edge hot flowdash" d="M174 285 C 245 285, 245 72, 328 72"></path>
-  <text class="elabel" transform="rotate(-90 196 180)" x="196" y="180" text-anchor="middle">novel · requests · keys</text>
+  <path id="pIn" class="edge hot flowdash" d="M166 446 C 196 446, 186 250, 198 246"></path>
+  <text class="elabel" transform="rotate(-90 182 350)" x="182" y="350" text-anchor="middle">novel · requests · keys</text>
 
-  <path class="edge" d="M380 100 C 380 150, 316 150, 316 184"></path>
-  <text class="elabel" x="352" y="138" text-anchor="middle">CLI commands (JSON)</text>
+  <path class="edge" d="M291 88 L291 116"></path>
+  <path class="edge" d="M457 88 L457 116"></path>
+  <path class="edge" d="M633 88 L633 116"></path>
+  <path class="edge" d="M809 88 L809 116"></path>
 
-  <path class="edge" d="M406 217 L444 217"></path>
-  <text class="elabel" x="425" y="207" text-anchor="middle">IDs</text>
-  <path class="edge" d="M656 217 L684 217"></path>
-  <text class="elabel" x="670" y="207" text-anchor="middle">scenes</text>
+  <path class="edge" d="M550 174 L550 188"></path>
+  <path class="edge" d="M550 276 L550 304"></path>
+  <text class="elabel" x="562" y="294">drives the CLI (JSON)</text>
 
-  <path id="pJev" class="edge jev flowdash" d="M656 200 C 760 158, 815 198, 894 205"></path>
-  <path class="edge jev" d="M894 232 C 815 258, 760 242, 658 234"></path>
-  <text class="elabel" x="778" y="152" text-anchor="middle">batched questions</text>
-  <text class="elabel" x="778" y="266" text-anchor="middle">probabilities</text>
+  <path class="edge" d="M428 429 L442 429"></path>
+  <text class="elabel" x="435" y="419" text-anchor="middle">IDs</text>
+  <path class="edge" d="M534 456 C 534 486, 440 478, 430 490"></path>
+  <text class="elabel" x="520" y="478">structured scenes</text>
+  <path class="edge" d="M338 524 C 338 548, 400 566, 420 572"></path>
+  <text class="elabel" x="330" y="552">proposals</text>
 
-  <path class="edge llm" d="M850 205 L894 205"></path>
-  <path class="edge llm" d="M894 232 L852 232"></path>
+  <path id="pJev" class="edge jev flowdash" d="M624 415 C 760 400, 830 480, 914 490"></path>
+  <path class="edge jev" d="M914 510 C 830 520, 760 460, 626 445"></path>
+  <text class="elabel" x="790" y="430" text-anchor="middle">batched questions</text>
+  <text class="elabel" x="790" y="540" text-anchor="middle">probabilities</text>
 
-  <path class="edge" d="M551 248 L551 284"></path>
-  <text class="elabel" x="560" y="270">proposals</text>
-  <path class="edge" d="M740 248 L740 317 L658 317"></path>
-  <text class="elabel" x="748" y="286">events · causality</text>
+  <path class="edge llm" d="M428 497 L700 497 C 800 497, 850 556, 914 558"></path>
+  <text class="elabel" x="700" y="488" text-anchor="middle">per-scene generation</text>
 
-  <path class="edge" d="M656 317 L684 317"></path>
-  <text class="elabel" x="670" y="307" text-anchor="middle">pending</text>
+  <path class="edge" d="M338 616 L338 658"></path>
+  <text class="elabel" x="348" y="640">facts for review</text>
+  <path class="edge" d="M428 687 L442 687"></path>
 
-  <path id="pReview" class="edge hot flowdash" d="M742 286 C 742 150, 706 84, 672 70"></path>
-  <text class="elabel" x="756" y="180">ChangeSet for review ↑</text>
-  <text class="elabel" x="756" y="196">approve · hold · revise ↓</text>
+  <path id="pReview" class="edge hot flowdash" d="M610 660 C 660 500, 640 300, 600 278"></path>
+  <text class="elabel" x="662" y="420">ChangeSet for review ↑</text>
+  <text class="elabel" x="662" y="436">verdicts · tie-breaks ↓</text>
 
-  <path id="pMerge" class="edge hot flowdash" d="M742 348 C 742 468, 420 478, 382 522"></path>
-  <text class="elabel" x="590" y="466" text-anchor="middle">approved merge only</text>
+  <path id="pMerge" class="edge hot flowdash" d="M436 736 C 436 770, 400 790, 392 814"></path>
+  <text class="elabel" x="452" y="772">approved merge only</text>
 
-  <path class="edge" d="M316 348 C 316 470, 302 500, 302 522"></path>
-  <text class="elabel" transform="rotate(-90 292 440)" x="292" y="440" text-anchor="middle">queries read the graph</text>
+  <path class="edge" d="M640 595 C 800 600, 880 520, 960 436"></path>
+  <text class="elabel" x="800" y="580" text-anchor="middle">event stream — watch</text>
 
-  <path class="edge" d="M506 555 L544 555"></path>
-  <text class="elabel" x="525" y="545" text-anchor="middle">rebuild</text>
+  <path class="edge" d="M546 845 L560 845"></path>
+  <text class="elabel" x="553" y="835" text-anchor="middle">rebuild</text>
 
-  <path class="edge" d="M700 586 L700 624 L95 624 L95 392"></path>
-  <text class="elabel" x="400" y="616" text-anchor="middle">answers · character simulation · parallel-universe forks</text>
+  <path class="edge" d="M700 874 L700 926 L91 926 L91 522"></path>
+  <text class="elabel" x="400" y="918" text-anchor="middle">answers · character simulation · parallel-universe forks</text>
 
   <!-- moving pulses -->
   <circle class="pulse" r="4"><animateMotion dur="3.2s" repeatCount="indefinite"><mpath href="#pIn"/></animateMotion></circle>
@@ -146,63 +200,73 @@ ontology. Everything it concludes becomes a proposal for the main agent to appro
 
 <p class="sub"><b>Rule zero:</b> never ask a model what code can compute exactly. Sectioning, offsets,
 and scanning for <i>known</i> names are code. Jev is only asked genuinely ambiguous questions — and it
-answers with probabilities, not text, in ~70–500&nbsp;ms, batched: one call per window, all questions at once.
-The one hard boundary in the graph: <b>nothing crosses from ChangeSet to storage except through the
-merge gate, on the main agent's approval.</b></p>
+answers with probabilities, not text, batched: one call per window, all questions at once.
+The one hard boundary in the picture: <b>nothing crosses from ChangeSet to storage except through
+the Solidifier, on approval.</b> And the Digger never waits for the Solidifier to finish the whole
+tunnel — it digs the next block while the last one is being lined.</p>
 
-<h2>The sectors — one page per functionality</h2>
-<a class="card" href="roadmap.html" style="margin-bottom:14px;border-color:var(--teal)"><h3>🗺 Roadmap — implementation timeline &amp; decision log</h3>
-<p>Phases 0–5 in implementation order, the milestone that ends each, which open questions get decided in which phase — and the standing rule: <b>this page is updated in GitHub every time something is completed.</b></p><span class="go">Open the roadmap →</span></a>
-<p class="sub">This site is divided the way the repo is: by the <b>functional sectors we will
-implement</b>, in pipeline order. Every sector page follows the same structure —
-<b>what it does → its own demo → design details → implementation mapping → open questions
-for that sector only</b>.</p>
-
-<h3 style="margin-top:22px">Phase A — Structure <span style="color:var(--faint);font-size:13px">(System 1: from raw text to structure)</span></h3>
+<h2>The four parts</h2>
 <div class="grid three">
-  <a class="card" href="sectioning.html"><h3>01 · Sectioning</h3><p>Intake &amp; auto sentence segregation. Deterministic code — the only sector with no model at all.</p><span class="go">Open →</span></a>
-  <a class="card" href="scene-boundary.html"><h3>02 · Scene boundary</h3><p>Patch: where scenes start, and why — location, time, viewpoint.</p><span class="go">Open →</span></a>
-  <a class="card" href="dialogue-detector.html"><h3>03 · Dialogue detector</h3><p>Patch: which sentences are dialogue, stitched into turns.</p><span class="go">Open →</span></a>
-  <a class="card" href="name-detector.html"><h3>04 · Name detector</h3><p>Patch: known names by code scan; new names &amp; nicknames by decision.</p><span class="go">Open →</span></a>
-  <a class="card" href="presence-detector.html"><h3>05 · Presence detector</h3><p>Patch: who is in the scene vs. merely mentioned.</p><span class="go">Open →</span></a>
-  <a class="card" href="speaker-attribution.html"><h3>06 · Speaker attribution</h3><p>Patch: which character each dialogue belongs to — and who it addresses.</p><span class="go">Open →</span></a>
-  <a class="card" href="miniloop-engine.html"><h3>07 · Miniloop engine</h3><p>The autostep loop itself: windows, batched Jev calls, confidence gates, recursion.</p><span class="go">Open →</span></a>
-</div>
-
-<h3 style="margin-top:22px">Phase B — Knowledge <span style="color:var(--faint);font-size:13px">(from structure to the ontology, through the gate)</span></h3>
-<div class="grid three">
-  <a class="card" href="extraction.html"><h3>08 · Extraction</h3><p>The work LLM reads structured scenes and proposes events, causality, state changes.</p><span class="go">Open →</span></a>
-  <a class="card" href="merge-gate.html"><h3>09 · Merge gate</h3><p>Block-by-block rolling; ChangeSets accumulate; the main agent approves, holds, revises.</p><span class="go">Open →</span></a>
-  <a class="card" href="storage-connectors.html"><h3>10 · Storage connectors</h3><p>Upload/query: the JSONL bundle (truth) and the Ladybug graph engine (hot queries).</p><span class="go">Open →</span></a>
-</div>
-
-<h3 style="margin-top:22px">Phase C — Use <span style="color:var(--faint);font-size:13px">(what the ontology powers)</span></h3>
-<div class="grid three">
-  <a class="card" href="timeline-forking.html"><h3>11 · Timelines &amp; forking</h3><p>Canon as an event timeline; the user picks a time point; a branch forks, canon untouched.</p><span class="go">Open →</span></a>
-  <a class="card" href="simulation.html"><h3>12 · Simulation</h3><p>Character state as a fold of events; roleplay that knows only what the character should know.</p><span class="go">Open →</span></a>
+  <a class="card" href="../../skills/novel-ontology/SKILL.md"><h3>📜 The Skill</h3><p>Workflows that teach the host agent to run the CLI, staff the gate, break ties and repair. Its subskills mirror the CLI groups: <b>data-extraction</b> (digger / solidifier) and <b>simulation</b> (empty for now).</p><span class="go">Read the Skill →</span></a>
+  <a class="card" href="roadmap.html"><h3>⌘ The CLI</h3><p>All machinery lives here: two command groups — <b>data extraction</b> and <b>simulation</b> — over an embedded ontology bundle. Deterministic where possible; models only where ambiguity is real.</p><span class="go">Roadmap &amp; decisions →</span></a>
+  <a class="card" href="roadmap.html"><h3>🔌 The Adaptor</h3><p>One adaptor makes Skill + CLI installable into every popular agent host — Pi, Codex, Claude Code, peers — in each host's native format. Spec: roadmap decision #21; built by Track C.</p><span class="go">See the decision →</span></a>
+  <a class="card" href="playground-frontend.html"><h3>🖥️ The Frontend</h3><p>The playground: watches the CLI's event stream — Live Theater, gate queue, growing graph, join animations. Transparency for the user, replay for debugging.</p><span class="go">Open sector 13 →</span></a>
+  <a class="card" href="storage-connectors.html"><h3>📦 The Ground</h3><p>What both CLI groups stand on: the JSONL bundle (source of truth) + the disposable Ladybug index. Sector 10.</p><span class="go">Open sector 10 →</span></a>
   <a class="card" href="../../DESIGN.md"><h3>📐 DESIGN.md</h3><p>The overall architecture in document form: decisions, schema v1, CLI surface, test plan.</p><span class="go">Read the doc →</span></a>
 </div>
 
-<h3 style="margin-top:22px">Phase D — Experience <span style="color:var(--faint);font-size:13px">(watching the system think)</span></h3>
+<h2>The sectors — one page per functionality</h2>
+<a class="card" href="roadmap.html" style="margin-bottom:14px;border-color:var(--teal)"><h3>🗺 Roadmap — implementation timeline &amp; decision log</h3>
+<p>Phases and parallel tracks in implementation order, the milestone that ends each, and the decision log — <b>updated in GitHub every time something is completed.</b></p><span class="go">Open the roadmap →</span></a>
+<p class="sub">Sector pages keep their pipeline numbering (01–13); they are grouped below the way
+the CLI is grouped. Every sector page follows the same structure —
+<b>what it does → its own demo → design details → implementation mapping → open questions
+for that sector only</b>.</p>
+
+<h3 style="margin-top:22px">CLI · Data extraction — ⛏ The Digger <span style="color:var(--faint);font-size:13px">(System 1 + faculties: from raw earth to proposals)</span></h3>
 <div class="grid three">
-  <a class="card" href="playground-frontend.html"><h3>13 · Playground frontend</h3><p>The live theater: pipeline strip, growing 3D graph (Reagraph), decision stream, gate queue — transparency for users, replay for debugging.</p><span class="go">Open →</span></a>
+  <a class="card" href="sectioning.html"><h3>01 · Sectioning</h3><p>Intake &amp; auto sentence segregation. Deterministic code — the only sector with no model at all.</p><span class="go">Open →</span></a>
+  <a class="card" href="scene-boundary.html"><h3>02 · Scene boundary</h3><p>Faculty: where scenes start, chosen as spans over long windows — location, time, viewpoint.</p><span class="go">Open →</span></a>
+  <a class="card" href="dialogue-detector.html"><h3>03 · Dialogue detector</h3><p>Faculty: which sentences are dialogue, stitched into exchanges (dialogue cards).</p><span class="go">Open →</span></a>
+  <a class="card" href="name-detector.html"><h3>04 · Name detector</h3><p>Faculty: known names by code scan (language-map keys); new names &amp; nicknames by decision.</p><span class="go">Open →</span></a>
+  <a class="card" href="presence-detector.html"><h3>05 · Presence detector</h3><p>Faculty: who is in the scene vs. merely mentioned — proposed per window, refined per scene.</p><span class="go">Open →</span></a>
+  <a class="card" href="speaker-attribution.html"><h3>06 · Speaker attribution</h3><p>Faculty: which characters take part in each dialogue card — membership, not per-turn winners.</p><span class="go">Open →</span></a>
+  <a class="card" href="miniloop-engine.html"><h3>07 · Miniloop engine</h3><p>The digger's engine room: the faculty graph, the shared pool, batched Jev calls, S2 adjudication, the legacy miniloop.</p><span class="go">Open →</span></a>
+  <a class="card" href="extraction.html"><h3>08 · Extraction</h3><p>The work-LLM faculties read structured scenes and propose events, causality, state changes — and resolve identity at birth.</p><span class="go">Open →</span></a>
 </div>
 
-<h2>Two loops, in one breath</h2>
+<h3 style="margin-top:22px">CLI · Data extraction — 🧱 The Solidifier <span style="color:var(--faint);font-size:13px">(from proposals to canon that holds)</span></h3>
+<div class="grid three">
+  <a class="card" href="merge-gate.html"><h3>09 · Merge gate &amp; EM</h3><p>The semantic fact gate: per-fact review under a revision digest; apply materializes accepted facts only. After apply, the <b>EM faculty</b> re-checks identity — per block, and cross-sectionally in a sweep at chapter close — merging through the audited fix path.</p><span class="go">Open →</span></a>
+  <a class="card" href="storage-connectors.html"><h3>10 · Storage connectors</h3><p>Where canon lands: the JSONL bundle (truth) and the Ladybug graph engine (hot queries), rebuilt from the bundle.</p><span class="go">Open →</span></a>
+</div>
+
+<h3 style="margin-top:22px">CLI · Simulation group <span style="color:var(--faint);font-size:13px">(kept — empty for now)</span></h3>
+<div class="grid three">
+  <a class="card" href="timeline-forking.html"><h3>11 · Timelines &amp; forking</h3><p>The foundation the group stands on: canon as an event timeline; the user picks a time point; a branch forks, canon untouched.</p><span class="go">Open →</span></a>
+  <a class="card" href="simulation.html"><h3>12 · Simulation</h3><p>The group's future tenant: character state as a fold of events; roleplay that knows only what the character should know.</p><span class="go">Open →</span></a>
+</div>
+
+<h3 style="margin-top:22px">Frontend <span style="color:var(--faint);font-size:13px">(watching the tunnel being dug)</span></h3>
+<div class="grid three">
+  <a class="card" href="playground-frontend.html"><h3>13 · Playground frontend</h3><p>The live theater: pipeline strip, growing 3D graph (Reagraph), decision stream, gate queue — the digger's advance and the solidifier's lining, visible as they happen.</p><span class="go">Open →</span></a>
+</div>
+
+<h2>One block's journey, in one breath</h2>
 <div class="flow">
-  <div class="node"><b>📖 Novel block</b><span>one chapter, or a long block, any language</span></div>
+  <div class="node"><b>📖 Novel block</b><span>raw earth — one chapter or a long block, any language</span></div>
   <div class="arrow">→</div>
-  <div class="node"><b>✂️ Sectioning</b><span>deterministic code — sentences, IDs, offsets</span></div>
+  <div class="node" style="border-color:var(--teal)"><b>⛏ Digger</b><span>sectioning → faculty graph (S1 Jev · S2 adjudication) → extraction</span></div>
   <div class="arrow">→</div>
-  <div class="node" style="border-color:var(--teal)"><b>🧠 Miniloop</b><span>decision patches over Jev</span></div>
+  <div class="node"><b>📝 ChangeSet</b><span>loose rock — proposals for this block</span></div>
   <div class="arrow">→</div>
-  <div class="node"><b>📝 ChangeSet</b><span>proposals for this block</span></div>
+  <div class="node" style="border-color:var(--amber)"><b>🧱 Solidifier</b><span>fact gate → apply → EM + cross-sectional EM</span></div>
   <div class="arrow">→</div>
-  <div class="node"><b>🛂 Merge gate</b><span>main agent decides</span></div>
+  <div class="node"><b>📦 Canon</b><span>the lined tunnel — bundle + graph, one block further</span></div>
 </div>
 
-<footer>novel-ontology-pi · System 1 detailed design · v0.1 · 2026-10-21 ·
-Code: <code>src/autostep/</code> · Doc: <a href="../../DESIGN.md">DESIGN.md</a></footer>
+<footer>novel-ontology-pi · design dashboard · hierarchy v2 · 2026-10-24 ·
+Code: <code>src/</code> · Doc: <a href="../../DESIGN.md">DESIGN.md</a> · Roadmap: <a href="roadmap.html">decisions &amp; tracks</a></footer>
 </div>
 <script src="assets/sector.js"></script>
 </body>

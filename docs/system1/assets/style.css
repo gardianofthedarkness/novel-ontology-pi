@@ -150,7 +150,8 @@ button.replay:hover{background:#1d2740}
 .oq li span{color:var(--dim);display:block;font-size:13px}
 
 /* ---------- sector pages: shared template ---------- */
-nav.site .links{display:flex;gap:6px;overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px;scrollbar-width:thin}
+nav.site .links{display:flex;gap:6px;overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px;scrollbar-width:thin;align-items:center}
+nav.site .navgroup{color:var(--faint);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;margin-left:10px}
 nav.site .links a.page{white-space:nowrap}
 .sectorno{font-size:44px;font-weight:800;color:var(--panel2);-webkit-text-stroke:1px var(--teal);
   line-height:1;float:right;margin-left:14px}

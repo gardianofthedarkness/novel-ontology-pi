@@ -2,35 +2,50 @@
    One nav definition -> every page carries the identical structure.
    One demo sequencer -> every sector page runs its demo the same way:
    caption + progress dots + steps + replay. */
+/* Sectors keep their pipeline numbers; `g` is the hierarchy group the
+   dashboard presents them under (decision #21): the CLI's data-extraction
+   group splits into the Digger and the Solidifier, the simulation group
+   is kept empty for now, and the frontend stands on its own. */
+const GROUPS = [
+  { g: "digger", label: "⛏ Digger" },
+  { g: "solidifier", label: "🧱 Solidifier" },
+  { g: "ground", label: "📦 Ground" },
+  { g: "simulation", label: "Simulation group" },
+  { g: "frontend", label: "Frontend" },
+];
 const SECTORS = [
-  { n: "01", slug: "sectioning", label: "Sectioning" },
-  { n: "02", slug: "scene-boundary", label: "Scene boundary" },
-  { n: "03", slug: "dialogue-detector", label: "Dialogue" },
-  { n: "04", slug: "name-detector", label: "Names" },
-  { n: "05", slug: "presence-detector", label: "Presence" },
-  { n: "06", slug: "speaker-attribution", label: "Speakers" },
-  { n: "07", slug: "miniloop-engine", label: "Miniloop engine" },
-  { n: "08", slug: "extraction", label: "Extraction" },
-  { n: "09", slug: "merge-gate", label: "Merge gate" },
-  { n: "10", slug: "storage-connectors", label: "Storage" },
-  { n: "11", slug: "timeline-forking", label: "Timelines & forks" },
-  { n: "12", slug: "simulation", label: "Simulation" },
-  { n: "13", slug: "playground-frontend", label: "Playground frontend" },
+  { n: "01", slug: "sectioning", label: "Sectioning", g: "digger" },
+  { n: "02", slug: "scene-boundary", label: "Scene boundary", g: "digger" },
+  { n: "03", slug: "dialogue-detector", label: "Dialogue", g: "digger" },
+  { n: "04", slug: "name-detector", label: "Names", g: "digger" },
+  { n: "05", slug: "presence-detector", label: "Presence", g: "digger" },
+  { n: "06", slug: "speaker-attribution", label: "Speakers", g: "digger" },
+  { n: "07", slug: "miniloop-engine", label: "Miniloop engine", g: "digger" },
+  { n: "08", slug: "extraction", label: "Extraction", g: "digger" },
+  { n: "09", slug: "merge-gate", label: "Merge gate & EM", g: "solidifier" },
+  { n: "10", slug: "storage-connectors", label: "Storage", g: "ground" },
+  { n: "11", slug: "timeline-forking", label: "Timelines & forks", g: "simulation" },
+  { n: "12", slug: "simulation", label: "Simulation", g: "simulation" },
+  { n: "13", slug: "playground-frontend", label: "Playground frontend", g: "frontend" },
 ];
 
 function renderNav() {
   const here = location.pathname.split("/").pop() || "index.html";
   const nav = document.getElementById("sitenav");
   if (!nav) return;
-  const links = [
-    `<a class="page ${here === "index.html" ? "here" : ""}" href="index.html">Overview</a>`,
-    `<a class="page ${here === "roadmap.html" ? "here" : ""}" href="roadmap.html">🗺 Roadmap</a>`,
-    ...SECTORS.map(
+  const sectorLinks = GROUPS.flatMap((grp) => [
+    `<span class="navgroup">${grp.label}</span>`,
+    ...SECTORS.filter((s) => s.g === grp.g).map(
       (s) =>
         `<a class="page ${here === s.slug + ".html" ? "here" : ""}" href="${s.slug}.html">${s.n} ${s.label}</a>`,
     ),
+  ]);
+  const links = [
+    `<a class="page ${here === "index.html" ? "here" : ""}" href="index.html">Overview</a>`,
+    `<a class="page ${here === "roadmap.html" ? "here" : ""}" href="roadmap.html">🗺 Roadmap</a>`,
+    ...sectorLinks,
   ].join("");
-  nav.innerHTML = `<a class="brand" href="index.html">novel-ontology-pi<small>System 1 · design by sector</small></a><div class="links">${links}</div>`;
+  nav.innerHTML = `<a class="brand" href="index.html">novel-ontology-pi<small>Skill + CLI + Adaptor + Frontend</small></a><div class="links">${links}</div>`;
 }
 
 function renderPager() {
