@@ -1,1 +1,2 @@
-{"at":100,"event":{"type":"album.anchored","blockId":"b0001","pictures":[{"id":"pic-demo-1","asset":"demo/plate1.jpg","kind":"story","sentenceId":"s0002"}]}}
+{"at":100,"event":{"type":"album.anchored","blockId":"b0001","pictures":[{"id":"pic-demo-1","asset":"demo/plate1.jpg","kind":"story","sentenceId":"s0002"},{"id":"pic-demo-2","asset":"demo/plate2.jpg","kind":"story","sentenceId":"s0004"}]}}
+{"at":101,"event":{"type":"album.portraitBound","blockId":"b0001","portraits":[{"id":"por-aoi","asset":"demo/aoi.jpg","entityId":"ch_aoi","entityLabel":"Aoi"},{"id":"por-ren","asset":"demo/ren.jpg","entityId":"ch_ren","entityLabel":"Ren"}]}}
