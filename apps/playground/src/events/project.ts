@@ -50,7 +50,8 @@ export type ProcessingEvent =
       unsupportedProposalIds: string[];
       deferredFactIds?: string[];
     }
-  | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate" }
+  | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate"; touchedIds?: string[] }
+  | { type: "faculty.activity"; blockId: string; callId: string; faculty: string; system: "system1" | "system2" | "work"; status: "started" | "completed" | "failed" }
   | { type: "entity.merged"; keepId: string; dropId: string }
   | { type: "entity.distinct"; aId: string; bId: string }
   | { type: "changeset.merged"; changesetId: string; target: "store" }
@@ -71,6 +72,7 @@ const pct = (confidence: number) => `${Math.round(confidence * 100)}%`;
 
 export function projectProcessingEvent(event: ProcessingEvent): PlaygroundEvent[] {
   switch (event.type) {
+    case "faculty.activity": return [{ type: "verdict", patch: event.faculty, text: `${event.system} · ${event.faculty} · ${event.status}` }];
     case "block.started":
       return [{ type: "block.started", blockId: event.blockId, label: `Block ${event.blockId}` }];
     case "sectioned":

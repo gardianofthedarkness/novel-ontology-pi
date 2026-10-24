@@ -15,6 +15,7 @@ interface GlyphData {
   reducedMotion: boolean;
   transparent: boolean;
   selected: boolean;
+  touched: boolean;
 }
 export const ORBITAL_TRANSITION_MS = 1100;
 const noRaycast = () => undefined;
@@ -22,7 +23,7 @@ const noRaycast = () => undefined;
 function SphereGlyph({ node, active }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
-  const { draw, morph, reducedMotion, transparent, selected } = data;
+  const { draw, morph, reducedMotion, transparent, selected, touched } = data;
   const color = recordColor(draw.node);
   const nebula = draw.role === "nebula";
   useFrame(({ clock }) => {
@@ -35,6 +36,7 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
   });
   const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? 0.3 : draw.node.state === "held" ? 0.5 : nebula ? 0.7 : 0.9;
   return <group ref={group} userData={{ orbitalGlyph: draw.node.id }}>
+    {touched && <mesh raycast={noRaycast}><boxGeometry args={[draw.radius * 2.7, draw.radius * 2.7, draw.radius * 2.7]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.95} toneMapped={false} depthTest={false} /></mesh>}
     <mesh raycast={transparent ? noRaycast : undefined}>
       <sphereGeometry args={[draw.radius, 32, 24]} />
       <meshStandardMaterial color={nebula ? color : "#12283c"} emissive={color} emissiveIntensity={selected ? 0.7 : active ? 0.45 : 0.2} metalness={0.35} roughness={0.27} transparent opacity={opacity} depthWrite={!transparent && draw.node.state === "canon"} />
@@ -110,6 +112,26 @@ function VisibleConnections({ edges, bus }: { edges: WorldEdge[]; bus: LabelBus 
   return <primitive object={line} raycast={noRaycast} />;
 }
 
+function ActivityBounds({ draws, bus }: { draws: OrbitalDraw[]; bus: LabelBus }) {
+  const bounds = useRef<Group>(null);
+  useFrame(() => {
+    if (!bounds.current || draws.length < 2) return;
+    const minimum = [Infinity, Infinity, Infinity];
+    const maximum = [-Infinity, -Infinity, -Infinity];
+    for (const draw of draws) {
+      const position = bus.positions.get(draw.node.id) ?? draw.position;
+      for (let axis = 0; axis < 3; axis++) {
+        minimum[axis] = Math.min(minimum[axis], position[axis] - draw.radius * 1.6);
+        maximum[axis] = Math.max(maximum[axis], position[axis] + draw.radius * 1.6);
+      }
+    }
+    bounds.current.position.set(...minimum.map((value, axis) => (value + maximum[axis]) / 2) as Position3);
+    bounds.current.scale.set(...minimum.map((value, axis) => Math.max(1, maximum[axis] - value)) as Position3);
+  });
+  if (draws.length < 2) return null;
+  return <group ref={bounds} userData={{ orbitalActivityBounds: true }}><mesh raycast={noRaycast}><boxGeometry args={[1, 1, 1]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.5} toneMapped={false} depthTest={false} depthWrite={false} /></mesh></group>;
+}
+
 function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, onReveal, onExtremeBack }: { draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
   const { camera, scene, size, gl } = useThree();
   const byId = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw])), [draws]);
@@ -177,12 +199,13 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
   return null;
 }
 
-function OrbitalFraming({ graphRef, positions, levelKey, reducedMotion }: { graphRef: { current: GraphCanvasRef | null }; positions: Position3[]; levelKey: string; reducedMotion: boolean }) {
+function OrbitalFraming({ graphRef, positions, levelKey, reducedMotion, enabled }: { graphRef: { current: GraphCanvasRef | null }; positions: Position3[]; levelKey: string; reducedMotion: boolean; enabled: boolean }) {
   const { camera, size } = useThree();
   const latest = useRef(positions); latest.current = positions;
+  const framingEnabled = useRef(enabled); framingEnabled.current = enabled;
   useEffect(() => {
     (camera as { fov: number }).fov = 42; camera.near = 1; camera.far = 2000000; camera.updateProjectionMatrix();
-    const timeout = setTimeout(() => framePositions(graphRef, latest.current, 1.2, !reducedMotion, { direction: levelKey.length % 2 ? [0.18, 0.22, 1] : [-0.18, 0.22, 1] }), 100);
+    const timeout = setTimeout(() => { if (framingEnabled.current) framePositions(graphRef, latest.current, 1.2, !reducedMotion, { direction: levelKey.length % 2 ? [0.18, 0.22, 1] : [-0.18, 0.22, 1] }); }, 100);
     return () => clearTimeout(timeout);
   }, [levelKey, reducedMotion, camera, graphRef, size.width, size.height]);
   return null;
@@ -194,6 +217,8 @@ interface Props {
   edges: WorldEdge[];
   bus: LabelBus;
   selectedId: string | null;
+  touchedIds?: string[];
+  autoFrame?: boolean;
   revealedId: string | null;
   levelKey: string;
   reducedMotion: boolean;
@@ -204,8 +229,8 @@ interface Props {
   onBack: () => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, bus, selectedId, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack }, ref) {
-  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id) } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId]);
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack }, ref) {
+  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id) } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   return <GraphCanvas ref={ref} nodes={nodes} edges={[]} theme={theme} renderNode={renderSphere} labelType="none" layoutType="forceDirected3d" cameraMode="rotate" draggable={false} animated={false} minDistance={16} maxDistance={1000000} selections={[]} glOptions={{ antialias: true, preserveDrawingBuffer: true }}
     onNodeClick={(node) => onSelect((node.data.glyph as GlyphData).draw)} onNodeDoubleClick={(node) => onEnter((node.data.glyph as GlyphData).draw)}>
@@ -214,8 +239,9 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <axesHelper args={[900]} position={[-1400, -945, -1200]} />
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} />)}
     <VisibleConnections edges={edges} bus={bus} />
+    <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
     <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} onReveal={onReveal} onExtremeBack={onBack} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
-    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} positions={draws.filter((draw) => draw.role !== "preview").map((draw) => draw.position)} levelKey={levelKey} reducedMotion={reducedMotion} />
+    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} positions={draws.filter((draw) => draw.role !== "preview").map((draw) => draw.position)} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} />
   </GraphCanvas>;
 });

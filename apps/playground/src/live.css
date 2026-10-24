@@ -1,0 +1,37 @@
+.live-runtime-status { max-width: min(76vw, 680px); margin-top: 12px; color: #c3cbac; font-size: 12px; line-height: 1.5; pointer-events: none; }
+.following-orbital .page-heading h1 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.live-runtime-status small { display: block; margin-top: 4px; font-size: 10px; color: #92958c; }
+.record-inspector h2, .gate-title { overflow-wrap: anywhere; }
+.panel-intro .review-summary { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+.page-heading { align-items: flex-start; }
+.scene-toolbar { top: 210px; }
+.scene-coordinate { top: 254px; }
+.node-label { width: 180px; }
+.node-label b { white-space: normal; overflow-wrap: anywhere; }
+.node-label:not(.k-bigEvent) b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.orbital-live-status { max-width: 620px; margin-top: 8px; padding-left: 9px; border-left: 2px solid #36adff; color: #9dd6ff; font-size: 10px; line-height: 1.5; }
+.orbital-live-status b, .orbital-live-status span, .orbital-live-status small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orbital-live-status span { color: #a5b2c0; }
+.latest-touch { color: #71caff; }
+.latest-touch b { outline: 1px solid #36adff; outline-offset: 5px; background: #061b2cd9; box-shadow: 0 0 18px #278dff40; }
+.identity-notice { position: fixed; bottom: 250px; left: 24px; z-index: 90; max-width: calc(100vw - 80px); padding: 12px 16px; border: 1px solid #36adff; background: #092038ef; color: #a9dfff; font-size: 12px; }
+.activity-tab[aria-pressed="true"] { border-color: #36adff; color: #b8e4ff; background: #102e46; }
+.telemetry-note { font-size: 10px; line-height: 1.4; max-width: 700px; color: #9dabbc; margin: 5px 0; }
+.pipeline:has(.telemetry-note) .pipeline-viewport { height: 125px; overflow: auto; }
+.pipeline:has(.telemetry-note) .pipeline-flow { height: 125px; min-width: 660px; }
+.faculty-pipeline { height: 40px; bottom: 120px; display: block; }
+.faculty-pipeline:has(details[open]) { z-index: 80; }
+.faculty-pipeline summary { cursor: pointer; padding: 12px; color: #b8e4ff; font-size: 12px; }
+.faculty-sheet { position: absolute; bottom: 42px; left: 0; right: 0; border: 1px solid #36627e; background: #081724f5; padding: 12px; border-radius: 12px; }
+.faculty-sheet h3 { font-size: 13px; margin: 4px 0; }
+.faculty-flow { height: min(55vh, 390px); min-height: 230px; }
+@media (max-width: 620px) {
+  .live-runtime-status { font-size: 10px; max-width: 82vw; }
+  .page-heading h1 { font-size: 24px; max-width: 82vw; }
+  .live-runtime-status small { font-size: 9px; }
+  .scene-toolbar { top: 196px; }
+  .scene-coordinate { top: 246px; }
+  .node-label { width: 122px; }
+  .page-heading:has(.interior-heading) { display: block; }
+  .heading-caption.interior-heading { padding-top: 8px; }
+}

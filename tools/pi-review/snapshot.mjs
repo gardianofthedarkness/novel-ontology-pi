@@ -2,6 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { root, novel, agentEvents } from './config.mjs';
 import { runOutcome } from './run-outcome.mjs';
 import { sceneContext } from './scene-context.mjs';
+import { liveActivity } from './live-activity.mjs';
 
 async function json(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return fallback; throw error; }
@@ -84,20 +85,27 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     const draftLinks = [];
     for (const draft of workingDrafts) {
       const remainingSpans = draft.sceneSpans.slice(draft.completedScenes);
+      const completed = new Set(draft.sceneSpans.slice(0, draft.completedScenes).flat());
+      const attached = new Set();
+      const addDialogue = (unit, parentId) => {
+        const dialogueId = `draft:${draft.blockId}:dialogue:${unit[0]}`;
+        const turn = draft.turns.find(entry => entry.sentenceIds.includes(unit[0]));
+        if (!attached.has(unit[0])) add({ id: dialogueId, summaryEn: `Dialogue exchange · ${unit.length} sentence${unit.length === 1 ? '' : 's'} · ${draft.dialogueCards ? 'participant membership' : turn?.speakerId ? 'legacy speaker attributed' : 'membership pending'}`, eventType: 'dialogue' }, 'event', 'proposed', Number(unit[0]?.split('_s')[1] ?? 0));
+        attached.add(unit[0]);
+        if (parentId) draftLinks.push([parentId, dialogueId, 'contains']);
+        if (turn?.speakerId && entityMap.has(turn.speakerId)) {
+          add(entityMap.get(turn.speakerId), 'entity', 'canon');
+          draftLinks.push([turn.speakerId, dialogueId, 'speaks']);
+        }
+      };
       for (const [index, span] of remainingSpans.entries()) {
         const id = `draft:${draft.blockId}:scene:${span[0]}`;
         add({ id, label: `Scene draft ${draft.completedScenes + index + 1} · Jev` }, 'scene', 'proposed', Number(span[0]?.split('_s')[1] ?? 0));
         for (const unit of draft.dialogueUnits.filter((unit) => span.includes(unit[0]))) {
-          const dialogueId = `draft:${draft.blockId}:dialogue:${unit[0]}`;
-          const turn = draft.turns.find((entry) => entry.sentenceIds.includes(unit[0]));
-          add({ id: dialogueId, summaryEn: `Dialogue exchange · ${unit.length} sentence${unit.length === 1 ? '' : 's'} · ${draft.dialogueCards ? 'participant membership' : turn?.speakerId ? 'legacy speaker attributed' : 'membership pending'}`, eventType: 'dialogue' }, 'event', 'proposed', Number(unit[0]?.split('_s')[1] ?? 0));
-          draftLinks.push([id, dialogueId, 'contains']);
-          if (turn?.speakerId && entityMap.has(turn.speakerId)) {
-            add(entityMap.get(turn.speakerId), 'entity', 'canon');
-            draftLinks.push([turn.speakerId, dialogueId, 'speaks']);
-          }
+          addDialogue(unit, id);
         }
       }
+      for (const unit of draft.dialogueUnits) if (!attached.has(unit[0]) && !completed.has(unit[0])) addDialogue(unit, null);
       for (let index = 1; index < remainingSpans.length; index++) draftLinks.push([`draft:${draft.blockId}:scene:${remainingSpans[index - 1][0]}`, `draft:${draft.blockId}:scene:${remainingSpans[index][0]}`, 'flow']);
     }
     const ids = new Set(nodes.map((node) => node.id));
@@ -139,15 +147,17 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     if (event.type === 'graph.rebuilt') { label = `Graph rebuilt · ${event.counts.entities} entities · ${event.counts.events} events · ${event.counts.relations} relations`; tone = 'ok'; }
     if (label) journal.push({ id: `cli-${record.id}`, timestamp: record.timestamp, text: text(label, 220), tone });
   }
+  const callLabels = new Map(agent.filter(record => record.label && record.call).map(record => [record.call, record.label]));
   for (const record of agent) {
-    const label = record.type === 'pi.status' && record.status === 'review' ? 'Pi paused at the merge gate · see Review for status' : record.label;
+    const label = record.type === 'pi.status' && record.status === 'review' ? 'Pi paused at the merge gate · see Review for status' : record.label ?? callLabels.get(record.call);
+    if (!label) continue;
     journal.push({ id: record.id, timestamp: record.timestamp, text: text(`${label}${record.type === 'pi.command' ? ` · ${record.status}` : ''}`, 230), tone: record.status === 'error' ? 'warn' : record.type === 'system1.call' ? 'jev' : record.status === 'ok' ? 'ok' : 'plain' });
   }
   for (const [index, record] of maintenance.entries()) journal.push({ id: `fix-${index}`, timestamp: record.ts, text: text(`Pi repair / ${record.op} · ${record.args?.blockId ?? 'ontology'} · audited CLI operation`, 180), tone: 'ok' });
   for (const draft of drafts) if (draft.stage !== 'gate') journal.push({ id: `draft-${draft.blockId}`, timestamp: draft.updatedAt, text: `${draft.blockId} working draft · ${draft.patchId} · ${draft.sceneSpans.length} scene decisions · ${draft.dialogueUnits.length} dialogue decisions · ${draft.proposals.length} proposals · not canon`, tone: 'jev' });
   journal.sort((first, second) => first.timestamp.localeCompare(second.timestamp));
   const piState = agent.findLast((record) => record.type === 'pi.status');
-  const activeCall = agent.findLast((record) => record.type === 'system1.call' || record.type === 'pi.command');
+  const activeCall = agent.findLast((record) => record.stage !== undefined || record.type === 'pi.command');
   const expectedBlocks = blockChapters.size;
   const computedOutcome = runOutcome(changesets, processing, expectedBlocks, 'blocks');
   const outcome = computedOutcome.status === 'complete' || ['review', 'complete'].includes(piState?.status) ? computedOutcome : null;
@@ -157,6 +167,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const stage = status === 'working' ? activeCall?.stage ?? (activeCall?.label.includes('ingest') ? 1 : 4) : status === 'complete' || status === 'review' ? 4 : 0;
   const lastBlock = processing.findLast((record) => record.event.type === 'block.started')?.event.blockId;
   return {
+    activity: liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId: options.activityAfter }),
     world: { laneNodes, laneEdges, interiors, bigEventLabels }, gates, feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
     status, stage, label: finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
     workSite: `chapter_${blockChapters.get(lastBlock) ?? chapters[0]?.index ?? 0}`,
