@@ -5,9 +5,9 @@ import { promisify } from "node:util";
 import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { newChangeSet } from "../src/merge/changeset.js";
-import { listChangeSets, saveChangeSet } from "../src/merge/changesetStore.js";
-import { reviewPage } from "../src/merge/reviewPage.js";
+import { newChangeSet } from "../src/solidifier/merge/changeset.js";
+import { listChangeSets, saveChangeSet } from "../src/solidifier/merge/changesetStore.js";
+import { reviewPage } from "../src/solidifier/merge/reviewPage.js";
 
 const execute = promisify(execFile);
 
@@ -40,7 +40,7 @@ test("CLI review pages are bounded, validated, and read-only", async (context) =
   await copyFile(file, join(directory, "changesets", "cs_b0001.superseded-test.json"));
   assert.deepEqual((await listChangeSets(directory)).map((entry) => entry.id), [changeset.id]);
   const before = await readFile(file, "utf8");
-  const args = [resolve("dist/src/cli.js"), "changeset", "show", directory, changeset.id];
+  const args = [resolve("dist/src/cli/cli.js"), "changeset", "show", directory, changeset.id];
   const result = JSON.parse((await execute(process.execPath, [...args, "--offset", "2", "--limit", "2"])).stdout);
   assert.deepEqual(result.proposals.map((proposal: { id: string }) => proposal.id), ["p2", "p3"]);
   assert.equal(result.page.nextOffset, null);

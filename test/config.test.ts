@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadConfig } from "../src/config.js";
+import { loadConfig } from "../src/cli/config.js";
 
 test("config: empty env reports both keys missing, with settled defaults", () => {
   const cfg = loadConfig({});

@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Miniloop } from "../src/autostep/miniloop.js";
-import { MockDecisionModel } from "../src/connectors/jev.js";
-import { sectionBlock } from "../src/text/sectioning.js";
-import type { Entity } from "../src/ontology/types.js";
-import type { DecisionModel } from "../src/connectors/jev.js";
+import { Miniloop } from "../src/digger/autostep/miniloop.js";
+import { MockDecisionModel } from "../src/ground/connectors/jev.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
+import type { Entity } from "../src/ground/ontology/types.js";
+import type { DecisionModel } from "../src/ground/connectors/jev.js";
 
 const mikoto: Entity = {
   id: "char_000001",

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { scoreDialogueCards } from "../src/commands/dialogueEval.js";
+import { scoreDialogueCards } from "../src/cli/commands/extract/dialogueEval.js";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,7 +16,7 @@ test("actual eval dialogues CLI reads card arrays without network or database wr
   await writeFile(goldPath, JSON.stringify([card("gold", ["s1"], ["甲", "乙"])]));
   await writeFile(predictedPath, JSON.stringify([card("predicted", ["s1"], ["甲"])]));
   const disableNetwork = "data:text/javascript," + encodeURIComponent('globalThis.fetch = () => { throw new Error("Unexpected network request"); };');
-  const result = await promisify(execFile)(process.execPath, ["--import", disableNetwork, "dist/src/cli.js", "eval", "dialogues", goldPath, predictedPath]);
+  const result = await promisify(execFile)(process.execPath, ["--import", disableNetwork, "dist/src/cli/cli.js", "eval", "dialogues", goldPath, predictedPath]);
   const report = JSON.parse(result.stdout);
   assert.equal(report.correctParticipants, 1);
   assert.equal(report.wrongParticipants, 0);

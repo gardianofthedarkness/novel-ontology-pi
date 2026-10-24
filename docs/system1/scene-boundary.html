@@ -15,7 +15,7 @@
 <h1>Scene boundary — where scenes start</h1>
 <p>
   <span class="badge v1">status: v1 patch (skeleton)</span>
-  <span class="badge">repo: <code>src/autostep/patches/scene-boundary.ts</code></span>
+  <span class="badge">repo: <code>src/digger/autostep/patches/scene-boundary.ts</code></span>
   <span class="badge">model: Jev · <span class="prim choice">choice</span> (span selection)</span>
 </p>
 <p class="sub">Scenes are the unit everything else keys off: presence is per-scene, dialogue groups
@@ -65,7 +65,7 @@ The demo below still illustrates the retired scanning design.</div>
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li><code>src/autostep/patches/scene-boundary.ts</code> + <code>src/autostep/segmentation.ts</code> — the prepass tiles the block into <code>ctx.accepted.sceneSpans</code>. Decision keys are pinnable for recall: <code>scene_start:&lt;anchorId&gt;</code>, <code>scene_end:&lt;startId&gt;</code>, <code>scene_seam:&lt;firstFollowingId&gt;</code>.</li>
+  <li><code>src/digger/autostep/patches/scene-boundary.ts</code> + <code>src/digger/autostep/segmentation.ts</code> — the prepass tiles the block into <code>ctx.accepted.sceneSpans</code>. Decision keys are pinnable for recall: <code>scene_start:&lt;anchorId&gt;</code>, <code>scene_end:&lt;startId&gt;</code>, <code>scene_seam:&lt;firstFollowingId&gt;</code>.</li>
   <li>Gates: accept ≥ 0.85 · re-ask 0.55–0.85 · escalate &lt; 0.55 (tuning: see Open questions).</li>
 </ul>
 

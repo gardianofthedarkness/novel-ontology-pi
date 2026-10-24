@@ -52,10 +52,10 @@ npm run build
 npm test                                   # mocked Jev — costs nothing
 
 # Create a fresh workspace (no models or API keys needed):
-node dist/src/cli.js init novels/my-novel --pretty
+node dist/src/cli/cli.js init novels/my-novel --pretty
 
 # Deterministic sectioning (works today):
-node dist/src/cli.js section path/to/chapter.txt --pretty
+node dist/src/cli/cli.js section path/to/chapter.txt --pretty
 ```
 
 `init` requires a new target path and creates missing parent directories. It
@@ -69,14 +69,14 @@ version is recorded from `JEV_MODEL`, defaulting to `jev-1.13.0` as in
 directory; inspect it before removing it or choosing a new path.
 
 Once a bundle's graph has been built
-(`node dist/src/cli.js graph build novels/my-novel/ontology`), the workspace
+(`node dist/src/cli/cli.js graph build novels/my-novel/ontology`), the workspace
 can be browsed without any model calls:
 
 ```bash
-node dist/src/cli.js query novels/my-novel "MATCH (c:Character) RETURN c.id AS id" --pretty
-node dist/src/cli.js search novels/my-novel "café" --pretty
-node dist/src/cli.js timeline list novels/my-novel --pretty
-node dist/src/cli.js timeline show novels/my-novel tl_canon --pretty
+node dist/src/cli/cli.js query novels/my-novel "MATCH (c:Character) RETURN c.id AS id" --pretty
+node dist/src/cli/cli.js search novels/my-novel "café" --pretty
+node dist/src/cli/cli.js timeline list novels/my-novel --pretty
+node dist/src/cli/cli.js timeline show novels/my-novel tl_canon --pretty
 ```
 
 `query` runs Cypher against the novel's built graph (`ontology/graph.lbug`).
@@ -97,12 +97,12 @@ commit them.
 ## Work LLM smoke tests: `llm ping` / `llm probe`
 
 The work-LLM plumbing — an OpenAI-compatible chat-completions client
-(`src/connectors/workModel.ts`, configured from `WORK_LLM_*`) — can be
+(`src/ground/connectors/workModel.ts`, configured from `WORK_LLM_*`) — can be
 exercised before any live wiring exists:
 
 ```bash
-node dist/src/cli.js llm ping  --pretty   # one tiny completion: reachability + latency + token usage
-node dist/src/cli.js llm probe --pretty   # JSON-mode completion, reply validated as JSON
+node dist/src/cli/cli.js llm ping  --pretty   # one tiny completion: reachability + latency + token usage
+node dist/src/cli/cli.js llm probe --pretty   # JSON-mode completion, reply validated as JSON
 ```
 
 `WORK_LLM_BASE_URL` overrides the provider's default API root
@@ -124,11 +124,11 @@ The CLI keeps its own durable secret store for the decision-model
 key, so the key does not have to live in the environment:
 
 ```bash
-node dist/src/cli.js jev login            # hidden prompt; stores the key (file mode 0600, outside the repo)
-node dist/src/cli.js jev login --from-env # copy TYPESAFE_API_KEY into the store instead
-node dist/src/cli.js jev status           # source only: env / store / env-indirect / missing
-node dist/src/cli.js jev logout           # remove the stored copy
-node dist/src/cli.js jev ping  --pretty   # one tiny live decision through the resolved key
+node dist/src/cli/cli.js jev login            # hidden prompt; stores the key (file mode 0600, outside the repo)
+node dist/src/cli/cli.js jev login --from-env # copy TYPESAFE_API_KEY into the store instead
+node dist/src/cli/cli.js jev status           # source only: env / store / env-indirect / missing
+node dist/src/cli/cli.js jev logout           # remove the stored copy
+node dist/src/cli/cli.js jev ping  --pretty   # one tiny live decision through the resolved key
 ```
 
 Resolution order (the same one open-source Jev integrations use):
@@ -149,7 +149,7 @@ anything) they should gate, is the maintainer's decision.
 ### `novel inspect <novel-dir>` — corpus diagnostics
 
 ```bash
-node dist/src/cli.js inspect path/to/novel --pretty
+node dist/src/cli/cli.js inspect path/to/novel --pretty
 ```
 
 Reads the bundle JSONL + manifest (the source of truth; the Ladybug
@@ -180,7 +180,7 @@ my-dataset/
 ```
 
 Golden files use exactly the bundle's JSONL shapes
-(`src/ontology/types.ts`). Every scored kind needs its file — write an
+(`src/ground/ontology/types.ts`). Every scored kind needs its file — write an
 empty file for a kind with no records. A worked example ships in
 `eval/examples/golden-chapter/` (one hand-written chapter, expected
 records, and sample predictions).
@@ -256,9 +256,9 @@ bundle folder. The graph database is *not* part of it — it is rebuilt
 locally from the bundle.
 
 ```bash
-node dist/src/cli.js bundle export <novel-dir> <out-dir>     # writes a NEW dir
-node dist/src/cli.js bundle import <bundle-dir> <target-dir> # writes a NEW dir
-node dist/src/cli.js graph build <target-dir>/ontology       # rebuild the graph
+node dist/src/cli/cli.js bundle export <novel-dir> <out-dir>     # writes a NEW dir
+node dist/src/cli/cli.js bundle import <bundle-dir> <target-dir> # writes a NEW dir
+node dist/src/cli/cli.js graph build <target-dir>/ontology       # rebuild the graph
 ```
 
 - **Export includes** the whole bundle, byte-for-byte: `source/`,

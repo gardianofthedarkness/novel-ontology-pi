@@ -8,12 +8,12 @@ import {
   checkMatches,
   foldVariants,
   nominateMatchCandidates,
-} from "../src/matching/entityMatch.js";
-import { MockDecisionModel } from "../src/connectors/jev.js";
-import { Miniloop } from "../src/autostep/miniloop.js";
-import { sectionBlock } from "../src/text/sectioning.js";
-import { initWorkspace } from "../src/workspace/init.js";
-import { BundleStore } from "../src/connectors/bundle.js";
+} from "../src/solidifier/matching/entityMatch.js";
+import { MockDecisionModel } from "../src/ground/connectors/jev.js";
+import { Miniloop } from "../src/digger/autostep/miniloop.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
 import {
   addNameForm,
   mergeEntities,
@@ -21,20 +21,20 @@ import {
   removeEntity,
   renameEntity,
   unrelate,
-} from "../src/maintenance/fixes.js";
-import { runFix } from "../src/commands/fixCommands.js";
+} from "../src/solidifier/maintenance/fixes.js";
+import { runFix } from "../src/cli/commands/extract/fixCommands.js";
 import {
   addCorrection,
   loadCorrections,
   pinsForBlock,
-} from "../src/maintenance/corrections.js";
-import { ingestNovel } from "../src/commands/ingestCommands.js";
-import { runRecall } from "../src/commands/recallCommands.js";
-import { runMatch } from "../src/commands/matchCommands.js";
-import { newChangeSet } from "../src/merge/changeset.js";
-import { saveChangeSet } from "../src/merge/changesetStore.js";
-import { EventLog } from "../src/events/log.js";
-import type { Entity, OntEvent, Relation, Scene } from "../src/ontology/types.js";
+} from "../src/solidifier/maintenance/corrections.js";
+import { ingestNovel } from "../src/cli/commands/extract/ingestCommands.js";
+import { runRecall } from "../src/cli/commands/extract/recallCommands.js";
+import { runMatch } from "../src/cli/commands/extract/matchCommands.js";
+import { newChangeSet } from "../src/solidifier/merge/changeset.js";
+import { saveChangeSet } from "../src/solidifier/merge/changesetStore.js";
+import { EventLog } from "../src/ground/events/log.js";
+import type { Entity, OntEvent, Relation, Scene } from "../src/ground/ontology/types.js";
 
 const ent = (id: string, kind: Entity["kind"], ...forms: string[]): Entity => ({
   id,

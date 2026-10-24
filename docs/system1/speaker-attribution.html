@@ -15,7 +15,7 @@
 <h1>Speaker attribution — whose line is it</h1>
 <p>
   <span class="badge v1">status: v1 patch (skeleton)</span>
-  <span class="badge">repo: <code>src/autostep/patches/speaker-attribution.ts</code></span>
+  <span class="badge">repo: <code>src/digger/autostep/patches/speaker-attribution.ts</code></span>
   <span class="badge">model: Jev · <span class="prim choice">choice</span></span>
 </p>
 <p class="sub">The last structural patch: it takes the dialogue units from sector 03 and decides
@@ -53,7 +53,7 @@ Its output — turns with speakers — is the skeleton extraction (08) hangs eve
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li><code>src/autostep/patches/speaker-attribution.ts</code> — one <code>choice</code> per unit from <code>ctx.accepted.dialogueUnits</code>; unresolved units become escalations.</li>
+  <li><code>src/digger/autostep/patches/speaker-attribution.ts</code> — one <code>choice</code> per unit from <code>ctx.accepted.dialogueUnits</code>; unresolved units become escalations.</li>
   <li>Runs last in the v1 registry — it consumes the most context of any patch.</li>
 </ul>
 

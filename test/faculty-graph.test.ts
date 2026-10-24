@@ -1,17 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import { FacultyPool } from "../src/processing/facultyPool.js";
-import { FacultyGraph } from "../src/processing/facultyGraph.js";
-import { sourceChunks, renderSentences } from "../src/processing/facultyContext.js";
-import { sectionBlock } from "../src/text/sectioning.js";
-import { createExtractor } from "../src/extraction/extraction.js";
-import type { DecisionModel } from "../src/connectors/jev.js";
-import type { WorkModel } from "../src/connectors/llm.js";
-import type { Entity, Scene } from "../src/ontology/types.js";
-import { groundFacultyProposals } from "../src/processing/facultyGrounding.js";
-import { previewFacultyStates } from "../src/processing/facultyContinuity.js";
-import type { OntologyStore } from "../src/ontology/store.js";
+import { FacultyPool } from "../src/digger/processing/facultyPool.js";
+import { FacultyGraph } from "../src/digger/processing/facultyGraph.js";
+import { sourceChunks, renderSentences } from "../src/digger/processing/facultyContext.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
+import { createExtractor } from "../src/digger/extraction/extraction.js";
+import type { DecisionModel } from "../src/ground/connectors/jev.js";
+import type { WorkModel } from "../src/ground/connectors/llm.js";
+import type { Entity, Scene } from "../src/ground/ontology/types.js";
+import { groundFacultyProposals } from "../src/digger/processing/facultyGrounding.js";
+import { previewFacultyStates } from "../src/digger/processing/facultyContinuity.js";
+import type { OntologyStore } from "../src/ground/ontology/store.js";
 
 const request = { system: "Return JSON", prompt: "source", maxTokens: 100 };
 const character: Entity = { id: "char_000001", kind: "Character", names: [{ text: "小樱", lang: "zh", kind: "canonical" }], properties: {}, confidence: 1 };

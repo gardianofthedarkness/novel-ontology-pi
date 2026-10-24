@@ -1,0 +1,270 @@
+import { sectionBlock } from "../intake/sectioning.js";
+import { Miniloop } from "../autostep/miniloop.js";
+import {
+  pinsForBlock,
+  type Correction,
+} from "../../solidifier/maintenance/corrections.js";
+import type { DecisionModel } from "../../ground/connectors/jev.js";
+import type { WorkModel } from "../../ground/connectors/llm.js";
+import type {
+  ExtractionInput,
+  ExtractionOutput,
+} from "../extraction/extraction.js";
+import { createCandidateRefiner, createExtractor } from "../extraction/extraction.js";
+import type { OntologyStore } from "../../ground/ontology/store.js";
+import type { Entity } from "../../ground/ontology/types.js";
+import type { ChangeSet } from "../../solidifier/merge/changeset.js";
+import { applyChangeSet } from "../../solidifier/merge/apply.js";
+import { saveChangeSet } from "../../solidifier/merge/changesetStore.js";
+import { EventLog } from "../../ground/events/log.js";
+import type { EventSink } from "../../ground/events/types.js";
+import { saveWorkingDraft, type WorkingDraft } from "./draft.js";
+import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../extraction/constraints.js";
+import { FacultyGraph, type FacultyGraphOptions } from "./facultyGraph.js";
+import { groundFacultyProposals } from "./facultyGrounding.js";
+import { previewFacultyStates } from "./facultyContinuity.js";
+import { join } from "node:path";
+import { BundleStore } from "../../ground/connectors/bundle.js";
+import type { OntEvent, Relation, Scene } from "../../ground/ontology/types.js";
+import { runEmPassAfterApply, loadMatchMemory, saveMatchMemory, type EmSummary } from "../../solidifier/matching/emFaculty.js";
+
+export type ReviewDecision = "approved" | "held" | "revision_requested";
+
+/**
+ * The outer processing loop — how a whole novel gets ingested.
+ *
+ *   for each block (chapter, or a long block of text):
+ *     1. section the block into sentences          (code)
+ *     2. run the System 1 miniloop                 (Jev patches)
+ *        -> accumulates a ChangeSet of proposals
+ *     3. per-scene extraction with the work LLM     (sector 08;
+ *        -> appends event/causality proposals        runs when a work
+ *        to the same ChangeSet                       model is wired)
+ *     4. MERGE GATE: hand the ChangeSet to the main agent.
+ *        - approved            -> apply to the main graph, next block
+ *        - held                -> stop; nothing applied; awaiting the user
+ *        - revision_requested  -> re-run the miniloop for the noted parts
+ *                                 only, present a revised ChangeSet
+ *   ... until the novel is done.
+ *
+ * The main agent is the reviewer because it holds what the miniloop
+ * cannot: the whole conversation, the user's intent, long-range memory
+ * of earlier chapters, and every other capability.
+ */
+export class BlockProcessor {
+  constructor(
+    private store: OntologyStore,
+    private decisions: DecisionModel,
+    private review: (cs: ChangeSet) => Promise<ReviewDecision>,
+    private observation: {
+      novelDir?: string;
+      semanticReview?: boolean;
+      emit?: EventSink;
+      /**
+       * Loads the entities the miniloop should treat as already known
+       * (the cumulative per-novel name registry). Called before EVERY
+       * block, so entities merged by earlier blocks — or earlier runs —
+       * are visible to the name scan and the presence patch. When not
+       * provided, blocks start with an empty registry.
+       */
+      loadKnownEntities?: () => Promise<Entity[]>;
+      /**
+       * The work LLM. When provided, the extraction step (sector 08)
+       * runs between the miniloop and the merge gate, and the
+       * zero-context candidate refiner is available to the miniloop.
+       * When absent, blocks produce miniloop-only ChangeSets.
+       */
+      workModel?: WorkModel;
+      facultyGraph?: false | FacultyGraphOptions;
+      /**
+       * The EM faculty (sector 04): after each block is applied, run
+       * the strict structural entity-matching pass over pairs that
+       * touch the block's entities (new x registry, new x new).
+       * Confident Jev verdicts merge through the audited maintenance
+       * path; distinct verdicts are remembered per novel. Only the
+       * ingest CLI enables this; EM failures never block ingestion.
+       */
+      entityMatching?: boolean;
+      onEntityMatching?: (blockId: string, summary: EmSummary) => void;
+      /** Distinct event/scene counts in the bundle, for ID/order sequencing. */
+      loadCounts?: () => Promise<{ events: number; scenes: number; reservedEntityIds?: string[] }>;
+      /**
+       * Recall corrections (sector 09): pinned decisions the reviewing
+       * agent has issued for specific blocks. Loaded once per run; the
+       * pins for each block are honored by its miniloop pass.
+       */
+      loadCorrections?: () => Promise<Correction[]>;
+    } = {},
+  ) {}
+
+  async processNovel(blocks: { blockId: string; text: string; chapterIndex?: number; sectionIndex?: number }[]): Promise<{
+    mergedBlocks: string[];
+    stoppedAt: string | null;
+    stopReason: string | null;
+  }> {
+    const mergedBlocks: string[] = [];
+    const miniloop = new Miniloop(this.decisions, {
+      refineNameCandidates: this.observation.workModel
+        ? createCandidateRefiner(this.observation.workModel)
+        : undefined,
+    });
+    const extract = this.observation.workModel
+      ? createExtractor(this.observation.workModel)
+      : undefined;
+    const emit = this.observation.emit ?? (this.observation.novelDir ? new EventLog(this.observation.novelDir).emit : undefined);
+
+    const corrections = this.observation.loadCorrections
+      ? await this.observation.loadCorrections()
+      : [];
+    for (const [blockIndex, block] of blocks.entries()) {
+      await emit?.({ type: "block.started", blockId: block.blockId });
+      const { sentences } = sectionBlock(block.text, block.sectionIndex ?? mergedBlocks.length);
+      await emit?.({ type: "sectioned", blockId: block.blockId, sentences: sentences.length });
+      let revisionRounds = 0;
+      for (;;) {
+        let draft: WorkingDraft = {
+          version: 1, blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0,
+          stage: "miniloop", patchId: "starting", updatedAt: new Date().toISOString(),
+          proposals: [], sceneSpans: [], dialogueUnits: [], turns: [], completedScenes: 0, totalScenes: 0,
+        };
+        let publishing = Promise.resolve();
+        const publish = (update: Partial<WorkingDraft>, announce = false) => {
+          publishing = publishing.then(async () => {
+            draft = { ...draft, ...update, updatedAt: new Date().toISOString() };
+            if (this.observation.novelDir) {
+              await saveWorkingDraft(this.observation.novelDir, draft);
+              // Phase B (decision #15): the working-draft stream is the
+              // live view's source of truth. Only progress publishes
+              // announce — a draft.updated fact means "a new batch of
+              // decisions landed", never the empty initial draft or the
+              // gate transition (changeset.pending already says that).
+              if (announce) {
+                await emit?.({ type: "draft.updated", blockId: draft.blockId, patchId: draft.patchId, stage: draft.stage });
+              }
+            }
+          });
+          return publishing;
+        };
+        await publish({});
+        const knownEntities = this.observation.loadKnownEntities
+          ? await this.observation.loadKnownEntities()
+          : [];
+        const pins = pinsForBlock(corrections, block.blockId);
+        const constraintsValue = corrections.find(correction => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)?.value;
+        const constraints = constraintsValue ? parseExtractionConstraints(constraintsValue) : undefined;
+        const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
+        const graph = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
+          ? new FacultyGraph(this.decisions, this.observation.workModel, this.observation.facultyGraph ?? {}) : undefined;
+        const margin = graph?.router.contextWindow(["scene-boundaries", "dialogue-boundaries", "dialogue-attribution", "dialogue-participants"]) ?? 0;
+        const contextSentences = margin > 0 ? [
+          ...(blockIndex > 0 ? sectionBlock(blocks[blockIndex - 1].text, blocks[blockIndex - 1].sectionIndex ?? blockIndex - 1).sentences.slice(-margin) : []),
+          ...sentences,
+          ...(blockIndex + 1 < blocks.length ? sectionBlock(blocks[blockIndex + 1].text, blocks[blockIndex + 1].sectionIndex ?? blockIndex + 1).sentences.slice(0, margin) : []),
+        ] : sentences;
+        const faculty = await graph?.run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, contextSentences, knownEntities, pins, constraints, fragmentDeclines: graph && this.observation.novelDir ? (await loadMatchMemory(this.observation.novelDir)).fragmentDeclines : [], onProgress: async progress => publish(progress, true) });
+        if (faculty && faculty.fragmentDeclines.length && this.observation.novelDir) {
+          // Remember fragment-at-birth declines per novel so later
+          // blocks do not re-ask the same pair (matching.json).
+          const memory = await loadMatchMemory(this.observation.novelDir);
+          const known = new Set(memory.fragmentDeclines.map((fd) => `${fd.form}|${fd.entityId}`));
+          for (const fd of faculty.fragmentDeclines) {
+            if (!known.has(`${fd.form}|${fd.entityId}`)) {
+              memory.fragmentDeclines.push({ ...fd, ts: new Date().toISOString() });
+            }
+          }
+          await saveMatchMemory(this.observation.novelDir, memory);
+        }
+        const result = faculty?.miniloop ?? await miniloop.runBlock({
+          blockId: block.blockId,
+          sentences,
+          knownEntities,
+          stateSummary: `Processing block ${block.blockId}.`,
+          pinnedAnswers: pins,
+          onProgress: async (progress) => publish({ ...progress, totalScenes: progress.sceneSpans.length }, true),
+        });
+        if (legacyPins && this.observation.workModel && this.observation.facultyGraph !== false) result.changeset.reviewNotes["faculty:legacy-pins"] = "Used the legacy execution path to honor reviewer pins whose window-scoped keys cannot be reinterpreted safely by the scene graph.";
+        for (const key of pins.keys()) if (key !== EXTRACTION_CONSTRAINTS_KEY && !result.appliedPins?.includes(key)) result.changeset.reviewNotes[`recall:unapplied:${key}`] = "The pinned question did not occur in this revision. The correction was not silently reinterpreted; Pi must check its applicability.";
+        for (const key of result.appliedPins ?? []) {
+          result.changeset.reviewNotes[`recall:pin:${key}`] =
+            "Decision pinned by a reviewing-agent correction (sector 09 recall); the miniloop honored the pin instead of its own judgment.";
+        }
+        if (extract) {
+          await publish({ stage: "extraction", patchId: "extraction" });
+          // Sector 08: extraction reads the miniloop's structured
+          // scenes and returns the block's FINAL proposal list —
+          // stubs fleshed or dropped, aliases folded, events,
+          // relations and state changes appended — before anything
+          // is saved or shown to the gate.
+          const counts = this.observation.loadCounts
+            ? await this.observation.loadCounts()
+            : { events: 0, scenes: 0 };
+          const out: ExtractionOutput = await extract({
+            blockId: block.blockId,
+            chapterIndex: block.chapterIndex ?? 0,
+            sentences,
+            miniloop: result,
+            knownEntities,
+            proposals: result.changeset.proposals,
+            counts,
+            constraints,
+            sceneResults: faculty?.sceneResults,
+            onProgress: async (progress) => publish(progress, true),
+          } satisfies ExtractionInput);
+          result.changeset.proposals = out.proposals;
+          Object.assign(result.changeset.reviewNotes, out.notes);
+          if (faculty) {
+            Object.assign(result.changeset.reviewNotes, groundFacultyProposals(out.proposals, knownEntities, sentences));
+            await publish({ patchId: "continuity-relations", statePreview: await previewFacultyStates(this.store, out.proposals) });
+          }
+        }
+        if (this.observation.semanticReview) result.changeset.reviewSource = sentences;
+        if (this.observation.novelDir) await saveChangeSet(this.observation.novelDir, result.changeset);
+        await publish({ stage: "gate", patchId: "merge-gate", proposals: result.changeset.proposals });
+        // No event emissions here: saveChangeSet is the emitter of record
+        // for proposal.added / changeset.<status> — it fires them only
+        // after the persisted state is visible, deduped by status change.
+        const decision = await this.review(result.changeset);
+        result.changeset.status = decision;
+        if (this.observation.novelDir) await saveChangeSet(this.observation.novelDir, result.changeset);
+        if (decision === "approved") {
+          result.changeset.status = "approved";
+          await applyChangeSet(this.store, result.changeset, emit);
+          mergedBlocks.push(block.blockId);
+          if (this.observation.entityMatching && this.observation.novelDir) {
+            const summary = await runEmPassAfterApply({
+              novelDir: this.observation.novelDir,
+              decisions: this.decisions,
+              changeset: result.changeset,
+              events: this.observation.emit ?? new EventLog(this.observation.novelDir).emit,
+            });
+            if (summary && summary.nominated > 0) {
+              result.changeset.reviewNotes["em-faculty"] =
+                `EM pass after apply: ${summary.nominated} nominated, ${summary.merged.length} merged, ${summary.distinct.length} distinct (remembered), ${summary.uncertain.length} uncertain.`;
+              this.observation.onEntityMatching?.(block.blockId, summary);
+            }
+          }
+          break;
+        }
+        if (decision === "held") {
+          return {
+            mergedBlocks,
+            stoppedAt: block.blockId,
+            stopReason: "Change set held by the main agent at the merge gate.",
+          };
+        }
+        // revision_requested
+        revisionRounds++;
+        if (revisionRounds > 2) {
+          return {
+            mergedBlocks,
+            stoppedAt: block.blockId,
+            stopReason: "Revision rounds exhausted; needs the user's call.",
+          };
+        }
+        // TODO: re-run only the noted proposals' patches (reviewNotes),
+        // not the whole block — granularity is an open design question.
+      }
+    }
+    return { mergedBlocks, stoppedAt: null, stopReason: null };
+  }
+}

@@ -1,21 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createExtractor, createCandidateRefiner } from "../src/extraction/extraction.js";
-import { nominateCandidateSpans } from "../src/autostep/patches/name-detector.js";
-import { sectionBlock } from "../src/text/sectioning.js";
-import { newChangeSet, type ChangeProposal } from "../src/merge/changeset.js";
-import type { MiniloopResult } from "../src/autostep/miniloop.js";
-import type { WorkModel } from "../src/connectors/llm.js";
-import type { Entity, OntEvent, Scene } from "../src/ontology/types.js";
+import { createExtractor, createCandidateRefiner } from "../src/digger/extraction/extraction.js";
+import { nominateCandidateSpans } from "../src/digger/autostep/patches/name-detector.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
+import { newChangeSet, type ChangeProposal } from "../src/solidifier/merge/changeset.js";
+import type { MiniloopResult } from "../src/digger/autostep/miniloop.js";
+import type { WorkModel } from "../src/ground/connectors/llm.js";
+import type { Entity, OntEvent, Scene } from "../src/ground/ontology/types.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initWorkspace } from "../src/workspace/init.js";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { saveChangeSet } from "../src/merge/changesetStore.js";
-import { materializeSemantic, semanticFacts, semanticRevision, validateStructure } from "../src/merge/semantic.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { saveChangeSet } from "../src/solidifier/merge/changesetStore.js";
+import { materializeSemantic, semanticFacts, semanticRevision, validateStructure } from "../src/solidifier/merge/semantic.js";
 
 const mikoto: Entity = {
   id: "char_000001",
@@ -99,7 +99,7 @@ test("resolved actor aliases produce unique IDs and readable semantic facts in l
     const store = new BundleStore(join(directory, "ontology"));
     for (const character of input.knownEntities) await store.upsertEntity(character);
     await saveChangeSet(directory, packet);
-    const result = await promisify(execFile)(process.execPath, ["dist/src/cli.js", "changeset", "facts", directory, packet.id, "--summary"]);
+    const result = await promisify(execFile)(process.execPath, ["dist/src/cli/cli.js", "changeset", "facts", directory, packet.id, "--summary"]);
     assert.equal(JSON.parse(result.stdout).totalFacts, facts.length);
   }
 });

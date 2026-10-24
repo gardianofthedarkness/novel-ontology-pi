@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sectionBlock } from '../../dist/src/text/sectioning.js';
+import { sectionBlock } from '../../dist/src/digger/intake/sectioning.js';
 import { recordSource } from './record-source.mjs';
 
 const text = '甲走进房间。\n\n「你好！」\n「再见。」\n\n甲离开房间。';

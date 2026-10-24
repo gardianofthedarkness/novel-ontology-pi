@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sectionBlock } from "../src/text/sectioning.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
 
 test("CJK sentences split on terminal punctuation, quotes absorbed", () => {
   const text = "御坂美琴走进咖啡店。「你来了。」她说道。窗外下着雨。";

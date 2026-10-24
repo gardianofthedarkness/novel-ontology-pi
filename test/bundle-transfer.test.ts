@@ -12,20 +12,20 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BundleStore } from "../src/connectors/bundle.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
 import {
   exportBundle,
   importBundle,
-} from "../src/connectors/bundleTransfer.js";
+} from "../src/ground/connectors/bundleTransfer.js";
 import {
   LadybugStore,
   buildGraphFromBundle,
-} from "../src/connectors/ladybug.js";
+} from "../src/ground/connectors/ladybug.js";
 import {
   causalAncestors,
   charactersPresent,
-} from "../src/ontology/retrieval.js";
-import type { Entity, OntEvent, Scene } from "../src/ontology/types.js";
+} from "../src/ground/ontology/retrieval.js";
+import type { Entity, OntEvent, Scene } from "../src/ground/ontology/types.js";
 
 const char = (id: string, name: string): Entity => ({
   id,

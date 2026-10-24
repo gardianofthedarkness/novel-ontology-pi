@@ -3,14 +3,14 @@ import { test } from "node:test";
 import type {
   DecisionAnswer,
   DecisionQuestion,
-} from "../src/connectors/jev.js";
-import { sectionBlock, type Sentence } from "../src/text/sectioning.js";
+} from "../src/ground/connectors/jev.js";
+import { sectionBlock, type Sentence } from "../src/digger/intake/sectioning.js";
 import {
   selectExchanges,
   selectExchangeSpans,
   tileScenes,
   type DecideFn,
-} from "../src/autostep/segmentation.js";
+} from "../src/digger/autostep/segmentation.js";
 
 const GATES = { accept: 0.85, reask: 0.55 };
 
@@ -136,7 +136,7 @@ test("selectExchanges: a 1-2 sentence graze trims instead of merging", async () 
 });
 
 test("miniloop pipelines: scene tiling and dialogue selection run concurrently", async () => {
-  const { Miniloop } = await import("../src/autostep/miniloop.js");
+  const { Miniloop } = await import("../src/digger/autostep/miniloop.js");
   const sentences = makeSentences(120);
   let inFlight = 0;
   let maxInFlight = 0;

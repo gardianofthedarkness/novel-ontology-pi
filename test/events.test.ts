@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, appendFile, mkdir, rm, access, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EventLog, eventLogPath, readEventBatch, validateCursor, cursorId, type LogIdentity } from "../src/events/log.js";
-import { newChangeSet } from "../src/merge/changeset.js";
-import { saveChangeSet, setChangeSetStatus, loadChangeSet } from "../src/merge/changesetStore.js";
-import { applyChangeSet } from "../src/merge/apply.js";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { BlockProcessor } from "../src/processing/blockProcessor.js";
-import { MockDecisionModel } from "../src/connectors/jev.js";
-import type { ChangeProposal } from "../src/merge/changeset.js";
+import { EventLog, eventLogPath, readEventBatch, validateCursor, cursorId, type LogIdentity } from "../src/ground/events/log.js";
+import { newChangeSet } from "../src/solidifier/merge/changeset.js";
+import { saveChangeSet, setChangeSetStatus, loadChangeSet } from "../src/solidifier/merge/changesetStore.js";
+import { applyChangeSet } from "../src/solidifier/merge/apply.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { BlockProcessor } from "../src/digger/processing/blockProcessor.js";
+import { MockDecisionModel } from "../src/ground/connectors/jev.js";
+import type { ChangeProposal } from "../src/solidifier/merge/changeset.js";
 
 const proposal = (): ChangeProposal => ({
   id: "p1", kind: "upsert_entity", confidence: 0.9,
@@ -184,7 +184,7 @@ test("draft.updated: BlockProcessor announces every published draft batch; the l
 });
 
 test("projectEvent passes entity match facts through with ids only", async () => {
-  const { projectEvent } = await import("../src/events/types.js");
+  const { projectEvent } = await import("../src/ground/events/types.js");
   assert.deepEqual(
     projectEvent({ type: "entity.merged", keepId: "char_a", dropId: "char_b" }),
     { type: "entity.merged", keepId: "char_a", dropId: "char_b" },

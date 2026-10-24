@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DecisionRouter } from "../src/processing/decisionRouter.js";
-import { expandDecisionContext, renderSentences } from "../src/processing/facultyContext.js";
-import { sectionBlock } from "../src/text/sectioning.js";
+import { DecisionRouter } from "../src/digger/processing/decisionRouter.js";
+import { expandDecisionContext, renderSentences } from "../src/digger/processing/facultyContext.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import { readSpeakerGuesses, speakerQuestions } from "../src/processing/dialogueDecisions.js";
+import { readSpeakerGuesses, speakerQuestions } from "../src/digger/processing/dialogueDecisions.js";
 
 test("shared router retries uncertain faculties before System 2 and reports separate denominators", async () => {
   const router = new DecisionRouter();

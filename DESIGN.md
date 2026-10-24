@@ -73,7 +73,7 @@ nodes → Cypher traversal walks causal / presence / timeline edges.
 
 Caveats designed around:
 1. **Closed schema** — node/relation tables are declared up front
-   (`src/ontology/schema.ts`). New types = a CLI migration.
+   (`src/ground/ontology/schema.ts`). New types = a CLI migration.
 2. **Vector dimension is fixed** at index creation — the embedding model
    is recorded in the bundle manifest; changing it means `graph reindex`.
 3. **One writer + many readers** — exactly a CLI's access pattern.
@@ -91,7 +91,7 @@ novels/<novel-id>/
   branches/<branch-id>/   delta events + fork-point state snapshot only
 ```
 All DB access goes through one `OntologyStore` interface
-(`src/ontology/store.ts`), so the engine can be swapped without touching
+(`src/ground/ontology/store.ts`), so the engine can be swapped without touching
 the miniloop or extraction. Sharing an ontology = copying the folder.
 
 ## 4. Schema v1 (English-canonical, language-neutral identity)
@@ -270,7 +270,7 @@ candidates = hybrid (below).
   re-ask 0.55–0.85, escalate < 0.55 (per patch). To tune with the test key.
 - **First test novel** — DECIDED: re-ingest the legacy Index corpus.
 - **Embedding provider/model** — DEFERRED (2026-10-21): graph-first.
-  Phase 1's retrieval layer is pure Cypher (src/ontology/retrieval.ts);
+  Phase 1's retrieval layer is pure Cypher (src/ground/ontology/retrieval.ts);
   an embedding model is added only when a concrete need defeats it.
   Fallback design: lightweight local CPU model (~500–1000 dims) + Jev
   post-selection over top-32 candidates.

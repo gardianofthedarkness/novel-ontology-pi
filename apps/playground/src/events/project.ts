@@ -3,7 +3,7 @@ import type { PlaygroundEvent } from "../types.js";
 /**
  * Projection from the CLI's processing events to PlaygroundEvents.
  *
- * The CLI deliberately emits TRANSPORT FACTS (src/events/types.ts in the
+ * The CLI deliberately emits TRANSPORT FACTS (src/ground/events/types.ts in the
  * CLI package): what happened, with ids and confidences — never layout,
  * labels-as-art, or view state. This module is the one place that turns
  * those facts into the playground's view-level events.
@@ -27,7 +27,7 @@ export interface ProposalFact {
   provenance: { blockId: string; sentenceIds: string[]; patchId: string };
 }
 
-/** Mirror of the CLI's ProcessingEvent union (src/events/types.ts). */
+/** Mirror of the CLI's ProcessingEvent union (src/ground/events/types.ts). */
 export type ProcessingEvent =
   | { type: "block.started"; blockId: string }
   | { type: "sectioned"; blockId: string; sentences: number }

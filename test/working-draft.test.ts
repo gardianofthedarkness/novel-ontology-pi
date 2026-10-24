@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { access, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BlockProcessor } from "../src/processing/blockProcessor.js";
-import { MockDecisionModel } from "../src/connectors/jev.js";
-import type { DecisionModel } from "../src/connectors/jev.js";
-import { BundleStore } from "../src/connectors/bundle.js";
-import { initWorkspace } from "../src/workspace/init.js";
-import { addCorrection } from "../src/maintenance/corrections.js";
-import { loadChangeSet } from "../src/merge/changesetStore.js";
-import type { WorkingDraft } from "../src/processing/draft.js";
+import { BlockProcessor } from "../src/digger/processing/blockProcessor.js";
+import { MockDecisionModel } from "../src/ground/connectors/jev.js";
+import type { DecisionModel } from "../src/ground/connectors/jev.js";
+import { BundleStore } from "../src/ground/connectors/bundle.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
+import { addCorrection } from "../src/solidifier/maintenance/corrections.js";
+import { loadChangeSet } from "../src/solidifier/merge/changesetStore.js";
+import type { WorkingDraft } from "../src/digger/processing/draft.js";
 
 test("block context buffer includes the following block without proposing or processing its source at a held gate", async context => {
   const parent = await mkdtemp(join(tmpdir(), "novel-context-"));

@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { resolveJevKey } from '../../dist/src/connectors/secrets.js';
+import { resolveJevKey } from '../../dist/src/ground/connectors/secrets.js';
 
 export async function observeModels(apiKey, emit) {
   const jevKey = resolveJevKey()?.key;

@@ -15,7 +15,7 @@
 <h1>Dialogue detector — which sentences are spoken</h1>
 <p>
   <span class="badge v1">status: v1 patch (skeleton)</span>
-  <span class="badge">repo: <code>src/autostep/patches/dialogue-detector.ts</code></span>
+  <span class="badge">repo: <code>src/digger/autostep/patches/dialogue-detector.ts</code></span>
   <span class="badge">model: Jev · <span class="prim choice">choice</span> (span selection)</span>
 </p>
 <p class="sub">The sector the whole design was first sketched around: which sentences belong to a
@@ -68,7 +68,7 @@ retired classify-then-stitch design.</div>
 
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
-  <li><code>src/autostep/patches/dialogue-detector.ts</code> — two questions per sentence; groups by kind + continues flag into <code>ctx.accepted.dialogueUnits</code>.</li>
+  <li><code>src/digger/autostep/patches/dialogue-detector.ts</code> — two questions per sentence; groups by kind + continues flag into <code>ctx.accepted.dialogueUnits</code>.</li>
   <li>Covered by the mocked-Jev miniloop test: a dialogue sentence is grouped into a unit with zero live model calls.</li>
 </ul>
 
