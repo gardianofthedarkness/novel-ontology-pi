@@ -235,6 +235,7 @@ export class BlockProcessor {
               novelDir: this.observation.novelDir,
               decisions: this.decisions,
               changeset: result.changeset,
+              events: this.observation.emit ?? new EventLog(this.observation.novelDir).emit,
             });
             if (summary && summary.nominated > 0) {
               result.changeset.reviewNotes["em-faculty"] =

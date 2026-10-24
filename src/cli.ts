@@ -369,7 +369,7 @@ async function main(): Promise<void> {
       // and a Jev failure must not fail an approval that landed.
       let entityMatching: Awaited<ReturnType<typeof runEmPassAfterApply>> = null;
       try {
-        entityMatching = await runEmPassAfterApply({ novelDir, decisions: jevFromEnv(process.env), changeset: cs });
+        entityMatching = await runEmPassAfterApply({ novelDir, decisions: jevFromEnv(process.env), changeset: cs, events: new EventLog(novelDir).emit });
       } catch {
         // No Jev configured for this shell: the pass is skipped and
         // retried by the chapter sweep or `novel match`.

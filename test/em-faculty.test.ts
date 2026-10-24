@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nominateStructuralCandidates } from "../src/matching/structuralMatch.js";
 import { loadDistinctMemory, runEntityMatching } from "../src/matching/emFaculty.js";
+import type { ProcessingEvent } from "../src/events/types.js";
 import { FacultyGraph } from "../src/processing/facultyGraph.js";
 import { sectionBlock } from "../src/text/sectioning.js";
 import type { DecisionModel } from "../src/connectors/jev.js";
@@ -142,6 +143,111 @@ test("EM faculty: distinct verdicts are remembered and suppress re-nomination", 
   assert.equal(memory.length, 1);
   const second = await runEntityMatching({ novelDir, decisions, data: { entities, events, scenes, relations } });
   assert.equal(second.nominated, 0, "remembered pair is not re-reviewed");
+});
+
+test("EM faculty: a confident merge emits entity.merged and a distinct verdict emits entity.distinct", async () => {
+  const { entities, events, scenes, relations } = fixture();
+  const novelDir = await mkdtemp(join(tmpdir(), "novel-em-events-"));
+  const onto = join(novelDir, "ontology");
+  await mkdir(onto, { recursive: true });
+  const write = (name: string, rows: unknown[]) =>
+    writeFile(join(onto, name), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  await write("entities.jsonl", entities);
+  await write("events.jsonl", events);
+  await write("scenes.jsonl", scenes);
+  await write("relations.jsonl", relations);
+  const emitted: ProcessingEvent[] = [];
+  const sink = async (e: ProcessingEvent) => { emitted.push(e); };
+  const confident: DecisionModel = {
+    modelId: "mock-jev",
+    async decide(_state, questions) {
+      return questions.map((q) => ({
+        key: q.key,
+        value: q.key.startsWith("same:") ? 0.95 : 0.05,
+        confidence: 0.95,
+      }));
+    },
+  };
+  await runEntityMatching({ novelDir, decisions: confident, data: { entities, events, scenes, relations }, events: sink });
+  assert.deepEqual(emitted, [{ type: "entity.merged", keepId: "char_a", dropId: "char_b" }]);
+
+  const novelDir2 = await mkdtemp(join(tmpdir(), "novel-em-events2-"));
+  const onto2 = join(novelDir2, "ontology");
+  await mkdir(onto2, { recursive: true });
+  const write2 = (name: string, rows: unknown[]) =>
+    writeFile(join(onto2, name), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  await write2("entities.jsonl", entities);
+  await write2("events.jsonl", events);
+  await write2("scenes.jsonl", scenes);
+  await write2("relations.jsonl", relations);
+  emitted.length = 0;
+  const distinctModel: DecisionModel = {
+    modelId: "mock-jev",
+    async decide(_state, questions) {
+      return questions.map((q) => ({
+        key: q.key,
+        value: q.key.startsWith("same:") ? 0.1 : q.key.startsWith("distinct:") ? 0.9 : 0.05,
+        confidence: 0.9,
+      }));
+    },
+  };
+  await runEntityMatching({ novelDir: novelDir2, decisions: distinctModel, data: { entities, events, scenes, relations }, events: sink });
+  assert.deepEqual(emitted, [{ type: "entity.distinct", aId: "char_a", bId: "char_b" }]);
+});
+
+test("EM faculty: chained confident verdicts in one pass resolve through earlier merges", async () => {
+  // Three records of one person (Anna / 安娜 / アンナ), each pair
+  // structurally identical; Jev calls all three pairs confident.
+  // The second and third merges name records the first merge may
+  // already have dropped — the pass must resolve, not crash.
+  const twins = ["t_a", "t_b", "t_c"];
+  const entities = [
+    ent("t_a", "Anna"), ent("t_b", "安娜"), ent("t_c", "アンナ"), ent("t_d", "Kenji"),
+  ];
+  const events: OntEvent[] = [];
+  let order = 0;
+  for (const x of twins) {
+    events.push(ev(`ev_${x}_1`, ++order, [x], "q1"));
+    events.push(ev(`ev_${x}_3`, ++order, [x], "q3"));
+    events.push(ev(`ev_${x}_d`, ++order, [x, "t_d"], "q2"));
+  }
+  const scenes = [scene("sc1", ["q1", "q2"]), scene("sc2", ["q3"])];
+  const relations: Relation[] = events.flatMap((e) =>
+    e.primaryActors.map((a) => ({ fromId: a, toId: e.id, type: "PARTICIPATES_IN" as const, properties: {}, confidence: 1 })));
+  const novelDir = await mkdtemp(join(tmpdir(), "novel-em-chain-"));
+  const onto = join(novelDir, "ontology");
+  await mkdir(onto, { recursive: true });
+  const write = (name: string, rows: unknown[]) =>
+    writeFile(join(onto, name), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  await write("entities.jsonl", entities);
+  await write("events.jsonl", events);
+  await write("scenes.jsonl", scenes);
+  await write("relations.jsonl", relations);
+  const emitted: ProcessingEvent[] = [];
+  const decisions: DecisionModel = {
+    modelId: "mock-jev",
+    async decide(_state, questions) {
+      return questions.map((q) => ({
+        key: q.key,
+        value: q.key.startsWith("same:") ? 0.95 : 0.05,
+        confidence: 0.95,
+      }));
+    },
+  };
+  const summary = await runEntityMatching({
+    novelDir, decisions,
+    data: { entities, events, scenes, relations },
+    events: async (e) => { emitted.push(e); },
+  });
+  assert.equal(summary.merged.length, 2, "three records collapse via two merges");
+  assert.equal(emitted.filter((e) => e.type === "entity.merged").length, 2);
+  const after = (await readFile(join(onto, "entities.jsonl"), "utf8")).trim().split("\n").map((l) => JSON.parse(l) as Entity);
+  const ids = new Set(after.map((e) => e.id));
+  assert.deepEqual([...ids].sort(), ["t_a", "t_d"]);
+  const keep = [...after].reverse().find((e) => e.id === "t_a")!;
+  for (const form of ["Anna", "安娜", "アンナ"]) {
+    assert.ok(keep.names.some((n) => n.text === form), `form ${form} folded onto the survivor`);
+  }
 });
 
 // --- alias-at-birth through the faculty graph ---

@@ -164,6 +164,7 @@ export async function ingestNovel(
         const summary = await runEntityMatching({
           novelDir,
           decisions: jevFromEnv(env),
+          events: log.emit,
           data: {
             entities: await loadKnownEntities(),
             events: await bundle.loadFile<OntEvent>("events.jsonl"),

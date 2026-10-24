@@ -9,7 +9,9 @@ export type ProcessingEvent =
   | { type: "changeset.applied"; changesetId: string; target: "store"; processed: number; unsupportedProposalIds: string[]; deferredFactIds?: string[]; rejectedFactIds?: string[]; verifiedFacts?: number }
   | { type: "changeset.merged"; changesetId: string; target: "store" }
   | { type: "graph.rebuilt"; counts: { entities: number; events: number; scenes: number; relations: number; branches: number } }
-  | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate" };
+  | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate" }
+  | { type: "entity.merged"; keepId: string; dropId: string }
+  | { type: "entity.distinct"; aId: string; bId: string };
 
 export interface EventRecord {
   version: 1;
@@ -43,6 +45,8 @@ export function projectEvent(event: ProcessingEvent): ProcessingEvent {
       return { type: event.type, counts: { entities: c.entities, events: c.events, scenes: c.scenes, relations: c.relations, branches: c.branches } };
     }
     case "draft.updated": return { type: event.type, blockId: event.blockId, patchId: event.patchId, stage: event.stage };
+    case "entity.merged": return { type: event.type, keepId: event.keepId, dropId: event.dropId };
+    case "entity.distinct": return { type: event.type, aId: event.aId, bId: event.bId };
     default: throw new Error("Unsupported processing event");
   }
 }
