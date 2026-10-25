@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { CharacterStateAtPoint, DialogueTurn } from "../../ground/ontology/types.js";
 import type { ChangeProposal } from "../../solidifier/merge/changeset.js";
+import { candidateNodeId, type EntityCandidate } from "./entityCandidates.js";
 
 export interface WorkingDraft {
   version: 1;
@@ -19,6 +20,8 @@ export interface WorkingDraft {
   completedScenes: number;
   totalScenes: number;
   statePreview?: CharacterStateAtPoint[];
+  /** Entities found by faculties so far, ahead of extraction (see entityCandidates.ts). */
+  entityCandidates?: EntityCandidate[];
 }
 
 export async function saveWorkingDraft(novelDir: string, draft: WorkingDraft): Promise<void> {
@@ -51,5 +54,9 @@ export function touchedDraftIds(previous: WorkingDraft, current: WorkingDraft): 
   for (const unit of current.dialogueUnits) if (!units.has(JSON.stringify(unit))) ids.push(`draft:${current.blockId}:dialogue:${unit[0]}`);
   const cards = new Map(previous.dialogueCards?.map(card => [card.id, JSON.stringify(card)]) ?? []);
   for (const card of current.dialogueCards ?? []) if (cards.get(card.id) !== JSON.stringify(card)) ids.push(`draft:${current.blockId}:dialogue:${card.sentenceIds[0]}`);
+  // New or changed candidates: a known entity is announced under its own id
+  // (it lights up in place); a new one under its draft candidate id.
+  const candidates = new Map(previous.entityCandidates?.map(candidate => [candidate.key, JSON.stringify(candidate)]) ?? []);
+  for (const candidate of current.entityCandidates ?? []) if (candidates.get(candidate.key) !== JSON.stringify(candidate)) ids.push(candidateNodeId(current.blockId, candidate));
   return [...new Set(ids)];
 }

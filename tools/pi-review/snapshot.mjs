@@ -109,6 +109,25 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
         }
       }
       for (const unit of draft.dialogueUnits) if (!attached.has(unit[0]) && !completed.has(unit[0])) addDialogue(unit, null);
+      // Entity candidates found by faculties ahead of extraction: known
+      // entities light up in place; new ones appear as proposed candidates
+      // beside the draft scene where they were first seen. Once extraction
+      // has minted what a candidate became, only that entity is drawn.
+      for (const candidate of draft.entityCandidates ?? []) {
+        const span = remainingSpans.find((entry) => entry.includes(candidate.firstSentenceId));
+        const sceneId = span ? `draft:${draft.blockId}:scene:${span[0]}` : null;
+        let id;
+        if (candidate.existingId) {
+          if (!entityMap.has(candidate.existingId)) continue;
+          add(entityMap.get(candidate.existingId), 'entity', 'canon');
+          id = candidate.existingId;
+        } else {
+          if (candidate.resolvedId && nodes.some((node) => node.id === candidate.resolvedId)) continue;
+          id = `draft:${draft.blockId}:entity:${candidate.key}`;
+          add({ id, kind: candidate.kind, names: [{ text: candidate.name, kind: 'canonical' }] }, 'entity', 'proposed');
+        }
+        if (sceneId) draftLinks.push([sceneId, id, 'speaks']);
+      }
       for (let index = 1; index < remainingSpans.length; index++) draftLinks.push([`draft:${draft.blockId}:scene:${remainingSpans[index - 1][0]}`, `draft:${draft.blockId}:scene:${remainingSpans[index][0]}`, 'flow']);
     }
     const ids = new Set(nodes.map((node) => node.id));

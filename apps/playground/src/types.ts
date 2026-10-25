@@ -103,6 +103,8 @@ export type PlaygroundEvent =
   | { type: "changeset.held"; changesetId: string; nodeIds: string[] }
   | { type: "changeset.merged"; changesetId: string }
   | { type: "entity.merged"; keepId: string; dropId: string }
+  /** A faculty-found entity candidate became the entity extraction minted (or a known one). */
+  | { type: "candidate.resolved"; keepId: string; dropId: string }
   | { type: "entity.distinct"; aId: string; bId: string }
   | { type: "graph.rebuilt" }
   /** Album pre-process anchors for one block; the orbit resolves them to picture nodes at render. */

@@ -20,6 +20,7 @@ import { saveChangeSet } from "../../solidifier/merge/changesetStore.js";
 import { EventLog } from "../../ground/events/log.js";
 import type { EventSink } from "../../ground/events/types.js";
 import { saveWorkingDraft, touchedDraftIds, type WorkingDraft } from "./draft.js";
+import { resolveCandidates } from "./entityCandidates.js";
 import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../extraction/constraints.js";
 import { FacultyGraph, type FacultyGraphOptions } from "./facultyGraph.js";
 import { groundFacultyProposals } from "./facultyGrounding.js";
@@ -130,10 +131,10 @@ export class BlockProcessor {
           proposals: [], sceneSpans: [], dialogueUnits: [], turns: [], completedScenes: 0, totalScenes: 0,
         };
         let publishing = Promise.resolve();
-        const publish = (update: Partial<WorkingDraft>, announce = false) => {
+        const publish = (update: Partial<WorkingDraft> | ((current: WorkingDraft) => Partial<WorkingDraft>), announce = false) => {
           publishing = publishing.then(async () => {
             const previous = draft;
-            draft = { ...draft, ...update, updatedAt: new Date().toISOString() };
+            draft = { ...draft, ...(typeof update === "function" ? update(draft) : update), updatedAt: new Date().toISOString() };
             if (this.observation.novelDir) {
               await saveWorkingDraft(this.observation.novelDir, draft);
               // Phase B (decision #15): the working-draft stream is the
@@ -233,7 +234,9 @@ export class BlockProcessor {
             counts,
             constraints,
             sceneResults: faculty?.sceneResults,
-            onProgress: async (progress) => publish(progress, true),
+            // Candidates resolve in the same write that adds the entities
+            // they became, so the view never shows both at once.
+            onProgress: async (progress) => publish(current => ({ ...progress, ...(current.entityCandidates?.length ? { entityCandidates: resolveCandidates(current.entityCandidates, progress.proposals) } : {}) }), true),
           } satisfies ExtractionInput);
           result.changeset.proposals = out.proposals;
           Object.assign(result.changeset.reviewNotes, out.notes);
@@ -245,7 +248,7 @@ export class BlockProcessor {
         if (this.observation.semanticReview) result.changeset.reviewSource = sentences;
         if (this.observation.novelDir) await saveChangeSet(this.observation.novelDir, result.changeset);
         await telemetry;
-        await publish({ stage: "gate", patchId: "merge-gate", proposals: result.changeset.proposals });
+        await publish(current => ({ stage: "gate", patchId: "merge-gate", proposals: result.changeset.proposals, ...(current.entityCandidates?.length ? { entityCandidates: resolveCandidates(current.entityCandidates, result.changeset.proposals) } : {}) }));
         // No event emissions here: saveChangeSet is the emitter of record
         // for proposal.added / changeset.<status> — it fires them only
         // after the persisted state is visible, deduped by status change.

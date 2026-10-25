@@ -157,3 +157,34 @@ test('applied blocks do not falsely mark a still-working Pi final check complete
   await writeState('complete');
   assert.equal((await snapshot(directory, runtime, { volume: 1, activeVolume: 1 })).status, 'complete');
 }));
+
+test('entity candidates appear beside their draft scene before extraction; known ones light up in place; resolved ones hand over', () => fixture(async (directory, runtime) => {
+  await mkdir(`${directory}/working`);
+  await writeFile(`${directory}/ontology/entities.jsonl`, `${JSON.stringify(proposals[0].payload)}\n`);
+  const file = `${directory}/working/b0001.json`;
+  const draft = {
+    version: 1, blockId: 'b0001', chapterIndex: 0, stage: 'miniloop', patchId: 'entities-participants', updatedAt: new Date().toISOString(), proposals: [],
+    sceneSpans: [['b0000_s0001', 'b0000_s0002']], dialogueUnits: [], turns: [], completedScenes: 0, totalScenes: 1,
+    entityCandidates: [
+      { key: 'character-k1', name: 'Kuroko', kind: 'Character', aliases: [], status: 'new', presence: 'present', firstSentenceId: 'b0000_s0002', faculty: 'entities-participants' },
+      { key: 'existing:char_1', name: 'Example', kind: 'Character', aliases: [], status: 'existing', existingId: 'char_1', firstSentenceId: 'b0000_s0001', faculty: 'entities-participants' },
+      { key: 'existing:char_404', name: 'Gone', kind: 'Character', aliases: [], status: 'existing', existingId: 'char_404', faculty: 'entities-participants' },
+    ],
+  };
+  await writeFile(file, JSON.stringify(draft));
+  const early = (await snapshot(directory, runtime)).world.interiors.chapter_0;
+  const candidate = early.nodes.find((node) => node.id === 'draft:b0001:entity:character-k1');
+  assert.equal(candidate?.label, 'Kuroko');
+  assert.equal(candidate?.state, 'proposed');
+  assert.ok(early.edges.some((edge) => edge.from === 'draft:b0001:scene:b0000_s0001' && edge.to === candidate.id), 'tied to the scene where it was first seen');
+  assert.ok(early.nodes.some((node) => node.id === 'char_1' && node.state === 'canon'), 'a known character lights up rather than duplicating');
+  assert.ok(early.edges.some((edge) => edge.from === 'draft:b0001:scene:b0000_s0001' && edge.to === 'char_1'));
+  assert.ok(!early.nodes.some((node) => node.id === 'char_404'), 'unknown ids are never invented');
+  draft.stage = 'extraction';
+  draft.proposals = [{ id: 'p9', kind: 'upsert_entity', payload: { id: 'char_9', kind: 'Character', names: [{ text: 'Kuroko', kind: 'canonical' }] } }];
+  draft.entityCandidates[0].resolvedId = 'char_9';
+  await writeFile(file, JSON.stringify(draft));
+  const late = (await snapshot(directory, runtime)).world.interiors.chapter_0;
+  assert.ok(late.nodes.some((node) => node.id === 'char_9'));
+  assert.ok(!late.nodes.some((node) => node.id === candidate.id), 'once extracted, only the minted entity is drawn');
+}));

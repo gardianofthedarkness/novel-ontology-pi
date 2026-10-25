@@ -15,6 +15,7 @@ import { readSpeakerGuesses, speakerQuestions } from "./dialogueDecisions.js";
 import { attributeBlockTurns, joinAttributedTurns } from "./turnAttribution.js";
 import { attributeDialogueCards, joinDialogueCards, type NamedDialogueCard } from "./dialogueCards.js";
 import { containmentTargets, type FragmentTarget } from "../../solidifier/matching/fragmentMatch.js";
+import { addSceneCandidates, type EntityCandidate } from "./entityCandidates.js";
 
 const IDENTITY_SYSTEM = `FACULTY: entities-participants. Read only the supplied source. Return JSON with newEntities:[{name,kind,aliases:[{text,kind}]}], charactersPresent:[name], charactersMentioned:[name], locationName:string|null. Allowed kinds: Character, Location, Organization, Item, Concept. Copy every name and alias exactly from the source or registry, preserving its language/script. Include people newly named in this scene, even when merely mentioned, but distinguish physical presence from mention. Include grounded role descriptions when no personal name is given, never invented placeholders. A narrator's description is not a person's alias. Do not create animal entities. Household groups are Organizations. Registry membership never proves presence. Do not fuse different people on generic pronouns or descriptions. No events or summaries. Set "descriptive":true on a newEntities entry whose name is a role or appearance description rather than a proper name.`;
 
@@ -81,13 +82,17 @@ export class FacultyGraph {
     const sourceCards: NamedDialogueCard[] = [];
     const sceneSpans: string[][] = [];
     let dialogueSpans: [number, number][] = [];
+    let entityCandidates: EntityCandidate[] = [];
     let coverage = -1;
     let dialogueFailure: unknown;
     const coverageWaiters = new Set<() => void>();
     let progressChain = Promise.resolve();
     const publish = (patchId: string) => {
-      const update: Partial<WorkingDraft> = { patchId, sceneSpans: sceneSpans.map(span => [...span]), dialogueUnits: dialogueSpans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), turns: sourceTurns.map(turn => ({ speakerId: null, addresseeId: null, sentenceIds: [...turn.sentenceIds] })), ...(cardScope ? { dialogueCards: sourceCards.map(card => ({ id: card.id, sentenceIds: card.sentenceIds, participantNames: card.participantNames, unresolvedNames: card.unresolvedNames })) } : {}), totalScenes: sceneSpans.length };
-      progressChain = progressChain.then(() => input.onProgress?.(update));
+      const update: Partial<WorkingDraft> = { patchId, sceneSpans: sceneSpans.map(span => [...span]), dialogueUnits: dialogueSpans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), turns: sourceTurns.map(turn => ({ speakerId: null, addresseeId: null, sentenceIds: [...turn.sentenceIds] })), ...(cardScope ? { dialogueCards: sourceCards.map(card => ({ id: card.id, sentenceIds: card.sentenceIds, participantNames: card.participantNames, unresolvedNames: card.unresolvedNames })) } : {}), totalScenes: sceneSpans.length, entityCandidates };
+      // Draft telemetry is best-effort: a failing consumer must neither reject
+      // this publish nor poison the chain (a rejected chain would skip every
+      // later update and fail every later awaited publish).
+      progressChain = progressChain.then(() => input.onProgress?.(update)).catch(() => {});
       return progressChain;
     };
     const note = (key: string, message: string) => { changeset.reviewNotes[`faculty:${key}`] = message; };
@@ -400,9 +405,25 @@ export class FacultyGraph {
       return { ...llm, newEntities: remaining };
     };
 
+    /** Record entities a faculty just found, before extraction mints them. Draft-only telemetry: never let candidate recording fail identity work. */
+    const foundEntities = async (identities: LlmScene, firstSentenceId?: string) => {
+      try {
+        const next = addSceneCandidates(entityCandidates, identities, input.knownEntities, { firstSentenceId, faculty: "entities-participants" });
+        if (JSON.stringify(next) === JSON.stringify(entityCandidates)) return;
+        entityCandidates = next;
+        await publish("entities-participants");
+      } catch {
+        // The draft update is lost; the identities themselves are unaffected,
+        // and the next publish re-sends the current draft state.
+      }
+    };
     const blockIdentityNotes: string[] = [];
     const blockIdentities = blockTurnScope || cardScope ? Promise.all(sourceChunks(input.sentences, { maxBytes: 7000, maxSentences: 48, margin: 4 }).map(async (chunk, index) => {
-      try { return await resolveBirths(await identityChunk(chunk, blockIdentityNotes), chunk.context, blockIdentityNotes); } catch {
+      try {
+        const identities = await resolveBirths(await identityChunk(chunk, blockIdentityNotes), chunk.context, blockIdentityNotes);
+        await foundEntities(identities, chunk.core[0]?.id);
+        return identities;
+      } catch {
         note(`block-identity:${index}`, "Block identity discovery failed, exceeded its budget or was unavailable; no identity was invented and unresolved references require review.");
         return { newEntities: [] } as LlmScene;
       }
@@ -420,7 +441,10 @@ export class FacultyGraph {
       const identity = safely<LlmScene>("entities-participants", async () => {
         const parts = await Promise.all(sourceChunks(sentences, { maxBytes: 7_000, maxSentences: 48, margin: 4 }).map(chunk => safely<LlmScene>("entities-participants chunk", () => identityChunk(chunk, notes), { newEntities: [], charactersPresent: [], charactersMentioned: [] })));
         return { newEntities: parts.flatMap(part => part.newEntities ?? []), charactersPresent: [...new Set(parts.flatMap(part => part.charactersPresent ?? []))], charactersMentioned: [...new Set(parts.flatMap(part => part.charactersMentioned ?? []))], locationName: parts.map(part => part.locationName).find(Boolean) ?? null } satisfies LlmScene;
-      }, { newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null } as LlmScene).then(llm => resolveBirths(llm, sentences, notes));
+      }, { newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null } as LlmScene).then(llm => resolveBirths(llm, sentences, notes)).then(async identities => {
+        await foundEntities(identities, span[0]);
+        return identities;
+      });
       const understanding = safely<LlmScene>("scene-understanding", async () => {
         const parts = await Promise.all(sourceChunks(sentences, { maxBytes: 7_000, maxSentences: 48, margin: 4 }).map(chunk => safely<LlmScene>("scene-understanding chunk", () => understandingChunk(chunk, sceneIndex), { events: [] })));
         const events: NonNullable<LlmScene["events"]> = [];
