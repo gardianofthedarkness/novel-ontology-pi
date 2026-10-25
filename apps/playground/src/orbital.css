@@ -96,3 +96,22 @@
 .causal-links button { display: flex; flex-direction: column; gap: 2px; text-align: left; width: 100%; }
 .causal-links small { color: #8cb8d4; font-size: 9px; }
 .orbital-label .causal-inside { display: block; color: #ffb48c; font-size: 8px; letter-spacing: .04em; }
+.orbital-hover-card { position: absolute; left: 0; top: 0; z-index: 7; pointer-events: none; max-width: 240px; padding: 8px 11px; border-radius: 10px; background: linear-gradient(135deg, #9fd2ff1f, #0b1c2cd0); border: 1px solid #a9d8f255; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: #e8f5ff; box-shadow: inset 0 1px #edf7ff22, 0 8px 28px #0008; }
+.orbital-hover-card .hover-kind { display: block; font-size: 8px; letter-spacing: .14em; text-transform: uppercase; color: #8fcaf0; }
+.orbital-hover-card b { display: block; font-size: 12px; line-height: 1.4; margin: 3px 0; }
+.orbital-hover-card b span { display: inline-block; white-space: pre; animation: hover-roll .32s cubic-bezier(.2, .8, .2, 1) both; }
+.orbital-hover-card small { font-size: 9px; color: #9fb6c8; }
+@keyframes hover-roll { from { opacity: 0; transform: translateY(70%); } to { opacity: 1; transform: none; } }
+.reduce-motion .orbital-hover-card b span { animation: none; }
+@media (prefers-reduced-motion: reduce) { .orbital-hover-card b span { animation: none; } }
+.orbital-label.is-hovered b { color: #fff; text-shadow: 0 0 12px #7cc8ff99, 0 1px 7px #050b15; }
+/* Rolling titles (RollingText): characters roll up one after another on change. */
+.rolling-text > span { display: inline-block; white-space: pre; animation: hover-roll .32s cubic-bezier(.2, .8, .2, 1) both; }
+.rolling-text > .rolling-rest { animation-delay: .45s; }
+.reduce-motion .rolling-text > span { animation: none; }
+@media (prefers-reduced-motion: reduce) { .rolling-text > span { animation: none; } }
+/* Opening sequence hint. */
+.orbital-intro-skip { position: absolute; left: 50%; bottom: 18%; z-index: 4; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #cfe7f7; background: #0b1826b3; border: 1px solid #8fc7d433; pointer-events: none; animation: intro-hint 2.6s ease both; }
+@keyframes intro-hint { 0% { opacity: 0; } 15%, 80% { opacity: .9; } 100% { opacity: 0; } }
+/* The record bar takes swipes on touch screens instead of scrolling the page. */
+@media (pointer: coarse) { .transport { touch-action: none; } }

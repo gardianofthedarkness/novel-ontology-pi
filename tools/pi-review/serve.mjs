@@ -8,6 +8,7 @@ import { root, repo, agentEvents } from './config.mjs';
 import { streamSnapshots } from './live-stream.mjs';
 import { createPiConsole } from './pi-console.mjs';
 import { bookCatalog } from './book-catalog.mjs';
+import { resolveAlbumAsset } from './album.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -94,7 +95,14 @@ async function configuredLive({ volume, activityAfter }) {
   return { ...data, availableVolumes: volumes.map(entry => entry.id), books: bookCatalog(volumes), activeVolume: active.volume };
 }
 
-export async function createViewer({ port = 4324, origin, expiresAt, readLive = configuredLive, watchPaths, console: consoleOptions, dist = `${repo}/apps/playground/dist` } = {}) {
+async function configuredWorkspace(volume) {
+  const { volumes, active } = await liveConfiguration();
+  const selected = volumes.find(entry => entry.id === (volume === 'active' ? active.volume : Number(volume)));
+  if (!selected) throw new Error('Unknown volume');
+  return resolve(root, selected.workspace);
+}
+
+export async function createViewer({ port = 4324, origin, expiresAt, readLive = configuredLive, resolveWorkspace = readLive === configuredLive ? configuredWorkspace : undefined, watchPaths, console: consoleOptions, dist = `${repo}/apps/playground/dist` } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new TypeError('Invalid loopback port');
   const expiry = deadline(expiresAt);
   if (origin !== undefined) validateOrigin(origin, port);
@@ -133,6 +141,16 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
       if (scopedPath === '/api/pi') {
         if (!piConsole) { send(404); return; }
         send(200, JSON.stringify(await bounded(() => piConsole.read())), { 'Content-Type': 'application/json; charset=utf-8' });
+        return;
+      }
+      if (scopedPath === '/api/album-asset') {
+        // Read-only album images (EPUB pictures and bound portraits) for the
+        // selected book; only files listed in its album records under assets/.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && !/^[1-9]\d*$/.test(volume)) { send(404); return; }
+        const asset = await bounded(async () => resolveAlbumAsset(await resolveWorkspace(volume), url.searchParams.get('id')));
+        if (!asset) { send(404); return; }
+        send(200, await readFile(asset.filename), { 'Content-Type': asset.type });
         return;
       }
       if (['/api/live', '/db/novel/view.json', '/api/live/stream'].includes(scopedPath)) {

@@ -4,6 +4,7 @@ import { runOutcome } from './run-outcome.mjs';
 import { sceneContext } from './scene-context.mjs';
 import { liveActivity } from './live-activity.mjs';
 import { sessionReviewProgress } from './review-progress.mjs';
+import { albumProjection } from './album.mjs';
 
 async function json(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return fallback; throw error; }
@@ -194,6 +195,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     reasonCodes: outcome?.held.includes(publicStatus?.changesetId) ? publicStatus.reasonCodes : [],
     counts: { entities: entityMap.size, events: eventMap.size, scenes: sceneMap.size, relations: relations.length, repairs: maintenance.length, ghosts: Object.values(interiors).flatMap((interior) => interior.nodes).filter((node) => node.state !== 'canon').length },
     chapters: chapters.map((chapter) => ({ index: chapter.index, title: chapter.title, characters: chapter.characters })),
+    album: await albumProjection(directory, new Map([...entityMap.values()].map((entity) => [entity.id, entity.names?.find((form) => form.kind === 'canonical')?.text ?? entity.names?.[0]?.text ?? entity.id]))),
     updatedAt: new Date().toISOString(),
   };
 }

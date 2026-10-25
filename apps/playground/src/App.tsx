@@ -15,12 +15,17 @@ import { OrbitalExplorer, type OrbitalInspection } from "./components/OrbitalExp
 import type { OrbitIllustration } from "./data/pictureNodes";
 import "./orbital.css";
 import "./live.css";
+import "./glass.css";
+import { RollingText } from "./components/RollingText";
+import { attachSwipe } from "./swipe";
+import type { Swipe } from "./data/gestures";
 import type { LiveActivity } from "./data/liveActivity";
 import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
 import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
 import { worldCausalLinks } from "./data/causalProjection";
 import { freshIdentityEvents, type PendingJoin } from "./data/joinAnimation";
+import { liveAlbum, sameAlbumEntries, type LiveAlbum } from "./data/liveAlbum";
 import { acceptsSnapshot, bookName, bookOptionLabel, bookQuery, libraryBooks, parseBookParam, sameBooks, viewedBook, type BookEntry } from "./data/bookCatalog";
 import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
 import type {
@@ -48,6 +53,7 @@ interface LiveSnapshot {
   activeVolume?: number;
   availableVolumes?: number[];
   books?: BookEntry[];
+  album?: LiveAlbum;
   jobLabel?: string;
   counts: { entities: number; events: number; repairs: number; ghosts: number };
   workSite?: string;
@@ -160,6 +166,7 @@ export default function App() {
   /** The most recently emerged ghost node — where System 1 is knitting right now (Phase B). */
   const lastKnitRef = useRef<{ node: WorldNode; chapterId: string } | null>(null);
   useEffect(() => () => { if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current); }, []);
+  // Glass panels catch the pointer (static under reduced motion).
   const inspectorRef = useRef<HTMLDivElement>(null);
   const labelBus = useMemo<LabelBus>(
     () => ({ targets: new Map(), active: new Set(), positions: new Map(), trackTargets: new Map() }),
@@ -412,6 +419,12 @@ export default function App() {
         const nextBooks = libraryBooks(data);
         setBooks((previous) => sameBooks(previous, nextBooks) ? previous : nextBooks);
         setAgentBook(data.activeVolume ?? null);
+        if (data.album) {
+          // Live album: anchored EPUB pictures and bound portraits from the snapshot.
+          const album = liveAlbum(data.album, volume);
+          setAlbumPictures((previous) => sameAlbumEntries(previous, album.pictures) ? previous : album.pictures);
+          setAlbumPortraits((previous) => sameAlbumEntries(previous, album.portraits) ? previous : album.portraits);
+        }
         if (pinnedBookRef.current === null && volume !== null) setPinnedBook(volume);
         current = data;
         if (data.world !== previousWorld) {
@@ -653,6 +666,14 @@ export default function App() {
     if (orbitalMode && displayNodes.length) { requestOrbitalFocus(displayNodes[(selectedIndex + step + displayNodes.length) % displayNodes.length]); return; }
     if (nodes.length) activateNode(nodes[(selectedIndex + step + nodes.length) % nodes.length]);
   };
+  /** Phone swipes on the record bar: left/right step records, up/down move
+   * one orbital level deeper or back (the canvas keeps its own drag). */
+  const swipeRef = useRef<(swipe: Swipe) => void>(() => {});
+  const transportRef = useCallback((bar: HTMLElement | null) => bar ? attachSwipe(bar, (swipe) => swipeRef.current(swipe)) : undefined, []);
+  swipeRef.current = (swipe) => {
+    if (swipe === "left" || swipe === "right") { stepRecord(swipe === "left" ? 1 : -1); return; }
+    if (orbitalMode) document.querySelector(".orbital-stage")?.dispatchEvent(new CustomEvent("orbital-nav", { detail: swipe === "up" ? "deeper" : "back" }));
+  };
   const overview = () => {
     setOrbitalReset((current) => current + 1);
     setOrbitalInspection(null);
@@ -711,7 +732,7 @@ export default function App() {
         <span className="sample-badge"><i />{phoneLive || liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">
-        <div><div className="eyebrow">{phoneLive ? liveCollection : "COLLECTION 001 / INDEX SAMPLE"}{followingActivity && orbitalPage ? ` / ${orbitalPage.kind.toUpperCase()} OVERVIEW` : ""}</div><h1>{followingActivity && orbitalPage ? orbitalPage.label : view.mode === "lanes" ? "Narrative archive." : shownWorld.bigEventLabels[view.bigEventId]}</h1>{phoneLive && <p className="live-runtime-status" role="status">{followingActivity ? liveActivity?.phase ?? liveLabel : liveLabel}<small>{liveCounts.ghosts} ghosts · {liveCounts.entities} canonical entities · {liveCounts.events} events · {liveCounts.repairs} audited operations · live updates</small></p>}</div>
+        <div><div className="eyebrow">{phoneLive ? liveCollection : "COLLECTION 001 / INDEX SAMPLE"}{followingActivity && orbitalPage ? ` / ${orbitalPage.kind.toUpperCase()} OVERVIEW` : ""}</div><h1><RollingText text={followingActivity && orbitalPage ? orbitalPage.label : view.mode === "lanes" ? "Narrative archive." : shownWorld.bigEventLabels[view.bigEventId] ?? ""} /></h1>{phoneLive && <p className="live-runtime-status" role="status">{followingActivity ? liveActivity?.phase ?? liveLabel : liveLabel}<small>{liveCounts.ghosts} ghosts · {liveCounts.entities} canonical entities · {liveCounts.events} events · {liveCounts.repairs} audited operations · live updates</small></p>}</div>
         <div className={`heading-caption${view.mode === "interior" ? " interior-heading" : ""}`}>{view.mode === "lanes" ? <><span>One world. Parallel stories.</span><small>Click a file or scroll closer to enter.</small></> : <><button className="back-link" onClick={overview}>← Back to chronology</button><small>EVENT INTERIOR / {sourceNodes.length} RECORDS</small></>}</div>
       </div>
       <main className="workspace">
@@ -771,7 +792,7 @@ export default function App() {
       {phoneLive && <PiReviewProgress review={liveActivity?.review} />}
       {phoneLive && <PiConsole />}
       {identityNotice && <div className="identity-notice" role="status">{identityNotice}</div>}
-      <footer className="transport">
+      <footer className="transport" ref={transportRef}>
         <div className="selection-counter"><span className="eyebrow">RECORD / SELECT</span><div>{String(selected ? selectedIndex + 1 : 0).padStart(2, "0")}<small>/ {String(displayNodes.length).padStart(2, "0")}</small></div></div>
         <div className="record-transport"><button className="arrow-button" aria-label="Previous record" disabled={!nodes.length} onClick={() => stepRecord(-1)}>←</button><div><strong>{selected?.label ?? "Archive"}</strong><span>{selected ? `${KIND_LABEL[selected.kind]} / ${selected.lane}` : "No records"}</span></div><button className="arrow-button" aria-label="Next record" disabled={!nodes.length} onClick={() => stepRecord(1)}>→</button></div>
         <div className="session-controls"><span className="eyebrow">{phoneLive || liveUrl ? "LIVE / NOVEL WATCH" : "LOCAL FILE REPLAY / DEMO"}</span>{phoneLive ? <a href="replay/">Session replay ↗</a> : <button onClick={startSession}>Replay session ↻</button>}</div>
