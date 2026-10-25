@@ -185,6 +185,35 @@ Recommended sharing:
   independent writers. This package does not provision authentication, platform
   storage, billing limits or a Space; do not publish an open shared Pi operator.
 
+## Optional private historical Vol1 data
+
+The separately hosted [Vol1 developer snapshot](https://huggingface.co/datasets/gardianofthedarkness/novel-ontology-vol1-dev)
+is **private**, personally owned, and currently accessible only to its owner.
+GitHub collaborators do not automatically get Hugging Face access. Team access
+requires a separately authorized arrangement; do not make the dataset public.
+It contains third-party novel text and historical extraction, not CC0 data,
+a gold benchmark, or newly certified facts. No redistribution rights are granted.
+The public synthetic fixture remains the default for every playground command.
+
+An authorized account can download the pinned snapshot using the Hugging Face
+CLI after authenticating through its normal secure login flow:
+
+```sh
+hf download gardianofthedarkness/novel-ontology-vol1-dev PRIVATE-vol1-dev-v1.tar.gz \
+  --repo-type dataset --revision 86d878de44e19b94e0a55d9ca8023cc7b83d85fd \
+  --local-dir .team-playground/imports/vol1
+shasum -a 256 .team-playground/imports/vol1/PRIVATE-vol1-dev-v1.tar.gz
+```
+
+Expected SHA-256:
+`af5a2266ef3e2b642408f0efef0d0c5519269f2664234cdf70189168976fb8fb`.
+Keep downloaded data ignored and private. Follow the archive's README and
+integrity manifest, import into a disposable workspace, and rebuild its native
+graph. Never overwrite a live writer's database. The archive excludes credentials,
+operator links, Pi sessions, private audit reasons, raw model responses,
+ChangeSets, original EPUBs, and native graph files. No paid processing or public
+hosting starts from downloading it; provider credentials are supplied separately.
+
 ## Phone access and development safety
 
 Only open a tunnel when the owner explicitly asks. Tunnel the protected outer
