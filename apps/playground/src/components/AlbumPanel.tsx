@@ -66,7 +66,7 @@ function PictureArt({ picture, small }: { picture: AlbumPanelPicture; small?: bo
   const [loaded, setLoaded] = useState(false);
   const servable = picture.asset.includes("/") || picture.asset.startsWith("http");
   return (
-    <div style={{ position: "relative" }}>
+    <div className="glass-frame">
       {servable && (
         <img
           src={picture.asset}

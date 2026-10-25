@@ -1,11 +1,11 @@
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type NodeRendererProps } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { BufferGeometry, CanvasTexture, Mesh, MeshBasicMaterial, MeshStandardMaterial, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
+import { BoxGeometry, BufferGeometry, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
 import { recordColor } from "../archive";
-import type { WorldEdge } from "../types";
+import type { WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
-import { entryFrame, interpolatePose, uncoilEase, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
+import { carryPose, carryTangent, entryFrame, interpolatePose, uncoilEase, type OrbitalPose, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
 import type { CausalArrow } from "../data/causalProjection";
 import { breathOffset, glintLevel, now, rippleOffset, RIPPLE_LIFE, RIPPLE_SPEED, type MotionBus } from "../data/orbitalMotion";
 import { framePositions, type LabelBus } from "./WorldGraph";
@@ -21,22 +21,50 @@ interface GlyphData {
   motion: MotionBus;
 }
 export const ORBITAL_TRANSITION_MS = 1100;
+/** A glyph's morph pose each frame, carrying its velocity into a transition
+ * that interrupts another (view only; reduced motion jumps straight there). */
+function useCarriedPose(draw: OrbitalDraw, morph: OrbitalMorph | null, reducedMotion: boolean) {
+  const state = useRef<{ last: Position3 | null; velocity: Position3; startedAt: number | null; tangent?: Position3 }>({ last: null, velocity: [0, 0, 0], startedAt: null });
+  return (delta: number): OrbitalPose => {
+    const memory = state.current;
+    const from = morph?.from.get(draw.node.id);
+    if (morph && memory.startedAt !== morph.startedAt) {
+      memory.startedAt = morph.startedAt;
+      memory.tangent = from && !reducedMotion ? carryTangent(memory.velocity, ORBITAL_TRANSITION_MS / 1000, from, draw) : undefined;
+    }
+    const pose = from ? carryPose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS, memory.tangent) : draw;
+    if (memory.last && delta > 0 && delta < 0.2) {
+      const follow = Math.min(1, delta * 12);
+      memory.velocity = memory.velocity.map((value, axis) => value + ((pose.position[axis] - memory.last![axis]) / delta - value) * follow) as Position3;
+    }
+    memory.last = pose.position;
+    return pose;
+  };
+}
+
 const noRaycast = () => undefined;
 
 function SphereGlyph({ node, active }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
   const { draw, morph, reducedMotion, transparent, selected, touched, motion } = data;
+  const carried = useCarriedPose(draw, morph, reducedMotion);
   const body = useRef<MeshStandardMaterial>(null);
   /** Followers for hover swell and selection lift (view only). */
   const hover = useRef(0), lift = useRef(0);
+  /** Frosted reveal: 0 = frosted (normal), 1 = cleared (revealed parent). */
+  const clear = useRef(transparent ? 1 : 0);
+  /** Ghost → canon: when this record's state becomes canon, it clears into solid. */
+  const previousState = useRef(draw.node.state);
+  const arrival = useRef<{ start: number; from: number } | null>(null);
+  const frost = useRef<MeshStandardMaterial>(null);
+  const frostPlane = useMemo(() => new Plane(new Vector3(0, -1, 0), 0), []);
   const color = recordColor(draw.node);
   const preimage = draw.role === "preimage";
   const nebula = draw.role === "nebula" || preimage;
   useFrame((_, delta) => {
     if (!group.current) return;
-    const from = morph?.from.get(draw.node.id);
-    const pose = from ? interpolatePose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS) : draw;
+    const pose = carried(delta);
     const t = now();
     hover.current += ((motion.hoveredId === draw.node.id ? 1 : 0) - hover.current) * (reducedMotion ? 1 : Math.min(1, delta * 10));
     lift.current += ((selected && (draw.role === "main" || draw.role === "preview") ? 1 : 0) - lift.current) * (reducedMotion ? 1 : Math.min(1, delta * 6));
@@ -46,12 +74,37 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
     group.current.position.set(pose.position[0] - draw.position[0] + breath[0] + ripple[0], pose.position[1] - draw.position[1] + breath[1] + ripple[1] + raise, pose.position[2] - draw.position[2] + breath[2] + ripple[2]);
     const pulse = draw.node.state === "proposed" && !reducedMotion ? 1 + 0.035 * Math.sin(t * 2.2) : 1;
     group.current.scale.setScalar(pose.radius / draw.radius * (1 + 0.08 * hover.current) * pulse);
+    // Frost front: the frosted shell keeps only what lies below a horizontal
+    // front that sweeps top → bottom as the sphere clears (and back up).
+    clear.current += ((transparent ? 1 : 0) - clear.current) * (reducedMotion ? 1 : Math.min(1, delta / 0.12));
+    if (previousState.current !== draw.node.state) {
+      if (draw.node.state === "canon" && previousState.current !== "canon" && !reducedMotion) arrival.current = { start: t, from: stateOpacity(previousState.current) };
+      previousState.current = draw.node.state;
+    }
+    const arriving = arrival.current ? Math.min(1, (t - arrival.current.start) / 0.9) : 1;
+    if (arriving >= 1) arrival.current = null;
+    const eased = clear.current * clear.current * (3 - 2 * clear.current);
+    if (body.current) body.current.opacity = (arrival.current ? arrival.current.from + (solid - arrival.current.from) * arriving : solid + (0.055 - solid) * eased) * (preimage ? 0.75 : 1);
+    if (frost.current) {
+      const front = arrival.current ? arriving : clear.current;
+      const active = arrival.current !== null || (clear.current > 0.01 && clear.current < 0.99);
+      frost.current.visible = active;
+      if (active) {
+        const centre = group.current.getWorldPosition(new Vector3()).y;
+        const reach = draw.radius * group.current.scale.x * 1.02;
+        frostPlane.constant = centre + reach * (1 - 2 * front);
+        frost.current.color.set(arrival.current ? "#ffe2a8" : "#e8f4ff");
+      }
+    }
     if (body.current) body.current.emissiveIntensity = baseGlow + 0.35 * hover.current + (reducedMotion ? 0 : 0.7 * glintLevel(motion.glints.get(draw.node.id), t));
   });
   /** Nebula weight: strongly linked entities are solid, weak ones faint —
    * proposed/held keep their own (lower) bands so states stay distinct. */
   const weight = nebula ? Math.min(1, Math.max(0, draw.prominence ?? 0.7)) : 1;
   const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? (nebula ? 0.14 + 0.22 * weight : 0.3) : draw.node.state === "held" ? (nebula ? 0.25 + 0.3 * weight : 0.5) : nebula ? 0.18 + 0.67 * weight : 0.9;
+  /** Opacity for a record state, before any reveal (states stay distinct). */
+  const stateOpacity = (state: WorldNode["state"]) => state === "proposed" ? (nebula ? 0.14 + 0.22 * weight : 0.3) : state === "held" ? (nebula ? 0.25 + 0.3 * weight : 0.5) : nebula ? 0.18 + 0.67 * weight : 0.9;
+  const solid = stateOpacity(draw.node.state);
   const light = nebula && weight < 0.35 && !selected;
   const shown = preimage ? opacity * 0.75 : opacity;
   const segments: [number, number] = light ? [16, 12] : [32, 24];
@@ -61,6 +114,10 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
     <mesh raycast={transparent || preimage ? noRaycast : undefined}>
       <sphereGeometry args={[draw.radius, ...segments]} />
       <meshStandardMaterial ref={body} color={nebula ? color : "#12283c"} emissive={color} emissiveIntensity={baseGlow} metalness={0.35} roughness={0.27} transparent opacity={shown} depthWrite={!transparent && !preimage && draw.node.state === "canon" && opacity >= 0.5} />
+    </mesh>
+    <mesh raycast={noRaycast}>
+      <sphereGeometry args={[draw.radius * 1.012, 24, 16]} />
+      <meshStandardMaterial ref={frost} color="#e8f4ff" roughness={1} metalness={0} transparent opacity={0.26} depthWrite={false} clippingPlanes={[frostPlane]} visible={false} />
     </mesh>
     <mesh raycast={noRaycast}>
       <sphereGeometry args={[draw.radius * 1.035, light ? 10 : 20, light ? 8 : 16]} />
@@ -119,15 +176,70 @@ function pictureTexture(kind: string, shortId: string): CanvasTexture {
 /** Framed picture card that always faces the camera (billboard).
  * Mirrors SphereGlyph's morph position/scale handling and sets
  * userData.orbitalGlyph so the label/position bus keeps working. */
+/** One shared diagonal highlight stripe; each card clones it to move its own offset. */
+let sheenSource: CanvasTexture | null = null;
+function sheenTexture(): CanvasTexture {
+  if (!sheenSource) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 256;
+    const context = canvas.getContext("2d")!;
+    const gradient = context.createLinearGradient(0, 256, 256, 0);
+    gradient.addColorStop(0, "rgba(255,255,255,0)");
+    gradient.addColorStop(0.42, "rgba(255,255,255,0)");
+    gradient.addColorStop(0.5, "rgba(255,255,255,0.85)");
+    gradient.addColorStop(0.56, "rgba(255,255,255,0.18)");
+    gradient.addColorStop(0.62, "rgba(255,255,255,0)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 256, 256);
+    sheenSource = new CanvasTexture(canvas);
+    sheenSource.wrapS = sheenSource.wrapT = RepeatWrapping;
+  }
+  return sheenSource;
+}
+
+/** Glass case over an album card (Rhine-style): a clear-coated pane, light
+ * catching on the edges, and a highlight band sweeping slowly across —
+ * brighter while hovered, still under reduced motion. View only. */
+function GlassCase({ id, width, height, depth, opacity, motion, reducedMotion }: { id: string; width: number; height: number; depth: number; opacity: number; motion: MotionBus; reducedMotion: boolean }) {
+  const parts = useMemo(() => {
+    const sheen = sheenTexture().clone();
+    sheen.needsUpdate = true;
+    sheen.repeat.set(0.6, 0.6);
+    const box = new BoxGeometry(width * 1.1, height * 1.1, depth * 1.6);
+    return {
+      pane: new MeshPhysicalMaterial({ color: "#d6ecff", transparent: true, opacity: 0.1 * opacity, roughness: 0.06, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04, depthWrite: false }),
+      sheen,
+      sheenMaterial: new MeshBasicMaterial({ map: sheen, transparent: true, opacity: 0.22 * opacity, depthWrite: false, toneMapped: false }),
+      edges: new EdgesGeometry(box),
+      box,
+      edgeMaterial: new LineBasicMaterial({ color: "#e6f6ff", transparent: true, opacity: 0.38 * opacity, depthWrite: false, toneMapped: false }),
+    };
+  }, [width, height, depth, opacity]);
+  useEffect(() => () => { parts.pane.dispose(); parts.sheen.dispose(); parts.sheenMaterial.dispose(); parts.edges.dispose(); parts.box.dispose(); parts.edgeMaterial.dispose(); }, [parts]);
+  const hover = useRef(0);
+  useFrame((_, delta) => {
+    hover.current += ((motion.hoveredId === id ? 1 : 0) - hover.current) * Math.min(1, delta * 8);
+    if (!reducedMotion) parts.sheen.offset.set((now() * 0.07 + (id.length % 7) * 0.13) % 1, 0);
+    parts.sheenMaterial.opacity = (0.22 + 0.35 * hover.current) * opacity;
+    parts.edgeMaterial.opacity = (0.38 + 0.4 * hover.current) * opacity;
+  });
+  return <>
+    <mesh raycast={noRaycast} position={[0, 0, depth * 0.9]} material={parts.pane}><planeGeometry args={[width * 1.08, height * 1.08]} /></mesh>
+    <mesh raycast={noRaycast} position={[0, 0, depth * 0.95]} material={parts.sheenMaterial}><planeGeometry args={[width * 1.08, height * 1.08]} /></mesh>
+    <lineSegments raycast={noRaycast} geometry={parts.edges} material={parts.edgeMaterial} />
+  </>;
+}
+
 function PictureGlyph({ node }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
   const { draw, morph, reducedMotion, transparent, selected, touched } = data;
+  const carried = useCarriedPose(draw, morph, reducedMotion);
   const { camera } = useThree();
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!group.current) return;
-    const from = morph?.from.get(draw.node.id);
-    const pose = from ? interpolatePose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS) : draw;
+    const pose = carried(delta);
     group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1], pose.position[2] - draw.position[2]);
     group.current.scale.setScalar(pose.radius / draw.radius);
     /** Fixed orientation: the card's plane stands perpendicular to the
@@ -159,6 +271,7 @@ function PictureGlyph({ node }: NodeRendererProps) {
       <planeGeometry args={[width, height]} />
       <meshBasicMaterial map={pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
     </mesh>
+    {!transparent && <GlassCase id={draw.node.id} width={width} height={height} depth={Math.max(1, draw.radius * 0.08)} opacity={opacity} motion={data.motion} reducedMotion={reducedMotion} />}
     {selected && <mesh raycast={noRaycast} position={[0, 0, Math.max(1, draw.radius * 0.06)]}>
       <planeGeometry args={[width * 1.14, height * 1.14]} />
       <meshBasicMaterial color="#ccf4ff" wireframe transparent opacity={0.65} />
@@ -172,11 +285,11 @@ function PortraitGlyph({ node }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
   const { draw, morph, reducedMotion, transparent, selected, touched } = data;
+  const carried = useCarriedPose(draw, morph, reducedMotion);
   const { camera } = useThree();
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!group.current) return;
-    const from = morph?.from.get(draw.node.id);
-    const pose = from ? interpolatePose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS) : draw;
+    const pose = carried(delta);
     group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1], pose.position[2] - draw.position[2]);
     group.current.scale.setScalar(pose.radius / draw.radius);
     group.current.quaternion.copy(camera.quaternion);
@@ -195,6 +308,7 @@ function PortraitGlyph({ node }: NodeRendererProps) {
       <planeGeometry args={[width, height]} />
       <meshBasicMaterial map={pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
     </mesh>
+    {!transparent && <GlassCase id={draw.node.id} width={width} height={height} depth={Math.max(1, draw.radius * 0.08)} opacity={opacity} motion={data.motion} reducedMotion={reducedMotion} />}
     {selected && <mesh raycast={noRaycast} position={[0, 0, Math.max(1, draw.radius * 0.06)]}>
       <planeGeometry args={[width * 1.14, height * 1.14]} />
       <meshBasicMaterial color="#ccf4ff" wireframe transparent opacity={0.65} />
@@ -265,7 +379,7 @@ const CAUSAL_SAMPLES = 24;
 
 /** Stored CAUSES links: cause → effect arcs lifted off the time spine.
  * Dashed = projected onto containing spheres; solid = event to event. */
-function CausalArc({ arrow, bus, radii }: { arrow: CausalArrow; bus: LabelBus; radii: Map<string, number> }) {
+function CausalArc({ arrow, bus, radii, reducedMotion }: { arrow: CausalArrow; bus: LabelBus; radii: Map<string, number>; reducedMotion: boolean }) {
   const line = useMemo(() => {
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(new Float32Array((CAUSAL_SAMPLES + 1) * 3), 3));
@@ -278,6 +392,9 @@ function CausalArc({ arrow, bus, radii }: { arrow: CausalArrow; bus: LabelBus; r
   }, [arrow.state, arrow.projected]);
   useEffect(() => () => { line.geometry.dispose(); (line.material as LineBasicMaterial).dispose(); }, [line]);
   const head = useRef<Group>(null);
+  /** A bead flowing cause → effect, so direction reads without the arrowhead. */
+  const bead = useRef<Group>(null);
+  const phase = useMemo(() => [...arrow.id].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 100 / 100, [arrow.id]);
   const width = Math.min(3, 1 + Math.log2(arrow.links.length));
   useFrame(() => {
     const from = bus.positions.get(arrow.from), to = bus.positions.get(arrow.to);
@@ -295,6 +412,10 @@ function CausalArc({ arrow, bus, radii }: { arrow: CausalArrow; bus: LabelBus; r
     attribute.needsUpdate = true;
     line.geometry.computeBoundingSphere();
     if (arrow.projected) line.computeLineDistances();
+    if (bead.current) {
+      bead.current.visible = !reducedMotion;
+      if (!reducedMotion) bead.current.position.copy(curve.getPoint(startT + (endT - startT) * ((now() * 0.35 + phase) % 1)));
+    }
     if (head.current) {
       head.current.position.copy(curve.getPoint(endT));
       head.current.quaternion.copy(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), curve.getTangent(endT).normalize()));
@@ -302,6 +423,7 @@ function CausalArc({ arrow, bus, radii }: { arrow: CausalArrow; bus: LabelBus; r
   });
   return <>
     <primitive object={line} raycast={noRaycast} />
+    <group ref={bead}><mesh raycast={noRaycast}><sphereGeometry args={[5 * width, 10, 8]} /><meshBasicMaterial color="#ffd9c2" transparent opacity={arrow.state === "canon" ? 0.95 : 0.6} toneMapped={false} /></mesh></group>
     <group ref={head}><mesh raycast={noRaycast} position={[0, -9 * width, 0]}><coneGeometry args={[6 * width, 18 * width, 8]} /><meshBasicMaterial color={CAUSAL_COLOR[arrow.state]} transparent opacity={arrow.state === "canon" ? 0.95 : 0.65} toneMapped={false} /></mesh></group>
   </>;
 }
@@ -392,6 +514,13 @@ function PointerParallax({ graphRef, enabled }: { graphRef: { current: GraphCanv
     const reach = controls.distance * 0.012;
     void controls.setFocalOffset(current.current[0] * reach, -current.current[1] * reach, 0, false);
   });
+  return null;
+}
+
+/** Frost fronts use per-material clipping planes. */
+function LocalClipping() {
+  const { gl } = useThree();
+  useEffect(() => { gl.localClippingEnabled = true; }, [gl]);
   return null;
 }
 
@@ -567,8 +696,9 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <VisibleConnections edges={edges} bus={bus} />
     {hoverEdges.length > 0 && <VisibleConnections edges={hoverEdges} bus={bus} color="#d9cbff" opacity={0.55} />}
     {!reducedMotion && <RippleRings motion={motion} />}
+    <LocalClipping />
     <PointerParallax graphRef={ref as { current: GraphCanvasRef | null }} enabled={!reducedMotion} />
-    {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} />)}
+    {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} reducedMotion={reducedMotion} />)}
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
     <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />

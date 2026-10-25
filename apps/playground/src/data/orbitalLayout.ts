@@ -26,6 +26,27 @@ export const interpolatePose = (from: OrbitalPose, to: OrbitalPose, progress: nu
   const amount = uncoilEase(progress);
   return { position: to.position.map((value, axis) => from.position[axis] + (value - from.position[axis]) * amount) as Position3, radius: from.radius + (to.radius - from.radius) * amount };
 };
+/**
+ * Interruptible transitions: `carryPose` is interpolatePose plus a Hermite
+ * start tangent, so a sphere interrupted mid-flight leaves with the momentum it
+ * had instead of stopping dead, and still settles at rest on `to`. With no
+ * tangent it is exactly interpolatePose.
+ */
+export const carryPose = (from: OrbitalPose, to: OrbitalPose, progress: number, tangent?: Position3): OrbitalPose => {
+  const base = interpolatePose(from, to, progress);
+  if (!tangent) return base;
+  const u = Math.min(1, Math.max(0, progress)), carry = u * (1 - u) * (1 - u);
+  return { position: base.position.map((value, axis) => value + carry * tangent[axis]) as Position3, radius: base.radius };
+};
+/** Start tangent from a velocity (units per second) over a transition of
+ * `seconds`, capped so a fast sphere doesn't overshoot wildly. */
+export function carryTangent(velocity: Position3, seconds: number, from: OrbitalPose, to: OrbitalPose): Position3 | undefined {
+  const tangent = velocity.map((value) => value * seconds) as Position3;
+  const length = Math.hypot(...tangent);
+  if (length < 1e-3) return undefined;
+  const cap = 1.5 * Math.max(Math.hypot(...to.position.map((value, axis) => value - from.position[axis])), to.radius);
+  return length > cap ? tangent.map((value) => value * cap / length) as Position3 : tangent;
+}
 export function helixPoint(progress: number, track: number, tracks: number, radius: number): Position3 {
   const orbit = radius * Math.min(0.28, 0.52 / Math.max(1, tracks));
   const phase = progress * Math.PI * 2.5 - Math.PI / 2;

@@ -105,3 +105,8 @@
 .reduce-motion .orbital-hover-card b span { animation: none; }
 @media (prefers-reduced-motion: reduce) { .orbital-hover-card b span { animation: none; } }
 .orbital-label.is-hovered b { color: #fff; text-shadow: 0 0 12px #7cc8ff99, 0 1px 7px #050b15; }
+/* Rolling titles (RollingText): characters roll up one after another on change. */
+.rolling-text > span { display: inline-block; white-space: pre; animation: hover-roll .32s cubic-bezier(.2, .8, .2, 1) both; }
+.rolling-text > .rolling-rest { animation-delay: .45s; }
+.reduce-motion .rolling-text > span { animation: none; }
+@media (prefers-reduced-motion: reduce) { .rolling-text > span { animation: none; } }

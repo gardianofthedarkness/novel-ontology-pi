@@ -15,6 +15,9 @@ import { OrbitalExplorer, type OrbitalInspection } from "./components/OrbitalExp
 import type { OrbitIllustration } from "./data/pictureNodes";
 import "./orbital.css";
 import "./live.css";
+import "./glass.css";
+import { RollingText } from "./components/RollingText";
+import { attachGlassSheen } from "./glassSheen";
 import type { LiveActivity } from "./data/liveActivity";
 import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
 import { useSceneExplorer } from "./data/useSceneExplorer";
@@ -162,6 +165,8 @@ export default function App() {
   /** The most recently emerged ghost node — where System 1 is knitting right now (Phase B). */
   const lastKnitRef = useRef<{ node: WorldNode; chapterId: string } | null>(null);
   useEffect(() => () => { if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current); }, []);
+  // Glass panels catch the pointer (static under reduced motion).
+  useEffect(() => reducedMotion ? undefined : attachGlassSheen(), [reducedMotion]);
   const inspectorRef = useRef<HTMLDivElement>(null);
   const labelBus = useMemo<LabelBus>(
     () => ({ targets: new Map(), active: new Set(), positions: new Map(), trackTargets: new Map() }),
@@ -719,7 +724,7 @@ export default function App() {
         <span className="sample-badge"><i />{phoneLive || liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">
-        <div><div className="eyebrow">{phoneLive ? liveCollection : "COLLECTION 001 / INDEX SAMPLE"}{followingActivity && orbitalPage ? ` / ${orbitalPage.kind.toUpperCase()} OVERVIEW` : ""}</div><h1>{followingActivity && orbitalPage ? orbitalPage.label : view.mode === "lanes" ? "Narrative archive." : shownWorld.bigEventLabels[view.bigEventId]}</h1>{phoneLive && <p className="live-runtime-status" role="status">{followingActivity ? liveActivity?.phase ?? liveLabel : liveLabel}<small>{liveCounts.ghosts} ghosts · {liveCounts.entities} canonical entities · {liveCounts.events} events · {liveCounts.repairs} audited operations · live updates</small></p>}</div>
+        <div><div className="eyebrow">{phoneLive ? liveCollection : "COLLECTION 001 / INDEX SAMPLE"}{followingActivity && orbitalPage ? ` / ${orbitalPage.kind.toUpperCase()} OVERVIEW` : ""}</div><h1><RollingText text={followingActivity && orbitalPage ? orbitalPage.label : view.mode === "lanes" ? "Narrative archive." : shownWorld.bigEventLabels[view.bigEventId] ?? ""} /></h1>{phoneLive && <p className="live-runtime-status" role="status">{followingActivity ? liveActivity?.phase ?? liveLabel : liveLabel}<small>{liveCounts.ghosts} ghosts · {liveCounts.entities} canonical entities · {liveCounts.events} events · {liveCounts.repairs} audited operations · live updates</small></p>}</div>
         <div className={`heading-caption${view.mode === "interior" ? " interior-heading" : ""}`}>{view.mode === "lanes" ? <><span>One world. Parallel stories.</span><small>Click a file or scroll closer to enter.</small></> : <><button className="back-link" onClick={overview}>← Back to chronology</button><small>EVENT INTERIOR / {sourceNodes.length} RECORDS</small></>}</div>
       </div>
       <main className="workspace">
