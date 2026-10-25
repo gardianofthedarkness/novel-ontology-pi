@@ -181,7 +181,7 @@ function GlassCase({ id, width, height, depth, opacity, motion }: { id: string; 
     const box = new BoxGeometry(width * 1.08, height * 1.08, Math.max(depth * 0.5, Math.min(width, height) * 0.035));
     return {
       box,
-      pane: new MeshPhysicalMaterial({ color: "#f4efe4", transparent: true, opacity: 0.045 * opacity, roughness: 0.03, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03, depthWrite: false }),
+      pane: new MeshPhysicalMaterial({ color: "#f4efe4", transparent: true, opacity: 0.02 * opacity, roughness: 0.02, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03, depthWrite: false }),
       edges: new EdgesGeometry(box),
       edgeMaterial: new LineBasicMaterial({ color: "#efe6d4", transparent: true, opacity: 0.5 * opacity, depthWrite: false, toneMapped: false }),
     };

@@ -1,10 +1,19 @@
-/* Glass, Rhine-style: the surface stays clear (each panel keeps its own
-   transparent background) and the glass shows as a very thin slab — a lit
-   front edge and its ivory side, offset a few pixels down and right. */
+/* Glass, Rhine-style: the surface is clear — a faint tint and almost no
+   blur, with a soft text shadow for legibility — and the glass shows as a
+   very thin slab: a lit front edge and its ivory side, offset a few pixels
+   down and right. */
 .orbital-active .inspector-sheet {
+  background: linear-gradient(130deg, #aecde20a, #1934491f 50%, #07131f38);
+  -webkit-backdrop-filter: blur(1px);
+  backdrop-filter: blur(1px);
+  text-shadow: 0 1px 3px #000c, 0 0 10px #0008;
   box-shadow: inset 1px 1px #f6f0e430, 1px 1px 0 #ece4d22e, 2px 2px 0 #ece4d222, 3px 3px 0 #ece4d21a, 4px 4px 0 #ece4d23d, 0 22px 60px #0006;
 }
 .orbital-hover-card {
+  background: linear-gradient(135deg, #9fd2ff0d, #0b1c2c4d);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  text-shadow: 0 1px 3px #000c;
   box-shadow: inset 1px 1px #f6f0e42e, 1px 1px 0 #ece4d22a, 2px 2px 0 #ece4d21c, 3px 3px 0 #ece4d238, 0 8px 28px #0008;
 }
 .glass-frame {
