@@ -21,6 +21,7 @@ import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
 import { worldCausalLinks } from "./data/causalProjection";
 import { freshIdentityEvents, type PendingJoin } from "./data/joinAnimation";
+import { liveAlbum, sameAlbumEntries, type LiveAlbum } from "./data/liveAlbum";
 import { acceptsSnapshot, bookName, bookOptionLabel, bookQuery, libraryBooks, parseBookParam, sameBooks, viewedBook, type BookEntry } from "./data/bookCatalog";
 import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
 import type {
@@ -48,6 +49,7 @@ interface LiveSnapshot {
   activeVolume?: number;
   availableVolumes?: number[];
   books?: BookEntry[];
+  album?: LiveAlbum;
   jobLabel?: string;
   counts: { entities: number; events: number; repairs: number; ghosts: number };
   workSite?: string;
@@ -412,6 +414,12 @@ export default function App() {
         const nextBooks = libraryBooks(data);
         setBooks((previous) => sameBooks(previous, nextBooks) ? previous : nextBooks);
         setAgentBook(data.activeVolume ?? null);
+        if (data.album) {
+          // Live album: anchored EPUB pictures and bound portraits from the snapshot.
+          const album = liveAlbum(data.album, volume);
+          setAlbumPictures((previous) => sameAlbumEntries(previous, album.pictures) ? previous : album.pictures);
+          setAlbumPortraits((previous) => sameAlbumEntries(previous, album.portraits) ? previous : album.portraits);
+        }
         if (pinnedBookRef.current === null && volume !== null) setPinnedBook(volume);
         current = data;
         if (data.world !== previousWorld) {
