@@ -20,6 +20,7 @@ import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mj
 import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
 import { worldCausalLinks } from "./data/causalProjection";
+import { freshIdentityEvents, type PendingJoin } from "./data/joinAnimation";
 import { acceptsSnapshot, bookName, bookOptionLabel, bookQuery, libraryBooks, parseBookParam, sameBooks, viewedBook, type BookEntry } from "./data/bookCatalog";
 import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
 import type {
@@ -113,9 +114,11 @@ export default function App() {
   const [heldMap, setHeldMap] = useState<Record<string, string[]>>({});
   /** Settled EM merges (dropId -> keepId) and the join now animating. */
   const [merges, setMerges] = useState<Map<string, string>>(new Map());
-  const [join, setJoin] = useState<{ dropId: string; keepId: string; seq: number } | null>(null);
-  const joinRef = useRef<{ dropId: string; keepId: string } | null>(null);
-  const joinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Real EM joins now animating; several can arrive in one refresh. */
+  const [joins, setJoins] = useState<PendingJoin[]>([]);
+  const joinsRef = useRef<PendingJoin[]>([]);
+  const joinTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const joinSeq = useRef(0);
   const labelsRef = useRef<Record<string, string>>({});
   const [activity, setActivity] = useState({ count: 0, shine: false, caughtUp: false });
   const [blockLabel, setBlockLabel] = useState<string | null>(null);
@@ -204,25 +207,30 @@ export default function App() {
 
   /** A join animation finished (or cannot run here): settle the merge. */
   const settleJoin = useCallback((dropId: string) => {
-    const current = joinRef.current;
-    if (!current || current.dropId !== dropId) return;
-    joinRef.current = null;
-    if (joinTimer.current) {
-      clearTimeout(joinTimer.current);
-      joinTimer.current = null;
-    }
-    setJoin(null);
+    const current = joinsRef.current.find((entry) => entry.dropId === dropId);
+    if (!current) return;
+    joinsRef.current = joinsRef.current.filter((entry) => entry !== current);
+    clearTimeout(joinTimers.current.get(dropId));
+    joinTimers.current.delete(dropId);
+    setJoins(joinsRef.current);
     setMerges((m) => new Map(m).set(current.dropId, current.keepId));
+  }, []);
+
+  const clearJoins = useCallback(() => {
+    for (const timer of joinTimers.current.values()) clearTimeout(timer);
+    joinTimers.current.clear();
+    joinsRef.current = [];
+    setJoins([]);
   }, []);
 
   const beginJoin = useCallback(
     (dropId: string, keepId: string) => {
-      if (joinRef.current) settleJoin(joinRef.current.dropId);
-      joinRef.current = { dropId, keepId };
-      setJoin({ dropId, keepId, seq: Date.now() });
+      if (joinsRef.current.some((entry) => entry.dropId === dropId)) return;
+      joinsRef.current = [...joinsRef.current, { id: `${dropId}>${keepId}`, dropId, keepId, seq: ++joinSeq.current }];
+      setJoins(joinsRef.current);
       // Backstop: if neither renderer can animate this pair (off-view
       // in both), the merge still settles promptly.
-      joinTimer.current = setTimeout(() => settleJoin(dropId), 2600);
+      joinTimers.current.set(dropId, setTimeout(() => settleJoin(dropId), 2600));
     },
     [settleJoin],
   );
@@ -334,12 +342,7 @@ export default function App() {
 
   /** Per-book live state; the next snapshot re-baselines identity events. */
   const resetBookData = useCallback(() => {
-    joinRef.current = null;
-    if (joinTimer.current) {
-      clearTimeout(joinTimer.current);
-      joinTimer.current = null;
-    }
-    setJoin(null);
+    clearJoins();
     setMerges(new Map());
     setDynNodes([]);
     setDynEdges([]);
@@ -355,12 +358,7 @@ export default function App() {
   const startSession = useCallback(() => {
     sourceRef.current?.stop();
     lastKnitRef.current = null;
-    joinRef.current = null;
-    if (joinTimer.current) {
-      clearTimeout(joinTimer.current);
-      joinTimer.current = null;
-    }
-    setJoin(null);
+    clearJoins();
     setMerges(new Map());
     setDynNodes([]);
     setDynEdges([]);
@@ -420,15 +418,14 @@ export default function App() {
           previousWorld = data.world;
           setWorld(data.world);
         }
-        for (const record of data.activity?.identityEvents ?? []) {
-          if (seenMerges.current.has(record.id)) continue;
-          seenMerges.current.add(record.id);
-          if (identityBaseline.current) {
-            handleEvent(record.event);
-            setIdentityNotice(record.event.type === "entity.merged" ? `EM joined ${record.event.dropId} → ${record.event.keepId}` : `EM kept ${record.event.aId} and ${record.event.bId} distinct`);
-          }
+        const identity = freshIdentityEvents(data.activity?.identityEvents ?? [], seenMerges.current, identityBaseline.current);
+        identityBaseline.current = identity.baselineDone;
+        for (const record of identity.events) handleEvent(record.event);
+        if (identity.events.length) {
+          const text = (record: (typeof identity.events)[number]) => record.event.type === "entity.merged" ? `${labelsRef.current[record.event.dropId] ?? record.event.dropId} → ${labelsRef.current[record.event.keepId] ?? record.event.keepId}` : `${labelsRef.current[record.event.aId] ?? record.event.aId} ≠ ${labelsRef.current[record.event.bId] ?? record.event.bId}`;
+          const merged = identity.events.filter((record) => record.event.type === "entity.merged").length;
+          setIdentityNotice(identity.events.length === 1 ? `EM ${merged ? "joined" : "kept distinct"} ${text(identity.events[0])}` : `EM · ${merged} joined, ${identity.events.length - merged} kept distinct · ${identity.events.slice(0, 3).map(text).join(" · ")}${identity.events.length > 3 ? " …" : ""}`);
         }
-        identityBaseline.current = true;
         setLiveActivity(data.activity ?? null);
         setChangesets(data.gates);
         setFeed(data.feed);
@@ -720,7 +717,7 @@ export default function App() {
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
           <button className="design-switch" disabled={followingActivity} aria-pressed={orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setInspectorOpen(false); }}>{orbitalMode ? "Orbital / switch to classic" : "Classic / switch to orbital"}</button>
-          {orbitalMode ? <OrbitalExplorer world={shownWorld} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} join={join} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
+          {orbitalMode ? <OrbitalExplorer world={shownWorld} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
           <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
             <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
             <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>
@@ -733,7 +730,7 @@ export default function App() {
             if (event.key === "Enter" && selected) { event.preventDefault(); activateNode(selected); }
             if (event.key === "Escape") backLevel();
           }}>
-            <div className="graph-canvas"><WorldGraph ref={graphRef} nodes={timeline.nodes} edges={visibleEdges} tracks={timeline.tracks} contextNodeIds={explorer.rootIds} interior={view.mode === "interior"} viewId={explorer.key} openableIds={openableIds} labelBus={labelBus} selectedId={selected?.id ?? null} reducedMotion={reducedMotion} onNodeClick={activateNode} onNodeOpen={activateNode} onViewBack={backLevel} join={join} onJoinSettled={settleJoin} /></div>
+            <div className="graph-canvas"><WorldGraph ref={graphRef} nodes={timeline.nodes} edges={visibleEdges} tracks={timeline.tracks} contextNodeIds={explorer.rootIds} interior={view.mode === "interior"} viewId={explorer.key} openableIds={openableIds} labelBus={labelBus} selectedId={selected?.id ?? null} reducedMotion={reducedMotion} onNodeClick={activateNode} onNodeOpen={activateNode} onViewBack={backLevel} join={joins[0] ?? null} onJoinSettled={settleJoin} /></div>
             <div className="scene-coordinate" aria-hidden="true">X / Y / Z<br /><span>TIME → / RELATIONS<br />SPATIAL ONTOLOGY</span></div>
             <div className="labels-layer">
               {nodes.map((node, index) => <button key={node.id} className={`node-label k-${node.kind} s-${node.state}${selected?.id === node.id ? " is-selected" : ""}`} style={{ visibility: "hidden" }} aria-label={`${openableIds.includes(node.id) ? "Open" : "Select"} ${node.label}`} aria-pressed={selected?.id === node.id} ref={(element) => { if (element) labelBus.targets.set(node.id, element); else labelBus.targets.delete(node.id); }} onClick={() => activateNode(node)}>

@@ -8,7 +8,8 @@ export interface OrbitalDraw {
   entry?: OrbitalEntry;
   position: Position3;
   radius: number;
-  role: "main" | "nebula" | "preview" | "connection";
+  /** "preimage": a transient, view-only stand-in for an entity an EM merge just removed. */
+  role: "main" | "nebula" | "preview" | "connection" | "preimage";
   /** 0–1 visual weight: child count for main spheres, scoped link strength for the nebula. */
   prominence?: number;
   previewParentId?: string;

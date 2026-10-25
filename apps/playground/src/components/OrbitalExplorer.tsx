@@ -12,6 +12,7 @@ import { activityFocus, type LiveActivity } from "../data/liveActivity";
 import { placePictures, type OrbitIllustration } from "../data/pictureNodes";
 import { orbitalLocation } from "../data/orbitalLocation";
 import { causalProjection, worldCausalLinks } from "../data/causalProjection";
+import { planJoins, type LastPose, type PendingJoin } from "../data/joinAnimation";
 import type { BookEntry } from "../data/bookCatalog";
 import type { AlbumPanelPicture } from "./AlbumPanel";
 
@@ -38,7 +39,8 @@ interface Props {
   showRelations: boolean;
   resetToken: number;
   focusRequest: { node: WorldNode; sequence: number; chapterId?: string } | null;
-  join: { dropId: string; keepId: string; seq: number } | null;
+  /** Real EM joins to show; several may arrive in one refresh. */
+  joins: PendingJoin[];
   onJoinSettled: (dropId: string) => void;
   onSelect: (inspection: OrbitalInspection | null) => void;
   onChapter: (id: string | null) => void;
@@ -47,7 +49,7 @@ interface Props {
   onRelations: () => void;
 }
 
-export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = null, albumPictures = [], albumPortraits = [], activityNodes, activityEdges, activity = null, followingActivity = false, reducedMotion, showRelations, resetToken, focusRequest, join, onJoinSettled, onSelect, onChapter, onPage, onMotion, onRelations }: Props) {
+export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = null, albumPictures = [], albumPortraits = [], activityNodes, activityEdges, activity = null, followingActivity = false, reducedMotion, showRelations, resetToken, focusRequest, joins, onJoinSettled, onSelect, onChapter, onPage, onMotion, onRelations }: Props) {
   const [path, setPath] = useState<OrbitalScope[]>([volumeScope]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [revealedId, setRevealedId] = useState<string | null>(null);
@@ -188,17 +190,18 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
   const causalLinks = useMemo(() => worldCausalLinks(world), [world]);
   const causal = useMemo(() => causalProjection(level, baseDraws, causalLinks), [level, baseDraws, causalLinks]);
-  /** EM join: while a match animates, the dropped draw's target pose
-   * is the survivor's position — the morph system glides it there. */
-  const [joinTarget, setJoinTarget] = useState<Map<string, Position3> | null>(null);
+  /** EM joins: a still-drawn dropped record moves onto its survivor; one the
+   * new snapshot already removed gets a view-only preimage at the survivor,
+   * and the morph glides both in from their last drawn poses. */
+  const [joinView, setJoinView] = useState<{ moves: Map<string, Position3>; preimages: OrbitalDraw[] } | null>(null);
   const draws = useMemo(() => {
-    const all = [...baseDraws, ...connections.draws, ...pictureDraws, ...portraitDraws];
-    if (!joinTarget) return all;
+    const all = [...baseDraws, ...connections.draws, ...pictureDraws, ...portraitDraws, ...(joinView?.preimages ?? [])];
+    if (!joinView?.moves.size) return all;
     return all.map((draw) => {
-      const target = joinTarget.get(draw.node.id);
+      const target = joinView.moves.get(draw.node.id);
       return target ? { ...draw, position: target } : draw;
     });
-  }, [baseDraws, connections.draws, pictureDraws, portraitDraws, joinTarget]);
+  }, [baseDraws, connections.draws, pictureDraws, portraitDraws, joinView]);
   const paths = useMemo(() => [...layout.paths.map((track) => {
     if (!morph) return track;
     const fromPoints = track.points.map((point) => {
@@ -237,7 +240,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     lastFollow.current = "";
     if (bookId !== null && restoredBook.current === bookId) { restoredBook.current = null; return; }
     restoredBook.current = null;
-    setPath([volumeScope]); setSelectedId(null); setRevealedId(null); setMorph(null); setJoinTarget(null);
+    setPath([volumeScope]); setSelectedId(null); setRevealedId(null); setMorph(null); setJoinView(null);
   }, [bookId]);
   useEffect(() => {
     if (canEnterOrbitalScope(scope)) return;
@@ -262,30 +265,41 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   }, [inspectedRecord, draws, edges, level.sourceNodes, onSelect, followingActivity, restoreRequest, touchedIds, touchedNodeIds, albumInfo]);
 
   const snapshot = () => new Map(draws.map((draw): [string, OrbitalPose] => [draw.node.id, { position: bus.positions.get(draw.node.id) ?? draw.position, radius: draw.radius }]));
-  /** EM join animation: retarget the dropped draw onto its survivor
-   * and let the morph glide it in; settle when the glide lands. If
-   * either record is not in this level, settle at once. */
-  const joinSeq = useRef(0);
+  /** EM join animation for a batch of real merges. Poses come from the last
+   * rendered frame of this level, because the snapshot announcing a merge has
+   * usually already removed the dropped entity. Joins not visible here settle
+   * at once (the activity notice still reports them); nothing pulls the
+   * reader's camera away. Nothing here touches canonical data. */
+  const lastPoses = useRef<{ key: string; poses: Map<string, LastPose> }>({ key: "", poses: new Map() });
+  const handledJoins = useRef(new Set<number>());
+  const joinTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => joinTimers.current.forEach(clearTimeout), []);
   useEffect(() => {
-    if (!join || joinSeq.current === join.seq) return;
-    joinSeq.current = join.seq;
-    const drop = draws.find((draw) => draw.node.id === join.dropId);
-    const keep = draws.find((draw) => draw.node.id === join.keepId);
-    if (!drop || !keep) {
-      onJoinSettled(join.dropId);
-      return;
-    }
-    setMorph({ startedAt: performance.now(), from: snapshot() });
-    setJoinTarget(new Map([[join.dropId, keep.position]]));
-    const timer = setTimeout(() => {
-      setJoinTarget(null);
-      onJoinSettled(join.dropId);
-    }, reducedMotion ? 0 : ORBITAL_TRANSITION_MS + 80);
-    return () => clearTimeout(timer);
-    // draws/snapshot are read from the render that delivered this
-    // join; re-running on their identity changes would restart it.
+    const fresh = joins.filter((join) => !handledJoins.current.has(join.seq));
+    if (!fresh.length) return;
+    fresh.forEach((join) => handledJoins.current.add(join.seq));
+    const plan = planJoins(fresh, lastPoses.current.key === scope.key ? lastPoses.current.poses : new Map(), draws);
+    plan.offscreen.forEach((join) => onJoinSettled(join.dropId));
+    if (!plan.animated.length) return;
+    setMorph({ startedAt: performance.now(), from: new Map([...snapshot(), ...plan.from]) });
+    setJoinView((current) => ({ moves: new Map([...(current?.moves ?? []), ...plan.moves]), preimages: [...(current?.preimages ?? []), ...plan.preimages] }));
+    const settled = new Set(plan.animated.map((join) => join.dropId));
+    joinTimers.current.push(setTimeout(() => {
+      setJoinView((current) => current && { moves: new Map([...current.moves].filter(([id]) => !settled.has(id))), preimages: current.preimages.filter((draw) => !plan.preimages.includes(draw)) });
+      plan.animated.forEach((join) => onJoinSettled(join.dropId));
+    }, reducedMotion ? 0 : ORBITAL_TRANSITION_MS + 80));
+    // draws/snapshot are read from the render that delivered these joins;
+    // re-running on their identity changes would restart them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [join]);
+  }, [joins]);
+  // Declared after the join effect so a join still sees the previous frame.
+  // Entities that vanish keep their final pose until the level changes, in
+  // case the merge event arrives a refresh after the removal.
+  useEffect(() => {
+    const poses = new Map(lastPoses.current.key === scope.key ? lastPoses.current.poses : []);
+    for (const draw of draws) if (draw.role !== "preimage") poses.set(draw.node.id, { node: draw.node, position: bus.positions.get(draw.node.id) ?? draw.position, radius: draw.radius });
+    lastPoses.current = { key: scope.key, poses };
+  }, [draws, scope.key, bus]);
   const focus = useCallback((draw: OrbitalDraw) => {
     const center = bus.positions.get(draw.node.id) ?? draw.position;
     framePositions(graphRef, [center], 1.2, !reducedMotion, { focusRadius: draw.radius });
@@ -456,7 +470,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       if (event.key === "Enter" && selected) { event.preventDefault(); if (event.shiftKey) enter(selected); else inspect(selected); }
     }}>
       <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations ? edges : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} /></div>
-      <div className="labels-layer orbital-labels">{draws.map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}${draw.role === "nebula" && (draw.prominence ?? 1) < 0.35 && selectedId !== draw.node.id ? " is-faint" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
+      <div className="labels-layer orbital-labels">{draws.filter((draw) => draw.role !== "preimage").map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}${draw.role === "nebula" && (draw.prominence ?? 1) < 0.35 && selectedId !== draw.node.id ? " is-faint" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
         <span className="node-code">{draw.role === "preview" ? "REVEALED / " : ""}{draw.node.kind.toUpperCase()}{draw.node.state !== "canon" ? ` · ${draw.node.state}` : ""}</span><b>{draw.node.label}</b>{draw.node.cluster && <span>{draw.node.cluster.ids.length} records · orbital group</span>}{showRelations && !!causal.insideBy.get(draw.node.id) && <span className="causal-inside">{causal.insideBy.get(draw.node.id)} causal inside</span>}
       </button>)}</div>
       <div className="orbital-time-key" aria-hidden="true"><i />TIME → <span>Blue arrows follow narrative order</span></div>

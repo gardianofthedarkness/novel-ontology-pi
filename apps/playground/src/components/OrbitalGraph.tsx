@@ -26,7 +26,8 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
   const data = node.data.glyph as GlyphData;
   const { draw, morph, reducedMotion, transparent, selected, touched } = data;
   const color = recordColor(draw.node);
-  const nebula = draw.role === "nebula";
+  const preimage = draw.role === "preimage";
+  const nebula = draw.role === "nebula" || preimage;
   useFrame(({ clock }) => {
     if (!group.current) return;
     const from = morph?.from.get(draw.node.id);
@@ -40,12 +41,13 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
   const weight = nebula ? Math.min(1, Math.max(0, draw.prominence ?? 0.7)) : 1;
   const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? (nebula ? 0.14 + 0.22 * weight : 0.3) : draw.node.state === "held" ? (nebula ? 0.25 + 0.3 * weight : 0.5) : nebula ? 0.18 + 0.67 * weight : 0.9;
   const light = nebula && weight < 0.35 && !selected;
+  const shown = preimage ? opacity * 0.75 : opacity;
   const segments: [number, number] = light ? [16, 12] : [32, 24];
   return <group ref={group} userData={{ orbitalGlyph: draw.node.id }}>
     {touched && <mesh raycast={noRaycast}><boxGeometry args={[draw.radius * 2.7, draw.radius * 2.7, draw.radius * 2.7]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.95} toneMapped={false} depthTest={false} /></mesh>}
-    <mesh raycast={transparent ? noRaycast : undefined}>
+    <mesh raycast={transparent || preimage ? noRaycast : undefined}>
       <sphereGeometry args={[draw.radius, ...segments]} />
-      <meshStandardMaterial color={nebula ? color : "#12283c"} emissive={color} emissiveIntensity={selected ? 0.7 : active ? 0.45 : nebula ? 0.08 + 0.2 * weight : 0.2} metalness={0.35} roughness={0.27} transparent opacity={opacity} depthWrite={!transparent && draw.node.state === "canon" && opacity >= 0.5} />
+      <meshStandardMaterial color={nebula ? color : "#12283c"} emissive={color} emissiveIntensity={selected ? 0.7 : active ? 0.45 : nebula ? 0.08 + 0.2 * weight : 0.2} metalness={0.35} roughness={0.27} transparent opacity={shown} depthWrite={!transparent && !preimage && draw.node.state === "canon" && opacity >= 0.5} />
     </mesh>
     <mesh raycast={noRaycast}>
       <sphereGeometry args={[draw.radius * 1.035, light ? 10 : 20, light ? 8 : 16]} />
