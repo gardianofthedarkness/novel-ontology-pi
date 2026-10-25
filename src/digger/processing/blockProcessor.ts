@@ -29,6 +29,8 @@ import { join } from "node:path";
 import { BundleStore } from "../../ground/connectors/bundle.js";
 import type { OntEvent, Relation, Scene } from "../../ground/ontology/types.js";
 import { runEmPassAfterApply, loadMatchMemory, saveMatchMemory, type EmSummary } from "../../solidifier/matching/emFaculty.js";
+import { runCausalityPass } from "../../solidifier/causality/faculty.js";
+import type { StateChange } from "../../ground/ontology/types.js";
 
 export type ReviewDecision = "approved" | "held" | "revision_requested";
 
@@ -88,6 +90,19 @@ export class BlockProcessor {
        */
       entityMatching?: boolean;
       onEntityMatching?: (blockId: string, summary: EmSummary) => void;
+      /**
+       * The causality faculty (systematic path): after extraction, run
+       * the hybrid candidate + Jev checklist pass over pairs touching
+       * the block's new events and dialogue cards. Confident verdicts
+       * join the block's ChangeSet as add_relation proposals for the
+       * same gate review as everything else. Only the ingest CLI
+       * enables this; faculty failures never block ingestion (a
+       * reviewNote records them, EM precedent).
+       */
+      causality?: boolean;
+      /** Optional embedder for the faculty's embedding leg (null = graph patterns only). */
+      embedder?: import("../../ground/connectors/embeddings.js").Embedder | null;
+      onCausality?: (blockId: string, summary: import("../../solidifier/causality/faculty.js").CausalitySummary) => void;
       /** Distinct event/scene counts in the bundle, for ID/order sequencing. */
       loadCounts?: () => Promise<{ events: number; scenes: number; reservedEntityIds?: string[] }>;
       /**
@@ -243,6 +258,46 @@ export class BlockProcessor {
           if (faculty) {
             Object.assign(result.changeset.reviewNotes, groundFacultyProposals(out.proposals, knownEntities, sentences));
             await publish({ patchId: "continuity-relations", statePreview: await previewFacultyStates(this.store, out.proposals) });
+          }
+        }
+        if (this.observation.causality && this.observation.novelDir) {
+          try {
+            const newEvents = result.changeset.proposals
+              .filter((p) => p.kind === "create_event")
+              .map((p) => p.payload as OntEvent);
+            const newScenes = result.changeset.proposals
+              .filter((p) => p.kind === "create_scene")
+              .map((p) => p.payload as Scene);
+            const newStateChanges = result.changeset.proposals
+              .filter((p) => p.kind === "set_state_change")
+              .map((p) => ({ ...(p.payload as Omit<StateChange, "id">), id: p.id }));
+            const touchedIds = new Set([
+              ...newEvents.map((event) => event.id),
+              ...newScenes.flatMap((scene) => (scene.dialogues ?? []).map((card) => card.id)),
+            ]);
+            const pass = await runCausalityPass({
+              novelDir: this.observation.novelDir,
+              decisions: this.decisions,
+              embedder: this.observation.embedder ?? null,
+              touchedIds,
+              extras: {
+                events: newEvents,
+                scenes: newScenes,
+                stateChanges: newStateChanges,
+                sentenceTexts: new Map(sentences.map((sentence) => [sentence.id, sentence.text])),
+              },
+              provenanceBlockId: block.blockId,
+            });
+            if (pass.proposals.length) result.changeset.proposals.push(...pass.proposals);
+            if (pass.summary.nominated > 0 || pass.summary.embedded > 0) {
+              result.changeset.reviewNotes["causality-faculty"] =
+                `Causality pass: ${pass.summary.nominated} nominated, ${pass.summary.proposed} proposed, ${pass.summary.uncertain} uncertain, ${pass.summary.rejected} rejected${pass.summary.embeddingLeg ? " (embedding leg on)" : " (graph patterns only)"}.`;
+              this.observation.onCausality?.(block.blockId, pass.summary);
+            }
+          } catch (error) {
+            // Advisory, EM precedent: a failed pass never blocks the block.
+            result.changeset.reviewNotes["causality-faculty"] =
+              `Causality pass failed (${error instanceof Error ? error.message : String(error)}); no CAUSES proposals from this block.`;
           }
         }
         if (this.observation.semanticReview) result.changeset.reviewSource = sentences;

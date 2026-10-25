@@ -77,7 +77,7 @@ const record = (value: unknown): value is Record<string, unknown> => !!value && 
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(entry => typeof entry === "string" && !!entry) && new Set(value).size === value.length;
 const kinds = new Set(["Character", "Location", "Organization", "Item", "Concept"]);
 const relationKinds: Record<string, [string[], string[]]> = {
-  CAUSES: [["Event"], ["Event"]], CAUSED_BY: [["Event"], ["Event"]], PRECEDES: [["Event"], ["Event"]],
+  CAUSES: [["Event", "DialogueCard"], ["Event", "DialogueCard"]], CAUSED_BY: [["Event", "DialogueCard"], ["Event", "DialogueCard"]], PRECEDES: [["Event"], ["Event"]],
   PARTICIPATES_IN: [["Character"], ["Event"]], PRESENT_IN: [["Character"], ["Scene"]], MENTIONED_IN: [["Character"], ["Scene"]], LOCATED_AT: [["Scene"], ["Location"]],
   KNOWS: [["Character"], ["Character"]], SPEAKS_TO: [["Character"], ["Character"]], ADDRESSES: [["Character"], ["Character"]], OWNS: [["Character"], ["Item"]], MEMBER_OF: [["Character"], ["Organization"]],
   STATE_BEFORE: [["Character"], ["Event"]], STATE_AFTER: [["Character"], ["Event"]], FORKS_FROM: [["Branch"], ["Event"]],
@@ -187,6 +187,9 @@ export function materializeSemantic(changeset: ChangeSet, knownEntities: Entity[
       payload.charactersPresent = []; payload.charactersMentioned = []; payload.locationId = null;
       payload.turns = (payload.turns as Scene["turns"]).map(turn => ({ ...turn, speakerId: null, addresseeId: null }));
       if (payload.dialogues) payload.dialogues = (payload.dialogues as NonNullable<Scene["dialogues"]>).map(card => ({ ...card, participantIds: [], unresolvedParticipantIds: [] }));
+      // Dialogue cards are first-class relation endpoints (CAUSES), so
+      // register their ids alongside the scene's own id.
+      for (const card of (payload.dialogues as NonNullable<Scene["dialogues"]> ?? [])) objectKinds.set(card.id, "DialogueCard");
     }
   }
   const output = new Map(projected.map(proposal => [proposal.id, proposal]));

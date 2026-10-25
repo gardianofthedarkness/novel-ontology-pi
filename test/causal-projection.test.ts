@@ -77,3 +77,21 @@ test("visible event spheres get direct (unprojected) arrows", () => {
   assert.deepEqual(result.arrows.map((arrow) => [arrow.from, arrow.to, arrow.projected]), [["event-0", "event-1", false]]);
   assert.equal(volumeScope.kind, "volume");
 });
+
+test("dialogue endpoints project onto their owning scene's sphere, keeping dialogue provenance", () => {
+  const causal: OrbitalWorld["causal"] = {
+    links: [{ id: "causes:dlg_1:event-25", from: "dlg_1", to: "event-25", fromChapter: "chapter_1", toChapter: "chapter_1", state: "canon" }],
+    unresolved: 0,
+    dialogueScenes: { dlg_1: "scene-1" },
+  };
+  const w = world([], causal);
+  const level = orbitalLevel(w, chapter);
+  const draws = layoutOrbitalLevel(level, []).draws;
+  const result = causalProjection(level, draws, worldCausalLinks(w), causal.dialogueScenes);
+  assert.equal(result.arrows.length, 1);
+  assert.ok(result.arrows[0].projected, "dialogue endpoint stands in as its scene group");
+  assert.equal(result.arrows[0].links[0].from, "dlg_1", "provenance keeps the dialogue id, not the scene");
+  const noMap = causalProjection(level, draws, worldCausalLinks(w));
+  assert.equal(noMap.arrows.length, 0);
+  assert.equal(noMap.elsewhere, 1, "without the scene map the dialogue endpoint is elsewhere, never guessed");
+});

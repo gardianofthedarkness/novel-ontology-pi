@@ -449,8 +449,7 @@ export class FacultyGraph {
         const parts = await Promise.all(sourceChunks(sentences, { maxBytes: 7_000, maxSentences: 48, margin: 4 }).map(chunk => safely<LlmScene>("scene-understanding chunk", () => understandingChunk(chunk, sceneIndex), { events: [] })));
         const events: NonNullable<LlmScene["events"]> = [];
         for (const part of parts) {
-          const base = events.length;
-          for (const event of part.events ?? []) events.push({ ...event, causes: typeof event.causes === "number" && event.causes >= 0 && event.causes < (part.events?.length ?? 0) ? base + event.causes : null });
+          for (const event of part.events ?? []) events.push(event);
         }
         return { events, summary: parts.map(part => part.summary).filter(Boolean).join("\n") } satisfies LlmScene;
       }, { events: [] } as LlmScene);

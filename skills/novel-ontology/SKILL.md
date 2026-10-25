@@ -69,6 +69,22 @@ without keys. Missing credentials require secure entry, never chat.
   portable ontology data. Fork/simulate commands are separate operations;
   choose a branch point only when requested by the user.
 
+## Causality
+
+- CAUSES links are cross-scene by design: extraction emits none. The
+  systematic path (per-block + chapter-close sweep, Jev checklist at
+  0.85 over hybrid graph-pattern + embedding candidates) proposes them
+  through the gate automatically during `novel ingest`.
+- After a full run, adjudicate yourself: `novel causality candidates
+  <dir>` lists nominated pairs with legs and summaries;
+  `novel causality propose <dir> <from> <to> [--reason "..."]` proposes
+  a link you judge causal (event or dialogue-card ids) into a
+  `pending_review` changeset; `novel causality sweep <dir>` re-runs the
+  systematic Jev pass on demand. Full workflow: references/causality.md.
+- Direct textual support + novel-sequence order decide. Succession,
+  correlation, or shared topic alone is never causation, and order or
+  adjacency alone never implies a link.
+
 ## Album (EPUB illustrations + character portraits)
 
 - `novel album import <dir> <book.epub>` is a PRE-PROCESS at intake:

@@ -24,6 +24,11 @@ import {
 import { llmPing, llmProbe } from "./commands/shared/llmCommands.js";
 import { ingestNovel } from "./commands/extract/ingestCommands.js";
 import { runMatch } from "./commands/extract/matchCommands.js";
+import {
+  listCausalityCandidates,
+  proposeCausalityLink,
+  runCausalitySweep,
+} from "./commands/extract/causalityCommands.js";
 import { runFix } from "./commands/extract/fixCommands.js";
 import { runRecall } from "./commands/extract/recallCommands.js";
 import {
@@ -48,6 +53,7 @@ import { reviewPage } from "../solidifier/merge/reviewPage.js";
 import { reviseProposals } from "../solidifier/merge/revise.js";
 import { decideFacts, prepareSemantic, semanticPage } from "../solidifier/merge/semanticCommands.js";
 import { runEmPassAfterApply } from "../solidifier/matching/emFaculty.js";
+import { markCausalitySweepPending } from "../solidifier/causality/faculty.js";
 import { jevFromEnv } from "../ground/connectors/jev.js";
 import {
   listChangeSets,
@@ -60,8 +66,14 @@ const COMMANDS: Record<string, string> = {
   "novel watch <novel-dir> [--port N]": "Read-only loopback SSE over the processing event log",
   "novel section <file>": "Deterministic sentence sectioning only (free, testable)",
   "novel blocks <file> [--size N]": "Chapter detection + block cutting map (no models)",
-  "novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract]":
-    "Full loop: blocks -> miniloop (live Jev) -> extraction (work LLM, when configured) -> ChangeSets -> merge gate -> graph. Default stops at the first gate; --auto-approve applies every ChangeSet",
+  "novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality]":
+    "Full loop: blocks -> miniloop (live Jev) -> extraction (work LLM, when configured) -> ChangeSets -> merge gate -> graph. Default stops at the first gate; --auto-approve applies every ChangeSet. Per-block causality faculty + chapter-close sweep run unless --no-causality",
+  "novel causality candidates <novel-dir> [--unit ID] [--chapter N] [--limit N]":
+    "List hybrid-nominated CAUSES candidates (graph patterns + embedding top-K) for agent adjudication. No proposals are created.",
+  "novel causality propose <novel-dir> <from> <to> [--reason \"...\"]":
+    "Agent-adjudicated CAUSES proposal (event or dialogue-card ids). Lands in a pending_review changeset for the gate; refuses self-links, existing links, and order-contradicted directions.",
+  "novel causality sweep <novel-dir>":
+    "On-demand systematic sweep: Jev-determined CAUSES pass over the whole universe (same machinery as the ingest chapter-close sweep).",
   "novel match <novel-dir> [--changeset <id>]":
     "Entity-matching review packet: code nominates duplicate pairs, System 1 (Jev) reviews the batch with a checklist, only unsettled pairs are raised to the agent",
   "novel fix merge|rename|add-form|relate|unrelate|remove-entity|remove-event <novel-dir> ...":
@@ -402,6 +414,14 @@ async function main(): Promise<void> {
         // No Jev configured for this shell: the pass is skipped and
         // retried by the chapter sweep or `novel match`.
       }
+      // Causality sweep cadence mirrors EM: an apply between ingest
+      // runs marks the chapter-close sweep pending; the next full-
+      // coverage ingest runs it. Best effort, never fatal to approval.
+      try {
+        await markCausalitySweepPending(novelDir);
+      } catch {
+        // A stale flag only triggers one extra sweep; approval stands.
+      }
       const counts = await buildGraphFromBundle(
         ontologyDir,
         join(ontologyDir, "graph.lbug"),
@@ -421,7 +441,7 @@ async function main(): Promise<void> {
     const file = positional[2];
     if (!novelDir || !file || file.startsWith("--")) {
       throw new Error(
-        "Usage: novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract]",
+        "Usage: novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality]",
       );
     }
     const maxBlocksRaw = flag(positional, "--max-blocks");
@@ -440,10 +460,49 @@ async function main(): Promise<void> {
         maxBlocks,
         blockSize,
         noExtract: positional.includes("--no-extract"),
+        noCausality: positional.includes("--no-causality"),
       }),
       pretty,
     );
     return;
+  }
+
+  if (cmd === "causality") {
+    const sub = positional[1];
+    const novelDir = positional[2];
+    if (!sub || !novelDir || novelDir.startsWith("--")) {
+      throw new Error(
+        "Usage: novel causality candidates <novel-dir> [--unit ID] [--chapter N] [--limit N] | novel causality propose <novel-dir> <from> <to> [--reason \"...\"] | novel causality sweep <novel-dir>",
+      );
+    }
+    if (sub === "candidates") {
+      const chapterRaw = flag(positional, "--chapter");
+      const limitRaw = flag(positional, "--limit");
+      out(
+        await listCausalityCandidates(novelDir, {
+          unitId: flag(positional, "--unit"),
+          chapterIndex: chapterRaw === undefined ? undefined : Number(chapterRaw),
+          limit: limitRaw === undefined ? undefined : Number(limitRaw),
+        }),
+        pretty,
+      );
+      return;
+    }
+    if (sub === "propose") {
+      const fromId = positional[3];
+      const toId = positional[4];
+      if (!fromId || !toId) throw new Error("Usage: novel causality propose <novel-dir> <from> <to> [--reason \"...\"]");
+      out(
+        await proposeCausalityLink(novelDir, fromId, toId, { reason: flag(positional, "--reason") }),
+        pretty,
+      );
+      return;
+    }
+    if (sub === "sweep") {
+      out(await runCausalitySweep(novelDir), pretty);
+      return;
+    }
+    throw new Error(`Unknown causality subcommand ${sub} (candidates | propose | sweep)`);
   }
 
   if (cmd === "match") {
