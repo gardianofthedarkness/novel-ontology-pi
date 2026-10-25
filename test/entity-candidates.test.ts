@@ -101,3 +101,38 @@ test("the faculty graph streams candidates scene by scene, well before extractio
     assert.equal(candidate.resolvedId, (minted!.payload as Entity).id, `${name} links to its extracted entity`);
   }
 });
+
+test("a failing draft consumer never fails identity work", async () => {
+  const sentences = sectionBlock("小樱走进教室。\n黑子跟在后面。\n她们来到常盘台。\n佐天在门口等待。", 0).sentences;
+  const ids = sentences.map(sentence => sentence.id);
+  const decisions: DecisionModel = {
+    modelId: "mock-jev",
+    async decide(_state, questions) {
+      return questions.map(question => {
+        if (question.key.startsWith("scene_end:")) return { key: question.key, value: question.key.endsWith(ids[0]) ? ids[1] : ids[3], confidence: 0.99 };
+        if (question.key.startsWith("scene_start:")) return { key: question.key, value: question.key.endsWith(ids[0]) ? ids[2] : "NONE", confidence: 0.99 };
+        if (question.key.startsWith("dlg_start:")) return { key: question.key, value: "NONE", confidence: 0.99 };
+        return { key: question.key, value: "NEW_PERSON", confidence: 0.99 };
+      });
+    },
+  };
+  const work: WorkModel = {
+    modelId: "mock-work",
+    async generate(input) {
+      if (input.system.startsWith("FACULTY: entities-participants")) {
+        const second = input.prompt.includes(`CORE: ${ids[2]}`);
+        return JSON.stringify(second
+          ? { newEntities: [{ name: "佐天", kind: "Character" }], charactersPresent: ["佐天", "黑子"], charactersMentioned: [], locationName: "常盘台" }
+          : { newEntities: [{ name: "黑子", kind: "Character" }], charactersPresent: ["小樱", "黑子"], charactersMentioned: [], locationName: null });
+      }
+      if (input.system.startsWith("FACULTY:")) return JSON.stringify({ turns: [] });
+      const first = input.prompt.includes(`${ids[0]}:`) ? ids[0] : ids[2];
+      return JSON.stringify({ summary: "走路。", events: [{ summaryEn: "走路。", actors: [], evidence: [first] }] });
+    },
+  };
+  const graph = new FacultyGraph(decisions, work, { dialogueScope: "scene" });
+  const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [sakura, school], onProgress: async () => { throw new Error("draft consumer failed"); } });
+  assert.ok(result.sceneResults.size > 0, "scenes still resolve when draft telemetry fails");
+  const scenes = await Promise.all(result.sceneResults.values());
+  assert.ok(scenes.some(scene => (scene.scene.newEntities ?? []).length > 0), "identities survive a failing draft consumer");
+});

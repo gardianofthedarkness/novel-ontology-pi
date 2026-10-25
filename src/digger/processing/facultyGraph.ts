@@ -89,7 +89,10 @@ export class FacultyGraph {
     let progressChain = Promise.resolve();
     const publish = (patchId: string) => {
       const update: Partial<WorkingDraft> = { patchId, sceneSpans: sceneSpans.map(span => [...span]), dialogueUnits: dialogueSpans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), turns: sourceTurns.map(turn => ({ speakerId: null, addresseeId: null, sentenceIds: [...turn.sentenceIds] })), ...(cardScope ? { dialogueCards: sourceCards.map(card => ({ id: card.id, sentenceIds: card.sentenceIds, participantNames: card.participantNames, unresolvedNames: card.unresolvedNames })) } : {}), totalScenes: sceneSpans.length, entityCandidates };
-      progressChain = progressChain.then(() => input.onProgress?.(update));
+      // Draft telemetry is best-effort: a failing consumer must neither reject
+      // this publish nor poison the chain (a rejected chain would skip every
+      // later update and fail every later awaited publish).
+      progressChain = progressChain.then(() => input.onProgress?.(update)).catch(() => {});
       return progressChain;
     };
     const note = (key: string, message: string) => { changeset.reviewNotes[`faculty:${key}`] = message; };
@@ -402,12 +405,17 @@ export class FacultyGraph {
       return { ...llm, newEntities: remaining };
     };
 
-    /** Record entities a faculty just found, before extraction mints them. */
+    /** Record entities a faculty just found, before extraction mints them. Draft-only telemetry: never let candidate recording fail identity work. */
     const foundEntities = async (identities: LlmScene, firstSentenceId?: string) => {
-      const next = addSceneCandidates(entityCandidates, identities, input.knownEntities, { firstSentenceId, faculty: "entities-participants" });
-      if (JSON.stringify(next) === JSON.stringify(entityCandidates)) return;
-      entityCandidates = next;
-      await publish("entities-participants");
+      try {
+        const next = addSceneCandidates(entityCandidates, identities, input.knownEntities, { firstSentenceId, faculty: "entities-participants" });
+        if (JSON.stringify(next) === JSON.stringify(entityCandidates)) return;
+        entityCandidates = next;
+        await publish("entities-participants");
+      } catch {
+        // The draft update is lost; the identities themselves are unaffected,
+        // and the next publish re-sends the current draft state.
+      }
     };
     const blockIdentityNotes: string[] = [];
     const blockIdentities = blockTurnScope || cardScope ? Promise.all(sourceChunks(input.sentences, { maxBytes: 7000, maxSentences: 48, margin: 4 }).map(async (chunk, index) => {
