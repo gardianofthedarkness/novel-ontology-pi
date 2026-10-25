@@ -146,12 +146,12 @@ export function layoutParentBackdrop(parentDraws: OrbitalDraw[], enteredId: stri
  * surrounding nebula continue off-screen; Frame view still shows it all.
  * Without an entered sphere (first load, Back) the whole timeline is framed. */
 const ENTRY_WINDOW = 5;
-export function entryFrame(draws: OrbitalDraw[], selectedId: string | null): Position3[] {
+export function entryFrame(draws: OrbitalDraw[], selectedId: string | null, window = ENTRY_WINDOW): Position3[] {
   const main = draws.filter((draw) => draw.role === "main").sort((first, second) => first.position[0] - second.position[0] || first.position[1] - second.position[1]);
   const found = main.findIndex((draw) => draw.node.id === selectedId);
-  if (found < 0 || main.length <= ENTRY_WINDOW) return main.map((draw) => draw.position);
-  const start = Math.max(0, Math.min(main.length - ENTRY_WINDOW, found - Math.floor(ENTRY_WINDOW / 2)));
-  return main.slice(start, start + ENTRY_WINDOW).map((draw) => draw.position);
+  if (found < 0 || main.length <= window) return main.map((draw) => draw.position);
+  const start = Math.max(0, Math.min(main.length - window, found - Math.floor(window / 2)));
+  return main.slice(start, start + window).map((draw) => draw.position);
 }
 
 export function visibleOrbitalEdges(edges: WorldEdge[], draws: OrbitalDraw[], selectedId: string | null): WorldEdge[] {

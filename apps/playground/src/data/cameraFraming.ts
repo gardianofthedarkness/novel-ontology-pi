@@ -69,3 +69,20 @@ export function cameraFocus(center: Position3, radius: number, position: Positio
   const distance = pixels < minimumPixels ? pixelScale / readablePixels : pixels > maximumPixels ? pixelScale / maximumPixels : depth;
   return frameAt(center, Math.max(16, Math.min(1000000, Math.max(radius * 1.1, distance))), view);
 }
+
+/** Pull the camera along its view ray so it stays inside a sphere (e.g. the
+ * faint parent ghost that encloses the current level). When the target lies
+ * outside the sphere, the camera distance is still capped at its radius. */
+export function keepInside(position: Position3, target: Position3, sphere: { center: Position3; radius: number }, fraction = 0.8, minimum = 300): Position3 {
+  const offset = position.map((value, axis) => value - target[axis]);
+  const distance = Math.hypot(...offset);
+  const toTarget = target.map((value, axis) => value - sphere.center[axis]);
+  const radius = sphere.radius * fraction;
+  if (!distance) return position;
+  const unit = offset.map((value) => value / distance);
+  if (Math.hypot(...toTarget) >= radius) return distance <= radius ? position : target.map((value, axis) => value + unit[axis] * radius) as Position3;
+  const along = unit.reduce((sum, value, axis) => sum + value * toTarget[axis], 0);
+  const limit = -along + Math.sqrt(along * along - toTarget.reduce((sum, value) => sum + value * value, 0) + radius * radius);
+  const chosen = Math.min(distance, Math.max(minimum, limit));
+  return target.map((value, axis) => value + unit[axis] * chosen) as Position3;
+}

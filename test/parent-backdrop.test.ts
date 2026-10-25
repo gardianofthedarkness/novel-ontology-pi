@@ -62,3 +62,16 @@ test("entry framing centres the entered sphere with its neighbours; without one 
   assert.equal(entryFrame(draws, null).length, 12, "Back or first load frames every timeline sphere");
   assert.ok(!entryFrame(draws, null).some((point) => draws.find((draw) => draw.role === "nebula" && draw.position === point)), "nebula never widens the frame");
 });
+
+test("the first view after entering stays inside the enclosing parent ghost", async () => {
+  const { keepInside } = await import("../apps/playground/src/data/cameraFraming.js");
+  const sphere = { center: [0, 0, 0] as [number, number, number], radius: 7500 };
+  const far = keepInside([0, 1500, 9000], [0, 0, 0], sphere);
+  assert.ok(Math.hypot(...far) <= 7500 * 0.8 + 1e-6, "pulled inside along the same view ray");
+  assert.ok(Math.abs(far[1] / far[2] - 1500 / 9000) < 1e-9, "viewing direction is preserved");
+  assert.deepEqual(keepInside([0, 0, 2000], [0, 0, 0], sphere), [0, 0, 2000], "already inside: unchanged");
+  const nearEdge = keepInside([5500, 0, 9000], [5500, 0, 0], sphere);
+  assert.ok(Math.hypot(...nearEdge) <= 7500 * 0.8 + 1e-6 || nearEdge[2] === 300, "a target near the ghost's edge still gets an inside (or minimum-distance) view");
+  const outside = keepInside([9000, 0, 50000], [9000, 0, 0], sphere);
+  assert.ok(Math.abs(Math.hypot(...outside.map((value, axis) => value - [9000, 0, 0][axis])) - 7500 * 0.8) < 1e-6, "a target outside the ghost still gets a capped distance");
+});

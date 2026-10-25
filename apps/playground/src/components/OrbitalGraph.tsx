@@ -340,7 +340,7 @@ function ActivityBounds({ draws, bus }: { draws: OrbitalDraw[]; bus: LabelBus })
   return <group ref={bounds} userData={{ orbitalActivityBounds: true }}><mesh raycast={noRaycast}><boxGeometry args={[1, 1, 1]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.5} toneMapped={false} depthTest={false} depthWrite={false} /></mesh></group>;
 }
 
-function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, onReveal, onExtremeBack }: { draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
+function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, enclosure, onReveal, onExtremeBack }: { draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; enclosure?: Enclosure; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
   const { camera, scene, size, gl } = useThree();
   const byId = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw])), [draws]);
   const revealed = useRef(revealedId); revealed.current = revealedId;
@@ -401,8 +401,11 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
     const main = candidates.filter((entry) => entry.draw.role === "main");
     if (main.length && performance.now() - zoomOut.current < 1000) {
       const extent = Math.max(...main.map((entry) => entry.position.x)) - Math.min(...main.map((entry) => entry.position.x));
-      if (!backFired.current && performance.now() - enteredAt.current > EXTREME_BACK_SETTLE_MS && extent < 0.06 && main.every((entry) => entry.pixels < 3)) { backFired.current = true; zoomOut.current = -Infinity; onExtremeBack(); }
-      else if (extent > 0.2) backFired.current = false;
+      // With a parent ghost, "extreme" means zoomed out far beyond it, so the
+      // ghost shrinks to a small orb; otherwise the level must be a speck.
+      const outside = enclosure ? camera.position.distanceTo(new Vector3(...enclosure.center)) > enclosure.radius * EXTREME_BACK_ENCLOSURE_FACTOR : extent < 0.06 && main.every((entry) => entry.pixels < 3);
+      if (!backFired.current && performance.now() - enteredAt.current > EXTREME_BACK_SETTLE_MS && outside) { backFired.current = true; zoomOut.current = -Infinity; onExtremeBack(); }
+      else if (!outside && extent > 0.2) backFired.current = false;
     }
   });
   return null;
@@ -411,13 +414,20 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
 /** Extreme outward zoom returns a level only once the new level has settled. */
 const EXTREME_BACK_SETTLE_MS = 1800;
 
-function OrbitalFraming({ graphRef, positions, levelKey, reducedMotion, enabled }: { graphRef: { current: GraphCanvasRef | null }; positions: Position3[]; levelKey: string; reducedMotion: boolean; enabled: boolean }) {
+/** Enclosing parent ghost: the first view stays inside it, and Back by
+ * zooming out happens only well beyond it. */
+type Enclosure = { center: Position3; radius: number };
+const EXTREME_BACK_ENCLOSURE_FACTOR = 12;
+
+function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, reducedMotion, enabled }: { graphRef: { current: GraphCanvasRef | null }; draws: OrbitalDraw[]; selectedId: string | null; enclosure?: Enclosure; levelKey: string; reducedMotion: boolean; enabled: boolean }) {
   const { camera, size } = useThree();
-  const latest = useRef(positions); latest.current = positions;
+  // Narrow (portrait) screens frame fewer neighbours so spheres stay readable.
+  const positions = entryFrame(draws, selectedId, size.width / Math.max(1, size.height) < 0.8 ? 2 : 5);
+  const latest = useRef({ positions, enclosure }); latest.current = { positions, enclosure };
   const framingEnabled = useRef(enabled); framingEnabled.current = enabled;
   useEffect(() => {
     (camera as { fov: number }).fov = 42; camera.near = 1; camera.far = 2000000; camera.updateProjectionMatrix();
-    const timeout = setTimeout(() => { if (framingEnabled.current) framePositions(graphRef, latest.current, 1.2, !reducedMotion, { direction: levelKey.length % 2 ? [0.18, 0.22, 1] : [-0.18, 0.22, 1] }); }, 100);
+    const timeout = setTimeout(() => { if (framingEnabled.current) framePositions(graphRef, latest.current.positions, 1.2, !reducedMotion, { direction: levelKey.length % 2 ? [0.18, 0.22, 1] : [-0.18, 0.22, 1], within: latest.current.enclosure, ignoreSheet: true }); }, 100);
     return () => clearTimeout(timeout);
   }, [levelKey, reducedMotion, camera, graphRef, size.width, size.height]);
   return null;
@@ -447,6 +457,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id) } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
+  const enclosure = useMemo(() => { const ghost = backdrop?.ghosts.find((entry) => entry.current); return ghost ? { center: ghost.position, radius: ghost.radius } : undefined; }, [backdrop]);
   return <GraphCanvas ref={ref} nodes={nodes} edges={[]} theme={theme} renderNode={renderSphere} labelType="none" layoutType="forceDirected3d" cameraMode="rotate" draggable={false} animated={false} minDistance={16} maxDistance={1000000} selections={[]} glOptions={{ antialias: true, preserveDrawingBuffer: true }}
     onNodeClick={(node) => onSelect((node.data.glyph as GlyphData).draw)} onNodeDoubleClick={(node) => onEnter((node.data.glyph as GlyphData).draw)}>
     <ambientLight intensity={0.85} /><directionalLight position={[800, 1200, 1800]} intensity={1.5} color="#c4eaff" />
@@ -457,8 +468,8 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <VisibleConnections edges={edges} bus={bus} />
     {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} />)}
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
-    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} onReveal={onReveal} onExtremeBack={onBack} />
+    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} enclosure={enclosure} onReveal={onReveal} onExtremeBack={onBack} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
-    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} positions={entryFrame(draws, selectedId)} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} />
+    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} />
   </GraphCanvas>;
 });
