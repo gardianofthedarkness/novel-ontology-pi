@@ -5,7 +5,7 @@ import { BufferGeometry, CanvasTexture, MeshBasicMaterial, Float32BufferAttribut
 import { recordColor } from "../archive";
 import type { WorldEdge } from "../types";
 import type { Position3 } from "../data/spatialLayout";
-import { interpolatePose, uncoilEase, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
+import { entryFrame, interpolatePose, uncoilEase, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
 import type { CausalArrow } from "../data/causalProjection";
 import { framePositions, type LabelBus } from "./WorldGraph";
 import { ScaleNavigation } from "./ScaleNavigation";
@@ -345,6 +345,7 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
   const byId = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw])), [draws]);
   const revealed = useRef(revealedId); revealed.current = revealedId;
   const zoomOut = useRef(-Infinity);
+  const enteredAt = useRef(performance.now());
   const backFired = useRef(false);
   useEffect(() => {
     const wheel = (event: WheelEvent) => { if (event.deltaY > 0) zoomOut.current = performance.now(); };
@@ -400,12 +401,15 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
     const main = candidates.filter((entry) => entry.draw.role === "main");
     if (main.length && performance.now() - zoomOut.current < 1000) {
       const extent = Math.max(...main.map((entry) => entry.position.x)) - Math.min(...main.map((entry) => entry.position.x));
-      if (!backFired.current && extent < 0.08 && main.every((entry) => entry.pixels < 4)) { backFired.current = true; zoomOut.current = -Infinity; onExtremeBack(); }
+      if (!backFired.current && performance.now() - enteredAt.current > EXTREME_BACK_SETTLE_MS && extent < 0.06 && main.every((entry) => entry.pixels < 3)) { backFired.current = true; zoomOut.current = -Infinity; onExtremeBack(); }
       else if (extent > 0.2) backFired.current = false;
     }
   });
   return null;
 }
+
+/** Extreme outward zoom returns a level only once the new level has settled. */
+const EXTREME_BACK_SETTLE_MS = 1800;
 
 function OrbitalFraming({ graphRef, positions, levelKey, reducedMotion, enabled }: { graphRef: { current: GraphCanvasRef | null }; positions: Position3[]; levelKey: string; reducedMotion: boolean; enabled: boolean }) {
   const { camera, size } = useThree();
@@ -455,6 +459,6 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
     <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} onReveal={onReveal} onExtremeBack={onBack} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
-    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} positions={draws.filter((draw) => draw.role !== "preview").map((draw) => draw.position)} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} />
+    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} positions={entryFrame(draws, selectedId)} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} />
   </GraphCanvas>;
 });

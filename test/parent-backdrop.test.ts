@@ -48,3 +48,17 @@ test("no backdrop at the top level or without the entered entry", () => {
   const draws = layoutOrbitalLevel(orbitalLevel(world, volumeScope), []).draws;
   assert.deepEqual(layoutParentBackdrop(draws, "missing", draws), { ghosts: [], path: [] });
 });
+
+test("entry framing centres the entered sphere with its neighbours; without one it frames the whole timeline", async () => {
+  const { entryFrame } = await import("../apps/playground/src/data/orbitalLayout.js");
+  const world: OrbitalWorld = { laneNodes: [record("chapter", "bigEvent", 0, { parent: null as unknown as string })], laneEdges: [], interiors: { chapter: { nodes: scenes(12), edges: [] } } };
+  const draws = layoutOrbitalLevel(orbitalLevel(world, { key: "c", label: "C", kind: "chapter", chapterId: "chapter" }), []).draws;
+  const framed = entryFrame(draws, "scene-6");
+  assert.equal(framed.length, 5);
+  const xs = framed.map((point) => point[0]);
+  const entered = draws.find((draw) => draw.node.id === "scene-6")!.position[0];
+  assert.ok(Math.min(...xs) < entered && Math.max(...xs) > entered, "neighbours on both sides");
+  assert.equal(entryFrame(draws, "scene-0").length, 5, "clamped at the start of the spine");
+  assert.equal(entryFrame(draws, null).length, 12, "Back or first load frames every timeline sphere");
+  assert.ok(!entryFrame(draws, null).some((point) => draws.find((draw) => draw.role === "nebula" && draw.position === point)), "nebula never widens the frame");
+});

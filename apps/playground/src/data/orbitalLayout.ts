@@ -140,6 +140,20 @@ export function layoutParentBackdrop(parentDraws: OrbitalDraw[], enteredId: stri
   return { ghosts, path };
 }
 
+/** Entry framing: the entered sphere and its nearest neighbours on the new
+ * local timeline (up to ENTRY_WINDOW main spheres), so the first view sits
+ * near the ground with readable spheres. The rest of the spine and the
+ * surrounding nebula continue off-screen; Frame view still shows it all.
+ * Without an entered sphere (first load, Back) the whole timeline is framed. */
+const ENTRY_WINDOW = 5;
+export function entryFrame(draws: OrbitalDraw[], selectedId: string | null): Position3[] {
+  const main = draws.filter((draw) => draw.role === "main").sort((first, second) => first.position[0] - second.position[0] || first.position[1] - second.position[1]);
+  const found = main.findIndex((draw) => draw.node.id === selectedId);
+  if (found < 0 || main.length <= ENTRY_WINDOW) return main.map((draw) => draw.position);
+  const start = Math.max(0, Math.min(main.length - ENTRY_WINDOW, found - Math.floor(ENTRY_WINDOW / 2)));
+  return main.slice(start, start + ENTRY_WINDOW).map((draw) => draw.position);
+}
+
 export function visibleOrbitalEdges(edges: WorldEdge[], draws: OrbitalDraw[], selectedId: string | null): WorldEdge[] {
   if (!selectedId) return [];
   const ids = new Set(draws.map((draw) => draw.node.id));
