@@ -15,7 +15,10 @@ export type EntityKind =
   | "Event"
   | "Scene"
   | "Timeline"
-  | "Branch";
+  | "Branch"
+  // Graph node kind, not a named entity: dialogue cards are CAUSES
+  // endpoints (multi-pair table) and traversal waypoints.
+  | "DialogueCard";
 
 export interface NameForm {
   text: string;

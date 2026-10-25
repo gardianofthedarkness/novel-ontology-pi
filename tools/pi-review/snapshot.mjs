@@ -161,11 +161,31 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   // chapter so the viewer can project cross-chapter links instead of
   // dropping them. Endpoints that are not projected events are counted,
   // never guessed. No causality is inferred from order or adjacency.
+  // Canon dialogue cards are not world nodes, so they resolve through
+  // their owning scene: the map below lets the viewer project a dialogue
+  // endpoint onto its scene's sphere (same projection idea as hidden
+  // events) instead of dropping the link as unresolved.
+  const dialogueScenes = {};
+  const dialogueChapter = {};
+  for (const scene of sceneMap.values()) for (const card of scene.dialogues ?? []) {
+    dialogueScenes[card.id] = scene.id;
+    dialogueChapter[card.id] = `chapter_${scene.chapterIndex}`;
+  }
+  for (const changeset of changesets) for (const proposal of changeset.proposals) {
+    if (proposal.kind !== 'create_scene') continue;
+    const chapterIndex = blockChapters.get(changeset.blockId);
+    if (chapterIndex === undefined) continue;
+    for (const card of proposal.payload.dialogues ?? []) if (!dialogueScenes[card.id]) {
+      dialogueScenes[card.id] = proposal.payload.id;
+      dialogueChapter[card.id] = `chapter_${chapterIndex}`;
+    }
+  }
   const causalLinks = [];
   let causalUnresolved = 0;
   for (const { relation, state: linkState } of [...fold(relations.map((relation) => ({ ...relation, id: `${relation.fromId}>${relation.toId}>${relation.type}` }))).map((relation) => ({ relation, state: 'canon' })), ...proposedCausal]) {
     if (relation.type !== 'CAUSES') continue;
-    const from = allNodes.get(relation.fromId), to = allNodes.get(relation.toId);
+    const from = allNodes.get(relation.fromId) ?? (dialogueChapter[relation.fromId] ? { kind: 'dialogue', parent: dialogueChapter[relation.fromId] } : undefined);
+    const to = allNodes.get(relation.toId) ?? (dialogueChapter[relation.toId] ? { kind: 'dialogue', parent: dialogueChapter[relation.toId] } : undefined);
     if (!['event', 'dialogue'].includes(from?.kind) || !['event', 'dialogue'].includes(to?.kind) || !from.parent || !to.parent) { causalUnresolved++; continue; }
     const id = `causes:${relation.fromId}:${relation.toId}`;
     if (!causalLinks.some((link) => link.id === id)) causalLinks.push({ id, from: relation.fromId, to: relation.toId, fromChapter: from.parent, toChapter: to.parent, state: linkState });
@@ -204,7 +224,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const lastBlock = processing.findLast((record) => record.event.type === 'block.started')?.event.blockId;
   return {
     activity: liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId: options.activityAfter, reviewProgress: await sessionReviewProgress(runtime) }),
-    world: { laneNodes, laneEdges, interiors, bigEventLabels, causal: { links: causalLinks, unresolved: causalUnresolved } }, gates, feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
+    world: { laneNodes, laneEdges, interiors, bigEventLabels, causal: { links: causalLinks, unresolved: causalUnresolved, dialogueScenes } }, gates, feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
     status, stage, label: finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
     workSite: `chapter_${blockChapters.get(lastBlock) ?? chapters[0]?.index ?? 0}`,
     volume: options.volume ?? 1,

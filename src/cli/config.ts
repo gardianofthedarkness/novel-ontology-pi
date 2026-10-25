@@ -40,11 +40,20 @@ export interface ConfigReport {
     apiKeySource: "env" | "store" | "env-indirect" | null;
   };
   embeddings: {
-    /** Deferred by decision (DESIGN.md §9): graph-first retrieval. */
-    status: "deferred";
+    /**
+     * Scoped activation (causality only): "deferred" until an embedding model
+     * or base URL is configured, then "causality-only". Embeddings are used
+     * ONLY for causality candidate generation; nothing else reads them. A
+     * local CPU server needs no key, so this status never gates live ingest.
+     */
+    status: "deferred" | "causality-only";
     provider: string | null;
     model: string | null;
     dimension: number | null;
+    /** OpenAI-compatible base URL; defaults by provider when unset. */
+    baseUrl: string | null;
+    /** Env var name holding the optional embedding API key (never the value). */
+    apiKeyEnv: "EMBEDDING_API_KEY";
   };
   /** Env var NAMES (never values) still needed for a live ingest. */
   missingForLiveIngest: string[];
@@ -102,10 +111,15 @@ export function loadConfig(
       apiKeySource: jevKey ? jevKeySource : null,
     },
     embeddings: {
-      status: "deferred",
+      status:
+        nonEmpty(env.EMBEDDING_PROVIDER) || nonEmpty(env.EMBEDDING_MODEL) || nonEmpty(env.EMBEDDING_BASE_URL)
+          ? "causality-only"
+          : "deferred",
       provider: nonEmpty(env.EMBEDDING_PROVIDER),
       model: nonEmpty(env.EMBEDDING_MODEL),
       dimension: dimension !== null && Number.isFinite(dimension) ? dimension : null,
+      baseUrl: nonEmpty(env.EMBEDDING_BASE_URL),
+      apiKeyEnv: "EMBEDDING_API_KEY",
     },
     missingForLiveIngest,
     readyForLiveIngest: missingForLiveIngest.length === 0,

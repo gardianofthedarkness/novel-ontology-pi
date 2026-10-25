@@ -87,7 +87,6 @@ interface LlmEvent {
   actors?: string[];
   affected?: string[];
   evidence?: string[];
-  causes?: number | null;
   stateChanges?: LlmStateChange[];
 }
 
@@ -114,7 +113,7 @@ export interface SceneFacultyResult {
   notes: string[];
 }
 
-export const EXTRACTION_SYSTEM = `You are the extraction step of a novel-ontology pipeline. You receive ONE structured scene from a novel: its sentences (with stable ids) and the characters the system already knows. Dialogue cards are multi-person exchanges, not single-speaker turns. You output ONLY a JSON object describing the scene's ontology: events, participants, causal links, character state changes, and any genuinely new entities.
+export const EXTRACTION_SYSTEM = `You are the extraction step of a novel-ontology pipeline. You receive ONE structured scene from a novel: its sentences (with stable ids) and the characters the system already knows. Dialogue cards are multi-person exchanges, not single-speaker turns. You output ONLY a JSON object describing the scene's ontology: events, participants, character state changes, and any genuinely new entities. Causality is NOT yours to judge: a separate causality faculty establishes CAUSES links across the whole novel afterwards (cross-scene links included), so do not emit causal claims here.
 
 Rules:
 - Do not assign individual sentences to speakers or addressees. Shared dialogue membership does not establish a directed utterance, relationship or emotion; derive such claims only from explicit original evidence.
@@ -125,7 +124,6 @@ Rules:
 - List charactersPresent and charactersMentioned for THIS scene only, using name forms. Known cast and wider-window decisions are context, not proof of presence. Do not copy a previous roster. A name match, comparison, memory, advertisement or event actor alone does not establish physical presence. Leave unsupported presence empty.
 - Extract 3-5 events for the scene (fewer if the scene is genuinely smaller). An event is something that happens or is revealed — not a mood, not pure description.
 - Evidence: each event lists the ids of the sentences that directly support it, copied from the scene's sentence list. Never invent sentence ids.
-- Causality: an event's "causes" is the 0-based index, within your events array, of an earlier event in this scene that directly causes it, or null. Only when the text supports a direct causal link.
 - State changes: only changes the text actually shows — emotions (deltas -1..1), knowledge gained (short source-language facts), goals gained, relationship shifts toward another named character (-1..1), a location the character ends up in, possessions gained or lost. Write free-text goals and possessions in the narrative's language too.
 - New entities: people, places, organizations, or significant items in this scene that are NOT in the known-cast list. Give the fullest name form used in the text, plus any alias/nickname/title forms used for them in this scene.
 - locationName: the original-form name of the place the scene happens in, if the text establishes one, else null.
@@ -165,7 +163,7 @@ export function buildScenePrompt(input: {
     `${input.turns.length ? "LEGACY ATTRIBUTION" : "DIALOGUE CARDS"}:\n${turnLines}`,
     `SENTENCES:\n${sentenceLines}`,
     `Respond with JSON of exactly this shape:
-{"locationName": string|null, "charactersPresent": [name forms], "charactersMentioned": [name forms], "events": [{"summaryEn": string, "eventType": "dialogue"|"action"|"revelation"|"conflict"|"movement"|"decision"|"introduction"|"resolution"|"other", "importance": number 0..1, "actors": [name forms], "affected": [name forms], "evidence": [sentence ids], "causes": number|null, "stateChanges": [{"character": name form, "emotions": {string: number}, "knowledgeAdd": [string], "goalsAdd": [string], "relationships": {name form: number}, "location": string|null, "possessionsAdd": [string], "possessionsRemove": [string]}]}], "newEntities": [{"name": string, "kind": "Character"|"Location"|"Organization"|"Item"|"Concept", "aliases": [{"text": string, "kind": "alias"|"nickname"|"title"}]}]}`,
+{"locationName": string|null, "charactersPresent": [name forms], "charactersMentioned": [name forms], "events": [{"summaryEn": string, "eventType": "dialogue"|"action"|"revelation"|"conflict"|"movement"|"decision"|"introduction"|"resolution"|"other", "importance": number 0..1, "actors": [name forms], "affected": [name forms], "evidence": [sentence ids], "stateChanges": [{"character": name form, "emotions": {string: number}, "knowledgeAdd": [string], "goalsAdd": [string], "relationships": {name form: number}, "location": string|null, "possessionsAdd": [string], "possessionsRemove": [string]}]}], "newEntities": [{"name": string, "kind": "Character"|"Location"|"Organization"|"Item"|"Concept", "aliases": [{"text": string, "kind": "alias"|"nickname"|"title"}]}]}`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -603,24 +601,6 @@ export function createExtractor(work: WorkModel) {
           };
           relationProposals.push({
             id: `${input.blockId}_${eventId}_part_${actorId}`,
-            kind: "add_relation",
-            payload: rel,
-            confidence: EXTRACTION_CONFIDENCE,
-            provenance: { blockId: input.blockId, sentenceIds: evidence, patchId: "extraction" },
-          });
-        }
-        const causeId =
-          typeof le.causes === "number" ? llmIndexToEventId.get(le.causes) : undefined;
-        if (causeId && causeId !== eventId) {
-          const rel: Relation = {
-            fromId: causeId,
-            toId: eventId,
-            type: "CAUSES",
-            properties: {},
-            confidence: EXTRACTION_CONFIDENCE,
-          };
-          relationProposals.push({
-            id: `${input.blockId}_${eventId}_causes`,
             kind: "add_relation",
             payload: rel,
             confidence: EXTRACTION_CONFIDENCE,

@@ -228,14 +228,16 @@ export async function relate(
   type: RelationType,
   reason?: string,
 ): Promise<{ added: boolean }> {
-  // Endpoints may be entities or events (CAUSES is event->event,
-  // PARTICIPATES_IN is entity->event); both must exist somewhere.
+  // Endpoints may be entities, events, or dialogue cards (CAUSES is
+  // (Event | DialogueCard) -> (Event | DialogueCard)); all must exist.
   const dir = ontologyDir(novelDir);
   const entityRows = await readJsonl<Entity>(join(dir, "entities.jsonl"));
   const eventRows = await readJsonl<OntEvent>(join(dir, "events.jsonl"));
+  const sceneRows = await readJsonl<{ dialogues?: { id: string }[] }>(join(dir, "scenes.jsonl"));
   const known = new Set([
     ...entityRows.map((e) => e.id),
     ...eventRows.map((e) => e.id),
+    ...sceneRows.flatMap((scene) => (scene.dialogues ?? []).map((card) => card.id)),
   ]);
   if (!known.has(fromId)) throw new Error(`relate: unknown from id ${fromId}.`);
   if (!known.has(toId)) throw new Error(`relate: unknown to id ${toId}.`);

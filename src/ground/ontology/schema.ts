@@ -36,8 +36,12 @@ export const LADYBUG_DDL: string[] = [
      label STRING, PRIMARY KEY(id))`,
 
   // Relations (endpoint pairs are fixed by the closed schema).
-  `CREATE REL TABLE IF NOT EXISTS CAUSES(FROM Event TO Event, confidence DOUBLE)`,
-  `CREATE REL TABLE IF NOT EXISTS CAUSED_BY(FROM Event TO Event, confidence DOUBLE)`,
+  // CAUSES / CAUSED_BY endpoints are (Event | DialogueCard): the causality
+  // faculty's uniform search units. Multi-pair tables; traversals pass
+  // through dialogue-card nodes.
+  `CREATE NODE TABLE IF NOT EXISTS DialogueCard(id STRING, scene_id STRING, PRIMARY KEY(id))`,
+  `CREATE REL TABLE IF NOT EXISTS CAUSES(FROM Event TO Event, FROM Event TO DialogueCard, FROM DialogueCard TO Event, FROM DialogueCard TO DialogueCard, confidence DOUBLE)`,
+  `CREATE REL TABLE IF NOT EXISTS CAUSED_BY(FROM Event TO Event, FROM Event TO DialogueCard, FROM DialogueCard TO Event, FROM DialogueCard TO DialogueCard, confidence DOUBLE)`,
   `CREATE REL TABLE IF NOT EXISTS PARTICIPATES_IN(FROM Character TO Event, role STRING)`,
   `CREATE REL TABLE IF NOT EXISTS PRESENT_IN(FROM Character TO Scene)`,
   `CREATE REL TABLE IF NOT EXISTS MENTIONED_IN(FROM Character TO Scene)`,

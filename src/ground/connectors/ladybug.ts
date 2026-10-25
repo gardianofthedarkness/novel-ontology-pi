@@ -50,11 +50,14 @@ const ALL_TABLES: EntityKind[] = [
 
 /** Fixed endpoint labels + writable properties per relation table (schema v1). */
 const REL_DEFS: Partial<
-  Record<RelationType, { from: EntityKind; to: EntityKind; props: string[] }>
+  Record<RelationType, { from: EntityKind | EntityKind[]; to: EntityKind | EntityKind[]; props: string[] }>
 > = {
-  CAUSES: { from: "Event", to: "Event", props: ["confidence"] },
-  CAUSED_BY: { from: "Event", to: "Event", props: ["confidence"] },
-  PARTICIPATES_IN: { from: "Character", to: "Event", props: ["role"] },
+  // CAUSES endpoints are (Event | DialogueCard): the multi-pair table
+  // created in schema.ts. addRelation resolves each endpoint's label
+  // before matching (Kuzu cannot bind an unlabelled CREATE against a
+  // multi-pair table), so any endpoint combination writes.
+  CAUSES: { from: ["Event", "DialogueCard"], to: ["Event", "DialogueCard"], props: ["confidence"] },
+  CAUSED_BY: { from: ["Event", "DialogueCard"], to: ["Event", "DialogueCard"], props: ["confidence"] },  PARTICIPATES_IN: { from: "Character", to: "Event", props: ["role"] },
   PRESENT_IN: { from: "Character", to: "Scene", props: [] },
   MENTIONED_IN: { from: "Character", to: "Scene", props: [] },
   LOCATED_AT: { from: "Scene", to: "Location", props: [] },
@@ -217,6 +220,14 @@ export class LadybugStore implements OntologyStore {
       `MERGE (n:Scene {id: $id}) SET n.chapter_index = $chapterIndex, n.dialogue_cards_json = $dialogues`,
       { id: s.id, chapterIndex: s.chapterIndex, dialogues: JSON.stringify(s.dialogues ?? []) },
     );
+    // Dialogue cards are graph nodes too, so CAUSES endpoints resolve
+    // (multi-pair table) and traversals pass through them.
+    for (const card of s.dialogues ?? []) {
+      await this.run(
+        `MERGE (n:DialogueCard {id: $id}) SET n.scene_id = $sceneId`,
+        { id: card.id, sceneId: s.id },
+      );
+    }
     for (const cid of s.charactersPresent) {
       await this.addRelation({
         fromId: cid, toId: s.id, type: "PRESENT_IN", properties: {}, confidence: 1,
@@ -252,8 +263,25 @@ export class LadybugStore implements OntologyStore {
       : "";
     const params: Record<string, unknown> = { fromId: r.fromId, toId: r.toId };
     for (const p of propNames) params[p] = valueOf(p);
+    // Multi-pair tables (CAUSES, CAUSED_BY): Kuzu cannot bind a CREATE
+    // against an unlabelled endpoint when the rel table has several
+    // endpoint pairs, so resolve each endpoint's node label first (ids
+    // are unique across tables) and match labelled.
+    const resolveLabel = async (id: string, labels: EntityKind[]): Promise<string> => {
+      for (const label of labels) {
+        const rows = await this.run(`MATCH (n:${label} {id: $id}) RETURN n.id AS id`, { id });
+        if (rows.length) return label;
+      }
+      throw new Error(`Relation ${r.type}: unknown endpoint id ${id}.`);
+    };
+    const fromLabel = Array.isArray(def.from)
+      ? `:${await resolveLabel(r.fromId, def.from)}`
+      : `:${def.from}`;
+    const toLabel = Array.isArray(def.to)
+      ? `:${await resolveLabel(r.toId, def.to)}`
+      : `:${def.to}`;
     await this.run(
-      `MATCH (a:${def.from} {id: $fromId}), (b:${def.to} {id: $toId})
+      `MATCH (a${fromLabel} {id: $fromId}), (b${toLabel} {id: $toId})
        CREATE (a)-[:${r.type}${propClause}]->(b)`,
       params,
     );

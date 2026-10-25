@@ -14,6 +14,11 @@ export async function semanticContext(novelDir: string) {
   for (const [file, kind] of [["events", "Event"], ["scenes", "Scene"], ["timelines", "Timeline"], ["branches", "Branch"]]) {
     for (const object of await store.loadFile<{ id: string }>(`${file}.jsonl`)) objects.push({ id: object.id, kind });
   }
+  // Dialogue cards live inside scenes, not as their own bundle objects; the
+  // gate's relation type-check needs them as first-class endpoints.
+  for (const scene of await store.loadFile<{ id: string; dialogues?: { id: string }[] }>("scenes.jsonl")) {
+    for (const card of scene.dialogues ?? []) objects.push({ id: card.id, kind: "DialogueCard" });
+  }
   return { entities, objects: [...new Map(objects.map(object => [object.id, object])).values()] };
 }
 

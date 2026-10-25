@@ -202,7 +202,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   }, [albumPictures, level.sourceNodes]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
   const causalLinks = useMemo(() => worldCausalLinks(world), [world]);
-  const causal = useMemo(() => causalProjection(level, baseDraws, causalLinks), [level, baseDraws, causalLinks]);
+  const causal = useMemo(() => causalProjection(level, baseDraws, causalLinks, world.causal?.dialogueScenes ?? {}), [level, baseDraws, causalLinks, world]);
   const hoveredDraw = hoveredId ? baseDraws.find((draw) => draw.node.id === hoveredId) : undefined;
   /** Hovering an entity previews its links to visible spheres as faint threads. */
   const hoverEdges = useMemo(() => {
