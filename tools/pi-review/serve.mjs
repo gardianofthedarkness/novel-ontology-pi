@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util';
 import { root, repo, agentEvents } from './config.mjs';
 import { streamSnapshots } from './live-stream.mjs';
 import { createPiConsole } from './pi-console.mjs';
+import { bookCatalog } from './book-catalog.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -90,7 +91,7 @@ async function configuredLive({ volume, activityAfter }) {
   const data = await snapshot(resolve(root, selected.workspace), resolve(root, selected.metadataDirectory), {
     volume: selected.id, agentEvents, jobStatus: true, jobLabel: selected.label, activeVolume: active.volume, activityAfter,
   });
-  return { ...data, availableVolumes: volumes.map(entry => entry.id) };
+  return { ...data, availableVolumes: volumes.map(entry => entry.id), books: bookCatalog(volumes), activeVolume: active.volume };
 }
 
 export async function createViewer({ port = 4324, origin, expiresAt, readLive = configuredLive, watchPaths, console: consoleOptions, dist = `${repo}/apps/playground/dist` } = {}) {

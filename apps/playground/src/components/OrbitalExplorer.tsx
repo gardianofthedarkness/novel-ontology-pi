@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { GraphCanvasRef } from "reagraph";
 import { Vector3 } from "three";
 import type { AlbumPortrait, WorldEdge, WorldNode } from "../types";
@@ -10,6 +10,8 @@ import { OrbitalGraph, ORBITAL_TRANSITION_MS } from "./OrbitalGraph";
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalTouchAncestors, type OrbitalReadingBookmark } from "../data/orbitalActivity";
 import { activityFocus, type LiveActivity } from "../data/liveActivity";
 import { placePictures, type OrbitIllustration } from "../data/pictureNodes";
+import { orbitalLocation } from "../data/orbitalLocation";
+import type { BookEntry } from "../data/bookCatalog";
 
 const PICTURE_KIND_LABELS: Record<string, string> = { cover: "Cover", plate: "Plate", story: "Illustration", paratext: "Paratext" };
 const pictureKindLabel = (kind: string) => PICTURE_KIND_LABELS[kind] ?? (kind ? kind[0].toUpperCase() + kind.slice(1) : "Picture");
@@ -17,6 +19,11 @@ const pictureKindLabel = (kind: string) => PICTURE_KIND_LABELS[kind] ?? (kind ? 
 export interface OrbitalInspection { node: WorldNode; nodes: WorldNode[]; edges: WorldEdge[]; lookupNodes: WorldNode[]; contents: WorldNode[]; inspect?: boolean; passive?: boolean }
 interface Props {
   world: OrbitalWorld;
+  /** The book whose world is shown (catalog entry and ID); a change resets the reading path. */
+  book?: BookEntry | null;
+  bookId?: number | null;
+  /** Book picker / Pi book status, shown above the location path. */
+  bookBar?: ReactNode;
   /** Album illustrations from album.anchored events (App state, deduped by id). */
   albumPictures?: OrbitIllustration[];
   /** Bound album portraits from album.portraitBound events (App state, deduped by id). */
@@ -38,7 +45,7 @@ interface Props {
   onRelations: () => void;
 }
 
-export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = [], activityNodes, activityEdges, activity = null, followingActivity = false, reducedMotion, showRelations, resetToken, focusRequest, join, onJoinSettled, onSelect, onChapter, onPage, onMotion, onRelations }: Props) {
+export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = null, albumPictures = [], albumPortraits = [], activityNodes, activityEdges, activity = null, followingActivity = false, reducedMotion, showRelations, resetToken, focusRequest, join, onJoinSettled, onSelect, onChapter, onPage, onMotion, onRelations }: Props) {
   const [path, setPath] = useState<OrbitalScope[]>([volumeScope]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [revealedId, setRevealedId] = useState<string | null>(null);
@@ -174,10 +181,26 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
   const touchAncestors = useMemo(() => new Set(touchedNodeIds.flatMap(id => [...orbitalTouchAncestors(level.sourceNodes, level.sourceEdges, id)])), [touchedNodeIds, level.sourceNodes, level.sourceEdges]);
   const touchedIds = useMemo(() => draws.filter(draw => touchAncestors.has(draw.node.id) || draw.entry?.members.some(id => touchAncestors.has(id))).map(draw => draw.node.id), [draws, touchAncestors]);
   const pageLabel = scope.sceneId ? level.sourceNodes.find(node => node.id === scope.sceneId)?.summary ?? level.sourceNodes.find(node => node.id === scope.sceneId)?.label ?? scope.label : scope.kind === "chapter" ? world.laneNodes.find(node => node.id === scope.chapterId)?.label ?? scope.label : scope.kind === "scenes" ? representativeScene(level.sourceNodes, level.sourceEdges, level.sourceNodes.filter(node => scope.ids?.includes(node.id)))?.summary ?? scope.label : scope.label;
+  const location = useMemo(() => orbitalLocation(world, path, level, book, inspectedRecord ?? null), [world, path, level, book, inspectedRecord]);
+  const locationRef = useRef<HTMLOListElement>(null);
+  useEffect(() => { const list = locationRef.current; if (list) list.scrollLeft = list.scrollWidth; }, [location]);
   const overviewPositions = useRef<Position3[]>([]);
   overviewPositions.current = layout.draws.map(draw => draw.position);
 
   useEffect(() => { setPath([volumeScope]); setSelectedId(null); setRevealedId(null); setMorph(null); }, [resetToken]);
+  /** Another book's world: start at its overview, except when returning to
+   * the book whose reading bookmark was just restored after following Pi. */
+  const shownBook = useRef(bookId);
+  const bookmarkBook = useRef<number | null>(null);
+  const restoredBook = useRef<number | null>(null);
+  useEffect(() => {
+    if (shownBook.current === bookId) return;
+    shownBook.current = bookId;
+    lastFollow.current = "";
+    if (bookId !== null && restoredBook.current === bookId) { restoredBook.current = null; return; }
+    restoredBook.current = null;
+    setPath([volumeScope]); setSelectedId(null); setRevealedId(null); setMorph(null); setJoinTarget(null);
+  }, [bookId]);
   useEffect(() => {
     if (canEnterOrbitalScope(scope)) return;
     setPath(current => current.filter(canEnterOrbitalScope));
@@ -241,6 +264,7 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
       if (singleClick.current) clearTimeout(singleClick.current);
       const controls = graphRef.current?.getControls?.();
       controls?.stop();
+      bookmarkBook.current = bookId;
       readingBookmark.current = copyOrbitalBookmark({ path, selectedId, revealedId, camera: controls ? { position: controls.getPosition(new Vector3(), false).toArray() as Position3, target: controls.getTarget(new Vector3(), false).toArray() as Position3, up: controls.camera.up.toArray() as Position3, zoom: controls.camera.zoom, focalOffset: controls.getFocalOffset(new Vector3(), false).toArray() as Position3 } : null });
       setPendingFocus(null);
       return;
@@ -248,6 +272,7 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
     const saved = readingBookmark.current;
     if (!saved) return;
     readingBookmark.current = null;
+    restoredBook.current = bookmarkBook.current !== shownBook.current ? bookmarkBook.current : null;
     lastFollow.current = "";
     setFollowTarget(null);
     setPendingFocus(null);
@@ -363,13 +388,26 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
     setPath((current) => current.slice(0, -1));
     setSelectedId(null); setRevealedId(null);
   };
+  const jumpTo = (index: number) => {
+    if (index >= path.length - 1 || morph) return;
+    if (singleClick.current) clearTimeout(singleClick.current);
+    graphRef.current?.getControls?.()?.stop();
+    setMorph({ startedAt: performance.now(), from: snapshot() });
+    setPath((current) => current.slice(0, index + 1));
+    setSelectedId(null); setRevealedId(null);
+  };
   const reveal = useCallback((id: string | null) => setRevealedId((current) => current === id ? current : id), []);
   const allPositions = layout.draws.map((draw) => bus.positions.get(draw.node.id) ?? draw.position);
   const zoomBy = (delta: number) => document.querySelector(".orbital-stage")?.dispatchEvent(new CustomEvent("orbital-zoom", { detail: { delta } }));
   return <div className="orbital-explorer">
     <nav className="scene-sequence orbital-navigation" aria-label="Orbital levels">
       <div className="orbital-navigation-top"><button onClick={back} disabled={path.length <= 1 || !!morph} aria-label="Back one orbital level">← Back</button><span className="orbital-level">{String(path.length).padStart(2, "0")} / {scope.kind === "scene" ? "SCENE · CONVERSATIONS" : scope.kind.toUpperCase()}</span><button onClick={() => zoomBy(-80)} aria-label="Zoom in" title="Zoom in (+); Shift + scroll for fine control">＋</button><button onClick={() => zoomBy(80)} aria-label="Zoom out" title="Zoom out (−)">−</button><button onClick={() => framePositions(graphRef, allPositions, 1.2, !reducedMotion)}>Frame view ⌖</button><button aria-pressed={showRelations} onClick={onRelations}>Connections {showRelations ? "on" : "off"}</button></div>
-      <div className="orbital-breadcrumb" title={path.map((entry, index) => index === path.length - 1 ? pageLabel : entry.label).join(" / ")}>{path.map((entry, index) => <span key={`${index}:${entry.key}`}>{index ? " / " : ""}{index === path.length - 1 ? pageLabel : entry.label}</span>)}</div>
+      {bookBar}
+      <ol ref={locationRef} className="orbital-location" aria-label="Location in the book">{location.map((crumb, index) => {
+        const content = <><b>{crumb.label}</b>{crumb.detail && <span>{crumb.detail}</span>}</>;
+        const navigable = crumb.pathIndex !== undefined && crumb.pathIndex < path.length - 1;
+        return <li key={`${index}:${crumb.key}`} className={`location-${crumb.kind}${crumb.selection ? " is-selection" : ""}`} aria-current={index === location.length - 1 ? "location" : undefined} title={[crumb.label, crumb.detail].filter(Boolean).join(" · ")}>{navigable ? <button onClick={() => jumpTo(crumb.pathIndex!)} disabled={!!morph} aria-label={`Go to ${crumb.label}`}>{content}</button> : <span>{content}</span>}</li>;
+      })}</ol>
       <div className="orbital-help"><span>Click to inspect · zoom to reveal · enter scene groups; conversations stay in place</span><span className="orbital-count" role="status">{level.main.length} main · {nebula.length}/{surrounding.eligible} surrounding · {preview.draws.length} revealed · {edges.length} links</span></div>
       {followingActivity && activity && <div className="orbital-live-status" role="status"><b>Following activity · {activity.blockId ?? "waiting"} · page overview</b><span>{activity.phase}</span>{activityTarget.timestamp && <small>{activityTarget.historical ? "Last observed · " : ""}{touchedNodeIds.length ? `Blue bounds · ${touchedNodeIds.length} ${activityTarget.kind === "review" ? "review targets (not edits)" : "edited records"}` : "No visible graph target for this tool action"} · {activityTarget.faculty} · {new Date(activityTarget.timestamp).toLocaleTimeString()}</small>}</div>}
     </nav>

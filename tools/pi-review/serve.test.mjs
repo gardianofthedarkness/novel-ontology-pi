@@ -284,7 +284,7 @@ async function cliFixture(context) {
   const setup = await fixture(context);
   const tools = join(setup.directory, 'tools/pi-review');
   await mkdir(tools, { recursive: true });
-  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs']) {
+  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs', 'book-catalog.mjs', 'review-progress.mjs', 'guard.mjs']) {
     await copyFile(fileURLToPath(new URL(filename, import.meta.url)), join(tools, filename));
   }
   const home = join(setup.directory, 'configured-home');
@@ -336,6 +336,8 @@ test('CLI reads only configured runtime, caps expiry, prints distinct links and 
   const initial = await fetch(new URL('api/live', readOnly)).then(result => result.json());
   assert.equal(initial.volume, 7);
   assert.deepEqual(initial.availableVolumes, [7]);
+  assert.deepEqual(initial.books, [{ id: 7, title: 'Book 7', sourceFile: null }]);
+  assert.equal(initial.activeVolume, 7);
   assert.equal(initial.clientBundle, 'app-123.js');
   const volumes = [{ id: 7, workspace: 'workspace', metadataDirectory: 'metadata' }, { id: 8, workspace: 'workspace-two', metadataDirectory: 'metadata-two' }];
   await writeFile(join(runtime, 'live-volumes.json'), JSON.stringify(volumes));
