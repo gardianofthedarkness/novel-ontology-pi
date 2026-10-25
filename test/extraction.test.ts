@@ -244,7 +244,6 @@ test("extraction turns one scene into events, relations, a scene record, and sta
             actors: ["御坂美琴"],
             affected: [],
             evidence: [ids[0]],
-            causes: null,
             stateChanges: [
               { character: "御坂美琴", emotions: { calm: 0.2 }, knowledgeAdd: [], goalsAdd: [], relationships: {}, location: "教室", possessionsAdd: [], possessionsRemove: [] },
             ],
@@ -281,7 +280,7 @@ test("extraction turns one scene into events, relations, a scene record, and sta
   assert.deepEqual(events[0].primaryActors, ["char_000001"]);
   assert.equal(events[0].evidence.text, "御坂美琴走进教室。");
   const rels = out.proposals.filter((p) => p.kind === "add_relation").map((p) => p.payload as { type: string; fromId: string; toId: string });
-  assert.ok(rels.some((r) => r.type === "CAUSES" && r.fromId === events[0].id && r.toId === events[1].id));
+  assert.ok(!rels.some((r) => r.type === "CAUSES"), "extraction no longer emits CAUSES — the causality faculty owns all CAUSES links (a legacy causes field in model output is ignored)");
   assert.ok(rels.some((r) => r.type === "PARTICIPATES_IN" && r.fromId === "char_000001"));
   const state = out.proposals.find((p) => p.kind === "set_state_change")?.payload as { characterId: string; afterEventId: string; location: string };
   assert.equal(state.characterId, "char_000001");
@@ -318,7 +317,7 @@ test("extraction fleshes a Jev stub, drops an unconfirmed stub with a note, fold
     reply: JSON.stringify({
       locationName: null,
       events: [
-        { summaryEn: "Mikoto and Kuroko enter", eventType: "movement", importance: 0.5, actors: ["御坂美琴", "白井黑子"], affected: [], evidence: [], causes: null, stateChanges: [] },
+        { summaryEn: "Mikoto and Kuroko enter", eventType: "movement", importance: 0.5, actors: ["御坂美琴", "白井黑子"], affected: [], evidence: [], stateChanges: [] },
       ],
       newEntities: [{ name: "白井黑子", kind: "Character", aliases: [{ text: "黑子", kind: "nickname" }] }],
     }),
@@ -354,7 +353,7 @@ test("a 'new' entity whose alias is already known folds into that entity — no 
     reply: JSON.stringify({
       locationName: null,
       events: [
-        { summaryEn: "Shokuhou watches Mikoto from the window", eventType: "action", importance: 0.5, actors: ["食蜂"], affected: ["御坂美琴"], evidence: [], causes: null, stateChanges: [] },
+        { summaryEn: "Shokuhou watches Mikoto from the window", eventType: "action", importance: 0.5, actors: ["食蜂"], affected: ["御坂美琴"], evidence: [], stateChanges: [] },
       ],
       // Canonical form is the short name; the alias is the known entity.
       newEntities: [{ name: "食蜂", kind: "Character", aliases: [{ text: "食蜂操祈", kind: "alias" }] }],
@@ -384,7 +383,7 @@ test("a 'new' entity spelled with a Japanese variant glyph folds into the known 
     reply: JSON.stringify({
       locationName: null,
       events: [
-        { summaryEn: "Kuroko teleports to Mikoto's side", eventType: "action", importance: 0.5, actors: ["白井黒子"], affected: ["御坂美琴"], evidence: [], causes: null, stateChanges: [] },
+        { summaryEn: "Kuroko teleports to Mikoto's side", eventType: "action", importance: 0.5, actors: ["白井黒子"], affected: ["御坂美琴"], evidence: [], stateChanges: [] },
       ],
       newEntities: [{ name: "白井黒子", kind: "Character", aliases: [] }],
     }),

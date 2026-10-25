@@ -189,7 +189,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   }, [albumPictures, level.sourceNodes]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
   const causalLinks = useMemo(() => worldCausalLinks(world), [world]);
-  const causal = useMemo(() => causalProjection(level, baseDraws, causalLinks), [level, baseDraws, causalLinks]);
+  const causal = useMemo(() => causalProjection(level, baseDraws, causalLinks, world.causal?.dialogueScenes ?? {}), [level, baseDraws, causalLinks, world]);
   /** EM joins: a still-drawn dropped record moves onto its survivor; one the
    * new snapshot already removed gets a view-only preimage at the survivor,
    * and the morph glides both in from their last drawn poses. */

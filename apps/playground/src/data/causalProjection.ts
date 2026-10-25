@@ -41,7 +41,7 @@ export function worldCausalLinks(world: OrbitalWorld): CausalLink[] {
 const size = (draw: OrbitalDraw) => draw.entry?.members.length ?? draw.node.cluster?.ids.length ?? 1;
 const weakest = (states: CanonState[]): CanonState => states.includes("held") ? "held" : states.includes("proposed") ? "proposed" : "canon";
 
-export function causalProjection(level: OrbitalLevel, draws: OrbitalDraw[], links: CausalLink[] = []): CausalProjection {
+export function causalProjection(level: OrbitalLevel, draws: OrbitalDraw[], links: CausalLink[] = [], dialogueScenes: Record<string, string> = {}): CausalProjection {
   const chapterId = level.scope.chapterId;
   const relevant = chapterId ? links.filter((link) => link.fromChapter === chapterId || link.toChapter === chapterId) : links;
   if (!relevant.length) return { arrows: [], inside: 0, insideBy: new Map(), elsewhere: 0 };
@@ -50,7 +50,9 @@ export function causalProjection(level: OrbitalLevel, draws: OrbitalDraw[], link
   const holder = (eventId: string, chapter: string): OrbitalDraw | undefined => {
     const exact = candidates.find((draw) => draw.node.id === eventId);
     if (exact) return exact;
-    const chain = new Set([eventId, owner.get(eventId), chapter].filter((id): id is string => !!id));
+    // Dialogue-card endpoints are not world nodes: project them onto
+    // their owning scene's sphere (same idea as hidden-event arrows).
+    const chain = new Set([eventId, owner.get(eventId), dialogueScenes[eventId], chapter].filter((id): id is string => !!id));
     return candidates
       .filter((draw) => chain.has(draw.node.id) || draw.entry?.members.some((id) => chain.has(id)) || draw.node.cluster?.ids.some((id) => chain.has(id)))
       .sort((first, second) => size(first) - size(second))[0];

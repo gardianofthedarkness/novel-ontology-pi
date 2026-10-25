@@ -103,6 +103,38 @@ export async function causalDescendants(
   return rows.map((r) => r.id as string);
 }
 
+/**
+ * Unit-agnostic variants: the anchor may be an event OR a dialogue card
+ * (CAUSES endpoints are both). Intermediate nodes were never label-bound,
+ * so the originals already traverse through dialogue cards; these only
+ * lift the anchor restriction.
+ */
+export async function causalAncestorsOf(
+  store: LadybugStore,
+  unitId: string,
+  depth = 4,
+): Promise<string[]> {
+  const rows = await store.run(
+    `MATCH (cause)-[:CAUSES*1..${clampDepth(depth)}]->(e {id: $id})
+     RETURN DISTINCT cause.id AS id`,
+    { id: unitId },
+  );
+  return rows.map((r) => r.id as string);
+}
+
+export async function causalDescendantsOf(
+  store: LadybugStore,
+  unitId: string,
+  depth = 4,
+): Promise<string[]> {
+  const rows = await store.run(
+    `MATCH (e {id: $id})-[:CAUSES*1..${clampDepth(depth)}]->(effect)
+     RETURN DISTINCT effect.id AS id`,
+    { id: unitId },
+  );
+  return rows.map((r) => r.id as string);
+}
+
 /** Where a scene happens (null if the location was never resolved). */
 export async function sceneLocation(
   store: LadybugStore,

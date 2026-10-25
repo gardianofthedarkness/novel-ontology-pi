@@ -75,7 +75,7 @@ export interface WorldEdge {
 /** One stored CAUSES relation between two events, with each endpoint's
  * chapter. Direction is cause → effect. Never inferred from chronology. */
 export interface CausalLink { id: string; from: string; to: string; fromChapter: string; toChapter: string; state: CanonState }
-export interface CausalSummary { links: CausalLink[]; unresolved: number }
+export interface CausalSummary { links: CausalLink[]; unresolved: number; /** Dialogue-card id -> owning scene id, for projecting dialogue endpoints onto their scene's sphere. */ dialogueScenes?: Record<string, string> }
 
 export interface ChangeSet {
   id: string;
