@@ -1,4 +1,4 @@
-export function liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId }) {
+export function liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId, reviewProgress }) {
   const visible = new Set(Object.values(interiors).flatMap(graph => graph.nodes.map(node => node.id)));
   const proposals = new Map(changesets.flatMap(packet => packet.proposals.map(proposal => [proposal.id, proposal])));
   const calls = new Map();
@@ -47,14 +47,24 @@ export function liveActivity({ processing, agent, drafts, changesets, interiors,
   const blockId = construction?.blockId ?? processing.findLast(record => record.event.type === 'block.started')?.event.blockId;
   const terminal = agent.findLast(record => record.type === 'pi.status');
   const command = agent.findLast(record => record.type === 'pi.command');
+  const review = reviewProgress ? Object.fromEntries(['id', 'timestamp', 'volume', 'chapterIndex', 'blockId', 'changesetId', 'phase', 'status', 'sourceStart', 'sourceEnd', 'revision', 'totalFacts', 'inspectedFacts', 'factIds', 'factPositions', 'proposalIds', 'fields', 'offset', 'pageCount', 'total', 'accepted', 'rejected', 'held', 'unreviewed'].filter(key => reviewProgress[key] !== undefined).map(key => [key, reviewProgress[key]])) : null;
+  if (review) {
+    review.active = terminal?.status === 'working' && review.timestamp >= terminal.timestamp;
+    const proposalIds = new Set([...(review.proposalIds ?? []), ...(review.factIds ?? []).map(id => id.split('/')[0])]);
+    review.nodeIds = [...new Set([...proposalIds].flatMap(id => {
+      const payload = proposals.get(id)?.payload;
+      return payload ? [payload.id, payload.fromId, payload.toId, payload.entityId, payload.characterId, payload.afterEventId].filter(id => visible.has(id)) : [];
+    }))];
+  }
   const identityEvents = processing.filter(record => ['entity.merged', 'entity.distinct'].includes(record.event.type)).map(record => ({ id: record.id, timestamp: record.timestamp, event: record.event.type === 'entity.merged' ? { type: 'entity.merged', keepId: record.event.keepId, dropId: record.event.dropId } : { type: 'entity.distinct', aId: record.event.aId, bId: record.event.bId } }));
   return {
     cursor: processing.at(-1)?.id ?? null,
     batch,
     count: processing.filter(record => ['draft.updated', 'proposal.added', 'entity.merged'].includes(record.event.type)).length,
-    chapterId: `chapter_${blockChapters.get(blockId) ?? 0}`,
-    blockId: blockId ?? null,
-    phase: terminal?.status === 'complete' ? 'Processing complete · last construction state; no extraction is currently running' : terminal?.status === 'error' ? 'Processor stopped · last construction state' : terminal?.status === 'idle' ? terminal.label ?? 'Pi ready · waiting for your message' : construction?.stage === 'gate' ? `Pi review · ${command?.label ?? 'checking semantic facts'} · ${command?.status ?? 'working'}` : construction ? `${construction.patchId} · live construction` : terminal?.label ?? 'Waiting for extraction',
+    chapterId: `chapter_${review?.active ? review.chapterIndex : blockChapters.get(blockId) ?? 0}`,
+    blockId: review?.active ? review.blockId : blockId ?? null,
+    phase: review?.active ? `Pi review · ${review.changesetId} · ${review.phase} · ${review.status}${review.total != null && review.offset != null ? ` · ${review.offset + 1}–${Math.min(review.offset + review.pageCount, review.total)} / ${review.total}` : ''}` : terminal?.status === 'complete' ? 'Processing complete · last construction state; no extraction is currently running' : terminal?.status === 'error' ? 'Processor stopped · last construction state' : terminal?.status === 'idle' ? terminal.label ?? 'Pi ready · waiting for your message' : construction?.stage === 'gate' ? `Pi review · ${command?.label ?? 'checking semantic facts'} · ${command?.status ?? 'working'}` : construction ? `${construction.patchId} · live construction` : terminal?.label ?? 'Waiting for extraction',
+    review,
     latestTouch,
     faculties: [...faculties.values()].sort((first, second) => second.timestamp.localeCompare(first.timestamp)).slice(0, 16),
     identityEvents,

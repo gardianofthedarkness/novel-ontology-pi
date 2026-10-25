@@ -50,3 +50,19 @@ test('latest touch follows actual log order, ignores removed IDs, and never expo
   assert.ok(!JSON.stringify(result).includes('PRIVATE-REASON'));
   assert.match(result.telemetryNote, /not separately identifiable/);
 });
+
+test('actual Pi review metadata highlights proposal targets without claiming a graph mutation or acceptance', () => {
+  const input = fixture();
+  input.agent = [{ type: 'pi.status', status: 'working', timestamp: time(1) }];
+  input.changesets = [{ proposals: [{ id: 'proposal', payload: { id: 'scene_1' } }] }];
+  const focus = { id: 'read', timestamp: time(2), volume: 1, chapterIndex: 0, blockId: 'b0001', changesetId: 'cs_b0001', phase: 'facts', status: 'ok', factIds: ['proposal/presence'], offset: 20, pageCount: 2, total: 100, privateReason: 'PRIVATE-REASON' };
+  const activity = liveActivity({ ...input, reviewProgress: focus });
+  assert.equal(activity.review.active, true);
+  assert.deepEqual(activity.review.nodeIds, ['scene_1']);
+  assert.equal(activity.count, 0);
+  assert.equal(activity.latestTouch, null);
+  assert.match(activity.phase, /21–22 \/ 100/);
+  assert.ok(!JSON.stringify(activity).includes('PRIVATE-REASON'));
+  input.agent.push({ type: 'pi.status', status: 'idle', timestamp: time(3) });
+  assert.equal(liveActivity({ ...input, reviewProgress: focus }).review.active, false);
+});

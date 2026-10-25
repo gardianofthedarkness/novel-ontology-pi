@@ -139,15 +139,17 @@ not transported. Several records published together are explicitly a batch,
 not an invented ordering of parallel model decisions.
 
 Activity follow frames the overview once when its actual page changes, never
-re-centering the camera on consecutive edits in the same page. Scene pages are
-terminal: all their event/dialogue spheres appear together without deeper
-record/dialogue pages. A refresh cursor collects every visible touched ID since
+re-centering the camera on consecutive edits in the same page. Navigation stops
+at the scene overview: zooming reveals each scene's event/dialogue spheres
+in-place, but double-click, keyboard entry and activity follow cannot promote
+those contents into a separate uncoiled record timeline. Nested scene groups
+remain navigable. A refresh cursor collects every visible touched ID since
 the preceding snapshot; containing nodes and a shared blue bound highlight the
 whole batch. Cross-scene batches choose their shared ancestor page. Headings,
 breadcrumbs and edit captions follow the active page and current processor step.
 
 The activity toggle follows work inside the existing orbital universe, navigating
-the ordinary chapter, scene-group and terminal scene layers without flattening
+the ordinary chapter and scene-group layers without flattening
 them or mounting another graph. Toggle again to restore the bookmarked orbital
 path, selected/revealed record, camera position/target, zoom, focal offset and
 inspector. A blue wire box and readable label mark the latest visible touch or
@@ -170,6 +172,30 @@ disconnected instead of accumulating an unbounded stream backlog.
 The activity count measures construction log records, not model calls: a real
 packet can publish hundreds of proposals at once. Such batches are not slowed
 down or split into fabricated intermediate agent steps.
+
+### Observed Pi merge-review progress
+
+The optional `activity.review` projection reads actual scoped Bash tool requests
+and results from the SDK's local session journal. It incrementally processes
+complete UTF-8 JSONL records, coalesces concurrent readers, caps file/read/cache
+sizes, and never modifies the journal or sends a prompt. Old or unavailable
+session telemetry remains explicitly unavailable. No worker restart is needed
+to attach a newly started observer/viewer to an existing SDK session.
+
+The expandable Pi review panel identifies the book, chapter, ChangeSet, revision,
+fact/proposal/evidence page or source-line range and semantic field types.
+Observed fact reads are deduplicated within a revision and reset on a new one;
+they are not proof of understanding, acceptance or extraction accuracy. Actual
+decision counts are displayed separately. Requests are labelled requested, not
+claimed to be executing simultaneously. Failed or oversized reads do not earn
+read coverage. Raw tool output, source excerpts, model thinking, correction
+payloads, command paths and private review reasons are not exported.
+
+Review targets use their existing proposal-to-node mapping and containing-scene
+highlights. They do not increment construction counts or fabricate edits. Review
+captions and passive record selection use the current review targets rather than
+the previous extraction write. Inactive/older review history cannot steal focus
+from newer construction, and reading mode retains the user's independent view.
 
 ### Interactive Pi console
 

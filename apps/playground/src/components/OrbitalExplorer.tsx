@@ -3,12 +3,12 @@ import type { GraphCanvasRef } from "reagraph";
 import { Vector3 } from "three";
 import type { AlbumPortrait, WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
-import { orbitalContents, orbitalLevel, progressiveNebula, representativeScene, volumeScope, type OrbitalScope, type OrbitalWorld } from "../data/orbitalModel";
+import { canEnterOrbitalScope, orbitalContents, orbitalLevel, progressiveNebula, representativeScene, volumeScope, type OrbitalScope, type OrbitalWorld } from "../data/orbitalModel";
 import { layoutOrbitalLevel, layoutOrbitalPreview, nestedEntityConnections, type OrbitalDraw, type OrbitalMorph, type OrbitalPose } from "../data/orbitalLayout";
 import { framePositions, type LabelBus } from "./WorldGraph";
 import { OrbitalGraph, ORBITAL_TRANSITION_MS } from "./OrbitalGraph";
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalTouchAncestors, type OrbitalReadingBookmark } from "../data/orbitalActivity";
-import type { LiveActivity } from "../data/liveActivity";
+import { activityFocus, type LiveActivity } from "../data/liveActivity";
 import { placePictures, type OrbitIllustration } from "../data/pictureNodes";
 
 const PICTURE_KIND_LABELS: Record<string, string> = { cover: "Cover", plate: "Plate", story: "Illustration", paratext: "Paratext" };
@@ -169,7 +169,8 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
   const edges = connections.edges;
   const selected = draws.find((draw) => draw.node.id === selectedId);
   const inspectedRecord = selected?.node ?? level.sourceNodes.find((node) => node.id === selectedId);
-  const touchedNodeIds = useMemo(() => activity?.batch?.nodeIds ?? (activity?.latestTouch ? [activity.latestTouch.nodeId] : []), [activity?.batch, activity?.latestTouch]);
+  const activityTarget = useMemo(() => activityFocus(activity), [activity]);
+  const touchedNodeIds = activityTarget.nodeIds;
   const touchAncestors = useMemo(() => new Set(touchedNodeIds.flatMap(id => [...orbitalTouchAncestors(level.sourceNodes, level.sourceEdges, id)])), [touchedNodeIds, level.sourceNodes, level.sourceEdges]);
   const touchedIds = useMemo(() => draws.filter(draw => touchAncestors.has(draw.node.id) || draw.entry?.members.some(id => touchAncestors.has(id))).map(draw => draw.node.id), [draws, touchAncestors]);
   const pageLabel = scope.sceneId ? level.sourceNodes.find(node => node.id === scope.sceneId)?.summary ?? level.sourceNodes.find(node => node.id === scope.sceneId)?.label ?? scope.label : scope.kind === "chapter" ? world.laneNodes.find(node => node.id === scope.chapterId)?.label ?? scope.label : scope.kind === "scenes" ? representativeScene(level.sourceNodes, level.sourceEdges, level.sourceNodes.filter(node => scope.ids?.includes(node.id)))?.summary ?? scope.label : scope.label;
@@ -177,6 +178,13 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
   overviewPositions.current = layout.draws.map(draw => draw.position);
 
   useEffect(() => { setPath([volumeScope]); setSelectedId(null); setRevealedId(null); setMorph(null); }, [resetToken]);
+  useEffect(() => {
+    if (canEnterOrbitalScope(scope)) return;
+    setPath(current => current.filter(canEnterOrbitalScope));
+    setSelectedId(scope.sceneId ?? null);
+    setRevealedId(scope.sceneId ?? null);
+    setMorph(null);
+  }, [scope.kind, scope.sceneId]);
   useEffect(() => { onChapter(scope.chapterId ?? null); }, [scope.chapterId, onChapter]);
   useEffect(() => { onPage?.({ key: scope.key, label: pageLabel, kind: scope.kind, chapterId: scope.chapterId }); }, [scope.key, scope.kind, scope.chapterId, pageLabel, onPage]);
   useEffect(() => () => { if (singleClick.current) clearTimeout(singleClick.current); }, []);
@@ -188,9 +196,9 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
   useEffect(() => {
     if (restoreRequest || !followingActivity && readingBookmark.current) return;
     if (suppressInspection.current) { suppressInspection.current = false; return; }
-    const record = followingActivity ? draws.find(draw => draw.node.id === activity?.latestTouch?.nodeId)?.node ?? [...draws].reverse().find(draw => touchedIds.includes(draw.node.id))?.node ?? inspectedRecord ?? level.main[0]?.node ?? level.nebula[0] : inspectedRecord ?? level.main[0]?.node ?? level.nebula[0];
+    const record = followingActivity ? draws.find(draw => draw.node.id === touchedNodeIds.at(-1))?.node ?? [...draws].reverse().find(draw => touchedIds.includes(draw.node.id))?.node ?? inspectedRecord ?? level.main[0]?.node ?? level.nebula[0] : inspectedRecord ?? level.main[0]?.node ?? level.nebula[0];
     onSelect(record ? { node: record, nodes: draws.map((draw) => draw.node), edges: inspectedRecord ? edges : [], lookupNodes: level.sourceNodes, contents: orbitalContents(record, level), inspect: !!inspectedRecord, passive: followingActivity } : null);
-  }, [inspectedRecord, draws, edges, level.sourceNodes, onSelect, followingActivity, restoreRequest, touchedIds, activity?.latestTouch?.nodeId]);
+  }, [inspectedRecord, draws, edges, level.sourceNodes, onSelect, followingActivity, restoreRequest, touchedIds, touchedNodeIds]);
 
   const snapshot = () => new Map(draws.map((draw): [string, OrbitalPose] => [draw.node.id, { position: bus.positions.get(draw.node.id) ?? draw.position, radius: draw.radius }]));
   /** EM join animation: retarget the dropped draw onto its survivor
@@ -273,7 +281,7 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
   }, [restoreRequest, reducedMotion, focusRequest?.sequence]);
   useEffect(() => {
     if (!followingActivity || !activity || restoreRequest) return;
-    const key = activity.batch?.id ?? activity.latestTouch?.id ?? `${activity.chapterId}:waiting`;
+    const key = activityTarget.id ?? `${activity.chapterId}:waiting`;
     if (lastFollow.current === key) return;
     const firstFollow = !lastFollow.current;
     const route = orbitalActivityBatchPath(world, touchedNodeIds, activity.chapterId, activityNodes, activityEdges, path);
@@ -289,7 +297,7 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
     } else if (firstFollow) {
       setFollowTarget({ key: nextKey });
     }
-  }, [followingActivity, activity, world, activityNodes, activityEdges, path, restoreRequest, touchedNodeIds]);
+  }, [followingActivity, activity, activityTarget.id, world, activityNodes, activityEdges, path, restoreRequest, touchedNodeIds]);
   useEffect(() => {
     if (!followingActivity || !followTarget) return;
     let timer: ReturnType<typeof setTimeout>;
@@ -339,6 +347,7 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
   }, [focusRequest, draws, focus, world, scope.chapterId, level, layout.draws, onSelect, followingActivity, restoreRequest]);
   const enter = (draw: OrbitalDraw) => {
     if (draw.role !== "preview" || !parent?.entry?.scope || morph) return;
+    if (!canEnterOrbitalScope(parent.entry.scope)) { inspect(draw); return; }
     if (singleClick.current) clearTimeout(singleClick.current);
     graphRef.current?.getControls?.()?.stop();
     setMorph({ startedAt: performance.now(), from: snapshot() });
@@ -361,8 +370,8 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
     <nav className="scene-sequence orbital-navigation" aria-label="Orbital levels">
       <div className="orbital-navigation-top"><button onClick={back} disabled={path.length <= 1 || !!morph} aria-label="Back one orbital level">← Back</button><span className="orbital-level">{String(path.length).padStart(2, "0")} / {scope.kind === "scene" ? "SCENE · CONVERSATIONS" : scope.kind.toUpperCase()}</span><button onClick={() => zoomBy(-80)} aria-label="Zoom in" title="Zoom in (+); Shift + scroll for fine control">＋</button><button onClick={() => zoomBy(80)} aria-label="Zoom out" title="Zoom out (−)">−</button><button onClick={() => framePositions(graphRef, allPositions, 1.2, !reducedMotion)}>Frame view ⌖</button><button aria-pressed={showRelations} onClick={onRelations}>Connections {showRelations ? "on" : "off"}</button></div>
       <div className="orbital-breadcrumb" title={path.map((entry, index) => index === path.length - 1 ? pageLabel : entry.label).join(" / ")}>{path.map((entry, index) => <span key={`${index}:${entry.key}`}>{index ? " / " : ""}{index === path.length - 1 ? pageLabel : entry.label}</span>)}</div>
-      <div className="orbital-help"><span>Click to inspect · zoom to reveal · double-click a revealed sphere to enter</span><span className="orbital-count" role="status">{level.main.length} main · {nebula.length}/{surrounding.eligible} surrounding · {preview.draws.length} revealed · {edges.length} links</span></div>
-      {followingActivity && activity && <div className="orbital-live-status" role="status"><b>Following activity · {activity.blockId ?? "waiting"} · page overview</b><span>{activity.phase}</span>{activity.latestTouch && <small>Blue bounds · {touchedNodeIds.length} edited records · {(activity.batch?.faculties ?? [activity.latestTouch.faculty]).join(" / ")} · {new Date(activity.batch?.timestamp ?? activity.latestTouch.timestamp).toLocaleTimeString()}</small>}</div>}
+      <div className="orbital-help"><span>Click to inspect · zoom to reveal · enter scene groups; conversations stay in place</span><span className="orbital-count" role="status">{level.main.length} main · {nebula.length}/{surrounding.eligible} surrounding · {preview.draws.length} revealed · {edges.length} links</span></div>
+      {followingActivity && activity && <div className="orbital-live-status" role="status"><b>Following activity · {activity.blockId ?? "waiting"} · page overview</b><span>{activity.phase}</span>{activityTarget.timestamp && <small>{activityTarget.historical ? "Last observed · " : ""}{touchedNodeIds.length ? `Blue bounds · ${touchedNodeIds.length} ${activityTarget.kind === "review" ? "review targets (not edits)" : "edited records"}` : "No visible graph target for this tool action"} · {activityTarget.faculty} · {new Date(activityTarget.timestamp).toLocaleTimeString()}</small>}</div>}
     </nav>
     <div className="stage orbital-stage" tabIndex={0} aria-label="Orbital timeline. Scroll or pinch to zoom; Shift scroll for fine control; plus and minus zoom. Select a sphere to inspect; Shift Enter on a revealed sphere enters its level. Escape returns one level." onKeyDown={(event) => {
       if (event.target !== event.currentTarget) return;
@@ -371,7 +380,7 @@ export function OrbitalExplorer({ world, albumPictures = [], albumPortraits = []
       if (event.key === "Enter" && selected) { event.preventDefault(); if (event.shiftKey) enter(selected); else inspect(selected); }
     }}>
       <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations ? edges : []} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} /></div>
-      <div className="labels-layer orbital-labels">{draws.map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? "Double-click or Shift Enter to enter this revealed level" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals the next timeline inside." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
+      <div className="labels-layer orbital-labels">{draws.map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
         <span className="node-code">{draw.role === "preview" ? "REVEALED / " : ""}{draw.node.kind.toUpperCase()}{draw.node.state !== "canon" ? ` · ${draw.node.state}` : ""}</span><b>{draw.node.label}</b>{draw.node.cluster && <span>{draw.node.cluster.ids.length} records · orbital group</span>}
       </button>)}</div>
       <div className="orbital-time-key" aria-hidden="true"><i />TIME → <span>Blue arrows follow narrative order</span></div>

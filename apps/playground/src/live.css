@@ -35,3 +35,7 @@
   .page-heading:has(.interior-heading) { display: block; }
   .heading-caption.interior-heading { padding-top: 8px; }
 }
+.pi-review-progress { position: fixed; left: 20px; bottom: 170px; z-index: 79; width: min(440px, calc(100vw - 40px)); color: #c4e5ff; font-size: 12px; background: #08131cba; border: 1px solid #69bfff42; border-radius: 10px; backdrop-filter: blur(14px); }
+.pi-review-progress summary { padding: 10px 12px; cursor: pointer; }
+.pi-review-progress details > div, .pi-review-progress details > p { padding: 0 12px 10px; max-height: 32vh; overflow-y: auto; }
+.pi-review-progress p { margin: 6px 0; line-height: 1.5; }

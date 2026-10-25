@@ -3,6 +3,7 @@ import type { GraphCanvasRef } from "reagraph";
 import { ActivityTab, DecisionFeed, GateQueue, type FeedEntry } from "./components/panels";
 import { PipelineStrip } from "./components/PipelineStrip";
 import { PiConsole } from "./components/PiConsole";
+import { PiReviewProgress } from "./components/PiReviewProgress";
 import { WorldGraph, framePositions, scaledPos, type LabelBus } from "./components/WorldGraph";
 import { loadWorld, type LoadedWorld } from "./data/loadWorld";
 import { FileEventSource } from "./events/fileSource";
@@ -677,6 +678,7 @@ export default function App() {
         <div className="activity-dock"><ActivityTab count={activity.count} shine={activity.shine} caughtUp={activity.caughtUp} active={followingActivity} onClick={flyToSite} /></div>
       </main>
       <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} faculties={liveActivity?.faculties} telemetryNote={liveActivity?.telemetryNote} />
+      {phoneLive && <PiReviewProgress review={liveActivity?.review} />}
       {phoneLive && <PiConsole />}
       {identityNotice && <div className="identity-notice" role="status">{identityNotice}</div>}
       <footer className="transport">

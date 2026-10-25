@@ -28,6 +28,7 @@ export interface OrbitalLevel {
 }
 export const ORBITAL_PAGE_SIZE = 20;
 export const volumeScope: OrbitalScope = { key: "orbital:volume", label: "Volume", kind: "volume" };
+export const canEnterOrbitalScope = (scope?: OrbitalScope) => !!scope && scope.kind !== "scene";
 export const isNebula = (node: WorldNode) => node.kind === "character" || node.kind === "location";
 export const isSourceRelation = (edge: WorldEdge) => !edge.id.includes(":narrative-order:") && !edge.id.startsWith("view-");
 const order = (first: WorldNode, second: WorldNode) => first.chrono - second.chrono || first.id.localeCompare(second.id);

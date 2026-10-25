@@ -3,6 +3,7 @@ import { root, novel, agentEvents } from './config.mjs';
 import { runOutcome } from './run-outcome.mjs';
 import { sceneContext } from './scene-context.mjs';
 import { liveActivity } from './live-activity.mjs';
+import { sessionReviewProgress } from './review-progress.mjs';
 
 async function json(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return fallback; throw error; }
@@ -167,7 +168,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const stage = status === 'working' ? activeCall?.stage ?? (activeCall?.label.includes('ingest') ? 1 : 4) : status === 'complete' || status === 'review' ? 4 : 0;
   const lastBlock = processing.findLast((record) => record.event.type === 'block.started')?.event.blockId;
   return {
-    activity: liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId: options.activityAfter }),
+    activity: liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId: options.activityAfter, reviewProgress: await sessionReviewProgress(runtime) }),
     world: { laneNodes, laneEdges, interiors, bigEventLabels }, gates, feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
     status, stage, label: finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
     workSite: `chapter_${blockChapters.get(lastBlock) ?? chapters[0]?.index ?? 0}`,
