@@ -13,11 +13,12 @@ import { placePictures, type OrbitIllustration } from "../data/pictureNodes";
 import { orbitalLocation } from "../data/orbitalLocation";
 import { causalProjection, worldCausalLinks } from "../data/causalProjection";
 import type { BookEntry } from "../data/bookCatalog";
+import type { AlbumPanelPicture } from "./AlbumPanel";
 
 const PICTURE_KIND_LABELS: Record<string, string> = { cover: "Cover", plate: "Plate", story: "Illustration", paratext: "Paratext" };
 const pictureKindLabel = (kind: string) => PICTURE_KIND_LABELS[kind] ?? (kind ? kind[0].toUpperCase() + kind.slice(1) : "Picture");
 
-export interface OrbitalInspection { node: WorldNode; nodes: WorldNode[]; edges: WorldEdge[]; lookupNodes: WorldNode[]; contents: WorldNode[]; inspect?: boolean; passive?: boolean }
+export interface OrbitalInspection { node: WorldNode; nodes: WorldNode[]; edges: WorldEdge[]; lookupNodes: WorldNode[]; contents: WorldNode[]; inspect?: boolean; passive?: boolean; album?: AlbumPanelPicture[] }
 interface Props {
   world: OrbitalWorld;
   /** The book whose world is shown (catalog entry and ID); a change resets the reading path. */
@@ -159,6 +160,31 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     }
     return draws;
   }, [albumPortraits, baseDraws]);
+  /** Album panel entries: the same placePictures resolution as the draws,
+   * plus scene labels, so the side panel can show every album picture —
+   * placed ones between their neighboring scenes, unplaced ones listed
+   * as not yet on the orbit. */
+  const albumInfo = useMemo((): AlbumPanelPicture[] => {
+    if (!albumPictures.length) return [];
+    const scenes = level.sourceNodes
+      .filter((node) => node.kind === "scene")
+      .sort((first, second) => first.chrono - second.chrono)
+      .map((node) => ({ id: node.id, chrono: node.chrono, sentenceIds: node.sentenceIds ?? [], label: node.label }));
+    if (!scenes.length) {
+      return albumPictures.map((picture) => ({ id: picture.id, asset: picture.asset, kind: picture.kind, label: pictureKindLabel(picture.kind), placed: false, prevSceneLabel: null, nextSceneLabel: null, chrono: null }));
+    }
+    const labelFor = (id: string | null) => scenes.find((scene) => scene.id === id)?.label ?? null;
+    return placePictures(scenes, albumPictures).map((placement) => ({
+      id: placement.pictureId,
+      asset: placement.asset,
+      kind: placement.kind,
+      label: pictureKindLabel(placement.kind),
+      placed: placement.placed,
+      prevSceneLabel: placement.placed ? labelFor(placement.prevSceneId) : null,
+      nextSceneLabel: placement.placed ? labelFor(placement.nextSceneId) : null,
+      chrono: placement.chrono,
+    }));
+  }, [albumPictures, level.sourceNodes]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
   const causalLinks = useMemo(() => worldCausalLinks(world), [world]);
   const causal = useMemo(() => causalProjection(level, baseDraws, causalLinks), [level, baseDraws, causalLinks]);
@@ -232,8 +258,8 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     if (restoreRequest || !followingActivity && readingBookmark.current) return;
     if (suppressInspection.current) { suppressInspection.current = false; return; }
     const record = followingActivity ? draws.find(draw => draw.node.id === touchedNodeIds.at(-1))?.node ?? [...draws].reverse().find(draw => touchedIds.includes(draw.node.id))?.node ?? inspectedRecord ?? level.main[0]?.node ?? level.nebula[0] : inspectedRecord ?? level.main[0]?.node ?? level.nebula[0];
-    onSelect(record ? { node: record, nodes: draws.map((draw) => draw.node), edges: inspectedRecord ? edges : [], lookupNodes: level.sourceNodes, contents: orbitalContents(record, level), inspect: !!inspectedRecord, passive: followingActivity } : null);
-  }, [inspectedRecord, draws, edges, level.sourceNodes, onSelect, followingActivity, restoreRequest, touchedIds, touchedNodeIds]);
+    onSelect(record ? { node: record, nodes: draws.map((draw) => draw.node), edges: inspectedRecord ? edges : [], lookupNodes: level.sourceNodes, contents: orbitalContents(record, level), inspect: !!inspectedRecord, passive: followingActivity, album: albumInfo } : null);
+  }, [inspectedRecord, draws, edges, level.sourceNodes, onSelect, followingActivity, restoreRequest, touchedIds, touchedNodeIds, albumInfo]);
 
   const snapshot = () => new Map(draws.map((draw): [string, OrbitalPose] => [draw.node.id, { position: bus.positions.get(draw.node.id) ?? draw.position, radius: draw.radius }]));
   /** EM join animation: retarget the dropped draw onto its survivor
@@ -351,7 +377,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     if (singleClick.current) clearTimeout(singleClick.current);
     singleClick.current = setTimeout(() => {
       setSelectedId(draw.node.id);
-      onSelect({ node: draw.node, nodes: draws.map((entry) => entry.node), edges: nestedEntityConnections(level, baseDraws, draw.node.id).edges, lookupNodes: level.sourceNodes, contents: orbitalContents(draw.node, level) });
+      onSelect({ node: draw.node, nodes: draws.map((entry) => entry.node), edges: nestedEntityConnections(level, baseDraws, draw.node.id).edges, lookupNodes: level.sourceNodes, contents: orbitalContents(draw.node, level), album: albumInfo });
       setPendingFocus(draw);
     }, 260);
   };
@@ -367,7 +393,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     if (draw) {
       lastFocus.current = focusRequest.sequence;
       setSelectedId(draw.node.id);
-      onSelect({ node: draw.node, nodes: draws.map((entry) => entry.node), edges: nestedEntityConnections(level, baseDraws, draw.node.id).edges, lookupNodes: level.sourceNodes, contents: orbitalContents(draw.node, level) });
+      onSelect({ node: draw.node, nodes: draws.map((entry) => entry.node), edges: nestedEntityConnections(level, baseDraws, draw.node.id).edges, lookupNodes: level.sourceNodes, contents: orbitalContents(draw.node, level), album: albumInfo });
       setPendingFocus(draw);
     }
     else if (focusRequest.node.parent && world.interiors[focusRequest.node.parent] && scope.chapterId !== focusRequest.node.parent) {
@@ -377,7 +403,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     } else {
       lastFocus.current = focusRequest.sequence;
       setSelectedId(focusRequest.node.id);
-      onSelect({ node: focusRequest.node, nodes: draws.map((entry) => entry.node), edges: level.sourceEdges.filter((edge) => edge.from === focusRequest.node.id || edge.to === focusRequest.node.id), lookupNodes: level.sourceNodes, contents: orbitalContents(focusRequest.node, level) });
+      onSelect({ node: focusRequest.node, nodes: draws.map((entry) => entry.node), edges: level.sourceEdges.filter((edge) => edge.from === focusRequest.node.id || edge.to === focusRequest.node.id), lookupNodes: level.sourceNodes, contents: orbitalContents(focusRequest.node, level), album: albumInfo });
       const container = layout.draws.find((entry) => entry.entry?.members.includes(focusRequest.node.id));
       if (container) setPendingFocus(container);
     }

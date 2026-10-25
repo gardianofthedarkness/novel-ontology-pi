@@ -61,5 +61,10 @@ paths are *native discovery conventions*, never renamed or merged.
 Descriptors for Pi, Codex and Claude Code are specified from
 research (`verified: false` — paths to be confirmed against each
 host's docs during the engine's first pass); Cursor and Gemini CLI
-are stubs. The setup engine itself is Track C's build task
+are stubs. Muse is specified and its descriptor paths are verified
+against the Muse environment itself (custom skills live in
+`~/workspace/custom-skills`); its key bridge — the loopback relays in
+`tools/muse-relay/` — is covered by `test/muse-relay.test.ts`
+(forwarding against mock helpers, supervisor restart, loopback-only
+operation). The setup engine itself is Track C's build task
 (roadmap decision #20).
