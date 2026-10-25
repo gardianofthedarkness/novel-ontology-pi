@@ -1,0 +1,169 @@
+{
+  "id": "lantern-harbor-v1",
+  "title": "灯港的夜航 · 原创合成示例",
+  "language": "zh",
+  "license": "CC0-1.0",
+  "entities": [
+    {
+      "id": "char_lin",
+      "kind": "Character",
+      "name": "林岚"
+    },
+    {
+      "id": "char_zhou",
+      "kind": "Character",
+      "name": "周宁"
+    },
+    {
+      "id": "char_xu",
+      "kind": "Character",
+      "name": "许遥"
+    },
+    {
+      "id": "loc_bridge",
+      "kind": "Location",
+      "name": "灯港旧桥"
+    },
+    {
+      "id": "loc_workshop",
+      "kind": "Location",
+      "name": "钟楼工坊"
+    }
+  ],
+  "chapters": [
+    {
+      "title": "第一章 桥上的蓝灯",
+      "scenes": [
+        {
+          "summary": "林岚与周宁在旧桥发现熄灭的航灯。",
+          "location": "loc_bridge",
+          "characters": [
+            "char_lin",
+            "char_zhou"
+          ],
+          "lines": [
+            "林岚与周宁走上灯港旧桥，发现桥头的蓝色航灯已经熄灭。",
+            "林岚说：「先检查灯座，再去寻找备用电池。」",
+            "周宁回答：「我负责记录检查结果。」"
+          ]
+        },
+        {
+          "summary": "两人检查灯座，发现接线松动。",
+          "location": "loc_bridge",
+          "characters": [
+            "char_lin",
+            "char_zhou"
+          ],
+          "lines": [
+            "周宁扶住灯架，林岚打开灯座，发现一根接线已经松动。",
+            "周宁说：「接线没有断，只是固定螺丝松了。」",
+            "林岚回答：「我们需要一把合适的螺丝刀。」"
+          ]
+        },
+        {
+          "summary": "林岚前往工坊借用工具。",
+          "location": "loc_workshop",
+          "characters": [
+            "char_lin",
+            "char_xu"
+          ],
+          "lines": [
+            "林岚来到钟楼工坊，许遥正在整理工具箱。",
+            "林岚说：「旧桥的航灯需要修理，可以借用螺丝刀吗？」",
+            "许遥回答：「可以，我带着绝缘手套一起过去。」"
+          ]
+        },
+        {
+          "summary": "许遥带工具回到旧桥，三人商定修理顺序。",
+          "location": "loc_bridge",
+          "characters": [
+            "char_lin",
+            "char_zhou",
+            "char_xu"
+          ],
+          "lines": [
+            "林岚和许遥回到旧桥，周宁已经在灯架周围放好了警示标记。",
+            "许遥说：「先断开电源，再固定松动的接线。」",
+            "周宁回答：「警示区已经准备好了。」"
+          ],
+          "dialogueParticipants": [
+            "char_xu",
+            "char_zhou"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "第二章 夜航开始之前",
+      "scenes": [
+        {
+          "summary": "许遥固定接线，周宁记录维修步骤。",
+          "location": "loc_bridge",
+          "characters": [
+            "char_lin",
+            "char_zhou",
+            "char_xu"
+          ],
+          "lines": [
+            "许遥断开电源并拧紧接线螺丝，林岚扶稳灯架，周宁在本子上记录步骤。",
+            "许遥说：「接线已经固定，现在可以检查防水盖。」",
+            "林岚回答：「防水盖的边缘完好，可以重新装回。」"
+          ],
+          "dialogueParticipants": [
+            "char_xu",
+            "char_lin"
+          ]
+        },
+        {
+          "summary": "航灯重新亮起，三人进行观察。",
+          "location": "loc_bridge",
+          "characters": [
+            "char_lin",
+            "char_zhou",
+            "char_xu"
+          ],
+          "lines": [
+            "许遥合上电源开关，桥头的蓝色航灯重新亮起。",
+            "周宁说：「灯光稳定，我们再观察一会儿。」",
+            "林岚回答：「我去桥的另一端确认可见范围。」"
+          ],
+          "dialogueParticipants": [
+            "char_zhou",
+            "char_lin"
+          ]
+        },
+        {
+          "summary": "林岚确认航灯在桥的远端清晰可见。",
+          "location": "loc_bridge",
+          "characters": [
+            "char_lin",
+            "char_zhou"
+          ],
+          "lines": [
+            "林岚走到旧桥远端，清楚看见蓝色航灯，随后向周宁挥手。",
+            "林岚说：「这里也能看清灯光。」",
+            "周宁回答：「我会把这个位置写进维修记录。」"
+          ]
+        },
+        {
+          "summary": "三人归还工具，并留下维修记录。",
+          "location": "loc_workshop",
+          "characters": [
+            "char_lin",
+            "char_zhou",
+            "char_xu"
+          ],
+          "lines": [
+            "夜航开始之前，林岚、周宁和许遥回到钟楼工坊，归还工具并留下维修记录。",
+            "许遥说：「下次巡检时，也记得检查固定螺丝。」",
+            "周宁回答：「我已经把它列入检查清单。」"
+          ],
+          "dialogueParticipants": [
+            "char_xu",
+            "char_zhou"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -6,3 +6,7 @@ dist/
 novels/*/ontology/graph.lbug*
 .DS_Store
 .pi-review/
+.team-playground/
+.env.*
+!.env.example
+__pycache__/
