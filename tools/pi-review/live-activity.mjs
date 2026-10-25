@@ -1,4 +1,8 @@
-export function liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId, reviewProgress }) {
+// A faculty call that started this recently still counts as live work: many
+// System 1 calls start and finish between two viewer polls.
+export const RECENT_FACULTY_MS = 5000;
+
+export function liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId, reviewProgress, now = Date.now() }) {
   const visible = new Set(Object.values(interiors).flatMap(graph => graph.nodes.map(node => node.id)));
   const proposals = new Map(changesets.flatMap(packet => packet.proposals.map(proposal => [proposal.id, proposal])));
   const calls = new Map();
@@ -11,16 +15,28 @@ export function liveActivity({ processing, agent, drafts, changesets, interiors,
     const event = record.event;
     if (event.type !== 'faculty.activity') continue;
     const key = `cli:${event.blockId}:${event.callId}`;
-    calls.set(key, { ...event, timestamp: record.timestamp, provider: event.system, status: event.status === 'started' ? 'working' : event.status === 'completed' ? 'ok' : 'error', label: `${event.system === 'system1' ? 'System 1 / Jev' : event.system === 'system2' ? 'System 2 fallback' : 'CLI extraction'} · ${event.faculty}` });
+    calls.set(key, { ...event, timestamp: record.timestamp, startedAt: event.status === 'started' ? record.timestamp : calls.get(key)?.startedAt, provider: event.system, status: event.status === 'started' ? 'working' : event.status === 'completed' ? 'ok' : 'error', label: `${event.system === 'system1' ? 'System 1 / Jev' : event.system === 'system2' ? 'System 2 fallback' : 'CLI extraction'} · ${event.faculty}` });
   }
   const faculties = new Map();
   for (const record of [...calls.values()].sort((first, second) => first.timestamp.localeCompare(second.timestamp))) {
     const faculty = record.faculty ?? (record.provider === 'jev' ? record.label?.split(' · ')[1] ?? 'decisions' : record.provider === 'pi' ? 'Pi review' : 'CLI work model');
     const key = `${record.provider}:${faculty}`;
     const previous = faculties.get(key);
-    faculties.set(key, { id: key, faculty, label: record.label ?? faculty, system: record.provider, status: record.status, timestamp: record.timestamp, calls: (previous?.calls ?? 0) + 1, active: (previous?.active ?? 0) + (record.status === 'working' ? 1 : 0) });
+    const startedAt = [previous?.startedAt, record.startedAt].filter(Boolean).sort().at(-1);
+    faculties.set(key, { id: key, faculty, label: record.label ?? faculty, system: record.provider, status: record.status, timestamp: record.timestamp, calls: (previous?.calls ?? 0) + 1, active: (previous?.active ?? 0) + (record.status === 'working' ? 1 : 0), blockId: record.blockId ?? previous?.blockId, startedAt });
   }
-  for (const faculty of faculties.values()) if (faculty.active) faculty.status = 'working';
+  // Where each faculty works: its block's chapter and the newest visible draft
+  // scene of that block (faculty events name a block, not records).
+  const draftScenes = blockId => [...visible].filter(id => id.startsWith(`draft:${blockId}:scene:`)).sort((first, second) => Number(first.split(':').at(-1)) - Number(second.split(':').at(-1)));
+  for (const faculty of faculties.values()) {
+    if (faculty.active) faculty.status = 'working';
+    faculty.recent = !!faculty.startedAt && now - Date.parse(faculty.startedAt) <= RECENT_FACULTY_MS;
+    if (faculty.blockId) {
+      faculty.chapterId = `chapter_${blockChapters.get(faculty.blockId) ?? 0}`;
+      faculty.anchorIds = draftScenes(faculty.blockId).slice(-1);
+    }
+    delete faculty.startedAt;
+  }
   let latestTouch = null;
   const touches = [];
   let activeBlock = null;

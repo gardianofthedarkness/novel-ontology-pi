@@ -10,6 +10,8 @@ import type { CausalArrow } from "../data/causalProjection";
 import { breathOffset, buildInertiaRig, glintLevel, heartbeatRoute, now, pointAlong, rippleOffset, stepInertia, swayOf, RIPPLE_LIFE, RIPPLE_SPEED, type MotionBus } from "../data/orbitalMotion";
 import { framePositions, type LabelBus } from "./WorldGraph";
 import { ScaleNavigation } from "./ScaleNavigation";
+import { FacultyEffects } from "./FacultyEffects";
+import type { FacultyAnchor } from "../data/facultyEffects";
 
 interface GlyphData {
   draw: OrbitalDraw;
@@ -761,6 +763,8 @@ function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, redu
 }
 
 interface Props {
+  /** Working faculties to animate, grouped by the sphere they play on. */
+  faculties?: FacultyAnchor[];
   /** Record Pi is working on right now (heartbeat target), if any. */
   heartbeatId?: string | null;
   draws: OrbitalDraw[];
@@ -789,7 +793,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [] }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -810,6 +814,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     {hoverEdges.length > 0 && <VisibleConnections edges={hoverEdges} bus={bus} color="#d9cbff" opacity={0.55} />}
     {!reducedMotion && <RippleRings motion={motion} />}
     <Atmosphere draws={draws} reducedMotion={reducedMotion} />
+    <FacultyEffects anchors={faculties} draws={draws} bus={bus} reducedMotion={reducedMotion} />
     <CameraInertia draws={draws} motion={motion} enabled={!reducedMotion} graphRef={ref as { current: GraphCanvasRef | null }} />
     {!reducedMotion && heartbeatId && <><FaceCamera /><PiHeartbeat spine={spine} targetId={heartbeatId} draws={draws} bus={bus} /></>}
     <LocalClipping />
