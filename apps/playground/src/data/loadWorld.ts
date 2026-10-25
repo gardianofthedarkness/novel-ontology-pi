@@ -1,4 +1,4 @@
-import type { WorldEdge, WorldNode } from "../types";
+import type { CausalSummary, WorldEdge, WorldNode } from "../types";
 
 /** The playground read model, loaded from the local DB files. */
 export interface LoadedWorld {
@@ -6,6 +6,7 @@ export interface LoadedWorld {
   laneEdges: WorldEdge[];
   interiors: Record<string, { nodes: WorldNode[]; edges: WorldEdge[] }>;
   bigEventLabels: Record<string, string>;
+  causal?: CausalSummary;
 }
 
 /**

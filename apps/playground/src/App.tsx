@@ -18,6 +18,7 @@ import type { LiveActivity } from "./data/liveActivity";
 import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
 import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
+import { worldCausalLinks } from "./data/causalProjection";
 import { acceptsSnapshot, bookName, bookOptionLabel, bookQuery, libraryBooks, parseBookParam, sameBooks, viewedBook, type BookEntry } from "./data/bookCatalog";
 import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
 import type {
@@ -191,7 +192,7 @@ export default function App() {
     for (const [id, group] of Object.entries(world.interiors)) {
       interiors[id] = applyMergesToSet(group.nodes, group.edges, merges);
     }
-    return { laneNodes: lanes.nodes, laneEdges: lanes.edges, interiors, bigEventLabels: world.bigEventLabels };
+    return { laneNodes: lanes.nodes, laneEdges: lanes.edges, interiors, bigEventLabels: world.bigEventLabels, causal: world.causal };
   }, [world, merges]);
 
   const visibleDyn = useMemo(
@@ -746,7 +747,7 @@ export default function App() {
           <div className="inspector-sheet" hidden={!inspectorOpen}>
           <div className="sheet-heading"><span className="eyebrow">ARCHIVE / {panel}</span><button aria-label="Close details" onClick={() => { setInspectorOpen(false); document.getElementById(`tab-${panel}`)?.focus(); }}>×</button></div>
           <div ref={inspectorRef} className="inspector-body" id={`panel-${panel}`} role="tabpanel" aria-labelledby={`tab-${panel}`}>
-            {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? `api/record-source${bookQuery(phoneLive ? loadedBook : null)}` : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!shownWorld.interiors[selected.id]} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
+            {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? `api/record-source${bookQuery(phoneLive ? loadedBook : null)}` : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!shownWorld.interiors[selected.id]} causalLinks={worldCausalLinks(shownWorld)} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
             {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? "Waiting for the live stream."}</p><a href="replay/">Pi session replay ↗</a>{!phoneLive && <button onClick={startSession}>Reconnect</button>}</div><DecisionFeed entries={feed} /></>}
             {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>{phoneLive ? "Read-only live viewer. Pi reviews consequential facts; held facts stay outside canon." : "Review sample proposals."}</p></div><div inert={phoneLive ? true : undefined}><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></div></>}
           </div>

@@ -68,7 +68,14 @@ export interface WorldEdge {
   weight?: number;
   derived?: boolean;
   relationLabel?: string;
+  /** Stored ontology relation type (e.g. CAUSES); absent for view edges. */
+  relationType?: string;
 }
+
+/** One stored CAUSES relation between two events, with each endpoint's
+ * chapter. Direction is cause → effect. Never inferred from chronology. */
+export interface CausalLink { id: string; from: string; to: string; fromChapter: string; toChapter: string; state: CanonState }
+export interface CausalSummary { links: CausalLink[]; unresolved: number }
 
 export interface ChangeSet {
   id: string;

@@ -1,10 +1,11 @@
-import type { WorldEdge, WorldNode } from "../types.js";
+import type { CausalSummary, WorldEdge, WorldNode } from "../types.js";
 import { relationshipAffinities } from "./spatialLayout.js";
 
 export interface OrbitalWorld {
   laneNodes: WorldNode[];
   laneEdges: WorldEdge[];
   interiors: Record<string, { nodes: WorldNode[]; edges: WorldEdge[] }>;
+  causal?: CausalSummary;
 }
 export interface OrbitalScope {
   key: string;

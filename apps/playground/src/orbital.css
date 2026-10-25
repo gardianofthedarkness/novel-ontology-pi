@@ -87,3 +87,12 @@
   .orbital-active .orbital-navigation-top button { padding: 3px 5px; font-size: 8px; }
   .orbital-active .inspector.is-open { top: 140px; bottom: 100px; }
 }
+.causal-key { display: inline-flex; align-items: center; gap: 6px; color: #ffb48c; }
+.causal-key i { display: inline-block; width: 22px; height: 0; border-top: 2px dashed #ff8f5a; }
+.causal-links { border-top: 1px solid #96c5df30; padding-top: 16px; margin-top: 20px; }
+.causal-links h4 { margin: 12px 0 6px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #ffb48c; }
+.causal-links ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.causal-links li { border-left: 2px solid #ff8f5a88; padding-left: 10px; font-size: 12px; line-height: 1.6; }
+.causal-links button { display: flex; flex-direction: column; gap: 2px; text-align: left; width: 100%; }
+.causal-links small { color: #8cb8d4; font-size: 9px; }
+.orbital-label .causal-inside { display: block; color: #ffb48c; font-size: 8px; letter-spacing: .04em; }
