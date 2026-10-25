@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalActivityPath, orbitalTouchAncestors } from "../apps/playground/src/data/orbitalActivity.js";
-import { orbitalLevel, progressiveNebula, volumeScope, type OrbitalWorld } from "../apps/playground/src/data/orbitalModel.js";
+import { canEnterOrbitalScope, orbitalLevel, surroundingEntities, volumeScope, type OrbitalWorld } from "../apps/playground/src/data/orbitalModel.js";
 import { layoutOrbitalLevel } from "../apps/playground/src/data/orbitalLayout.js";
 import type { WorldNode, WorldEdge } from "../apps/playground/src/types.js";
 
@@ -9,27 +9,28 @@ const node = (id: string, kind: WorldNode["kind"], chrono = 0): WorldNode => ({ 
 const edge = (from: string, to: string): WorldEdge => ({ id: `${from}:${to}`, from, to, kind: "contains", state: "proposed", parent: "chapter" });
 const world = (nodes: WorldNode[], edges: WorldEdge[] = []): OrbitalWorld => ({ laneNodes: [node("chapter", "bigEvent")], laneEdges: [], interiors: { chapter: { nodes, edges } } });
 
-test("activity follows a ghost through nested scene groups to a terminal scene without flattening chronology", () => {
+test("activity follows a ghost only as far as its scene overview without uncoiling record timelines", () => {
   const scenes = Array.from({ length: 430 }, (_, index) => node(`scene-${index}`, "scene", index));
   const records = Array.from({ length: 80 }, (_, index) => node(`dialogue-${index}`, "dialogue", index));
   const input = world([...scenes, ...records], records.map(record => edge("scene-227", record.id)));
   const before = structuredClone(input);
   const route = orbitalActivityPath(input, "dialogue-43", "chapter");
-  assert.equal(route.targetId, "dialogue-43");
+  assert.equal(route.targetId, "scene-227");
   assert.deepEqual(route.path.slice(0, 2).map(scope => scope.kind), ["volume", "chapter"]);
   assert.ok(route.path.some(scope => scope.kind === "scenes"));
-  assert.ok(route.path.some(scope => scope.kind === "scene" && scope.sceneId === "scene-227"));
-  assert.equal(route.path.at(-1)?.kind, "scene");
-  assert.ok(route.path.every(scope => ["volume", "chapter", "scenes", "scene"].includes(scope.kind)));
+  assert.equal(route.path.at(-1)?.kind, "scenes");
+  assert.ok(route.path.every(scope => canEnterOrbitalScope(scope)));
   for (const scope of route.path.slice(1)) {
     const level = orbitalLevel(input, scope);
-    assert.ok(scope.kind === "scene" || level.main.length <= 20);
+    assert.ok(level.main.length <= 20);
     assert.deepEqual(level.main.map(entry => entry.node.chrono), level.main.map(entry => entry.node.chrono).sort((first, second) => first - second));
   }
   const local = orbitalLevel(input, route.path.at(-1));
-  assert.equal(local.main.length, 80);
-  assert.ok(local.main.every(entry => !entry.scope && !entry.node.cluster));
-  assert.ok(local.main.some(entry => entry.node.id === "dialogue-43"));
+  const scene = local.main.find(entry => entry.node.id === "scene-227")!;
+  assert.equal(canEnterOrbitalScope(scene.scope), false);
+  const contents = orbitalLevel(input, scene.scope);
+  assert.equal(contents.main.length, 80);
+  assert.ok(contents.main.every(entry => !entry.scope));
   assert.ok(layoutOrbitalLevel(local, []).paths.length > 0);
   assert.deepEqual(input, before);
 });
@@ -43,8 +44,8 @@ test("parallel dialogue ghosts remain in the orbital hierarchy before their scen
   const scene = node("draft:b0001:scene:b0000_s0000", "scene");
   const updated = world([scene, dialogue], [edge(scene.id, dialogue.id)]);
   const linked = orbitalActivityPath(updated, dialogue.id, "chapter");
-  assert.equal(linked.targetId, dialogue.id);
-  assert.equal(linked.path.at(-1)?.sceneId, scene.id);
+  assert.equal(linked.targetId, scene.id);
+  assert.equal(linked.path.at(-1)?.kind, "chapter");
   assert.equal(updated.interiors.chapter.nodes.filter(record => record.id === dialogue.id).length, 1);
 });
 
@@ -54,7 +55,7 @@ test("new characters stay weighted nebula in the current orbital level; containi
   const route = orbitalActivityPath(input, "character", "chapter", [], [], scenePath);
   assert.deepEqual(route.path, scenePath);
   const level = orbitalLevel(input, route.path.at(-1));
-  assert.ok(progressiveNebula(level, route.path.length, "character").nodes.some(record => record.id === "character"));
+  assert.ok(surroundingEntities(level, "character").nodes.some(record => record.id === "character"));
   const ancestors = orbitalTouchAncestors(input.interiors.chapter.nodes, input.interiors.chapter.edges, "event");
   assert.ok(ancestors.has("scene"));
   assert.ok(!ancestors.has("character"));
@@ -85,7 +86,7 @@ test("reading bookmarks preserve independent level, selection, camera, zoom and 
   assert.deepEqual(bookmark.camera?.focalOffset, [2, 3, 0]);
 });
 
-test("activity preserves directly visible scene edits but descends for hidden event and dialogue edits", () => {
+test("activity preserves the same scene page for event and dialogue edits", () => {
   const input = world([node("scene-a", "scene"), node("scene-b", "scene", 1), node("event", "event"), node("dialogue", "dialogue")], [edge("scene-a", "event"), edge("scene-b", "dialogue")]);
   const preferred = [volumeScope, orbitalActivityPath(input, "scene-a", "chapter").path[1]];
   const before = structuredClone(preferred);
@@ -96,8 +97,8 @@ test("activity preserves directly visible scene edits but descends for hidden ev
   }
   for (const [id, sceneId] of [["event", "scene-a"], ["dialogue", "scene-b"]]) {
     const route = orbitalActivityPath(input, id, "chapter", [], [], preferred);
-    assert.equal(route.path.at(-1)?.sceneId, sceneId);
-    assert.equal(route.targetId, id);
+    assert.deepEqual(route.path, preferred);
+    assert.equal(route.targetId, sceneId);
   }
   assert.deepEqual(preferred, before);
 });
@@ -109,7 +110,7 @@ test("a batch chooses the lowest shared scene group and ascends when touches spa
   const scenePath = orbitalActivityPath(input, "a", "chapter").path;
   const common = orbitalActivityBatchPath(input, ["a", "b"], "chapter");
   assert.equal(common.path.at(-1)?.kind, "scenes");
-  assert.deepEqual(common.path, scenePath.slice(0, -1));
+  assert.deepEqual(common.path, scenePath);
   assert.equal(common.targetId, "scene-228");
   assert.deepEqual(orbitalActivityBatchPath(input, ["a", "b"], "chapter", [], [], scenePath.slice(0, 2)), common);
   assert.deepEqual(orbitalActivityBatchPath(input, ["a", "b"], "chapter", [], [], common.path), common);
@@ -118,15 +119,15 @@ test("a batch chooses the lowest shared scene group and ascends when touches spa
   assert.ok(orbitalLevel(input, wide.path.at(-1)).main.some(entry => entry.node.id === wide.targetId && entry.members.includes("scene-0")));
 });
 
-test("a batch in one scene descends from an overview and stays stable for subsequent record edits", () => {
+test("a batch in one scene stays in its overview for all subsequent record edits", () => {
   const input = world([node("scene", "scene"), node("event", "event"), node("dialogue", "dialogue"), node("person", "character")], [edge("scene", "event"), edge("event", "dialogue")]);
   const route = orbitalActivityBatchPath(input, ["event", "dialogue"], "chapter");
-  assert.equal(route.path.at(-1)?.sceneId, "scene");
-  assert.equal(route.targetId, "dialogue");
-  const preferred = route.path.slice(0, -1);
+  assert.equal(route.path.at(-1)?.kind, "chapter");
+  assert.equal(route.targetId, "scene");
+  const preferred = route.path;
   assert.deepEqual(orbitalActivityBatchPath(input, ["event", "dialogue"], "chapter", [], [], preferred), route);
   for (const ids of [["event"], ["dialogue"], ["dialogue", "event"]]) {
-    assert.deepEqual(orbitalActivityBatchPath(input, ids, "chapter", [], [], route.path), { path: route.path, targetId: ids.at(-1) });
+    assert.deepEqual(orbitalActivityBatchPath(input, ids, "chapter", [], [], route.path), { path: route.path, targetId: "scene" });
   }
   const mixed = orbitalActivityBatchPath(input, ["event", "person"], "chapter", [], [], route.path);
   assert.deepEqual(mixed.path, route.path);
@@ -134,12 +135,12 @@ test("a batch in one scene descends from an overview and stays stable for subseq
   assert.deepEqual(orbitalActivityPath(input, "scene", "chapter", [], [], route.path), { path: preferred, targetId: "scene" });
 });
 
-test("touching another scene's records routes to that terminal scene instead of retaining an ancestor proxy", () => {
+test("touching another scene changes the highlight without changing the scene overview page", () => {
   const input = world([node("scene-a", "scene"), node("scene-b", "scene", 1), node("a", "event"), node("b", "event")], [edge("scene-a", "a"), edge("scene-b", "b")]);
   const initial = orbitalActivityPath(input, "a", "chapter");
   const next = orbitalActivityPath(input, "b", "chapter", [], [], initial.path);
-  assert.equal(next.path.at(-1)?.sceneId, "scene-b");
-  assert.equal(next.targetId, "b");
+  assert.deepEqual(next.path, initial.path);
+  assert.equal(next.targetId, "scene-b");
   assert.deepEqual(orbitalActivityPath(input, "a", "chapter", [], [], next.path), initial);
 });
 
@@ -169,8 +170,8 @@ test("a stale preferred group's ancestor proxy does not retain hidden record edi
   const preferred = orbitalActivityPath(input, "event", "chapter").path.slice(0, -1).map(scope => ({ ...scope, ...(scope.ids ? { ids: scope.ids.filter(id => id !== "scene-227") } : {}) }));
   const before = structuredClone(preferred);
   const route = orbitalActivityPath(input, "event", "chapter", [], [], preferred);
-  assert.equal(route.path.at(-1)?.sceneId, "scene-227");
-  assert.equal(route.targetId, "event");
+  assert.equal(route.path.at(-1)?.kind, "scenes");
+  assert.equal(route.targetId, "scene-227");
   assert.deepEqual(preferred, before);
 });
 
@@ -188,5 +189,13 @@ test("ancestry ignores synthetic relations and terminates on containment cycles"
   const nodes = [node("scene", "scene"), node("event", "event"), node("card", "dialogue"), node("unrelated", "scene")];
   const edges = [edge("scene", "event"), edge("event", "card"), edge("card", "event"), { ...edge("unrelated", "card"), id: "view-membership" }, { ...edge("unrelated", "event"), id: "chapter:narrative-order:1" }];
   assert.deepEqual(orbitalTouchAncestors(nodes, edges, "card"), new Set(["card", "event", "scene"]));
-  assert.equal(orbitalActivityPath(world(nodes, edges), "card", "chapter").path.at(-1)?.sceneId, "scene");
+  assert.equal(orbitalActivityPath(world(nodes, edges), "card", "chapter").targetId, "scene");
+});
+
+test("a legacy scene-page bookmark cannot pull activity back into the removed uncoil depth", () => {
+  const input = world([node("scene", "scene"), node("event", "event")], [edge("scene", "event")]);
+  const overview = orbitalActivityPath(input, "scene", "chapter").path;
+  const sceneScope = orbitalLevel(input, overview.at(-1)).main[0].scope!;
+  assert.equal(canEnterOrbitalScope(sceneScope), false);
+  assert.deepEqual(orbitalActivityPath(input, "event", "chapter", [], [], [...overview, sceneScope]), { path: overview, targetId: "scene" });
 });

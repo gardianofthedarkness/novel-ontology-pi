@@ -3,6 +3,7 @@ import type { GraphCanvasRef } from "reagraph";
 import { ActivityTab, DecisionFeed, GateQueue, type FeedEntry } from "./components/panels";
 import { PipelineStrip } from "./components/PipelineStrip";
 import { PiConsole } from "./components/PiConsole";
+import { PiReviewProgress } from "./components/PiReviewProgress";
 import { WorldGraph, framePositions, scaledPos, type LabelBus } from "./components/WorldGraph";
 import { loadWorld, type LoadedWorld } from "./data/loadWorld";
 import { FileEventSource } from "./events/fileSource";
@@ -18,6 +19,9 @@ import type { LiveActivity } from "./data/liveActivity";
 import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
 import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
+import { worldCausalLinks } from "./data/causalProjection";
+import { freshIdentityEvents, type PendingJoin } from "./data/joinAnimation";
+import { acceptsSnapshot, bookName, bookOptionLabel, bookQuery, libraryBooks, parseBookParam, sameBooks, viewedBook, type BookEntry } from "./data/bookCatalog";
 import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
 import type {
   AlbumPortrait,
@@ -41,6 +45,9 @@ interface LiveSnapshot {
   stage: number;
   label: string;
   volume?: number;
+  activeVolume?: number;
+  availableVolumes?: number[];
+  books?: BookEntry[];
   jobLabel?: string;
   counts: { entities: number; events: number; repairs: number; ghosts: number };
   workSite?: string;
@@ -107,9 +114,11 @@ export default function App() {
   const [heldMap, setHeldMap] = useState<Record<string, string[]>>({});
   /** Settled EM merges (dropId -> keepId) and the join now animating. */
   const [merges, setMerges] = useState<Map<string, string>>(new Map());
-  const [join, setJoin] = useState<{ dropId: string; keepId: string; seq: number } | null>(null);
-  const joinRef = useRef<{ dropId: string; keepId: string } | null>(null);
-  const joinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Real EM joins now animating; several can arrive in one refresh. */
+  const [joins, setJoins] = useState<PendingJoin[]>([]);
+  const joinsRef = useRef<PendingJoin[]>([]);
+  const joinTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const joinSeq = useRef(0);
   const labelsRef = useRef<Record<string, string>>({});
   const [activity, setActivity] = useState({ count: 0, shine: false, caughtUp: false });
   const [blockLabel, setBlockLabel] = useState<string | null>(null);
@@ -128,6 +137,17 @@ export default function App() {
   const seenMerges = useRef(new Set<string>());
   const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
   const [followingActivity, setFollowingActivity] = useState(false);
+  /** Pinned reading book (the owner's choice) vs the book Pi is working on.
+   * Only an explicit Follow agent shows Pi's book; an active-book change
+   * never replaces the pin. loadedBook is the book whose records are shown. */
+  const [pinnedBook, setPinnedBook] = useState<number | null>(() => parseBookParam(window.location.search));
+  const [agentBook, setAgentBook] = useState<number | null>(null);
+  const [loadedBook, setLoadedBook] = useState<number | null>(null);
+  const [books, setBooks] = useState<BookEntry[]>([]);
+  const requestedBook = viewedBook(pinnedBook, followingActivity, agentBook);
+  const loadedBookRef = useRef<number | null>(null);
+  const pinnedBookRef = useRef(pinnedBook);
+  pinnedBookRef.current = pinnedBook;
   const readingPanelBookmark = useRef<{ inspection: OrbitalInspection | null; panel: "record" | "activity" | "review" | "album"; open: boolean; selectedId: string | null } | null>(null);
   const identityBaseline = useRef(false);
   const [identityNotice, setIdentityNotice] = useState<string | null>(null);
@@ -149,10 +169,12 @@ export default function App() {
   viewRef.current = view;
 
   useEffect(() => {
+    // Live viewers receive their (book-scoped) world from the snapshot stream.
+    if (phoneLive) return;
     loadWorld(`${DB}/view.json`)
       .then(setWorld)
       .catch((e: Error) => setLoadError(e.message));
-  }, []);
+  }, [phoneLive]);
 
   const pushFeed = useCallback((text: string, tone: FeedEntry["tone"] = "plain") => {
     setFeed((f) => [...f.slice(-40), { id: ++feedSeq, text, tone }]);
@@ -175,7 +197,7 @@ export default function App() {
     for (const [id, group] of Object.entries(world.interiors)) {
       interiors[id] = applyMergesToSet(group.nodes, group.edges, merges);
     }
-    return { laneNodes: lanes.nodes, laneEdges: lanes.edges, interiors, bigEventLabels: world.bigEventLabels };
+    return { laneNodes: lanes.nodes, laneEdges: lanes.edges, interiors, bigEventLabels: world.bigEventLabels, causal: world.causal };
   }, [world, merges]);
 
   const visibleDyn = useMemo(
@@ -185,25 +207,30 @@ export default function App() {
 
   /** A join animation finished (or cannot run here): settle the merge. */
   const settleJoin = useCallback((dropId: string) => {
-    const current = joinRef.current;
-    if (!current || current.dropId !== dropId) return;
-    joinRef.current = null;
-    if (joinTimer.current) {
-      clearTimeout(joinTimer.current);
-      joinTimer.current = null;
-    }
-    setJoin(null);
+    const current = joinsRef.current.find((entry) => entry.dropId === dropId);
+    if (!current) return;
+    joinsRef.current = joinsRef.current.filter((entry) => entry !== current);
+    clearTimeout(joinTimers.current.get(dropId));
+    joinTimers.current.delete(dropId);
+    setJoins(joinsRef.current);
     setMerges((m) => new Map(m).set(current.dropId, current.keepId));
+  }, []);
+
+  const clearJoins = useCallback(() => {
+    for (const timer of joinTimers.current.values()) clearTimeout(timer);
+    joinTimers.current.clear();
+    joinsRef.current = [];
+    setJoins([]);
   }, []);
 
   const beginJoin = useCallback(
     (dropId: string, keepId: string) => {
-      if (joinRef.current) settleJoin(joinRef.current.dropId);
-      joinRef.current = { dropId, keepId };
-      setJoin({ dropId, keepId, seq: Date.now() });
+      if (joinsRef.current.some((entry) => entry.dropId === dropId)) return;
+      joinsRef.current = [...joinsRef.current, { id: `${dropId}>${keepId}`, dropId, keepId, seq: ++joinSeq.current }];
+      setJoins(joinsRef.current);
       // Backstop: if neither renderer can animate this pair (off-view
       // in both), the merge still settles promptly.
-      joinTimer.current = setTimeout(() => settleJoin(dropId), 2600);
+      joinTimers.current.set(dropId, setTimeout(() => settleJoin(dropId), 2600));
     },
     [settleJoin],
   );
@@ -313,15 +340,25 @@ export default function App() {
     [noteActivity, pushFeed, beginJoin],
   );
 
+  /** Per-book live state; the next snapshot re-baselines identity events. */
+  const resetBookData = useCallback(() => {
+    clearJoins();
+    setMerges(new Map());
+    setDynNodes([]);
+    setDynEdges([]);
+    setAlbumPictures([]);
+    setAlbumPortraits([]);
+    setProposalsByCs({});
+    setHeldMap({});
+    seenMerges.current = new Set();
+    identityBaseline.current = false;
+    setIdentityNotice(null);
+  }, []);
+
   const startSession = useCallback(() => {
     sourceRef.current?.stop();
     lastKnitRef.current = null;
-    joinRef.current = null;
-    if (joinTimer.current) {
-      clearTimeout(joinTimer.current);
-      joinTimer.current = null;
-    }
-    setJoin(null);
+    clearJoins();
     setMerges(new Map());
     setDynNodes([]);
     setDynEdges([]);
@@ -363,21 +400,32 @@ export default function App() {
     let polling = false;
     let request: AbortController | null = null;
     const receive = (data: LiveSnapshot) => {
-        if (stopped) return;
+        if (stopped || !acceptsSnapshot(requestedBook, data)) return;
+        const volume = data.volume ?? null;
+        if (volume !== loadedBookRef.current) {
+          // Another book: its graph, ghosts, joins and merge baseline start
+          // fresh, so the new book's historical merges never replay as live.
+          if (loadedBookRef.current !== null) resetBookData();
+          loadedBookRef.current = volume;
+          setLoadedBook(volume);
+        }
+        const nextBooks = libraryBooks(data);
+        setBooks((previous) => sameBooks(previous, nextBooks) ? previous : nextBooks);
+        setAgentBook(data.activeVolume ?? null);
+        if (pinnedBookRef.current === null && volume !== null) setPinnedBook(volume);
         current = data;
         if (data.world !== previousWorld) {
           previousWorld = data.world;
           setWorld(data.world);
         }
-        for (const record of data.activity?.identityEvents ?? []) {
-          if (seenMerges.current.has(record.id)) continue;
-          seenMerges.current.add(record.id);
-          if (identityBaseline.current) {
-            handleEvent(record.event);
-            setIdentityNotice(record.event.type === "entity.merged" ? `EM joined ${record.event.dropId} → ${record.event.keepId}` : `EM kept ${record.event.aId} and ${record.event.bId} distinct`);
-          }
+        const identity = freshIdentityEvents(data.activity?.identityEvents ?? [], seenMerges.current, identityBaseline.current);
+        identityBaseline.current = identity.baselineDone;
+        for (const record of identity.events) handleEvent(record.event);
+        if (identity.events.length) {
+          const text = (record: (typeof identity.events)[number]) => record.event.type === "entity.merged" ? `${labelsRef.current[record.event.dropId] ?? record.event.dropId} → ${labelsRef.current[record.event.keepId] ?? record.event.keepId}` : `${labelsRef.current[record.event.aId] ?? record.event.aId} ≠ ${labelsRef.current[record.event.bId] ?? record.event.bId}`;
+          const merged = identity.events.filter((record) => record.event.type === "entity.merged").length;
+          setIdentityNotice(identity.events.length === 1 ? `EM ${merged ? "joined" : "kept distinct"} ${text(identity.events[0])}` : `EM · ${merged} joined, ${identity.events.length - merged} kept distinct · ${identity.events.slice(0, 3).map(text).join(" · ")}${identity.events.length > 3 ? " …" : ""}`);
         }
-        identityBaseline.current = true;
         setLiveActivity(data.activity ?? null);
         setChangesets(data.gates);
         setFeed(data.feed);
@@ -395,7 +443,7 @@ export default function App() {
       if (stopped || !polling) return;
       try {
         request = new AbortController();
-        const response = await fetch("api/live", { cache: "no-store", signal: request.signal });
+        const response = await fetch(`api/live${bookQuery(requestedBook)}`, { cache: "no-store", signal: request.signal });
         if (!response.ok) throw new Error(`Live connection: HTTP ${response.status}`);
         const data = await response.json() as LiveSnapshot;
         if (polling) receive(data);
@@ -413,7 +461,7 @@ export default function App() {
     const reconnect = () => {
       if (stopped) return;
       stream?.close();
-      stream = new EventSource("api/live/stream");
+      stream = new EventSource(`api/live/stream${bookQuery(requestedBook)}`);
       stream.addEventListener("snapshot", event => {
         polling = false;
         request?.abort();
@@ -429,7 +477,26 @@ export default function App() {
     else reconnect();
     timer = setTimeout(() => { if (!current) fallback(); }, 4000);
     return () => { stopped = true; clearTimeout(timer); stream?.close(); request?.abort(); };
-  }, [phoneLive, handleEvent]);
+  }, [phoneLive, handleEvent, requestedBook, resetBookData]);
+
+  useEffect(() => {
+    if (!phoneLive || pinnedBook === null) return;
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("book") === String(pinnedBook)) return;
+      url.searchParams.set("book", String(pinnedBook));
+      window.history.replaceState(window.history.state, "", url);
+    } catch { /* the pin still works without a reload-safe URL */ }
+  }, [phoneLive, pinnedBook]);
+
+  /** Readonly selection among assigned books: no ingest, prompt or write. */
+  const chooseBook = useCallback((id: number) => {
+    if (id === pinnedBookRef.current) return;
+    setPinnedBook(id);
+    setOrbitalInspection(null);
+    setInspectorOpen(false);
+    setSelectedId(null);
+  }, []);
 
   useEffect(() => {
     if (world && !phoneLive) startSession();
@@ -616,6 +683,15 @@ export default function App() {
   }, [labelBus, nodes]);
 
   const shownWorld: LoadedWorld = displayWorld ?? (world as LoadedWorld);
+  const loadedBookEntry = books.find((book) => book.id === loadedBook) ?? null;
+  const agentBookEntry = books.find((book) => book.id === agentBook) ?? null;
+  const bookLoading = phoneLive && requestedBook !== null && requestedBook !== loadedBook;
+  const bookBar = phoneLive && books.length > 0 ? <div className="book-bar" role="group" aria-label="Books">
+            <label className="book-picker"><span>{followingActivity ? "Following Pi in" : "Reading"}</span><select value={requestedBook ?? ""} disabled={followingActivity} title={followingActivity ? "Stop following Pi to choose your own book" : "Choose an assigned book to read (read-only)"} onChange={(event) => chooseBook(Number(event.target.value))}>{requestedBook === null && <option value="">Pi's current book</option>}{books.map((book) => <option key={book.id} value={book.id}>{bookOptionLabel(book)}</option>)}</select></label>
+            <span className="book-agent" role="status">Pi working on <b>{agentBookEntry ? bookName(agentBookEntry) : agentBook !== null ? `Book ${agentBook}` : "unknown"}</b>{!followingActivity && agentBook !== null && agentBook !== pinnedBook && <button onClick={() => chooseBook(agentBook)}>Read Pi's book</button>}</span>
+            {followingActivity && pinnedBook !== null && pinnedBook !== agentBook && <small>Your pinned book returns when you stop following.</small>}
+            {bookLoading && <small role="status">Loading {bookName(books.find((book) => book.id === requestedBook))}…</small>}
+          </div> : null;
 
   if (!world) {
     return (
@@ -641,7 +717,7 @@ export default function App() {
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
           <button className="design-switch" disabled={followingActivity} aria-pressed={orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setInspectorOpen(false); }}>{orbitalMode ? "Orbital / switch to classic" : "Classic / switch to orbital"}</button>
-          {orbitalMode ? <OrbitalExplorer world={shownWorld} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} join={join} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
+          {orbitalMode ? <OrbitalExplorer world={shownWorld} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
           <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
             <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
             <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>
@@ -654,7 +730,7 @@ export default function App() {
             if (event.key === "Enter" && selected) { event.preventDefault(); activateNode(selected); }
             if (event.key === "Escape") backLevel();
           }}>
-            <div className="graph-canvas"><WorldGraph ref={graphRef} nodes={timeline.nodes} edges={visibleEdges} tracks={timeline.tracks} contextNodeIds={explorer.rootIds} interior={view.mode === "interior"} viewId={explorer.key} openableIds={openableIds} labelBus={labelBus} selectedId={selected?.id ?? null} reducedMotion={reducedMotion} onNodeClick={activateNode} onNodeOpen={activateNode} onViewBack={backLevel} join={join} onJoinSettled={settleJoin} /></div>
+            <div className="graph-canvas"><WorldGraph ref={graphRef} nodes={timeline.nodes} edges={visibleEdges} tracks={timeline.tracks} contextNodeIds={explorer.rootIds} interior={view.mode === "interior"} viewId={explorer.key} openableIds={openableIds} labelBus={labelBus} selectedId={selected?.id ?? null} reducedMotion={reducedMotion} onNodeClick={activateNode} onNodeOpen={activateNode} onViewBack={backLevel} join={joins[0] ?? null} onJoinSettled={settleJoin} /></div>
             <div className="scene-coordinate" aria-hidden="true">X / Y / Z<br /><span>TIME → / RELATIONS<br />SPATIAL ONTOLOGY</span></div>
             <div className="labels-layer">
               {nodes.map((node, index) => <button key={node.id} className={`node-label k-${node.kind} s-${node.state}${selected?.id === node.id ? " is-selected" : ""}`} style={{ visibility: "hidden" }} aria-label={`${openableIds.includes(node.id) ? "Open" : "Select"} ${node.label}`} aria-pressed={selected?.id === node.id} ref={(element) => { if (element) labelBus.targets.set(node.id, element); else labelBus.targets.delete(node.id); }} onClick={() => activateNode(node)}>
@@ -682,7 +758,7 @@ export default function App() {
           <div className="inspector-sheet" hidden={!inspectorOpen}>
           <div className="sheet-heading"><span className="eyebrow">ARCHIVE / {panel}</span><button aria-label="Close details" onClick={() => { setInspectorOpen(false); document.getElementById(`tab-${panel}`)?.focus(); }}>×</button></div>
           <div ref={inspectorRef} className="inspector-body" id={`panel-${panel}`} role="tabpanel" aria-labelledby={`tab-${panel}`}>
-            {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? "api/record-source" : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!shownWorld.interiors[selected.id]} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
+            {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? `api/record-source${bookQuery(phoneLive ? loadedBook : null)}` : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!shownWorld.interiors[selected.id]} causalLinks={worldCausalLinks(shownWorld)} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
             {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? "Waiting for the live stream."}</p><a href="replay/">Pi session replay ↗</a>{!phoneLive && <button onClick={startSession}>Reconnect</button>}</div><DecisionFeed entries={feed} /></>}
             {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>{phoneLive ? "Read-only live viewer. Pi reviews consequential facts; held facts stay outside canon." : "Review sample proposals."}</p></div><div inert={phoneLive ? true : undefined}><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></div></>}
             {panel === "album" && <AlbumPanel pictures={albumInfo.length ? albumInfo : albumPictures.map((picture) => ({ id: picture.id, asset: picture.asset, kind: picture.kind, label: picture.kind ? picture.kind[0].toUpperCase() + picture.kind.slice(1) : "Picture", placed: false, prevSceneLabel: null, nextSceneLabel: null, chrono: null }))} selectedId={selected?.id ?? null} onSelect={albumThumbnailSelect} />}
@@ -692,6 +768,7 @@ export default function App() {
         <div className="activity-dock"><ActivityTab count={activity.count} shine={activity.shine} caughtUp={activity.caughtUp} active={followingActivity} onClick={flyToSite} /></div>
       </main>
       <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} faculties={liveActivity?.faculties} telemetryNote={liveActivity?.telemetryNote} />
+      {phoneLive && <PiReviewProgress review={liveActivity?.review} />}
       {phoneLive && <PiConsole />}
       {identityNotice && <div className="identity-notice" role="status">{identityNotice}</div>}
       <footer className="transport">

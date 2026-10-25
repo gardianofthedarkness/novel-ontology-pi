@@ -1,5 +1,5 @@
 import type { WorldEdge, WorldNode } from "../types.js";
-import { isSourceRelation, orbitalLevel, volumeScope, type OrbitalLevel, type OrbitalScope, type OrbitalWorld } from "./orbitalModel.js";
+import { canEnterOrbitalScope, isSourceRelation, orbitalLevel, volumeScope, type OrbitalLevel, type OrbitalScope, type OrbitalWorld } from "./orbitalModel.js";
 import type { Position3 } from "./spatialLayout.js";
 
 export interface OrbitalReadingBookmark {
@@ -79,7 +79,7 @@ export function orbitalActivityBatchPath(world: OrbitalWorld, targetIds: readonl
       if (visible) fallback = [...path];
       if (visible === id) break;
       const container = level.main.find(entry => entry.scope && (ancestors.has(entry.node.id) || entry.members.some(member => ancestors.has(member))));
-      if (!container?.scope) break;
+      if (!container?.scope || !canEnterOrbitalScope(container.scope)) break;
       path.push(container.scope);
     }
     routes.push({ id, chapterId: owner, ancestors, path: fallback });
@@ -91,6 +91,7 @@ export function orbitalActivityBatchPath(world: OrbitalWorld, targetIds: readonl
   }
   const validPreferred: OrbitalScope[] = [];
   for (const scope of preferred) {
+    if (!canEnterOrbitalScope(scope)) break;
     if (scope.kind === "volume") {
       if (validPreferred.length || scope.key !== volumeScope.key) break;
     } else {

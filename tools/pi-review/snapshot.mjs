@@ -3,6 +3,7 @@ import { root, novel, agentEvents } from './config.mjs';
 import { runOutcome } from './run-outcome.mjs';
 import { sceneContext } from './scene-context.mjs';
 import { liveActivity } from './live-activity.mjs';
+import { sessionReviewProgress } from './review-progress.mjs';
 
 async function json(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return fallback; throw error; }
@@ -35,6 +36,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const bigEventLabels = {};
   const gates = [];
   const provenanceChapter = new Map();
+  const proposedCausal = [];
   for (const changeset of changesets) {
     const chapterIndex = blockChapters.get(changeset.blockId);
     for (const proposal of changeset.proposals) if (proposal.payload?.id) provenanceChapter.set(proposal.payload.id, chapterIndex);
@@ -109,14 +111,15 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
       for (let index = 1; index < remainingSpans.length; index++) draftLinks.push([`draft:${draft.blockId}:scene:${remainingSpans[index - 1][0]}`, `draft:${draft.blockId}:scene:${remainingSpans[index][0]}`, 'flow']);
     }
     const ids = new Set(nodes.map((node) => node.id));
-    const addEdge = (from, to, kind, edgeState, suffix) => {
+    const addEdge = (from, to, kind, edgeState, suffix, extra = {}) => {
       if (!ids.has(from) || !ids.has(to) || from === to) return;
       const id = `${chapterId}:${suffix}:${from}:${to}`;
-      if (!edges.some((edge) => edge.id === id)) edges.push({ id, from, to, kind, state: edgeState, parent: chapterId });
+      if (!edges.some((edge) => edge.id === id)) edges.push({ id, from, to, kind, state: edgeState, parent: chapterId, ...extra });
     };
     for (const [from, to, kind] of draftLinks) addEdge(from, to, kind, 'proposed', 'working-decision');
     const proposedRelations = proposed.filter((proposal) => proposal.kind === 'add_relation').map((proposal) => proposal.payload);
-    for (const relation of [...relations, ...proposedRelations]) addEdge(relation.fromId, relation.toId, relation.type === 'CAUSES' || relation.type === 'PRECEDES' ? 'flow' : 'speaks', proposedRelations.includes(relation) ? state : 'canon', relation.type);
+    for (const relation of [...relations, ...proposedRelations]) addEdge(relation.fromId, relation.toId, relation.type === 'CAUSES' || relation.type === 'PRECEDES' ? 'flow' : 'speaks', proposedRelations.includes(relation) ? state : 'canon', relation.type, { relationType: relation.type });
+    for (const relation of proposedRelations) if (relation.type === 'CAUSES') proposedCausal.push({ relation, state });
     const allEvents = [...eventMap.values(), ...proposed.filter((proposal) => proposal.kind === 'create_event').map((proposal) => proposal.payload)];
     const ordered = fold(allEvents).filter((event) => event.chapterIndex === chapter.index && ids.has(event.id)).sort((first, second) => first.chronologicalOrder - second.chronologicalOrder);
     for (let index = 1; index < ordered.length; index++) addEdge(ordered[index - 1].id, ordered[index].id, 'flow', state, 'narrative-order');
@@ -133,6 +136,19 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
       const deferred = (applied?.unsupportedProposalIds?.length ?? 0) + (applied?.deferredFactIds?.length ?? 0);
       gates.push({ id: changeset.id, label: `Chapter ${chapter.index} · ${changeset.id}`, status: changeset.status === 'approved' ? deferred ? 'applied' : 'merged' : changeset.status === 'held' ? 'held' : 'pending', nodeIds: changeset.proposals.map((proposal) => proposal.id), deferred });
     }
+  }
+  // Stored CAUSES relations, typed and directional, with each endpoint's
+  // chapter so the viewer can project cross-chapter links instead of
+  // dropping them. Endpoints that are not projected events are counted,
+  // never guessed. No causality is inferred from order or adjacency.
+  const causalLinks = [];
+  let causalUnresolved = 0;
+  for (const { relation, state: linkState } of [...fold(relations.map((relation) => ({ ...relation, id: `${relation.fromId}>${relation.toId}>${relation.type}` }))).map((relation) => ({ relation, state: 'canon' })), ...proposedCausal]) {
+    if (relation.type !== 'CAUSES') continue;
+    const from = allNodes.get(relation.fromId), to = allNodes.get(relation.toId);
+    if (!['event', 'dialogue'].includes(from?.kind) || !['event', 'dialogue'].includes(to?.kind) || !from.parent || !to.parent) { causalUnresolved++; continue; }
+    const id = `causes:${relation.fromId}:${relation.toId}`;
+    if (!causalLinks.some((link) => link.id === id)) causalLinks.push({ id, from: relation.fromId, to: relation.toId, fromChapter: from.parent, toChapter: to.parent, state: linkState });
   }
   for (let index = 1; index < chapters.length; index++) laneEdges.push({ id: `chapter-order-${index}`, from: `chapter_${chapters[index - 1].index}`, to: `chapter_${chapters[index].index}`, kind: 'flow', state: 'canon', parent: null });
   const journal = [];
@@ -167,8 +183,8 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const stage = status === 'working' ? activeCall?.stage ?? (activeCall?.label.includes('ingest') ? 1 : 4) : status === 'complete' || status === 'review' ? 4 : 0;
   const lastBlock = processing.findLast((record) => record.event.type === 'block.started')?.event.blockId;
   return {
-    activity: liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId: options.activityAfter }),
-    world: { laneNodes, laneEdges, interiors, bigEventLabels }, gates, feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
+    activity: liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId: options.activityAfter, reviewProgress: await sessionReviewProgress(runtime) }),
+    world: { laneNodes, laneEdges, interiors, bigEventLabels, causal: { links: causalLinks, unresolved: causalUnresolved } }, gates, feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
     status, stage, label: finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
     workSite: `chapter_${blockChapters.get(lastBlock) ?? chapters[0]?.index ?? 0}`,
     volume: options.volume ?? 1,

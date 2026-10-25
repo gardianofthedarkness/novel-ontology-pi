@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { KIND_LABEL, recordStatus } from "../archive";
-import type { WorldEdge, WorldNode } from "../types";
+import type { CausalLink, WorldEdge, WorldNode } from "../types";
 
 interface Props {
   selected: WorldNode | undefined;
@@ -13,6 +13,7 @@ interface Props {
   orbital?: boolean;
   contents?: WorldNode[];
   sourceEndpoint?: string;
+  causalLinks?: CausalLink[];
 }
 
 function OriginalSource({ node, endpoint }: { node: WorldNode; endpoint?: string }) {
@@ -33,7 +34,24 @@ function OriginalSource({ node, endpoint }: { node: WorldNode; endpoint?: string
   return <section className="original-source" aria-label="Original source text"><h3>{node.dialogue ? "Original dialogue exchange" : "Original segment"}</h3>{!endpoint ? <p className="empty-state">Open the Mac-local source viewer to read the original text.</p> : !current ? <p role="status">Loading original text…</p> : current.text ? <><p className="original-source-text">{current.text}</p>{current.contiguous === false && <p className="empty-state">Separate stored source spans are shown in their original order.</p>}{!current.complete && <p className="empty-state">Some stored source references are unavailable; this is not the complete segment.</p>}</> : <p className="empty-state">{current.message ?? "No original source span is available for this record."}</p>}</section>;
 }
 
-export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, childCount, canOpen, onSelect, orbital = false, contents = [], sourceEndpoint }: Props) {
+function CausalLinks({ selected, links, lookupNodes, onSelect }: { selected: WorldNode; links: CausalLink[]; lookupNodes: WorldNode[]; onSelect: (node: WorldNode) => void }) {
+  const causes = links.filter((link) => link.to === selected.id);
+  const effects = links.filter((link) => link.from === selected.id);
+  if (!causes.length && !effects.length) return null;
+  const item = (link: CausalLink, otherId: string, chapter: string) => {
+    const other = lookupNodes.find((node) => node.id === otherId);
+    const status = link.state === "canon" ? "" : ` · ${link.state}`;
+    return <li key={link.id}>{other ? <button onClick={() => onSelect(other)}><span>{other.summary ?? other.label}</span><small>{otherId}{status}</small></button> : <span>{otherId} · {chapter}{status}</span>}</li>;
+  };
+  return <section className="causal-links" aria-label="Stored causal relations">
+    <h3>Causes / effects</h3>
+    <p className="empty-state">Stored CAUSES relations, shown as recorded; not re-certified here.</p>
+    {!!causes.length && <><h4>Caused by</h4><ul>{causes.map((link) => item(link, link.from, link.fromChapter))}</ul></>}
+    {!!effects.length && <><h4>Leads to</h4><ul>{effects.map((link) => item(link, link.to, link.toChapter))}</ul></>}
+  </section>;
+}
+
+export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, childCount, canOpen, onSelect, orbital = false, contents = [], sourceEndpoint, causalLinks = [] }: Props) {
   if (!selected) return <p className="empty-state">No records in this view.</p>;
   const connections = edges.filter((edge) => edge.from === selected.id || edge.to === selected.id);
   return (
@@ -50,6 +68,7 @@ export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, c
         {!!selected.relatedSummaries?.length && <ul>{selected.relatedSummaries.filter((entry) => entry.text !== selected.summary).map((entry) => <li key={entry.id}><button onClick={() => { const event = lookupNodes.find((node) => node.id === entry.id); if (event) onSelect(event); }}>{entry.text}</button></li>)}</ul>}
       </section>
       {!selected.cluster && (selected.kind === "scene" || selected.kind === "event" || selected.kind === "dialogue") && <OriginalSource node={selected} endpoint={sourceEndpoint} />}
+      {(selected.kind === "event" || selected.kind === "dialogue") && <CausalLinks selected={selected} links={causalLinks} lookupNodes={lookupNodes} onSelect={onSelect} />}
       {!!contents.length && <section className="chronological-contents" aria-label="Contents in chronological order"><h3>Inside · earlier → later</h3><ol>{contents.map((node, index) => <li key={node.id}><button onClick={() => onSelect(node)}><small>{String(index + 1).padStart(2, "0")} / {KIND_LABEL[node.kind]}</small><span>{node.summary ?? node.label}</span></button></li>)}</ol></section>}
       <dl className="record-facts">
         <div><dt>Record ID</dt><dd>{selected.id}</dd></div>

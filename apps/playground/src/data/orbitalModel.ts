@@ -1,10 +1,11 @@
-import type { WorldEdge, WorldNode } from "../types.js";
+import type { CausalSummary, WorldEdge, WorldNode } from "../types.js";
 import { relationshipAffinities } from "./spatialLayout.js";
 
 export interface OrbitalWorld {
   laneNodes: WorldNode[];
   laneEdges: WorldEdge[];
   interiors: Record<string, { nodes: WorldNode[]; edges: WorldEdge[] }>;
+  causal?: CausalSummary;
 }
 export interface OrbitalScope {
   key: string;
@@ -28,6 +29,7 @@ export interface OrbitalLevel {
 }
 export const ORBITAL_PAGE_SIZE = 20;
 export const volumeScope: OrbitalScope = { key: "orbital:volume", label: "Volume", kind: "volume" };
+export const canEnterOrbitalScope = (scope?: OrbitalScope) => !!scope && scope.kind !== "scene";
 export const isNebula = (node: WorldNode) => node.kind === "character" || node.kind === "location";
 export const isSourceRelation = (edge: WorldEdge) => !edge.id.includes(":narrative-order:") && !edge.id.startsWith("view-");
 const order = (first: WorldNode, second: WorldNode) => first.chrono - second.chrono || first.id.localeCompare(second.id);
@@ -73,7 +75,11 @@ export function orbitalContents(node: WorldNode, level: OrbitalLevel): WorldNode
   return visibleRecords(sceneRecords(level.sourceNodes, level.sourceEdges, [node.id]));
 }
 
-export function progressiveNebula(level: OrbitalLevel, depth: number, selectedId: string | null = null): { nodes: WorldNode[]; eligible: number } {
+/** Scoped surroundings: every entity with a direct or bounded two-hop link
+ * into this level (plus the selected entity and pending ghosts at volume and
+ * chapter scale). Nothing is culled by degree; `prominence` (0–1, log-scaled
+ * link strength) drives size and opacity instead. */
+export function surroundingEntities(level: OrbitalLevel, selectedId: string | null = null): { nodes: WorldNode[]; prominence: Map<string, number> } {
   const entities = new Map(level.nebula.map((node) => [node.id, node]));
   const targets = new Set(level.main.flatMap((entry) => entry.members).filter((id) => !entities.has(id)));
   if (level.scope.sceneId) targets.add(level.scope.sceneId);
@@ -86,14 +92,24 @@ export function progressiveNebula(level: OrbitalLevel, depth: number, selectedId
       if (entities.has(entity) && targets.has(target)) scores.set(entity, (scores.get(entity) ?? 0) + pair.strength);
     }
   }
-  const ranked = [...entities.values()].filter((node) => (scores.get(node.id) ?? 0) > 0 || node.id === selectedId || node.state !== "canon" && (level.scope.kind === "volume" || level.scope.kind === "chapter")).sort((first, second) => (scores.get(second.id) ?? 0) - (scores.get(first.id) ?? 0) || first.id.localeCompare(second.id));
-  const bottom = level.scope.kind === "scene";
-  const limit = bottom ? ranked.length : Math.min(ranked.length, 5 + Math.max(0, depth - 1) * 5);
-  const pending = ranked.filter((node) => node.state !== "canon").slice(0, Math.min(2, limit));
-  const shown = [...pending, ...ranked.filter((node) => !pending.includes(node)).slice(0, limit - pending.length)];
-  const selected = entities.get(selectedId ?? "");
-  if (selected && !shown.some((node) => node.id === selected.id)) shown.push(selected);
-  return { nodes: shown, eligible: ranked.length };
+  const nodes = [...entities.values()].filter((node) => (scores.get(node.id) ?? 0) > 0 || node.id === selectedId || node.state !== "canon" && (level.scope.kind === "volume" || level.scope.kind === "chapter")).sort((first, second) => (scores.get(second.id) ?? 0) - (scores.get(first.id) ?? 0) || first.id.localeCompare(second.id));
+  const strongest = Math.log1p(Math.max(0, ...nodes.map((node) => scores.get(node.id) ?? 0)));
+  return { nodes, prominence: new Map(nodes.map((node) => [node.id, strongest > 0 ? Math.log1p(scores.get(node.id) ?? 0) / strongest : 0])) };
+}
+
+/** How many actual children a main sphere holds at the next level. */
+export function orbitalChildCount(entry: OrbitalEntry, level: OrbitalLevel): number {
+  if (entry.node.cluster) return entry.node.cluster.ids.length;
+  if (entry.node.kind === "bigEvent" || entry.node.kind === "scene") return orbitalContents(entry.node, level).length;
+  return 0;
+}
+
+/** Main-sphere prominence (0–1, square-root of child count) within this level. */
+export function mainProminence(level: OrbitalLevel): Map<string, number> {
+  const containers = level.main.filter((entry) => entry.node.cluster || entry.node.kind === "bigEvent" || entry.node.kind === "scene");
+  const counts = new Map(containers.map((entry) => [entry.node.id, orbitalChildCount(entry, level)]));
+  const most = Math.sqrt(Math.max(0, ...counts.values()));
+  return most > 0 ? new Map([...counts].map(([id, count]) => [id, Math.sqrt(count) / most])) : new Map();
 }
 
 function groupEntries(records: WorldNode[], scope: OrbitalScope, sourceNodes: WorldNode[], sourceEdges: WorldEdge[]): OrbitalEntry[] {

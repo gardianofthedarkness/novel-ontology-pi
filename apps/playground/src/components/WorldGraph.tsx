@@ -6,7 +6,7 @@ import { ArchiveNode } from "./ArchiveNode";
 import { recordColor } from "../archive";
 import type { WorldEdge, WorldNode } from "../types";
 import type { TimelineTrack } from "../data/timelineLayout";
-import { cameraFocus, cameraFrame } from "../data/cameraFraming";
+import { cameraFocus, cameraFrame, keepInside } from "../data/cameraFraming";
 
 export const SCALE = 3;
 
@@ -23,7 +23,7 @@ export function framePositions(
   positions: [number, number, number][],
   pad = 1.18,
   animated = true,
-  options?: { margin?: number; direction?: [number, number, number]; preserveDirection?: boolean; focusRadius?: number },
+  options?: { margin?: number; direction?: [number, number, number]; preserveDirection?: boolean; focusRadius?: number; within?: { center: [number, number, number]; radius: number }; ignoreSheet?: boolean },
 ): void {
   if (!positions.length) return;
   const controls = ref.current?.getControls?.();
@@ -42,7 +42,7 @@ export function framePositions(
   const sequence = document.querySelector<HTMLElement>(".scene-sequence")?.getBoundingClientRect();
   const transport = document.querySelector<HTMLElement>(".pipeline")?.getBoundingClientRect();
   const inset = { left: 28, right: 65, top: Math.max(95, (sequence?.bottom ?? toolbar?.bottom ?? 170) - (bounds?.top ?? 0) + 18), bottom: transport && bounds ? bounds.bottom - transport.top + 32 : 200 };
-  if (sheet && bounds) {
+  if (sheet && bounds && !options?.ignoreSheet) {
     if (sheet.width > width * 0.55) inset.bottom = Math.max(inset.bottom, bounds.bottom - sheet.top + 16);
     else inset.right = Math.max(inset.right, bounds.right - sheet.left + 18);
   }
@@ -54,6 +54,7 @@ export function framePositions(
     ? cameraFocus(positions[0], options.focusRadius, currentPosition.toArray() as [number, number, number], { ...framing, zoom: camera.zoom })
     : cameraFrame(positions, framing);
   if (!frame) return;
+  if (options?.within) frame.position = keepInside(frame.position, frame.target, options.within);
   void controls.zoomTo(1, false);
   void controls.setFocalOffset(0, 0, 0, false);
   void controls.setLookAt(...frame.position, ...frame.target, animated);

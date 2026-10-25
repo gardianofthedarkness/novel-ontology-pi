@@ -4,7 +4,27 @@
 .orbital-navigation-top { display: flex; align-items: center; gap: 12px; }
 .orbital-navigation-top button { background: #0b2033a1; border: 1px solid #75b9df35; border-radius: 5px; font-size: 10px; color: #b6dcf0; padding: 5px 8px; }
 .orbital-level { color: #b8e0ff; font-size: 10px; letter-spacing: .1em; }
-.orbital-breadcrumb { max-width: min(780px, 80vw); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; color: #a6c1d4; }
+.book-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 14px; font-size: 10px; color: #8aa6bc; }
+.book-picker { display: flex; align-items: center; gap: 7px; }
+.book-picker > span, .book-agent { letter-spacing: .04em; }
+.book-picker select { max-width: min(440px, 72vw); background: #0b2033d9; color: #eef7ff; border: 1px solid #ffd58a66; border-radius: 6px; padding: 4px 8px; font-size: 11px; }
+.book-picker select:disabled { opacity: .75; border-color: #36adff88; }
+.book-agent b { color: #ffc777; font-weight: 600; }
+.book-agent button { margin-left: 8px; background: #0b2033a1; border: 1px solid #75b9df35; border-radius: 5px; font-size: 10px; color: #b6dcf0; padding: 3px 7px; }
+.book-bar small { font-size: 9px; color: #9dd6ff; }
+.orbital-location { display: flex; list-style: none; margin: 0; padding: 0; max-width: min(960px, 88vw); overflow-x: auto; scrollbar-width: none; }
+.orbital-location::-webkit-scrollbar { display: none; }
+.orbital-location li { flex: 0 0 auto; display: flex; align-items: center; min-width: 0; font-size: 10px; color: #a6c1d4; }
+.orbital-location li + li::before { content: "›"; padding: 0 7px; color: #5f8aa6; }
+.orbital-location li > button, .orbital-location li > span { display: flex; flex-direction: column; gap: 1px; max-width: 230px; padding: 2px 0; text-align: left; color: inherit; background: none; border: 0; }
+.orbital-location b { font-weight: 600; color: #cfe7f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orbital-location li > * > span { font-size: 9px; color: #8aa6bc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orbital-location button { cursor: pointer; }
+.orbital-location button:hover b, .orbital-location button:focus-visible b { color: #fff; text-decoration: underline; }
+.orbital-location .location-book b { color: #ffe0a3; }
+.orbital-location .is-selection > * { border-bottom: 1px dashed #36adff99; }
+.orbital-location .is-selection b { color: #9fdcff; }
+.orbital-location [aria-current] b { color: #fff; }
 .orbital-help { display: flex; justify-content: space-between; gap: 14px; color: #8aa6bc; font-size: 9px; }
 .orbital-help > span { white-space: nowrap; }
 .orbital-count { color: #a9d8ec; }
@@ -17,6 +37,8 @@
 .orbital-label.role-preview .node-code { color: #7bd5ff; }
 .orbital-label.role-preview b { font-size: 10px; }
 .orbital-label.role-nebula b { font-size: 11px; }
+.orbital-label.is-faint { opacity: .55; }
+.orbital-label.is-faint b { font-size: 10px; }
 .orbital-time-key { position: absolute; left: 32px; bottom: 232px; color: #83cfff; font-size: 10px; letter-spacing: .08em; pointer-events: none; }
 .orbital-time-key i { display: inline-block; width: 24px; height: 2px; background: #68caff; box-shadow: 0 0 12px #50b9ff; margin: 0 8px 3px 0; }
 .orbital-time-key span { display: block; margin-top: 6px; color: #8aa6bc; font-size: 8px; letter-spacing: 0; }
@@ -40,7 +62,8 @@
   .orbital-level { font-size: 8px; }
   .orbital-help { display: block; font-size: 8px; }
   .orbital-help > span { display: block; white-space: normal; }
-  .orbital-breadcrumb { max-width: 78vw; font-size: 9px; }
+  .orbital-location li > button, .orbital-location li > span { max-width: 150px; }
+  .book-picker select { font-size: 10px; max-width: 66vw; }
   .phone-live .design-switch { top: 169px; right: 15px; }
   .phone-live .orbital-navigation { top: 203px; }
   .orbital-time-key { left: 18px; bottom: 245px; font-size: 8px; }
@@ -55,8 +78,21 @@
   .phone-live .orbital-navigation { top: 165px; }
   .orbital-time-key { bottom: 108px; }
   .orbital-active .orbital-navigation { top: 104px; gap: 2px; }
-  .orbital-active .orbital-help, .orbital-active .orbital-breadcrumb { display: none; }
+  .orbital-active .orbital-help, .orbital-active .book-bar small { display: none; }
+  .orbital-active .orbital-location li > * > span { display: none; }
+  .orbital-active .live-runtime-status small { display: none; }
+  .orbital-active .book-bar { gap: 3px 10px; font-size: 9px; }
+  .orbital-active .book-picker select { padding: 2px 6px; font-size: 9px; }
   .orbital-active .orbital-navigation-top { gap: 5px; }
   .orbital-active .orbital-navigation-top button { padding: 3px 5px; font-size: 8px; }
   .orbital-active .inspector.is-open { top: 140px; bottom: 100px; }
 }
+.causal-key { display: inline-flex; align-items: center; gap: 6px; color: #ffb48c; }
+.causal-key i { display: inline-block; width: 22px; height: 0; border-top: 2px dashed #ff8f5a; }
+.causal-links { border-top: 1px solid #96c5df30; padding-top: 16px; margin-top: 20px; }
+.causal-links h4 { margin: 12px 0 6px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #ffb48c; }
+.causal-links ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.causal-links li { border-left: 2px solid #ff8f5a88; padding-left: 10px; font-size: 12px; line-height: 1.6; }
+.causal-links button { display: flex; flex-direction: column; gap: 2px; text-align: left; width: 100%; }
+.causal-links small { color: #8cb8d4; font-size: 9px; }
+.orbital-label .causal-inside { display: block; color: #ffb48c; font-size: 8px; letter-spacing: .04em; }

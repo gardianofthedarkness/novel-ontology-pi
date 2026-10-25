@@ -8,7 +8,10 @@ export interface OrbitalDraw {
   entry?: OrbitalEntry;
   position: Position3;
   radius: number;
-  role: "main" | "nebula" | "preview" | "connection";
+  /** "preimage": a transient, view-only stand-in for an entity an EM merge just removed. */
+  role: "main" | "nebula" | "preview" | "connection" | "preimage";
+  /** 0–1 visual weight: child count for main spheres, scoped link strength for the nebula. */
+  prominence?: number;
   previewParentId?: string;
   /** Direction the glyph's +Z faces (picture cards: the timeline tangent,
    * so the card plane stands perpendicular to the timeline). When absent,
@@ -29,7 +32,18 @@ export function helixPoint(progress: number, track: number, tracks: number, radi
   return [(progress - 0.5) * radius * 1.2, (track - (tracks - 1) / 2) * orbit * 2.4 + Math.sin(phase) * orbit, Math.cos(phase) * orbit];
 }
 const trackKey = (node: WorldNode) => `${node.lane}:${node.trackId ?? "story"}`;
-export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.nebula): { draws: OrbitalDraw[]; paths: OrbitalPath[] } {
+/** Bounded radii: main spheres stay well inside the 600-unit spine spacing,
+ * nebula spheres stay small enough for a phone to draw hundreds. */
+export const mainRadius = (node: WorldNode, prominence?: number) => {
+  const base = node.kind === "bigEvent" ? 165 : node.kind === "dialogue" ? 72 : 115;
+  return prominence === undefined ? base : Math.round(base * (0.7 + 0.55 * Math.min(1, Math.max(0, prominence))));
+};
+export const nebulaRadius = (node: WorldNode, prominence?: number) => {
+  const base = node.kind === "character" ? 48 : 42;
+  return prominence === undefined ? base : Math.round(base * (0.55 + 0.75 * Math.min(1, Math.max(0, prominence))));
+};
+
+export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.nebula, weights: { main?: Map<string, number>; nebula?: Map<string, number> } = {}): { draws: OrbitalDraw[]; paths: OrbitalPath[] } {
   const tracks = [...new Set(level.main.map((entry) => trackKey(entry.node)))].sort();
   const times = [...new Set(level.main.map((entry) => entry.node.chrono))].sort((first, second) => first - second);
   const anchors = new Map<string, Position3>();
@@ -70,8 +84,8 @@ export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.ne
     const radius = 270 + Math.sqrt(contextNebula.length) * 24 + 180 / (1 + Math.log1p(strength));
     positions.set(node.id, center.map((value, axis) => value + spread[axis] / length * radius) as Position3);
   }
-  const draws: OrbitalDraw[] = level.main.map((entry) => ({ node: entry.node, entry, position: anchors.get(entry.node.id)!.map((value) => value * 3) as Position3, radius: entry.node.kind === "bigEvent" ? 165 : entry.node.kind === "dialogue" ? 72 : 115, role: "main" }));
-  draws.push(...contextNebula.map((node): OrbitalDraw => ({ node, position: positions.get(node.id)!.map((value) => value * 3) as Position3, radius: node.kind === "character" ? 48 : 42, role: "nebula" })));
+  const draws: OrbitalDraw[] = level.main.map((entry) => ({ node: entry.node, entry, position: anchors.get(entry.node.id)!.map((value) => value * 3) as Position3, radius: mainRadius(entry.node, weights.main?.get(entry.node.id)), prominence: weights.main?.get(entry.node.id), role: "main" }));
+  draws.push(...contextNebula.map((node): OrbitalDraw => ({ node, position: positions.get(node.id)!.map((value) => value * 3) as Position3, radius: nebulaRadius(node, weights.nebula?.get(node.id)), prominence: weights.nebula?.get(node.id), role: "nebula" })));
   const paths = tracks.map((track): OrbitalPath => {
     const members = draws.filter((draw) => draw.role === "main" && trackKey(draw.node) === track);
     const first = members[0].position, last = members.at(-1)!.position;
@@ -91,6 +105,54 @@ export function layoutOrbitalPreview(parent: OrbitalDraw, level: OrbitalLevel): 
   });
   const paths = tracks.map((track, trackIndex): OrbitalPath => ({ id: `orbit:${parent.node.id}:${track}`, preview: true, points: Array.from({ length: 81 }, (_, index) => helixPoint(index / 80, trackIndex, tracks.length, parent.radius).map((value, axis) => parent.position[axis] + value) as Position3) }));
   return { draws, paths };
+}
+
+export interface BackdropGhost { id: string; position: Position3; radius: number; current: boolean; state: WorldNode["state"] }
+/**
+ * The previous level, seen from inside the entered sphere: the inverse of the
+ * entry uncoil. Entering straightened a helix inside the parent; here the
+ * parent's straight spine is recoiled onto the same helix form, scaled up so
+ * the entered sphere's ghost encloses the current world and its siblings
+ * continue the spiral beyond it (parallel tracks keep their offsets). View
+ * geometry only: no labels, picking, focus or framing use these.
+ */
+export function layoutParentBackdrop(parentDraws: OrbitalDraw[], enteredId: string, childDraws: OrbitalDraw[]): { ghosts: BackdropGhost[]; path: Position3[] } {
+  const parents = parentDraws.filter((draw) => draw.role === "main");
+  const entered = parents.find((draw) => draw.node.id === enteredId);
+  const children = childDraws.filter((draw) => draw.role === "main");
+  if (!entered || !children.length) return { ghosts: [], path: [] };
+  const tracks = [...new Set(parents.map((draw) => trackKey(draw.node)))].sort();
+  const times = [...new Set(parents.map((draw) => draw.node.chrono))].sort((first, second) => first - second);
+  const progress = (node: WorldNode) => times.length <= 1 ? 0.5 : times.indexOf(node.chrono) / (times.length - 1);
+  const center = [0, 1, 2].map((axis) => children.reduce((sum, draw) => sum + draw.position[axis], 0) / children.length) as Position3;
+  const extent = Math.max(...children.map((draw) => Math.abs(draw.position[0] - center[0]) + draw.radius));
+  const enclosing = Math.max(900, extent * 1.25);
+  const giant = enclosing * 2.6 * Math.max(1, times.length - 1) / 1.2;
+  const origin = helixPoint(progress(entered.node), tracks.indexOf(trackKey(entered.node)), tracks.length, giant);
+  const place = (point: Position3) => point.map((value, axis) => center[axis] + value - origin[axis]) as Position3;
+  const ghosts = parents.map((draw): BackdropGhost => ({
+    id: draw.node.id,
+    position: place(helixPoint(progress(draw.node), tracks.indexOf(trackKey(draw.node)), tracks.length, giant)),
+    radius: Math.round(enclosing * Math.min(1.6, Math.max(0.4, draw.radius / entered.radius))),
+    current: draw.node.id === enteredId,
+    state: draw.node.state,
+  }));
+  const path = Array.from({ length: 121 }, (_, index) => place(helixPoint(index / 120, tracks.indexOf(trackKey(entered.node)), tracks.length, giant)));
+  return { ghosts, path };
+}
+
+/** Entry framing: the entered sphere and its nearest neighbours on the new
+ * local timeline (up to ENTRY_WINDOW main spheres), so the first view sits
+ * near the ground with readable spheres. The rest of the spine and the
+ * surrounding nebula continue off-screen; Frame view still shows it all.
+ * Without an entered sphere (first load, Back) the whole timeline is framed. */
+const ENTRY_WINDOW = 5;
+export function entryFrame(draws: OrbitalDraw[], selectedId: string | null, window = ENTRY_WINDOW): Position3[] {
+  const main = draws.filter((draw) => draw.role === "main").sort((first, second) => first.position[0] - second.position[0] || first.position[1] - second.position[1]);
+  const found = main.findIndex((draw) => draw.node.id === selectedId);
+  if (found < 0 || main.length <= window) return main.map((draw) => draw.position);
+  const start = Math.max(0, Math.min(main.length - window, found - Math.floor(window / 2)));
+  return main.slice(start, start + window).map((draw) => draw.position);
 }
 
 export function visibleOrbitalEdges(edges: WorldEdge[], draws: OrbitalDraw[], selectedId: string | null): WorldEdge[] {

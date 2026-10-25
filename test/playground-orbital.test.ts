@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { orbitalContents, orbitalLevel, progressiveNebula, representativeScene, volumeScope, type OrbitalWorld } from "../apps/playground/src/data/orbitalModel.js";
-import { helixPoint, interpolatePose, layoutOrbitalLevel, layoutOrbitalPreview, nestedEntityConnections, visibleOrbitalEdges } from "../apps/playground/src/data/orbitalLayout.js";
+import { mainProminence, orbitalContents, orbitalLevel, representativeScene, surroundingEntities, volumeScope, type OrbitalWorld } from "../apps/playground/src/data/orbitalModel.js";
+import { helixPoint, interpolatePose, layoutOrbitalLevel, mainRadius, nebulaRadius, layoutOrbitalPreview, nestedEntityConnections, visibleOrbitalEdges } from "../apps/playground/src/data/orbitalLayout.js";
 import type { WorldEdge, WorldNode } from "../apps/playground/src/types.js";
 
 const record = (id: string, kind: WorldNode["kind"], chrono = 0): WorldNode => ({ id, kind, label: id, chrono, state: "canon", lane: "canon", parent: "chapter", lanePos: [0, 0, 0], interiorPos: [0, 0, 0] });
@@ -129,22 +129,53 @@ test("relations show only selected visible endpoints and never projected aggrega
   assert.deepEqual(visibleOrbitalEdges(edges, draws, null), []);
 });
 
-test("surroundings reveal progressively by scoped link strength rather than persisting every entity", () => {
+test("every scoped entity stays visible; link strength sets prominence instead of culling", () => {
   const entities = Array.from({ length: 40 }, (_, index) => record(`person-${index}`, "character"));
-  const nodes = [...scenes(100), ...entities];
+  const loner = record("loner", "character");
+  const nodes = [...scenes(100), ...entities, loner];
   const edges = entities.map((node, index) => relation(node.id, "scene-0", index + 1));
   const world = worldWith(nodes, edges);
-  const root = progressiveNebula(orbitalLevel(world), 1);
-  const middle = progressiveNebula(orbitalLevel(world, chapter), 2);
   const leaf = orbitalLevel(world, { ...chapter, key: "scene-0", kind: "scene", sceneId: "scene-0" });
-  assert.equal(root.nodes.length, 5);
-  assert.equal(middle.nodes.length, 10);
-  assert.equal(progressiveNebula(leaf, 4).nodes.length, 40);
-  assert.equal(root.nodes[0].id, "person-39");
-  assert.equal(root.eligible, 40);
-  assert.ok(progressiveNebula(orbitalLevel(world), 1, "person-0").nodes.some((node) => node.id === "person-0"));
+  for (const level of [orbitalLevel(world), orbitalLevel(world, chapter), leaf]) {
+    const { nodes: shown, prominence } = surroundingEntities(level);
+    assert.equal(shown.length, 40, "no degree-based cap at any depth");
+    assert.equal(shown[0].id, "person-39");
+    assert.equal(prominence.get("person-39"), 1);
+    const weak = prominence.get("person-0")!, middle = prominence.get("person-20")!;
+    assert.ok(weak > 0 && weak < middle && middle < 1);
+    assert.ok(!shown.some((node) => node.id === "loner"), "an entity with no link into the scope is out of scope");
+  }
+  assert.ok(surroundingEntities(orbitalLevel(world), "loner").nodes.some((node) => node.id === "loner"), "a selected entity stays");
   const ghost = { ...record("candidate", "character"), state: "proposed" as const };
-  assert.ok(progressiveNebula(orbitalLevel(worldWith([...nodes, ghost], edges)), 1).nodes.some((node) => node.id === ghost.id));
+  assert.ok(surroundingEntities(orbitalLevel(worldWith([...nodes, ghost], edges))).nodes.some((node) => node.id === ghost.id));
+  const level = orbitalLevel(world, chapter);
+  const surrounding = surroundingEntities(level);
+  const draws = layoutOrbitalLevel(level, surrounding.nodes, { nebula: surrounding.prominence }).draws;
+  const radius = (id: string) => draws.find((draw) => draw.node.id === id)!.radius;
+  assert.ok(radius("person-39") > radius("person-20") && radius("person-20") > radius("person-0"));
+  assert.ok(draws.filter((draw) => draw.role === "nebula").every((draw) => draw.radius >= 26 && draw.radius <= 63));
+  assert.equal(draws.find((draw) => draw.node.id === "person-0")!.prominence, surrounding.prominence.get("person-0"));
+});
+
+test("main spheres grow with their actual children, bounded and stable without weights", () => {
+  const events = Array.from({ length: 10 }, (_, index) => record(`event-${index}`, "event", index));
+  const nodes = [...scenes(3), ...events];
+  const edges = [...events.slice(0, 9).map((node) => relation("scene-0", node.id)), relation("scene-1", "event-9")];
+  const level = orbitalLevel(worldWith(nodes, edges), chapter);
+  const weights = mainProminence(level);
+  assert.equal(weights.get("scene-0"), 1);
+  assert.ok(Math.abs(weights.get("scene-1")! - 1 / 3) < 1e-9);
+  assert.equal(weights.get("scene-2"), 0, "an empty scene is the smallest, not the default size");
+  const draws = layoutOrbitalLevel(level, [], { main: weights }).draws;
+  const radius = (id: string) => draws.find((draw) => draw.node.id === id)!.radius;
+  assert.ok(radius("scene-0") > radius("scene-1") && radius("scene-1") > radius("scene-2"));
+  assert.ok(draws.every((draw) => draw.radius >= 80 && draw.radius < 300), "neighbors on the 600-unit spine never touch");
+  assert.equal(mainRadius(record("chapter", "bigEvent")), 165);
+  assert.equal(nebulaRadius(record("person", "character")), 48);
+  const chapters = orbitalLevel({ laneNodes: [record("a", "bigEvent", 0), record("b", "bigEvent", 1)], laneEdges: [], interiors: { a: { nodes: [{ ...record("s1", "scene"), parent: "a" }, { ...record("s2", "scene"), parent: "a" }], edges: [] }, b: { nodes: [{ ...record("s3", "scene"), parent: "b" }], edges: [] } } });
+  const byChapter = mainProminence(chapters);
+  assert.equal(byChapter.get("a"), 1);
+  assert.ok(byChapter.get("b")! < 1);
 });
 
 test("selected entities connect to every linked nested scene without claiming event actors were physically present", () => {
