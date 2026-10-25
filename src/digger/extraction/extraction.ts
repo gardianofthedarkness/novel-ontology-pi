@@ -13,6 +13,7 @@ import type {
 } from "../../ground/ontology/types.js";
 import type { Sentence } from "../intake/sectioning.js";
 import { formKey } from "../../ground/language/nameForms.js";
+import { IdentityNameIndex } from "../../ground/language/identityLabels.js";
 import type { NamedDialogueCard } from "../processing/dialogueCards.js";
 import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints, type ExtractionConstraints } from "./constraints.js";
 
@@ -284,7 +285,7 @@ export function createExtractor(work: WorkModel) {
     // (text/languageMap.ts): a variant spelling resolves to the known
     // entity; the spelling itself is still recorded as its own form.
     const entityById = new Map<string, Entity>();
-    const formToId = new Map<string, string>();
+    const formToId = new IdentityNameIndex();
     for (const e of input.knownEntities) {
       entityById.set(e.id, e);
       for (const n of e.names) formToId.set(formKey(n.text), e.id);
@@ -351,7 +352,11 @@ export function createExtractor(work: WorkModel) {
         return undefined;
       }
       const known = formToId.get(formKey(name));
-      if (known) return entityById.get(known)!;
+      if (known && entityById.get(known)?.kind === kind) return entityById.get(known)!;
+      if (formToId.has(formKey(name))) {
+        notes[`extraction:identity-conflict:${name}`] = `${origin}: ambiguous name ownership or incompatible entity kind; reference remains unresolved.`;
+        return undefined;
+      }
       if (input.sceneResults) {
         notes[`faculty:unresolved-reference:${name}`] = `${origin}: identity faculty did not resolve this name; no placeholder entity was invented.`;
         return undefined;
@@ -389,6 +394,10 @@ export function createExtractor(work: WorkModel) {
         }
         const aliasForms = (ne.aliases ?? []).filter((alias) => {
           if (!alias.text) return false;
+          if (formToId.owners(formKey(alias.text)).length > 1) {
+            notes[`extraction:alias-conflict:${ne.name}:${alias.text}`] = "Alias has multiple existing owners; no identity was selected.";
+            return false;
+          }
           const owner = formToId.get(formKey(alias.text));
           const ownerNames = owner ? entityById.get(owner)!.names.map((name) => name.text) : [alias.text];
           const conflict = distinct([ne.name!], ownerNames) || distinct([ne.name!], [alias.text]);
@@ -403,9 +412,12 @@ export function createExtractor(work: WorkModel) {
             : "alias") as NameForm["kind"],
         }));
         const declaredForms = [ne.name, ...aliases.map((a) => a.text)];
-        const existingId = declaredForms
-          .map((f) => formToId.get(formKey(f)))
-          .find((id) => id !== undefined);
+        const owners = [...new Set(declaredForms.flatMap(form => formToId.owners(formKey(form))))];
+        if (owners.length > 1 || owners.some(id => entityById.get(id)?.kind !== kind)) {
+          notes[`extraction:identity-conflict:${ne.name}`] = "Declaration bridges multiple identity owners or incompatible kinds; no forms were reassigned.";
+          continue;
+        }
+        const existingId = owners[0];
         if (existingId) {
           const base = entityById.get(existingId)!;
           const missing = declaredForms.filter(
@@ -455,6 +467,30 @@ export function createExtractor(work: WorkModel) {
       }
     };
 
+    for (const proposal of aliasProposals) {
+      const { entityId, aliasText } = proposal.payload as { entityId: string; aliasText: string };
+      const entity = entityById.get(entityId);
+      const owners = formToId.owners(formKey(aliasText));
+      if (!entity || owners.some(id => id !== entityId) || rejected.has(aliasText) || distinct(entity.names.map(name => name.text), [aliasText])) {
+        notes[proposal.id] = "Alias target is missing, ambiguous or conflicts with an established identity; no form was reassigned.";
+        continue;
+      }
+      if (entity.names.some(name => name.text === aliasText)) continue;
+      const sourceIds = input.sentences.filter(sentence => sentence.text.includes(aliasText)).map(sentence => sentence.id);
+      if (!sourceIds.length) {
+        notes[proposal.id] = "Alias is absent from the original block; reference remains unresolved.";
+        continue;
+      }
+      const updated: Entity = { ...entity, names: [...entity.names, { text: aliasText, lang: guessLang(aliasText), kind: "alias" }] };
+      entityById.set(entityId, updated);
+      formToId.set(formKey(aliasText), entityId);
+      const previous = entityUpserts.get(entityId);
+      entityUpserts.set(entityId, {
+        ...proposal, id: previous?.id ?? proposal.id.replace(/_alias_/, "_aliasfold_"), kind: "upsert_entity", payload: updated,
+        provenance: { ...proposal.provenance, sentenceIds: [...new Set([...previous?.provenance.sentenceIds ?? [], ...sourceIds])] },
+      });
+    }
+
     const blockDeclarations = input.miniloop.accepted["blockIdentityDeclarations"] as LlmScene["newEntities"] | undefined;
     if (Array.isArray(blockDeclarations)) for (const declaration of blockDeclarations) {
       if (!declaration || typeof declaration.name !== "string" || !declaration.name.trim() || !["Character", "Location", "Organization", "Item", "Concept"].includes(declaration.kind ?? "") || !input.sentences.some(sentence => sentence.text.includes(declaration.name!))) {
@@ -463,7 +499,7 @@ export function createExtractor(work: WorkModel) {
       }
       const aliases = (Array.isArray(declaration.aliases) ? declaration.aliases : []).filter(alias => alias && typeof alias.text === "string" && !!alias.text.trim() && input.sentences.some(sentence => sentence.text.includes(alias.text!)));
       const forms = [declaration.name, ...aliases.map(alias => alias.text!)];
-      const owners = [...new Set(forms.map(form => formToId.get(formKey(form))).filter((id): id is string => !!id))];
+      const owners = [...new Set(forms.flatMap(form => formToId.owners(formKey(form))))];
       if (owners.length > 1 || owners.some(id => entityById.get(id)?.kind !== declaration.kind)) {
         notes[`faculty:block-identity-conflict:${declaration.name}`] = "Block identity declaration conflicts with existing identity owners or kinds; no identities were fused.";
         continue;
@@ -607,17 +643,17 @@ export function createExtractor(work: WorkModel) {
             provenance: { blockId: input.blockId, sentenceIds: evidence, patchId: "extraction" },
           });
         }
-        for (const sc of le.stateChanges ?? []) {
+        for (const [stateIndex, sc] of (le.stateChanges ?? []).entries()) {
           if (!sc.character) continue;
           const character = resolveOrMint(sc.character, "Character", [], `State change in event ${eventId}`);
           if (!character || character.kind !== "Character") continue;
           const relationships: Record<string, number> = {};
           for (const [name, v] of Object.entries(sc.relationships ?? {})) {
             const target = formToId.get(formKey(name));
-            if (target) relationships[target] = clampDelta(v);
+            if (target && entityById.get(target)?.kind === "Character") relationships[target] = clampDelta(v);
           }
           stateProposals.push({
-            id: `${input.blockId}_${eventId}_state_${character.id}`,
+            id: `${input.blockId}_${eventId}_state_${character.id}_${stateIndex + 1}`,
             kind: "set_state_change",
             payload: {
               characterId: character.id,
@@ -706,49 +742,6 @@ export function createExtractor(work: WorkModel) {
     for (const [candidate, stub] of stubByCandidate) {
       notes[stub.id] =
         `Name candidate "${candidate}" was judged new by Jev but extraction did not confirm it in this block; stub dropped rather than merged as a malformed entity.`;
-    }
-
-    // --- fold add_alias proposals into entity upserts (apply.ts) ---
-    for (const ap of aliasProposals) {
-      const payload = ap.payload as { entityId: string; aliasText: string };
-      const entity = input.knownEntities.find((e) => e.id === payload.entityId);
-      if (!entity) {
-        notes[ap.id] = `Alias "${payload.aliasText}" targeted unknown entity ${payload.entityId}; dropped at extraction fold.`;
-        continue;
-      }
-      if (distinct(entity.names.map((name) => name.text), [payload.aliasText]) || rejected.has(payload.aliasText)) {
-        notes[ap.id] = "Alias omitted because it conflicts with the reviewer's extraction constraints.";
-        continue;
-      }
-      if (entity.names.some((n) => n.text === payload.aliasText)) continue;
-      const owner = formToId.get(formKey(payload.aliasText));
-      if (owner && owner !== entity.id) {
-        notes[ap.id] = "Alias omitted because extraction already resolved this form to another entity; reviewer must decide the identity conflict.";
-        continue;
-      }
-      const aliasForm: NameForm = {
-        text: payload.aliasText,
-        lang: entity.names[0]?.lang ?? "und",
-        kind: "alias",
-      };
-      const existing = entityUpserts.get(entity.id);
-      if (existing) {
-        // Merge into the upsert already proposed for this entity
-        // (e.g. forms folded in during extraction) rather than
-        // replacing its payload and losing them.
-        const current = existing.payload as Entity;
-        if (!current.names.some((n) => n.text === payload.aliasText)) {
-          current.names = [...current.names, aliasForm];
-        }
-      } else {
-        entityUpserts.set(entity.id, {
-          id: ap.id.replace(/_alias_/, "_aliasfold_"),
-          kind: "upsert_entity",
-          payload: { ...entity, names: [...entity.names, aliasForm] },
-          confidence: ap.confidence,
-          provenance: ap.provenance,
-        });
-      }
     }
 
     return {

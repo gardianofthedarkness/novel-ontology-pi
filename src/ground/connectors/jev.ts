@@ -98,7 +98,7 @@ export class JevClient implements DecisionModel {
         lastError = err;
       } catch (err) {
         options.signal?.throwIfAborted();
-        if (err instanceof Error && err.message.startsWith("Jev request failed: 4")) {
+        if (err instanceof Error && (err.message.startsWith("Jev request failed: 4") || err.message.startsWith("Jev response"))) {
           throw err;
         }
         lastError = err instanceof Error ? err : new Error(String(err));
@@ -164,8 +164,9 @@ function fromWireAnswers(
       throw new Error(`Jev response is missing an answer for question "${q.key}"`);
     }
     if (q.primitive === "noul") {
+      if (typeof a.noul !== "number" || !Number.isFinite(a.noul) || a.noul < 0 || a.noul > 1) throw new Error(`Jev response has an invalid probability for question "${q.key}"`);
       // The probability IS the value; patches read it directly.
-      return { key: q.key, value: a.noul ?? 0 };
+      return { key: q.key, value: a.noul };
     }
     if (q.primitive === "choice") {
       return {

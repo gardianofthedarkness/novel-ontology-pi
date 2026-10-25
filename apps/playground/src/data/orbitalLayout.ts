@@ -86,10 +86,11 @@ export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.ne
   }
   const draws: OrbitalDraw[] = level.main.map((entry) => ({ node: entry.node, entry, position: anchors.get(entry.node.id)!.map((value) => value * 3) as Position3, radius: mainRadius(entry.node, weights.main?.get(entry.node.id)), prominence: weights.main?.get(entry.node.id), role: "main" }));
   draws.push(...contextNebula.map((node): OrbitalDraw => ({ node, position: positions.get(node.id)!.map((value) => value * 3) as Position3, radius: nebulaRadius(node, weights.nebula?.get(node.id)), prominence: weights.nebula?.get(node.id), role: "nebula" })));
-  const paths = tracks.map((track): OrbitalPath => {
-    const members = draws.filter((draw) => draw.role === "main" && trackKey(draw.node) === track);
+  const paths = tracks.flatMap((track): OrbitalPath[] => {
+    const members = draws.filter((draw) => draw.role === "main" && trackKey(draw.node) === track && (!draw.node.library || draw.node.library.type === "file" && draw.node.library.readingOrder !== null));
+    if (!members.length || members[0].node.library && members.length < 2) return [];
     const first = members[0].position, last = members.at(-1)!.position;
-    return { id: `time:${track}`, points: [[first[0] - 260, first[1], first[2]], ...members.map((draw) => draw.position), [last[0] + 260, last[1], last[2]]] };
+    return [{ id: `${members[0].node.library ? "reading-order" : "time"}:${track}`, points: [[first[0] - 260, first[1], first[2]], ...members.map((draw) => draw.position), [last[0] + 260, last[1], last[2]]] }];
   });
   return { draws, paths };
 }
@@ -103,7 +104,11 @@ export function layoutOrbitalPreview(parent: OrbitalDraw, level: OrbitalLevel): 
     const local = helixPoint(progress(entry.node), tracks.indexOf(trackKey(entry.node)), tracks.length, parent.radius);
     return { node: entry.node, entry, role: "preview", previewParentId: parent.node.id, position: local.map((value, axis) => parent.position[axis] + value) as Position3, radius: Math.max(3, Math.min(13, parent.radius * 0.075, parent.radius * 0.9 / largestTrack)) };
   });
-  const paths = tracks.map((track, trackIndex): OrbitalPath => ({ id: `orbit:${parent.node.id}:${track}`, preview: true, points: Array.from({ length: 81 }, (_, index) => helixPoint(index / 80, trackIndex, tracks.length, parent.radius).map((value, axis) => parent.position[axis] + value) as Position3) }));
+  const paths = tracks.flatMap((track, trackIndex): OrbitalPath[] => {
+    const entries = level.main.filter(entry => trackKey(entry.node) === track);
+    if (entries[0]?.node.library && (entries.length < 2 || entries.some(entry => entry.node.library?.readingOrder === null))) return [];
+    return [{ id: `orbit:${parent.node.id}:${track}`, preview: true, points: Array.from({ length: 81 }, (_, index) => helixPoint(index / 80, trackIndex, tracks.length, parent.radius).map((value, axis) => parent.position[axis] + value) as Position3) }];
+  });
   return { draws, paths };
 }
 

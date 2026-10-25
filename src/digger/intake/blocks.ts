@@ -204,7 +204,9 @@ function paragraphs(chapterText: string): { start: number; end: number }[] {
  * on paragraph boundaries. `targetChars` default matches the design's
  * chapter-or-long-block roll (≈ a long chapter stays one block).
  */
-export function cutBlocks(text: string, targetChars = 24000): Block[] {
+export const DEFAULT_BLOCK_SIZE = 24000;
+
+export function cutBlocks(text: string, targetChars = DEFAULT_BLOCK_SIZE): Block[] {
   const chapters = splitChapters(text);
   const blocks: Block[] = [];
   let n = 0;

@@ -1,7 +1,10 @@
 import type { CausalSummary, WorldEdge, WorldNode } from "../types.js";
 import { relationshipAffinities } from "./spatialLayout.js";
+import { libraryLevel, type LibraryView } from "./libraryModel.js";
 
 export interface OrbitalWorld {
+  library?: LibraryView;
+  sourceId?: string | null;
   laneNodes: WorldNode[];
   laneEdges: WorldEdge[];
   interiors: Record<string, { nodes: WorldNode[]; edges: WorldEdge[] }>;
@@ -10,7 +13,10 @@ export interface OrbitalWorld {
 export interface OrbitalScope {
   key: string;
   label: string;
-  kind: "volume" | "chapter" | "scenes" | "scene";
+  kind: "library" | "series" | "volume" | "chapter" | "scenes" | "scene";
+  libraryGroup?: string;
+  planId?: string;
+  sourceId?: string;
   chapterId?: string;
   ids?: string[];
   sceneId?: string;
@@ -66,6 +72,7 @@ export function representativeScene(nodes: WorldNode[], edges: WorldEdge[], cand
 }
 
 export function orbitalContents(node: WorldNode, level: OrbitalLevel): WorldNode[] {
+  if (node.library) return level.sourceNodes.filter(entry => entry.parent === node.id);
   if (node.kind === "bigEvent") return level.sourceNodes.filter((entry) => entry.parent === node.id && entry.kind === "scene").sort(order);
   if (node.cluster) {
     const ids = new Set(node.cluster.ids);
@@ -148,6 +155,8 @@ function groupEntries(records: WorldNode[], scope: OrbitalScope, sourceNodes: Wo
 }
 
 export function orbitalLevel(world: OrbitalWorld, scope: OrbitalScope = volumeScope, activityNodes: WorldNode[] = [], activityEdges: WorldEdge[] = []): OrbitalLevel {
+  if (world.library && (scope.kind === "library" || scope.kind === "series")) return libraryLevel(world, scope);
+  if (scope.kind === "volume" && scope.sourceId && world.sourceId !== scope.sourceId) return { scope, main: [], nebula: [], sourceNodes: [], sourceEdges: [] };
   if (scope.kind === "volume") {
     const main = world.laneNodes.filter((node) => node.kind === "bigEvent").sort(order).map((node): OrbitalEntry => {
       const interior = world.interiors[node.id];

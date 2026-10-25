@@ -19,6 +19,59 @@ No private commercial-novel data is distributed.
 
 ## How it works
 
+### Multiple files and series
+
+Use the separate [novel-library skill](skills/novel-library/SKILL.md) before
+multi-file ingestion. The main agent determines series/universe/continuity
+membership and reading order from evidence; the CLI validates, stages and records
+its review. It does not guess grouping from filenames or call a model itself.
+
+```sh
+novel library init ./library
+novel library add ./library ./volume-1.epub
+novel library add ./library ./volume-2.epub
+novel library show ./library
+novel library evidence ./library <source-id> --offset 0 --limit 1500
+novel library propose ./library ./organization.json --revision <catalog-revision>
+novel library plan ./library <plan-id>
+novel library decide ./library <plan-id> --revision <plan-revision> --decision approve --reason 'Reviewed the source evidence and volume order'
+novel library show ./library --series <series-id>
+novel library prepare ./library <source-id>
+```
+
+See the [proposal schema](skills/novel-library/references/organization.md); agents
+can submit the same JSON via `--organization '<JSON>'` without writing a plan
+file. Load/install both skill folders when using the multi-file workflow.
+Unknown memberships remain unresolved, and a changed catalog invalidates old
+plans. `library history` lists immutable checkpoints; organization can be changed
+only by another reviewed plan. History/evidence and source copies are private
+local data, not a public catalog to serve wholesale.
+
+`prepare` performs offline EPUB/text intake and returns exact `workspace` and
+`input` paths; only an explicit later `novel ingest` starts processing and its
+normal gates. Every source has its own stable-ID workspace. The returned input
+is outside that workspace (compatible with Pi job validation), while a matching
+bound source copy remains inside it. Qualify local IDs as `<source-id>:<local-id>`
+when reporting across files. Reordering volumes never renumbers stored facts.
+Directly ingesting another source into a bound workspace is refused. Existing
+single-source workspaces can bind unchanged; ambiguous/replaced sources require
+an explicit migration, not silent concatenation.
+
+This is **federated organization**, not a combined ontology or cross-book EM.
+`show --universe` lists sources but does not fuse their graphs or continuities.
+Actual story-time extraction/alignment remains phase 2. The existing bounded
+`tools/pi-review` extraction runner is not a library-management shell: organize
+and prepare before configuring its ordered job inputs. No active Pi session or
+existing database is migrated or restarted by these commands.
+
+For the [live orbital series view](docs/library-live.md), configure a protected
+viewer with `NOVEL_LIBRARY_DIR` and prepared-source/volume bindings. The existing
+activity stream then shows proposed/held organization ghosts and reviewed series
+→ ordered files → chapters. Volume arrows are reading order, not actual story
+time. Existing library-less viewers remain unchanged.
+
+### Extraction pipeline
+
 - **The Skill** (`skills/novel-ontology/SKILL.md`) teaches a
   [Pi agent](https://github.com/earendil-works/pi) the workflows:
   ingest → review → query → simulate → fork.

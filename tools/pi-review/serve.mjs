@@ -8,6 +8,8 @@ import { root, repo, agentEvents } from './config.mjs';
 import { streamSnapshots } from './live-stream.mjs';
 import { createPiConsole } from './pi-console.mjs';
 import { bookCatalog } from './book-catalog.mjs';
+import { resolveAlbumAsset } from './album.mjs';
+import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -94,12 +96,25 @@ async function configuredLive({ volume, activityAfter }) {
   return { ...data, availableVolumes: volumes.map(entry => entry.id), books: bookCatalog(volumes), activeVolume: active.volume };
 }
 
-export async function createViewer({ port = 4324, origin, expiresAt, readLive = configuredLive, watchPaths, console: consoleOptions, dist = `${repo}/apps/playground/dist` } = {}) {
+async function configuredWorkspace(volume) {
+  const { volumes, active } = await liveConfiguration();
+  const selected = volumes.find(entry => entry.id === (volume === 'active' ? active.volume : Number(volume)));
+  if (!selected) throw new Error('Unknown volume');
+  return resolve(root, selected.workspace);
+}
+
+export async function createViewer({ port = 4324, origin, expiresAt, readLive = configuredLive, resolveWorkspace = readLive === configuredLive ? configuredWorkspace : undefined, watchPaths, console: consoleOptions, dist = `${repo}/apps/playground/dist`, libraryDirectory = process.env.NOVEL_LIBRARY_DIR, libraryBindings, libraryReader = readLibraryLive } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new TypeError('Invalid loopback port');
   const expiry = deadline(expiresAt);
   if (origin !== undefined) validateOrigin(origin, port);
   const resources = await validateResources(dist);
-  const paths = watchPaths ?? (readLive === configuredLive ? [`${root}runtime`, ...(await liveConfiguration()).volumes.map(volume => resolve(root, volume.workspace))] : []);
+  const paths = [...(watchPaths ?? (readLive === configuredLive ? [`${root}runtime`, ...(await liveConfiguration()).volumes.map(volume => resolve(root, volume.workspace))] : [])), ...(libraryDirectory ? [resolve(libraryDirectory)] : [])];
+  const readSnapshot = async options => {
+    const data = await readLive(options);
+    if (!libraryDirectory) return data;
+    const bindings = libraryBindings ?? (readLive === configuredLive ? await configuredLibraryBindings((await liveConfiguration()).volumes, root) : []);
+    return withLibraryLive(data, await libraryReader(libraryDirectory, bindings, undefined, resolveWorkspace));
+  };
   if (!Array.isArray(paths) || paths.some(path => typeof path !== 'string')) throw new TypeError('Invalid watch paths');
   const access = randomBytes(32).toString('base64url');
   const privatePath = `/view/${access}/`;
@@ -135,13 +150,21 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         send(200, JSON.stringify(await bounded(() => piConsole.read())), { 'Content-Type': 'application/json; charset=utf-8' });
         return;
       }
+      if (scopedPath === '/api/album-asset') {
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const asset = await bounded(async () => resolveAlbumAsset(await resolveWorkspace(volume), url.searchParams.get('id')));
+        if (!asset) { send(404); return; }
+        send(200, await readFile(asset.filename), { 'Content-Type': asset.type });
+        return;
+      }
       if (['/api/live', '/db/novel/view.json', '/api/live/stream'].includes(scopedPath)) {
         const volume = url.searchParams.get('volume') ?? 'active';
         if (volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(400); return; }
         let activityAfter;
         let lastBatch;
         const read = async () => {
-          const data = await bounded(() => readLive({ volume, activityAfter }));
+          const data = await bounded(() => readSnapshot({ volume, activityAfter }));
           if (response.destroyed || Date.now() >= expiry) throw new Error('Viewer closed');
           if (data.activity) {
             activityAfter = data.activity.cursor;

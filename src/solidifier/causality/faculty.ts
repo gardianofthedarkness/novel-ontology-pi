@@ -48,6 +48,7 @@ export interface CausalitySummary {
 }
 
 export interface CausalityPassInput {
+  limit?: number;
   novelDir: string;
   decisions: DecisionModel;
   embedder?: Embedder | null;
@@ -136,13 +137,14 @@ export async function ensureUnitVectors(
 }
 
 export async function runCausalityPass(input: CausalityPassInput): Promise<CausalityPassResult> {
+  if (input.limit !== undefined && (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 500)) throw new Error("Causality limit must be an integer from 1 to 500.");
   const universe = await loadCausalityUniverse(input.novelDir, input.extras ?? {});
   const { vectors, embedded } = await ensureUnitVectors(input.novelDir, universe, input.embedder ?? null);
 
   const candidates = nominateCausalCandidates(universe, {
     touchedIds: input.touchedIds ?? null,
     vectors: vectors.size > 0 ? vectors : undefined,
-  });
+  }).slice(0, input.limit ?? 500);
   const verdicts = await checkCausalLinks(input.decisions, candidates, universe);
 
   const provenanceBlockId = input.provenanceBlockId ?? "causality-sweep";

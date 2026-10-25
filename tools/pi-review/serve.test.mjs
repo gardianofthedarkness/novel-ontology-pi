@@ -284,7 +284,7 @@ async function cliFixture(context) {
   const setup = await fixture(context);
   const tools = join(setup.directory, 'tools/pi-review');
   await mkdir(tools, { recursive: true });
-  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs', 'book-catalog.mjs', 'review-progress.mjs', 'guard.mjs']) {
+  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs', 'book-catalog.mjs', 'review-progress.mjs', 'guard.mjs', 'library-live.mjs', 'album.mjs']) {
     await copyFile(fileURLToPath(new URL(filename, import.meta.url)), join(tools, filename));
   }
   const home = join(setup.directory, 'configured-home');
@@ -360,4 +360,25 @@ test('CLI reads only configured runtime, caps expiry, prints distinct links and 
   assert.equal(errors, '');
   await writeFile(join(runtime, 'pi-control.json'), JSON.stringify({ token: controlToken, expiresAt: new Date(Date.now() - 1000).toISOString() }));
   await assert.rejects(execute(process.execPath, [entry], { env: { ...process.env, NOVEL_REVIEW_HOME: home } }), error => error.code === 1 && !error.stdout.includes('link:') && !error.stderr.includes(controlToken));
+});
+
+test('album assets are served read-only per book, and only when the host resolves workspaces', async context => {
+  const { directory, start } = await fixture(context);
+  const workspace = join(directory, 'workspace');
+  await mkdir(join(workspace, 'ontology'), { recursive: true });
+  await mkdir(join(workspace, 'assets'), { recursive: true });
+  await writeFile(join(workspace, 'assets', 'ill_0001.jpg'), 'jpeg-bytes');
+  await writeFile(join(workspace, 'ontology', 'illustrations.jsonl'), JSON.stringify({ id: 'ill_0001', asset: 'assets/ill_0001.jpg', sentenceId: null, kind: 'plate' }));
+  const requested = [];
+  const viewer = await start({ resolveWorkspace: async (volume) => { requested.push(volume); return workspace; } });
+  const image = await send(viewer, 'api/album-asset?id=ill_0001&volume=2');
+  assert.equal(image.status, 200);
+  assert.equal(image.headers['content-type'], 'image/jpeg');
+  assert.equal(image.body, 'jpeg-bytes');
+  assert.deepEqual(requested, ['2']);
+  assert.equal((await send(viewer, 'api/album-asset?id=../private-report.json')).status, 404);
+  assert.equal((await send(viewer, 'api/album-asset?id=ill_0001&volume=../x')).status, 404);
+  assert.equal((await send(viewer, 'api/album-asset?id=ill_0001', { method: 'POST' })).status, 405);
+  const without = await start();
+  assert.equal((await send(without, 'api/album-asset?id=ill_0001')).status, 404, 'a custom host without a workspace resolver serves nothing');
 });

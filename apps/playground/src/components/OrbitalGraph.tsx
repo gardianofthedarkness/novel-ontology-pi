@@ -253,6 +253,7 @@ const CAUSAL_SAMPLES = 24;
 /** Stored CAUSES links: cause → effect arcs lifted off the time spine.
  * Dashed = projected onto containing spheres; solid = event to event. */
 function CausalArc({ arrow, bus, radii }: { arrow: CausalArrow; bus: LabelBus; radii: Map<string, number> }) {
+  const { camera, size } = useThree();
   const line = useMemo(() => {
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(new Float32Array((CAUSAL_SAMPLES + 1) * 3), 3));
@@ -283,7 +284,12 @@ function CausalArc({ arrow, bus, radii }: { arrow: CausalArrow; bus: LabelBus; r
     line.geometry.computeBoundingSphere();
     if (arrow.projected) line.computeLineDistances();
     if (head.current) {
-      head.current.position.copy(curve.getPoint(endT));
+      const tip = curve.getPoint(endT);
+      const projected = tip.clone().project(camera);
+      const offset = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0).add(tip).project(camera);
+      const pixelsPerUnit = Math.abs(offset.x - projected.x) * size.width / 2;
+      head.current.scale.setScalar(Math.min(Math.max(1, 3 / Math.max(0.000001, 6 * width * pixelsPerUnit)), distance / (60 * width)));
+      head.current.position.copy(tip);
       head.current.quaternion.copy(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), curve.getTangent(endT).normalize()));
     }
   });

@@ -56,9 +56,9 @@ export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, c
   const connections = edges.filter((edge) => edge.from === selected.id || edge.to === selected.id);
   return (
     <div className="record-inspector">
-      <div className="record-eyebrow"><span>{KIND_LABEL[selected.kind]}</span><span>#{String(nodes.findIndex((node) => node.id === selected.id) + 1).padStart(2, "0")}</span></div>
+      <div className="record-eyebrow"><span>{selected.library?.type ?? KIND_LABEL[selected.kind]}</span><span>#{String(nodes.findIndex((node) => node.id === selected.id) + 1).padStart(2, "0")}</span></div>
       <h2>{selected.label}</h2>
-      <span className={`record-status status-${selected.state}`}><i />{selected.cluster ? "View-only group · not an ontology record" : recordStatus(selected)}</span>
+      <span className={`record-status status-${selected.state}`}><i />{selected.library ? `${selected.state === "canon" ? "Reviewed" : selected.state} organization · not an ontology fact` : selected.cluster ? "View-only group · not an ontology record" : recordStatus(selected)}</span>
       <section className="record-summary" aria-label="Recorded summary">
         <h3>{selected.kind === "scene" ? "Scene · recorded event summary" : "Recorded summary"}</h3>
         {selected.cluster && selected.summary && <p>{selected.summary}</p>}
@@ -69,11 +69,11 @@ export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, c
       </section>
       {!selected.cluster && (selected.kind === "scene" || selected.kind === "event" || selected.kind === "dialogue") && <OriginalSource node={selected} endpoint={sourceEndpoint} />}
       {(selected.kind === "event" || selected.kind === "dialogue") && <CausalLinks selected={selected} links={causalLinks} lookupNodes={lookupNodes} onSelect={onSelect} />}
-      {!!contents.length && <section className="chronological-contents" aria-label="Contents in chronological order"><h3>Inside · earlier → later</h3><ol>{contents.map((node, index) => <li key={node.id}><button onClick={() => onSelect(node)}><small>{String(index + 1).padStart(2, "0")} / {KIND_LABEL[node.kind]}</small><span>{node.summary ?? node.label}</span></button></li>)}</ol></section>}
+      {!!contents.length && <section className="chronological-contents" aria-label={selected.library ? "Files in reading order" : "Contents in chronological order"}><h3>{selected.library ? "Files · reading order / unknown placement" : "Inside · earlier → later"}</h3><ol>{contents.map((node, index) => <li key={node.id}><button onClick={() => onSelect(node)}><small>{String(index + 1).padStart(2, "0")} / {node.library?.type ?? KIND_LABEL[node.kind]}</small><span>{node.library ? node.label : node.summary ?? node.label}</span></button></li>)}</ol></section>}
       <dl className="record-facts">
         <div><dt>Record ID</dt><dd>{selected.id}</dd></div>
-        <div><dt>Timeline</dt><dd>{selected.lane === "canon" ? "01 / Canon" : "02 / Branch"}</dd></div>
-        <div><dt>Sequence</dt><dd>{String(selected.chrono).padStart(2, "0")}</dd></div>
+        <div><dt>{selected.library ? "Scope" : "Timeline"}</dt><dd>{selected.library ? "Library organization" : selected.lane === "canon" ? "01 / Canon" : "02 / Branch"}</dd></div>
+        <div><dt>{selected.library ? "Reading position" : "Sequence"}</dt><dd>{selected.library ? selected.library.readingOrder ?? "Unknown / not applicable" : String(selected.chrono).padStart(2, "0")}</dd></div>
         <div><dt>Connections</dt><dd>{connections.length}</dd></div>
       </dl>
       {canOpen ? <p className="interior-summary">{childCount} interior records · {orbital ? "zoom to reveal; double-click a revealed sphere to enter" : "click the file to enter ↗"}</p> : !orbital && selected.kind === "bigEvent" && <p className="empty-state">No interior records in this sample.</p>}
@@ -83,7 +83,7 @@ export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, c
           <li key={node.id}>
             <button className={node.id === selected.id ? "selected" : ""} aria-pressed={node.id === selected.id} onClick={() => onSelect(node)}>
               <span className="record-number">{String(index + 1).padStart(2, "0")}</span>
-              <span><strong>{node.label}</strong><small>{KIND_LABEL[node.kind]} / {node.state !== "canon" ? node.state : node.lane}</small></span>
+              <span><strong>{node.label}</strong><small>{node.library?.type ?? KIND_LABEL[node.kind]} / {node.state !== "canon" ? node.state : node.library ? "organization" : node.lane}</small></span>
               <span aria-hidden="true">{node.id === selected.id ? "↗" : "·"}</span>
             </button>
           </li>

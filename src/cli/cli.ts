@@ -23,6 +23,7 @@ import {
 } from "./commands/shared/queryCommands.js";
 import { llmPing, llmProbe } from "./commands/shared/llmCommands.js";
 import { ingestNovel } from "./commands/extract/ingestCommands.js";
+import { libraryCommand } from "./commands/extract/libraryCommands.js";
 import { runMatch } from "./commands/extract/matchCommands.js";
 import {
   listCausalityCandidates,
@@ -54,6 +55,8 @@ import { reviseProposals } from "../solidifier/merge/revise.js";
 import { decideFacts, prepareSemantic, semanticPage } from "../solidifier/merge/semanticCommands.js";
 import { runEmPassAfterApply } from "../solidifier/matching/emFaculty.js";
 import { markCausalitySweepPending } from "../solidifier/causality/faculty.js";
+import { causalityEvidence } from "../solidifier/causality/evidence.js";
+import { universeCausalityCommand } from "./commands/extract/universeCausalityCommands.js";
 import { jevFromEnv } from "../ground/connectors/jev.js";
 import {
   listChangeSets,
@@ -63,6 +66,15 @@ import {
 
 const COMMANDS: Record<string, string> = {
   "novel init <path>": "Create a novel workspace + bundle manifest",
+  "novel library init <library-dir>": "Create a private, versioned multi-file library; no model calls",
+  "novel library add <library-dir> <file.epub|file.txt> [--title <title>]": "Register an immutable source by content hash; identical files deduplicate",
+  "novel library show <library-dir> [--series <id> | --universe <id> | --continuity <id>]": "Inspect source identities, reviewed organization and reading order; scoped results exclude unresolved assignments",
+  "novel library evidence <library-dir> <source-id> [--offset N --limit N]": "Read up to 2000 original-language characters for organization evidence; no model calls",
+  "novel library propose <library-dir> [<organization.json> | --organization '<JSON>'] --revision <catalog-revision>": "Validate an evidence-backed organization plan without applying it",
+  "novel library plan <library-dir> <plan-id>": "Read the complete immutable proposal, review revision and stale status before deciding",
+  "novel library decide <library-dir> <plan-id> --revision <plan-revision> --decision approve|hold|reject --reason <text>": "Record an audited independent review; only approve changes library organization, never ontology facts",
+  "novel library prepare <library-dir> <source-id>": "Create one isolated source-bound workspace, including offline EPUB intake; never ingest or start a model",
+  "novel library history <library-dir>": "List immutable library checkpoints; restore organization by proposing a new reviewed plan",
   "novel watch <novel-dir> [--port N]": "Read-only loopback SSE over the processing event log",
   "novel section <file>": "Deterministic sentence sectioning only (free, testable)",
   "novel blocks <file> [--size N]": "Chapter detection + block cutting map (no models)",
@@ -72,7 +84,11 @@ const COMMANDS: Record<string, string> = {
     "List hybrid-nominated CAUSES candidates (graph patterns + embedding top-K) for agent adjudication. No proposals are created.",
   "novel causality propose <novel-dir> <from> <to> [--reason \"...\"]":
     "Agent-adjudicated CAUSES proposal (event or dialogue-card ids). Lands in a pending_review changeset for the gate; refuses self-links, existing links, and order-contradicted directions.",
-  "novel causality sweep <novel-dir>":
+  "novel causality evidence <novel-dir> <from> <to> [--changeset ID] [--offset N --limit N]":
+    "Read revision-bound original source passages for both causal endpoints; missing provenance is explicit.",
+  "novel causality universe candidates|sweep|evidence|propose|show|decide|list <library-dir> <universe-id> ...":
+    "Cross-file causal ledger for reviewed universe/continuity membership; qualified IDs, independent source review, bounded Jev batches, no book database fusion.",
+  "novel causality sweep <novel-dir> [--limit N]":
     "On-demand systematic sweep: Jev-determined CAUSES pass over the whole universe (same machinery as the ingest chapter-close sweep).",
   "novel match <novel-dir> [--changeset <id>]":
     "Entity-matching review packet: code nominates duplicate pairs, System 1 (Jev) reviews the batch with a checklist, only unsettled pairs are raised to the agent",
@@ -182,6 +198,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "library") {
+    out(await libraryCommand(positional.slice(1)), pretty);
+    return;
+  }
+
   if (cmd === "jev") {
     if (sub === "login") {
       out(
@@ -228,11 +249,11 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "album") {
-    if (sub === "import" && positional[2] && positional[3] && !positional[3].startsWith("--")) {
+    if (sub === "import" && positional.length === 4 && positional[2] && positional[3] && !positional[3].startsWith("--")) {
       out(await albumImport(positional[2], positional[3]), pretty);
       return;
     }
-    if (sub === "list" && positional[2]) {
+    if (sub === "list" && positional[2] && (positional.length === 3 || positional.length === 5 && positional[3] === "--block-size")) {
       const rawSize = flag(positional, "--block-size");
       const blockSize = rawSize === undefined ? undefined : Number(rawSize);
       if (blockSize !== undefined && (!Number.isInteger(blockSize) || blockSize < 100)) {
@@ -241,7 +262,7 @@ async function main(): Promise<void> {
       out(await albumList(positional[2], blockSize), pretty);
       return;
     }
-    if (sub === "portraits" && positional[2]) {
+    if (sub === "portraits" && positional.length === 3 && positional[2]) {
       out(await albumPortraits(positional[2]), pretty);
       return;
     }
@@ -469,11 +490,29 @@ async function main(): Promise<void> {
 
   if (cmd === "causality") {
     const sub = positional[1];
+    if (sub === "universe") { out(await universeCausalityCommand(positional.slice(2)), pretty); return; }
     const novelDir = positional[2];
     if (!sub || !novelDir || novelDir.startsWith("--")) {
       throw new Error(
         "Usage: novel causality candidates <novel-dir> [--unit ID] [--chapter N] [--limit N] | novel causality propose <novel-dir> <from> <to> [--reason \"...\"] | novel causality sweep <novel-dir>",
       );
+    }
+    const optionStart = ["propose", "evidence"].includes(sub) ? 5 : 3;
+    const allowed = sub === "candidates" ? ["--unit", "--chapter", "--limit"] : sub === "propose" ? ["--reason"] : sub === "evidence" ? ["--changeset", "--offset", "--limit"] : sub === "sweep" ? ["--limit"] : [];
+    const seen = new Set<string>();
+    for (let index = optionStart; index < positional.length; index += 2) {
+      const name = positional[index], value = positional[index + 1];
+      if (!allowed.includes(name) || seen.has(name) || !value || value.startsWith("--")) throw new Error("Causality options require unique supported flags and values.");
+      seen.add(name);
+    }
+    if (sub === "evidence") {
+      if (!positional[3] || !positional[4]) throw new Error("Causal evidence needs from and to IDs.");
+      out(await causalityEvidence(novelDir, positional[3], positional[4], {
+        changesetId: flag(positional, "--changeset"),
+        offset: flag(positional, "--offset") === undefined ? undefined : Number(flag(positional, "--offset")),
+        limit: flag(positional, "--limit") === undefined ? undefined : Number(flag(positional, "--limit")),
+      }), pretty);
+      return;
     }
     if (sub === "candidates") {
       const chapterRaw = flag(positional, "--chapter");
@@ -499,7 +538,7 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "sweep") {
-      out(await runCausalitySweep(novelDir), pretty);
+      out(await runCausalitySweep(novelDir, { limit: flag(positional, "--limit") === undefined ? undefined : Number(flag(positional, "--limit")) }), pretty);
       return;
     }
     throw new Error(`Unknown causality subcommand ${sub} (candidates | propose | sweep)`);

@@ -283,6 +283,10 @@ export class FacultyGraph {
         .map(d => ({ name: d.name as string, id: undefined as string | undefined, forms: [d.name as string, ...(d.aliases ?? []).flatMap(a => a.text ? [a.text] : [])] }));
       const candidates = [...registryCandidates, ...sceneCandidates];
       if (!candidates.length) return llm;
+      const uniqueTarget = (targets: FragmentTarget[]) => {
+        if (new Set(targets.flatMap(target => target.id ? [target.id] : [])).size > 1 || new Set(targets.map(target => target.name)).size > 1) return undefined;
+        return targets.find(target => target.id) ?? targets[0];
+      };
       const remaining = [...declarations];
       // Folds chain: a name folded into a host that is itself folded
       // later in this same pass must land on the final survivor,
@@ -314,7 +318,7 @@ export class FacultyGraph {
       };
       const pending: typeof descriptive = [];
       for (const d of descriptive) {
-        const owner = candidates.find(c => c.forms.includes(d.name!));
+        const owner = uniqueTarget(candidates.filter(c => c.forms.includes(d.name!)));
         if (owner) {
           attach(d.name!, owner);
           notes.push(`alias-at-birth: "${d.name}" is already a recorded form of ${owner.name}; folded without a new entity.`);
@@ -354,13 +358,13 @@ export class FacultyGraph {
           key: `birth:${d.name}`,
           primitive: "choice" as const,
           instructions: `In the passage, the narrator refers to a figure as "${d.name}". Which EXISTING character does this description refer to in this passage? Choose that character's exact name from the options. Choose NEW_PERSON if the figure is a different person, a new character, or the passage does not establish the identity with confidence. A figure who merely appears in the same scene as a character, or interacts with them, is NOT that character.`,
-          options: [...candidates.map(c => c.name), "NEW_PERSON"],
+          options: [...new Set([...candidates.map(c => c.name), "NEW_PERSON"])],
         })),
         ...fragAsks.map(f => ({
           key: `fragment:${f.name}`,
           primitive: "choice" as const,
           instructions: `In the passage, a figure is referred to as "${f.name}", a shortened or extended form of a known character's name (${f.targets.map(t => t.name).join(", ")}). A fragment of a known character's name (surname-only or given-name-only reference) usually denotes that same character — but it can also be a DIFFERENT person: a relative sharing the surname, a clone, or a namesake. Which listed character does "${f.name}" refer to in this passage? Choose NEW_PERSON if it is a different or newly introduced person, or if the passage does not establish the identity with confidence.`,
-          options: [...f.targets.map(t => t.name), "NEW_PERSON"],
+          options: [...new Set([...f.targets.map(t => t.name), "NEW_PERSON"])],
         })),
       ];
       try {
@@ -369,7 +373,7 @@ export class FacultyGraph {
           const a = answers.find(x => x.key === `birth:${d.name}`);
           const value = typeof a?.value === "string" ? a.value : "NEW_PERSON";
           const conf = a?.confidence ?? 0;
-          const target = candidates.find(c => c.name === value);
+          const target = value === "NEW_PERSON" ? undefined : uniqueTarget(candidates.filter(c => c.name === value));
           if (target && conf >= BIRTH_ALIAS_THRESHOLD) {
             attach(d.name!, target);
             notes.push(`alias-at-birth: "${d.name}" attached to ${target.name} (Jev confidence ${conf.toFixed(2)}); no new entity minted.`);
@@ -381,7 +385,7 @@ export class FacultyGraph {
           const a = answers.find(x => x.key === `fragment:${f.name}`);
           const value = typeof a?.value === "string" ? a.value : "NEW_PERSON";
           const conf = a?.confidence ?? 0;
-          const target = f.targets.find(t => t.name === value);
+          const target = value === "NEW_PERSON" ? undefined : uniqueTarget(f.targets.filter(t => t.name === value));
           if (target && conf >= BIRTH_ALIAS_THRESHOLD) {
             attach(f.name, target);
             notes.push(`fragment-at-birth: "${f.name}" folded into ${target.name} (Jev confidence ${conf.toFixed(2)}); no new entity minted.`);
