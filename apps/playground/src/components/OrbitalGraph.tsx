@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type NodeRendererProps } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { AdditiveBlending, BoxGeometry, BufferGeometry, DoubleSide, Points, PointsMaterial, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
+import { AdditiveBlending, BoxGeometry, BufferGeometry, DoubleSide, Points, PointsMaterial, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
 import { recordColor } from "../archive";
 import type { WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
@@ -173,64 +173,34 @@ function pictureTexture(kind: string, shortId: string): CanvasTexture {
   return texture;
 }
 
-/** Framed picture card that always faces the camera (billboard).
- * Mirrors SphereGlyph's morph position/scale handling and sets
- * userData.orbitalGlyph so the label/position bus keeps working. */
-/** One shared diagonal highlight stripe; each card clones it to move its own offset. */
-let sheenSource: CanvasTexture | null = null;
-function sheenTexture(): CanvasTexture {
-  if (!sheenSource) {
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 256;
-    const context = canvas.getContext("2d")!;
-    const gradient = context.createLinearGradient(0, 256, 256, 0);
-    gradient.addColorStop(0, "rgba(255,255,255,0)");
-    gradient.addColorStop(0.42, "rgba(255,255,255,0)");
-    gradient.addColorStop(0.5, "rgba(255,255,255,0.85)");
-    gradient.addColorStop(0.56, "rgba(255,255,255,0.18)");
-    gradient.addColorStop(0.62, "rgba(255,255,255,0)");
-    gradient.addColorStop(1, "rgba(255,255,255,0)");
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 256, 256);
-    sheenSource = new CanvasTexture(canvas);
-    sheenSource.wrapS = sheenSource.wrapT = RepeatWrapping;
-  }
-  return sheenSource;
-}
-
-/** Glass case over an album card (Rhine-style): a clear-coated pane, light
- * catching on the edges, and a highlight band sweeping slowly across —
- * brighter while hovered, still under reduced motion. View only. */
-function GlassCase({ id, width, height, depth, opacity, motion, reducedMotion }: { id: string; width: number; height: number; depth: number; opacity: number; motion: MotionBus; reducedMotion: boolean }) {
+/** Glass case over an album card (Rhine-style): a clear, thin slab. The face
+ * is nearly invisible; what reads as glass is its thin ivory sides and edges,
+ * a little brighter while hovered. View only. */
+function GlassCase({ id, width, height, depth, opacity, motion }: { id: string; width: number; height: number; depth: number; opacity: number; motion: MotionBus; reducedMotion: boolean }) {
   const parts = useMemo(() => {
-    const sheen = sheenTexture().clone();
-    sheen.needsUpdate = true;
-    sheen.repeat.set(0.6, 0.6);
-    const box = new BoxGeometry(width * 1.1, height * 1.1, depth * 1.6);
+    const box = new BoxGeometry(width * 1.08, height * 1.08, Math.max(depth * 0.5, Math.min(width, height) * 0.035));
     return {
-      pane: new MeshPhysicalMaterial({ color: "#d6ecff", transparent: true, opacity: 0.1 * opacity, roughness: 0.06, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04, depthWrite: false }),
-      sheen,
-      sheenMaterial: new MeshBasicMaterial({ map: sheen, transparent: true, opacity: 0.22 * opacity, depthWrite: false, toneMapped: false }),
-      edges: new EdgesGeometry(box),
       box,
-      edgeMaterial: new LineBasicMaterial({ color: "#e6f6ff", transparent: true, opacity: 0.38 * opacity, depthWrite: false, toneMapped: false }),
+      pane: new MeshPhysicalMaterial({ color: "#f4efe4", transparent: true, opacity: 0.045 * opacity, roughness: 0.03, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03, depthWrite: false }),
+      edges: new EdgesGeometry(box),
+      edgeMaterial: new LineBasicMaterial({ color: "#efe6d4", transparent: true, opacity: 0.5 * opacity, depthWrite: false, toneMapped: false }),
     };
   }, [width, height, depth, opacity]);
-  useEffect(() => () => { parts.pane.dispose(); parts.sheen.dispose(); parts.sheenMaterial.dispose(); parts.edges.dispose(); parts.box.dispose(); parts.edgeMaterial.dispose(); }, [parts]);
+  useEffect(() => () => { parts.box.dispose(); parts.pane.dispose(); parts.edges.dispose(); parts.edgeMaterial.dispose(); }, [parts]);
   const hover = useRef(0);
   useFrame((_, delta) => {
     hover.current += ((motion.hoveredId === id ? 1 : 0) - hover.current) * Math.min(1, delta * 8);
-    if (!reducedMotion) parts.sheen.offset.set((now() * 0.07 + (id.length % 7) * 0.13) % 1, 0);
-    parts.sheenMaterial.opacity = (0.22 + 0.35 * hover.current) * opacity;
-    parts.edgeMaterial.opacity = (0.38 + 0.4 * hover.current) * opacity;
+    parts.edgeMaterial.opacity = (0.5 + 0.35 * hover.current) * opacity;
   });
-  return <>
-    <mesh raycast={noRaycast} position={[0, 0, depth * 0.9]} material={parts.pane}><planeGeometry args={[width * 1.08, height * 1.08]} /></mesh>
-    <mesh raycast={noRaycast} position={[0, 0, depth * 0.95]} material={parts.sheenMaterial}><planeGeometry args={[width * 1.08, height * 1.08]} /></mesh>
+  return <group position={[0, 0, depth * 0.6]}>
+    <mesh raycast={noRaycast} geometry={parts.box} material={parts.pane} />
     <lineSegments raycast={noRaycast} geometry={parts.edges} material={parts.edgeMaterial} />
-  </>;
+  </group>;
 }
 
+/** Framed picture card that always faces the camera (billboard).
+ * Mirrors SphereGlyph's morph position/scale handling and sets
+ * userData.orbitalGlyph so the label/position bus keeps working. */
 function PictureGlyph({ node }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;

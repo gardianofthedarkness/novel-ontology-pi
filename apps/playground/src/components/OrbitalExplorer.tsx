@@ -60,6 +60,8 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   /** Opening sequence in progress (skippable). */
   const [intro, setIntro] = useState(false);
   const opened = useRef(false);
+  /** Selection last sent to the inspector (undefined = nothing sent yet). */
+  const lastInspected = useRef<string | null | undefined>(undefined);
   const graphRef = useRef<GraphCanvasRef>(null);
   const singleClick = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFocus = useRef(-1);
@@ -286,8 +288,13 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   useEffect(() => {
     if (restoreRequest || !followingActivity && readingBookmark.current) return;
     if (suppressInspection.current) { suppressInspection.current = false; return; }
+    // Live data refreshes re-send the same selection; only a new selection may
+    // open (or close) the inspector, so a panel the reader closed stays closed.
+    const selectionKey = inspectedRecord?.id ?? null;
+    const refresh = lastInspected.current === selectionKey;
+    lastInspected.current = selectionKey;
     const record = followingActivity ? draws.find(draw => draw.node.id === touchedNodeIds.at(-1))?.node ?? [...draws].reverse().find(draw => touchedIds.includes(draw.node.id))?.node ?? inspectedRecord ?? level.main[0]?.node ?? level.nebula[0] : inspectedRecord ?? level.main[0]?.node ?? level.nebula[0];
-    onSelect(record ? { node: record, nodes: draws.map((draw) => draw.node), edges: inspectedRecord ? edges : [], lookupNodes: level.sourceNodes, contents: orbitalContents(record, level), inspect: !!inspectedRecord, passive: followingActivity, album: albumInfo } : null);
+    onSelect(record ? { node: record, nodes: draws.map((draw) => draw.node), edges: inspectedRecord ? edges : [], lookupNodes: level.sourceNodes, contents: orbitalContents(record, level), inspect: !!inspectedRecord, passive: followingActivity || refresh, album: albumInfo } : null);
   }, [inspectedRecord, draws, edges, level.sourceNodes, onSelect, followingActivity, restoreRequest, touchedIds, touchedNodeIds, albumInfo]);
 
   const snapshot = () => new Map(draws.map((draw): [string, OrbitalPose] => [draw.node.id, { position: bus.positions.get(draw.node.id) ?? draw.position, radius: draw.radius }]));

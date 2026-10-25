@@ -19,7 +19,6 @@ import "./glass.css";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
 import type { Swipe } from "./data/gestures";
-import { attachGlassSheen } from "./glassSheen";
 import type { LiveActivity } from "./data/liveActivity";
 import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
 import { useSceneExplorer } from "./data/useSceneExplorer";
@@ -168,7 +167,6 @@ export default function App() {
   const lastKnitRef = useRef<{ node: WorldNode; chapterId: string } | null>(null);
   useEffect(() => () => { if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current); }, []);
   // Glass panels catch the pointer (static under reduced motion).
-  useEffect(() => reducedMotion ? undefined : attachGlassSheen(), [reducedMotion]);
   const inspectorRef = useRef<HTMLDivElement>(null);
   const labelBus = useMemo<LabelBus>(
     () => ({ targets: new Map(), active: new Set(), positions: new Map(), trackTargets: new Map() }),
