@@ -27,6 +27,14 @@ test("every host descriptor is installable-shaped", () => {
   }
 });
 
+test("the Muse main-agent host is specified with its relay key bridge", () => {
+  const muse = getAgentHost("muse");
+  assert.equal(muse.status, "specified");
+  assert.ok(muse.skillTargets.some((t) => t.path.includes("custom-skills")), "Muse skill target is its custom-skills dir");
+  assert.ok(muse.notes.includes("muse-relay"), "notes name the relay key bridge");
+  assert.ok(muse.notes.includes("visual"), "notes name the visual-input reviewer advantage");
+});
+
 test("an unknown host fails loudly and names the registered hosts", () => {
   assert.throws(() => getAgentHost("no-such-host"), /claude-code/);
 });

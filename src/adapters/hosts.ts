@@ -163,3 +163,21 @@ registerAgentHost({
   ],
   notes: "Descriptor to be completed when its setup lands.",
 });
+
+registerAgentHost({
+  id: "muse",
+  label: "Muse",
+  status: "specified",
+  verified: true,
+  skillTargets: [{ scope: "global", path: "~/workspace/custom-skills" }],
+  configFiles: [
+    {
+      path: "~/.config/novel-ontology/secrets.json",
+      scope: "global",
+      format: "json",
+      purpose: "The CLI's own secret store — the fallback path when Muse does NOT host the relays; unused in relay mode, where the CLI points at the relays instead.",
+    },
+  ],
+  notes:
+    "Muse is the main-agent host: it reviews at the semantic fact gate in conversation and, uniquely among hosts, genuinely supports visual input, so the end-of-run portrait fallback (which requires seeing face images) works instead of staying manual. Key bridge: Muse runs tools/muse-relay/start.mjs with its connector CLIs as helpers, and the CLI points JEV_ENDPOINT / WORK_LLM_BASE_URL at the loopback relays — vault key values never enter the CLI's environment or store. Descriptor paths are verified against the Muse environment itself (custom skills live in ~/workspace/custom-skills and survive deployments); the plan/apply setup-engine flow itself remains Track C's unbuilt engine, as for every host.",
+});
