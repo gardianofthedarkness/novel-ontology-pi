@@ -347,8 +347,15 @@ substitute for testing the full extraction/review pipeline.
 Live processing also writes owner-only, atomically replaced
 `working/<block-id>.json` snapshots after real Jev patches and each extracted
 scene. These are disposable, uncommitted working drafts: scene/dialogue
-decisions and candidate stubs can be rendered as ghosts immediately. They
-never update ontology files or bypass the merge gate. Final proposals still
+decisions and candidate stubs can be rendered as ghosts immediately. Entity
+faculties also record `entityCandidates` as each scene's identities resolve:
+a name that is a recorded form of a known entity points at that entity
+(`existingId`), anything else is a new candidate keyed by kind and name, with
+the sentence where it was first seen. Extraction links each candidate to the
+entity it became (`resolvedId`) in the same write that adds that entity. Any
+future faculty that identifies entities should add to this list rather than
+waiting for extraction. Drafts never update ontology files or bypass the merge
+gate. Final proposals still
 arrive in the normal persisted ChangeSet; the metadata-only processing log
 continues to exclude raw payloads and source quotes.
 

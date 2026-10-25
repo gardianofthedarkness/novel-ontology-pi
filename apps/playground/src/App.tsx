@@ -317,6 +317,11 @@ export default function App() {
           beginJoin(ev.dropId, ev.keepId);
           break;
         }
+        case "candidate.resolved":
+          // Not an EM decision: a candidate glides into what it became.
+          pushFeed(`◇ ${labelsRef.current[ev.dropId] ?? "candidate"} became ${labelsRef.current[ev.keepId] ?? ev.keepId}`);
+          beginJoin(ev.dropId, ev.keepId);
+          break;
         case "entity.distinct": {
           const aLabel = labelsRef.current[ev.aId] ?? ev.aId;
           const bLabel = labelsRef.current[ev.bId] ?? ev.bId;
@@ -434,10 +439,11 @@ export default function App() {
         const identity = freshIdentityEvents(data.activity?.identityEvents ?? [], seenMerges.current, identityBaseline.current);
         identityBaseline.current = identity.baselineDone;
         for (const record of identity.events) handleEvent(record.event);
-        if (identity.events.length) {
-          const text = (record: (typeof identity.events)[number]) => record.event.type === "entity.merged" ? `${labelsRef.current[record.event.dropId] ?? record.event.dropId} → ${labelsRef.current[record.event.keepId] ?? record.event.keepId}` : `${labelsRef.current[record.event.aId] ?? record.event.aId} ≠ ${labelsRef.current[record.event.bId] ?? record.event.bId}`;
-          const merged = identity.events.filter((record) => record.event.type === "entity.merged").length;
-          setIdentityNotice(identity.events.length === 1 ? `EM ${merged ? "joined" : "kept distinct"} ${text(identity.events[0])}` : `EM · ${merged} joined, ${identity.events.length - merged} kept distinct · ${identity.events.slice(0, 3).map(text).join(" · ")}${identity.events.length > 3 ? " …" : ""}`);
+        const emEvents = identity.events.filter((record) => record.event.type !== "candidate.resolved");
+        if (emEvents.length) {
+          const text = (record: (typeof identity.events)[number]) => record.event.type !== "entity.distinct" ? `${labelsRef.current[record.event.dropId] ?? record.event.dropId} → ${labelsRef.current[record.event.keepId] ?? record.event.keepId}` : `${labelsRef.current[record.event.aId] ?? record.event.aId} ≠ ${labelsRef.current[record.event.bId] ?? record.event.bId}`;
+          const merged = emEvents.filter((record) => record.event.type === "entity.merged").length;
+          setIdentityNotice(emEvents.length === 1 ? `EM ${merged ? "joined" : "kept distinct"} ${text(emEvents[0])}` : `EM · ${merged} joined, ${emEvents.length - merged} kept distinct · ${emEvents.slice(0, 3).map(text).join(" · ")}${emEvents.length > 3 ? " …" : ""}`);
         }
         setLiveActivity(data.activity ?? null);
         setChangesets(data.gates);

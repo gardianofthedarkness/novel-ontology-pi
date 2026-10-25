@@ -16,7 +16,7 @@ export interface LiveActivity {
    * newest visible draft scene of its block when there is one). recent: a call
    * started within the last few seconds, so quick calls still show. */
   faculties: { id: string; label: string; faculty: string; system: string; status: string; active: number; calls: number; blockId?: string; chapterId?: string; anchorIds?: string[]; recent?: boolean }[];
-  identityEvents: { id: string; timestamp: string; event: { type: "entity.merged"; keepId: string; dropId: string } | { type: "entity.distinct"; aId: string; bId: string } }[];
+  identityEvents: { id: string; timestamp: string; event: { type: "entity.merged"; keepId: string; dropId: string } | { type: "candidate.resolved"; keepId: string; dropId: string } | { type: "entity.distinct"; aId: string; bId: string } }[];
   telemetryNote: string | null;
 }
 

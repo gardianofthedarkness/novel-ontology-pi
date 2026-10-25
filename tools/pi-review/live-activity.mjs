@@ -73,6 +73,11 @@ export function liveActivity({ processing, agent, drafts, changesets, interiors,
     }))];
   }
   const identityEvents = processing.filter(record => ['entity.merged', 'entity.distinct'].includes(record.event.type)).map(record => ({ id: record.id, timestamp: record.timestamp, event: record.event.type === 'entity.merged' ? { type: 'entity.merged', keepId: record.event.keepId, dropId: record.event.dropId } : { type: 'entity.distinct', aId: record.event.aId, bId: record.event.bId } }));
+  // A new candidate that extraction resolved glides into what it became.
+  for (const draft of drafts) for (const candidate of draft.entityCandidates ?? []) {
+    if (candidate.status !== 'new' || !candidate.resolvedId) continue;
+    identityEvents.push({ id: `candidate:${draft.blockId}:${candidate.key}`, timestamp: draft.updatedAt, event: { type: 'candidate.resolved', keepId: candidate.resolvedId, dropId: `draft:${draft.blockId}:entity:${candidate.key}` } });
+  }
   return {
     cursor: processing.at(-1)?.id ?? null,
     batch,

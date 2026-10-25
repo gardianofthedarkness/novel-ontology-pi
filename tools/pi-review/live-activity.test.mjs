@@ -88,3 +88,14 @@ test('working faculties carry their block, chapter and newest draft scene, and s
   assert.equal(liveActivity({ ...input, now: Date.parse(time(1)) + 60000 }).faculties.find(row => row.faculty === 'speaker').recent, false);
   assert.equal(result.faculties.some(row => 'startedAt' in row), false);
 });
+
+test('resolved entity candidates become join events; unresolved and known ones do not', () => {
+  const input = fixture();
+  input.drafts = [{ blockId: 'b0001', updatedAt: time(5), stage: 'extraction', entityCandidates: [
+    { key: 'character-abc', name: 'K', kind: 'Character', aliases: [], status: 'new', faculty: 'entities-participants', resolvedId: 'char_7' },
+    { key: 'character-def', name: 'S', kind: 'Character', aliases: [], status: 'new', faculty: 'entities-participants' },
+    { key: 'existing:char_1', name: 'R', kind: 'Character', aliases: [], status: 'existing', existingId: 'char_1', resolvedId: 'char_1', faculty: 'entities-participants' },
+  ] }];
+  const events = liveActivity(input).identityEvents;
+  assert.deepEqual(events, [{ id: 'candidate:b0001:character-abc', timestamp: time(5), event: { type: 'candidate.resolved', keepId: 'char_7', dropId: 'draft:b0001:entity:character-abc' } }]);
+});

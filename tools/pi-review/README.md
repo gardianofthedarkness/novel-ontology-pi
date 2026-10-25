@@ -134,7 +134,11 @@ The phone snapshot includes `activity`: actual observed faculty calls, the activ
 construction chapter, ordered visible touches, and ID-only EM merge/distinct
 events. `faculty.activity` records correlate S1 decisions, ordinary CLI work and
 actual S2 fallback starts/completions/failures. `draft.updated.touchedIds` names
-only newly created or edited draft records; source text and model payloads are
+only newly created or edited draft records (an entity candidate that matches a
+known entity is announced under that entity's id, so it lights up in place);
+each faculty carries its block, chapter and newest visible draft scene for the
+viewer's faculty animations; resolved entity candidates arrive as
+`candidate.resolved` join events (not EM decisions); source text and model payloads are
 not transported. Several records published together are explicitly a batch,
 not an invented ordering of parallel model decisions.
 
