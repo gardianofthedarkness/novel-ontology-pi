@@ -66,3 +66,25 @@ test('actual Pi review metadata highlights proposal targets without claiming a g
   input.agent.push({ type: 'pi.status', status: 'idle', timestamp: time(3) });
   assert.equal(liveActivity({ ...input, reviewProgress: focus }).review.active, false);
 });
+
+test('working faculties carry their block, chapter and newest draft scene, and stay live briefly after quick calls', () => {
+  const input = fixture();
+  input.interiors.chapter_0.nodes.push({ id: 'draft:b0001:scene:12' }, { id: 'draft:b0001:scene:4' }, { id: 'draft:b0001:dialogue:12' });
+  input.blockChapters.set('b0002', 3);
+  input.processing = [
+    { id: '1', timestamp: time(1), event: { type: 'faculty.activity', blockId: 'b0001', callId: 'a', faculty: 'speaker', system: 'system1', status: 'started' } },
+    { id: '2', timestamp: time(2), event: { type: 'faculty.activity', blockId: 'b0001', callId: 'a', faculty: 'speaker', system: 'system1', status: 'completed' } },
+    { id: '3', timestamp: time(3), event: { type: 'faculty.activity', blockId: 'b0002', callId: 'b', faculty: 'scene-understanding', system: 'work', status: 'started' } },
+  ];
+  const result = liveActivity({ ...input, now: Date.parse(time(4)) });
+  const speaker = result.faculties.find(row => row.faculty === 'speaker');
+  assert.equal(speaker.active, 0);
+  assert.equal(speaker.recent, true, 'a call that just finished still shows');
+  assert.equal(speaker.chapterId, 'chapter_0');
+  assert.deepEqual(speaker.anchorIds, ['draft:b0001:scene:12'], 'newest draft scene of the block');
+  const reading = result.faculties.find(row => row.faculty === 'scene-understanding');
+  assert.equal(reading.chapterId, 'chapter_3');
+  assert.deepEqual(reading.anchorIds, [], 'no visible draft scene: chapter only');
+  assert.equal(liveActivity({ ...input, now: Date.parse(time(1)) + 60000 }).faculties.find(row => row.faculty === 'speaker').recent, false);
+  assert.equal(result.faculties.some(row => 'startedAt' in row), false);
+});

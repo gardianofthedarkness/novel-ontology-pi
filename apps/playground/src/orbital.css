@@ -115,3 +115,7 @@
 @keyframes intro-hint { 0% { opacity: 0; } 15%, 80% { opacity: .9; } 100% { opacity: 0; } }
 /* The record bar takes swipes on touch screens instead of scrolling the page. */
 @media (pointer: coarse) { .transport { touch-action: none; } }
+/* Faculty chips: who is working on this sphere (positioned by FacultyEffects). */
+.faculty-chips { z-index: 4; }
+.faculty-chip { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: auto; padding: 3px 9px; border-radius: 999px; font-size: 10px; letter-spacing: .04em; white-space: nowrap; color: #d9fff3; background: #06201acc; border: 1px solid #5dcaa566; cursor: pointer; }
+.faculty-chip:hover, .faculty-chip:focus-visible { border-color: #5dcaa5; }
