@@ -48,6 +48,8 @@ export async function listCausalityCandidates(
   embeddingLeg: boolean;
   embedded: number;
 }> {
+  if (opts.limit !== undefined && (!Number.isSafeInteger(opts.limit) || opts.limit < 1 || opts.limit > 500)) throw new Error("Candidate limit must be 1..500.");
+  if (opts.chapterIndex !== undefined && (!Number.isSafeInteger(opts.chapterIndex) || opts.chapterIndex < 0)) throw new Error("Chapter must be a nonnegative integer.");
   const env = opts.env ?? process.env;
   const universe = await loadCausalityUniverse(novelDir);
   const { vectors, embedded } = await ensureUnitVectors(novelDir, universe, embedderFromEnv(env));
@@ -146,7 +148,7 @@ export async function proposeCausalityLink(
 /** On-demand systematic sweep: the Jev-determined pass, outside ingest. */
 export async function runCausalitySweep(
   novelDir: string,
-  opts: { env?: NodeJS.ProcessEnv; decisions?: import("../../../ground/connectors/jev.js").DecisionModel } = {},
+  opts: { limit?: number; env?: NodeJS.ProcessEnv; decisions?: import("../../../ground/connectors/jev.js").DecisionModel } = {},
 ): Promise<{
   changesetId: string | null;
   nominated: number;
@@ -159,6 +161,7 @@ export async function runCausalitySweep(
   const env = opts.env ?? process.env;
   const pass = await runCausalityPass({
     novelDir,
+    limit: opts.limit,
     decisions: opts.decisions ?? jevFromEnv(env),
     embedder: embedderFromEnv(env),
   });
@@ -177,7 +180,7 @@ export async function runCausalitySweep(
     await saveChangeSet(novelDir, changeset);
     changesetId = changeset.id;
   }
-  await clearCausalitySweepPending(novelDir);
+  if (opts.limit === undefined) await clearCausalitySweepPending(novelDir);
   return { changesetId, ...pass.summary };
 }
 
@@ -187,7 +190,7 @@ export function causalityCommandsHelp(): Record<string, string> {
       "List hybrid-nominated CAUSES candidates (graph patterns + embedding top-K) for agent adjudication. No proposals are created.",
     "novel causality propose <novel-dir> <from> <to> [--reason \"...\"]":
       "Agent-adjudicated CAUSES proposal (event or dialogue-card ids). Lands in a pending_review changeset for the gate; refuses self-links, existing links, and order-contradicted directions.",
-    "novel causality sweep <novel-dir>":
+    "novel causality sweep <novel-dir> [--limit N]":
       "On-demand systematic sweep: Jev-determined CAUSES pass over the whole universe (same machinery as the ingest chapter-close sweep).",
   };
 }

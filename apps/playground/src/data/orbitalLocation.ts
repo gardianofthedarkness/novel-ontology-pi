@@ -9,7 +9,7 @@ import type { BookEntry } from "./bookCatalog.js";
  * levels carry `pathIndex` for navigation; a selection never claims to be an
  * entered level, and nothing is claimed when nothing is selected.
  */
-export interface LocationCrumb { key: string; kind: "book" | "chapter" | "scenes" | "scene" | "record"; label: string; detail?: string; pathIndex?: number; selection?: boolean }
+export interface LocationCrumb { key: string; kind: "library" | "series" | "book" | "chapter" | "scenes" | "scene" | "record"; label: string; detail?: string; pathIndex?: number; selection?: boolean }
 
 const order = (first: WorldNode, second: WorldNode) => first.chrono - second.chrono || first.id.localeCompare(second.id);
 const summary = (node?: WorldNode) => node?.summary?.trim() || undefined;
@@ -23,8 +23,14 @@ function sceneRange(ordinals: Map<string, number>, ids: string[]): string | unde
 }
 
 export function orbitalLocation(world: OrbitalWorld, path: OrbitalScope[], level: OrbitalLevel, book: BookEntry | null, selected: WorldNode | null = null): LocationCrumb[] {
-  const crumbs: LocationCrumb[] = [{ key: "book", kind: "book", label: book ? book.sourceFile ?? book.title : "Volume", detail: book?.sourceFile && book.title !== book.sourceFile ? book.title : undefined, pathIndex: 0 }];
+  const crumbs: LocationCrumb[] = path.flatMap((scope, index): LocationCrumb[] => scope.kind === "library" || scope.kind === "series" ? [{ key: scope.key, kind: scope.kind, label: scope.label, pathIndex: index }] : []);
+  const volumeIndex = path.findIndex(scope => scope.kind === "volume");
+  if (volumeIndex >= 0) crumbs.push({ key: "book", kind: "book", label: book ? book.sourceFile ?? book.title : path[volumeIndex].label, detail: book?.sourceFile && book.title !== book.sourceFile ? book.title : undefined, pathIndex: volumeIndex });
   const current = path[path.length - 1];
+  if (current.kind === "library" || current.kind === "series") {
+    if (selected?.library) crumbs.push({ key: selected.id, kind: selected.library.type === "series" ? "series" : "book", label: selected.label, detail: selected.summary, selection: true });
+    return crumbs;
+  }
   const chapterId = current.chapterId ?? (selected?.kind === "bigEvent" ? undefined : selected?.parent ?? undefined);
   const scenes = level.sourceNodes.filter((node) => node.kind === "scene" && !node.cluster && (!chapterId || node.parent === chapterId)).sort(order);
   const ordinals = new Map(scenes.map((node, index) => [node.id, index + 1]));

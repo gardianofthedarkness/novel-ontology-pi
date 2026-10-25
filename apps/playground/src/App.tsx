@@ -44,6 +44,7 @@ let feedSeq = 0;
 interface LiveSnapshot {
   world: LoadedWorld;
   activity?: LiveActivity;
+  libraryActivity?: { count: number; latest: { id: string; type: string; timestamp: string } | null };
   gates: ChangeSet[];
   feed: FeedEntry[];
   status: "idle" | "working" | "review" | "complete" | "error";
@@ -156,6 +157,7 @@ export default function App() {
   pinnedBookRef.current = pinnedBook;
   const readingPanelBookmark = useRef<{ inspection: OrbitalInspection | null; panel: "record" | "activity" | "review" | "album"; open: boolean; selectedId: string | null } | null>(null);
   const identityBaseline = useRef(false);
+  const libraryBaseline = useRef<string | null>(null);
   const [identityNotice, setIdentityNotice] = useState<string | null>(null);
   useEffect(() => {
     if (!identityNotice) return;
@@ -204,7 +206,7 @@ export default function App() {
     for (const [id, group] of Object.entries(world.interiors)) {
       interiors[id] = applyMergesToSet(group.nodes, group.edges, merges);
     }
-    return { laneNodes: lanes.nodes, laneEdges: lanes.edges, interiors, bigEventLabels: world.bigEventLabels, causal: world.causal };
+    return { ...world, laneNodes: lanes.nodes, laneEdges: lanes.edges, interiors };
   }, [world, merges]);
 
   const visibleDyn = useMemo(
@@ -456,7 +458,10 @@ export default function App() {
         setWorkSite(data.workSite ?? "chapter_0");
         setBlockLabel(data.label);
         setLoadError(null);
-        setActivity(currentActivity => ({ ...currentActivity, count: data.activity?.count ?? 0, shine: data.status === "working", caughtUp: data.status === "complete" }));
+        const libraryEvent = data.libraryActivity?.latest;
+        const newLibraryEvent = !!libraryEvent && libraryBaseline.current !== null && libraryBaseline.current !== libraryEvent.id;
+        if (libraryEvent) libraryBaseline.current = libraryEvent.id;
+        setActivity(currentActivity => ({ ...currentActivity, count: (data.activity?.count ?? 0) + (data.libraryActivity?.count ?? 0), shine: data.status === "working" || newLibraryEvent, caughtUp: data.status === "complete" && !newLibraryEvent }));
     };
     const poll = async () => {
       if (stopped || !polling) return;
@@ -719,6 +724,8 @@ export default function App() {
             {followingActivity && pinnedBook !== null && pinnedBook !== agentBook && <small>Your pinned book returns when you stop following.</small>}
             {bookLoading && <small role="status">Loading {bookName(books.find((book) => book.id === requestedBook))}…</small>}
           </div> : null;
+  const libraryAtTop = !!shownWorld?.library && ["library", "series"].includes(orbitalPage?.kind ?? "");
+  const libraryCaption = shownWorld?.library?.events.at(-1)?.type.replaceAll(".", " / ") ?? "Waiting for organization";
 
   if (!world) {
     return (
@@ -738,13 +745,13 @@ export default function App() {
         <span className="sample-badge"><i />{phoneLive || liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">
-        <div><div className="eyebrow">{phoneLive ? liveCollection : "COLLECTION 001 / INDEX SAMPLE"}{followingActivity && orbitalPage ? ` / ${orbitalPage.kind.toUpperCase()} OVERVIEW` : ""}</div><h1><RollingText text={followingActivity && orbitalPage ? orbitalPage.label : view.mode === "lanes" ? "Narrative archive." : shownWorld.bigEventLabels[view.bigEventId] ?? ""} /></h1>{phoneLive && <p className="live-runtime-status" role="status">{followingActivity ? liveActivity?.phase ?? liveLabel : liveLabel}<small>{liveCounts.ghosts} ghosts · {liveCounts.entities} canonical entities · {liveCounts.events} events · {liveCounts.repairs} audited operations · live updates</small></p>}</div>
+        <div><div className="eyebrow">{libraryAtTop ? "SERIES LIBRARY / " : ""}{phoneLive ? liveCollection : "COLLECTION 001 / INDEX SAMPLE"}{followingActivity && orbitalPage ? ` / ${orbitalPage.kind.toUpperCase()} OVERVIEW` : ""}</div><h1><RollingText text={(followingActivity || libraryAtTop) && orbitalPage ? orbitalPage.label : view.mode === "lanes" ? "Narrative archive." : shownWorld.bigEventLabels[view.bigEventId] ?? ""} /></h1>{phoneLive && <p className="live-runtime-status" role="status">{libraryAtTop ? libraryCaption : followingActivity ? liveActivity?.phase ?? liveLabel : liveLabel}<small>{libraryAtTop ? `${shownWorld.library!.sources.length} files · ${shownWorld.library!.organization.series.length} reviewed series · ${shownWorld.library!.plans.length} proposed/held plans · live updates` : `${liveCounts.ghosts} ghosts · ${liveCounts.entities} canonical entities · ${liveCounts.events} events · ${liveCounts.repairs} audited operations · live updates`}</small></p>}</div>
         <div className={`heading-caption${view.mode === "interior" ? " interior-heading" : ""}`}>{view.mode === "lanes" ? <><span>One world. Parallel stories.</span><small>Click a file or scroll closer to enter.</small></> : <><button className="back-link" onClick={overview}>← Back to chronology</button><small>EVENT INTERIOR / {sourceNodes.length} RECORDS</small></>}</div>
       </div>
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
           <button className="design-switch" disabled={followingActivity} aria-pressed={orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setInspectorOpen(false); }}>{orbitalMode ? "Orbital / switch to classic" : "Classic / switch to orbital"}</button>
-          {orbitalMode ? <OrbitalExplorer world={shownWorld} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
+          {orbitalMode ? <OrbitalExplorer world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
           <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
             <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
             <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>
@@ -795,12 +802,12 @@ export default function App() {
         <div className="activity-dock"><ActivityTab count={activity.count} shine={activity.shine} caughtUp={activity.caughtUp} active={followingActivity} onClick={flyToSite} /></div>
       </main>
       <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} faculties={liveActivity?.faculties} telemetryNote={liveActivity?.telemetryNote} />
-      {phoneLive && <PiReviewProgress review={liveActivity?.review} />}
+      {phoneLive && (!libraryAtTop || liveActivity?.review) && <PiReviewProgress review={liveActivity?.review} />}
       {phoneLive && <PiConsole />}
       {identityNotice && <div className="identity-notice" role="status">{identityNotice}</div>}
       <footer className="transport" ref={transportRef}>
         <div className="selection-counter"><span className="eyebrow">RECORD / SELECT</span><div>{String(selected ? selectedIndex + 1 : 0).padStart(2, "0")}<small>/ {String(displayNodes.length).padStart(2, "0")}</small></div></div>
-        <div className="record-transport"><button className="arrow-button" aria-label="Previous record" disabled={!nodes.length} onClick={() => stepRecord(-1)}>←</button><div><strong>{selected?.label ?? "Archive"}</strong><span>{selected ? `${KIND_LABEL[selected.kind]} / ${selected.lane}` : "No records"}</span></div><button className="arrow-button" aria-label="Next record" disabled={!nodes.length} onClick={() => stepRecord(1)}>→</button></div>
+        <div className="record-transport"><button className="arrow-button" aria-label="Previous record" disabled={!nodes.length} onClick={() => stepRecord(-1)}>←</button><div><strong>{selected?.label ?? "Archive"}</strong><span>{selected ? `${selected.library?.type ?? KIND_LABEL[selected.kind]} / ${selected.library ? "organization" : selected.lane}` : "No records"}</span></div><button className="arrow-button" aria-label="Next record" disabled={!nodes.length} onClick={() => stepRecord(1)}>→</button></div>
         <div className="session-controls"><span className="eyebrow">{phoneLive || liveUrl ? "LIVE / NOVEL WATCH" : "LOCAL FILE REPLAY / DEMO"}</span>{phoneLive ? <a href="replay/">Session replay ↗</a> : <button onClick={startSession}>Replay session ↻</button>}</div>
       </footer>
     </div>

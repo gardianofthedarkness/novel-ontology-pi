@@ -76,7 +76,7 @@ test("identity decisions receive name forms and cannot nominate an Organization 
       if (nickname) {
         checked = true;
         assert.ok(state.includes("char_000001: 御坂美琴"));
-        assert.deepEqual(nickname.options, [mikoto.id, "none"]);
+        assert.deepEqual(nickname.options, [mikoto.names[0].text, "none"]);
       }
       return questions.map((question) => ({ key: question.key, value: question.primitive === "choice" ? question.key.startsWith("nick:") ? "none" : "narration" : 0, confidence: 1 }));
     },

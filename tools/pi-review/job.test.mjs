@@ -2,6 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseJob } from './job.mjs';
 
+test('library capability contains only explicit source/volume bindings outside extraction workspaces', () => {
+  const binding = { sourceId: `doc_${'a'.repeat(64)}`, volume: 1 };
+  const base = { volumes: [{ id: 1, input: 'source.txt', workspace: 'novel' }] };
+  const library = { directory: 'library', bindings: [binding] };
+  assert.equal(parseJob({ ...base, library }, '/private/job').library.directory, '/private/job/library');
+  for (const value of [null, {}, { ...library, apiKey: 'x' }, { ...library, bindings: [binding, binding] }, { ...library, bindings: [{ ...binding, volume: 2 }] }, { ...library, directory: '.' }, { ...library, directory: 'novel/metadata' }, { ...library, bindings: [{ sourceId: '../other', volume: 1 }] }]) assert.throws(() => parseJob({ ...base, library: value }, '/private/job'));
+});
+
+test('optional EPUB is host-assigned, external to workspaces, never a wildcard read grant', () => {
+  const job = parseJob({ volumes: [{ input: 'book.txt', workspace: 'novel', epub: 'book.epub' }] }, '/private/job');
+  assert.equal(job.volumes[0].epub, '/private/job/book.epub');
+  for (const epub of ['', 3, 'secret.txt', 'novel/book.epub']) assert.throws(() => parseJob({ volumes: [{ input: 'book.txt', workspace: 'novel', epub }] }, '/private/job'));
+});
+
 test('portable job paths, explicit larger budgets and scope are preserved', () => {
   const job = parseJob({ chapters: 4, limits: { recallsPerBlock: 12, pendingRevisionsPerBlock: 30 }, volumes: [{ input: 'volume1.txt' }, { input: 'volume2.txt' }] }, '/private/job');
   assert.equal(job.volumes[0].input, '/private/job/volume1.txt');

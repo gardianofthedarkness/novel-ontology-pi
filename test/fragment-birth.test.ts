@@ -66,6 +66,7 @@ function fragmentRun(opts: {
   confidence: number;
   declines?: { form: string; entityId: string }[];
   askedKeys?: string[];
+  ambiguousRegistry?: boolean;
 }) {
   const sentences = sectionBlock("食蜂操祈走进教室。\n操祈笑着看向窗外。\n众人安静下来。", 0).sentences;
   const registry: Entity = {
@@ -100,10 +101,17 @@ function fragmentRun(opts: {
     registry,
     run: new FacultyGraph(decisions, work).run({
       blockId: "b0001", chapterIndex: 0, sentences,
-      knownEntities: [registry], fragmentDeclines: opts.declines ?? [],
+      knownEntities: opts.ambiguousRegistry ? [registry, { ...registry, id: "char_000101" }] : [registry], fragmentDeclines: opts.declines ?? [],
     }),
   };
 }
+
+test("fragment-at-birth never binds a semantic name shared by two existing identities to the first record", async () => {
+  const result = await fragmentRun({ answer: "食蜂操祈", confidence: 0.99, ambiguousRegistry: true }).run;
+  const scene = await [...result.sceneResults.values()][0];
+  assert.ok(scene.scene.newEntities?.some(declaration => declaration.name === "操祈"));
+  assert.ok(!scene.scene.newEntities?.some(declaration => declaration.name === "食蜂操祈" && declaration.aliases?.some(alias => alias.text === "操祈")));
+});
 
 test("fragment-at-birth: a confidently attached fragment folds as a form", async () => {
   const { run } = fragmentRun({ answer: "食蜂操祈", confidence: 0.95 });

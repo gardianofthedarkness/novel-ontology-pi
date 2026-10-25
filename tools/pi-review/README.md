@@ -6,6 +6,76 @@ for a live run. Tests use synthetic data and make no paid model calls.
 
 ## Setup
 
+Duplicate proposal-ID corruption can be repaired through the existing scoped
+`changeset revise --edits '{"rekeyDuplicateIds":true}'` operation. This sole
+semantic-packet bulk-revision exception changes IDs only, preserves every fact,
+archives the old packet, clears stale decisions and leaves it held. It cannot
+be combined with payload/deletion edits or used on an applied packet. Existing
+fresh-revision fact/evidence gates and command/revision budgets still apply.
+
+### Causality review
+
+The hosted CLI permits workspace-scoped `causality candidates`, `evidence`,
+`propose` and `sweep`. Candidate/sweep reads default to 10 pairs and cap at 20;
+this is a bounded test, not a completed universe sweep. No embedding service is
+started by the host. Existing per-block semantic gates remain unchanged.
+
+Standalone causal packets appear as proposed/held edges and review gates in the
+same live snapshot. Their approval requires the full ontology skill/causality
+reference, all current proposal/note pages, and revision-bound original evidence
+for both endpoints (`causality evidence ... --changeset ID`). Missing provenance
+or changed source/proposals invalidate approval. Accepted causal facts in normal
+extraction packets also require both endpoints; direct `fix relate` cannot bypass
+this path. Private checkpoints and approval receipts are retained. Library
+membership does not combine book databases. Explicit `causality universe`
+commands add reviewed cross-file links in a separate universe ledger, with
+same-continuity scope, source-qualified IDs, bounded original-passage Jev
+batches and paged independent review. See [universe causality](../../docs/universe-causality.md).
+The runner derives private workspace/hash bindings from its authorized library
+job; the browser cannot provide arbitrary paths. Its public stream carries
+safe causal metadata and proposed/held/canon states, never raw review reasons.
+
+### Optional live library organization
+
+The protected viewer can watch a reviewed library as well as extraction work.
+Set `NOVEL_LIBRARY_DIR` before starting a viewer built from the updated source;
+default bindings come from assigned workspaces' `ontology/library-source.json`.
+Custom hosts can pass `libraryDirectory` and `libraryBindings: [{ sourceId, volume }]`
+to `createViewer`. This is trusted host configuration, never a browser-supplied
+path. No binding means inspect-only, not arbitrary file access.
+
+Library proposals/reviews project into `world.library` and `libraryActivity` in
+the same snapshot/SSE stream. The orbital view adds series → ordered files above
+the existing chapter hierarchy, with proposed/held states and explicit reading-
+order arrows. Source text, private reasons/evidence and workspace paths are not
+part of this public metadata. Existing viewer/control authentication and expiry
+are unchanged; no Pi prompt or automatic ingestion occurs.
+
+See [live library contract](../../docs/library-live.md). Registration/preparation
+remain host operations. To let hosted Pi organize already registered sources,
+add an explicit job capability before starting/restarting its idle worker:
+
+```json
+{"library":{"directory":"/private/library","bindings":[{"sourceId":"doc_<source-sha256>","volume":1}]}}
+```
+
+Every catalog source must bind to an assigned volume's original EPUB bytes (or
+UTF-8 input bytes for text-only jobs). The runner loads both `novel-library` and
+`novel-ontology`, records a private loaded-skill manifest, and grants only that
+catalog's show/evidence/propose/plan/decide/history commands. No arbitrary path,
+source registration, preparation, file proposal or direct database edit is added.
+Missing configuration leaves organization commands unavailable.
+
+Show/plan reads are paged (default 10, maximum 20 items). Pi must read the library
+skill/schema, every current plan item and every cited metadata/text source before
+approval. Proposal output does not count as independent review. Changed catalogs
+invalidate credits; stale or incomplete decisions fail closed. Mutations retain
+private checkpoints, core immutable history and reviewed-decision receipts.
+Shared-universe membership changes metadata only: databases, job IDs, source
+boundaries and fact merge gates stay separate. No automatic prompt is sent.
+
+### Install dependencies
+
 From the repository root:
 
 ```sh
@@ -28,7 +98,9 @@ does not independently establish a dated underlying model version.
 
 Copy `job.example.json` to a private directory and place a UTF-8 `source.txt`
 beside it. Paths in the job resolve relative to that JSON file, not the
-shell's working directory. EPUB conversion is outside this runner.
+shell's working directory. An optional `epub` path grants album CLI access to
+that exact local EPUB, not arbitrary file or shell access. Prepare the assigned
+UTF-8 input with the same EPUB intake before starting a new job.
 
 ```sh
 node tools/pi-review/run.mjs /private/job.json
@@ -36,13 +108,22 @@ node tools/pi-review/run.mjs /private/job.json
 
 - `chapters: 4` assigns the first four chapter sections, including any
   prologue at index zero. Omit `chapters` to assign all blocks.
-- `volumes` is an ordered list of `{id, input, workspace?}`. Each volume
+- `volumes` is an ordered list of `{id, input, workspace?, epub?}`. Each volume
   gets a separate database. Omitted workspaces are fresh and private
   inside this attempt. Specify a workspace deliberately to resume it;
   original input basename, applied prefix and 24,000-character block boundaries
   must be unchanged. The manifest assigns only unapplied blocks while the
   viewer retains every chapter; approval/application audit and stored source
   are checked before skipping an applied block.
+- The private manifest exposes `album.epub`, a pinned byte hash and
+  `album.importAllowed`. Pi can execute `novel album import <workspace> <epub>`,
+  `novel album list <workspace>` and `novel album portraits <workspace>`.
+  Import rechecks EPUB bytes and exact extracted/assigned text before writing.
+  A legacy story-only input remains readable but cannot be silently replaced by
+  full EPUB text; use a fresh workspace for its album intake. The core importer
+  also protects bound/legacy sources for other host agents. Album mutations have
+  private pre-operation ontology checkpoints and do not approve semantic facts.
+  Portrait finalization binds existing crops; it does not run Python cropping.
 - `minutes` bounds the run. `limits` sets recalls/revisions per block and
   total command calls. The example's 2 recalls / 3 revisions are historical
   test settings, **not recommended universal limits for large packets**.
@@ -95,6 +176,14 @@ stops the serial loop; individual held facts do not block unrelated supported
 work. Held fact counts must not be presented as fully verified completion.
 
 ## Replay and projection
+
+For a read-only review intervention audit, run `node tools/pi-review/review-impact.mjs
+<workspace> [workspace ...]` after building the CLI. It counts changed accepts,
+rejects, explicit holds, unreviewed facts and repeated decision actions, separating
+card memberships/candidate-only memberships from legacy speaker turns. It excludes
+unapplied/stale packets and deduplicates copies. Interventions are not independently
+verified improvements; no accuracy rate or raw source/reason is emitted. See
+[review-impact findings](../../docs/review-impact.md).
 
 ```sh
 NOVEL_REVIEW_HOME=/private/review-home node tools/pi-review/replay.mjs \

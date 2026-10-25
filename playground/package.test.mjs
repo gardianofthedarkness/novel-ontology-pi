@@ -10,6 +10,7 @@ import { repository } from './prepare.mjs';
 
 test('optional development assets live under root playground without changing user CLI commands', async () => {
   const files = await collectPackageFiles(repository);
+  for (const name of ['skills/novel-library/SKILL.md', 'skills/novel-library/references/organization.md']) assert.ok(files.includes(name), name);
   for (const name of ['playground/Dockerfile', 'playground/compose.yaml', 'playground/Dockerfile.dockerignore', 'playground/start.mjs', 'playground/fixtures/lantern-harbor/story.json']) assert.ok(files.includes(name), name);
   for (const name of ['Dockerfile', 'compose.yaml', '.dockerignore', 'tools/team-playground/start.mjs']) await assert.rejects(access(join(repository, name)), { code: 'ENOENT' });
   const pkg = JSON.parse(await readFile(join(repository, 'package.json'), 'utf8'));

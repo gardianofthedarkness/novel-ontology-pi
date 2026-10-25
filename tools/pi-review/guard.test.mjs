@@ -8,6 +8,62 @@ const chapterOne = '/private/review/b0002.txt';
 const defaultScope = { novel, input, skill, sourcePaths: [skill, chapterOne], blockIds: ['b0001', 'b0002'], maxBlocks: 2 };
 const authorize = (command, scope = defaultScope) => authorizeScoped(command, scope);
 
+test('causality is bounded, workspace-scoped and only registered standalone packets can reach review', () => {
+  const scope = { ...defaultScope, causalityChangesetIds: ['cs_causality_sweep_123'] };
+  assert.deepEqual(authorize(`novel causality sweep ${novel}`, scope).args.slice(-2), ['--limit', '10']);
+  assert.equal(authorize(`novel causality candidates ${novel} --chapter 0 --limit 20`, scope).kind, 'cli');
+  assert.equal(authorize(`novel causality evidence ${novel} ev_1 card_2 --changeset cs_causality_sweep_123 --offset 0 --limit 1`, scope).kind, 'cli');
+  assert.equal(authorize(`novel changeset show ${novel} cs_causality_sweep_123 --offset 0 --limit 10`, scope).kind, 'cli');
+  assert.equal(authorize(`novel changeset approve ${novel} cs_causality_sweep_123`, scope).kind, 'cli');
+  for (const command of [
+    `novel causality sweep /tmp/other --limit 1`, `novel causality sweep ${novel} --limit 21`,
+    `novel causality sweep ${novel} --auto-approve yes`, `novel causality sweep ${novel} --limit 1 --limit 2`,
+    `novel causality candidates ${novel} --chapter -1`, `novel causality propose ${novel} ../private ev_1`,
+    `novel causality evidence ${novel} ev_1 card_2 --changeset cs_causality_sweep_999`,
+    `novel changeset approve ${novel} cs_causality_sweep_999`,
+    `novel changeset facts ${novel} cs_causality_sweep_123`,
+    `novel fix relate ${novel} ev_1 ev_2 --kind CAUSES --reason bypass`,
+  ]) assert.throws(() => authorize(command, scope), command);
+});
+
+test('library organization stays in the assigned catalog and uses bounded revisioned reads', () => {
+  const sourceId = `doc_${'a'.repeat(64)}`, planId = `plan_${'b'.repeat(64)}`;
+  const library = { directory: '/private/library', bindings: [{ sourceId, volume: 1 }] };
+  const scope = { ...defaultScope, library };
+  assert.deepEqual(authorize('novel library show /private/library', scope).args.slice(-4), ['--offset', '0', '--limit', '10']);
+  assert.equal(authorize(`novel library evidence /private/library ${sourceId} --offset 0 --limit 2000`, scope).kind, 'cli');
+  assert.equal(authorize(`novel library plan /private/library ${planId} --offset 0 --limit 1`, scope).kind, 'cli');
+  assert.equal(authorize(`novel library propose /private/library --revision ${'a'.repeat(64)} --organization '{}'`, scope).kind, 'cli');
+  assert.equal(authorize(`novel library decide /private/library ${planId} --revision ${'b'.repeat(64)} --decision hold --reason '证据不足'`, scope).kind, 'cli');
+  for (const command of [
+    'novel library init /private/library', 'novel library add /private/library /tmp/book.epub',
+    `novel library prepare /private/library ${sourceId}`, 'novel library show /tmp/other',
+    `novel library propose /private/library /tmp/raw.json --revision ${'a'.repeat(64)}`,
+    'novel library show /private/library --limit 100', 'novel library show /private/library --offset 1 --offset 2',
+    `novel library evidence /private/library doc_${'c'.repeat(64)}`,
+    `novel library evidence /private/library ${sourceId} --limit 2001`,
+    `novel library decide /private/library ${planId} --revision stale --decision approve --reason test`,
+    `novel library decide /private/library ${planId} --revision ${'b'.repeat(64)} --decision approve --reason test --auto-approve yes`,
+    `novel library show /private/library --universe world --series same`,
+  ]) assert.throws(() => authorize(command, scope), command);
+  assert.throws(() => authorize('novel library show /private/library'));
+});
+
+test('album CLI permits only the assigned matching EPUB and scoped workspace', () => {
+  const album = { epub: '/private/review/book.epub', importAllowed: true };
+  const scope = { ...defaultScope, album };
+  assert.equal(authorize(`novel album import '${novel}' '${album.epub}'`, scope).label, 'novel album import');
+  assert.equal(authorize(`novel album list '${novel}'`, scope).kind, 'cli');
+  assert.equal(authorize(`novel album portraits '${novel}'`, scope).kind, 'cli');
+  for (const command of [
+    `cat '${album.epub}'`, `novel album import '${novel}' /tmp/other.epub`,
+    `novel album import /tmp/other '${album.epub}'`, `novel album list '${novel}' --output /tmp/leak`,
+    `novel album portraits '${novel}' --auto-approve`,
+  ]) assert.throws(() => authorize(command, scope));
+  assert.throws(() => authorize(`novel album import '${novel}' '${album.epub}'`, { ...scope, album: { ...album, importAllowed: false } }));
+  assert.throws(() => authorize(`novel album import '${novel}' '${album.epub}'`));
+});
+
 test('permits only scoped, explicit CLI operations', () => {
   assert.equal(authorize(`novel ingest '${novel}' '${input}' --max-blocks 2 --block-size 24000`).kind, 'cli');
   assert.equal(authorize(`novel fix merge '${novel}' loc_1 loc_2 --reason '同一条街; confirmed in source'`).args[3], 'loc_1');

@@ -15,6 +15,19 @@ presence: remembered exchanges need not imply present-time presence.
 Verify communication versus thoughts/quoted labels, not perfect
 dialogue boundaries or incidental narration.
 
+Use each fact's `meaning` for identity/role judgments against original evidence;
+raw `value` IDs are storage references, not semantic evidence. For a correction,
+prefer `semanticReplacement` instead of `replacement`: preserve the value's shape
+but put displayed identity labels in entity-reference fields (including `...Id`
+keys and state relationship keys). For example, an actor correction is
+`{"factId":"...","verdict":"accept","reason":"...","semanticReplacement":{"primaryActors":["小明"],"affectedCharacters":[]}}`.
+The CLI resolves only known unique labels/registered aliases, with kind checks;
+it does not guess from substrings. Same-name option suffixes distinguish records,
+not proof of identity: retrieve evidence or hold. Identity-object corrections omit
+`id`; the CLI preserves it. State event anchors cannot change through this path.
+Relation endpoint edits still use the existing relation/evidence workflow, not
+this identity-only adapter. Raw replacements remain compatible with older clients.
+
 `novel changeset facts <dir> <id> --fact '<fact-id>' --offset 0 --limit 12`
 
 Use the current `revision` to record batches of at most 50 decisions:

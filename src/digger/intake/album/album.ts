@@ -21,12 +21,13 @@
  * proposals. Records are data, not graph nodes: the graph stays the
  * ontology, the album hangs off it by sentence.
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rmdir, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { splitChapters, cutBlocks, type Block } from "../blocks.js";
 import { sectionBlock } from "../sectioning.js";
 import { walkEpub } from "./epub.js";
 import { unzipAll } from "./zip.js";
+import { sourceHash, storedSource } from "../../../ground/workspace/source.js";
 
 export type IllustrationKind = "cover" | "plate" | "story" | "paratext";
 
@@ -151,11 +152,30 @@ export async function importEpubAlbum(novelDir: string, epubPath: string): Promi
   if (manifest === null) {
     throw new Error(`not a novel workspace (missing ${manifestPath}) — run \`novel init ${novelDir}\` first`);
   }
+  const lock = join(novelDir, "ontology", ".source.lock");
+  await mkdir(lock);
+  try { return await writeEpubAlbum(novelDir, epubPath); }
+  finally { await rmdir(lock); }
+}
+
+async function writeEpubAlbum(novelDir: string, epubPath: string) {
   const epubBytes = await readFile(epubPath);
   const files = unzipAll(epubBytes);
   const walk = walkEpub(epubBytes);
+  const bound = await storedSource(novelDir);
+  const sources = await readdir(join(novelDir, "source"));
+  if (sources.length > 1) throw new Error("Ambiguous stored sources; album import requires explicit source migration.");
+  const existing = bound?.file ?? sources[0];
+  if (existing) {
+    const stored = await readFile(join(novelDir, "source", existing), "utf8");
+    if (bound && sourceHash(stored) !== bound.sha256 || stored !== walk.text) throw new Error("EPUB text differs from the stored source; import into a fresh workspace instead of changing existing anchors.");
+  } else {
+    const packets = await readdir(join(novelDir, "changesets"));
+    const history = await readFile(join(novelDir, "events.jsonl"), "utf8").catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return ""; });
+    if (packets.length || history.trim()) throw new Error("Processing history has no source; explicit source migration required before album import.");
+  }
   const chapters = splitChapters(walk.text);
-  const blocks = cutBlocks(walk.text);
+  const blocks = cutBlocks(walk.text, bound?.blockSize);
 
   const assetsDir = join(novelDir, "assets");
   await mkdir(assetsDir, { recursive: true });
@@ -196,8 +216,8 @@ export async function importEpubAlbum(novelDir: string, epubPath: string): Promi
     await writeFile(join(novelDir, record.asset), bytes);
   }
 
-  const sourceTextRel = `source/${sanitizeBase(epubPath)}.txt`;
-  await writeFile(join(novelDir, sourceTextRel), walk.text, "utf8");
+  const sourceTextRel = `source/${existing ?? `${sanitizeBase(epubPath)}.txt`}`;
+  if (!existing) await writeFile(join(novelDir, sourceTextRel), walk.text, { encoding: "utf8", flag: "wx" });
   await writeFile(
     join(novelDir, "ontology", "illustrations.jsonl"),
     records.map((r) => JSON.stringify(r)).join("\n") + (records.length ? "\n" : ""),

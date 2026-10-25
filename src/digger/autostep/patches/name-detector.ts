@@ -4,6 +4,8 @@ import type { DecisionPatch, PatchContext, PatchOutcome } from "./types.js";
 import { EMPTY_OUTCOME } from "./types.js";
 import type { ChangeProposal } from "../../../solidifier/merge/changeset.js";
 import { containmentTargets } from "../../../solidifier/matching/fragmentMatch.js";
+import { IdentityNameIndex, identityChoices } from "../../../ground/language/identityLabels.js";
+import { formKey } from "../../../ground/language/nameForms.js";
 
 /**
  * Name Detector patch.
@@ -85,10 +87,12 @@ export function nominateCandidateSpans(
 
 export function scanKnownNames(ctx: PatchContext): NameScanHit[] {
   const hits: NameScanHit[] = [];
+  const index = new IdentityNameIndex();
+  for (const entity of ctx.knownEntities) for (const name of entity.names) index.set(formKey(name.text), entity.id);
   for (const s of ctx.sentences) {
     for (const e of ctx.knownEntities) {
       for (const n of e.names) {
-        if (n.text.length > 0 && s.text.includes(n.text)) {
+        if (n.text.length > 0 && index.get(formKey(n.text)) === e.id && s.text.includes(n.text)) {
           hits.push({ sentenceId: s.id, entityId: e.id, matchedText: n.text });
         }
       }
@@ -106,7 +110,7 @@ export const nameDetector: DecisionPatch = {
   buildQuestions(ctx: PatchContext): DecisionQuestion[] {
     const candidates = (ctx.accepted["nameCandidates"] as string[] | undefined) ?? [];
     const knownChars = ctx.knownEntities.filter((entity) => entity.kind === "Character");
-    const known = knownChars.map((entity) => entity.id);
+    const known = identityChoices(knownChars, ["none"]).options.map(option => option.label);
     const qs: DecisionQuestion[] = [];
     for (const c of candidates) {
       // Fragment-at-birth, miniloop site: when the candidate
@@ -143,6 +147,7 @@ export const nameDetector: DecisionPatch = {
     const candidates = (ctx.accepted["nameCandidates"] as string[] | undefined) ?? [];
     const proposals: ChangeProposal[] = [];
     const escalations: PatchOutcome["escalations"] = [];
+    const choices = identityChoices(ctx.knownEntities.filter(entity => entity.kind === "Character"), ["none"]);
 
     candidates.forEach((c, i) => {
       const isNew = byKey.get(`newname:${c}`);
@@ -157,10 +162,15 @@ export const nameDetector: DecisionPatch = {
           provenance: { blockId: ctx.blockId, sentenceIds: [], patchId: this.id },
         });
       } else if (nick && typeof nick.value === "string" && nick.value !== "none") {
+        const target = choices.resolve(nick.value, "Character");
+        if (!target) {
+          escalations.push({ unitId: c, reason: "Nickname choice was unknown or ambiguous; no entity ID was guessed" });
+          return;
+        }
         proposals.push({
           id: `${ctx.blockId}_alias_${i}`,
           kind: "add_alias",
-          payload: { entityId: nick.value, aliasText: c },
+          payload: { entityId: target.id, aliasText: c },
           confidence: nick.confidence ?? 0.7,
           provenance: { blockId: ctx.blockId, sentenceIds: [], patchId: this.id },
         });

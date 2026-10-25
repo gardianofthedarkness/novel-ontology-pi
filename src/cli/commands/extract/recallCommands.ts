@@ -1,6 +1,6 @@
-import { copyFile, readdir, readFile, stat } from "node:fs/promises";
+import { copyFile, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { cutBlocks } from "../../../digger/intake/blocks.js";
+import { recallSourceBlock } from "../../../ground/workspace/source.js";
 import { BlockProcessor } from "../../../digger/processing/blockProcessor.js";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
@@ -45,18 +45,7 @@ export async function runRecall(
     );
   }
 
-  const sourceDir = join(novelDir, "source");
-  let sourceFiles: string[] = [];
-  try {
-    sourceFiles = await readdir(sourceDir);
-  } catch {
-    sourceFiles = [];
-  }
-  if (sourceFiles.length === 0) {
-    throw new Error(
-      `No stored source in ${sourceDir} — recall needs the source copy that ingest saves. Re-run \`novel ingest\` once to populate it.`,
-    );
-  }
+  const block = await recallSourceBlock(novelDir, blockId);
   const existing = await loadChangeSet(novelDir, `cs_${blockId}`);
   if (existing?.status === "approved") throw new Error("Cannot recall an approved block without a canonical rollback plan; hold the new work for review instead.");
   const history = await readFile(join(novelDir, "events.jsonl"), "utf8").catch((error: NodeJS.ErrnoException) => {
@@ -66,21 +55,6 @@ export async function runRecall(
   if (history.split("\n").filter(Boolean).map((line) => JSON.parse(line)).some((record) => record.event.type === "changeset.applied" && record.event.changesetId === `cs_${blockId}`)) {
     throw new Error("Cannot recall an already applied block without a canonical rollback plan, even if its gate status was changed to held.");
   }
-  let block: { id: string; text: string; chapterIndex: number; index: number } | null = null;
-  for (const f of sourceFiles) {
-    const text = await readFile(join(sourceDir, f), "utf8");
-    const found = cutBlocks(text).find((b) => b.id === blockId);
-    if (found) {
-      block = found;
-      break;
-    }
-  }
-  if (!block) {
-    throw new Error(
-      `Block ${blockId} not found in the stored source (${sourceFiles.join(", ")}). Block ids come from the default cutter; a custom --block-size ingest may number differently.`,
-    );
-  }
-
   const corrections = await loadCorrections(novelDir);
   const pins = pinsForBlock(corrections, blockId);
 

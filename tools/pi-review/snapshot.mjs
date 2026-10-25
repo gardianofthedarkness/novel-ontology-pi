@@ -26,6 +26,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const agent = options.volume ? agentRecords.filter((record) => record.volume === options.volume || !record.volume && options.volume === 1 || options.jobStatus && record.type === 'pi.status') : agentRecords;
   const files = await readdir(`${directory}/changesets`).catch(() => []);
   const changesets = (await Promise.all(files.filter((file) => /^cs_b\d+\.json$/.test(file)).map((file) => json(`${directory}/changesets/${file}`, null)))).filter((entry) => entry && blockChapters.has(entry.blockId));
+  const causalSets = (await Promise.all(files.filter(file => /^cs_causality_(agent|sweep)_\d+\.json$/.test(file)).map(file => json(`${directory}/changesets/${file}`, null)))).filter(entry => entry && entry.status !== 'approved');
   const drafts = (await Promise.all([...blockChapters.keys()].map((blockId) => json(`${directory}/working/${blockId}.json`, null)))).filter(Boolean);
   const entityMap = new Map(fold(entities).map((entity) => [entity.id, entity]));
   const eventMap = new Map(fold(events).map((event) => [event.id, event]));
@@ -38,6 +39,11 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const gates = [];
   const provenanceChapter = new Map();
   const proposedCausal = [];
+  for (const packet of causalSets) {
+    const state = ['held', 'revision_requested'].includes(packet.status) ? 'held' : 'proposed';
+    for (const proposal of packet.proposals) if (proposal.kind === 'add_relation' && proposal.payload?.type === 'CAUSES') proposedCausal.push({ relation: proposal.payload, state });
+    gates.push({ id: packet.id, label: `Causality · ${packet.id}`, status: state === 'held' ? 'held' : 'pending', nodeIds: packet.proposals.map(proposal => proposal.id), deferred: 0 });
+  }
   for (const changeset of changesets) {
     const chapterIndex = blockChapters.get(changeset.blockId);
     for (const proposal of changeset.proposals) if (proposal.payload?.id) provenanceChapter.set(proposal.payload.id, chapterIndex);
@@ -225,7 +231,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   return {
     activity: liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId: options.activityAfter, reviewProgress: await sessionReviewProgress(runtime) }),
     world: { laneNodes, laneEdges, interiors, bigEventLabels, causal: { links: causalLinks, unresolved: causalUnresolved, dialogueScenes } }, gates, feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
-    status, stage, label: finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
+    status, stage, label: causalSets.length ? `${causalSets.length} causal packet${causalSets.length === 1 ? '' : 's'} awaiting review · not canon` : finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
     workSite: `chapter_${blockChapters.get(lastBlock) ?? chapters[0]?.index ?? 0}`,
     volume: options.volume ?? 1,
     jobLabel: options.jobLabel ?? 'Full volume',

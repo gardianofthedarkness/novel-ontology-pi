@@ -1,7 +1,10 @@
 import type { CausalSummary, WorldEdge, WorldNode } from "../types";
+import type { LibraryView } from "./libraryModel";
 
 /** The playground read model, loaded from the local DB files. */
 export interface LoadedWorld {
+  library?: LibraryView;
+  sourceId?: string | null;
   laneNodes: WorldNode[];
   laneEdges: WorldEdge[];
   interiors: Record<string, { nodes: WorldNode[]; edges: WorldEdge[] }>;

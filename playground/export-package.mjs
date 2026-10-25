@@ -11,7 +11,7 @@ import { preparePlayground, repository, fixtureDirectory } from './prepare.mjs';
 const execute = promisify(execFile);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const fixed = new Set(['README.md', 'LICENSE', 'DESIGN.md', 'playground/Dockerfile', 'playground/compose.yaml', 'playground/Dockerfile.dockerignore', '.gitignore', 'package.json', 'package-lock.json', 'tsconfig.json', 'apps/playground/package.json', 'apps/playground/package-lock.json', 'apps/playground/tsconfig.json', 'apps/playground/vite.config.ts', 'apps/playground/index.html', 'apps/playground/AGENTS.md', 'tools/pi-review/package.json', 'tools/pi-review/package-lock.json', 'tools/pi-review/job.example.json', 'playground/fixtures/lantern-harbor/story.json', 'playground/fixtures/lantern-harbor/DATASET_CARD.md']);
-const sourceRoots = ['src', 'test', 'skills/novel-ontology', 'apps/playground/src', 'tools/pi-review', 'playground'];
+const sourceRoots = ['src', 'test', 'skills/novel-ontology', 'skills/novel-library', 'apps/playground/src', 'tools/pi-review', 'playground'];
 const sourceExtensions = new Set(['.ts', '.tsx', '.mts', '.mjs', '.py', '.css', '.html', '.md', '.svg']);
 const forbidden = /(?:^|\/)(?:node_modules|\.git|private|runtime|__pycache__|\.pi-review|\.team-playground)(?:\/|$)|(?:^|\/)\.env(?:\.|$)|\.(?:epub|lbug(?:\..*)?|log)$/i;
 

@@ -1,5 +1,5 @@
-import { copyFile, mkdir, readFile, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { cutBlocks } from "../../../digger/intake/blocks.js";
 import { BlockProcessor, type ReviewDecision } from "../../../digger/processing/blockProcessor.js";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
@@ -23,6 +23,7 @@ import {
   runCausalityPass,
 } from "../../../solidifier/causality/faculty.js";
 import { albumPortraits, emitAlbumAnchors } from "./albumCommands.js";
+import { bindWorkspaceSource, sourceHash } from "../../../ground/workspace/source.js";
 
 export interface IngestOptions {
   /** Legacy miniloop-only smoke option; a configured work model requires fact review. */
@@ -81,8 +82,9 @@ export async function ingestNovel(
   // Keep a copy of the source inside the workspace: the recall
   // protocol (sector 09) re-runs a single block from it, in a later
   // session, without the original file at hand.
-  const sourceDir = join(novelDir, "source");
-  const allBlocks = cutBlocks(text, opts.blockSize);
+  const source = await bindWorkspaceSource(novelDir, file, opts.blockSize);
+  if (sourceHash(text) !== source.sha256) throw new Error("Input changed while binding the source; retry with a stable file.");
+  const allBlocks = cutBlocks(text, source.blockSize);
   const selectedBlocks = opts.maxBlocks ? allBlocks.slice(0, opts.maxBlocks) : allBlocks;
   const existing = await listChangeSets(novelDir);
   const unresolved = existing.find((changeset) => changeset.status !== "approved" && selectedBlocks.some((block) => block.id === changeset.blockId));
@@ -107,8 +109,6 @@ export async function ingestNovel(
   }
   const skippedBlocks = selectedBlocks.filter((block) => approved.has(block.id)).map((block) => block.id);
   const blocks = selectedBlocks.filter((block) => !approved.has(block.id));
-  await mkdir(sourceDir, { recursive: true });
-  await copyFile(file, join(sourceDir, basename(file)));
 
   const bundle = new BundleStore(ontologyDir);
   const log = new EventLog(novelDir);
@@ -288,6 +288,7 @@ export async function ingestNovel(
     status: "ok",
     novelDir,
     file,
+    source,
     reviewMode: opts.autoApprove ? "auto-approve" : "gate",
     extraction: workModel ? "live" : "off",
     workModel: workModel?.modelId ?? null,

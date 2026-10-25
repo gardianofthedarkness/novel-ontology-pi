@@ -24,6 +24,7 @@ export type NodeKind =
 export type CanonState = "canon" | "proposed" | "held";
 
 export interface WorldNode {
+  library?: { type: "series" | "file"; sourceId?: string; group?: string; volume?: number; planId?: string; readingOrder: number | null };
   id: string;
   label: string;
   subLabel?: string;
