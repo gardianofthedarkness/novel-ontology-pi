@@ -17,6 +17,8 @@ import "./orbital.css";
 import "./live.css";
 import "./glass.css";
 import { RollingText } from "./components/RollingText";
+import { attachSwipe } from "./swipe";
+import type { Swipe } from "./data/gestures";
 import { attachGlassSheen } from "./glassSheen";
 import type { LiveActivity } from "./data/liveActivity";
 import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
@@ -666,6 +668,14 @@ export default function App() {
     if (orbitalMode && displayNodes.length) { requestOrbitalFocus(displayNodes[(selectedIndex + step + displayNodes.length) % displayNodes.length]); return; }
     if (nodes.length) activateNode(nodes[(selectedIndex + step + nodes.length) % nodes.length]);
   };
+  /** Phone swipes on the record bar: left/right step records, up/down move
+   * one orbital level deeper or back (the canvas keeps its own drag). */
+  const swipeRef = useRef<(swipe: Swipe) => void>(() => {});
+  const transportRef = useCallback((bar: HTMLElement | null) => bar ? attachSwipe(bar, (swipe) => swipeRef.current(swipe)) : undefined, []);
+  swipeRef.current = (swipe) => {
+    if (swipe === "left" || swipe === "right") { stepRecord(swipe === "left" ? 1 : -1); return; }
+    if (orbitalMode) document.querySelector(".orbital-stage")?.dispatchEvent(new CustomEvent("orbital-nav", { detail: swipe === "up" ? "deeper" : "back" }));
+  };
   const overview = () => {
     setOrbitalReset((current) => current + 1);
     setOrbitalInspection(null);
@@ -784,7 +794,7 @@ export default function App() {
       {phoneLive && <PiReviewProgress review={liveActivity?.review} />}
       {phoneLive && <PiConsole />}
       {identityNotice && <div className="identity-notice" role="status">{identityNotice}</div>}
-      <footer className="transport">
+      <footer className="transport" ref={transportRef}>
         <div className="selection-counter"><span className="eyebrow">RECORD / SELECT</span><div>{String(selected ? selectedIndex + 1 : 0).padStart(2, "0")}<small>/ {String(displayNodes.length).padStart(2, "0")}</small></div></div>
         <div className="record-transport"><button className="arrow-button" aria-label="Previous record" disabled={!nodes.length} onClick={() => stepRecord(-1)}>←</button><div><strong>{selected?.label ?? "Archive"}</strong><span>{selected ? `${KIND_LABEL[selected.kind]} / ${selected.lane}` : "No records"}</span></div><button className="arrow-button" aria-label="Next record" disabled={!nodes.length} onClick={() => stepRecord(1)}>→</button></div>
         <div className="session-controls"><span className="eyebrow">{phoneLive || liveUrl ? "LIVE / NOVEL WATCH" : "LOCAL FILE REPLAY / DEMO"}</span>{phoneLive ? <a href="replay/">Session replay ↗</a> : <button onClick={startSession}>Replay session ↻</button>}</div>

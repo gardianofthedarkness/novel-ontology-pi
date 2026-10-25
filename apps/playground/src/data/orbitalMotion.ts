@@ -97,3 +97,32 @@ export function rayPlanePoint(origin: Position3, direction: Position3, height = 
   const distance = (height - origin[1]) / direction[1];
   return distance > 0 ? origin.map((value, axis) => value + direction[axis] * distance) as Position3 : null;
 }
+
+/**
+ * Pi heartbeat route: along the spine from its head to the spine point nearest
+ * the record Pi is touching, then a final hop to the record itself.
+ */
+export function heartbeatRoute(spine: Position3[], target: Position3): Position3[] {
+  if (!spine.length) return [target];
+  let nearest = 0;
+  spine.forEach((point, index) => { if (Math.hypot(...point.map((value, axis) => value - target[axis])) < Math.hypot(...spine[nearest].map((value, axis) => value - target[axis]))) nearest = index; });
+  const route = spine.slice(0, nearest + 1);
+  const last = route[route.length - 1];
+  if (Math.hypot(...last.map((value, axis) => value - target[axis])) > 1) route.push(target);
+  return route;
+}
+
+/** Point at fraction u (0..1) of a polyline's length. */
+export function pointAlong(route: Position3[], u: number): Position3 {
+  if (route.length < 2) return route[0] ?? [0, 0, 0];
+  const lengths = route.slice(1).map((point, index) => Math.hypot(...point.map((value, axis) => value - route[index][axis])));
+  let remaining = Math.min(1, Math.max(0, u)) * lengths.reduce((sum, length) => sum + length, 0);
+  for (let index = 0; index < lengths.length; index++) {
+    if (remaining <= lengths[index] || index === lengths.length - 1) {
+      const f = lengths[index] ? Math.min(1, remaining / lengths[index]) : 1;
+      return route[index].map((value, axis) => value + (route[index + 1][axis] - value) * f) as Position3;
+    }
+    remaining -= lengths[index];
+  }
+  return route[route.length - 1];
+}

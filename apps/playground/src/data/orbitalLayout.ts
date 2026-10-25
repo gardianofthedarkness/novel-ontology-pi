@@ -20,7 +20,13 @@ export interface OrbitalDraw {
 }
 export interface OrbitalPath { id: string; points: Position3[]; preview?: boolean; fromPoints?: Position3[] }
 export interface OrbitalPose { position: Position3; radius: number }
-export interface OrbitalMorph { startedAt: number; from: Map<string, OrbitalPose> }
+/** A transition from `from` poses to the current layout. The opening
+ * sequence uses a longer `durationMs` and per-record start `delays` (ms). */
+export interface OrbitalMorph { startedAt: number; from: Map<string, OrbitalPose>; durationMs?: number; delays?: Map<string, number> }
+/** Raw progress (unclamped) of one record's morph at `nowMs`. */
+export const morphProgress = (morph: OrbitalMorph, id: string, nowMs: number, fallbackMs: number) => (nowMs - morph.startedAt - (morph.delays?.get(id) ?? 0)) / (morph.durationMs ?? fallbackMs);
+/** How long the whole morph runs, including the latest delayed start. */
+export const morphSpan = (morph: OrbitalMorph, fallbackMs: number) => (morph.durationMs ?? fallbackMs) + Math.max(0, ...(morph.delays?.values() ?? []));
 export const uncoilEase = (progress: number) => { const bounded = Math.min(1, Math.max(0, progress)); return bounded * bounded * (3 - 2 * bounded); };
 export const interpolatePose = (from: OrbitalPose, to: OrbitalPose, progress: number): OrbitalPose => {
   const amount = uncoilEase(progress);
@@ -46,6 +52,25 @@ export function carryTangent(velocity: Position3, seconds: number, from: Orbital
   if (length < 1e-3) return undefined;
   const cap = 1.5 * Math.max(Math.hypot(...to.position.map((value, axis) => value - from.position[axis])), to.radius);
   return length > cap ? tangent.map((value) => value * cap / length) as Position3 : tangent;
+}
+/**
+ * Opening sequence: every record starts folded into one point at the head of
+ * the spine and uncoils into place, earlier records first (by time, x).
+ */
+export const OPENING_MS = 1400;
+export const OPENING_STAGGER_MS = 900;
+export function openingMorph(draws: OrbitalDraw[], startedAt: number): OrbitalMorph | null {
+  const spine = draws.filter((draw) => draw.role === "main");
+  if (!spine.length) return null;
+  const xs = draws.map((draw) => draw.position[0]);
+  const minX = Math.min(...xs), span = Math.max(1, Math.max(...xs) - minX);
+  const head = [...spine].sort((first, second) => first.position[0] - second.position[0])[0].position;
+  const from = new Map<string, OrbitalPose>(), delays = new Map<string, number>();
+  for (const draw of draws) {
+    from.set(draw.node.id, { position: head, radius: draw.radius * 0.04 });
+    delays.set(draw.node.id, Math.round((draw.position[0] - minX) / span * OPENING_STAGGER_MS + (draw.role === "main" ? 0 : 160)));
+  }
+  return { startedAt, from, durationMs: OPENING_MS, delays };
 }
 export function helixPoint(progress: number, track: number, tracks: number, radius: number): Position3 {
   const orbit = radius * Math.min(0.28, 0.52 / Math.max(1, tracks));

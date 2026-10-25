@@ -110,3 +110,8 @@
 .rolling-text > .rolling-rest { animation-delay: .45s; }
 .reduce-motion .rolling-text > span { animation: none; }
 @media (prefers-reduced-motion: reduce) { .rolling-text > span { animation: none; } }
+/* Opening sequence hint. */
+.orbital-intro-skip { position: absolute; left: 50%; bottom: 18%; z-index: 4; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #cfe7f7; background: #0b1826b3; border: 1px solid #8fc7d433; pointer-events: none; animation: intro-hint 2.6s ease both; }
+@keyframes intro-hint { 0% { opacity: 0; } 15%, 80% { opacity: .9; } 100% { opacity: 0; } }
+/* The record bar takes swipes on touch screens instead of scrolling the page. */
+@media (pointer: coarse) { .transport { touch-action: none; } }

@@ -1,13 +1,13 @@
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type NodeRendererProps } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { BoxGeometry, BufferGeometry, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
+import { AdditiveBlending, BoxGeometry, BufferGeometry, DoubleSide, Points, PointsMaterial, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
 import { recordColor } from "../archive";
 import type { WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
-import { carryPose, carryTangent, entryFrame, interpolatePose, uncoilEase, type OrbitalPose, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
+import { carryPose, carryTangent, entryFrame, interpolatePose, morphProgress, OPENING_STAGGER_MS, uncoilEase, type OrbitalPose, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
 import type { CausalArrow } from "../data/causalProjection";
-import { breathOffset, glintLevel, now, rippleOffset, RIPPLE_LIFE, RIPPLE_SPEED, type MotionBus } from "../data/orbitalMotion";
+import { breathOffset, glintLevel, heartbeatRoute, now, pointAlong, rippleOffset, RIPPLE_LIFE, RIPPLE_SPEED, type MotionBus } from "../data/orbitalMotion";
 import { framePositions, type LabelBus } from "./WorldGraph";
 import { ScaleNavigation } from "./ScaleNavigation";
 
@@ -32,7 +32,7 @@ function useCarriedPose(draw: OrbitalDraw, morph: OrbitalMorph | null, reducedMo
       memory.startedAt = morph.startedAt;
       memory.tangent = from && !reducedMotion ? carryTangent(memory.velocity, ORBITAL_TRANSITION_MS / 1000, from, draw) : undefined;
     }
-    const pose = from ? carryPose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS, memory.tangent) : draw;
+    const pose = from ? carryPose(from, draw, reducedMotion ? 1 : morphProgress(morph!, draw.node.id, performance.now(), ORBITAL_TRANSITION_MS), memory.tangent) : draw;
     if (memory.last && delta > 0 && delta < 0.2) {
       const follow = Math.min(1, delta * 12);
       memory.velocity = memory.velocity.map((value, axis) => value + ((pose.position[axis] - memory.last![axis]) / delta - value) * follow) as Position3;
@@ -333,7 +333,9 @@ function AnimatedTimePath({ path, morph, reducedMotion }: { path: OrbitalPath; m
     const attribute = line.geometry.attributes.position;
     const points = path.points.map((point, index): Position3 => {
       const from = path.fromPoints?.[index];
-      return from && morph ? interpolatePose({ position: from, radius: 1 }, { position: point, radius: 1 }, reducedMotion ? 1 : (performance.now() - morph.startedAt) / ORBITAL_TRANSITION_MS).position : point;
+      // The opening sequence grows the spine from its head, in step with the spheres.
+      const delay = morph?.delays ? OPENING_STAGGER_MS * index / Math.max(1, path.points.length - 1) : 0;
+      return from && morph ? interpolatePose({ position: from, radius: 1 }, { position: point, radius: 1 }, reducedMotion ? 1 : morphProgress(morph, "", performance.now() - delay, ORBITAL_TRANSITION_MS)).position : point;
     });
     points.forEach((point, index) => attribute.setXYZ(index, ...point));
     attribute.needsUpdate = true;
@@ -441,7 +443,7 @@ function ParentBackdrop({ ghosts, path, morph, reducedMotion }: { ghosts: Backdr
   useEffect(() => () => { spine.geometry.dispose(); spine.material.dispose(); }, [spine]);
   useEffect(() => () => { Object.values(materials).forEach((material) => material.dispose()); }, [materials]);
   useFrame(() => {
-    const fade = morph && !reducedMotion ? uncoilEase((performance.now() - morph.startedAt) / ORBITAL_TRANSITION_MS) : 1;
+    const fade = morph && !reducedMotion ? uncoilEase(morphProgress(morph, "", performance.now(), ORBITAL_TRANSITION_MS)) : 1;
     materials.shell.opacity = 0.028 * fade;
     materials.current.opacity = 0.045 * fade;
     materials.fill.opacity = 0.012 * fade;
@@ -477,6 +479,105 @@ function RippleRings({ motion }: { motion: MotionBus }) {
     });
   });
   return <>{rings.map((ring, index) => <primitive key={index} object={ring} raycast={noRaycast} />)}</>;
+}
+
+/** Soft round sprite shared by the atmosphere layers. */
+let dotTexture: CanvasTexture | null = null;
+function softDot() {
+  if (dotTexture) return dotTexture;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 64;
+  const context = canvas.getContext("2d")!;
+  const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, "rgba(255,255,255,1)"); gradient.addColorStop(0.35, "rgba(255,255,255,.45)"); gradient.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = gradient; context.fillRect(0, 0, 64, 64);
+  dotTexture = new CanvasTexture(canvas);
+  return dotTexture;
+}
+const seeded = (seed: number) => () => { seed = (seed + 0x6d2b79f5) | 0; let value = Math.imul(seed ^ (seed >>> 15), 1 | seed); value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value; return ((value ^ (value >>> 14)) >>> 0) / 4294967296; };
+
+/**
+ * Atmosphere: far stars on a distant shell and nearer dust around the level,
+ * so camera moves and parallax read as depth. Decoration only; never
+ * raycast. Under reduced motion both layers stay still.
+ */
+function Atmosphere({ draws, reducedMotion }: { draws: OrbitalDraw[]; reducedMotion: boolean }) {
+  const bounds = useMemo(() => {
+    if (!draws.length) return { center: [0, 0, 0] as Position3, extent: 3000 };
+    const axes = [0, 1, 2].map((axis) => draws.map((draw) => draw.position[axis]));
+    const center = axes.map((values) => (Math.min(...values) + Math.max(...values)) / 2) as Position3;
+    return { center, extent: Math.max(2000, ...axes.map((values) => Math.max(...values) - Math.min(...values))) };
+  }, [draws]);
+  const layers = useMemo(() => {
+    const random = seeded(7);
+    const star = new Float32Array(900 * 3);
+    for (let index = 0; index < 900; index++) {
+      const theta = random() * Math.PI * 2, phi = Math.acos(2 * random() - 1);
+      star.set([Math.sin(phi) * Math.cos(theta), Math.cos(phi) * 0.7 + 0.15, Math.sin(phi) * Math.sin(theta)], index * 3);
+    }
+    const dust = new Float32Array(320 * 3);
+    for (let index = 0; index < 320; index++) dust.set([random() - 0.5, (random() - 0.5) * 0.5, random() - 0.5], index * 3);
+    const stars = new Points(new BufferGeometry().setAttribute("position", new Float32BufferAttribute(star, 3)), new PointsMaterial({ map: softDot(), color: "#bcdcff", size: 2.4, sizeAttenuation: false, transparent: true, opacity: 0.75, depthWrite: false, toneMapped: false }));
+    const motes = new Points(new BufferGeometry().setAttribute("position", new Float32BufferAttribute(dust, 3)), new PointsMaterial({ map: softDot(), color: "#7fc4ff", size: 26, sizeAttenuation: true, transparent: true, opacity: 0.32, depthWrite: false, blending: AdditiveBlending, toneMapped: false }));
+    stars.frustumCulled = motes.frustumCulled = false;
+    return { stars, motes };
+  }, []);
+  useEffect(() => () => { for (const layer of Object.values(layers)) { layer.geometry.dispose(); (layer.material as PointsMaterial).dispose(); } }, [layers]);
+  useFrame(() => {
+    const { stars, motes } = layers;
+    stars.position.set(...bounds.center);
+    stars.scale.setScalar(Math.max(40000, bounds.extent * 8));
+    motes.position.set(...bounds.center);
+    motes.scale.set(bounds.extent * 1.8, bounds.extent * 1.8, bounds.extent * 1.8);
+    (motes.material as PointsMaterial).size = Math.max(10, bounds.extent / 120);
+    if (reducedMotion) return;
+    const t = now();
+    stars.rotation.y = t * 0.004;
+    motes.rotation.y = t * 0.012;
+    motes.position.y = bounds.center[1] + Math.sin(t * 0.2) * bounds.extent * 0.01;
+  });
+  return <><primitive object={layers.stars} raycast={noRaycast} /><primitive object={layers.motes} raycast={noRaycast} /></>;
+}
+
+/**
+ * Pi heartbeat: while Pi is working, a light pulse runs along the spine to the
+ * record it is touching and blooms there, every few seconds. It shows only
+ * where Pi already reports activity; it never moves the camera.
+ */
+const HEARTBEAT_PERIOD = 3.2, HEARTBEAT_TRAVEL = 1.5;
+function PiHeartbeat({ spine, targetId, draws, bus }: { spine: Position3[]; targetId: string; draws: OrbitalDraw[]; bus: LabelBus }) {
+  const pulse = useRef<Mesh>(null), bloom = useRef<Mesh>(null);
+  const target = draws.find((draw) => draw.node.id === targetId);
+  const route = useMemo(() => target ? heartbeatRoute(spine, target.position) : [], [spine, target]);
+  useFrame(() => {
+    if (!pulse.current || !bloom.current || !target || !route.length) return;
+    const phase = now() % HEARTBEAT_PERIOD;
+    const travelling = phase < HEARTBEAT_TRAVEL;
+    const end = bus.positions.get(targetId) ?? target.position;
+    const u = phase / HEARTBEAT_TRAVEL;
+    const point = travelling ? pointAlong([...route.slice(0, -1), end], u * u * (3 - 2 * u)) : end;
+    pulse.current.visible = travelling;
+    pulse.current.position.set(...point);
+    pulse.current.scale.setScalar(Math.max(18, target.radius * 0.12));
+    const age = (phase - HEARTBEAT_TRAVEL) / (HEARTBEAT_PERIOD - HEARTBEAT_TRAVEL);
+    bloom.current.visible = !travelling && age < 0.7;
+    bloom.current.position.set(...end);
+    bloom.current.scale.setScalar(target.radius * (1.05 + age * 0.9));
+    bloom.current.quaternion.copy(bloomFacing);
+    (bloom.current.material as MeshBasicMaterial).opacity = 0.55 * (1 - age / 0.7) ** 2;
+  });
+  if (!target) return null;
+  return <>
+    <mesh ref={pulse} raycast={noRaycast}><sphereGeometry args={[1, 16, 12]} /><meshBasicMaterial color="#bfe6ff" transparent opacity={0.95} blending={AdditiveBlending} depthWrite={false} toneMapped={false} /></mesh>
+    <mesh ref={bloom} raycast={noRaycast}><ringGeometry args={[0.96, 1, 96]} /><meshBasicMaterial color="#9fd8ff" transparent opacity={0} blending={AdditiveBlending} depthWrite={false} toneMapped={false} side={DoubleSide} /></mesh>
+  </>;
+}
+const bloomFacing = new Quaternion();
+/** Keeps the heartbeat bloom ring facing the camera. */
+function FaceCamera() {
+  const { camera } = useThree();
+  useFrame(() => { bloomFacing.copy(camera.quaternion); });
+  return null;
 }
 
 /** Subtle depth from the pointer (desktop) or device tilt (phone): a tiny
@@ -544,7 +645,7 @@ function ActivityBounds({ draws, bus }: { draws: OrbitalDraw[]; bus: LabelBus })
   return <group ref={bounds} userData={{ orbitalActivityBounds: true }}><mesh raycast={noRaycast}><boxGeometry args={[1, 1, 1]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.5} toneMapped={false} depthTest={false} depthWrite={false} /></mesh></group>;
 }
 
-function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, enclosure, hoverCard, motion, onReveal, onExtremeBack }: { draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; enclosure?: Enclosure; hoverCard?: { current: HTMLDivElement | null }; motion?: MotionBus; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
+function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, opening = false, enclosure, hoverCard, motion, onReveal, onExtremeBack }: { draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; /** Opening sequence: labels wait until records have arrived. */ opening?: boolean; enclosure?: Enclosure; hoverCard?: { current: HTMLDivElement | null }; motion?: MotionBus; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
   const { camera, scene, size, gl } = useThree();
   const byId = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw])), [draws]);
   const revealed = useRef(revealedId); revealed.current = revealedId;
@@ -584,7 +685,7 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
         const score = pixels - Math.hypot(point.x, point.y) * 20 + (selectedId === draw.node.id || selectedPreview ? 10000 : 0);
         if (pixels >= (revealed.current === draw.node.id ? 46 : 64) && (!closest || score > closest.score)) closest = { id: draw.node.id, pixels, score };
       }
-      if ((draw.role === "connection" || draw.role === "preview" && pixels < 3) && selectedId !== draw.node.id) return;
+      if (opening || (draw.role === "connection" || draw.role === "preview" && pixels < 3) && selectedId !== draw.node.id) return;
       candidates.push({ draw, position: point, pixels, priority: selectedId === draw.node.id ? 0 : draw.role === "preview" ? 1 : draw.role === "main" ? 2 : 3 });
     });
     const next = closest as { id: string; pixels: number; score: number } | null;
@@ -653,6 +754,8 @@ function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, redu
 }
 
 interface Props {
+  /** Record Pi is working on right now (heartbeat target), if any. */
+  heartbeatId?: string | null;
   draws: OrbitalDraw[];
   paths: OrbitalPath[];
   edges: WorldEdge[];
@@ -679,11 +782,12 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
   const enclosure = useMemo(() => { const ghost = backdrop?.ghosts.find((entry) => entry.current); return ghost ? { center: ghost.position, radius: ghost.radius } : undefined; }, [backdrop]);
+  const spine = useMemo(() => paths.find((path) => !path.preview)?.points ?? [], [paths]);
   return <GraphCanvas ref={ref} nodes={nodes} edges={[]} theme={theme} renderNode={renderSphere} labelType="none" layoutType="forceDirected3d" cameraMode="rotate" draggable={false} animated={false} minDistance={16} maxDistance={1000000} selections={[]} glOptions={{ antialias: true, preserveDrawingBuffer: true }}
     onNodeClick={(node) => onSelect((node.data.glyph as GlyphData).draw)} onNodeDoubleClick={(node) => onEnter((node.data.glyph as GlyphData).draw)}
     onNodePointerOver={(node) => { if ((node.data.glyph as GlyphData).draw.role !== "preimage") onHover?.(node.id); }} onNodePointerOut={(node) => { if (motion.hoveredId === node.id) onHover?.(null); }}
@@ -696,11 +800,13 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <VisibleConnections edges={edges} bus={bus} />
     {hoverEdges.length > 0 && <VisibleConnections edges={hoverEdges} bus={bus} color="#d9cbff" opacity={0.55} />}
     {!reducedMotion && <RippleRings motion={motion} />}
+    <Atmosphere draws={draws} reducedMotion={reducedMotion} />
+    {!reducedMotion && heartbeatId && <><FaceCamera /><PiHeartbeat spine={spine} targetId={heartbeatId} draws={draws} bus={bus} /></>}
     <LocalClipping />
     <PointerParallax graphRef={ref as { current: GraphCanvasRef | null }} enabled={!reducedMotion} />
     {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} reducedMotion={reducedMotion} />)}
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
-    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} />
+    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} opening={!!morph?.delays} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
     <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} />
   </GraphCanvas>;

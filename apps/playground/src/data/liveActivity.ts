@@ -29,3 +29,6 @@ export function activityFocus(activity?: LiveActivity | null) {
     faculty: reviewing ? "Pi review" : (activity?.batch?.faculties ?? (activity?.latestTouch ? [activity.latestTouch.faculty] : [])).join(" / "),
   };
 }
+
+/** Pi is working right now: a live review, or a faculty with calls in flight. */
+export const piBusy = (activity?: LiveActivity | null) => !!activity && (!!activity.review?.active || activity.faculties.some((faculty) => faculty.active > 0));
