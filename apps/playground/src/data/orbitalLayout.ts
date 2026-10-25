@@ -9,6 +9,8 @@ export interface OrbitalDraw {
   position: Position3;
   radius: number;
   role: "main" | "nebula" | "preview" | "connection";
+  /** 0–1 visual weight: child count for main spheres, scoped link strength for the nebula. */
+  prominence?: number;
   previewParentId?: string;
   /** Direction the glyph's +Z faces (picture cards: the timeline tangent,
    * so the card plane stands perpendicular to the timeline). When absent,
@@ -29,7 +31,18 @@ export function helixPoint(progress: number, track: number, tracks: number, radi
   return [(progress - 0.5) * radius * 1.2, (track - (tracks - 1) / 2) * orbit * 2.4 + Math.sin(phase) * orbit, Math.cos(phase) * orbit];
 }
 const trackKey = (node: WorldNode) => `${node.lane}:${node.trackId ?? "story"}`;
-export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.nebula): { draws: OrbitalDraw[]; paths: OrbitalPath[] } {
+/** Bounded radii: main spheres stay well inside the 600-unit spine spacing,
+ * nebula spheres stay small enough for a phone to draw hundreds. */
+export const mainRadius = (node: WorldNode, prominence?: number) => {
+  const base = node.kind === "bigEvent" ? 165 : node.kind === "dialogue" ? 72 : 115;
+  return prominence === undefined ? base : Math.round(base * (0.7 + 0.55 * Math.min(1, Math.max(0, prominence))));
+};
+export const nebulaRadius = (node: WorldNode, prominence?: number) => {
+  const base = node.kind === "character" ? 48 : 42;
+  return prominence === undefined ? base : Math.round(base * (0.55 + 0.75 * Math.min(1, Math.max(0, prominence))));
+};
+
+export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.nebula, weights: { main?: Map<string, number>; nebula?: Map<string, number> } = {}): { draws: OrbitalDraw[]; paths: OrbitalPath[] } {
   const tracks = [...new Set(level.main.map((entry) => trackKey(entry.node)))].sort();
   const times = [...new Set(level.main.map((entry) => entry.node.chrono))].sort((first, second) => first - second);
   const anchors = new Map<string, Position3>();
@@ -70,8 +83,8 @@ export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.ne
     const radius = 270 + Math.sqrt(contextNebula.length) * 24 + 180 / (1 + Math.log1p(strength));
     positions.set(node.id, center.map((value, axis) => value + spread[axis] / length * radius) as Position3);
   }
-  const draws: OrbitalDraw[] = level.main.map((entry) => ({ node: entry.node, entry, position: anchors.get(entry.node.id)!.map((value) => value * 3) as Position3, radius: entry.node.kind === "bigEvent" ? 165 : entry.node.kind === "dialogue" ? 72 : 115, role: "main" }));
-  draws.push(...contextNebula.map((node): OrbitalDraw => ({ node, position: positions.get(node.id)!.map((value) => value * 3) as Position3, radius: node.kind === "character" ? 48 : 42, role: "nebula" })));
+  const draws: OrbitalDraw[] = level.main.map((entry) => ({ node: entry.node, entry, position: anchors.get(entry.node.id)!.map((value) => value * 3) as Position3, radius: mainRadius(entry.node, weights.main?.get(entry.node.id)), prominence: weights.main?.get(entry.node.id), role: "main" }));
+  draws.push(...contextNebula.map((node): OrbitalDraw => ({ node, position: positions.get(node.id)!.map((value) => value * 3) as Position3, radius: nebulaRadius(node, weights.nebula?.get(node.id)), prominence: weights.nebula?.get(node.id), role: "nebula" })));
   const paths = tracks.map((track): OrbitalPath => {
     const members = draws.filter((draw) => draw.role === "main" && trackKey(draw.node) === track);
     const first = members[0].position, last = members.at(-1)!.position;

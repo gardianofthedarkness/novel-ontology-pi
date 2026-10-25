@@ -34,20 +34,25 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
     group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1] + drift, pose.position[2] - draw.position[2]);
     group.current.scale.setScalar(pose.radius / draw.radius);
   });
-  const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? 0.3 : draw.node.state === "held" ? 0.5 : nebula ? 0.7 : 0.9;
+  /** Nebula weight: strongly linked entities are solid, weak ones faint —
+   * proposed/held keep their own (lower) bands so states stay distinct. */
+  const weight = nebula ? Math.min(1, Math.max(0, draw.prominence ?? 0.7)) : 1;
+  const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? (nebula ? 0.14 + 0.22 * weight : 0.3) : draw.node.state === "held" ? (nebula ? 0.25 + 0.3 * weight : 0.5) : nebula ? 0.18 + 0.67 * weight : 0.9;
+  const light = nebula && weight < 0.35 && !selected;
+  const segments: [number, number] = light ? [16, 12] : [32, 24];
   return <group ref={group} userData={{ orbitalGlyph: draw.node.id }}>
     {touched && <mesh raycast={noRaycast}><boxGeometry args={[draw.radius * 2.7, draw.radius * 2.7, draw.radius * 2.7]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.95} toneMapped={false} depthTest={false} /></mesh>}
     <mesh raycast={transparent ? noRaycast : undefined}>
-      <sphereGeometry args={[draw.radius, 32, 24]} />
-      <meshStandardMaterial color={nebula ? color : "#12283c"} emissive={color} emissiveIntensity={selected ? 0.7 : active ? 0.45 : 0.2} metalness={0.35} roughness={0.27} transparent opacity={opacity} depthWrite={!transparent && draw.node.state === "canon"} />
+      <sphereGeometry args={[draw.radius, ...segments]} />
+      <meshStandardMaterial color={nebula ? color : "#12283c"} emissive={color} emissiveIntensity={selected ? 0.7 : active ? 0.45 : nebula ? 0.08 + 0.2 * weight : 0.2} metalness={0.35} roughness={0.27} transparent opacity={opacity} depthWrite={!transparent && draw.node.state === "canon" && opacity >= 0.5} />
     </mesh>
     <mesh raycast={noRaycast}>
-      <sphereGeometry args={[draw.radius * 1.035, 20, 16]} />
+      <sphereGeometry args={[draw.radius * 1.035, light ? 10 : 20, light ? 8 : 16]} />
       <meshBasicMaterial color={color} wireframe transparent opacity={transparent ? 0.12 : draw.node.state !== "canon" ? 0.34 : 0.035} depthWrite={false} />
     </mesh>
     <mesh raycast={noRaycast}>
-      <sphereGeometry args={[draw.radius * 1.22, 24, 16]} />
-      <meshBasicMaterial color={color} transparent opacity={transparent ? 0.018 : nebula ? 0.045 : 0.025} depthWrite={false} />
+      <sphereGeometry args={[draw.radius * 1.22, light ? 12 : 24, light ? 8 : 16]} />
+      <meshBasicMaterial color={color} transparent opacity={transparent ? 0.018 : nebula ? 0.012 + 0.05 * weight : 0.025} depthWrite={false} />
     </mesh>
     {(selected || draw.node.kind === "location" || draw.node.kind === "bigEvent") && <mesh raycast={noRaycast} rotation={[0.8, 0.25, -0.3]}>
       <torusGeometry args={[draw.radius * 1.18, draw.radius * 0.015, 6, 64]} />
@@ -304,7 +309,7 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
     const next = closest as { id: string; pixels: number; score: number } | null;
     if ((next?.id ?? null) !== revealed.current) onReveal(next?.id ?? null);
     const occupied: { left: number; top: number; right: number; bottom: number }[] = [];
-    for (const candidate of candidates.sort((first, second) => first.priority - second.priority)) {
+    for (const candidate of candidates.sort((first, second) => first.priority - second.priority || second.pixels - first.pixels)) {
       const element = bus.targets.get(candidate.draw.node.id);
       if (!element) continue;
       const horizontal = (candidate.position.x * 0.5 + 0.5) * size.width;

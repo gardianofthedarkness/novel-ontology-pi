@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalActivityPath, orbitalTouchAncestors } from "../apps/playground/src/data/orbitalActivity.js";
-import { canEnterOrbitalScope, orbitalLevel, progressiveNebula, volumeScope, type OrbitalWorld } from "../apps/playground/src/data/orbitalModel.js";
+import { canEnterOrbitalScope, orbitalLevel, surroundingEntities, volumeScope, type OrbitalWorld } from "../apps/playground/src/data/orbitalModel.js";
 import { layoutOrbitalLevel } from "../apps/playground/src/data/orbitalLayout.js";
 import type { WorldNode, WorldEdge } from "../apps/playground/src/types.js";
 
@@ -55,7 +55,7 @@ test("new characters stay weighted nebula in the current orbital level; containi
   const route = orbitalActivityPath(input, "character", "chapter", [], [], scenePath);
   assert.deepEqual(route.path, scenePath);
   const level = orbitalLevel(input, route.path.at(-1));
-  assert.ok(progressiveNebula(level, route.path.length, "character").nodes.some(record => record.id === "character"));
+  assert.ok(surroundingEntities(level, "character").nodes.some(record => record.id === "character"));
   const ancestors = orbitalTouchAncestors(input.interiors.chapter.nodes, input.interiors.chapter.edges, "event");
   assert.ok(ancestors.has("scene"));
   assert.ok(!ancestors.has("character"));

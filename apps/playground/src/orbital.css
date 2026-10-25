@@ -37,6 +37,8 @@
 .orbital-label.role-preview .node-code { color: #7bd5ff; }
 .orbital-label.role-preview b { font-size: 10px; }
 .orbital-label.role-nebula b { font-size: 11px; }
+.orbital-label.is-faint { opacity: .55; }
+.orbital-label.is-faint b { font-size: 10px; }
 .orbital-time-key { position: absolute; left: 32px; bottom: 232px; color: #83cfff; font-size: 10px; letter-spacing: .08em; pointer-events: none; }
 .orbital-time-key i { display: inline-block; width: 24px; height: 2px; background: #68caff; box-shadow: 0 0 12px #50b9ff; margin: 0 8px 3px 0; }
 .orbital-time-key span { display: block; margin-top: 6px; color: #8aa6bc; font-size: 8px; letter-spacing: 0; }
