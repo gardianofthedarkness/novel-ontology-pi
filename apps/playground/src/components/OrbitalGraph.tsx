@@ -1,12 +1,13 @@
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type NodeRendererProps } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { BufferGeometry, CanvasTexture, MeshBasicMaterial, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
+import { BufferGeometry, CanvasTexture, Mesh, MeshBasicMaterial, MeshStandardMaterial, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
 import { recordColor } from "../archive";
 import type { WorldEdge } from "../types";
 import type { Position3 } from "../data/spatialLayout";
 import { entryFrame, interpolatePose, uncoilEase, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
 import type { CausalArrow } from "../data/causalProjection";
+import { breathOffset, glintLevel, now, rippleOffset, RIPPLE_LIFE, RIPPLE_SPEED, type MotionBus } from "../data/orbitalMotion";
 import { framePositions, type LabelBus } from "./WorldGraph";
 import { ScaleNavigation } from "./ScaleNavigation";
 
@@ -17,6 +18,7 @@ interface GlyphData {
   transparent: boolean;
   selected: boolean;
   touched: boolean;
+  motion: MotionBus;
 }
 export const ORBITAL_TRANSITION_MS = 1100;
 const noRaycast = () => undefined;
@@ -24,17 +26,27 @@ const noRaycast = () => undefined;
 function SphereGlyph({ node, active }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
-  const { draw, morph, reducedMotion, transparent, selected, touched } = data;
+  const { draw, morph, reducedMotion, transparent, selected, touched, motion } = data;
+  const body = useRef<MeshStandardMaterial>(null);
+  /** Followers for hover swell and selection lift (view only). */
+  const hover = useRef(0), lift = useRef(0);
   const color = recordColor(draw.node);
   const preimage = draw.role === "preimage";
   const nebula = draw.role === "nebula" || preimage;
-  useFrame(({ clock }) => {
+  useFrame((_, delta) => {
     if (!group.current) return;
     const from = morph?.from.get(draw.node.id);
     const pose = from ? interpolatePose(from, draw, reducedMotion ? 1 : (performance.now() - morph!.startedAt) / ORBITAL_TRANSITION_MS) : draw;
-    const drift = reducedMotion || selected || !nebula ? 0 : Math.sin(clock.elapsedTime * 0.45 + draw.node.chrono) * 2.2;
-    group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1] + drift, pose.position[2] - draw.position[2]);
-    group.current.scale.setScalar(pose.radius / draw.radius);
+    const t = now();
+    hover.current += ((motion.hoveredId === draw.node.id ? 1 : 0) - hover.current) * (reducedMotion ? 1 : Math.min(1, delta * 10));
+    lift.current += ((selected && (draw.role === "main" || draw.role === "preview") ? 1 : 0) - lift.current) * (reducedMotion ? 1 : Math.min(1, delta * 6));
+    const breath = reducedMotion || (selected && nebula) ? [0, 0, 0] : breathOffset(draw, t);
+    const ripple = reducedMotion ? [0, 0, 0] : rippleOffset(draw.position, t, motion.ripples);
+    const raise = draw.radius * 0.22 * lift.current;
+    group.current.position.set(pose.position[0] - draw.position[0] + breath[0] + ripple[0], pose.position[1] - draw.position[1] + breath[1] + ripple[1] + raise, pose.position[2] - draw.position[2] + breath[2] + ripple[2]);
+    const pulse = draw.node.state === "proposed" && !reducedMotion ? 1 + 0.035 * Math.sin(t * 2.2) : 1;
+    group.current.scale.setScalar(pose.radius / draw.radius * (1 + 0.08 * hover.current) * pulse);
+    if (body.current) body.current.emissiveIntensity = baseGlow + 0.35 * hover.current + (reducedMotion ? 0 : 0.7 * glintLevel(motion.glints.get(draw.node.id), t));
   });
   /** Nebula weight: strongly linked entities are solid, weak ones faint —
    * proposed/held keep their own (lower) bands so states stay distinct. */
@@ -43,11 +55,12 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
   const light = nebula && weight < 0.35 && !selected;
   const shown = preimage ? opacity * 0.75 : opacity;
   const segments: [number, number] = light ? [16, 12] : [32, 24];
+  const baseGlow = selected ? 0.7 : active ? 0.45 : nebula ? 0.08 + 0.2 * weight : 0.2;
   return <group ref={group} userData={{ orbitalGlyph: draw.node.id }}>
     {touched && <mesh raycast={noRaycast}><boxGeometry args={[draw.radius * 2.7, draw.radius * 2.7, draw.radius * 2.7]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.95} toneMapped={false} depthTest={false} /></mesh>}
     <mesh raycast={transparent || preimage ? noRaycast : undefined}>
       <sphereGeometry args={[draw.radius, ...segments]} />
-      <meshStandardMaterial color={nebula ? color : "#12283c"} emissive={color} emissiveIntensity={selected ? 0.7 : active ? 0.45 : nebula ? 0.08 + 0.2 * weight : 0.2} metalness={0.35} roughness={0.27} transparent opacity={shown} depthWrite={!transparent && !preimage && draw.node.state === "canon" && opacity >= 0.5} />
+      <meshStandardMaterial ref={body} color={nebula ? color : "#12283c"} emissive={color} emissiveIntensity={baseGlow} metalness={0.35} roughness={0.27} transparent opacity={shown} depthWrite={!transparent && !preimage && draw.node.state === "canon" && opacity >= 0.5} />
     </mesh>
     <mesh raycast={noRaycast}>
       <sphereGeometry args={[draw.radius * 1.035, light ? 10 : 20, light ? 8 : 16]} />
@@ -228,12 +241,12 @@ function AnimatedTimePath({ path, morph, reducedMotion }: { path: OrbitalPath; m
   </>;
 }
 
-function VisibleConnections({ edges, bus }: { edges: WorldEdge[]; bus: LabelBus }) {
+function VisibleConnections({ edges, bus, color = "#d8bdff", opacity = 0.8 }: { edges: WorldEdge[]; bus: LabelBus; color?: string; opacity?: number }) {
   const line = useMemo(() => {
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(new Float32Array(edges.length * 6), 3));
-    return new LineSegments(geometry, new LineBasicMaterial({ color: "#d8bdff", transparent: true, opacity: 0.8, depthWrite: false }));
-  }, [edges]);
+    return new LineSegments(geometry, new LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
+  }, [edges, color, opacity]);
   useEffect(() => () => { line.geometry.dispose(); line.material.dispose(); }, [line]);
   useFrame(() => {
     const attribute = line.geometry.attributes.position;
@@ -322,6 +335,66 @@ function ParentBackdrop({ ghosts, path, morph, reducedMotion }: { ghosts: Backdr
   </group>;
 }
 
+/** Ground rings for clicks on empty space: they spread with the ripple front. */
+const GROUND_Y = -950;
+function RippleRings({ motion }: { motion: MotionBus }) {
+  const rings = useMemo(() => Array.from({ length: 6 }, () => new Mesh(new RingGeometry(0.97, 1, 96), new MeshBasicMaterial({ color: "#7cc8ff", transparent: true, opacity: 0, depthWrite: false, toneMapped: false }))), []);
+  useEffect(() => () => rings.forEach((ring) => { ring.geometry.dispose(); (ring.material as MeshBasicMaterial).dispose(); }), [rings]);
+  useFrame(() => {
+    const t = now();
+    const blank = motion.ripples.filter((ripple) => ripple.kind === "blank");
+    rings.forEach((ring, index) => {
+      const ripple = blank[index];
+      const age = ripple ? t - ripple.start : Infinity;
+      ring.visible = age >= 0 && age < RIPPLE_LIFE;
+      if (!ripple || !ring.visible) return;
+      ring.position.set(ripple.origin[0], GROUND_Y + 4, ripple.origin[2]);
+      ring.rotation.set(-Math.PI / 2, 0, 0);
+      ring.scale.setScalar(Math.max(1, RIPPLE_SPEED * age));
+      (ring.material as MeshBasicMaterial).opacity = 0.75 * (1 - age / RIPPLE_LIFE) ** 2;
+    });
+  });
+  return <>{rings.map((ring, index) => <primitive key={index} object={ring} raycast={noRaycast} />)}</>;
+}
+
+/** Subtle depth from the pointer (desktop) or device tilt (phone): a tiny
+ * focal offset, at most ~0.6% of the camera distance, easing back to centre. */
+function PointerParallax({ graphRef, enabled }: { graphRef: { current: GraphCanvasRef | null }; enabled: boolean }) {
+  const { gl } = useThree();
+  const target = useRef<[number, number]>([0, 0]);
+  const current = useRef<[number, number]>([0, 0]);
+  useEffect(() => {
+    target.current = [0, 0];
+    if (!enabled) return;
+    const surface = gl.domElement;
+    const move = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") return;
+      const rectangle = surface.getBoundingClientRect();
+      target.current = [(event.clientX - rectangle.left) / rectangle.width - 0.5, (event.clientY - rectangle.top) / rectangle.height - 0.5];
+    };
+    const leave = () => { target.current = [0, 0]; };
+    const tilt = (event: DeviceOrientationEvent) => {
+      if (event.gamma === null || event.beta === null) return;
+      target.current = [Math.max(-0.5, Math.min(0.5, event.gamma / 60)), Math.max(-0.5, Math.min(0.5, (event.beta - 45) / 60))];
+    };
+    surface.addEventListener("pointermove", move);
+    surface.addEventListener("pointerleave", leave);
+    window.addEventListener("deviceorientation", tilt);
+    return () => { surface.removeEventListener("pointermove", move); surface.removeEventListener("pointerleave", leave); window.removeEventListener("deviceorientation", tilt); };
+  }, [gl, enabled]);
+  useFrame((_, delta) => {
+    const controls = graphRef.current?.getControls?.();
+    if (!controls) return;
+    const ease = Math.min(1, delta * 3);
+    const [x, y] = current.current;
+    current.current = [x + (target.current[0] - x) * ease, y + (target.current[1] - y) * ease];
+    if (Math.abs(current.current[0]) < 1e-4 && Math.abs(current.current[1]) < 1e-4 && Math.abs(x) < 1e-4 && Math.abs(y) < 1e-4) return;
+    const reach = controls.distance * 0.012;
+    void controls.setFocalOffset(current.current[0] * reach, -current.current[1] * reach, 0, false);
+  });
+  return null;
+}
+
 function ActivityBounds({ draws, bus }: { draws: OrbitalDraw[]; bus: LabelBus }) {
   const bounds = useRef<Group>(null);
   useFrame(() => {
@@ -342,7 +415,7 @@ function ActivityBounds({ draws, bus }: { draws: OrbitalDraw[]; bus: LabelBus })
   return <group ref={bounds} userData={{ orbitalActivityBounds: true }}><mesh raycast={noRaycast}><boxGeometry args={[1, 1, 1]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.5} toneMapped={false} depthTest={false} depthWrite={false} /></mesh></group>;
 }
 
-function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, enclosure, onReveal, onExtremeBack }: { draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; enclosure?: Enclosure; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
+function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, enclosure, hoverCard, motion, onReveal, onExtremeBack }: { draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; enclosure?: Enclosure; hoverCard?: { current: HTMLDivElement | null }; motion?: MotionBus; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
   const { camera, scene, size, gl } = useThree();
   const byId = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw])), [draws]);
   const revealed = useRef(revealedId); revealed.current = revealedId;
@@ -400,6 +473,21 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
       element.style.transform = `translate(${horizontal}px, ${vertical}px) translate(-50%, 0)`;
       occupied.push(rectangle);
     }
+    const card = hoverCard?.current;
+    if (card) {
+      // The hover card floats just above the hovered sphere's projected edge.
+      const id = motion?.hoveredId;
+      const world = id ? bus.positions.get(id) : undefined;
+      const hovered = id ? byId.get(id) : undefined;
+      const point = world ? new Vector3(...world).project(camera) : null;
+      if (!world || !hovered || !point || point.z > 1) card.style.visibility = "hidden";
+      else {
+        const edge = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(hovered.radius).add(new Vector3(...world)).project(camera);
+        const pixels = Math.abs(edge.x - point.x) * size.width / 2;
+        card.style.transform = `translate(${(point.x * 0.5 + 0.5) * size.width}px, ${(-point.y * 0.5 + 0.5) * size.height - pixels - 12}px) translate(-50%, -100%)`;
+        card.style.visibility = "visible";
+      }
+    }
     const main = candidates.filter((entry) => entry.draw.role === "main");
     if (main.length && performance.now() - zoomOut.current < 1000) {
       const extent = Math.max(...main.map((entry) => entry.position.x)) - Math.min(...main.map((entry) => entry.position.x));
@@ -453,24 +541,36 @@ interface Props {
   onEnter: (draw: OrbitalDraw) => void;
   onReveal: (id: string | null) => void;
   onBack: () => void;
+  /** View-only motion state shared with every glyph. */
+  motion: MotionBus;
+  /** Faint threads from a hovered entity to its visible scenes. */
+  hoverEdges?: WorldEdge[];
+  hoverCard?: { current: HTMLDivElement | null };
+  onHover?: (id: string | null) => void;
+  onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack }, ref) {
-  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id) } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds]);
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank }, ref) {
+  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
   const enclosure = useMemo(() => { const ghost = backdrop?.ghosts.find((entry) => entry.current); return ghost ? { center: ghost.position, radius: ghost.radius } : undefined; }, [backdrop]);
   return <GraphCanvas ref={ref} nodes={nodes} edges={[]} theme={theme} renderNode={renderSphere} labelType="none" layoutType="forceDirected3d" cameraMode="rotate" draggable={false} animated={false} minDistance={16} maxDistance={1000000} selections={[]} glOptions={{ antialias: true, preserveDrawingBuffer: true }}
-    onNodeClick={(node) => onSelect((node.data.glyph as GlyphData).draw)} onNodeDoubleClick={(node) => onEnter((node.data.glyph as GlyphData).draw)}>
+    onNodeClick={(node) => onSelect((node.data.glyph as GlyphData).draw)} onNodeDoubleClick={(node) => onEnter((node.data.glyph as GlyphData).draw)}
+    onNodePointerOver={(node) => { if ((node.data.glyph as GlyphData).draw.role !== "preimage") onHover?.(node.id); }} onNodePointerOut={(node) => { if (motion.hoveredId === node.id) onHover?.(null); }}
+    onCanvasClick={(event) => onBlank?.(event)}>
     <ambientLight intensity={0.85} /><directionalLight position={[800, 1200, 1800]} intensity={1.5} color="#c4eaff" />
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     <axesHelper args={[900]} position={[-1400, -945, -1200]} />
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} />)}
     <VisibleConnections edges={edges} bus={bus} />
+    {hoverEdges.length > 0 && <VisibleConnections edges={hoverEdges} bus={bus} color="#d9cbff" opacity={0.55} />}
+    {!reducedMotion && <RippleRings motion={motion} />}
+    <PointerParallax graphRef={ref as { current: GraphCanvasRef | null }} enabled={!reducedMotion} />
     {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} />)}
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
-    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} enclosure={enclosure} onReveal={onReveal} onExtremeBack={onBack} />
+    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
     <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} />
   </GraphCanvas>;

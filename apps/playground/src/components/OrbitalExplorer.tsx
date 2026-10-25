@@ -13,6 +13,8 @@ import { placePictures, type OrbitIllustration } from "../data/pictureNodes";
 import { orbitalLocation } from "../data/orbitalLocation";
 import { causalProjection, worldCausalLinks } from "../data/causalProjection";
 import { planJoins, type LastPose, type PendingJoin } from "../data/joinAnimation";
+import { addRipple, createMotionBus, now, rayPlanePoint, scheduleGlints } from "../data/orbitalMotion";
+import { KIND_LABEL } from "../archive";
 import type { BookEntry } from "../data/bookCatalog";
 import type { AlbumPanelPicture } from "./AlbumPanel";
 
@@ -63,6 +65,10 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   const lastFollow = useRef("");
   const suppressInspection = useRef(false);
   const bus = useMemo<LabelBus>(() => ({ targets: new Map(), active: new Set(), positions: new Map(), trackTargets: new Map() }), []);
+  /** View-only motion (breathing, ripples, glints) and hover, shared with every glyph. */
+  const motion = useMemo(createMotionBus, []);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const hoverCard = useRef<HTMLDivElement>(null);
   const scope = path[path.length - 1];
   const level = useMemo(() => orbitalLevel(world, scope, activityNodes, activityEdges), [world, scope, activityNodes, activityEdges]);
   const surrounding = useMemo(() => surroundingEntities(level, selectedId), [level, selectedId]);
@@ -190,6 +196,22 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
   const causalLinks = useMemo(() => worldCausalLinks(world), [world]);
   const causal = useMemo(() => causalProjection(level, baseDraws, causalLinks), [level, baseDraws, causalLinks]);
+  const hoveredDraw = hoveredId ? baseDraws.find((draw) => draw.node.id === hoveredId) : undefined;
+  /** Hovering an entity previews its links to visible spheres as faint threads. */
+  const hoverEdges = useMemo(() => {
+    if (!hoveredDraw || hoveredDraw.role !== "nebula" || hoveredDraw.node.id === selectedId) return [];
+    const visible = new Set(baseDraws.map((draw) => draw.node.id));
+    // Links into scenes hidden inside a sphere end on that containing sphere.
+    const nested = nestedEntityConnections(level, baseDraws, hoveredDraw.node.id);
+    const container = new Map(nested.draws.map((port) => [port.node.id, port.previewParentId]));
+    const threads = new Map<string, WorldEdge>();
+    for (const edge of nested.edges) {
+      const to = visible.has(edge.to) ? edge.to : container.get(edge.to);
+      if (to && visible.has(edge.from) && visible.has(to) && !threads.has(to)) threads.set(to, { ...edge, id: `hover:${edge.from}:${to}`, to });
+    }
+    return [...threads.values()];
+  }, [hoveredDraw, selectedId, level, baseDraws]);
+  useEffect(() => { motion.hoveredId = null; setHoveredId(null); }, [scope.key, motion]);
   /** EM joins: a still-drawn dropped record moves onto its survivor; one the
    * new snapshot already removed gets a view-only preimage at the survivor,
    * and the morph glides both in from their last drawn poses. */
@@ -390,10 +412,32 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   const inspect = (draw: OrbitalDraw) => {
     if (singleClick.current) clearTimeout(singleClick.current);
     singleClick.current = setTimeout(() => {
+      const linked = nestedEntityConnections(level, baseDraws, draw.node.id).edges;
       setSelectedId(draw.node.id);
-      onSelect({ node: draw.node, nodes: draws.map((entry) => entry.node), edges: nestedEntityConnections(level, baseDraws, draw.node.id).edges, lookupNodes: level.sourceNodes, contents: orbitalContents(draw.node, level), album: albumInfo });
+      onSelect({ node: draw.node, nodes: draws.map((entry) => entry.node), edges: linked, lookupNodes: level.sourceNodes, contents: orbitalContents(draw.node, level), album: albumInfo });
       setPendingFocus(draw);
+      if (!reducedMotion) {
+        // Selection answers physically: a lift wave along the timeline and
+        // linked entities glinting in order of link strength.
+        const t = now();
+        addRipple(motion, { kind: "select", origin: draw.position, start: t });
+        scheduleGlints(motion, draw.node.id, linked, t);
+      }
     }, 260);
+  };
+  /** Click on empty space: a soft ripple from that point and the selection clears. */
+  const blankClick = (event: MouseEvent) => {
+    const controls = graphRef.current?.getControls?.();
+    const surface = event.target instanceof HTMLElement ? event.target.getBoundingClientRect() : null;
+    if (controls && surface && !reducedMotion) {
+      const camera = controls.camera;
+      const ndc = new Vector3(((event.clientX - surface.left) / surface.width) * 2 - 1, -((event.clientY - surface.top) / surface.height) * 2 + 1, 0.5).unproject(camera);
+      const direction = ndc.sub(camera.position).normalize();
+      const origin = rayPlanePoint(camera.position.toArray() as Position3, direction.toArray() as Position3, 0) ?? controls.getTarget(new Vector3(), false).toArray() as Position3;
+      addRipple(motion, { kind: "blank", origin, start: now() });
+    }
+    setHover(null);
+    if (!followingActivity && selectedId) setSelectedId(null);
   };
   useEffect(() => {
     if (followingActivity || restoreRequest || !focusRequest || lastFocus.current === focusRequest.sequence) return;
@@ -448,6 +492,18 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     setPath((current) => current.slice(0, index + 1));
     setSelectedId(null); setRevealedId(null);
   };
+  const setHover = useCallback((id: string | null) => {
+    motion.hoveredId = id;
+    setHoveredId(id);
+    const canvas = document.querySelector<HTMLCanvasElement>(".orbital-stage canvas");
+    if (canvas) canvas.style.cursor = id ? "pointer" : "";
+  }, [motion]);
+  useEffect(() => {
+    const stage = document.querySelector(".orbital-stage");
+    const leave = () => setHover(null);
+    stage?.addEventListener("pointerleave", leave);
+    return () => stage?.removeEventListener("pointerleave", leave);
+  }, [setHover]);
   const reveal = useCallback((id: string | null) => setRevealedId((current) => current === id ? current : id), []);
   const allPositions = layout.draws.map((draw) => bus.positions.get(draw.node.id) ?? draw.position);
   const zoomBy = (delta: number) => document.querySelector(".orbital-stage")?.dispatchEvent(new CustomEvent("orbital-zoom", { detail: { delta } }));
@@ -469,13 +525,26 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       if (!event.metaKey && !event.ctrlKey && ["+", "=", "-", "_"].includes(event.key)) { event.preventDefault(); zoomBy(event.key === "+" || event.key === "=" ? -80 : 80); }
       if (event.key === "Enter" && selected) { event.preventDefault(); if (event.shiftKey) enter(selected); else inspect(selected); }
     }}>
-      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations ? edges : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} /></div>
-      <div className="labels-layer orbital-labels">{draws.filter((draw) => draw.role !== "preimage").map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}${draw.role === "nebula" && (draw.prominence ?? 1) < 0.35 && selectedId !== draw.node.id ? " is-faint" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
+      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations ? edges : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} /></div>
+      <div className="labels-layer orbital-labels">{draws.filter((draw) => draw.role !== "preimage").map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}${draw.role === "nebula" && (draw.prominence ?? 1) < 0.35 && selectedId !== draw.node.id ? " is-faint" : ""}${hoveredId === draw.node.id ? " is-hovered" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onPointerEnter={() => setHover(draw.node.id)} onPointerLeave={() => { if (motion.hoveredId === draw.node.id) setHover(null); }} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
         <span className="node-code">{draw.role === "preview" ? "REVEALED / " : ""}{draw.node.kind.toUpperCase()}{draw.node.state !== "canon" ? ` · ${draw.node.state}` : ""}</span><b>{draw.node.label}</b>{draw.node.cluster && <span>{draw.node.cluster.ids.length} records · orbital group</span>}{showRelations && !!causal.insideBy.get(draw.node.id) && <span className="causal-inside">{causal.insideBy.get(draw.node.id)} causal inside</span>}
       </button>)}</div>
+      <div ref={hoverCard} className="orbital-hover-card" aria-hidden="true" style={{ visibility: "hidden" }}>{hoveredDraw && <HoverCard key={hoveredDraw.node.id} draw={hoveredDraw} links={hoverEdges.length} causalInside={causal.insideBy.get(hoveredDraw.node.id) ?? 0} enterable={!!hoveredDraw.entry?.scope} />}</div>
       <div className="orbital-time-key" aria-hidden="true"><i />TIME → <span>Blue arrows follow narrative order</span></div>
       {morph && <div className="orbital-transition-status" role="status">Uncoiling into the local timeline…</div>}
     </div>
     <div className="scene-legend"><span><i className="canon" />Canon</span><span><i className="proposed" />Proposed</span><span><i className="held" />Held</span><span>Spheres / weighted nebula</span><span className="causal-key"><i />Causes (stored) · dashed = projected</span><button aria-pressed={reducedMotion} onClick={onMotion}>{reducedMotion ? "Motion reduced" : "Motion on"}</button></div>
   </div>;
+}
+
+/** Small floating card for the hovered sphere; its title rolls in per character. */
+function HoverCard({ draw, links, causalInside, enterable }: { draw: OrbitalDraw; links: number; causalInside: number; enterable: boolean }) {
+  const title = (draw.node.summary ?? draw.node.label).trim();
+  const rolled = [...title.slice(0, 28)];
+  const detail = draw.node.cluster ? `${draw.node.cluster.ids.length} scenes · orbital group` : draw.role === "nebula" ? `linked to ${links} visible sphere${links === 1 ? "" : "s"}` : enterable ? "Zoom to reveal · double-click a revealed sphere to enter" : "Click to inspect";
+  return <>
+    <span className="hover-kind">{KIND_LABEL[draw.node.kind] ?? draw.node.kind}{draw.node.state !== "canon" ? ` · ${draw.node.state}` : ""}</span>
+    <b>{rolled.map((character, index) => <span key={index} style={{ animationDelay: `${index * 14}ms` }}>{character}</span>)}{title.length > 28 ? "…" : ""}</b>
+    <small>{detail}{causalInside ? ` · ${causalInside} causal inside` : ""}</small>
+  </>;
 }
