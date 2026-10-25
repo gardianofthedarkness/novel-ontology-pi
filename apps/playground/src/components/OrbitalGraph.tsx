@@ -1,11 +1,11 @@
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type NodeRendererProps } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { BufferGeometry, CanvasTexture, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
+import { BufferGeometry, CanvasTexture, MeshBasicMaterial, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
 import { recordColor } from "../archive";
 import type { WorldEdge } from "../types";
 import type { Position3 } from "../data/spatialLayout";
-import { interpolatePose, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
+import { interpolatePose, uncoilEase, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
 import type { CausalArrow } from "../data/causalProjection";
 import { framePositions, type LabelBus } from "./WorldGraph";
 import { ScaleNavigation } from "./ScaleNavigation";
@@ -291,6 +291,35 @@ function CausalArc({ arrow, bus, radii }: { arrow: CausalArrow; bus: LabelBus; r
   </>;
 }
 
+/** Previous level as a vague recoiled shadow behind the current world.
+ * Separate group: never raycast, labelled, focused or framed; it only
+ * fades in with the established level transition. */
+function ParentBackdrop({ ghosts, path, morph, reducedMotion }: { ghosts: BackdropGhost[]; path: Position3[]; morph: OrbitalMorph | null; reducedMotion: boolean }) {
+  const materials = useMemo(() => ({
+    shell: new MeshBasicMaterial({ color: "#7fb6d8", wireframe: true, transparent: true, opacity: 0.028, depthWrite: false, toneMapped: false }),
+    current: new MeshBasicMaterial({ color: "#a9d8f2", wireframe: true, transparent: true, opacity: 0.045, depthWrite: false, toneMapped: false }),
+    fill: new MeshBasicMaterial({ color: "#5e9cc4", transparent: true, opacity: 0.012, depthWrite: false, toneMapped: false }),
+  }), []);
+  const spine = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: "#51b7ff", transparent: true, opacity: 0.08, depthWrite: false, toneMapped: false })), [path]);
+  useEffect(() => () => { spine.geometry.dispose(); spine.material.dispose(); }, [spine]);
+  useEffect(() => () => { Object.values(materials).forEach((material) => material.dispose()); }, [materials]);
+  useFrame(() => {
+    const fade = morph && !reducedMotion ? uncoilEase((performance.now() - morph.startedAt) / ORBITAL_TRANSITION_MS) : 1;
+    materials.shell.opacity = 0.028 * fade;
+    materials.current.opacity = 0.045 * fade;
+    materials.fill.opacity = 0.012 * fade;
+    (spine.material as LineBasicMaterial).opacity = 0.08 * fade;
+  });
+  if (!ghosts.length) return null;
+  return <group userData={{ orbitalBackdrop: true }} renderOrder={-1}>
+    <primitive object={spine} raycast={noRaycast} />
+    {ghosts.map((ghost) => <group key={ghost.id} position={ghost.position}>
+      <mesh raycast={noRaycast} material={ghost.current ? materials.current : materials.shell}><sphereGeometry args={[ghost.radius, 14, 9]} /></mesh>
+      <mesh raycast={noRaycast} material={materials.fill}><sphereGeometry args={[ghost.radius * 0.995, 16, 10]} /></mesh>
+    </group>)}
+  </group>;
+}
+
 function ActivityBounds({ draws, bus }: { draws: OrbitalDraw[]; bus: LabelBus }) {
   const bounds = useRef<Group>(null);
   useFrame(() => {
@@ -395,6 +424,7 @@ interface Props {
   paths: OrbitalPath[];
   edges: WorldEdge[];
   causal?: CausalArrow[];
+  backdrop?: { ghosts: BackdropGhost[]; path: Position3[] };
   bus: LabelBus;
   selectedId: string | null;
   touchedIds?: string[];
@@ -409,7 +439,7 @@ interface Props {
   onBack: () => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id) } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -418,6 +448,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <ambientLight intensity={0.85} /><directionalLight position={[800, 1200, 1800]} intensity={1.5} color="#c4eaff" />
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     <axesHelper args={[900]} position={[-1400, -945, -1200]} />
+    {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} />)}
     <VisibleConnections edges={edges} bus={bus} />
     {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} />)}

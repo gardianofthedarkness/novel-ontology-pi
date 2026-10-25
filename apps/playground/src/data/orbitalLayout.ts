@@ -106,6 +106,40 @@ export function layoutOrbitalPreview(parent: OrbitalDraw, level: OrbitalLevel): 
   return { draws, paths };
 }
 
+export interface BackdropGhost { id: string; position: Position3; radius: number; current: boolean; state: WorldNode["state"] }
+/**
+ * The previous level, seen from inside the entered sphere: the inverse of the
+ * entry uncoil. Entering straightened a helix inside the parent; here the
+ * parent's straight spine is recoiled onto the same helix form, scaled up so
+ * the entered sphere's ghost encloses the current world and its siblings
+ * continue the spiral beyond it (parallel tracks keep their offsets). View
+ * geometry only: no labels, picking, focus or framing use these.
+ */
+export function layoutParentBackdrop(parentDraws: OrbitalDraw[], enteredId: string, childDraws: OrbitalDraw[]): { ghosts: BackdropGhost[]; path: Position3[] } {
+  const parents = parentDraws.filter((draw) => draw.role === "main");
+  const entered = parents.find((draw) => draw.node.id === enteredId);
+  const children = childDraws.filter((draw) => draw.role === "main");
+  if (!entered || !children.length) return { ghosts: [], path: [] };
+  const tracks = [...new Set(parents.map((draw) => trackKey(draw.node)))].sort();
+  const times = [...new Set(parents.map((draw) => draw.node.chrono))].sort((first, second) => first - second);
+  const progress = (node: WorldNode) => times.length <= 1 ? 0.5 : times.indexOf(node.chrono) / (times.length - 1);
+  const center = [0, 1, 2].map((axis) => children.reduce((sum, draw) => sum + draw.position[axis], 0) / children.length) as Position3;
+  const extent = Math.max(...children.map((draw) => Math.abs(draw.position[0] - center[0]) + draw.radius));
+  const enclosing = Math.max(900, extent * 1.25);
+  const giant = enclosing * 2.6 * Math.max(1, times.length - 1) / 1.2;
+  const origin = helixPoint(progress(entered.node), tracks.indexOf(trackKey(entered.node)), tracks.length, giant);
+  const place = (point: Position3) => point.map((value, axis) => center[axis] + value - origin[axis]) as Position3;
+  const ghosts = parents.map((draw): BackdropGhost => ({
+    id: draw.node.id,
+    position: place(helixPoint(progress(draw.node), tracks.indexOf(trackKey(draw.node)), tracks.length, giant)),
+    radius: Math.round(enclosing * Math.min(1.6, Math.max(0.4, draw.radius / entered.radius))),
+    current: draw.node.id === enteredId,
+    state: draw.node.state,
+  }));
+  const path = Array.from({ length: 121 }, (_, index) => place(helixPoint(index / 120, tracks.indexOf(trackKey(entered.node)), tracks.length, giant)));
+  return { ghosts, path };
+}
+
 export function visibleOrbitalEdges(edges: WorldEdge[], draws: OrbitalDraw[], selectedId: string | null): WorldEdge[] {
   if (!selectedId) return [];
   const ids = new Set(draws.map((draw) => draw.node.id));
