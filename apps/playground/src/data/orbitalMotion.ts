@@ -20,8 +20,13 @@ export interface MotionBus {
   hoveredId: string | null;
   /** Glint start times (seconds) per draw id. */
   glints: Map<string, number>;
+  /** Camera-inertia sway for the current level (see buildInertiaRig). */
+  inertia?: InertiaRig;
 }
 export const createMotionBus = (): MotionBus => ({ ripples: [], hoveredId: null, glints: new Map() });
+const STILL: Position3 = [0, 0, 0];
+/** Current camera-inertia sway of one draw (zero when none). */
+export const swayOf = (bus: MotionBus, id: string): Position3 => bus.inertia?.bodies.get(id)?.p ?? STILL;
 
 export const RIPPLE_SPEED = 2600;
 export const RIPPLE_LIFE = 2.4;
@@ -125,4 +130,81 @@ export function pointAlong(route: Position3[], u: number): Position3 {
     remaining -= lengths[index];
   }
   return route[route.length - 1];
+}
+
+/**
+ * Camera inertia: the world reacts to camera moves as if it floated in a
+ * liquid. Timeline spheres sit on soft springs at their places and are tied
+ * to their neighbours like beads on a string, so a disturbance travels along
+ * the spine. Surrounding entities hang on their timeline sphere by a looser
+ * "gravity" spring, so they lag and swing more (weak links swing most). Drag
+ * settles everything. Driven by camera acceleration normalised by camera
+ * distance, so it feels the same at every zoom. Offsets are view only.
+ */
+export interface InertiaBody { p: Position3; v: Position3 }
+interface InertiaTuning { anchor?: string; k: number; c: number; g: number; limit: number }
+export interface InertiaRig { spine: string[]; tuning: Map<string, InertiaTuning>; bodies: Map<string, InertiaBody> }
+
+export const INERTIA_MAX_DRIVE = 6;
+const STRING_K = 20;
+
+export function buildInertiaRig(draws: OrbitalDraw[], previous?: InertiaRig): InertiaRig {
+  const spineDraws = draws.filter((draw) => draw.role === "main").sort((first, second) => first.position[0] - second.position[0]);
+  const nearestSpine = (draw: OrbitalDraw) => {
+    let best: OrbitalDraw | undefined;
+    let distance = Infinity;
+    for (const entry of spineDraws) {
+      const d = Math.hypot(...entry.position.map((value, axis) => value - draw.position[axis]));
+      if (d < distance) { distance = d; best = entry; }
+    }
+    return best?.node.id;
+  };
+  const tuning = new Map<string, InertiaTuning>();
+  for (const draw of draws) {
+    const r = draw.radius;
+    if (draw.role === "main") tuning.set(draw.node.id, { k: 14, c: 4.2, g: 0.9 * r, limit: 0.45 * r });
+    else if (draw.role === "preview") tuning.set(draw.node.id, { anchor: draw.previewParentId && spineDraws.some((entry) => entry.node.id === draw.previewParentId) ? draw.previewParentId : nearestSpine(draw), k: 10, c: 3, g: 1.2 * r, limit: 0.9 * r });
+    else if (draw.role === "nebula" || draw.role === "preimage") {
+      const loose = 1 - Math.min(1, Math.max(0, draw.prominence ?? 0.7));
+      tuning.set(draw.node.id, { anchor: nearestSpine(draw), k: 7 - 3.5 * loose, c: 2.3 - 0.4 * loose, g: (1.4 + 0.7 * loose) * r, limit: (0.9 + 0.5 * loose) * r });
+    }
+  }
+  const bodies = new Map<string, InertiaBody>();
+  for (const id of tuning.keys()) bodies.set(id, previous?.bodies.get(id) ?? { p: [0, 0, 0], v: [0, 0, 0] });
+  return { spine: spineDraws.map((draw) => draw.node.id), tuning, bodies };
+}
+
+/** Advance the rig by dt seconds under a normalised camera acceleration (1/s²). */
+export function stepInertia(rig: InertiaRig, drive: Position3, dt: number): void {
+  const magnitude = Math.hypot(...drive);
+  const scale = magnitude > INERTIA_MAX_DRIVE ? INERTIA_MAX_DRIVE / magnitude : 1;
+  const force = drive.map((value) => value * scale) as Position3;
+  const steps = Math.max(1, Math.ceil(Math.min(dt, 0.1) / (1 / 120)));
+  const h = Math.min(dt, 0.1) / steps;
+  const zero: InertiaBody = { p: [0, 0, 0], v: [0, 0, 0] };
+  for (let step = 0; step < steps; step++) {
+    const accelerations = new Map<string, Position3>();
+    for (const [id, tune] of rig.tuning) {
+      const body = rig.bodies.get(id)!;
+      const target = tune.anchor ? rig.bodies.get(tune.anchor)?.p ?? zero.p : zero.p;
+      const a = body.p.map((value, axis) => -tune.k * (value - target[axis]) - tune.c * body.v[axis] + tune.g * force[axis]) as Position3;
+      if (!tune.anchor) {
+        const index = rig.spine.indexOf(id);
+        for (const neighbour of [rig.spine[index - 1], rig.spine[index + 1]]) {
+          const other = neighbour ? rig.bodies.get(neighbour) : undefined;
+          if (other) for (let axis = 0; axis < 3; axis++) a[axis] -= STRING_K * (body.p[axis] - other.p[axis]);
+        }
+      }
+      accelerations.set(id, a);
+    }
+    for (const [id, tune] of rig.tuning) {
+      const body = rig.bodies.get(id)!, a = accelerations.get(id)!;
+      for (let axis = 0; axis < 3; axis++) { body.v[axis] += a[axis] * h; body.p[axis] += body.v[axis] * h; }
+      const length = Math.hypot(...body.p);
+      if (length > tune.limit) {
+        const shrink = tune.limit / length;
+        for (let axis = 0; axis < 3; axis++) { body.p[axis] *= shrink; body.v[axis] *= 0.5; }
+      }
+    }
+  }
 }

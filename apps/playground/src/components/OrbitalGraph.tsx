@@ -7,7 +7,7 @@ import type { WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
 import { carryPose, carryTangent, entryFrame, interpolatePose, morphProgress, OPENING_STAGGER_MS, uncoilEase, type OrbitalPose, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
 import type { CausalArrow } from "../data/causalProjection";
-import { breathOffset, glintLevel, heartbeatRoute, now, pointAlong, rippleOffset, RIPPLE_LIFE, RIPPLE_SPEED, type MotionBus } from "../data/orbitalMotion";
+import { breathOffset, buildInertiaRig, glintLevel, heartbeatRoute, now, pointAlong, rippleOffset, stepInertia, swayOf, RIPPLE_LIFE, RIPPLE_SPEED, type MotionBus } from "../data/orbitalMotion";
 import { framePositions, type LabelBus } from "./WorldGraph";
 import { ScaleNavigation } from "./ScaleNavigation";
 
@@ -71,7 +71,8 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
     const breath = reducedMotion || (selected && nebula) ? [0, 0, 0] : breathOffset(draw, t);
     const ripple = reducedMotion ? [0, 0, 0] : rippleOffset(draw.position, t, motion.ripples);
     const raise = draw.radius * 0.22 * lift.current;
-    group.current.position.set(pose.position[0] - draw.position[0] + breath[0] + ripple[0], pose.position[1] - draw.position[1] + breath[1] + ripple[1] + raise, pose.position[2] - draw.position[2] + breath[2] + ripple[2]);
+    const sway = swayOf(motion, draw.node.id);
+    group.current.position.set(pose.position[0] - draw.position[0] + breath[0] + ripple[0] + sway[0], pose.position[1] - draw.position[1] + breath[1] + ripple[1] + raise + sway[1], pose.position[2] - draw.position[2] + breath[2] + ripple[2] + sway[2]);
     const pulse = draw.node.state === "proposed" && !reducedMotion ? 1 + 0.035 * Math.sin(t * 2.2) : 1;
     group.current.scale.setScalar(pose.radius / draw.radius * (1 + 0.08 * hover.current) * pulse);
     // Frost front: the frosted shell keeps only what lies below a horizontal
@@ -204,13 +205,14 @@ function GlassCase({ id, width, height, depth, opacity, motion }: { id: string; 
 function PictureGlyph({ node }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
-  const { draw, morph, reducedMotion, transparent, selected, touched } = data;
+  const { draw, morph, reducedMotion, transparent, selected, touched, motion } = data;
   const carried = useCarriedPose(draw, morph, reducedMotion);
   const { camera } = useThree();
   useFrame((_, delta) => {
     if (!group.current) return;
     const pose = carried(delta);
-    group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1], pose.position[2] - draw.position[2]);
+    const sway = swayOf(motion, draw.node.id);
+    group.current.position.set(pose.position[0] - draw.position[0] + sway[0], pose.position[1] - draw.position[1] + sway[1], pose.position[2] - draw.position[2] + sway[2]);
     group.current.scale.setScalar(pose.radius / draw.radius);
     /** Fixed orientation: the card's plane stands perpendicular to the
      * timeline tangent (draw.facing), at all times — never billboarded
@@ -254,13 +256,14 @@ function PictureGlyph({ node }: NodeRendererProps) {
 function PortraitGlyph({ node }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
-  const { draw, morph, reducedMotion, transparent, selected, touched } = data;
+  const { draw, morph, reducedMotion, transparent, selected, touched, motion } = data;
   const carried = useCarriedPose(draw, morph, reducedMotion);
   const { camera } = useThree();
   useFrame((_, delta) => {
     if (!group.current) return;
     const pose = carried(delta);
-    group.current.position.set(pose.position[0] - draw.position[0], pose.position[1] - draw.position[1], pose.position[2] - draw.position[2]);
+    const sway = swayOf(motion, draw.node.id);
+    group.current.position.set(pose.position[0] - draw.position[0] + sway[0], pose.position[1] - draw.position[1] + sway[1], pose.position[2] - draw.position[2] + sway[2]);
     group.current.scale.setScalar(pose.radius / draw.radius);
     group.current.quaternion.copy(camera.quaternion);
   });
@@ -293,7 +296,7 @@ function renderSphere(props: NodeRendererProps) {
   return <SphereGlyph {...props} />;
 }
 
-function AnimatedTimePath({ path, morph, reducedMotion }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean }) {
+function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean; motion: MotionBus; anchors: (string | undefined)[] }) {
   const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: "#51b7ff", transparent: true, opacity: path.preview ? 0.85 : 0.6, depthWrite: false })), [path]);
   const arrowGroups = useRef<(Group | null)[]>([]);
   const arrowCount = path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
@@ -307,7 +310,12 @@ function AnimatedTimePath({ path, morph, reducedMotion }: { path: OrbitalPath; m
       const delay = morph?.delays ? OPENING_STAGGER_MS * index / Math.max(1, path.points.length - 1) : 0;
       return from && morph ? interpolatePose({ position: from, radius: 1 }, { position: point, radius: 1 }, reducedMotion ? 1 : morphProgress(morph, "", performance.now() - delay, ORBITAL_TRANSITION_MS)).position : point;
     });
-    points.forEach((point, index) => attribute.setXYZ(index, ...point));
+    // The spine is the string the timeline spheres hang on: it sways with them.
+    points.forEach((point, index) => {
+      const sway = anchors[index] ? swayOf(motion, anchors[index]!) : null;
+      if (sway) points[index] = point.map((value, axis) => value + sway[axis]) as Position3;
+      attribute.setXYZ(index, ...points[index]);
+    });
     attribute.needsUpdate = true;
     line.geometry.computeBoundingSphere();
     arrowIndices.forEach((pointIndex, index) => {
@@ -550,6 +558,35 @@ function FaceCamera() {
   return null;
 }
 
+/**
+ * Camera inertia driver: reads how the camera accelerates (orbit, pan, zoom,
+ * framing flights) and steps the floating-in-liquid rig in motion.inertia.
+ * Jumps (teleports) are ignored rather than flinging the world.
+ */
+function CameraInertia({ draws, motion, enabled, graphRef }: { draws: OrbitalDraw[]; motion: MotionBus; enabled: boolean; graphRef: { current: GraphCanvasRef | null } }) {
+  const { camera } = useThree();
+  useMemo(() => { motion.inertia = buildInertiaRig(draws, motion.inertia); }, [draws, motion]);
+  const last = useRef<{ position: Vector3; velocity: Vector3; drive: Vector3 } | null>(null);
+  useEffect(() => () => { motion.inertia = undefined; }, [motion]);
+  useFrame((_, delta) => {
+    const rig = motion.inertia;
+    if (!rig) return;
+    if (!enabled) { for (const body of rig.bodies.values()) { body.p = [0, 0, 0]; body.v = [0, 0, 0]; } last.current = null; return; }
+    const dt = Math.min(Math.max(delta, 1 / 240), 0.1);
+    const position = camera.position.clone();
+    const target = graphRef.current?.getControls?.()?.getTarget(new Vector3(), false);
+    const distance = Math.max(1, target ? position.distanceTo(target) : position.length());
+    if (!last.current) { last.current = { position, velocity: new Vector3(), drive: new Vector3() }; return; }
+    let velocity = position.clone().sub(last.current.position).divideScalar(dt);
+    if (velocity.length() / distance > 25) velocity = new Vector3();
+    const acceleration = velocity.clone().sub(last.current.velocity).divideScalar(dt).divideScalar(distance);
+    const drive = last.current.drive.lerp(acceleration, 0.5);
+    last.current = { position, velocity, drive };
+    stepInertia(rig, drive.toArray() as Position3, dt);
+  });
+  return null;
+}
+
 /** Subtle depth from the pointer (desktop) or device tilt (phone): a tiny
  * focal offset, at most ~0.6% of the camera distance, easing back to centre. */
 function PointerParallax({ graphRef, enabled }: { graphRef: { current: GraphCanvasRef | null }; enabled: boolean }) {
@@ -758,6 +795,8 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
   const enclosure = useMemo(() => { const ghost = backdrop?.ghosts.find((entry) => entry.current); return ghost ? { center: ghost.position, radius: ghost.radius } : undefined; }, [backdrop]);
   const spine = useMemo(() => paths.find((path) => !path.preview)?.points ?? [], [paths]);
+  /** Which sphere sits on each path point, so the string follows their sway. */
+  const pathAnchors = useMemo(() => new Map(paths.map((path) => [path.id, path.points.map((point) => draws.find((draw) => draw.position.every((value, axis) => value === point[axis]))?.node.id)])), [paths, draws]);
   return <GraphCanvas ref={ref} nodes={nodes} edges={[]} theme={theme} renderNode={renderSphere} labelType="none" layoutType="forceDirected3d" cameraMode="rotate" draggable={false} animated={false} minDistance={16} maxDistance={1000000} selections={[]} glOptions={{ antialias: true, preserveDrawingBuffer: true }}
     onNodeClick={(node) => onSelect((node.data.glyph as GlyphData).draw)} onNodeDoubleClick={(node) => onEnter((node.data.glyph as GlyphData).draw)}
     onNodePointerOver={(node) => { if ((node.data.glyph as GlyphData).draw.role !== "preimage") onHover?.(node.id); }} onNodePointerOut={(node) => { if (motion.hoveredId === node.id) onHover?.(null); }}
@@ -766,11 +805,12 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     <axesHelper args={[900]} position={[-1400, -945, -1200]} />
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
-    {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} />)}
+    {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} />)}
     <VisibleConnections edges={edges} bus={bus} />
     {hoverEdges.length > 0 && <VisibleConnections edges={hoverEdges} bus={bus} color="#d9cbff" opacity={0.55} />}
     {!reducedMotion && <RippleRings motion={motion} />}
     <Atmosphere draws={draws} reducedMotion={reducedMotion} />
+    <CameraInertia draws={draws} motion={motion} enabled={!reducedMotion} graphRef={ref as { current: GraphCanvasRef | null }} />
     {!reducedMotion && heartbeatId && <><FaceCamera /><PiHeartbeat spine={spine} targetId={heartbeatId} draws={draws} bus={bus} /></>}
     <LocalClipping />
     <PointerParallax graphRef={ref as { current: GraphCanvasRef | null }} enabled={!reducedMotion} />
