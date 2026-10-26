@@ -15,7 +15,7 @@ export function createCausalityAccess() {
       const ids = [];
       for (const name of names.filter(name => standaloneId.test(name.replace(/\.json$/, '')) && name.endsWith('.json'))) {
         const packet = JSON.parse(await readFile(`${workspace}/changesets/${name}`, 'utf8'));
-        if (packet.id !== name.slice(0, -5) || packet.blockId !== `causality-${packet.id.split('_')[2]}` || packet.reviewSource || !packet.proposals?.length || !packet.proposals.every(proposal => proposal.kind === 'add_relation' && causal(proposal.payload))) continue;
+        if (packet.id !== name.slice(0, -5) || packet.blockId !== `causality-${packet.id.split('_')[2]}` || !packet.proposals?.length || !packet.proposals.every(proposal => proposal.kind === 'add_relation' && causal(proposal.payload))) continue;
         ids.push(packet.id);
       }
       return ids;

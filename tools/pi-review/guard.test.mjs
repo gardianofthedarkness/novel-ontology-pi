@@ -8,6 +8,39 @@ const chapterOne = '/private/review/b0002.txt';
 const defaultScope = { novel, input, skill, sourcePaths: [skill, chapterOne], blockIds: ['b0001', 'b0002'], maxBlocks: 2 };
 const authorize = (command, scope = defaultScope) => authorizeScoped(command, scope);
 
+test('one bounded shared gate authorizes all registered storage scopes without faculty-specific mutations', () => {
+  const library = { directory: '/private/library', bindings: [] };
+  const scope = { ...defaultScope, library, reviewProtocol: 'review-v1', causalityChangesetIds: ['cs_causality_agent_123'] };
+  for (const [root, packet, flags] of [
+    [novel, 'cs_b0001', '--scope book'],
+    [novel, 'cs_causality_agent_123', '--scope book'],
+    [library.directory, `uc_${'a'.repeat(64)}`, '--scope universe --universe world'],
+    [library.directory, `plan_${'b'.repeat(64)}`, '--scope library'],
+  ]) {
+    assert.equal(authorize(`novel review show ${root} ${packet} ${flags} --offset 0 --limit 20`, scope).kind, 'cli');
+    assert.equal(authorize(`novel review evidence ${root} ${packet} ${flags} --fact 'assertion/relation' --limit 20`, scope).kind, 'cli');
+    assert.equal(authorize(`novel review decide ${root} ${packet} ${flags} --revision ${'c'.repeat(64)} --decisions '[]'`, scope).kind, 'cli');
+    assert.equal(authorize(`novel review apply ${root} ${packet} ${flags} --revision ${'c'.repeat(64)}`, scope).kind, 'cli');
+  }
+  for (const command of [
+    `novel changeset approve ${novel} cs_b0001`,
+    `novel changeset decide ${novel} cs_b0001 --revision ${'c'.repeat(64)} --decisions '[]'`,
+    `novel library decide ${library.directory} plan_${'b'.repeat(64)}`,
+    `novel causality universe decide ${library.directory} world uc_${'a'.repeat(64)}`,
+  ]) assert.throws(() => authorize(command, scope), /Use novel review/);
+  for (const command of [
+    `novel review show /tmp/unassigned cs_b0001 --scope book`,
+    `novel review show ${novel} cs_unassigned --scope book`,
+    `novel review show ${novel} cs_b0001 --scope faculty`,
+    `novel review show ${novel} cs_b0001 --limit 21`,
+    `novel review show ${novel} cs_b0001 --limit 1 --limit 2`,
+    `novel review apply ${novel} cs_b0001 --revision stale`,
+    `novel review apply ${novel} cs_b0001 --revision ${'c'.repeat(64)} --auto-approve yes`,
+    `novel review decide ${novel} cs_b0001 --revision ${'c'.repeat(64)} --decisions '${JSON.stringify(Array.from({ length: 51 }, () => ({})))}'`,
+    `novel review show ${library.directory} uc_${'a'.repeat(64)} --scope universe`,
+  ]) assert.throws(() => authorize(command, scope), command);
+});
+
 test('causality is bounded, workspace-scoped and only registered standalone packets can reach review', () => {
   const scope = { ...defaultScope, causalityChangesetIds: ['cs_causality_sweep_123'] };
   assert.deepEqual(authorize(`novel causality sweep ${novel}`, scope).args.slice(-2), ['--limit', '10']);

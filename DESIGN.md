@@ -179,6 +179,33 @@ The time faculty, global EM and physical graph fusion remain separate open work.
 
 ## 5. The processing model — blocks and the merge gate
 
+### One semantic gate for every faculty (settled 26 October 2026)
+
+**A new faculty or flow must not invent its own review/approval gate.**
+Ingestion facts, standalone causal assertions, cross-book causal assertions and
+library organization use `novel review show|evidence|decide|apply`. Scope is a
+parameter (`book`, `universe`, `library`), not another agent workflow. Decisions
+always use `factId`, `accept|hold|reject`, a source-grounded reason and an optional
+supported semantic correction. `decide` stages; only explicit `apply` publishes.
+
+Faculty code supplies assertions, readable meaning, provenance and domain
+validators to the shared contract. Storage adapters preserve book isolation,
+the universe ledger and atomic organization plans. They may add requirements
+(both causal endpoints, actual temporal evidence, endpoint kinds, cycle checks),
+but cannot weaken evidence/revision/hold rules or add an independent accept path.
+Do not add a new scope just because a new faculty exists: reuse the appropriate
+storage adapter and extend its typed assertion support, failing closed until it
+is registered. Unsupported legacy packets must not be auto-converted/approved.
+
+The same gate owns bounded pages, revision-bound read coverage, staged decisions,
+default holds, audit history, application and duplicate-apply prevention. New
+assertion types require contract tests for incomplete/stale evidence, unknown
+identities, holds/rejections, scope isolation and repeated application. Legacy
+CLI spellings are compatibility interfaces, not examples for new faculties;
+the scoped Pi host directs all review through the shared protocol.
+
+Implementation and migration: [unified review contract](docs/unified-review.md).
+
 This is how a novel actually gets ingested, end to end:
 
 ```

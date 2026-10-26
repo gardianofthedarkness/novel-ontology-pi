@@ -45,7 +45,18 @@ Propose only links you judge causal:
 novel causality propose <novel-dir> <from> <to> [--reason "..."]
 ```
 
-The proposal lands in a `pending_review` changeset for the gate. The
+The proposal lands in a `pending_review` changeset for the shared gate:
+
+```
+novel review show <novel-dir> <changeset-id> --scope book --offset 0 --limit 20
+novel review evidence <novel-dir> <changeset-id> --scope book --fact <fact-id> --offset 0 --limit 20
+novel review decide <novel-dir> <changeset-id> --scope book --revision <hash> --decisions '<JSON-array>'
+novel review apply <novel-dir> <changeset-id> --scope book --revision <hash>
+```
+
+Use `factId`, `verdict` (`accept|hold|reject`) and `reason`, exactly as for
+ingestion. Complete every required endpoint evidence page for this revision.
+Decisions stage only; explicit apply publishes verified assertions. The
 command refuses self-links, already-linked pairs, and pairs whose
 novel-sequence order contradicts the proposed direction (swap from/to
 instead). Order-ambiguous pairs are allowed — direction is your judgment
@@ -84,14 +95,15 @@ those IDs, `--revision <candidate-revision>` and `--reason "..."`.
 Review the resulting universe packet independently:
 
 ```
-novel causality universe show <library-dir> <universe-id> <packet-id> --offset 0 --limit 10
-novel causality universe evidence <library-dir> <universe-id> <from> <to> --packet <packet-id> --offset 0 --limit 10
-novel causality universe decide <library-dir> <universe-id> <packet-id> --revision <show-revision> --decisions '<JSON-array>'
+novel review show <library-dir> <packet-id> --scope universe --universe <universe-id> --offset 0 --limit 10
+novel review evidence <library-dir> <packet-id> --scope universe --universe <universe-id> --fact <fact-id> --offset 0 --limit 10
+novel review decide <library-dir> <packet-id> --scope universe --universe <universe-id> --revision <show-revision> --decisions '<JSON-array>'
+novel review apply <library-dir> <packet-id> --scope universe --universe <universe-id> --revision <show-revision>
 novel causality universe list <library-dir> <universe-id> --offset 0 --limit 10
 ```
 
 Read every proposal and both full original spans, following all evidence pages.
-Decide each proposal once with `proposalId`, `verdict` (`accept|hold|reject`),
+Decide each assertion with `factId`, `verdict` (`accept|hold|reject`),
 and `reason`. Acceptance additionally requires `temporalReason`: explain from
 the text why this cause precedes/brings about this effect, not volume numbering.
 Hold uncertain identity, timing or missing evidence. Keep reasons/summaries in
@@ -105,11 +117,9 @@ for cross-book causes; per-book `novel query` still queries only that book.
 ## Rules
 
 - The hosted CLI caps each sweep at 20 pairs (default 10). No automatic
-  continuation or approval. Read the skill/reference, all proposal/note
-  pages and current endpoint evidence before approval; then explicitly
-  approve or hold. Standalone causal packets use proposal review, not
-  scene-bound `changeset facts`. Existing extraction packets keep their
-  semantic fact gate and additionally require both causal endpoints.
+  continuation or approval. Read the skill/reference, current shared review
+  assertions and both endpoint evidence pages, then explicitly decide/apply.
+  Standalone and extraction causal packets use the same semantic fact gate.
 - At-birth extraction remains local. The explicit universe pass above adds
   cross-file review over existing canon; it is not global EM, database fusion,
   or an actual-time extraction faculty. Membership alone is not causal evidence.

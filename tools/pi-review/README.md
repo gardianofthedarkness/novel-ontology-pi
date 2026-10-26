@@ -6,6 +6,21 @@ for a live run. Tests use synthetic data and make no paid model calls.
 
 ## Setup
 
+### Shared review protocol
+
+Hosted Pi uses `novel review show|evidence|decide|apply` for every faculty.
+`--scope book|universe|library` selects storage; universe packets also need
+`--universe <id>`. Every decision uses `factId`, `accept|hold|reject` and a reason.
+Decisions stage only; explicit apply revalidates revision, source coverage and
+domain rules. New faculties register assertion support/validators, never another
+gate. See [the contract and compatibility boundaries](../../docs/unified-review.md).
+
+The host supplies actionable migration errors for legacy `changeset facts|decide|
+approve`, `library decide` and `causality universe decide` commands. The legacy
+command shapes described below remain useful for historical clients/read tooling,
+not hosted review. Shared commands retain checkpoints, safe page/fact telemetry,
+loaded-skill requirements, assigned source scopes and private audit receipts.
+
 Duplicate proposal-ID corruption can be repaired through the existing scoped
 `changeset revise --edits '{"rekeyDuplicateIds":true}'` operation. This sole
 semantic-packet bulk-revision exception changes IDs only, preserves every fact,

@@ -1,69 +1,47 @@
-# Fact review
+# One semantic review gate
 
-`novel changeset facts <dir> <id> --offset 0 --limit 20`
+Every faculty uses the same commands and decision schema. The scope chooses
+storage, not a different review process: `book` for local packets, `universe`
+for cross-book links (also supply `--universe <id>`), `library` for organization.
 
-Pages are byte-bounded. Follow the returned `page.nextOffset`, not your
-requested limit. Facts contain complete assertion values, names, event
-context and original-source excerpts. Excerpts are not exhaustive; inspect
-`evidencePage.nextOffset`. Read more when ownership, a speaker, emotion or
-relationship is unclear:
+```
+novel review show <root> <packet> --scope book --offset 0 --limit 20
+novel review evidence <root> <packet> --scope book --fact <fact-id> --offset 0 --limit 20
+novel review decide <root> <packet> --scope book --revision <hash> --decisions '[{"factId":"...","verdict":"accept","reason":"source-grounded explanation"}]'
+novel review apply <root> <packet> --scope book --revision <hash>
+```
 
-Page-level `labels`, `events` and `evidence` dictionaries are shared by facts
-through `eventIds` and `evidenceIds`; source ranges summarize citation IDs,
-not assertion values. Dialogue participation evidence does not imply physical
-presence: remembered exchanges need not imply present-time presence.
-Verify communication versus thoughts/quoted labels, not perfect
-dialogue boundaries or incidental narration.
+Follow actual `page.nextOffset`, never assume the requested limit was returned.
+Values are complete and byte-bounded. Read each accepted assertion and adequate
+original evidence; causal links require ALL cited evidence from BOTH endpoints.
+`evidencePage.nextOffset` indicates additional evidence. Reads are bound to the
+current packet/context revision. Old reads cannot authorize a new revision.
 
-Use each fact's `meaning` for identity/role judgments against original evidence;
-raw `value` IDs are storage references, not semantic evidence. For a correction,
-prefer `semanticReplacement` instead of `replacement`: preserve the value's shape
-but put displayed identity labels in entity-reference fields (including `...Id`
-keys and state relationship keys). For example, an actor correction is
+Judge `meaning` against the source, not opaque `value` IDs. Prefer an accepted
+decision's `semanticReplacement` for identity corrections: preserve the field
+shape, but use displayed unique names in identity-reference slots. Example:
 `{"factId":"...","verdict":"accept","reason":"...","semanticReplacement":{"primaryActors":["小明"],"affectedCharacters":[]}}`.
-The CLI resolves only known unique labels/registered aliases, with kind checks;
-it does not guess from substrings. Same-name option suffixes distinguish records,
-not proof of identity: retrieve evidence or hold. Identity-object corrections omit
-`id`; the CLI preserves it. State event anchors cannot change through this path.
-Relation endpoint edits still use the existing relation/evidence workflow, not
-this identity-only adapter. Raw replacements remain compatible with older clients.
+Ambiguous labels stay held. Identity corrections omit storage `id`; state event
+anchors cannot change. Relation endpoint/type changes need a new evidence-bound
+proposal, not an identity correction. Cross-book acceptance additionally needs
+`temporalReason` supported by actual text, never merely volume/reading order.
 
-`novel changeset facts <dir> <id> --fact '<fact-id>' --offset 0 --limit 12`
+Batch at most 50 decisions. `accept`, `hold`, `reject` have the same meaning in
+every scope. Omitted assertions default to hold. Decisions stage only; explicit
+apply is required. Show the current review again after source, packet or canonical
+context changes. Unchanged repeated accepts preserve prior corrections.
 
-Use the current `revision` to record batches of at most 50 decisions:
+Review consequences: identities, dialogue-card members, presence, actors,
+relations and state. Do not optimize scene/dialogue boundaries or small event
+detection. Review each dialogue member separately; do not assign sentences to
+speakers or infer presence/relationships from dialogue co-membership.
 
-`novel changeset decide <dir> <id> --revision '<hash>' --decisions '[{"factId":"...","verdict":"accept","reason":"source-grounded explanation"}]'`
+Applying a book preserves source organization and publishes only verified facts
+whose dependencies are available. Held/rejected facts remain outside canon and
+recoverable; do not reapply an approved packet to release them. Universe apply
+writes only its ledger. Library plans are atomic: every organization item must
+be accepted, otherwise organization is not applied. Report processed, verified,
+held, rejected, deferred and unfinished separately; processing is not verification.
 
-Verdicts: `accept`, `hold`, `reject`. Omitted decisions default to hold.
-Accept requires adequate source evidence, not a high confidence score.
-For `dialogue-member`, the value is one Character ID for one exchange.
-Accept supported members independently; reject wrong members and hold uncertainty.
-`candidateOnly` marks initially unresolved candidates, not verified participants.
-Correct a wrong identity using a source-supported Character ID replacement.
-Do not assign speakers/addressees per sentence. Legacy `turn` facts retain
-their original shape only for older packets.
-
-Use an optional `replacement` on an accepted decision to correct just its
-value; keep its field shape. A turn value is `{speakerId,addresseeId}`;
-presence/mention is an array of character IDs; actors is
-`{primaryActors,affectedCharacters}`. Identity replacements retain the ID
-and use only existing candidate/source name forms. Hold a fused identity
-instead of guessing a split. A missing speaker remains null, not narration.
-
-Pages distinguish `reviewed` decisions from the default hold on unreviewed facts;
-summary counts include `explicitHolds` and `unreviewed`. Do not repeatedly submit
-unchanged decisions or reread completed pages to resolve intentional holds.
-
-Decisions preserve unrelated facts and segmentation. A presence correction
-must not change a turn, addressee or event actor. Relations and emotions
-remain held until independently supported, even if nearby events are clear.
-An accepted assertion whose identity dependency is held remains deferred;
-the decision command reports this explicitly.
-
-Approve once the source-supported decisions are recorded. Unreviewed facts
-remain absent from canon and retained in the original packet for retrieval;
-do not claim they were verified. Approved packets are immutable; do not
-re-apply them to release held facts. Later recovery needs new source-grounded
-work, not silent promotion. Structural corruption requires a hold/recall;
-small segmentation imperfections do not. Original source and held evidence
-remain retrievable with `facts --fact` after application.
+Legacy CLI spellings remain for compatibility outside the scoped Pi host.
+Use this protocol in new work; do not guess different approval commands by faculty.

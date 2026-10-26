@@ -14,3 +14,9 @@ test('source-language heuristic distinguishes foreign prose from wordless punctu
   assert.equal(nonCjkNarrative('甲保持沉默。'), false);
   assert.equal(nonCjkNarrative('The character remains silent.'), true);
 });
+
+test('stability accepts canonical dialogue-card causal endpoints without inventing missing cards', () => {
+  const scenes = [{ id: 'scene_1', dialogues: [{ id: 'card_1', participantIds: [] }] }];
+  assert.deepEqual(structuralIssues([], [{ id: 'event_1' }], scenes, [{ fromId: 'event_1', toId: 'card_1' }]), []);
+  assert.equal(structuralIssues([], [{ id: 'event_1' }], scenes, [{ fromId: 'event_1', toId: 'unknown_card' }])[0].code, 'dangling-relation');
+});

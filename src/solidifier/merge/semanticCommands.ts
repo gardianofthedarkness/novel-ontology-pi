@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import { BundleStore } from "../../ground/connectors/bundle.js";
 import { appendAudit } from "../maintenance/fixes.js";
 import type { Entity } from "../../ground/ontology/types.js";
-import { loadChangeSet, saveChangeSet } from "./changesetStore.js";
+import { saveChangeSet } from "./changesetStore.js";
 import type { ChangeSet } from "./changeset.js";
 import { digest, factEvidence, materializeSemantic, semanticFacts, semanticRevision, validateStructure, type FactDecision } from "./semantic.js";
 import { normalizeFactDecisions, semanticIdentityCodec } from "./semanticIdentity.js";
+import { reviewBook } from "./reviewBook.js";
 
 export async function semanticContext(novelDir: string) {
   const store = new BundleStore(join(novelDir, "ontology"));
@@ -24,7 +25,7 @@ export async function semanticContext(novelDir: string) {
 }
 
 export async function semanticPage(novelDir: string, id: string, options: { offset?: number; limit?: number; factId?: string; summary?: boolean } = {}) {
-  const changeset = await loadChangeSet(novelDir, id);
+  const changeset = await reviewBook(novelDir, id);
   validateStructure(changeset);
   const facts = semanticFacts(changeset);
   const context = await semanticContext(novelDir);
@@ -79,14 +80,14 @@ export async function semanticPage(novelDir: string, id: string, options: { offs
   return { ...base, labels: pageLabels, evidence: pageEvidence, events: pageEvents, facts: page, page: { offset, limit: page.length, total: facts.length, nextOffset: offset + page.length < facts.length ? offset + page.length : null } };
 }
 
-export async function decideFacts(novelDir: string, id: string, revision: string, value: unknown) {
+export async function decideFacts(novelDir: string, id: string, revision: string, value: unknown, replace = false) {
   if (!Array.isArray(value) || value.length > 50) throw new Error("Decisions must be a batch of at most 50 fact decisions");
-  const changeset = await loadChangeSet(novelDir, id);
+  const changeset = await reviewBook(novelDir, id);
   if (!["held", "pending_review", "revision_requested"].includes(changeset.status)) throw new Error("Only pending packets can receive fact decisions");
   const context = await semanticContext(novelDir);
   const contextDigest = digest(context);
   if (revision !== semanticRevision(changeset, contextDigest)) throw new Error("Stale semantic revision or canonical context; read current facts");
-  const prior = changeset.semanticReview?.revision === revision && changeset.semanticReview.contextDigest === contextDigest ? changeset.semanticReview.decisions : [];
+  const prior = !replace && changeset.semanticReview?.revision === revision && changeset.semanticReview.contextDigest === contextDigest ? changeset.semanticReview.decisions : [];
   const updates = normalizeFactDecisions(changeset, context.entities, value);
   if (new Set(updates.map(decision => decision?.factId)).size !== updates.length) throw new Error("Duplicate decisions in batch");
   const merged = new Map(prior.map(decision => [decision.factId, decision]));

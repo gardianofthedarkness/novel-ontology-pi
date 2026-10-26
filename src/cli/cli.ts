@@ -47,18 +47,15 @@ import { sectionBlock } from "../digger/intake/sectioning.js";
 import { cutBlocks } from "../digger/intake/blocks.js";
 import { initWorkspace } from "../ground/workspace/init.js";
 import { buildGraphFromBundle, LadybugStore } from "../ground/connectors/ladybug.js";
-import { BundleStore } from "../ground/connectors/bundle.js";
 import { exportBundle, importBundle } from "../ground/connectors/bundleTransfer.js";
-import { applyChangeSet } from "../solidifier/merge/apply.js";
 import { reviewPage } from "../solidifier/merge/reviewPage.js";
 import { reviseProposals } from "../solidifier/merge/revise.js";
-import { decideFacts, prepareSemantic, semanticPage } from "../solidifier/merge/semanticCommands.js";
-import { runEmPassAfterApply } from "../solidifier/matching/emFaculty.js";
-import { markCausalitySweepPending } from "../solidifier/causality/faculty.js";
+import { decideFacts, semanticPage } from "../solidifier/merge/semanticCommands.js";
 import { causalityEvidence } from "../solidifier/causality/evidence.js";
 import { universeCausalityCommand } from "./commands/extract/universeCausalityCommands.js";
+import { reviewCommand } from "./commands/extract/reviewCommands.js";
+import { approveBook } from "../solidifier/merge/approve.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow } from "./commands/extract/timeplaceCommands.js";
-import { jevFromEnv } from "../ground/connectors/jev.js";
 import {
   listChangeSets,
   loadChangeSet,
@@ -66,6 +63,7 @@ import {
 } from "../solidifier/merge/changesetStore.js";
 
 const COMMANDS: Record<string, string> = {
+  "novel review show|evidence|decide|apply <root> <packet> --scope book|universe|library [--universe <id>]": "One semantic gate for every faculty: paged assertions/evidence, revision-bound accept|hold|reject, staged decisions, explicit apply. Evidence uses --fact; mutations use --revision; decide uses --decisions '<JSON>'. Unreviewed assertions remain held.",
   "novel init <path>": "Create a novel workspace + bundle manifest",
   "novel library init <library-dir>": "Create a private, versioned multi-file library; no model calls",
   "novel library add <library-dir> <file.epub|file.txt> [--title <title>]": "Register an immutable source by content hash; identical files deduplicate",
@@ -357,6 +355,8 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "review") { out(await reviewCommand(positional.slice(1)), pretty); return; }
+
   if (cmd === "changeset" && sub && positional[2]) {
     const novelDir = positional[2];
     if (sub === "list") {
@@ -422,47 +422,15 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "approve") {
-      const ontologyDir = join(novelDir, "ontology");
-      const pending = await loadChangeSet(novelDir, id);
-      if (pending.status === "approved") throw new Error("Packet already approved; do not apply twice");
-      const context = pending.reviewSource ? await prepareSemantic(novelDir, pending) : undefined;
-      let cs = await setChangeSetStatus(novelDir, id, "approved");
-      const bundle = new BundleStore(ontologyDir);
-      const application = await applyChangeSet(bundle, cs, new EventLog(novelDir).emit, context);
-      // EM faculty cadence (sector 04): the per-block pass is homed
-      // on the apply, wherever it happens — in gate mode that is
-      // here, not BlockProcessor. Advisory: the helper never throws,
-      // and a Jev failure must not fail an approval that landed.
-      let entityMatching: Awaited<ReturnType<typeof runEmPassAfterApply>> = null;
-      try {
-        entityMatching = await runEmPassAfterApply({ novelDir, decisions: jevFromEnv(process.env), changeset: cs, events: new EventLog(novelDir).emit });
-      } catch {
-        // No Jev configured for this shell: the pass is skipped and
-        // retried by the chapter sweep or `novel match`.
-      }
-      // Causality sweep cadence mirrors EM: an apply between ingest
-      // runs marks the chapter-close sweep pending; the next full-
-      // coverage ingest runs it. Best effort, never fatal to approval.
-      try {
-        await markCausalitySweepPending(novelDir);
-      } catch {
-        // A stale flag only triggers one extra sweep; approval stands.
-      }
-      const counts = await buildGraphFromBundle(
-        ontologyDir,
-        join(ontologyDir, "graph.lbug"),
-        new EventLog(novelDir).emit,
-      );
-      cs = await loadChangeSet(novelDir, id);
-      // Time-place at birth (opt-in): the approved block's new scenes get
-      // time and place facts in their own pending ChangeSet.
+      const application = await approveBook(novelDir, id);
+      const cs = await loadChangeSet(novelDir, id);
       let timePlace: Record<string, unknown> | null = null;
       if (positional.includes("--time-place")) {
         try { timePlace = await timeplaceAfterApprove(novelDir, cs); }
         catch (error) { timePlace = { error: error instanceof Error ? error.message : String(error) }; }
       }
       out(
-        { id: cs.id, status: cs.status, ...application, graph: counts, ...(timePlace ? { timePlace } : {}), ...(entityMatching ? { entityMatching: { nominated: entityMatching.nominated, merged: entityMatching.merged.length, distinct: entityMatching.distinct.length, uncertain: entityMatching.uncertain.length } } : {}) },
+        { ...application, ...(timePlace ? { timePlace } : {}) },
         pretty,
       );
       return;
