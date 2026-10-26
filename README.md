@@ -339,6 +339,41 @@ node dist/src/cli/cli.js graph build <target-dir>/ontology       # rebuild the g
 - **Nothing is ever overwritten**: if the target directory already
   exists, both commands stop with an error and leave it untouched.
 
+## Story time and places: `timeplace` (phase 1)
+
+Granularity is the scene. Time and place words become entities that scenes
+belong to: a `TimePoint` per time anchor (`Scene -OCCURS_DURING-> TimePoint`)
+and named `Location`s (`Scene -LOCATED_AT-> Location`).
+
+```
+novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--propose] [--cache dir]
+novel timeplace show <novel-dir>
+novel changeset approve <novel-dir> <id> --time-place   # at birth, after a block is approved
+novel ingest <novel-dir> <file> --time-place            # inline, for blocks approved during ingest
+```
+
+1. **Vocabulary** — a rule lexicon (dates, clock times, relative days,
+   spans, parts of day, holidays, past markers; Chinese first, basic
+   Japanese/English) and/or a work-model pass that lists time and place
+   words verbatim per sentence; code rejects anything not in the source.
+2. **Roles** — unambiguous "it is now …" cues are rule-decided; Jev decides
+   the rest as ADVANCE / FLASHBACK / RETURN / REFERENCE with the story
+   state (current time, date, open flashback) and the full distribution.
+   Quoted speech and （inner thoughts） default to REFERENCE. A flashback
+   needs confidence (0.6, or 0.5 FLASHBACK probability on a past marker).
+3. **Periods** — code: one anchor until the next; a flashback closes on
+   RETURN or when Jev says the next scene is back in the present; dates are
+   derived only from stated words; dated flashbacks are ordered by date.
+4. **Places** — scenes are `LOCATED_AT` the proper-named places they happen
+   in; generic settings ("屋顶", "医院") stay in the report for the later
+   hierarchy phase.
+
+Runs are incremental and continue the book's stored periods, so
+block-by-block equals the whole book. Output is a reviewable ChangeSet; the
+viewer's **Story time** and **Places** views (beside the orbit; `?view=story`
+or `?view=places`) read the applied facts. See
+[docs/time-place.md](docs/time-place.md) for the design and measured results.
+
 ## Gate review tooling: `match` / `fix` / `recall`
 
 The merge gate's review is staged. `novel match <novel-dir>

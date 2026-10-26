@@ -57,6 +57,7 @@ import { runEmPassAfterApply } from "../solidifier/matching/emFaculty.js";
 import { markCausalitySweepPending } from "../solidifier/causality/faculty.js";
 import { causalityEvidence } from "../solidifier/causality/evidence.js";
 import { universeCausalityCommand } from "./commands/extract/universeCausalityCommands.js";
+import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow } from "./commands/extract/timeplaceCommands.js";
 import { jevFromEnv } from "../ground/connectors/jev.js";
 import {
   listChangeSets,
@@ -78,7 +79,7 @@ const COMMANDS: Record<string, string> = {
   "novel watch <novel-dir> [--port N]": "Read-only loopback SSE over the processing event log",
   "novel section <file>": "Deterministic sentence sectioning only (free, testable)",
   "novel blocks <file> [--size N]": "Chapter detection + block cutting map (no models)",
-  "novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality]":
+  "novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]":
     "Full loop: blocks -> miniloop (live Jev) -> extraction (work LLM, when configured) -> ChangeSets -> merge gate -> graph. Default stops at the first gate; --auto-approve applies every ChangeSet. Per-block causality faculty + chapter-close sweep run unless --no-causality",
   "novel causality candidates <novel-dir> [--unit ID] [--chapter N] [--limit N]":
     "List hybrid-nominated CAUSES candidates (graph patterns + embedding top-K) for agent adjudication. No proposals are created.",
@@ -88,6 +89,10 @@ const COMMANDS: Record<string, string> = {
     "Read revision-bound original source passages for both causal endpoints; missing provenance is explicit.",
   "novel causality universe candidates|sweep|evidence|propose|show|decide|list <library-dir> <universe-id> ...":
     "Cross-file causal ledger for reviewed universe/continuity membership; qualified IDs, independent source review, bounded Jev batches, no book database fusion.",
+  "novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--cache dir] [--out file] [--propose] [--force]":
+    "Time-place faculty (phase 1): time words and places become TimePoint/Location entities that scenes belong to; Jev marks flashback signs; code builds periods and an estimated story order. By default runs only scenes without time facts, continuing the book's stored periods (as at birth); --force re-runs selected scenes from scratch. Writes a report; --propose saves a pending_review ChangeSet. Never writes canon. `novel changeset approve ... --time-place` runs it for a just-approved block.",
+  "novel timeplace show <novel-dir>":
+    "Applied time periods in story order and places with their scenes.",
   "novel causality sweep <novel-dir> [--limit N]":
     "On-demand systematic sweep: Jev-determined CAUSES pass over the whole universe (same machinery as the ingest chapter-close sweep).",
   "novel match <novel-dir> [--changeset <id>]":
@@ -339,7 +344,7 @@ async function main(): Promise<void> {
   if (cmd === "graph" && sub === "stats" && positional[2]) {
     const store = new LadybugStore(positional[2]);
     const tables = [
-      "Character", "Location", "Organization", "Item", "Concept",
+      "Character", "Location", "Organization", "Item", "Concept", "TimePoint",
       "Event", "Scene", "Timeline", "Branch",
     ];
     const counts: Record<string, number> = {};
@@ -449,8 +454,15 @@ async function main(): Promise<void> {
         new EventLog(novelDir).emit,
       );
       cs = await loadChangeSet(novelDir, id);
+      // Time-place at birth (opt-in): the approved block's new scenes get
+      // time and place facts in their own pending ChangeSet.
+      let timePlace: Record<string, unknown> | null = null;
+      if (positional.includes("--time-place")) {
+        try { timePlace = await timeplaceAfterApprove(novelDir, cs); }
+        catch (error) { timePlace = { error: error instanceof Error ? error.message : String(error) }; }
+      }
       out(
-        { id: cs.id, status: cs.status, ...application, graph: counts, ...(entityMatching ? { entityMatching: { nominated: entityMatching.nominated, merged: entityMatching.merged.length, distinct: entityMatching.distinct.length, uncertain: entityMatching.uncertain.length } } : {}) },
+        { id: cs.id, status: cs.status, ...application, graph: counts, ...(timePlace ? { timePlace } : {}), ...(entityMatching ? { entityMatching: { nominated: entityMatching.nominated, merged: entityMatching.merged.length, distinct: entityMatching.distinct.length, uncertain: entityMatching.uncertain.length } } : {}) },
         pretty,
       );
       return;
@@ -462,7 +474,7 @@ async function main(): Promise<void> {
     const file = positional[2];
     if (!novelDir || !file || file.startsWith("--")) {
       throw new Error(
-        "Usage: novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality]",
+        "Usage: novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]",
       );
     }
     const maxBlocksRaw = flag(positional, "--max-blocks");
@@ -482,9 +494,32 @@ async function main(): Promise<void> {
         blockSize,
         noExtract: positional.includes("--no-extract"),
         noCausality: positional.includes("--no-causality"),
+        timePlace: positional.includes("--time-place"),
       }),
       pretty,
     );
+    return;
+  }
+
+  if (cmd === "timeplace") {
+    const novelDir = positional[2];
+    if (!["run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${TIMEPLACE_USAGE}`);
+    if (sub === "show") { out(await timeplaceShow(novelDir), pretty); return; }
+    const valued = ["--mode", "--chapter", "--limit", "--max-calls", "--max-questions", "--out", "--cache"], switches = ["--no-jev", "--propose", "--force"];
+    const seen = new Set<string>();
+    for (let index = 3; index < positional.length; index++) {
+      const name = positional[index];
+      if (seen.has(name) || ![...valued, ...switches].includes(name)) throw new Error(`Usage: ${TIMEPLACE_USAGE}`);
+      seen.add(name);
+      if (valued.includes(name)) { const value = positional[++index]; if (!value || value.startsWith("--")) throw new Error(`${name} needs a value.`); }
+    }
+    const number = (name: string) => { const value = flag(positional, name); if (value === undefined) return undefined; const parsed = Number(value); if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${name} must be a non-negative integer.`); return parsed; };
+    out(await timeplaceRun(novelDir, {
+      mode: flag(positional, "--mode") as "hybrid" | "llm" | "programmatic" | undefined,
+      jev: !positional.includes("--no-jev"), chapter: number("--chapter"), limit: number("--limit"),
+      maxCalls: number("--max-calls"), maxQuestions: number("--max-questions"), out: flag(positional, "--out"), cache: flag(positional, "--cache"),
+      propose: positional.includes("--propose"), force: positional.includes("--force"),
+    }), pretty);
     return;
   }
 

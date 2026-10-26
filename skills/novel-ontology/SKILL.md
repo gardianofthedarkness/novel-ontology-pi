@@ -101,6 +101,26 @@ re-read its fresh revision. Never drop conflicting updates merely to clear a gat
   correlation, or shared topic alone is never causation, and order or
   adjacency alone never implies a link.
 
+## Story time and places (phase 1)
+
+- Scene-level, not event-level. `novel timeplace run <dir>` finds time
+  words (rules + an LLM vocabulary pass) and place words in each scene;
+  Jev judges whether each time word moves the story (ADVANCE), opens a
+  flashback (FLASHBACK), returns (RETURN) or is only mentioned
+  (REFERENCE). Code turns anchors into periods (one anchor to the next),
+  marks flashbacks with Jev's certainty, derives dates only from stated
+  words ("第二天" after 12-24 → 12-25, labelled derived) and estimates a
+  story order. Scenes become OCCURS_DURING a TimePoint and LOCATED_AT the
+  named places they happen in.
+- Runs are incremental (scenes without time facts, continuing the stored
+  periods); `--propose` writes a `pending_review` changeset — review and
+  approve like any packet. After approving a block,
+  `novel changeset approve <dir> <id> --time-place` does the same for its
+  new scenes. `novel timeplace show <dir>` prints the story timeline.
+- Do not treat story order as causation, a carried-over place as stated,
+  or a derived date as a stated one. Hierarchy (room ⊂ building ⊂ city),
+  spatial relations and cross-volume time alignment are later phases.
+
 ## Album (EPUB illustrations + character portraits)
 
 - `novel album import <dir> <book.epub>` is a PRE-PROCESS at intake:

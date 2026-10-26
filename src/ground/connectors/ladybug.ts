@@ -39,6 +39,7 @@ const NAME_TABLES: EntityKind[] = [
   "Organization",
   "Item",
   "Concept",
+  "TimePoint",
 ];
 const ALL_TABLES: EntityKind[] = [
   ...NAME_TABLES,
@@ -61,6 +62,7 @@ const REL_DEFS: Partial<
   PRESENT_IN: { from: "Character", to: "Scene", props: [] },
   MENTIONED_IN: { from: "Character", to: "Scene", props: [] },
   LOCATED_AT: { from: "Scene", to: "Location", props: [] },
+  OCCURS_DURING: { from: "Scene", to: "TimePoint", props: [] },
   KNOWS: { from: "Character", to: "Character", props: ["degree"] },
   SPEAKS_TO: { from: "Character", to: "Character", props: ["scene_id"] },
   OWNS: { from: "Character", to: "Item", props: [] },

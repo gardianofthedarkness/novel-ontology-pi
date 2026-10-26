@@ -36,6 +36,8 @@ export interface IngestOptions {
   noExtract?: boolean;
   /** Skip the per-block causality faculty + chapter sweep (default: on). */
   noCausality?: boolean;
+  /** Run the time-place faculty after each applied block (phase 1, opt-in). */
+  timePlace?: boolean;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -165,6 +167,7 @@ export async function ingestNovel(
       uncertain: summary.uncertain.length,
     }),
     causality: !opts.noCausality,
+    ...(opts.timePlace ? { timePlace: { mode: workModel ? "hybrid" as const : "programmatic" as const } } : {}),
     embedder: loadEmbedder({
       provider: cfg.embeddings.provider,
       model: cfg.embeddings.model,
