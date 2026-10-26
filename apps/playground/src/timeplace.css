@@ -91,3 +91,14 @@
   .design-switch.stage-switch { font-size: 10px; }
   .stage-switch button { padding: 3px 8px; }
 }
+/* Live time-place: proposed (awaiting review) and just emerged. */
+.tp-row.is-proposed { border-style: dashed; }
+.tp-proposed { margin-left: 8px; padding: 0 6px; border: 1px dashed #9fd8ff88; border-radius: 4px; font-size: 9px; font-style: normal; font-weight: 500; letter-spacing: .05em; color: #9fd8ff; vertical-align: middle; }
+.tp-row.is-emerging { animation: tp-emerge 2.6s ease-out; }
+.tp-chip.is-touched { border-color: #ffc46b; box-shadow: 0 0 0 1px #ffc46b66; }
+.tp-place-node.is-proposed circle:not(.tp-emerge-ring) { stroke-dasharray: 4 3; }
+.tp-emerge-ring { fill: none; stroke: #ffc46b; stroke-width: 2; animation: tp-ring 2.4s ease-out forwards; }
+@keyframes tp-emerge { 0% { box-shadow: 0 0 0 2px #ffc46b, 0 0 24px #ffc46b66; } 100% { box-shadow: none; } }
+@keyframes tp-ring { 0% { opacity: 1; } 100% { opacity: 0; } }
+.reduce-motion .tp-row.is-emerging { animation: none; box-shadow: inset 3px 0 0 #ffc46b; }
+.reduce-motion .tp-emerge-ring { animation: none; }

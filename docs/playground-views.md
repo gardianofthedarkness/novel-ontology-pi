@@ -15,8 +15,21 @@ The viewer has two **modes** and the same three **views** in each:
   arrows; book-level causal arrows live in Story time.
 - Both modes share the inspector, record stepping, book choice and live
   updates. A record open in the inspector stays open when the mode changes.
-- **Following Pi** works in both Narrative views: the orbit flies to the
-  work; the flat list opens the chapter and scene Pi touched and marks them.
+- **Following Pi** reads its work across all three views, in either mode:
+  - **Switching:** following switches tabs by itself. New or newly confirmed
+    story periods open Story time; new places open Places, a few seconds
+    after the periods. Pi running `novel timeplace run` points to Story
+    time, and other new work to Narrative. A view stays at least 5 s unless
+    something new emerged.
+  - **What each view shows:** Narrative flies to (or opens) the work. The
+    Story time and Places orbits go to the scene Pi touches, framed with its
+    neighbours or its place's column, without opening the inspector. The flat
+    views scroll to it and mark it.
+  - **Just emerged:** periods and places that just appeared are highlighted
+    and brought into view first.
+- **Proposed time and place:** a time-place changeset still awaiting review
+  shows its periods and places at once, marked proposed: dashed rows and
+  nodes, or amber spheres. They become canon only after review.
 - The Traditional Narrative list shows each chapter's gist (its most
   connected scene summary), counts, cast, and live and review states.
   Each scene carries its story time and place when the time-place faculty

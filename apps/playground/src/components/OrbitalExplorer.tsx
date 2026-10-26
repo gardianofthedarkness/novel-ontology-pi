@@ -45,7 +45,8 @@ interface Props {
   reducedMotion: boolean;
   showRelations: boolean;
   resetToken: number;
-  focusRequest: { node: WorldNode; sequence: number; chapterId?: string } | null;
+  /** passive: follow-driven (moves the camera and selection without opening the inspector). */
+  focusRequest: { node: WorldNode; sequence: number; chapterId?: string; passive?: boolean } | null;
   /** Real EM joins to show; several may arrive in one refresh. */
   joins: PendingJoin[];
   onJoinSettled: (dropId: string) => void;
@@ -60,13 +61,15 @@ interface Props {
   showCausal?: boolean;
   /** Main spheres near the centre of the view (volume level), reported as the camera settles. */
   onCenter?: (ids: string[]) => void;
+  /** Following Pi from outside (Story time / Places): selections move the camera but never open the inspector. */
+  quietSelection?: boolean;
 }
 
 // Stable defaults: a fresh [] per render would re-run every memo and effect keyed on them.
 const NO_PICTURES: OrbitIllustration[] = [];
 const NO_PORTRAITS: AlbumPortrait[] = [];
 
-export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = null, onSourceVolume, albumPictures = NO_PICTURES, albumPortraits = NO_PORTRAITS, activityNodes, activityEdges, activity = null, followingActivity = false, reducedMotion, showRelations, resetToken, focusRequest, joins, onJoinSettled, onSelect, onChapter, onPage, onMotion, onRelations, arrangement, showCausal = false, onCenter }: Props) {
+export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = null, onSourceVolume, albumPictures = NO_PICTURES, albumPortraits = NO_PORTRAITS, activityNodes, activityEdges, activity = null, followingActivity = false, reducedMotion, showRelations, resetToken, focusRequest, joins, onJoinSettled, onSelect, onChapter, onPage, onMotion, onRelations, arrangement, showCausal = false, onCenter, quietSelection = false }: Props) {
   const readingPrefix = useMemo(() => libraryReadingPrefix(world), [world.library, world.sourceId]);
   const currentSource = world.library?.sources.find(source => source.id === world.sourceId);
   const volumeRoot = useMemo<OrbitalScope>(() => ({ ...volumeScope, ...(world.sourceId ? { sourceId: world.sourceId } : {}), label: currentSource?.filename ?? volumeScope.label }), [world.sourceId, currentSource?.filename]);
@@ -341,7 +344,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     const refresh = lastInspected.current === selectionKey;
     lastInspected.current = selectionKey;
     const record = followingActivity ? draws.find(draw => draw.node.id === touchedNodeIds.at(-1))?.node ?? [...draws].reverse().find(draw => touchedIds.includes(draw.node.id))?.node ?? inspectedRecord ?? level.main[0]?.node ?? level.nebula[0] : inspectedRecord ?? level.main[0]?.node ?? level.nebula[0];
-    onSelect(record ? { node: record, nodes: draws.map((draw) => draw.node), edges: inspectedRecord ? edges : [], lookupNodes: level.sourceNodes, contents: orbitalContents(record, level), inspect: !!inspectedRecord, passive: followingActivity || refresh, album: albumInfo } : null);
+    onSelect(record ? { node: record, nodes: draws.map((draw) => draw.node), edges: inspectedRecord ? edges : [], lookupNodes: level.sourceNodes, contents: orbitalContents(record, level), inspect: !!inspectedRecord, passive: followingActivity || quietSelection || refresh, album: albumInfo } : null);
   }, [inspectedRecord, draws, edges, level.sourceNodes, onSelect, followingActivity, restoreRequest, touchedIds, touchedNodeIds, albumInfo]);
 
   const snapshot = () => new Map(draws.map((draw): [string, OrbitalPose] => [draw.node.id, { position: bus.positions.get(draw.node.id) ?? draw.position, radius: draw.radius }]));
@@ -514,7 +517,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     if (draw) {
       lastFocus.current = focusRequest.sequence;
       setSelectedId(draw.node.id);
-      onSelect({ node: draw.node, nodes: draws.map((entry) => entry.node), edges: nestedEntityConnections(level, baseDraws, draw.node.id).edges, lookupNodes: level.sourceNodes, contents: orbitalContents(draw.node, level), album: albumInfo });
+      onSelect({ node: draw.node, nodes: draws.map((entry) => entry.node), edges: nestedEntityConnections(level, baseDraws, draw.node.id).edges, lookupNodes: level.sourceNodes, contents: orbitalContents(draw.node, level), album: albumInfo, ...(focusRequest.passive ? { inspect: false, passive: true } : {}) });
       setPendingFocus(draw);
     }
     else if (focusRequest.node.parent && world.interiors[focusRequest.node.parent] && scope.chapterId !== focusRequest.node.parent) {

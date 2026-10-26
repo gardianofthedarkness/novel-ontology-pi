@@ -28,6 +28,8 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const files = await readdir(`${directory}/changesets`).catch(() => []);
   const changesets = (await Promise.all(files.filter((file) => /^cs_b\d+\.json$/.test(file)).map((file) => json(`${directory}/changesets/${file}`, null)))).filter((entry) => entry && blockChapters.has(entry.blockId));
   const causalSets = (await Promise.all(files.filter(file => /^cs_causality_(agent|sweep)_\d+\.json$/.test(file)).map(file => json(`${directory}/changesets/${file}`, null)))).filter(entry => entry && entry.status !== 'approved');
+  // Time-place proposals still awaiting review: shown live as proposed periods/places.
+  const timePlacePending = (await Promise.all(files.filter(file => /^cs_timeplace_[\w-]+\.json$/.test(file)).map(file => json(`${directory}/changesets/${file}`, null)))).filter(entry => entry && entry.status === 'pending_review').flatMap(entry => entry.proposals ?? []);
   const drafts = (await Promise.all([...blockChapters.keys()].map((blockId) => json(`${directory}/working/${blockId}.json`, null)))).filter(Boolean);
   const entityMap = new Map(fold(entities).map((entity) => [entity.id, entity]));
   const eventMap = new Map(fold(events).map((event) => [event.id, event]));
@@ -234,7 +236,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   return {
     activity: liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId: options.activityAfter, reviewProgress: await sessionReviewProgress(runtime) }),
     world: { laneNodes, laneEdges, interiors, bigEventLabels, causal: { links: causalLinks, unresolved: causalUnresolved, dialogueScenes } }, gates,
-    timePlace: timePlaceProjection({ entities: [...entityMap.values()], scenes: [...sceneMap.values()], relations, events: [...eventMap.values()] }), feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
+    timePlace: timePlaceProjection({ entities: [...entityMap.values()], scenes: [...sceneMap.values()], relations, events: [...eventMap.values()], pending: timePlacePending }), feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
     status, stage, label: causalSets.length ? `${causalSets.length} causal packet${causalSets.length === 1 ? '' : 's'} awaiting review · not canon` : finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
     workSite: `chapter_${blockChapters.get(lastBlock) ?? chapters[0]?.index ?? 0}`,
     volume: options.volume ?? 1,

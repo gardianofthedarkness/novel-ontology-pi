@@ -18,13 +18,13 @@ import { StoryTimeline } from "./components/StoryTimeline";
 import { NarrativeList } from "./components/NarrativeList";
 import "./narrative.css";
 import { PlaceMap } from "./components/PlaceMap";
-import type { TimePlaceProjection } from "./data/timePlace";
-import { atlasArrangement, atlasWorld, readingOrderProjection, sceneOfSpiral, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels } from "./data/orbitalTimePlace";
+import { followTarget, timePlaceEmergence, type TimePlaceProjection } from "./data/timePlace";
+import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProjection, sceneOfSpiral, spiralNodeId, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels } from "./data/orbitalTimePlace";
 import { AtlasPanel } from "./components/AtlasPanel";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
 import type { Swipe } from "./data/gestures";
-import type { LiveActivity } from "./data/liveActivity";
+import { activityFocus, type LiveActivity } from "./data/liveActivity";
 import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
 import { KIND_LABEL } from "./archive";
 import { worldCausalLinks } from "./data/causalProjection";
@@ -137,7 +137,7 @@ export default function App() {
   const [orbitalInspection, setOrbitalInspection] = useState<OrbitalInspection | null>(null);
   const [orbitalPage, setOrbitalPage] = useState<{ key: string; label: string; kind: string; chapterId?: string } | null>(null);
   const reportOrbitalPage = useCallback((page: { key: string; label: string; kind: string; chapterId?: string }) => setOrbitalPage(current => current?.key === page.key && current.label === page.label ? current : page), []);
-  const [orbitalFocus, setOrbitalFocus] = useState<{ node: WorldNode; sequence: number; chapterId?: string } | null>(null);
+  const [orbitalFocus, setOrbitalFocus] = useState<{ node: WorldNode; sequence: number; chapterId?: string; passive?: boolean } | null>(null);
   const [albumInfo, setAlbumInfo] = useState<AlbumPanelPicture[]>([]);
   const inspectOrbital = useCallback((inspection: OrbitalInspection | null) => { setOrbitalInspection(inspection); if (inspection?.album) setAlbumInfo(inspection.album); if (inspection?.passive) return; if (inspection?.inspect !== false && inspection) setPanel(inspection.node.kind === "picture" ? "album" : "record"); setInspectorOpen(!!inspection && inspection.inspect !== false); }, []);
   const chapterOrbital = useCallback((id: string | null) => setView((current) => id ? current.mode === "interior" && current.bigEventId === id ? current : { mode: "interior", bigEventId: id } : current.mode === "lanes" ? current : { mode: "lanes" }), []);
@@ -584,8 +584,6 @@ export default function App() {
       if (!followingActivity) {
         readingPanelBookmark.current = { inspection: orbitalInspection, panel, open: inspectorOpen, selectedId };
         setInspectorOpen(false);
-        // Both modes follow Pi in their Narrative view.
-        setStageView("narrative");
       } else if (readingPanelBookmark.current) {
         const saved = readingPanelBookmark.current;
         setOrbitalInspection(saved.inspection);
@@ -656,6 +654,66 @@ export default function App() {
   useEffect(() => {
     inspectorRef.current?.scrollTo(0, 0);
   }, [panel, selected?.id, view.mode, inspectorOpen]);
+  /** Scene that holds each record (for following Pi in the scene-based views). */
+  const sceneOfRecord = useMemo(() => {
+    const owner = new Map<string, string>();
+    for (const interior of Object.values(displayWorld?.interiors ?? {})) {
+      const scenes = new Set(interior.nodes.filter((node) => node.kind === "scene").map((node) => node.id));
+      for (const edge of interior.edges) if (edge.kind === "contains" && scenes.has(edge.from) && !owner.has(edge.to)) owner.set(edge.to, edge.from);
+      for (const id of scenes) owner.set(id, id);
+    }
+    return owner;
+  }, [displayWorld]);
+  const touchedScenes = useMemo(() => new Set(activityFocus(liveActivity).nodeIds.map((id) => sceneOfRecord.get(id)).filter((id): id is string => !!id)), [liveActivity, sceneOfRecord]);
+  /** Periods and places that just emerged (new, or proposed → confirmed), for the highlight. */
+  const [emerging, setEmerging] = useState<{ times: Set<string>; places: Set<string>; at: number } | null>(null);
+  const previousTimePlace = useRef<TimePlaceProjection | null>(null);
+  const lastWork = useRef<string | null | undefined>(undefined);
+  const lastAutoSwitch = useRef(0);
+  const queuedSwitch = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (queuedSwitch.current) clearTimeout(queuedSwitch.current); }, []);
+  // Following Pi reads its work across all three views: periods that emerge
+  // open Story time, places open Places (after the periods), the time-place
+  // run points to Story time and other new work to Narrative. A view stays
+  // at least 5 s unless something new emerged.
+  useEffect(() => {
+    const change = timePlace ? timePlaceEmergence(previousTimePlace.current, timePlace) : { times: [], places: [] };
+    if (timePlace) previousTimePlace.current = timePlace;
+    if (change.times.length || change.places.length) setEmerging({ times: new Set(change.times), places: new Set(change.places), at: Date.now() });
+    const work = activityFocus(liveActivity).id ?? null;
+    const otherWork = lastWork.current !== undefined && !!work && work !== lastWork.current;
+    lastWork.current = work;
+    if (!followingActivity) return;
+    const target = followTarget(change, liveActivity?.command, otherWork);
+    const emerged = change.times.length + change.places.length > 0;
+    if (target && target !== stageView && (emerged || Date.now() - lastAutoSwitch.current > 5000)) { setStageView(target); lastAutoSwitch.current = Date.now(); }
+    if (change.times.length && change.places.length) {
+      if (queuedSwitch.current) clearTimeout(queuedSwitch.current);
+      queuedSwitch.current = setTimeout(() => { setStageView("places"); lastAutoSwitch.current = Date.now(); }, 6000);
+    }
+  }, [timePlace, liveActivity]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Take the orbit to what just emerged (Story time: the period's first scene; Places: the place).
+  const focusedEmergence = useRef(0);
+  useEffect(() => {
+    if (!emerging || !orbitalMode || focusedEmergence.current === emerging.at || !timePlace) return;
+    const time = stageView === "story" ? timePlace.times.find((entry) => emerging.times.has(entry.id)) : undefined;
+    const sceneId = time?.anchorSceneId ?? time?.sceneIds[0];
+    const placeId = stageView === "places" ? [...emerging.places][0] : undefined;
+    const id = sceneId ? spiralNodeId(sceneId) : placeId ? pinNodeId(placeId) : null;
+    if (!id) return;
+    focusedEmergence.current = emerging.at;
+    setOrbitalFocus({ node: { id, label: id, kind: "scene", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, sequence: Date.now(), passive: followingActivity });
+  }, [emerging, stageView, orbitalMode, timePlace]);
+  // Following Pi in the orbital Story time / Places views: go to the scene Pi is touching.
+  useEffect(() => {
+    if (!followingActivity || !orbitalMode || stageView === "narrative") return;
+    // What just emerged keeps the camera for a while; then Pi's latest touch leads again.
+    if (emerging && Date.now() - emerging.at < 9000) return;
+    const sceneId = [...touchedScenes][0];
+    if (!sceneId) return;
+    const id = stageView === "story" ? spiralNodeId(sceneId) : atlasNodeId(sceneId);
+    setOrbitalFocus({ node: { id, label: id, kind: "scene", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, sequence: Date.now(), passive: true });
+  }, [touchedScenes, followingActivity, orbitalMode, stageView]); // eslint-disable-line react-hooks/exhaustive-deps
   const requestOrbitalFocus = (node: WorldNode) => {
     if (orbitalInspection) setOrbitalInspection({ ...orbitalInspection, node });
     setOrbitalFocus({ node, sequence: Date.now() });
@@ -757,9 +815,9 @@ export default function App() {
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
           </div>
           {regroupedOrbit && stageView === "places" && timePlace && <AtlasPanel data={timePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: timePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
-          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} showCausal={stageView === "story"} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
-          : stageView === "story" ? <StoryTimeline data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("narrative"); if (node) requestOrbitalFocus(node); }} />
-          : stageView === "places" ? <PlaceMap data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} />
+          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} activity={liveActivity} quietSelection={followingActivity} showCausal={stageView === "story"} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          : stageView === "story" ? <StoryTimeline data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} emerging={emerging?.times} touched={emerging && Date.now() - emerging.at < 9000 ? undefined : touchedScenes} following={followingActivity} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("narrative"); if (node) requestOrbitalFocus(node); }} />
+          : stageView === "places" ? <PlaceMap data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} emerging={emerging?.places} />
           : orbitalMode ? <OrbitalExplorer key="narrative" world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
           : <NarrativeList world={shownWorld} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} timePlace={timePlace} bookBar={bookBar} selectedId={selected?.id ?? null} focusRequest={orbitalFocus} onSelect={inspectOrbital} />}
         </section>

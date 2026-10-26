@@ -99,8 +99,8 @@ function regroup(bundles: Map<string, { nodes: WorldNode[]; edges: WorldEdge[] }
   return { nodes: [...nodes.values()], edges: [...edges.values()] };
 }
 
-const groupNode = (id: string, label: string, viewKind: string, chrono: number, trackId: string, summary: string): WorldNode => ({
-  id, label, viewKind, kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono, trackId, trackLabel: viewKind, summary, subLabel: summary, lanePos: [0, 0, 0], interiorPos: [0, 0, 0],
+const groupNode = (id: string, label: string, viewKind: string, chrono: number, trackId: string, summary: string, proposed = false): WorldNode => ({
+  id, label, viewKind, kind: "bigEvent", state: proposed ? "proposed" : "canon", parent: null, lane: "canon", chrono, trackId, trackLabel: viewKind, summary, subLabel: summary, lanePos: [0, 0, 0], interiorPos: [0, 0, 0],
 });
 
 /**
@@ -140,7 +140,7 @@ export function spiralWorld(world: WorldLike & { causal?: CausalSummary; library
     const period = time ? `${time.flashback ? "↶ " : ""}${time.label}${dateLine(time) ? ` · ${dateLine(time)}` : ""}` : data.available ? "Time not stated" : `Chapter ${scene.chapterIndex} · reading order`;
     const place = scene.placeIds[0] ? data.names[scene.placeIds[0]] ?? scene.placeIds[0] : null;
     const summary = `${period}${time?.flashback ? ` · flashback${host ? ` told during ${host.label}` : ""}` : ""}${place ? ` · ⌖ ${place}${scene.placeCarried ? " (carried over)" : ""}` : ""} · scene ${scene.index + 1} in reading order, chapter ${scene.chapterIndex}`;
-    result.laneNodes.push(groupNode(id, scene.label, period, rank, time?.flashback ? "flashback" : "present", summary));
+    result.laneNodes.push(groupNode(id, scene.label, period, rank, time?.flashback ? "flashback" : "present", summary, !!time?.proposed));
     result.bigEventLabels[id] = scene.label;
     const bundle = regroup(bundles, id, [scene]);
     result.interiors[id] = { nodes: bundle.nodes.filter((node) => node.id !== scene.id), edges: bundle.edges.filter((edge) => edge.from !== scene.id && edge.to !== scene.id) };
@@ -250,6 +250,12 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
       ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told` }
       : { label: "READING ORDER →", detail: `Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""}` },
     initialFrame: (draws) => draws.filter((draw) => draw.role === "main" && draw.node.chrono < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
+    // A selected scene is framed with its neighbours on the spiral (about half a turn).
+    focusFor: (selectedId, draws) => {
+      const self = draws.find((draw) => draw.role === "main" && draw.node.id === selectedId);
+      if (!self) return null;
+      return draws.filter((draw) => draw.role === "main" && Math.abs(draw.node.chrono - self.node.chrono) <= 3).map((draw) => draw.position);
+    },
     routeCausal: routeCausalArcs,
     paths: (draws) => {
       const main = draws.filter((draw) => draw.role === "main").sort((first, second) => first.node.chrono - second.node.chrono);
@@ -295,7 +301,8 @@ export function atlasWorld(world: WorldLike, data: TimePlaceProjection, filter: 
     const time = timeById.get(scenePeriod(scene) ?? "");
     const place = data.names[scene.placeIds[0]] ?? scene.placeIds[0];
     const summary = `⌖ ${place}${scene.placeCarried ? " (carried over from the scene before)" : ""} · ${time ? `${time.flashback ? "↶ " : ""}${time.label}${dateLine(time) ? ` · ${dateLine(time)}` : ""}` : "time not stated"} · scene ${scene.index + 1}, chapter ${scene.chapterIndex}`;
-    result.laneNodes.push(groupNode(id, scene.label, "Scene", rank, "atlas", summary));
+    const proposed = !!time?.proposed || !!data.places.find((place) => place.id === scene.placeIds[0])?.proposed;
+    result.laneNodes.push(groupNode(id, scene.label, "Scene", rank, "atlas", summary, proposed));
     result.bigEventLabels[id] = scene.label;
     const bundle = regroup(bundles, id, [scene]);
     // The sphere is the scene: inside are its records (and the people and places around them).
@@ -337,7 +344,7 @@ export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter,
   const floor: FloorMark[] = [...map].map(([id, spot]) => ({ id, x: spot.x, z: spot.z, radius: radiusOf(id), active: shown.has(id) }));
   const pins: OrbitalDraw[] = data.places.flatMap((place): OrbitalDraw[] => {
     const spot = map.get(place.id);
-    return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: "canon", parent: null, lane: "canon", chrono: 0, summary: `${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it) · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
+    return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: place.proposed ? "proposed" : "canon", parent: null, lane: "canon", chrono: 0, summary: `${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it) · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
   });
   const withRecords = levels.event || levels.dialogue;
   /** Records sit inside their scene, whose sphere (scaled like the main
@@ -366,9 +373,17 @@ export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter,
     envelope: withRecords ? levels.scene ? "shell" : "hidden" : undefined,
     timeKey: { label: "PLACES · SPACE-TIME", detail: `Map on the floor (schematic) · ${withRecords ? `${[levels.event && "events", levels.dialogue && "dialogue"].filter(Boolean).join(" and ")} inside ${levels.scene ? "each scene" : "their scene's spot"}` : "scenes"} rise in story order above their place · select a character for their path` },
     focusFor: (selectedId, draws) => {
+      const self = draws.find((draw) => draw.node.id === selectedId)?.position;
+      // A place or one of its scenes: frame the whole column above that place, down to the map.
+      const placeId = selectedId.startsWith("pin:") ? selectedId.slice(4) : sceneOf.get(selectedId)?.placeIds[0];
+      if (placeId && !characters.has(selectedId)) {
+        const spot = map.get(placeId);
+        const column = draws.filter((draw) => draw.role === "main" && sceneOf.get(draw.node.id)?.placeIds[0] === placeId).map((draw) => draw.position);
+        const span = [...column, ...(spot ? [[spot.x, FLOOR_Y, spot.z] as Position3] : [])];
+        return span.length > 1 ? span : null;
+      }
       if (!characters.has(selectedId)) return null;
       // Frame the character with every scene of theirs in the window (their path).
-      const self = draws.find((draw) => draw.node.id === selectedId)?.position;
       const span = [...pathOf(selectedId, draws), ...(self ? [self] : [])];
       return span.length > 1 ? span : null;
     },

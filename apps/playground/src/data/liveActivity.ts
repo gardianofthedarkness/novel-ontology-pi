@@ -6,6 +6,8 @@ export interface LiveActivity {
     totalFacts?: number | null; inspectedFacts?: number; accepted?: number | null; rejected?: number | null; held?: number | null; unreviewed?: number | null;
   } | null;
   cursor?: string | null;
+  /** Pi's latest scoped CLI command, e.g. "novel timeplace run". */
+  command?: { label: string; status: string; timestamp: string } | null;
   batch?: { id: string; nodeIds: string[]; chapterIds: string[]; faculties: string[]; timestamp: string } | null;
   count: number;
   chapterId: string;

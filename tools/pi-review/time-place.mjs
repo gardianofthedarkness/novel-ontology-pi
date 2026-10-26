@@ -9,12 +9,21 @@
  *   previous scene's place within the same chapter, flagged `carried` so the
  *   map never presents it as stated;
  * - places: named places with the scenes and characters seen there.
+ *
+ * `pending` are time-place proposals still awaiting review: their new periods
+ * and places are included, flagged `proposed`, so the views can show them
+ * the moment Pi proposes them (never as canon).
  */
 const nameOf = (entity) => entity?.names?.find((form) => form.kind === 'canonical')?.text ?? entity?.names?.[0]?.text ?? entity?.id;
 const order = (id) => { const match = /^b(\d+)_s(\d+)$/.exec(id ?? ''); return match ? Number(match[1]) * 1_000_000 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
 const clip = (value, length) => typeof value === 'string' && value.length > length ? `${value.slice(0, length - 1)}…` : value;
 
-export function timePlaceProjection({ entities, scenes, relations, events = [] }) {
+export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [] }) {
+  const known = new Set(applied.map((entity) => entity.id));
+  const proposedEntities = pending.filter((proposal) => proposal.kind === 'upsert_entity' && ['TimePoint', 'Location'].includes(proposal.payload?.kind) && !known.has(proposal.payload.id)).map((proposal) => proposal.payload);
+  const proposedIds = new Set(proposedEntities.map((entity) => entity.id));
+  const entities = [...applied, ...proposedEntities];
+  const relations = [...appliedRelations, ...pending.filter((proposal) => proposal.kind === 'add_relation' && ['OCCURS_DURING', 'LOCATED_AT'].includes(proposal.payload?.type)).map((proposal) => proposal.payload)];
   const byId = new Map(entities.map((entity) => [entity.id, entity]));
   const times = entities.filter((entity) => entity.kind === 'TimePoint');
   if (!times.length && !relations.some((relation) => relation.type === 'LOCATED_AT')) return { available: false, times: [], scenes: [], places: [], characters: [], names: {} };
@@ -62,14 +71,14 @@ export function timePlaceProjection({ entities, scenes, relations, events = [] }
       id: time.id, label: nameOf(time), gloss: properties.gloss ?? '', family: properties.family ?? 'date', role: properties.role ?? 'ADVANCE',
       flashback: properties.flashback === true, flashbackProbability: Number(properties.flashbackProbability ?? 0), decidedBy: properties.decidedBy ?? null,
       toldFromId: properties.toldFromId ?? null, date: properties.date ?? null, partOfDay: properties.partOfDay ?? null,
-      chapterIndex: Number(properties.chapterIndex ?? 0), storyIndex: Number(properties.storyIndex ?? 0), narrativeIndex: Number(properties.narrativeIndex ?? 0),
+      chapterIndex: Number(properties.chapterIndex ?? 0), storyIndex: Number(properties.storyIndex ?? 0), narrativeIndex: Number(properties.narrativeIndex ?? 0), proposed: proposedIds.has(time.id),
       anchorSceneId: properties.sceneId ?? null, sceneIds: sceneRows.filter((scene) => scene.times.some((entry) => entry.id === time.id)).map((scene) => scene.id),
     };
   }).sort((first, second) => first.storyIndex - second.storyIndex);
   const placeIds = new Set(sceneRows.flatMap((scene) => scene.placeIds));
   const places = [...placeIds].map((id) => {
     const here = sceneRows.filter((scene) => scene.placeIds.includes(id));
-    return { id, label: nameOf(byId.get(id)), sceneIds: here.map((scene) => scene.id), statedScenes: here.filter((scene) => !scene.placeCarried).length, characterIds: [...new Set(here.flatMap((scene) => scene.characterIds))] };
+    return { id, label: nameOf(byId.get(id)), sceneIds: here.map((scene) => scene.id), statedScenes: here.filter((scene) => !scene.placeCarried).length, characterIds: [...new Set(here.flatMap((scene) => scene.characterIds))], proposed: proposedIds.has(id) };
   }).sort((first, second) => second.sceneIds.length - first.sceneIds.length);
   const characterCounts = new Map();
   for (const scene of sceneRows) for (const id of scene.characterIds) characterCounts.set(id, (characterCounts.get(id) ?? 0) + 1);
