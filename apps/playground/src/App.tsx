@@ -671,6 +671,13 @@ export default function App() {
   const lastWork = useRef<string | null | undefined>(undefined);
   const lastAutoSwitch = useRef(0);
   const queuedSwitch = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Latest follow/view state for the queued Places switch below: the callback
+   *  must not fire after the user turned following off or moved to another view
+   *  (manual tab switches bypass this effect, so the closed-over values would lie). */
+  const followingRef = useRef(followingActivity);
+  followingRef.current = followingActivity;
+  const stageViewRef = useRef(stageView);
+  stageViewRef.current = stageView;
   useEffect(() => () => { if (queuedSwitch.current) clearTimeout(queuedSwitch.current); }, []);
   // Following Pi reads its work across all three views: periods that emerge
   // open Story time, places open Places (after the periods), the time-place
@@ -689,7 +696,10 @@ export default function App() {
     if (target && target !== stageView && (emerged || Date.now() - lastAutoSwitch.current > 5000)) { setStageView(target); lastAutoSwitch.current = Date.now(); }
     if (change.times.length && change.places.length) {
       if (queuedSwitch.current) clearTimeout(queuedSwitch.current);
-      queuedSwitch.current = setTimeout(() => { setStageView("places"); lastAutoSwitch.current = Date.now(); }, 6000);
+      queuedSwitch.current = setTimeout(() => {
+        if (!followingRef.current || stageViewRef.current !== "story") return;
+        setStageView("places"); lastAutoSwitch.current = Date.now();
+      }, 6000);
     }
   }, [timePlace, liveActivity]); // eslint-disable-line react-hooks/exhaustive-deps
   // Take the orbit to what just emerged (Story time: the period's first scene; Places: the place).
