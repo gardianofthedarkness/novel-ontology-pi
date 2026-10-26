@@ -325,10 +325,11 @@ export class BlockProcessor {
           if (this.observation.timePlace && this.observation.novelDir) {
             try {
               const sceneIds = result.changeset.proposals.filter((proposal) => proposal.kind === "create_scene").map((proposal) => (proposal.payload as Scene).id);
-              const output = sceneIds.length ? await timePlaceForNewScenes({ novelDir: this.observation.novelDir, sentences: new Map(sentences.map((sentence) => [sentence.id, sentence])), mode: this.observation.timePlace.mode, work: this.observation.workModel, decisions: this.decisions, sceneIds, provenanceBlockId: block.blockId }) : null;
+              const output = sceneIds.length ? await timePlaceForNewScenes({ novelDir: this.observation.novelDir, sentences: new Map(sentences.map((sentence) => [sentence.id, sentence])), mode: this.observation.timePlace.mode, work: this.observation.workModel, decisions: this.decisions, sceneIds, provenanceBlockId: block.blockId , reviewSource: !!this.observation.semanticReview }) : null;
               if (output?.changeset) {
                 await saveChangeSet(this.observation.novelDir, output.changeset);
-                const verdict = await this.review(output.changeset);
+                // Semantic hosts review time-place packets through the shared gate (novel review); legacy hosts approve here.
+                const verdict = output.changeset.reviewSource ? "pending_review" : await this.review(output.changeset);
                 output.changeset.status = verdict;
                 await saveChangeSet(this.observation.novelDir, output.changeset);
                 if (verdict === "approved") await applyChangeSet(this.store, output.changeset, emit);

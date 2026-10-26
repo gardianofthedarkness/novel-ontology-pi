@@ -1,3 +1,4 @@
+import { timePlaceChangesetIds } from './timeplace-access.mjs';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { appendFile, cp, mkdir, open, readFile, unlink, writeFile } from 'node:fs/promises';
@@ -165,7 +166,7 @@ try {
     if (cancelled || Date.now() >= deadline || ++calls > manifest.limits.commands) throw new Error('Run window or command budget exhausted');
     let permitted;
     let refusal;
-    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); permitted = authorize(command, scope); break; } catch (error) { if (error.message.startsWith('Use novel review')) refusal = error.message; } }
+    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); scope.timePlaceChangesetIds = await timePlaceChangesetIds(scope.novel); permitted = authorize(command, scope); break; } catch (error) { if (error.message.startsWith('Use novel review')) refusal = error.message; } }
     if (!permitted) {
       await emit({ type: 'pi.command', label: 'Scoped command rejected', status: 'error', reasonCode: 'allowlist' });
       throw new Error(refusal ?? 'Command outside scoped CLI allowlist. Run ONE command per call: novel ..., cat NOVEL_JOB.json, cat <absolute skill/reference path>, wc -l <evidence>, or sed -n \'1,150p\' <evidence>. No pipes, joins, ls, head, scripts or expansions. Read workspace paths from NOVEL_JOB.json.');
@@ -224,7 +225,7 @@ try {
     const volume = volumes.find((volume) => args.includes(volume.workspace) || args.includes(`${volume.workspace}/ontology`));
     if (volume) { volumeId = volume.id; await writeFile(`${cwd}/active-volume.json`, JSON.stringify({ volume: volumeId }), { mode: 0o600 }); }
     if (args[0] === 'album' && args[1] === 'import') await verifyAlbumAccess(volume.album, volume.input);
-    const mutations = args[0] === 'review' && ['decide', 'apply'].includes(args[1]) || args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'causality' && ['propose', 'sweep'].includes(args[1]) || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise', 'decide'].includes(args[1]);
+    const mutations = args[0] === 'review' && ['decide', 'apply'].includes(args[1]) || args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'causality' && ['propose', 'sweep'].includes(args[1]) || args[0] === 'timeplace' && args[1] === 'run' || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise', 'decide'].includes(args[1]);
     if (volume && mutations && volume.id > 1 && (await jobState()).some((state) => state.volume < volume.id && !state.applied)) throw new Error('Earlier volumes must pass their merge gates before later-volume mutations');
     if (args[0] === 'ingest') {
       const states = (await jobState()).filter((state) => state.volume === volume.id);

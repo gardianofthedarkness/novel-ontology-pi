@@ -56,6 +56,9 @@ export interface TimePlaceResult {
   places: ScenePlace[];
   usage: UsageMeter;
   notes: string[];
+  /** Each scene's opening sentence: the evidence that a scene with no time
+   * word of its own continues a period (alongside the period's anchor). */
+  sceneOpenings?: Record<string, string>;
 }
 
 export interface TimePlaceInput {
@@ -220,7 +223,8 @@ export async function runTimePlace(raw: TimePlaceInput): Promise<TimePlaceResult
       if (known) places.push({ sceneId: scene.id, key: `entity:${known.id}`, name: known.names[0]?.text ?? known.id, entityId: known.id, role: "setting", specific: true, sentenceId: scene.sentences[0]?.id ?? "", source: "scene" });
     }
   }
-  return { mode: input.mode, usedJev: !!input.decisions, mentions, periods: assembled.periods, reordered: assembled.reordered, sceneTimes: assembled.scenes, places, usage, notes };
+  const sceneOpenings = Object.fromEntries(input.scenes.flatMap((scene) => scene.sentences[0] ? [[scene.id, scene.sentences[0].id]] : []));
+  return { mode: input.mode, usedJev: !!input.decisions, mentions, periods: assembled.periods, reordered: assembled.reordered, sceneTimes: assembled.scenes, places, usage, notes, sceneOpenings };
 }
 
 const fnv = (text: string) => { let hash = 2166136261; for (const character of text) hash = Math.imul(hash ^ character.codePointAt(0)!, 16777619) >>> 0; return hash.toString(36); };
@@ -233,7 +237,7 @@ export const placeIdFor = (key: string) => `loc_tp_${fnv(key)}`;
  * new Location entities for specific places not yet known, and LOCATED_AT
  * for scene settings. Relations already in the bundle are not re-proposed.
  */
-export function timePlaceProposals(result: TimePlaceResult, existing: { entityIds: Set<string>; relationKeys: Set<string> }, provenanceBlockId = "time-place"): ChangeProposal[] {
+export function timePlaceProposals(result: TimePlaceResult, existing: { entityIds: Set<string>; relationKeys: Set<string>; /** Stored periods' anchor sentences (periods from earlier runs). */ anchorSentences?: Map<string, string> }, provenanceBlockId = "time-place"): ChangeProposal[] {
   const proposals: ChangeProposal[] = [];
   const relationKey = (relation: Pick<Relation, "fromId" | "toId" | "type">) => `${relation.type}:${relation.fromId}:${relation.toId}`;
   const addRelation = (relation: Relation, sentenceIds: string[]) => {
@@ -258,15 +262,17 @@ export function timePlaceProposals(result: TimePlaceResult, existing: { entityId
     proposals.push({ id: `tp_ent_${period.id}`, kind: "upsert_entity", payload: entity, confidence: entity.confidence, provenance: { blockId: provenanceBlockId, sentenceIds: [anchor.sentenceId], patchId: "time-place" } } as ChangeProposal);
   }
   const periodById = new Map([...result.periods, ...result.reordered].map((period) => [period.id, period]));
+  // An inherited membership cites the period's time word and the scene's opening.
+  const inheritedEvidence = (sceneId: string, anchorSentenceId: string | undefined) => [...new Set([anchorSentenceId, result.sceneOpenings?.[sceneId]].filter((id): id is string => !!id))];
   for (const scene of result.sceneTimes) for (const periodId of scene.periodIds) {
     const period = periodById.get(periodId);
     if (!period) {
       // Continues a period from an earlier block or run.
-      addRelation({ fromId: scene.sceneId, toId: periodId, type: "OCCURS_DURING", properties: { via: "inherited" }, confidence: 0.6 }, []);
+      addRelation({ fromId: scene.sceneId, toId: periodId, type: "OCCURS_DURING", properties: { via: "inherited" }, confidence: 0.6 }, inheritedEvidence(scene.sceneId, existing.anchorSentences?.get(periodId)));
       continue;
     }
     const via = period.anchor.sceneId === scene.sceneId ? "anchor" : "inherited";
-    addRelation({ fromId: scene.sceneId, toId: periodId, type: "OCCURS_DURING", properties: { via, flashback: period.flashback }, confidence: via === "anchor" ? period.anchor.verdict.confidence ?? 0.7 : 0.6 }, via === "anchor" ? [period.anchor.sentenceId] : []);
+    addRelation({ fromId: scene.sceneId, toId: periodId, type: "OCCURS_DURING", properties: { via, flashback: period.flashback }, confidence: via === "anchor" ? period.anchor.verdict.confidence ?? 0.7 : 0.6 }, via === "anchor" ? [period.anchor.sentenceId] : inheritedEvidence(scene.sceneId, period.anchor.sentenceId));
   }
   const minted = new Set<string>();
   for (const place of result.places) {

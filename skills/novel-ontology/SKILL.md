@@ -111,12 +111,18 @@ re-read its fresh revision. Never drop conflicting updates merely to clear a gat
 
 ## Story time and places (phase 1)
 
-- Standalone `novel timeplace run <dir>` finds scene time/place anchors;
-  `--propose` creates a pending packet, never verified canon. Runs are
-  incremental; `novel timeplace show <dir>` prints the story timeline.
-- This legacy producer still needs source-bound typed assertion support
-  before shared hosted review. Do not bypass this with a separate approval
-  command or claim it is available in a scoped host.
+- `novel timeplace run <dir> --propose [--mode hybrid|llm|programmatic]
+  [--chapter N]` finds scene time/place anchors and writes a pending
+  `cs_timeplace_*` packet, never verified canon. Runs are incremental (only
+  scenes without time facts); `novel timeplace show <dir>` prints the story
+  timeline.
+- Review it like every other faculty, through the shared gate:
+  `novel review show <dir> <packet> --scope book`, then `evidence` for any
+  fact whose evidence page continues, then `decide`, then `apply`. Each
+  period (TimePoint), place (Location), scene→period (OCCURS_DURING) and
+  scene→place (LOCATED_AT) is one typed fact with its original sentences:
+  accept a period only if its time word is in the cited sentence; a scene
+  continuing a period cites that time word and the scene's opening.
 - Do not treat story order as causation, a carried-over place as stated,
   or a derived date as a stated one. Hierarchy (room ⊂ building ⊂ city),
   spatial relations and cross-volume time alignment are later phases.

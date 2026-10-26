@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describeTime, detectTimeMentions, leadingDateCue, needsRoleCheck, parseNumber, parseTimeText, strongAdvanceCue } from "../src/digger/timeplace/lexicon.js";
 import { assemblePeriods, type AnchoredMention } from "../src/digger/timeplace/periods.js";
 import { runTimePlace, timePlaceProposals, type SceneSource } from "../src/digger/timeplace/faculty.js";
+import { timePlaceReviewSource } from "../src/digger/timeplace/afterApply.js";
 import { sectionBlock } from "../src/digger/intake/sectioning.js";
 import type { DecisionModel } from "../src/ground/connectors/jev.js";
 import type { WorkModel } from "../src/ground/connectors/llm.js";
@@ -136,6 +137,13 @@ test("the faculty asks Jev only about checkable words, keeps quoted ones as refe
   assert.equal((times.find((proposal) => (proposal.payload as Entity).properties.flashback)!.payload as Entity).properties.flashbackProbability, 0.8);
   const again = timePlaceProposals(result, { entityIds: new Set(["loc_7"]), relationKeys: new Set(relations.map((relation) => `${relation.type}:${relation.fromId}:${relation.toId}`)) });
   assert.equal(again.filter((proposal) => proposal.kind === "add_relation").length, 0, "re-runs never duplicate relations");
+  // Every assertion cites original sentences, so the shared review gate can bind it.
+  assert.ok(proposals.every((proposal) => proposal.provenance.sentenceIds.length), "no fact without evidence");
+  const inherited = proposals.find((proposal) => proposal.kind === "add_relation" && (proposal.payload as { properties: { via?: string } }).properties.via === "inherited");
+  if (inherited) assert.ok(inherited.provenance.sentenceIds.length >= 1, "an inherited period cites its time word and the scene's opening");
+  const allSentences = new Map(scenes.flatMap((scene) => scene.sentences.map((sentence) => [sentence.id, sentence] as const)));
+  const source = timePlaceReviewSource(proposals, allSentences);
+  assert.deepEqual(new Set(source.map((sentence) => sentence.id)), new Set(proposals.flatMap((proposal) => proposal.provenance.sentenceIds)), "the packet carries exactly the cited sentences");
 });
 
 test("budgets stop paid calls and fall back to rules, with a note", async () => {
@@ -179,7 +187,8 @@ test("runs continue from the book's stored periods, so block-by-block equals the
     const decisions: DecisionModel = { modelId: "mock", async decide(_state, questions) { return questions.map((question) => ({ key: question.key, value: "ADVANCE", confidence: 0.9 })); } };
     const store = new BundleStore(joinPath(directory, "ontology"));
     const first = await timePlaceForNewScenes({ novelDir: directory, sentences: sentenceMap, mode: "programmatic", decisions, sceneIds: ["scene_1"], provenanceBlockId: "b0001" });
-    await applyChangeSet(store, { ...first.changeset!, status: "approved" });
+    // Legacy direct approval (no shared-gate decisions): apply without the cited-sentence bundle.
+    await applyChangeSet(store, { ...first.changeset!, reviewSource: undefined, status: "approved" });
     const second = await timePlaceForNewScenes({ novelDir: directory, sentences: sentenceMap, mode: "programmatic", decisions, provenanceBlockId: "b0002" });
     assert.equal(second.scenes, 2, "only scenes without time facts");
     const relations = (await read(joinPath(directory, "ontology", "relations.jsonl"), "utf8")).split("\n").filter(Boolean).map((line) => JSON.parse(line));
