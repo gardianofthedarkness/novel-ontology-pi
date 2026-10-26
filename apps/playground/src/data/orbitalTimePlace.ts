@@ -1,4 +1,4 @@
-import type { CausalSummary, WorldEdge, WorldNode } from "../types.js";
+import type { CausalLink, CausalSummary, WorldEdge, WorldNode } from "../types.js";
 import type { CausalArrow } from "./causalProjection.js";
 import type { Position3 } from "./spatialLayout.js";
 import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
@@ -25,7 +25,15 @@ export interface RegroupedWorld {
   interiors: Record<string, { nodes: WorldNode[]; edges: WorldEdge[] }>;
   bigEventLabels: Record<string, string>;
   causal?: CausalSummary;
+  /** Other volumes this book's cross-volume causal links reach (Story time). */
+  portals?: VolumePortal[];
 }
+export interface VolumePortal { id: string; sourceId: string; label: string; before: boolean; links: number }
+interface LibraryLike {
+  sources: { id: string; title: string; filename: string }[];
+  causal?: { links: { id: string; universeId: string; from: { sourceId: string; unitId: string }; to: { sourceId: string; unitId: string }; state: CausalLink["state"]; stale: boolean }[] };
+}
+export const portalNodeId = (sourceId: string) => `volume:${sourceId}`;
 /** Volume-level arrangement handed to the orbital explorer. */
 export interface OrbitalArrangement {
   /** Anchor positions (layout units, before the orbit's ×3 scale). */
@@ -121,7 +129,7 @@ export const sceneOfSpiral = (id: string) => id.startsWith("spiral:") ? id.slice
 /** Story time: every scene of the book on one spiral in story order. Each
  * sphere is a scene (inside: its events and dialogue); its code line names
  * its period. The book's stored causal links come along for the arrows. */
-export function spiralWorld(world: WorldLike & { causal?: CausalSummary }, data: TimePlaceProjection): RegroupedWorld {
+export function spiralWorld(world: WorldLike & { causal?: CausalSummary; library?: LibraryLike; sourceId?: string | null }, data: TimePlaceProjection): RegroupedWorld {
   const bundles = sceneBundles(world);
   const timeById = new Map(data.times.map((time) => [time.id, time]));
   const result: RegroupedWorld = { laneNodes: [], laneEdges: [], interiors: {}, bigEventLabels: {}, causal: world.causal };
@@ -137,6 +145,23 @@ export function spiralWorld(world: WorldLike & { causal?: CausalSummary }, data:
     const bundle = regroup(bundles, id, [scene]);
     result.interiors[id] = { nodes: bundle.nodes.filter((node) => node.id !== scene.id), edges: bundle.edges.filter((edge) => edge.from !== scene.id && edge.to !== scene.id) };
   });
+  // Cross-volume causes (the universe ledger): one end here, the other at a
+  // portal for the other volume, before or after the spiral by reading order.
+  const here = world.sourceId, sources = world.library?.sources ?? [];
+  const crossing = here ? (world.library?.causal?.links ?? []).filter((link) => !link.stale && (link.from.sourceId === here) !== (link.to.sourceId === here)) : [];
+  if (crossing.length) {
+    const position = (sourceId: string) => sources.findIndex((source) => source.id === sourceId);
+    const portals = new Map<string, VolumePortal>();
+    const links = crossing.map((link): CausalLink => {
+      const other = link.from.sourceId === here ? link.to : link.from;
+      const portal = portals.get(other.sourceId) ?? { id: portalNodeId(other.sourceId), sourceId: other.sourceId, label: sources[position(other.sourceId)]?.title ?? other.sourceId, before: position(other.sourceId) < position(here!), links: 0 };
+      portal.links++;
+      portals.set(other.sourceId, portal);
+      return { id: `universe:${link.id}`, from: link.from.sourceId === here ? link.from.unitId : portal.id, to: link.to.sourceId === here ? link.to.unitId : portal.id, fromChapter: "", toChapter: "", state: link.state, universeId: link.universeId };
+    });
+    result.causal = { unresolved: world.causal?.unresolved ?? 0, dialogueScenes: world.causal?.dialogueScenes, links: [...(world.causal?.links ?? []), ...links] };
+    result.portals = [...portals.values()];
+  }
   return result;
 }
 
@@ -213,11 +238,17 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
       return { node: { ...record, viewKind: record.kind === "dialogue" ? "Dialogue" : "Event" }, position: anchor.map((value, axis) => value * 3 + local[axis]) as Position3, radius: record.kind === "dialogue" ? 5 : 7, role: "preview", previewParentId: id, order: rank + (index + 1) / (inside.length + 1) };
     });
   }) : [];
+  // Other volumes, past either end of the spiral; their arcs are the cross-volume causes.
+  const reach = ((order.length - 1) / 2 * SPIRAL.step + 4 * SPIRAL.step) * 3;
+  for (const portal of world?.portals ?? []) records.push({
+    node: { id: portal.id, label: portal.label, viewKind: "Other volume", kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono: 0, summary: `${portal.links} cross-volume causal link${portal.links === 1 ? "" : "s"} with this book (universe ledger) · ${portal.before ? "read before" : "read after"} this volume`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] },
+    position: [portal.before ? -reach : reach, 0, 0], radius: 70, role: "preview", order: portal.before ? -1 : order.length + 1,
+  });
   return {
-    anchors, radiusScale: 0.42, causal: true, extraDraws: records, envelope: records.length ? "shell" : undefined,
+    anchors, radiusScale: 0.42, causal: true, extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
     timeKey: data.available
-      ? { label: "STORY TIME →", detail: "Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs) · amber: a flashback, threaded to where it is told" }
-      : { label: "READING ORDER →", detail: "Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes" },
+      ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told` }
+      : { label: "READING ORDER →", detail: `Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""}` },
     initialFrame: (draws) => draws.filter((draw) => draw.role === "main" && draw.node.chrono < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
     routeCausal: routeCausalArcs,
     paths: (draws) => {

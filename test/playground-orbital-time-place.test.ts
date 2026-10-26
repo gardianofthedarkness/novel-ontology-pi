@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { atlasArrangement, atlasNodeId, atlasScenes, atlasWorld, pinNodeId, readingOrderProjection, routeCausalArcs, spiralArrangement, spiralNodeId, spiralWorld } from "../apps/playground/src/data/orbitalTimePlace.js";
+import { atlasArrangement, atlasNodeId, atlasScenes, atlasWorld, pinNodeId, portalNodeId, readingOrderProjection, routeCausalArcs, spiralArrangement, spiralNodeId, spiralWorld } from "../apps/playground/src/data/orbitalTimePlace.js";
 import { orbitalLevel, surroundingEntities, mainProminence } from "../apps/playground/src/data/orbitalModel.js";
 import { layoutOrbitalLevel } from "../apps/playground/src/data/orbitalLayout.js";
 import type { TimePlaceProjection } from "../apps/playground/src/data/timePlace.js";
@@ -123,4 +123,20 @@ test("before time-place runs, the spiral uses reading order and still carries th
   assert.equal(spiral.laneNodes[0].viewKind, "Chapter 0 · reading order");
   assert.equal(spiralArrangement(order, spiral).timeKey.label, "READING ORDER →");
   assert.equal(spiralArrangement(order, spiral).extraDraws!.length, 3, "causal endpoints still sit in their bubbles");
+});
+
+test("cross-volume causes reach a portal for the other volume past the spiral's end", () => {
+  const library = {
+    sources: [{ id: "doc_a", title: "Book A", filename: "a.epub" }, { id: "doc_b", title: "Book B", filename: "b.epub" }],
+    causal: { links: [
+      { id: "u1", universeId: "uni", from: { sourceId: "doc_a", unitId: "e3" }, to: { sourceId: "doc_b", unitId: "x9" }, state: "canon" as const, stale: false },
+      { id: "u2", universeId: "uni", from: { sourceId: "doc_a", unitId: "e1" }, to: { sourceId: "doc_b", unitId: "x1" }, state: "canon" as const, stale: true },
+    ] },
+  };
+  const spiral = spiralWorld({ ...causalWorld, library, sourceId: "doc_a" }, data);
+  assert.deepEqual(spiral.portals, [{ id: portalNodeId("doc_b"), sourceId: "doc_b", label: "Book B", before: false, links: 1 }], "stale links are left out");
+  const crossing = spiral.causal!.links.find((link) => link.universeId)!;
+  assert.deepEqual([crossing.from, crossing.to], ["e3", portalNodeId("doc_b")]);
+  const portal = spiralArrangement(data, spiral).extraDraws!.find((draw) => draw.node.id === portalNodeId("doc_b"))!;
+  assert.ok(portal.position[0] > 0 && portal.order! > 2, "a later volume sits after the spiral's end");
 });

@@ -406,6 +406,7 @@ function VisibleConnections({ edges, bus, color = "#d8bdff", opacity = 0.8 }: { 
   return <primitive object={line} raycast={noRaycast} />;
 }
 
+const CROSS_VOLUME_COLOR = "#c9a7ff";
 const CAUSAL_COLOR = { canon: "#ff8f5a", proposed: "#ffc777", held: "#91c3e0" } as const;
 const CAUSAL_SAMPLES = 24;
 
@@ -413,16 +414,18 @@ const CAUSAL_SAMPLES = 24;
  * Dashed = projected onto containing spheres; solid = event to event. */
 function CausalArc({ arrow, bus, radii, reducedMotion }: { arrow: CausalArrow; bus: LabelBus; radii: Map<string, number>; reducedMotion: boolean }) {
   const { camera, size } = useThree();
+  // Cross-volume causes (universe ledger) in violet, book causes in orange.
+  const crossVolume = arrow.links.some((link) => link.universeId);
   const line = useMemo(() => {
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(new Float32Array((CAUSAL_SAMPLES + 1) * 3), 3));
-    const color = CAUSAL_COLOR[arrow.state];
+    const color = crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state];
     const opacity = arrow.state === "canon" ? 0.9 : 0.6;
     const material = arrow.projected
       ? new LineDashedMaterial({ color, dashSize: 26, gapSize: 18, transparent: true, opacity, depthWrite: false, toneMapped: false })
       : new LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false, toneMapped: false });
     return new Line(geometry, material);
-  }, [arrow.state, arrow.projected]);
+  }, [arrow.state, arrow.projected, crossVolume]);
   useEffect(() => () => { line.geometry.dispose(); (line.material as LineBasicMaterial).dispose(); }, [line]);
   const head = useRef<Group>(null);
   /** A bead flowing cause → effect, so direction reads without the arrowhead. */
@@ -462,7 +465,7 @@ function CausalArc({ arrow, bus, radii, reducedMotion }: { arrow: CausalArrow; b
   return <>
     <primitive object={line} raycast={noRaycast} />
     <group ref={bead}><mesh raycast={noRaycast}><sphereGeometry args={[1, 10, 8]} /><meshBasicMaterial color="#ffd9c2" transparent opacity={arrow.state === "canon" ? 0.95 : 0.6} toneMapped={false} /></mesh></group>
-    <group ref={head}><ArrowHead color={CAUSAL_COLOR[arrow.state]} opacity={arrow.state === "canon" ? 0.95 : 0.65} /></group>
+    <group ref={head}><ArrowHead color={crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state]} opacity={arrow.state === "canon" ? 0.95 : 0.65} /></group>
   </>;
 }
 
