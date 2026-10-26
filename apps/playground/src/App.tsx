@@ -16,6 +16,10 @@ import type { OrbitIllustration } from "./data/pictureNodes";
 import "./orbital.css";
 import "./live.css";
 import "./glass.css";
+import "./timeplace.css";
+import { StoryTimeline } from "./components/StoryTimeline";
+import { PlaceMap } from "./components/PlaceMap";
+import type { TimePlaceProjection } from "./data/timePlace";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
 import type { Swipe } from "./data/gestures";
@@ -41,7 +45,11 @@ import type {
 const KNIT_SITE = "chapter_0";
 const DB = "db/novel";
 let feedSeq = 0;
+const EMPTY_TIME_PLACE: TimePlaceProjection = { available: false, times: [], scenes: [], places: [], characters: [], names: {} };
+
 interface LiveSnapshot {
+  /** Story time and places (time-place faculty); absent on older viewers. */
+  timePlace?: TimePlaceProjection;
   world: LoadedWorld;
   activity?: LiveActivity;
   libraryActivity?: { count: number; latest: { id: string; type: string; timestamp: string } | null };
@@ -97,6 +105,13 @@ export default function App() {
   const [view, setView] = useState<ViewState>({ mode: "lanes" });
   const [showRelations, setShowRelations] = useState(true);
   const [orbitalMode, setOrbitalMode] = useState(true);
+  /** Orbit (reading order), Story time (when it happens) or Places (where). */
+  const [stageView, setStageView] = useState<"orbit" | "story" | "places">(() => {
+    // Deep link: ?view=story|places opens that view directly.
+    const requested = new URLSearchParams(window.location.search).get("view");
+    return requested === "story" || requested === "places" ? requested : "orbit";
+  });
+  const [timePlace, setTimePlace] = useState<TimePlaceProjection | null>(null);
   const [orbitalReset, setOrbitalReset] = useState(0);
   const [orbitalInspection, setOrbitalInspection] = useState<OrbitalInspection | null>(null);
   const [orbitalPage, setOrbitalPage] = useState<{ key: string; label: string; kind: string; chapterId?: string } | null>(null);
@@ -455,6 +470,7 @@ export default function App() {
         setLiveLabel(data.label);
         setLiveCollection(`Volume ${data.volume ?? 1} / ${data.jobLabel ?? "Live processing"}`);
         setLiveCounts(data.counts);
+        setTimePlace((previous) => data.timePlace && JSON.stringify(previous) === JSON.stringify(data.timePlace) ? previous : data.timePlace ?? null);
         setWorkSite(data.workSite ?? "chapter_0");
         setBlockLabel(data.label);
         setLoadError(null);
@@ -734,7 +750,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${orbitalMode ? " orbital-active" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}`}>
+    <div className={`app${orbitalMode ? " orbital-active" : ""}${orbitalMode && stageView !== "orbit" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}`}>
       <header className="topbar">
         <button className="brand" onClick={overview} aria-label="Return to archive overview"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 32V8h7l18 24h7V8M4 32h7V18l18 14M19 8h17" fill="none" stroke="currentColor" strokeWidth="3" /></svg><span>NOVEL<span>ONTOLOGY / PI</span></span></button>
         <nav aria-label="Workspace navigation">
@@ -750,8 +766,13 @@ export default function App() {
       </div>
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
-          <button className="design-switch" disabled={followingActivity} aria-pressed={orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setInspectorOpen(false); }}>{orbitalMode ? "Orbital / switch to classic" : "Classic / switch to orbital"}</button>
-          {orbitalMode ? <OrbitalExplorer world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
+          <div className="design-switch stage-switch" role="group" aria-label="View">
+            {orbitalMode && ([["orbit", "Orbit"], ["story", "Story time"], ["places", "Places"]] as const).map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => setStageView(value)}>{label}</button>)}
+            <button className="classic-toggle" disabled={followingActivity} aria-pressed={!orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setStageView("orbit"); setInspectorOpen(false); }} title={orbitalMode ? "Switch to the classic view" : "Switch to the orbital view"}>{orbitalMode ? "Classic" : "Classic / switch to orbital"}</button>
+          </div>
+          {orbitalMode && stageView === "story" ? <StoryTimeline data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("orbit"); if (node) requestOrbitalFocus(node); }} />
+          : orbitalMode && stageView === "places" ? <PlaceMap data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} />
+          : orbitalMode ? <OrbitalExplorer world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
           <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
             <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
             <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>

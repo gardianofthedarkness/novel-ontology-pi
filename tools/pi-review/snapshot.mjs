@@ -3,6 +3,7 @@ import { root, novel, agentEvents } from './config.mjs';
 import { runOutcome } from './run-outcome.mjs';
 import { sceneContext } from './scene-context.mjs';
 import { liveActivity } from './live-activity.mjs';
+import { timePlaceProjection } from './time-place.mjs';
 import { sessionReviewProgress } from './review-progress.mjs';
 import { albumProjection } from './album.mjs';
 
@@ -230,7 +231,8 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const lastBlock = processing.findLast((record) => record.event.type === 'block.started')?.event.blockId;
   return {
     activity: liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId: options.activityAfter, reviewProgress: await sessionReviewProgress(runtime) }),
-    world: { laneNodes, laneEdges, interiors, bigEventLabels, causal: { links: causalLinks, unresolved: causalUnresolved, dialogueScenes } }, gates, feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
+    world: { laneNodes, laneEdges, interiors, bigEventLabels, causal: { links: causalLinks, unresolved: causalUnresolved, dialogueScenes } }, gates,
+    timePlace: timePlaceProjection({ entities: [...entityMap.values()], scenes: [...sceneMap.values()], relations, events: [...eventMap.values()] }), feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
     status, stage, label: causalSets.length ? `${causalSets.length} causal packet${causalSets.length === 1 ? '' : 's'} awaiting review · not canon` : finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
     workSite: `chapter_${blockChapters.get(lastBlock) ?? chapters[0]?.index ?? 0}`,
     volume: options.volume ?? 1,
