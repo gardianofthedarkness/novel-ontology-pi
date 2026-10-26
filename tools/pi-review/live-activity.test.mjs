@@ -4,6 +4,15 @@ import { liveActivity } from './live-activity.mjs';
 
 const fixture = () => ({ processing: [], agent: [], drafts: [], changesets: [], interiors: { chapter_0: { nodes: [{ id: 'scene_1' }, { id: 'char_1' }], edges: [] } }, blockChapters: new Map([['b0001', 0]]) });
 const time = index => `2026-10-24T00:00:0${index}.000Z`;
+test('causal proposals touch both real endpoints and their actual chapters, including dialogue scene anchors', () => {
+  const input = fixture();
+  input.interiors.chapter_3 = { nodes: [{ id: 'event_3' }], edges: [] };
+  input.changesets = [{ proposals: [{ id: 'causal', payload: { type: 'CAUSES', fromId: 'event_3', toId: 'card' } }] }];
+  input.processing = [{ id: 'new', timestamp: time(4), event: { type: 'proposal.added', proposal: { id: 'causal', provenance: { patchId: 'causality-faculty' } } } }];
+  const result = liveActivity({ ...input, dialogueScenes: { card: 'scene_1' } });
+  assert.deepEqual(result.batch.nodeIds, ['event_3', 'scene_1']);
+  assert.deepEqual(result.batch.chapterIds.sort(), ['chapter_0', 'chapter_3']);
+});
 test('one refresh highlights every touched record since its cursor without replaying historical writes', () => {
   const input = fixture();
   input.processing = [

@@ -300,8 +300,8 @@ export class BlockProcessor {
             if (pass.summary.nominated > 0 || pass.summary.embedded > 0) {
               result.changeset.reviewNotes["causality-faculty"] =
                 `Causality pass: ${pass.summary.nominated} nominated, ${pass.summary.proposed} proposed, ${pass.summary.uncertain} uncertain, ${pass.summary.rejected} rejected${pass.summary.embeddingLeg ? " (embedding leg on)" : " (graph patterns only)"}.`;
-              this.observation.onCausality?.(block.blockId, pass.summary);
             }
+            this.observation.onCausality?.(block.blockId, pass.summary);
           } catch (error) {
             // Advisory, EM precedent: a failed pass never blocks the block.
             result.changeset.reviewNotes["causality-faculty"] =

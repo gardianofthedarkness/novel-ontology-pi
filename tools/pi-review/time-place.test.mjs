@@ -31,3 +31,11 @@ test('story time and places project in story order; unnamed places carry within 
 test('books without time-place facts report unavailable', () => {
   assert.equal(timePlaceProjection({ entities: [], scenes: [scene('s1', 1, 0)], relations: [] }).available, false);
 });
+
+test('known scene locations remain available to Places when actual story time is unavailable', () => {
+  const projection = timePlaceProjection({ entities: [place('station', '车站')], scenes: [scene('s1', 1, 0, { locationId: 'station' })], relations: [] });
+  assert.equal(projection.available, false);
+  assert.deepEqual(projection.scenes[0].placeIds, ['station']);
+  assert.equal(projection.places[0].id, 'station');
+  assert.deepEqual(projection.times, []);
+});

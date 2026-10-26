@@ -75,7 +75,7 @@
 .stage-switch button { padding: 3px 9px; border: 0; border-radius: 20px; background: transparent; color: #a8d5ed; font: inherit; font-size: inherit; cursor: pointer; white-space: nowrap; }
 .stage-switch button[aria-pressed="true"] { color: #06141f; background: #9fd8ff; }
 /* Story time / Places: the activity bars step aside (transport and console stay). */
-.stage-alt .pi-review-progress, .stage-alt .pipeline, .stage-alt .activity-dock { display: none; }
+.stage-alt .pipeline { display: none; }
 .tp-view { padding-right: 64px; }
 @media (max-width: 700px) { .tp-view { padding-right: 48px; } }
 .tp-whereabouts { max-width: 760px; margin: 8px auto 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; }

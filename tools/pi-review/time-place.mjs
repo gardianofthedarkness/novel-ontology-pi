@@ -17,7 +17,6 @@ const clip = (value, length) => typeof value === 'string' && value.length > leng
 export function timePlaceProjection({ entities, scenes, relations, events = [] }) {
   const byId = new Map(entities.map((entity) => [entity.id, entity]));
   const times = entities.filter((entity) => entity.kind === 'TimePoint');
-  if (!times.length && !relations.some((relation) => relation.type === 'LOCATED_AT')) return { available: false, times: [], scenes: [], places: [], characters: [], names: {} };
   const ordered = [...scenes].sort((first, second) => order(first.sentenceIds?.[0]) - order(second.sentenceIds?.[0]));
   const during = new Map();
   const located = new Map();

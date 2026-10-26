@@ -41,6 +41,7 @@ export interface CausalUnit {
 }
 
 export interface CausalityUniverse {
+  storyIndex?: Map<string, number>;
   units: CausalUnit[];
   byId: Map<string, CausalUnit>;
   scenes: Scene[];
@@ -82,6 +83,15 @@ export async function loadCausalityUniverse(
   const canonRelations = await bundle.loadFile<Relation>("relations.jsonl");
   const canonStateChanges = currentRecords(await bundle.loadFile<StateChange>("state-changes.jsonl"));
   const entities = currentRecords(await bundle.loadFile<Entity>("entities.jsonl"));
+  const timePoints = new Map(entities.filter(entity => entity.kind === "TimePoint" && typeof entity.properties.storyIndex === "number" && Number.isFinite(entity.properties.storyIndex)).map(entity => [entity.id, Number(entity.properties.storyIndex)]));
+  const sceneTimes = new Map<string, Set<number>>();
+  for (const relation of canonRelations) {
+    if (relation.type !== "OCCURS_DURING" || !timePoints.has(relation.toId)) continue;
+    const values = sceneTimes.get(relation.fromId) ?? new Set<number>();
+    values.add(timePoints.get(relation.toId)!);
+    sceneTimes.set(relation.fromId, values);
+  }
+  const storyIndex = new Map([...sceneTimes].filter(([, values]) => values.size === 1).map(([id, values]) => [id, [...values][0]]));
 
   const events = [...canonEvents];
   for (const event of extras.events ?? []) if (!events.some((e) => e.id === event.id)) events.push(event);
@@ -175,6 +185,7 @@ export async function loadCausalityUniverse(
       sceneId: previous.sceneId === unit.sceneId ? unit.sceneId : null, scenePosition: previous.sceneId === unit.sceneId ? previous.scenePosition : null } : unit);
   }
   return {
+    storyIndex,
     units: [...byId.values()],
     byId,
     scenes,
@@ -195,6 +206,12 @@ export async function loadCausalityUniverse(
 export function compareOrder(a: CausalUnit, b: CausalUnit, universe: CausalityUniverse): -1 | 1 | null {
   if (a.id === b.id) return null;
   if (a.origin && b.origin && a.origin.sourceId !== b.origin.sourceId) return null;
+  if (universe.storyIndex?.size && a.sceneId !== b.sceneId) {
+    const first = a.sceneId ? universe.storyIndex.get(a.sceneId) : undefined;
+    const second = b.sceneId ? universe.storyIndex.get(b.sceneId) : undefined;
+    if (first === undefined || second === undefined || first === second) return null;
+    return first < second ? -1 : 1;
+  }
   if (a.chapterIndex !== b.chapterIndex) return a.chapterIndex < b.chapterIndex ? -1 : 1;
   if (a.sceneId && b.sceneId && a.sceneId === b.sceneId) {
     if (a.scenePosition !== null && b.scenePosition !== null && a.scenePosition !== b.scenePosition) {
@@ -231,7 +248,7 @@ export function compareOrder(a: CausalUnit, b: CausalUnit, universe: CausalityUn
 export function alreadyLinked(universe: CausalityUniverse, fromId: string, toId: string): boolean {
   return universe.relations.some(
     (relation) =>
-      relation.type === "CAUSES" &&
+      ["CAUSES", "CAUSED_BY"].includes(relation.type) &&
       ((relation.fromId === fromId && relation.toId === toId) || (relation.fromId === toId && relation.toId === fromId)),
   );
 }

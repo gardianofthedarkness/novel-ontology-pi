@@ -584,8 +584,6 @@ export default function App() {
       if (!followingActivity) {
         readingPanelBookmark.current = { inspection: orbitalInspection, panel, open: inspectorOpen, selectedId };
         setInspectorOpen(false);
-        // Both modes follow Pi in their Narrative view.
-        setStageView("narrative");
       } else if (readingPanelBookmark.current) {
         const saved = readingPanelBookmark.current;
         setOrbitalInspection(saved.inspection);
@@ -710,7 +708,7 @@ export default function App() {
       const spiral = spiralWorld(displayWorld, order);
       return { world: spiral, arrangement: spiralArrangement(order, spiral) };
     }
-    if (!timePlace?.available || !timePlace.places.length) return null;
+    if (!timePlace?.places.length) return null;
     const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels };
     const regrouped = atlasWorld(displayWorld, timePlace, filter);
     return { world: regrouped, arrangement: atlasArrangement(timePlace, filter, regrouped) };
@@ -757,10 +755,10 @@ export default function App() {
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
           </div>
           {regroupedOrbit && stageView === "places" && timePlace && <AtlasPanel data={timePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: timePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
-          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} showCausal={stageView === "story"} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} showCausal activity={liveActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
           : stageView === "story" ? <StoryTimeline data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("narrative"); if (node) requestOrbitalFocus(node); }} />
           : stageView === "places" ? <PlaceMap data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} />
-          : orbitalMode ? <OrbitalExplorer key="narrative" world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          : orbitalMode ? <OrbitalExplorer key="narrative" world={shownWorld} showCausal onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
           : <NarrativeList world={shownWorld} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} timePlace={timePlace} bookBar={bookBar} selectedId={selected?.id ?? null} focusRequest={orbitalFocus} onSelect={inspectOrbital} />}
         </section>
         <aside className={`inspector${inspectorOpen ? " is-open" : ""}`} aria-label="Record and processing details">
