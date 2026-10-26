@@ -1,7 +1,8 @@
-import type { WorldEdge, WorldNode } from "../types.js";
+import type { CausalLink, CausalSummary, WorldEdge, WorldNode } from "../types.js";
+import type { CausalArrow } from "./causalProjection.js";
 import type { Position3 } from "./spatialLayout.js";
-import type { OrbitalDraw, OrbitalPath } from "./orbitalLayout.js";
-import { dateLine, placeLayout, placeLinks, scenePeriod, storyRows, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
+import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
+import { dateLine, placeLayout, placeLinks, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
 
 /**
  * Orbital Story time and Places (time-place phase 1, view only). Each is the
@@ -23,7 +24,16 @@ export interface RegroupedWorld {
   laneEdges: WorldEdge[];
   interiors: Record<string, { nodes: WorldNode[]; edges: WorldEdge[] }>;
   bigEventLabels: Record<string, string>;
+  causal?: CausalSummary;
+  /** Other volumes this book's cross-volume causal links reach (Story time). */
+  portals?: VolumePortal[];
 }
+export interface VolumePortal { id: string; sourceId: string; label: string; before: boolean; links: number }
+interface LibraryLike {
+  sources: { id: string; title: string; filename: string }[];
+  causal?: { links: { id: string; universeId: string; from: { sourceId: string; unitId: string }; to: { sourceId: string; unitId: string }; state: CausalLink["state"]; stale: boolean }[] };
+}
+export const portalNodeId = (sourceId: string) => `volume:${sourceId}`;
 /** Volume-level arrangement handed to the orbital explorer. */
 export interface OrbitalArrangement {
   /** Anchor positions (layout units, before the orbit's ×3 scale). */
@@ -41,13 +51,17 @@ export interface OrbitalArrangement {
   direction?: Position3;
   /** A selected character's path stands in for their link fan. */
   pathReplacesLinks?: boolean;
+  /** Draw the book's stored causal links on this level, routed by routeCausal. */
+  causal?: boolean;
+  routeCausal?: (arrows: CausalArrow[], draws: OrbitalDraw[]) => CausalArrow[];
+  /** What the camera frames on arrival (default: every main sphere). */
+  initialFrame?: (draws: OrbitalDraw[]) => Position3[];
+  /** Main spheres as transparent envelopes around their records ("shell"), or not drawn ("hidden"). */
+  envelope?: "shell" | "hidden";
   timeKey: { label: string; detail: string };
 }
 export interface FloorMark { id: string; x: number; z: number; radius: number; active: boolean }
 
-export const periodNodeId = (timeId: string) => `story:${timeId}`;
-export const placeNodeId = (placeId: string) => `place:${placeId}`;
-const UNPLACED = "story:unplaced";
 
 /** A scene with everything around it in its chapter: records it covers and
  * the characters and places linked to either. */
@@ -89,41 +103,160 @@ const groupNode = (id: string, label: string, viewKind: string, chrono: number, 
   id, label, viewKind, kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono, trackId, trackLabel: viewKind, summary, subLabel: summary, lanePos: [0, 0, 0], interiorPos: [0, 0, 0],
 });
 
-/** Story time: periods in story order; flashbacks on their own raised track. */
-export function storyWorld(world: WorldLike, data: TimePlaceProjection): RegroupedWorld {
+/**
+ * Before the time-place faculty has run there is no story order yet: the
+ * book's scenes in reading order stand in (no periods, places or
+ * flashbacks), so the spiral and its causal arrows still show.
+ */
+export function readingOrderProjection(world: WorldLike): TimePlaceProjection {
+  const chapters = world.laneNodes.filter((node) => node.kind === "bigEvent").sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id));
+  let index = 0;
+  const scenes: StoryScene[] = chapters.flatMap((chapter, chapterIndex) => (world.interiors[chapter.id]?.nodes ?? [])
+    .filter((node) => node.kind === "scene")
+    .sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id))
+    .map((node) => ({ id: node.id, index: index++, chapterIndex, label: node.summary ?? node.label, times: [], flashback: false, placeIds: [], placeCarried: false, characterIds: [] })));
+  return { available: false, times: [], scenes, places: [], characters: [], names: {} };
+}
+
+/** Scenes in story order: by period (estimated story order), then reading order; scenes before the first time word lead. */
+export function storyOrderScenes(data: TimePlaceProjection): StoryScene[] {
+  const rank = new Map(data.times.map((time) => [time.id, time.storyIndex]));
+  return [...data.scenes].sort((first, second) => (rank.get(scenePeriod(first) ?? "") ?? -1) - (rank.get(scenePeriod(second) ?? "") ?? -1) || first.index - second.index);
+}
+export const spiralNodeId = (sceneId: string) => `spiral:${sceneId}`;
+export const sceneOfSpiral = (id: string) => id.startsWith("spiral:") ? id.slice(7) : null;
+
+/** Story time: every scene of the book on one spiral in story order. Each
+ * sphere is a scene (inside: its events and dialogue); its code line names
+ * its period. The book's stored causal links come along for the arrows. */
+export function spiralWorld(world: WorldLike & { causal?: CausalSummary; library?: LibraryLike; sourceId?: string | null }, data: TimePlaceProjection): RegroupedWorld {
   const bundles = sceneBundles(world);
   const timeById = new Map(data.times.map((time) => [time.id, time]));
-  const result: RegroupedWorld = { laneNodes: [], laneEdges: [], interiors: {}, bigEventLabels: {} };
-  for (const { time, scenes } of storyRows(data)) {
-    const id = time ? periodNodeId(time.id) : UNPLACED;
+  const result: RegroupedWorld = { laneNodes: [], laneEdges: [], interiors: {}, bigEventLabels: {}, causal: world.causal };
+  storyOrderScenes(data).forEach((scene, rank) => {
+    const id = spiralNodeId(scene.id);
+    const time = timeById.get(scenePeriod(scene) ?? "");
     const host = time?.toldFromId ? timeById.get(time.toldFromId) : undefined;
-    const when = time ? dateLine(time) || time.gloss : "Before the first time word in the text";
-    const summary = time?.flashback
-      ? `Flashback${host ? ` told during ${host.label} (chapter ${host.chapterIndex})` : ""} · Jev ${Math.round(time.flashbackProbability * 100)}% sure it goes back in time · ${when} · ${scenes.length} scene${scenes.length === 1 ? "" : "s"}`
-      : `${when} · ${scenes.length} scene${scenes.length === 1 ? "" : "s"}`;
-    const label = time ? `${time.flashback ? "↶ " : ""}${time.label}` : "Time not stated";
-    result.laneNodes.push(groupNode(id, label, time?.flashback ? "Flashback" : "Story period", time ? time.storyIndex : -1, time?.flashback ? "flashback" : "present", summary));
-    result.bigEventLabels[id] = label;
-    result.interiors[id] = regroup(bundles, id, scenes);
-    if (time?.flashback && host) result.laneEdges.push({ id: `story:told:${time.id}`, from: id, to: periodNodeId(host.id), kind: "cross", state: "canon", parent: null, relationLabel: "Told during (flashback)" });
+    const period = time ? `${time.flashback ? "↶ " : ""}${time.label}${dateLine(time) ? ` · ${dateLine(time)}` : ""}` : data.available ? "Time not stated" : `Chapter ${scene.chapterIndex} · reading order`;
+    const place = scene.placeIds[0] ? data.names[scene.placeIds[0]] ?? scene.placeIds[0] : null;
+    const summary = `${period}${time?.flashback ? ` · flashback${host ? ` told during ${host.label}` : ""}` : ""}${place ? ` · ⌖ ${place}${scene.placeCarried ? " (carried over)" : ""}` : ""} · scene ${scene.index + 1} in reading order, chapter ${scene.chapterIndex}`;
+    result.laneNodes.push(groupNode(id, scene.label, period, rank, time?.flashback ? "flashback" : "present", summary));
+    result.bigEventLabels[id] = scene.label;
+    const bundle = regroup(bundles, id, [scene]);
+    result.interiors[id] = { nodes: bundle.nodes.filter((node) => node.id !== scene.id), edges: bundle.edges.filter((edge) => edge.from !== scene.id && edge.to !== scene.id) };
+  });
+  // Cross-volume causes (the universe ledger): one end here, the other at a
+  // portal for the other volume, before or after the spiral by reading order.
+  const here = world.sourceId, sources = world.library?.sources ?? [];
+  const crossing = here ? (world.library?.causal?.links ?? []).filter((link) => !link.stale && (link.from.sourceId === here) !== (link.to.sourceId === here)) : [];
+  if (crossing.length) {
+    const position = (sourceId: string) => sources.findIndex((source) => source.id === sourceId);
+    const portals = new Map<string, VolumePortal>();
+    const links = crossing.map((link): CausalLink => {
+      const other = link.from.sourceId === here ? link.to : link.from;
+      const portal = portals.get(other.sourceId) ?? { id: portalNodeId(other.sourceId), sourceId: other.sourceId, label: sources[position(other.sourceId)]?.title ?? other.sourceId, before: position(other.sourceId) < position(here!), links: 0 };
+      portal.links++;
+      portals.set(other.sourceId, portal);
+      return { id: `universe:${link.id}`, from: link.from.sourceId === here ? link.from.unitId : portal.id, to: link.to.sourceId === here ? link.to.unitId : portal.id, fromChapter: "", toChapter: "", state: link.state, universeId: link.universeId };
+    });
+    result.causal = { unresolved: world.causal?.unresolved ?? 0, dialogueScenes: world.causal?.dialogueScenes, links: [...(world.causal?.links ?? []), ...links] };
+    result.portals = [...portals.values()];
   }
   return result;
 }
 
-/** Story order through every period (raised flashbacks included), plus an
- * amber thread from each flashback down to the period it was told during. */
-export function storyArrangement(world: RegroupedWorld): OrbitalArrangement {
-  const told = new Map(world.laneEdges.map((edge) => [edge.from, edge.to]));
+/** Scenes per turn, radius and step along the axis (layout units). */
+const SPIRAL = { perTurn: 14, radius: 260, step: 40 };
+const spiralPoint = (rank: number, total: number): Position3 => {
+  const angle = rank / SPIRAL.perTurn * Math.PI * 2;
+  return [(rank - (total - 1) / 2) * SPIRAL.step, Math.cos(angle) * SPIRAL.radius, Math.sin(angle) * SPIRAL.radius];
+};
+
+/**
+ * Curved causal arcs that do not collide. Every arc bends outward, away from
+ * the spiral's axis. Arcs whose story spans overlap take different lanes
+ * (interval colouring, shortest spans lowest), so two arcs share a lane only
+ * when their spans are apart — arcs between the same pair of records too.
+ * Links inside one scene stay small, inside its bubble; links between scenes
+ * arc out past the spiral.
+ */
+export function routeCausalArcs(arrows: CausalArrow[], draws: OrbitalDraw[]): CausalArrow[] {
+  const at = new Map(draws.filter((draw) => draw.role === "main" || draw.role === "preview").map((draw) => [draw.node.id, draw]));
+  const key = (draw: OrbitalDraw) => draw.order ?? draw.node.chrono;
+  const spans = arrows.flatMap((arrow) => {
+    const from = at.get(arrow.from), to = at.get(arrow.to);
+    if (!from || !to) return [];
+    const local = !!from.previewParentId && from.previewParentId === to.previewParentId;
+    return [{ arrow, from, to, local, group: local ? from.previewParentId! : "", low: Math.min(key(from), key(to)), high: Math.max(key(from), key(to)) }];
+  }).sort((first, second) => (first.high - first.low) - (second.high - second.low) || first.low - second.low);
+  const lanes = new Map<string, { low: number; high: number }[][]>();
+  const routed = new Map<string, CausalArrow>();
+  const radial = (point: Position3) => { const length = Math.hypot(point[1], point[2]) || 1; return [0, point[1] / length, point[2] / length]; };
+  for (const span of spans) {
+    const taken = lanes.get(span.group) ?? [];
+    lanes.set(span.group, taken);
+    const gap = span.local ? 0.002 : 0.5;
+    let lane = taken.findIndex((spans) => spans.every((other) => span.high + gap < other.low || span.low - gap > other.high));
+    if (lane < 0) { lane = taken.length; taken.push([]); }
+    taken[lane].push({ low: span.low, high: span.high });
+    const sum = radial(span.from.position).map((value, axis) => value + radial(span.to.position)[axis]);
+    const length = Math.hypot(...sum);
+    // Endpoints on opposite sides of the spiral: bend perpendicular to them.
+    const out = length > 0.2 ? sum.map((value) => value / length) : [0, -radial(span.from.position)[2], radial(span.from.position)[1]];
+    const chord = Math.hypot(...span.to.position.map((value, axis) => value - span.from.position[axis]));
+    const reach = span.local ? 16 + 0.5 * chord + 7 * lane : SPIRAL.radius * 3 * 0.55 + 110 * lane + 0.08 * Math.abs(span.to.position[0] - span.from.position[0]);
+    routed.set(span.arrow.id, { ...span.arrow, bend: out.map((value) => value * reach) as Position3 });
+  }
+  return arrows.map((arrow) => routed.get(arrow.id) ?? arrow);
+}
+
+/** A scene's records that some stored causal link starts or ends at, in order. */
+const causalRecords = (nodes: WorldNode[], ends: ReadonlySet<string>) => nodes
+  .filter((node) => (node.kind === "event" || node.kind === "dialogue") && ends.has(node.id))
+  .sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id));
+
+/** The spiral string through every scene in story order; each scene a clear
+ * bubble around the events and dialogue its causal arrows start or end at
+ * (entering the scene shows all its records); an amber thread from each
+ * flashback scene to the scene it was told after. */
+export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWorld): OrbitalArrangement {
+  const order = storyOrderScenes(data);
+  const anchors = new Map(order.map((scene, rank) => [spiralNodeId(scene.id), spiralPoint(rank, order.length)]));
+  const reading = [...data.scenes].sort((first, second) => first.index - second.index);
+  const toldAfter = new Map<string, string>();
+  for (let index = 1; index < reading.length; index++) {
+    const scene = reading[index], previous = reading[index - 1];
+    if (scene.flashback && !previous.flashback) toldAfter.set(spiralNodeId(scene.id), spiralNodeId(previous.id));
+  }
+  const bubble = 0.42 * 165;
+  const ends = new Set((world?.causal?.links ?? []).flatMap((link) => [link.from, link.to]));
+  const records: OrbitalDraw[] = world ? order.flatMap((scene, rank) => {
+    const id = spiralNodeId(scene.id), anchor = anchors.get(id)!;
+    const inside = causalRecords(world.interiors[id]?.nodes ?? [], ends);
+    return inside.map((record, index): OrbitalDraw => {
+      const local = helixPoint(inside.length > 1 ? index / (inside.length - 1) : 0.5, 0, 1, bubble * 1.25);
+      return { node: { ...record, viewKind: record.kind === "dialogue" ? "Dialogue" : "Event" }, position: anchor.map((value, axis) => value * 3 + local[axis]) as Position3, radius: record.kind === "dialogue" ? 5 : 7, role: "preview", previewParentId: id, order: rank + (index + 1) / (inside.length + 1) };
+    });
+  }) : [];
+  // Other volumes, past either end of the spiral; their arcs are the cross-volume causes.
+  const reach = ((order.length - 1) / 2 * SPIRAL.step + 4 * SPIRAL.step) * 3;
+  for (const portal of world?.portals ?? []) records.push({
+    node: { id: portal.id, label: portal.label, viewKind: "Other volume", kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono: 0, summary: `${portal.links} cross-volume causal link${portal.links === 1 ? "" : "s"} with this book (universe ledger) · ${portal.before ? "read before" : "read after"} this volume`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] },
+    position: [portal.before ? -reach : reach, 0, 0], radius: 70, role: "preview", order: portal.before ? -1 : order.length + 1,
+  });
   return {
-    timeKey: { label: "STORY TIME →", detail: "Story order (estimated) · ↑ flashbacks, amber thread to when each was told" },
+    anchors, radiusScale: 0.42, causal: true, extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
+    timeKey: data.available
+      ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told` }
+      : { label: "READING ORDER →", detail: `Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""}` },
+    initialFrame: (draws) => draws.filter((draw) => draw.role === "main" && draw.node.chrono < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
+    routeCausal: routeCausalArcs,
     paths: (draws) => {
       const main = draws.filter((draw) => draw.role === "main").sort((first, second) => first.node.chrono - second.node.chrono);
       if (!main.length) return [];
-      const first = main[0].position, last = main.at(-1)!.position;
-      const spine: OrbitalPath = { id: "story-order", points: [[first[0] - 260, first[1], first[2]], ...main.map((draw) => draw.position), [last[0] + 260, last[1], last[2]]] };
       const at = new Map(main.map((draw) => [draw.node.id, draw.position]));
-      const threads = [...told].flatMap(([flashback, host]): OrbitalPath[] => at.get(flashback) && at.get(host) ? [{ id: `told:${flashback}`, tone: "thread", points: [at.get(host)!, at.get(flashback)!] }] : []);
-      return [spine, ...threads];
+      const threads = [...toldAfter].flatMap(([flashback, teller]): OrbitalPath[] => at.get(flashback) && at.get(teller) ? [{ id: `told:${flashback}`, tone: "thread", points: [at.get(teller)!, at.get(flashback)!] }] : []);
+      return [{ id: "story-order", points: main.map((draw) => draw.position) }, ...threads];
     },
   };
 }
@@ -133,21 +266,31 @@ const FLOOR_Y = -945;
 export const atlasNodeId = (sceneId: string) => `atlas:${sceneId}`;
 export const pinNodeId = (placeId: string) => `pin:${placeId}`;
 
-/** Placed scenes of the chosen periods, in story order (period, then reading order). */
-export function atlasScenes(data: TimePlaceProjection, periodIds: ReadonlySet<string> | null): StoryScene[] {
-  const rank = new Map(data.times.map((time) => [time.id, time.storyIndex]));
-  return data.scenes
-    .filter((scene) => scene.placeIds.length && (!periodIds || periodIds.has(scenePeriod(scene) ?? "")))
-    .sort((first, second) => (rank.get(scenePeriod(first) ?? "") ?? -1) - (rank.get(scenePeriod(second) ?? "") ?? -1) || first.index - second.index);
+/** What floats above the map. */
+export interface AtlasFilter {
+  /** Story periods to show (null: all). */
+  periods: ReadonlySet<string> | null;
+  /** Only these scenes, e.g. the stretch of the spiral that was in view in Story time (null: no limit). */
+  sceneIds?: ReadonlySet<string> | null;
+  /** Scene spheres, event and dialogue records. With records on, scenes become
+   * transparent envelopes around them (or vanish when scenes are off). */
+  levels?: AtlasLevels;
+}
+export interface AtlasLevels { scene: boolean; event: boolean; dialogue: boolean }
+export const SCENE_LEVEL: AtlasLevels = { scene: true, event: false, dialogue: false };
+
+/** Placed scenes passing the filter, in story order (period, then reading order). */
+export function atlasScenes(data: TimePlaceProjection, filter: AtlasFilter): StoryScene[] {
+  return storyOrderScenes(data).filter((scene) => scene.placeIds.length && (!filter.periods || filter.periods.has(scenePeriod(scene) ?? "")) && (!filter.sceneIds || filter.sceneIds.has(scene.id)));
 }
 
-/** Places (space-time): one sphere per placed scene of the chosen periods;
+/** Places (space-time): one sphere per placed scene passing the filter;
  * entering it shows the scene's events and dialogue. */
-export function atlasWorld(world: WorldLike, data: TimePlaceProjection, periodIds: ReadonlySet<string> | null): RegroupedWorld {
+export function atlasWorld(world: WorldLike, data: TimePlaceProjection, filter: AtlasFilter): RegroupedWorld {
   const bundles = sceneBundles(world);
   const timeById = new Map(data.times.map((time) => [time.id, time]));
   const result: RegroupedWorld = { laneNodes: [], laneEdges: [], interiors: {}, bigEventLabels: {} };
-  atlasScenes(data, periodIds).forEach((scene, rank) => {
+  atlasScenes(data, filter).forEach((scene, rank) => {
     const id = atlasNodeId(scene.id);
     const time = timeById.get(scenePeriod(scene) ?? "");
     const place = data.names[scene.placeIds[0]] ?? scene.placeIds[0];
@@ -161,11 +304,18 @@ export function atlasWorld(world: WorldLike, data: TimePlaceProjection, periodId
   return result;
 }
 
+/** A scene's records at the chosen levels, in order (dialogue: exchange cards). */
+const recordsAt = (nodes: WorldNode[], levels: AtlasLevels) => nodes
+  .filter((node) => (levels.event && node.kind === "event") || (levels.dialogue && node.kind === "dialogue" && !!node.dialogue))
+  .sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id));
+
 /** The map (schematic, not geography) on the floor; each scene above its
  * place at a height set by its story rank; a thread from each scene down to
  * its place; the story-order string through the air; a selected character's
- * path through their scenes. */
-export function atlasArrangement(data: TimePlaceProjection, periodIds: ReadonlySet<string> | null): OrbitalArrangement {
+ * path through their scenes. With event or dialogue levels on, each scene's
+ * records float inside it on a small helix. */
+export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter, world?: RegroupedWorld): OrbitalArrangement {
+  const levels = filter.levels ?? SCENE_LEVEL;
   const links = placeLinks(data);
   const layout = placeLayout(data.places, links, 600);
   const map = new Map<string, { x: number; z: number }>();
@@ -173,7 +323,7 @@ export function atlasArrangement(data: TimePlaceProjection, periodIds: ReadonlyS
     const point = layout.get(place.id);
     if (point) map.set(place.id, { x: (point.x - 300) * 7, z: (point.y - 300) * 5 });
   }
-  const scenes = atlasScenes(data, periodIds);
+  const scenes = atlasScenes(data, filter);
   const shown = new Set(scenes.flatMap((scene) => scene.placeIds.slice(0, 1)));
   const step = Math.max(12, Math.min(70, 900 / Math.max(1, scenes.length)));
   const anchors = new Map<string, Position3>();
@@ -189,6 +339,22 @@ export function atlasArrangement(data: TimePlaceProjection, periodIds: ReadonlyS
     const spot = map.get(place.id);
     return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: "canon", parent: null, lane: "canon", chrono: 0, summary: `${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it) · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
   });
+  const withRecords = levels.event || levels.dialogue;
+  /** Records sit inside their scene, whose sphere (scaled like the main
+   * spheres: radiusScale × base) envelops them. */
+  const envelopeRadius = 0.36 * 165;
+  const records: OrbitalDraw[] = withRecords && world ? scenes.flatMap((scene) => {
+    const id = atlasNodeId(scene.id), anchor = anchors.get(id);
+    if (!anchor) return [];
+    const inside = recordsAt(world.interiors[id]?.nodes ?? [], levels);
+    return inside.map((record, index): OrbitalDraw => {
+      // Without scene bubbles the records are the subject: larger, on a wider helix.
+      const spread = levels.scene ? 1.25 : 2.2;
+      const local = helixPoint(inside.length > 1 ? index / (inside.length - 1) : 0.5, 0, 1, envelopeRadius * spread);
+      const size = (record.kind === "dialogue" ? 0.1 : 0.13) * (levels.scene ? 1 : 2.4);
+      return { node: { ...record, viewKind: record.kind === "dialogue" ? "Dialogue" : "Event" }, position: anchor.map((value, axis) => value * 3 + local[axis]) as Position3, radius: Math.max(5, envelopeRadius * size), role: "preview", previewParentId: id };
+    });
+  }) : [];
   const sceneOf = new Map(scenes.map((scene) => [atlasNodeId(scene.id), scene]));
   const pathOf = (characterId: string, draws: OrbitalDraw[]) => draws
     .filter((draw) => draw.role === "main" && sceneOf.get(draw.node.id)?.characterIds.includes(characterId))
@@ -196,8 +362,9 @@ export function atlasArrangement(data: TimePlaceProjection, periodIds: ReadonlyS
     .map((draw) => draw.position);
   const characters = new Set(data.characters.map((character) => character.id));
   return {
-    anchors, floor, extraDraws: pins, radiusScale: 0.32, direction: [0.12, 0.62, 1], pathReplacesLinks: true,
-    timeKey: { label: "PLACES · SPACE-TIME", detail: "Map on the floor (schematic) · scenes rise in story order above their place · select a character for their path" },
+    anchors, floor, extraDraws: [...pins, ...records], radiusScale: withRecords ? 0.36 : 0.32, direction: [0.12, 0.62, 1], pathReplacesLinks: true,
+    envelope: withRecords ? levels.scene ? "shell" : "hidden" : undefined,
+    timeKey: { label: "PLACES · SPACE-TIME", detail: `Map on the floor (schematic) · ${withRecords ? `${[levels.event && "events", levels.dialogue && "dialogue"].filter(Boolean).join(" and ")} inside ${levels.scene ? "each scene" : "their scene's spot"}` : "scenes"} rise in story order above their place · select a character for their path` },
     focusFor: (selectedId, draws) => {
       if (!characters.has(selectedId)) return null;
       // Frame the character with every scene of theirs in the window (their path).
