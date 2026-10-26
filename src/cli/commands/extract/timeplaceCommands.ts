@@ -89,7 +89,10 @@ export async function timeplaceRun(novelDir: string, options: TimeplaceRunOption
   await writeFile(out, JSON.stringify({ novelDir, scenes: selected.length, seconds: (Date.now() - started) / 1000, ...result, proposals: proposals.length }, null, 1), { mode: 0o600 });
   let changesetId: string | null = null;
   if (options.propose && proposals.length) {
-    changesetId = `cs_timeplace_${stamp}`;
+    // The reviewability filter (tools/pi-review/timeplace-access.mjs) requires a
+    // trailing _<digits> suffix, as at-birth packets already carry; a bare ISO
+    // stamp ends in "Z" and would never be listed for hosted-Pi review.
+    changesetId = `cs_timeplace_${stamp}_${Date.now()}`;
     await saveChangeSet(novelDir, {
       id: changesetId, blockId: "time-place", proposals, status: "pending_review", reviewSource: timePlaceReviewSource(proposals, sentences),
       reviewNotes: { "time-place": `Time-place faculty (phase 1, mode ${mode}${result.usedJev ? ", Jev roles" : ", rule roles"}): ${result.periods.length} time periods (${result.periods.filter((period) => period.flashback).length} flashback), ${new Set(result.places.filter((place) => place.specific && place.role === "setting").map((place) => place.key)).size} setting places over ${selected.length} scenes. Story order is estimated; derived dates come only from stated words.${result.notes.length ? ` Notes: ${result.notes.slice(0, 5).join(" ")}` : ""}` },
