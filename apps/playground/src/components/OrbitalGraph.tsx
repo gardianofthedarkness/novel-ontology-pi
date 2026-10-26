@@ -296,6 +296,7 @@ function renderSphere(props: NodeRendererProps) {
   const draw = (props.node.data.glyph as GlyphData).draw;
   if (draw.node.kind === "picture") return <PictureGlyph {...props} />;
   if (draw.node.kind === "portrait") return <PortraitGlyph {...props} />;
+  if (draw.envelope === "hidden") return <group userData={{ orbitalGlyph: draw.node.id }} />;
   return <SphereGlyph {...props} />;
 }
 
@@ -417,7 +418,7 @@ function CausalArc({ arrow, bus, radii, reducedMotion }: { arrow: CausalArrow; b
     if (!from || !to) return;
     const start = new Vector3(...from), end = new Vector3(...to);
     const distance = start.distanceTo(end);
-    const control = start.clone().add(end).multiplyScalar(0.5).add(new Vector3(0, Math.max(60, distance * 0.28), 0));
+    const control = start.clone().add(end).multiplyScalar(0.5).add(arrow.bend ? new Vector3(...arrow.bend) : new Vector3(0, Math.max(60, distance * 0.28), 0));
     const curve = new QuadraticBezierCurve3(start, control, end);
     const startT = Math.min(0.45, (radii.get(arrow.from) ?? 0) * 1.05 / Math.max(1, distance));
     const endT = 1 - Math.min(0.45, (radii.get(arrow.to) ?? 0) * 1.05 / Math.max(1, distance));
@@ -691,7 +692,7 @@ function ActivityBounds({ draws, bus }: { draws: OrbitalDraw[]; bus: LabelBus })
   return <group ref={bounds} userData={{ orbitalActivityBounds: true }}><mesh raycast={noRaycast}><boxGeometry args={[1, 1, 1]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.5} toneMapped={false} depthTest={false} depthWrite={false} /></mesh></group>;
 }
 
-function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, opening = false, enclosure, hoverCard, motion, onReveal, onExtremeBack }: { draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; /** Opening sequence: labels wait until records have arrived. */ opening?: boolean; enclosure?: Enclosure; hoverCard?: { current: HTMLDivElement | null }; motion?: MotionBus; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
+function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, opening = false, enclosure, hoverCard, motion, onReveal, onExtremeBack, onCenter }: { onCenter?: (ids: string[]) => void; draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; /** Opening sequence: labels wait until records have arrived. */ opening?: boolean; enclosure?: Enclosure; hoverCard?: { current: HTMLDivElement | null }; motion?: MotionBus; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
   const { camera, scene, size, gl } = useThree();
   const byId = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw])), [draws]);
   const revealed = useRef(revealedId); revealed.current = revealedId;
@@ -709,8 +710,12 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
     surface.addEventListener("touchmove", touch, { passive: true });
     return () => { surface.removeEventListener("wheel", wheel as EventListener, true); surface.removeEventListener("orbital-zoom", command); surface.removeEventListener("touchmove", touch); };
   }, [gl]);
+  /** Centre watch: main spheres inside the middle of the view, sampled a few times a second. */
+  const centre = useRef({ at: 0, key: "" });
   useFrame(() => {
     bus.positions.clear();
+    const sampleCentre = !!onCenter && !transitioning && performance.now() - centre.current.at > 400;
+    const central: string[] = [];
     const candidates: { draw: OrbitalDraw; position: Vector3; pixels: number; priority: number }[] = [];
     let closest: { id: string; pixels: number; score: number } | null = null;
     scene.traverse((object) => {
@@ -724,6 +729,7 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
       const pixels = Math.abs(horizontal.x - point.x) * size.width / 2;
       const element = bus.targets.get(draw.node.id);
       if (element) element.style.visibility = "hidden";
+      if (sampleCentre && draw.role === "main" && point.z < 1 && Math.abs(point.x) < 0.45 && Math.abs(point.y) < 0.55) central.push(draw.node.id);
       const selectedPreview = draws.some((entry) => entry.node.id === selectedId && entry.previewParentId === draw.node.id);
       if (!transitioning && selectedPreview && world.distanceTo(camera.position) < draw.radius * 4) closest = { id: draw.node.id, pixels, score: 1000000 };
       if (point.z > 1 || (!selectedPreview && (Math.abs(point.x) > 1.2 || Math.abs(point.y) > 1.2))) return;
@@ -734,6 +740,11 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
       if (opening || (draw.role === "connection" || draw.role === "preview" && pixels < 3) && selectedId !== draw.node.id) return;
       candidates.push({ draw, position: point, pixels, priority: selectedId === draw.node.id ? 0 : draw.role === "preview" ? 1 : draw.role === "main" ? 2 : 3 });
     });
+    if (sampleCentre) {
+      centre.current.at = performance.now();
+      const key = central.sort().join("|");
+      if (key !== centre.current.key) { centre.current.key = key; onCenter!(central); }
+    }
     const next = closest as { id: string; pixels: number; score: number } | null;
     if ((next?.id ?? null) !== revealed.current) onReveal(next?.id ?? null);
     const occupied: { left: number; top: number; right: number; bottom: number }[] = [];
@@ -785,10 +796,10 @@ const EXTREME_BACK_SETTLE_MS = 1800;
 type Enclosure = { center: Position3; radius: number };
 const EXTREME_BACK_ENCLOSURE_FACTOR = 12;
 
-function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, reducedMotion, enabled, direction }: { graphRef: { current: GraphCanvasRef | null }; draws: OrbitalDraw[]; selectedId: string | null; enclosure?: Enclosure; levelKey: string; reducedMotion: boolean; enabled: boolean; direction?: Position3 }) {
+function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, reducedMotion, enabled, direction, span }: { graphRef: { current: GraphCanvasRef | null }; draws: OrbitalDraw[]; selectedId: string | null; enclosure?: Enclosure; levelKey: string; reducedMotion: boolean; enabled: boolean; direction?: Position3; span?: Position3[] }) {
   const { camera, size } = useThree();
   // Narrow (portrait) screens frame fewer neighbours so spheres stay readable.
-  const positions = entryFrame(draws, selectedId, size.width / Math.max(1, size.height) < 0.8 ? 2 : 5);
+  const positions = span && span.length > 1 && !selectedId ? span : entryFrame(draws, selectedId, size.width / Math.max(1, size.height) < 0.8 ? 2 : 5);
   const latest = useRef({ positions, enclosure }); latest.current = { positions, enclosure };
   const framingEnabled = useRef(enabled); framingEnabled.current = enabled;
   useEffect(() => {
@@ -806,6 +817,10 @@ interface Props {
   floor?: FloorMark[];
   /** Camera direction for automatic framing (default: a slight side view). */
   frameDirection?: Position3;
+  /** What automatic framing frames (default: the selection's neighbourhood or every main sphere). */
+  frameSpan?: Position3[];
+  /** Main spheres near the centre of the view, reported when the set changes. */
+  onCenter?: (ids: string[]) => void;
   /** Record Pi is working on right now (heartbeat target), if any. */
   heartbeatId?: string | null;
   draws: OrbitalDraw[];
@@ -834,8 +849,8 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], frameDirection }, ref) {
-  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion]);
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], frameDirection, frameSpan, onCenter }, ref) {
+  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
   const enclosure = useMemo(() => { const ghost = backdrop?.ghosts.find((entry) => entry.current); return ghost ? { center: ghost.position, radius: ghost.radius } : undefined; }, [backdrop]);
@@ -862,8 +877,8 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <PointerParallax graphRef={ref as { current: GraphCanvasRef | null }} enabled={!reducedMotion} />
     {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} reducedMotion={reducedMotion} />)}
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
-    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} opening={!!morph?.delays} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} />
+    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} opening={!!morph?.delays} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} onCenter={onCenter} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
-    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} direction={frameDirection} />
+    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} direction={frameDirection} span={frameSpan} />
   </GraphCanvas>;
 });

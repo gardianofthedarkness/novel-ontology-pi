@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { atlasArrangement, atlasNodeId, atlasScenes, atlasWorld, periodNodeId, pinNodeId, storyArrangement, storyWorld } from "../apps/playground/src/data/orbitalTimePlace.js";
+import { atlasArrangement, atlasNodeId, atlasScenes, atlasWorld, pinNodeId, routeCausalArcs, spiralArrangement, spiralNodeId, spiralWorld } from "../apps/playground/src/data/orbitalTimePlace.js";
 import { orbitalLevel, surroundingEntities, mainProminence } from "../apps/playground/src/data/orbitalModel.js";
 import { layoutOrbitalLevel } from "../apps/playground/src/data/orbitalLayout.js";
 import type { TimePlaceProjection } from "../apps/playground/src/data/timePlace.js";
@@ -42,30 +42,46 @@ const data: TimePlaceProjection = {
 };
 const finite = (draws: { position: number[]; radius: number }[]) => draws.every((draw) => draw.position.every(Number.isFinite) && Number.isFinite(draw.radius));
 
-test("story time: one sphere per period in story order, flashbacks on a raised track, threaded to when they were told", () => {
-  const regrouped = storyWorld(world, data);
-  assert.deepEqual(regrouped.laneNodes.map((entry) => [entry.id, entry.chrono, entry.trackId]), [[periodNodeId("t_child"), 0, "flashback"], [periodNodeId("t_evening"), 1, "present"], [periodNodeId("t_morning"), 2, "present"]]);
-  assert.deepEqual(regrouped.interiors[periodNodeId("t_evening")].nodes.map((entry) => entry.id).sort(), ["e1", "ming", "s1"]);
-  assert.ok(regrouped.interiors[periodNodeId("t_morning")].nodes.every((entry) => entry.parent === periodNodeId("t_morning")));
-  const level = orbitalLevel(regrouped);
-  assert.equal(level.main[0].node.label, "↶ back then", "periods keep their own names");
-  const nebula = surroundingEntities(level, null);
-  const layout = layoutOrbitalLevel(level, nebula.nodes, { main: mainProminence(level), nebula: nebula.prominence });
+// Stored causes (invented): e1 → e3 across scenes; e1 → e1b inside s1.
+const causalWorld = {
+  ...world,
+  interiors: { ...world.interiors, ch_1: { ...world.interiors.ch_1, nodes: [...world.interiors.ch_1.nodes, node("e1b", "event", "ch_1", 2)], edges: [...world.interiors.ch_1.edges, edge("s1", "e1b", "contains", "ch_1", "Shared source coverage")] } },
+  causal: { unresolved: 0, links: [{ id: "c1", from: "e1", to: "e3", fromChapter: "ch_1", toChapter: "ch_2", state: "canon" as const }, { id: "c2", from: "e1", to: "e1b", fromChapter: "ch_1", toChapter: "ch_1", state: "canon" as const }] },
+};
+
+test("story time: every scene on one spiral in story order, the flashback first, causes carried", () => {
+  const spiral = spiralWorld(causalWorld, data);
+  assert.deepEqual(spiral.laneNodes.map((entry) => [entry.id, entry.chrono]), [[spiralNodeId("s2"), 0], [spiralNodeId("s1"), 1], [spiralNodeId("s3"), 2]], "story order, unplaced scenes included");
+  assert.equal(spiral.laneNodes[0].viewKind, "↶ back then", "each scene names its period");
+  assert.equal(spiral.causal?.links.length, 2);
+  const arrangement = spiralArrangement(data, spiral);
+  assert.deepEqual(arrangement.extraDraws!.map((draw) => [draw.node.id, draw.previewParentId]).sort(), [["e1", spiralNodeId("s1")], ["e1b", spiralNodeId("s1")], ["e3", spiralNodeId("s3")]], "bubbles hold the records causes join");
+  assert.equal(arrangement.envelope, "shell");
+  const level = orbitalLevel(spiral);
+  const layout = layoutOrbitalLevel(level, [], { main: mainProminence(level), anchors: arrangement.anchors, radiusScale: arrangement.radiusScale });
   assert.ok(finite(layout.draws));
-  const at = new Map(layout.draws.map((draw) => [draw.node.id, draw.position]));
-  assert.ok(at.get(periodNodeId("t_child"))![1] > at.get(periodNodeId("t_evening"))![1], "the flashback is raised");
-  const paths = storyArrangement(regrouped).paths!(layout.draws, null);
-  assert.deepEqual(paths.map((path) => path.tone ?? "time"), ["time", "thread"]);
-  assert.equal(paths[0].points.length, 5, "one story-order string through all three periods");
+  const paths = arrangement.paths!(layout.draws, null);
+  assert.deepEqual(paths.map((path) => path.tone ?? "time"), ["time", "thread"], "the story string and the flashback's thread to where it is told");
+});
+
+test("causal arcs bend outward and never share a lane over overlapping spans", () => {
+  const draw = (id: string, chrono: number, position: [number, number, number], parent?: string, order?: number) => ({ node: node(id, "event", null, chrono), position, radius: 7, role: (parent ? "preview" : "main") as "preview" | "main", previewParentId: parent, order });
+  const draws = [draw("a", 0, [0, 300, 0], "p", 0.2), draw("b", 1, [10, 300, 0], "p", 0.4), draw("c", 2, [0, 300, 10], "p", 0.6), draw("x", 5, [800, -300, 0], "q", 5.5)];
+  const arrow = (id: string, from: string, to: string) => ({ id, from, to, links: [], projected: false, state: "canon" as const });
+  const routed = new Map(routeCausalArcs([arrow("ab", "a", "b"), arrow("ac", "a", "c"), arrow("ax", "a", "x")], draws).map((entry) => [entry.id, entry.bend!]));
+  const length = (vector: number[]) => Math.hypot(...vector);
+  assert.ok(length(routed.get("ac")!) > length(routed.get("ab")!), "overlapping spans inside a scene take a higher lane");
+  assert.ok(length(routed.get("ax")!) > 4 * length(routed.get("ac")!), "links between scenes arc far out past the spiral");
+  assert.ok(routed.get("ab")![1] > 0, "a scene above the axis bends further up (outward)");
 });
 
 test("places (space-time): the map on the floor, placed scenes above their place rising in story order", () => {
-  assert.deepEqual(atlasScenes(data, null).map((scene) => scene.id), ["s1", "s3"], "story order; a scene with no place stays off the map");
-  const regrouped = atlasWorld(world, data, null);
+  assert.deepEqual(atlasScenes(data, { periods: null }).map((scene) => scene.id), ["s1", "s3"], "story order; a scene with no place stays off the map");
+  const regrouped = atlasWorld(world, data, { periods: null });
   assert.deepEqual(regrouped.laneNodes.map((entry) => entry.id), [atlasNodeId("s1"), atlasNodeId("s3")]);
   assert.ok(!regrouped.interiors[atlasNodeId("s1")].nodes.some((entry) => entry.id === "s1"), "inside the sphere are the scene's records");
   assert.ok(regrouped.interiors[atlasNodeId("s1")].nodes.some((entry) => entry.id === "e1"));
-  const arrangement = atlasArrangement(data, null);
+  const arrangement = atlasArrangement(data, { periods: null }, regrouped);
   assert.deepEqual(arrangement.floor!.map((mark) => [mark.id, mark.active]), [["station", true], ["school", true]]);
   assert.deepEqual(arrangement.extraDraws!.map((draw) => draw.node.id), [pinNodeId("station"), pinNodeId("school")]);
   const level = orbitalLevel(regrouped);
@@ -82,10 +98,19 @@ test("places (space-time): the map on the floor, placed scenes above their place
   assert.ok(arrangement.focusFor!("ming", layout.draws)!.length >= 2);
 });
 
-test("places (space-time): the story-time window decides which scenes float above the map", () => {
-  const evening = new Set(["t_evening"]);
+test("places (space-time): periods, the stretch seen in Story time, and record levels decide what floats", () => {
+  const evening = { periods: new Set(["t_evening"]) };
   assert.deepEqual(atlasScenes(data, evening).map((scene) => scene.id), ["s1"]);
   assert.deepEqual(atlasWorld(world, data, evening).laneNodes.map((entry) => entry.id), [atlasNodeId("s1")]);
   assert.deepEqual(atlasArrangement(data, evening).floor!.map((mark) => [mark.id, mark.active]), [["station", true], ["school", false]], "places outside the window dim");
-  assert.equal(atlasWorld(world, data, new Set()).laneNodes.length, 0);
+  assert.equal(atlasWorld(world, data, { periods: new Set() }).laneNodes.length, 0);
+  assert.deepEqual(atlasScenes(data, { periods: null, sceneIds: new Set(["s3", "s2"]) }).map((scene) => scene.id), ["s3"], "only the scenes seen in Story time (and placed)");
+  const withEvents = { periods: null, levels: { scene: true, event: true, dialogue: false } };
+  const regrouped = atlasWorld(world, data, withEvents);
+  const bubbles = atlasArrangement(data, withEvents, regrouped);
+  assert.equal(bubbles.envelope, "shell", "scenes envelop their events");
+  assert.deepEqual(bubbles.extraDraws!.filter((draw) => draw.role === "preview").map((draw) => [draw.node.id, draw.previewParentId]), [["e1", atlasNodeId("s1")], ["e3", atlasNodeId("s3")]]);
+  const eventsOnly = atlasArrangement(data, { ...withEvents, levels: { scene: false, event: true, dialogue: false } }, regrouped);
+  assert.equal(eventsOnly.envelope, "hidden");
+  assert.ok(eventsOnly.extraDraws!.find((draw) => draw.node.id === "e1")!.radius > bubbles.extraDraws!.find((draw) => draw.node.id === "e1")!.radius, "records are larger when they are the subject");
 });

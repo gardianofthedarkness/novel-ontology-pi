@@ -13,6 +13,10 @@ export interface OrbitalDraw {
   /** 0–1 visual weight: child count for main spheres, scoped link strength for the nebula. */
   prominence?: number;
   previewParentId?: string;
+  /** A container drawn as a clear shell around its records, or not drawn at all (orbital Places levels). */
+  envelope?: "shell" | "hidden";
+  /** Story-order key for records drawn inside a container (container rank + position inside). */
+  order?: number;
   /** Direction the glyph's +Z faces (picture cards: the timeline tangent,
    * so the card plane stands perpendicular to the timeline). When absent,
    * glyphs fall back to camera billboarding. */

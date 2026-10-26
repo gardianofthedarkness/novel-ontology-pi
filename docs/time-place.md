@@ -83,8 +83,12 @@ in both Orbital and Traditional mode ([playground views](playground-views.md)):
   as carried (dashed / asterisk), never as stated.
 
 Deep links: `?view=story`, `?view=places`. In Orbital mode the same views are
-3D: period spheres in story order, and a space-time map (scenes above their
-place, rising in story time, filtered by a story-time window).
+3D:
+- Story time puts every scene on one spiral in story order, with the stored
+  causal links as curved arrows.
+- Places is a space-time map: scenes, events and/or dialogue float above
+  their place, rising in story time. A story-time window filters what
+  floats, or the stretch of the spiral that was in view does.
 
 ## Measured (2026-10-26)
 

@@ -21,6 +21,9 @@ export interface CausalArrow {
   /** True when either end is a container rather than the event itself. */
   projected: boolean;
   state: CanonState;
+  /** Where the curve's middle bends, from the chord's midpoint (world units);
+   * absent: straight up. Set by collision-free routing (orbital Story time). */
+  bend?: [number, number, number];
 }
 export interface CausalProjection {
   arrows: CausalArrow[];

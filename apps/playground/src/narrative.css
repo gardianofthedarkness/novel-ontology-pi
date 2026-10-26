@@ -98,4 +98,9 @@
   .atlas-panel { top: 372px; left: 12px; width: min(240px, 64vw); max-height: 40svh; padding: 8px 10px; }
 }
 /* Long scene summaries in the record bar: two lines at most. */
-.record-transport strong { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.transport .record-transport strong { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.atlas-levels { display: flex; gap: 4px; margin: 8px 0 0; }
+.atlas-levels button { flex: 1; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--tp-edge); background: transparent; color: var(--tp-text); font: inherit; font-size: 10px; cursor: pointer; }
+.atlas-levels button[aria-pressed="true"] { background: #9fd8ff; border-color: #9fd8ff; color: #06141f; }
+.atlas-focus { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 8px 0 0; padding: 6px 8px; border-radius: 8px; background: #ffc46b1a; color: var(--tp-flashback); font-size: 10px; }
+.atlas-focus button { padding: 1px 8px; border-radius: 999px; border: 1px solid #ffc46b88; background: transparent; color: var(--tp-flashback); font: inherit; font-size: 10px; cursor: pointer; }
