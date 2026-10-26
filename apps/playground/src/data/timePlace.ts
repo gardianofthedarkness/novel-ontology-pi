@@ -20,6 +20,8 @@ export interface StoryTime {
   narrativeIndex: number;
   anchorSceneId: string | null;
   sceneIds: string[];
+  /** Proposed by the faculty, still awaiting review (not canon). */
+  proposed?: boolean;
 }
 export interface StoryScene {
   id: string;
@@ -32,7 +34,7 @@ export interface StoryScene {
   placeCarried: boolean;
   characterIds: string[];
 }
-export interface StoryPlace { id: string; label: string; sceneIds: string[]; statedScenes: number; characterIds: string[] }
+export interface StoryPlace { id: string; label: string; sceneIds: string[]; statedScenes: number; characterIds: string[]; /** Proposed, awaiting review. */ proposed?: boolean }
 export interface TimePlaceProjection {
   available: boolean;
   times: StoryTime[];
@@ -159,4 +161,30 @@ export function placeLayout(places: StoryPlace[], links: { from: string; to: str
   const scale = Math.min(3, (size - 2 * margin) / Math.max(1, maxX - minX), (size - 2 * margin) / Math.max(1, maxY - minY));
   const offsetX = (size - (maxX - minX) * scale) / 2, offsetY = (size - (maxY - minY) * scale) / 2;
   return new Map(nodes.map((node) => [node.id, { x: Math.round(offsetX + (node.x - minX) * scale), y: Math.round(offsetY + (node.y - minY) * scale), r: Math.round(node.r) }]));
+}
+
+/**
+ * What a live update established in story time and places: periods and
+ * places that are new, or that were proposed and are now confirmed. Drives
+ * the follow-Pi tab switch and the "just emerged" highlight.
+ */
+export function timePlaceEmergence(previous: TimePlaceProjection | null, next: TimePlaceProjection): { times: string[]; places: string[] } {
+  if (!previous) return { times: [], places: [] };
+  const before = <T extends { id: string; proposed?: boolean }>(rows: T[]) => new Map(rows.map((row) => [row.id, !!row.proposed]));
+  const times = before(previous.times), places = before(previous.places);
+  const fresh = <T extends { id: string; proposed?: boolean }>(rows: T[], seen: Map<string, boolean>) => rows.filter((row) => !seen.has(row.id) || (seen.get(row.id) && !row.proposed)).map((row) => row.id);
+  return { times: fresh(next.times, times), places: fresh(next.places, places) };
+}
+
+export type FollowView = "narrative" | "story" | "places";
+/**
+ * Which view following Pi should show. Time-place facts that just emerged
+ * win (periods before places); Pi running the time-place faculty points to
+ * Story time; any other new work points to Narrative.
+ */
+export function followTarget(change: { times: string[]; places: string[] }, command: { label: string; status: string } | null | undefined, otherWork: boolean): FollowView | null {
+  if (change.times.length) return "story";
+  if (change.places.length) return "places";
+  if (command && /\btimeplace\b/.test(command.label) && command.status === "working") return "story";
+  return otherWork ? "narrative" : null;
 }

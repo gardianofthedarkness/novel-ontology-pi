@@ -10,12 +10,12 @@ import { characterTrack, dateLine, placeLayout, placeLinks, whereDuring, type Ti
  * its place and the previous scene's place was carried over); slide through
  * story time to see who is where.
  */
-interface Props { data: TimePlaceProjection; names: Map<string, string> }
+interface Props { data: TimePlaceProjection; names: Map<string, string>; /** Places that just emerged live. */ emerging?: ReadonlySet<string> }
 
 const SIZE = 600;
 const initials = (name: string) => [...name.replace(/[·・\s]/g, "")].slice(0, 2).join("");
 
-export function PlaceMap({ data, names }: Props) {
+export function PlaceMap({ data, names, emerging }: Props) {
   const insets = useChromeInsets();
   const links = useMemo(() => placeLinks(data), [data]);
   const layout = useMemo(() => placeLayout(data.places, links, SIZE), [data.places, links]);
@@ -58,10 +58,11 @@ export function PlaceMap({ data, names }: Props) {
         const onTrack = track.some((step) => step.placeId === place.id);
         const here = occupants.get(place.id) ?? [];
         const dim = (characterId && !onTrack) || (time && !here.length);
-        return <g key={place.id} className={`tp-place-node${dim ? " is-dim" : ""}`} transform={`translate(${point.x},${point.y})`}>
+        return <g key={place.id} className={`tp-place-node${dim ? " is-dim" : ""}${place.proposed ? " is-proposed" : ""}${emerging?.has(place.id) ? " is-emerging" : ""}`} transform={`translate(${point.x},${point.y})`}>
           <circle r={point.r} className={place.statedScenes ? "" : "is-carried"} />
           {track[0]?.placeId === place.id && <text className="tp-step" y={-point.r - 4}>1</text>}
-          <text className="tp-place-label" y={point.r + 13} lang="zh">{place.label}</text>
+          {emerging?.has(place.id) && <circle r={point.r + 10} className="tp-emerge-ring" />}
+          <text className="tp-place-label" y={point.r + 13} lang="zh">{place.label}{place.proposed ? " · proposed" : ""}</text>
           <text className="tp-place-count" y={4}>{place.sceneIds.length}</text>
           {here.slice(0, 6).map((occupant, index) => { const angle = -Math.PI / 2 + index * (Math.PI / 3.2); return <g key={occupant.id} transform={`translate(${Math.cos(angle) * (point.r + 11)},${Math.sin(angle) * (point.r + 11)})`} className={`tp-occupant${occupant.carried ? " is-carried" : ""}`}><circle r={9} /><text y={3} lang="zh">{initials(names.get(occupant.id) ?? "?")}</text><title>{names.get(occupant.id)}</title></g>; })}
         </g>;

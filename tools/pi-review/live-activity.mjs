@@ -86,6 +86,8 @@ export function liveActivity({ processing, agent, drafts, changesets, interiors,
     blockId: review?.active ? review.blockId : blockId ?? null,
     phase: review?.active ? `Pi review · ${review.changesetId} · ${review.phase} · ${review.status}${review.total != null && review.offset != null ? ` · ${review.offset + 1}–${Math.min(review.offset + review.pageCount, review.total)} / ${review.total}` : ''}` : terminal?.status === 'complete' ? 'Processing complete · last construction state; no extraction is currently running' : terminal?.status === 'error' ? 'Processor stopped · last construction state' : terminal?.status === 'idle' ? terminal.label ?? 'Pi ready · waiting for your message' : construction?.stage === 'gate' ? `Pi review · ${command?.label ?? 'checking semantic facts'} · ${command?.status ?? 'working'}` : construction ? `${construction.patchId} · live construction` : terminal?.label ?? 'Waiting for extraction',
     review,
+    /** Pi's latest scoped CLI command (label/status only), e.g. "novel timeplace run". */
+    command: command ? { label: command.label, status: command.status, timestamp: command.timestamp } : null,
     latestTouch,
     faculties: [...faculties.values()].sort((first, second) => second.timestamp.localeCompare(first.timestamp)).slice(0, 16),
     identityEvents,
