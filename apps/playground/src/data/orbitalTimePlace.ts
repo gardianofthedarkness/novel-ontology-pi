@@ -95,6 +95,21 @@ const groupNode = (id: string, label: string, viewKind: string, chrono: number, 
   id, label, viewKind, kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono, trackId, trackLabel: viewKind, summary, subLabel: summary, lanePos: [0, 0, 0], interiorPos: [0, 0, 0],
 });
 
+/**
+ * Before the time-place faculty has run there is no story order yet: the
+ * book's scenes in reading order stand in (no periods, places or
+ * flashbacks), so the spiral and its causal arrows still show.
+ */
+export function readingOrderProjection(world: WorldLike): TimePlaceProjection {
+  const chapters = world.laneNodes.filter((node) => node.kind === "bigEvent").sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id));
+  let index = 0;
+  const scenes: StoryScene[] = chapters.flatMap((chapter, chapterIndex) => (world.interiors[chapter.id]?.nodes ?? [])
+    .filter((node) => node.kind === "scene")
+    .sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id))
+    .map((node) => ({ id: node.id, index: index++, chapterIndex, label: node.summary ?? node.label, times: [], flashback: false, placeIds: [], placeCarried: false, characterIds: [] })));
+  return { available: false, times: [], scenes, places: [], characters: [], names: {} };
+}
+
 /** Scenes in story order: by period (estimated story order), then reading order; scenes before the first time word lead. */
 export function storyOrderScenes(data: TimePlaceProjection): StoryScene[] {
   const rank = new Map(data.times.map((time) => [time.id, time.storyIndex]));
@@ -114,7 +129,7 @@ export function spiralWorld(world: WorldLike & { causal?: CausalSummary }, data:
     const id = spiralNodeId(scene.id);
     const time = timeById.get(scenePeriod(scene) ?? "");
     const host = time?.toldFromId ? timeById.get(time.toldFromId) : undefined;
-    const period = time ? `${time.flashback ? "↶ " : ""}${time.label}${dateLine(time) ? ` · ${dateLine(time)}` : ""}` : "Time not stated";
+    const period = time ? `${time.flashback ? "↶ " : ""}${time.label}${dateLine(time) ? ` · ${dateLine(time)}` : ""}` : data.available ? "Time not stated" : `Chapter ${scene.chapterIndex} · reading order`;
     const place = scene.placeIds[0] ? data.names[scene.placeIds[0]] ?? scene.placeIds[0] : null;
     const summary = `${period}${time?.flashback ? ` · flashback${host ? ` told during ${host.label}` : ""}` : ""}${place ? ` · ⌖ ${place}${scene.placeCarried ? " (carried over)" : ""}` : ""} · scene ${scene.index + 1} in reading order, chapter ${scene.chapterIndex}`;
     result.laneNodes.push(groupNode(id, scene.label, period, rank, time?.flashback ? "flashback" : "present", summary));
@@ -200,7 +215,9 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
   }) : [];
   return {
     anchors, radiusScale: 0.42, causal: true, extraDraws: records, envelope: records.length ? "shell" : undefined,
-    timeKey: { label: "STORY TIME →", detail: "Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs) · amber: a flashback, threaded to where it is told" },
+    timeKey: data.available
+      ? { label: "STORY TIME →", detail: "Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs) · amber: a flashback, threaded to where it is told" }
+      : { label: "READING ORDER →", detail: "Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes" },
     initialFrame: (draws) => draws.filter((draw) => draw.role === "main" && draw.node.chrono < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
     routeCausal: routeCausalArcs,
     paths: (draws) => {

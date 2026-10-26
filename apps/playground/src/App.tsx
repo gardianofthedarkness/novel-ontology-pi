@@ -19,7 +19,7 @@ import { NarrativeList } from "./components/NarrativeList";
 import "./narrative.css";
 import { PlaceMap } from "./components/PlaceMap";
 import type { TimePlaceProjection } from "./data/timePlace";
-import { atlasArrangement, atlasWorld, sceneOfSpiral, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels } from "./data/orbitalTimePlace";
+import { atlasArrangement, atlasWorld, readingOrderProjection, sceneOfSpiral, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels } from "./data/orbitalTimePlace";
 import { AtlasPanel } from "./components/AtlasPanel";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
@@ -703,9 +703,14 @@ export default function App() {
 
   /** Orbital Story time / Places: the world regrouped by period or by place (view only). */
   const regroupedOrbit = useMemo(() => {
-    if (!orbitalMode || stageView === "narrative" || !displayWorld || !timePlace?.available) return null;
-    if (stageView === "story") { const spiral = spiralWorld(displayWorld, timePlace); return { world: spiral, arrangement: spiralArrangement(timePlace, spiral) }; }
-    if (!timePlace.places.length) return null;
+    if (!orbitalMode || stageView === "narrative" || !displayWorld) return null;
+    if (stageView === "story") {
+      // Without time facts yet, the spiral runs in reading order (its causal arrows still show).
+      const order = timePlace?.available ? timePlace : readingOrderProjection(displayWorld);
+      const spiral = spiralWorld(displayWorld, order);
+      return { world: spiral, arrangement: spiralArrangement(order, spiral) };
+    }
+    if (!timePlace?.available || !timePlace.places.length) return null;
     const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels };
     const regrouped = atlasWorld(displayWorld, timePlace, filter);
     return { world: regrouped, arrangement: atlasArrangement(timePlace, filter, regrouped) };

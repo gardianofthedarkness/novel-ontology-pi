@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { atlasArrangement, atlasNodeId, atlasScenes, atlasWorld, pinNodeId, routeCausalArcs, spiralArrangement, spiralNodeId, spiralWorld } from "../apps/playground/src/data/orbitalTimePlace.js";
+import { atlasArrangement, atlasNodeId, atlasScenes, atlasWorld, pinNodeId, readingOrderProjection, routeCausalArcs, spiralArrangement, spiralNodeId, spiralWorld } from "../apps/playground/src/data/orbitalTimePlace.js";
 import { orbitalLevel, surroundingEntities, mainProminence } from "../apps/playground/src/data/orbitalModel.js";
 import { layoutOrbitalLevel } from "../apps/playground/src/data/orbitalLayout.js";
 import type { TimePlaceProjection } from "../apps/playground/src/data/timePlace.js";
@@ -113,4 +113,14 @@ test("places (space-time): periods, the stretch seen in Story time, and record l
   const eventsOnly = atlasArrangement(data, { ...withEvents, levels: { scene: false, event: true, dialogue: false } }, regrouped);
   assert.equal(eventsOnly.envelope, "hidden");
   assert.ok(eventsOnly.extraDraws!.find((draw) => draw.node.id === "e1")!.radius > bubbles.extraDraws!.find((draw) => draw.node.id === "e1")!.radius, "records are larger when they are the subject");
+});
+
+test("before time-place runs, the spiral uses reading order and still carries the causes", () => {
+  const order = readingOrderProjection(causalWorld);
+  assert.equal(order.available, false);
+  assert.deepEqual(order.scenes.map((scene) => [scene.id, scene.index, scene.chapterIndex]), [["s1", 0, 0], ["s2", 1, 0], ["s3", 2, 1]]);
+  const spiral = spiralWorld(causalWorld, order);
+  assert.equal(spiral.laneNodes[0].viewKind, "Chapter 0 · reading order");
+  assert.equal(spiralArrangement(order, spiral).timeKey.label, "READING ORDER →");
+  assert.equal(spiralArrangement(order, spiral).extraDraws!.length, 3, "causal endpoints still sit in their bubbles");
 });
