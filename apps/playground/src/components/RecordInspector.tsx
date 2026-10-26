@@ -56,7 +56,7 @@ export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, c
   const connections = edges.filter((edge) => edge.from === selected.id || edge.to === selected.id);
   return (
     <div className="record-inspector">
-      <div className="record-eyebrow"><span>{selected.library?.type ?? KIND_LABEL[selected.kind]}</span><span>#{String(nodes.findIndex((node) => node.id === selected.id) + 1).padStart(2, "0")}</span></div>
+      <div className="record-eyebrow"><span>{selected.viewKind ?? selected.library?.type ?? KIND_LABEL[selected.kind]}</span><span>#{String(nodes.findIndex((node) => node.id === selected.id) + 1).padStart(2, "0")}</span></div>
       <h2>{selected.label}</h2>
       <span className={`record-status status-${selected.state}`}><i />{selected.library ? `${selected.state === "canon" ? "Reviewed" : selected.state} organization · not an ontology fact` : selected.cluster ? "View-only group · not an ontology record" : recordStatus(selected)}</span>
       <section className="record-summary" aria-label="Recorded summary">

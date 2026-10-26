@@ -18,7 +18,9 @@ export interface OrbitalDraw {
    * glyphs fall back to camera billboarding. */
   facing?: Position3;
 }
-export interface OrbitalPath { id: string; points: Position3[]; preview?: boolean; fromPoints?: Position3[] }
+/** tone: "thread" (amber, flashback → told during), "route" (a character's
+ * path through places), "link" (faint move between places); default the time string. */
+export interface OrbitalPath { id: string; points: Position3[]; preview?: boolean; fromPoints?: Position3[]; tone?: "thread" | "route" | "link" }
 export interface OrbitalPose { position: Position3; radius: number }
 /** A transition from `from` poses to the current layout. The opening
  * sequence uses a longer `durationMs` and per-record start `delays` (ms). */
@@ -89,11 +91,11 @@ export const nebulaRadius = (node: WorldNode, prominence?: number) => {
   return prominence === undefined ? base : Math.round(base * (0.55 + 0.75 * Math.min(1, Math.max(0, prominence))));
 };
 
-export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.nebula, weights: { main?: Map<string, number>; nebula?: Map<string, number> } = {}): { draws: OrbitalDraw[]; paths: OrbitalPath[] } {
+export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.nebula, weights: { main?: Map<string, number>; nebula?: Map<string, number>; anchors?: Map<string, Position3>; radiusScale?: number } = {}): { draws: OrbitalDraw[]; paths: OrbitalPath[] } {
   const tracks = [...new Set(level.main.map((entry) => trackKey(entry.node)))].sort();
   const times = [...new Set(level.main.map((entry) => entry.node.chrono))].sort((first, second) => first - second);
   const anchors = new Map<string, Position3>();
-  for (const entry of level.main) anchors.set(entry.node.id, [(times.indexOf(entry.node.chrono) - (times.length - 1) / 2) * 200, ((tracks.length - 1) / 2 - tracks.indexOf(trackKey(entry.node))) * 240, 0]);
+  for (const entry of level.main) anchors.set(entry.node.id, weights.anchors?.get(entry.node.id) ?? [(times.indexOf(entry.node.chrono) - (times.length - 1) / 2) * 200, ((tracks.length - 1) / 2 - tracks.indexOf(trackKey(entry.node))) * 240, 0]);
   const mapped = new Map<string, string>();
   const entityIds = new Set(contextNebula.map((node) => node.id));
   for (const entry of level.main) for (const member of entry.members) if (!entityIds.has(member)) mapped.set(member, entry.node.id);
@@ -130,7 +132,7 @@ export function layoutOrbitalLevel(level: OrbitalLevel, contextNebula = level.ne
     const radius = 270 + Math.sqrt(contextNebula.length) * 24 + 180 / (1 + Math.log1p(strength));
     positions.set(node.id, center.map((value, axis) => value + spread[axis] / length * radius) as Position3);
   }
-  const draws: OrbitalDraw[] = level.main.map((entry) => ({ node: entry.node, entry, position: anchors.get(entry.node.id)!.map((value) => value * 3) as Position3, radius: mainRadius(entry.node, weights.main?.get(entry.node.id)), prominence: weights.main?.get(entry.node.id), role: "main" }));
+  const draws: OrbitalDraw[] = level.main.map((entry) => ({ node: entry.node, entry, position: anchors.get(entry.node.id)!.map((value) => value * 3) as Position3, radius: Math.round(mainRadius(entry.node, weights.main?.get(entry.node.id)) * (weights.radiusScale ?? 1)), prominence: weights.main?.get(entry.node.id), role: "main" }));
   draws.push(...contextNebula.map((node): OrbitalDraw => ({ node, position: positions.get(node.id)!.map((value) => value * 3) as Position3, radius: nebulaRadius(node, weights.nebula?.get(node.id)), prominence: weights.nebula?.get(node.id), role: "nebula" })));
   const paths = tracks.flatMap((track): OrbitalPath[] => {
     const members = draws.filter((draw) => draw.role === "main" && trackKey(draw.node) === track && (!draw.node.library || draw.node.library.type === "file" && draw.node.library.readingOrder !== null));

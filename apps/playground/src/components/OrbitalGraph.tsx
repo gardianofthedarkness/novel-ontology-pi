@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type NodeRendererProps } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { AdditiveBlending, BoxGeometry, BufferGeometry, DoubleSide, Points, PointsMaterial, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
+import { AdditiveBlending, BoxGeometry, BufferGeometry, CurvePath, LineCurve3, TubeGeometry, DoubleSide, Points, PointsMaterial, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
 import { recordColor } from "../archive";
 import type { WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
@@ -12,6 +12,7 @@ import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";
+import type { FloorMark } from "../data/orbitalTimePlace";
 
 interface GlyphData {
   draw: OrbitalDraw;
@@ -298,11 +299,34 @@ function renderSphere(props: NodeRendererProps) {
   return <SphereGlyph {...props} />;
 }
 
+/** The flat map of orbital Places: a disc and rim per place on the floor
+ * (sized by scenes; dim when no scene of the chosen periods is there). */
+function FloorMap({ marks }: { marks: FloorMark[] }) {
+  return <>{marks.map((mark) => <group key={mark.id} position={[mark.x, -944, mark.z]} rotation={[-Math.PI / 2, 0, 0]}>
+    <mesh raycast={noRaycast}><circleGeometry args={[mark.radius, 48]} /><meshBasicMaterial color="#16405e" transparent opacity={mark.active ? 0.55 : 0.18} depthWrite={false} toneMapped={false} /></mesh>
+    <mesh raycast={noRaycast}><ringGeometry args={[mark.radius * 0.94, mark.radius, 48]} /><meshBasicMaterial color="#7cc8ff" transparent opacity={mark.active ? 0.85 : 0.25} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>
+  </group>)}</>;
+}
+
+/** Path tones: the blue time string, an amber flashback thread, a character route, a faint move. */
+const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 }, thread: { color: "#ffc46b", arrow: "#ffc46b", opacity: 0.75 }, route: { color: "#ff9a6b", arrow: "#ffb48c", opacity: 0.95 }, link: { color: "#7cc8ff", arrow: "#7cc8ff", opacity: 0.16 } };
+
 function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean; motion: MotionBus; anchors: (string | undefined)[] }) {
-  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: "#51b7ff", transparent: true, opacity: path.preview ? 0.85 : 0.6, depthWrite: false })), [path]);
+  const tone = PATH_TONES[path.tone ?? "time"];
+  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: tone.color, transparent: true, opacity: path.preview ? 0.85 : tone.opacity, depthWrite: false })), [path, tone]);
   const arrowGroups = useRef<(Group | null)[]>([]);
-  const arrowCount = path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
+  const arrowCount = path.tone === "link" ? 0 : path.tone === "thread" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
   const arrowIndices = useMemo(() => Array.from({ length: arrowCount }, (_, index) => Math.max(1, Math.round((index + 1) * (path.points.length - 1) / arrowCount))), [path, arrowCount]);
+  /** A character's route: a bead travels it in story order (resting at the start under reduced motion). */
+  const bead = useRef<Mesh>(null);
+  // WebGL lines are one pixel wide; a route also gets a thin tube so it reads at a glance.
+  const tube = useMemo(() => {
+    if (path.tone !== "route" || path.points.length < 2) return null;
+    const curve = new CurvePath<Vector3>();
+    for (let index = 1; index < path.points.length; index++) curve.add(new LineCurve3(new Vector3(...path.points[index - 1]), new Vector3(...path.points[index])));
+    return new TubeGeometry(curve, Math.min(400, 24 * (path.points.length - 1)), 7, 6, false);
+  }, [path]);
+  useEffect(() => () => tube?.dispose(), [tube]);
   useEffect(() => () => { line.geometry.dispose(); line.material.dispose(); }, [line]);
   useFrame(() => {
     const attribute = line.geometry.attributes.position;
@@ -320,6 +344,11 @@ function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors }: { pat
     });
     attribute.needsUpdate = true;
     line.geometry.computeBoundingSphere();
+    if (bead.current && points.length > 1) {
+      const travel = reducedMotion ? 0 : (performance.now() / (1400 * (points.length - 1))) % 1;
+      const along = travel * (points.length - 1), segment = Math.min(points.length - 2, Math.floor(along)), part = along - segment;
+      bead.current.position.set(...points[segment].map((value, axis) => value + (points[segment + 1][axis] - value) * part) as Position3);
+    }
     arrowIndices.forEach((pointIndex, index) => {
       const arrow = arrowGroups.current[index];
       if (!arrow) return;
@@ -331,8 +360,10 @@ function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors }: { pat
   });
   return <>
     <primitive object={line} raycast={noRaycast} />
+    {tube && <mesh geometry={tube} raycast={noRaycast}><meshBasicMaterial color={tone.color} transparent opacity={0.8} depthWrite={false} toneMapped={false} /></mesh>}
+    {path.tone === "route" && <mesh ref={bead} raycast={noRaycast}><sphereGeometry args={[34, 16, 12]} /><meshBasicMaterial color={tone.arrow} toneMapped={false} /></mesh>}
     {arrowIndices.map((pointIndex, index) => <group key={`${index}:${pointIndex}`} ref={(element) => { arrowGroups.current[index] = element; }}>
-      <mesh raycast={noRaycast}><coneGeometry args={[path.preview ? 2.6 : 13, path.preview ? 8 : 40, 8]} /><meshBasicMaterial color="#75ceff" toneMapped={false} /></mesh>
+      <mesh raycast={noRaycast}><coneGeometry args={[path.preview ? 2.6 : path.tone ? 10 : 13, path.preview ? 8 : path.tone ? 30 : 40, 8]} /><meshBasicMaterial color={tone.arrow} toneMapped={false} /></mesh>
     </group>)}
   </>;
 }
@@ -754,7 +785,7 @@ const EXTREME_BACK_SETTLE_MS = 1800;
 type Enclosure = { center: Position3; radius: number };
 const EXTREME_BACK_ENCLOSURE_FACTOR = 12;
 
-function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, reducedMotion, enabled }: { graphRef: { current: GraphCanvasRef | null }; draws: OrbitalDraw[]; selectedId: string | null; enclosure?: Enclosure; levelKey: string; reducedMotion: boolean; enabled: boolean }) {
+function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, reducedMotion, enabled, direction }: { graphRef: { current: GraphCanvasRef | null }; draws: OrbitalDraw[]; selectedId: string | null; enclosure?: Enclosure; levelKey: string; reducedMotion: boolean; enabled: boolean; direction?: Position3 }) {
   const { camera, size } = useThree();
   // Narrow (portrait) screens frame fewer neighbours so spheres stay readable.
   const positions = entryFrame(draws, selectedId, size.width / Math.max(1, size.height) < 0.8 ? 2 : 5);
@@ -762,7 +793,7 @@ function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, redu
   const framingEnabled = useRef(enabled); framingEnabled.current = enabled;
   useEffect(() => {
     (camera as { fov: number }).fov = 42; camera.near = 1; camera.far = 2000000; camera.updateProjectionMatrix();
-    const timeout = setTimeout(() => { if (framingEnabled.current) framePositions(graphRef, latest.current.positions, 1.2, !reducedMotion, { direction: levelKey.length % 2 ? [0.18, 0.22, 1] : [-0.18, 0.22, 1], within: latest.current.enclosure, ignoreSheet: true }); }, 100);
+    const timeout = setTimeout(() => { if (framingEnabled.current) framePositions(graphRef, latest.current.positions, 1.2, !reducedMotion, { direction: direction ?? (levelKey.length % 2 ? [0.18, 0.22, 1] : [-0.18, 0.22, 1]), within: latest.current.enclosure, ignoreSheet: true }); }, 100);
     return () => clearTimeout(timeout);
   }, [levelKey, reducedMotion, camera, graphRef, size.width, size.height]);
   return null;
@@ -771,6 +802,10 @@ function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, redu
 interface Props {
   /** Working faculties to animate, grouped by the sphere they play on. */
   faculties?: FacultyAnchor[];
+  /** A flat map on the floor (orbital Places); world units. */
+  floor?: FloorMark[];
+  /** Camera direction for automatic framing (default: a slight side view). */
+  frameDirection?: Position3;
   /** Record Pi is working on right now (heartbeat target), if any. */
   heartbeatId?: string | null;
   draws: OrbitalDraw[];
@@ -799,7 +834,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [] }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], frameDirection }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -813,7 +848,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     onCanvasClick={(event) => onBlank?.(event)}>
     <ambientLight intensity={0.85} /><directionalLight position={[800, 1200, 1800]} intensity={1.5} color="#c4eaff" />
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
-    <axesHelper args={[900]} position={[-1400, -945, -1200]} />
+    {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} />)}
     <VisibleConnections edges={edges} bus={bus} />
@@ -829,6 +864,6 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
     <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} opening={!!morph?.delays} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
-    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} />
+    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} direction={frameDirection} />
   </GraphCanvas>;
 });

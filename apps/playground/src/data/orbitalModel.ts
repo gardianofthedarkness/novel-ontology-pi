@@ -161,7 +161,8 @@ export function orbitalLevel(world: OrbitalWorld, scope: OrbitalScope = volumeSc
     const main = world.laneNodes.filter((node) => node.kind === "bigEvent").sort(order).map((node): OrbitalEntry => {
       const interior = world.interiors[node.id];
       const source = [...(interior?.nodes ?? []), ...activityNodes.filter((entry) => entry.parent === node.id)];
-      const representative = representativeScene(source, interior?.edges ?? []);
+      // Chapters wear their most connected scene summary; regrouped spheres (periods, places) keep their own names.
+      const representative = node.viewKind ? undefined : representativeScene(source, interior?.edges ?? []);
       const chapterNode = representative ? { ...node, label: representative.summary!.slice(0, 72), summary: representative.summary, subLabel: node.label } : node;
       return { node: chapterNode, members: [node.id, ...source.map((entry) => entry.id)], ...(source.length ? { scope: { key: `orbital:chapter:${node.id}`, label: node.label, kind: "chapter", chapterId: node.id } as OrbitalScope } : {}) };
     });
