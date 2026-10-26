@@ -71,13 +71,10 @@
   .tp-chip { max-width: 100%; }
 }
 .reduce-motion .tp-view * { scroll-behavior: auto !important; }
-/* One segmented view switch where the orbital/classic toggle used to be. */
-.design-switch.stage-switch { display: flex; gap: 2px; padding: 2px; }
+/* The mode × view switch (layout in narrative.css). */
 .stage-switch button { padding: 3px 9px; border: 0; border-radius: 20px; background: transparent; color: #a8d5ed; font: inherit; font-size: inherit; cursor: pointer; white-space: nowrap; }
-.stage-switch button[aria-pressed="true"]:not(.classic-toggle) { color: #06141f; background: #9fd8ff; }
-.stage-switch .classic-toggle { opacity: .7; border-left: 1px solid #8ab6d33d; border-radius: 0 20px 20px 0; }
-.stage-switch .classic-toggle:disabled { opacity: .35; cursor: default; }
-/* Story time / Places: the orbit's activity bars step aside (transport and console stay). */
+.stage-switch button[aria-pressed="true"] { color: #06141f; background: #9fd8ff; }
+/* Story time / Places: the activity bars step aside (transport and console stay). */
 .stage-alt .pi-review-progress, .stage-alt .pipeline, .stage-alt .activity-dock { display: none; }
 .tp-view { padding-right: 64px; }
 @media (max-width: 700px) { .tp-view { padding-right: 48px; } }
@@ -91,6 +88,6 @@
   .tp-step { font-size: 18px; }
   .tp-occupant circle { r: 14; }
   .tp-occupant text { font-size: 11px; }
-  .design-switch.stage-switch { font-size: 9px; }
-  .stage-switch button { padding: 2px 6px; }
+  .design-switch.stage-switch { font-size: 10px; }
+  .stage-switch button { padding: 3px 8px; }
 }

@@ -4,7 +4,7 @@ import { AdditiveBlending, BufferGeometry, CircleGeometry, DoubleSide, Group, Li
 import type { OrbitalDraw } from "../data/orbitalLayout";
 import type { FacultyAnchor, FacultyEffect, FacultyFamily } from "../data/facultyEffects";
 import { now } from "../data/orbitalMotion";
-import type { LabelBus } from "./WorldGraph";
+import type { LabelBus } from "./graphCamera";
 
 /**
  * Live faculty animations in the orbital world (see data/facultyEffects.ts).

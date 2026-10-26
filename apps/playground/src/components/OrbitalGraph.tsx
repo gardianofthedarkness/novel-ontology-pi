@@ -8,7 +8,7 @@ import type { Position3 } from "../data/spatialLayout";
 import { carryPose, carryTangent, entryFrame, interpolatePose, morphProgress, OPENING_STAGGER_MS, uncoilEase, type OrbitalPose, type BackdropGhost, type OrbitalDraw, type OrbitalMorph, type OrbitalPath } from "../data/orbitalLayout";
 import type { CausalArrow } from "../data/causalProjection";
 import { breathOffset, buildInertiaRig, glintLevel, heartbeatRoute, now, pointAlong, rippleOffset, stepInertia, swayOf, RIPPLE_LIFE, RIPPLE_SPEED, type MotionBus } from "../data/orbitalMotion";
-import { framePositions, type LabelBus } from "./WorldGraph";
+import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";

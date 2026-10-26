@@ -7,7 +7,7 @@ import { useLayoutEffect, useState, type CSSProperties } from "react";
  * nothing starts hidden underneath at any breakpoint.
  */
 const TOP = [".page-heading", ".design-switch"];
-const BOTTOM = [".transport", ".pipeline", ".pi-review-progress", ".pi-console"];
+const BOTTOM = [".transport", ".pipeline", ".pi-review-progress", ".pi-console", ".activity-dock"];
 
 export function useChromeInsets(): CSSProperties {
   const [insets, setInsets] = useState({ top: 200, bottom: 180 });
