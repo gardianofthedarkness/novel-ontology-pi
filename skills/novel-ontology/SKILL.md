@@ -123,6 +123,11 @@ re-read its fresh revision. Never drop conflicting updates merely to clear a gat
   scene→place (LOCATED_AT) is one typed fact with its original sentences:
   accept a period only if its time word is in the cited sentence; a scene
   continuing a period cites that time word and the scene's opening.
+- Decide each page as you read it (at most 50 decisions per call). When the
+  cited sentences cannot settle whether a period carries over (a chapter
+  may jump or rewind), hold that fact with the reason instead of rebuilding
+  the whole book's chronology in one reply; `novel search <dir> <time word>
+  [--limit N]` finds where a time word is stated.
 - Do not treat story order as causation, a carried-over place as stated,
   or a derived date as a stated one. Hierarchy (room ⊂ building ⊂ city),
   spatial relations and cross-volume time alignment are later phases.

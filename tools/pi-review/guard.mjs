@@ -256,7 +256,7 @@ export function authorize(command, scope) {
   if (verb === 'recall') valid = operation === novel && tokens.length === 3 && blockIds.includes(tokens[2]);
   if (verb === 'graph') valid = operation === 'build' && tokens.length === 3 && tokens[2] === `${novel}/ontology`;
   if (verb === 'query') valid = operation === novel && tokens.length === 3 && /^\s*MATCH\b/i.test(tokens[2]) && !/\b(CREATE|MERGE|SET|DELETE|DROP|ALTER|COPY|LOAD|INSTALL|ATTACH|CALL|REMOVE)\b|;/i.test(tokens[2]);
-  if (verb === 'search') valid = operation === novel && tokens.length === 3;
+  if (verb === 'search') valid = operation === novel && (tokens.length === 3 || tokens.length === 5 && tokens[3] === '--limit' && /^\d+$/.test(tokens[4]) && Number(tokens[4]) >= 1 && Number(tokens[4]) <= 30);
   if (verb === 'inspect') valid = operation === novel && tokens.length === 2;
   if (verb === 'timeline') valid = operation === 'list' && tokens.length === 3 && tokens[2] === novel;
   if (!valid) throw new Error('Command outside this block/workspace CLI allowlist; no shell, direct file writes, credential access, or auto-approve');
