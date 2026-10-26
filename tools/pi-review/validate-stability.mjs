@@ -8,7 +8,7 @@ export const nonCjkNarrative = (value) => /\p{L}/u.test(value ?? '') && !/[\u4e0
 
 export function structuralIssues(entities, events, scenes, relations) {
   const kinds = new Map(entities.map((entity) => [entity.id, entity.kind]));
-  const ids = new Set([...kinds.keys(), ...events.map((event) => event.id), ...scenes.map((scene) => scene.id)]);
+  const ids = new Set([...kinds.keys(), ...events.map((event) => event.id), ...scenes.map((scene) => scene.id), ...scenes.flatMap(scene => (scene.dialogues ?? []).map(card => card.id))]);
   const issues = [];
   const characters = (values, record) => { for (const id of values ?? []) if (kinds.get(id) !== 'Character') issues.push({ code: 'invalid-character-reference', record, id }); };
   for (const event of events) { characters(event.primaryActors, event.id); characters(event.affectedCharacters, event.id); }
@@ -34,10 +34,11 @@ export async function validateStability(jobRoot, manifest) {
     const applications = new Map(records.filter((record) => record.event.type === 'changeset.applied').map((record) => [record.event.changesetId, record.event]));
     for (const block of volume.blocks) {
       const packet = await readFile(`${volume.workspace}/changesets/cs_${block.id}.json`, 'utf8').then(JSON.parse, (error) => { if (error.code === 'ENOENT') return null; throw error; });
-      const receipt = receipts.findLast((entry) => entry.volume === volume.id && entry.blockId === block.id);
+      const receipt = receipts.findLast((entry) => entry.volume === volume.id && entry.blockId === block.id && (entry.policy !== 'review-v1' || entry.operation === 'apply' && entry.applied === true));
       const application = applications.get(`cs_${block.id}`);
       const applied = packet?.status === 'approved' && !!application;
-      const semanticReviewed = packet?.reviewSource && receipt?.policy === 'semantic-v1' && packet.semanticReview && receipt.revision === reviewRevision(packet) && packet.semanticReview.decisions.filter(decision => decision.verdict === 'accept').every(decision => receipt.acceptedFactIds?.includes(decision.factId) && receipt.verifiedSourceFacts?.includes(decision.factId));
+      const boundReview = !!packet && (receipt?.policy === 'review-v1' ? receipt.scope === 'book' && receipt.packetId === packet.id && receipt.packetRevision === reviewRevision(packet) : receipt?.policy === 'semantic-v1' && receipt.revision === reviewRevision(packet));
+      const semanticReviewed = packet?.reviewSource && boundReview && packet.semanticReview && packet.semanticReview.decisions.filter(decision => decision.verdict === 'accept').every(decision => receipt.acceptedFactIds?.includes(decision.factId) && receipt.verifiedSourceFacts?.includes(decision.factId) && (receipt.policy !== 'review-v1' || receipt.inspectedFactIds?.includes(decision.factId)));
       const reviewed = !!packet && !!receipt && (packet.reviewSource ? !!semanticReviewed : receipt.revision === reviewRevision(packet) && receipt.reviewedProposals === packet.proposals.length && receipt.reviewedNotes === Object.keys(packet.reviewNotes).length && receipt.sourceLines === block.lines && receipt.coveredSourceLines >= block.lines);
       if (applied && !reviewed) issues.push({ code: 'missing-current-review-proof', blockId: block.id, volume: volume.id });
       states.push({ volume: volume.id, blockId: block.id, chapterIndex: block.chapterIndex, applied, reviewed, status: packet?.status ?? 'not-started', supported: application ? application.processed - application.unsupportedProposalIds.length : 0, deferred: application?.unsupportedProposalIds.length ?? 0, deferredFacts: application?.deferredFactIds?.length ?? 0 });

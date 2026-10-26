@@ -11,6 +11,21 @@ const result = (id, value, isError = false) => ({ type: 'message', timestamp: '2
 const command = "novel changeset facts '/private/book-2' cs_b0001 --offset 20 --limit 20";
 const page = revision => ({ id: 'cs_b0001', revision, totalFacts: 100, accepted: 7, rejected: 2, explicitHolds: 1, unreviewed: 90, page: { offset: 20, limit: 2, total: 100 }, facts: [{ id: 'proposal-1/identity', field: 'identity', value: 'PRIVATE-VALUE' }, { id: 'proposal-2/dialogue-member/card/person', field: 'dialogue-member', value: 'PRIVATE-VALUE' }], evidence: { sentence: 'PRIVATE-SOURCE' }, labels: { person: 'PRIVATE-NAME' }, reason: 'PRIVATE-REASON' });
 
+test('shared show/evidence/decide/apply retain safe live review focus and counts', () => {
+  const tracker = createReviewTracker(volumes);
+  tracker.consume(request('read', "novel review show '/private/book-2' cs_b0001 --scope book --offset 20 --limit 20"));
+  const shown = tracker.consume(result('read', { ...page('a'.repeat(64)), policy: 'review-v1', scope: 'book', held: 91 }));
+  assert.equal(shown.phase, 'facts');
+  assert.equal(shown.inspectedFacts, 2);
+  assert.equal(shown.held, 91);
+  tracker.consume(request('evidence', "novel review evidence '/private/book-2' cs_b0001 --scope book --fact 'proposal-1/identity' --offset 0 --limit 10"));
+  assert.equal(tracker.consume(result('evidence', { id: 'cs_b0001', revision: 'a'.repeat(64), factId: 'proposal-1/identity', sentences: [{ id: 's1', text: 'PRIVATE-SOURCE' }], page: { offset: 0, total: 1 } })).phase, 'evidence');
+  tracker.consume(request('apply', `novel review apply '/private/book-2' cs_b0001 --scope book --revision ${'a'.repeat(64)}`));
+  const applied = tracker.consume(result('apply', { id: 'cs_b0001', revision: 'a'.repeat(64), applied: true, accepted: 7, held: 91, rejected: 2 }));
+  assert.equal(applied.phase, 'approve');
+  assert.ok(!JSON.stringify(applied).includes('PRIVATE-'));
+});
+
 test('review exposes actual packet/page/field metadata, not model reasoning, evidence or decisions payloads', () => {
   const tracker = createReviewTracker(volumes);
   assert.equal(tracker.consume(request('call-1', command)).status, 'requested');

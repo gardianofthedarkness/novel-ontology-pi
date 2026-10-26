@@ -31,6 +31,22 @@ memories and capabilities — reviews: <b>approve</b> the merge, <b>hold</b> it,
   <tr><th>Feeds into</th><td>10 Storage (writes happen only here), then the next block</td></tr>
 </table>
 
+<h2>Settled principle: every faculty shares one semantic gate</h2>
+<div class="panel">
+  <p><b>No new faculty or flow may create its own review/approval gate.</b>
+  Ingestion, local causality, universe causality and library organization use
+  <code>novel review show|evidence|decide|apply</code>. Choose storage with
+  <code>--scope book|universe|library</code>, not a different agent workflow.</p>
+  <p>Every assertion has a readable meaning, original evidence and a revision.
+  Decisions use <code>factId</code>, <code>accept|hold|reject</code> and a reason.
+  <b>Decide only stages; apply explicitly publishes.</b> Unreviewed facts stay held.
+  Domain validators add causal direction, endpoint and cycle checks without
+  bypassing the common evidence, audit and stale-revision safeguards.</p>
+  <p>New faculties register assertion/provenance support and validators with the
+  existing storage adapter. Unsupported packets fail closed; never create a new
+  approval command to work around that. See <a href="../unified-review.md">the shared contract and compatibility boundaries</a>.</p>
+</div>
+
 <h2>Demo — three blocks, three verdicts</h2>
 <div class="panel">
   <div class="caption" id="caption"><span class="stepno">▶</span>The demo plays and loops on its own.</div>
@@ -71,7 +87,7 @@ memories and capabilities — reviews: <b>approve</b> the merge, <b>hold</b> it,
   <li><code>src/solidifier/merge/changeset.ts</code> — ChangeSet / ChangeProposal types and lifecycle states.</li>
   <li><code>src/solidifier/merge/apply.ts</code> — the single apply path, status-checked.</li>
   <li><code>src/digger/processing/blockProcessor.ts</code> — the roll: section → faculty graph (legacy: miniloop) → review callback → apply / stop / revise. Revisions are surgical (<code>revise.ts</code>, reason required; applied packets refused).</li>
-  <li><b>Semantic fact gate (decision #17):</b> proposals decompose into per-field facts bound to a revision digest (<code>novel changeset facts|decide</code>); apply materializes only accepted facts, and the digest fails closed on pending reviews.</li>
+  <li><b>Shared semantic gate:</b> <code>src/solidifier/merge/review.ts</code> owns the common lifecycle; <code>reviewAdapters.ts</code> supplies book, universe and library storage/domain validation. Proposals decompose into per-field assertions bound to a revision digest; only accepted, supported facts materialize. Historical <code>changeset facts|decide</code> spellings remain compatibility interfaces outside the scoped Pi host.</li>
   <li><b>EM composition (decision #18):</b> birth-time identity output reaches the gate as ordinary identity facts; EM merges run post-apply through the audited fix path, never as gate proposals. Identity now has its own pages: <a href="em-at-birth.html">08a EM at birth</a> (Digger) and <a href="em-global.html">09a EM across the novel</a> (Solidifier).</li>
   <li>The Skill teaches the agent its reviewer duties: <code>skills/novel-ontology/SKILL.md</code>.</li>
   <li>Review tooling (2026-10-22): <code>src/solidifier/matching/entityMatch.ts</code> + <code>novel match</code> — duplicate nomination + the System 1 batch checklist; <code>src/solidifier/maintenance/fixes.ts</code> + <code>novel fix …</code> — audited pointwise repairs with graph rebuild; <code>src/solidifier/maintenance/corrections.ts</code> + <code>novel recall</code> — pinned decisions honored on a single-block re-run.</li>

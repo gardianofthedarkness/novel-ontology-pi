@@ -28,11 +28,12 @@ export function createReviewTracker(volumes) {
       return null;
     }
     const args = permitted.args;
-    if (args[0] !== 'changeset' || !['facts', 'show', 'decide', 'revise', 'approve', 'hold'].includes(args[1])) return null;
+    const unified = args[0] === 'review';
+    if (!unified && (args[0] !== 'changeset' || !['facts', 'show', 'decide', 'revise', 'approve', 'hold'].includes(args[1]))) return null;
     const volume = volumes.find(volume => volume.workspace === args[2]);
     const block = volume?.blocks.find(block => `cs_${block.id}` === args[3]);
     if (!block) return null;
-    const phase = args[1] === 'facts' ? args.includes('--fact') ? 'evidence' : args.includes('--summary') ? 'summary' : 'facts' : args[1] === 'show' ? args.includes('--notes') ? 'notes' : args.includes('--summary') ? 'summary' : 'proposals' : args[1];
+    const phase = unified ? ({ show: 'facts', evidence: 'evidence', decide: 'decide', apply: 'approve' })[args[1]] : args[1] === 'facts' ? args.includes('--fact') ? 'evidence' : args.includes('--summary') ? 'summary' : 'facts' : args[1] === 'show' ? args.includes('--notes') ? 'notes' : args.includes('--summary') ? 'summary' : 'proposals' : args[1];
     const factId = identifier(args[args.indexOf('--fact') + 1]);
     let factIds = args.includes('--fact') && factId ? [factId] : [];
     if (phase === 'decide') {
@@ -74,7 +75,7 @@ export function createReviewTracker(volumes) {
               proposalIds: Array.isArray(page.proposals) ? page.proposals.slice(0, 20).map(proposal => identifier(proposal.id)).filter(Boolean) : [],
               fields: facts.length ? [...new Set(facts.map(fact => fact.field).filter(field => fields.has(field)))] : focus.fields,
               offset: count(page.page?.offset), pageCount: facts.length || (Array.isArray(page.sentences) ? page.sentences.length : Array.isArray(page.proposals) ? page.proposals.length : page.reviewNotes ? Object.keys(page.reviewNotes).length : 0), total: count(page.page?.total),
-              accepted: count(page.accepted ?? page.verifiedFacts), rejected: count(page.rejected ?? page.rejectedFacts), held: count(page.explicitHolds ?? page.deferredFacts), unreviewed: count(page.unreviewed) };
+              accepted: count(page.accepted ?? page.verifiedFacts), rejected: count(page.rejected ?? page.rejectedFacts), held: count(page.held ?? page.explicitHolds ?? page.deferredFacts), unreviewed: count(page.unreviewed) };
           } else if (['facts', 'evidence', 'summary', 'proposals', 'notes'].includes(focus.phase)) latest.status = 'unavailable';
         }
       }

@@ -51,6 +51,39 @@ export function authorize(command, scope) {
   if (tokens.shift() !== 'novel') throw new Error('Use only novel commands or cat of the supplied skill/source block');
   const [verb, operation] = tokens;
   const changesetIds = [...blockIds.map(id => `cs_${id}`), ...(scope.causalityChangesetIds ?? [])];
+  if (scope.reviewProtocol === 'review-v1' && (
+    verb === 'changeset' && ['facts', 'decide', 'approve'].includes(operation) && tokens[2] === novel
+    || verb === 'library' && operation === 'decide' && tokens[2] === scope.library?.directory
+    || verb === 'causality' && operation === 'universe' && tokens[2] === 'decide' && tokens[3] === scope.library?.directory
+  )) throw new Error('Use novel review show|evidence|decide|apply with --scope book|universe|library; every faculty shares the same gate.');
+  if (verb === 'review') {
+    const allowed = {
+      show: ['--scope', '--universe', '--offset', '--limit'],
+      evidence: ['--scope', '--universe', '--fact', '--offset', '--limit'],
+      decide: ['--scope', '--universe', '--revision', '--decisions'],
+      apply: ['--scope', '--universe', '--revision'],
+    };
+    if (!Object.hasOwn(allowed, operation)) throw new Error('Use review show|evidence|decide|apply');
+    const flags = new Map();
+    for (let index = 4; index < tokens.length; index += 2) {
+      if (!allowed[operation].includes(tokens[index]) || flags.has(tokens[index]) || !tokens[index + 1]) throw new Error('Review options require unique bounded values');
+      flags.set(tokens[index], tokens[index + 1]);
+    }
+    const kind = flags.get('--scope') ?? 'book';
+    const assigned = kind === 'book' ? tokens[2] === novel && changesetIds.includes(tokens[3]) && !flags.has('--universe')
+      : kind === 'library' ? tokens[2] === scope.library?.directory && /^plan_[a-f0-9]{64}$/.test(tokens[3] ?? '') && !flags.has('--universe')
+      : kind === 'universe' && tokens[2] === scope.library?.directory && /^uc_[a-f0-9]{64}$/.test(tokens[3] ?? '') && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(flags.get('--universe') ?? '');
+    if (!assigned) throw new Error('Review target is outside the assigned scope');
+    for (const name of ['--offset', '--limit']) if (flags.has(name) && (!/^\d+$/.test(flags.get(name)) || !Number.isSafeInteger(Number(flags.get(name))) || Number(flags.get(name)) < (name === '--limit' ? 1 : 0) || name === '--limit' && Number(flags.get(name)) > 20)) throw new Error('Review page exceeds its budget');
+    if (operation === 'evidence' && (!flags.get('--fact') || flags.get('--fact').length > 2000)) throw new Error('Use --fact from review show');
+    if (['decide', 'apply'].includes(operation) && !/^[a-f0-9]{64}$/.test(flags.get('--revision') ?? '')) throw new Error('Review mutation requires the current revision');
+    if (operation === 'decide') {
+      const raw = flags.get('--decisions') ?? '';
+      if (Buffer.byteLength(raw) > 64000 || !Array.isArray(JSON.parse(raw)) || JSON.parse(raw).length > 50) throw new Error('Review decisions exceed their budget');
+    }
+    if (['show', 'evidence'].includes(operation) && !flags.has('--limit')) tokens.push('--limit', '10');
+    return { kind: 'cli', args: tokens, label: `novel review ${operation}` };
+  }
   let valid = false;
   if (verb === 'causality' && operation === 'universe') {
     const sub = tokens[2], library = scope.library;

@@ -1,5 +1,10 @@
 # Precision-first semantic review
 
+The canonical agent interface is now the [shared review contract](unified-review.md):
+`novel review show|evidence|decide|apply --scope book|universe|library`.
+Historical spellings below describe the underlying compatible book fact API;
+new faculties must reuse the shared gate, not create their own approval flow.
+
 New work-model ingestion separates two responsibilities:
 
 - Code validates source IDs, ordered/nonoverlapping spans, exact scene

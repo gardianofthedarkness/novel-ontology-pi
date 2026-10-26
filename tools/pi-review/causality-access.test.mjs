@@ -68,6 +68,12 @@ test('missing provenance and spoofed evidence never earn review credit', async c
   assert.deepEqual(await access.changesetIds(directory), [packet.id]);
 });
 
+test('source-bound standalone packets stay in the assigned readable scope after shared semantic application', async context => {
+  const { directory, packet, sentences } = await fixture(context);
+  await writeFile(join(directory, 'changesets', `${packet.id}.json`), JSON.stringify({ ...packet, status: 'approved', reviewSource: sentences }));
+  assert.deepEqual(await createCausalityAccess().changesetIds(directory), [packet.id]);
+});
+
 test('standalone pending and held causal edges project live onto their dialogue scene, not canon', async context => {
   const { directory, packet } = await fixture(context);
   let view = await snapshot(directory, join(directory, 'runtime'));

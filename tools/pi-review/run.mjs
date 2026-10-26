@@ -19,6 +19,7 @@ import { inspectAlbumAccess, readAppliedSource, verifyAlbumAccess } from './albu
 import { createLibraryAccess } from './library-access.mjs';
 import { createCausalityAccess } from './causality-access.mjs';
 import { createUniverseCausalityAccess } from './universe-causality-access.mjs';
+import { requireSharedReviewSkills, sharedReviewReceipt } from './shared-review.mjs';
 
 const job = await loadJob(process.argv[2]);
 const interactive = process.argv[3] === '--interactive';
@@ -158,15 +159,16 @@ try {
   }
   const sourcePaths = [skill, causalityReference, `${repo}/skills/novel-ontology/references/repair.md`, `${repo}/skills/novel-ontology/references/semantic-review.md`, manifestPath, 'NOVEL_JOB.json', ...volumes.flatMap((volume) => volume.blocks.map((block) => block.evidence))];
   if (libraryAccess) sourcePaths.push(librarySkill, librarySchema);
-  const scopes = volumes.map((volume) => ({ novel: volume.workspace, input: volume.input, album: volume.album, library: libraryAccess?.config, skill, sourcePaths, blockIds: volume.blocks.map((block) => block.id), maxBlocks: volume.maxBlocks }));
+  const scopes = volumes.map((volume) => ({ novel: volume.workspace, input: volume.input, album: volume.album, library: libraryAccess?.config, skill, sourcePaths, blockIds: volume.blocks.map((block) => block.id), maxBlocks: volume.maxBlocks, reviewProtocol: 'review-v1' }));
   let queue = Promise.resolve();
   const execute = async (command, ignored, options) => {
     if (cancelled || Date.now() >= deadline || ++calls > manifest.limits.commands) throw new Error('Run window or command budget exhausted');
     let permitted;
-    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); permitted = authorize(command, scope); break; } catch {} }
+    let refusal;
+    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); permitted = authorize(command, scope); break; } catch (error) { if (error.message.startsWith('Use novel review')) refusal = error.message; } }
     if (!permitted) {
       await emit({ type: 'pi.command', label: 'Scoped command rejected', status: 'error', reasonCode: 'allowlist' });
-      throw new Error('Command outside scoped CLI allowlist. Run ONE command per call: novel ..., cat NOVEL_JOB.json, cat <absolute skill/reference path>, wc -l <evidence>, or sed -n \'1,150p\' <evidence>. No pipes, joins, ls, head, scripts or expansions. Read workspace paths from NOVEL_JOB.json.');
+      throw new Error(refusal ?? 'Command outside scoped CLI allowlist. Run ONE command per call: novel ..., cat NOVEL_JOB.json, cat <absolute skill/reference path>, wc -l <evidence>, or sed -n \'1,150p\' <evidence>. No pipes, joins, ls, head, scripts or expansions. Read workspace paths from NOVEL_JOB.json.');
     }
     await emit({ type: 'pi.command', label: permitted.label, status: 'working' });
     if (permitted.kind === 'read') {
@@ -186,6 +188,25 @@ try {
       return { exitCode: 0 };
     }
     const args = permitted.args;
+    if (args[0] === 'review') {
+      const book = !args.includes('--scope') || args[args.indexOf('--scope') + 1] === 'book';
+      const packet = book ? await json(`${args[2]}/changesets/${args[3]}.json`) : null;
+      const scope = requireSharedReviewSkills(args, { ontology: skillRead, library: libraryReads.get(librarySkill), schema: libraryReads.get(librarySchema), causality: causalityRead }, packet);
+      if (scope !== 'book') await libraryAccess.before(['library', 'show', args[2]], true);
+      if (['decide', 'apply'].includes(args[1])) {
+        const checkpoint = `${jobRoot}/checkpoints/review-${Date.now()}-${calls}`;
+        await mkdir(checkpoint, { recursive: true, mode: 0o700 });
+        if (scope === 'book') {
+          await cp(`${args[2]}/changesets/${args[3]}.json`, `${checkpoint}/packet.json`);
+          await cp(`${args[2]}/ontology`, `${checkpoint}/ontology`, { recursive: true, filter: path => !path.split('/').at(-1).startsWith('graph.lbug') });
+        } else {
+          await cp(`${args[2]}/catalog.json`, `${checkpoint}/catalog.json`);
+          await cp(`${args[2]}/causality`, `${checkpoint}/causality`, { recursive: true }).catch(error => { if (error.code !== 'ENOENT') throw error; });
+          if (scope === 'library') await cp(`${args[2]}/plans/${args[3]}.json`, `${checkpoint}/packet.json`);
+        }
+        await cp(`${args[2]}/review`, `${checkpoint}/review`, { recursive: true }).catch(error => { if (error.code !== 'ENOENT') throw error; });
+      }
+    }
     const universeProof = await universeAccess.before(args, skillRead && causalityRead && libraryReads.get(librarySkill));
     if (args[0] === 'causality' && args[1] === 'universe' && ['propose', 'sweep', 'decide'].includes(args[2])) {
       const checkpoint = `${jobRoot}/checkpoints/universe-${Date.now()}-${calls}`;
@@ -203,7 +224,7 @@ try {
     const volume = volumes.find((volume) => args.includes(volume.workspace) || args.includes(`${volume.workspace}/ontology`));
     if (volume) { volumeId = volume.id; await writeFile(`${cwd}/active-volume.json`, JSON.stringify({ volume: volumeId }), { mode: 0o600 }); }
     if (args[0] === 'album' && args[1] === 'import') await verifyAlbumAccess(volume.album, volume.input);
-    const mutations = args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'causality' && ['propose', 'sweep'].includes(args[1]) || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise', 'decide'].includes(args[1]);
+    const mutations = args[0] === 'review' && ['decide', 'apply'].includes(args[1]) || args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'causality' && ['propose', 'sweep'].includes(args[1]) || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise', 'decide'].includes(args[1]);
     if (volume && mutations && volume.id > 1 && (await jobState()).some((state) => state.volume < volume.id && !state.applied)) throw new Error('Earlier volumes must pass their merge gates before later-volume mutations');
     if (args[0] === 'ingest') {
       const states = (await jobState()).filter((state) => state.volume === volume.id);
@@ -266,6 +287,11 @@ try {
       if (universeProof) await appendFile(`${jobRoot}/universe-causal-review-receipts.jsonl`, JSON.stringify({ ...universeProof, timestamp: new Date().toISOString() }) + '\n', { mode: 0o600 });
     }
     if (!result.exitCode) await causalityAccess.credit(args, result.output);
+    if (!result.exitCode && args[0] === 'review' && ['decide', 'apply'].includes(args[1])) {
+      const outcome = JSON.parse(result.output);
+      const packet = volume && outcome.scope === 'book' && args[1] === 'apply' ? await json(`${volume.workspace}/changesets/${args[3]}.json`) : null;
+      await appendFile(`${jobRoot}/approval-receipts.jsonl`, JSON.stringify(sharedReviewReceipt(args, outcome, volume, packet)) + '\n', { mode: 0o600 });
+    }
     if (!result.exitCode && args[0] === 'library') {
       await libraryAccess.credit(args, result.output);
       if (libraryProof) await appendFile(`${jobRoot}/library-review-receipts.jsonl`, JSON.stringify({ ...libraryProof, timestamp: new Date().toISOString() }) + '\n', { mode: 0o600 });
