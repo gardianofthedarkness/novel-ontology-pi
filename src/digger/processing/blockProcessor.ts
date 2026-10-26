@@ -21,6 +21,7 @@ import { EventLog } from "../../ground/events/log.js";
 import type { EventSink } from "../../ground/events/types.js";
 import { saveWorkingDraft, touchedDraftIds, type WorkingDraft } from "./draft.js";
 import { resolveCandidates } from "./entityCandidates.js";
+import { timePlaceForNewScenes } from "../timeplace/afterApply.js";
 import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../extraction/constraints.js";
 import { FacultyGraph, type FacultyGraphOptions } from "./facultyGraph.js";
 import { groundFacultyProposals } from "./facultyGrounding.js";
@@ -100,6 +101,13 @@ export class BlockProcessor {
        * reviewNote records them, EM precedent).
        */
       causality?: boolean;
+      /**
+       * Time-place faculty at birth (phase 1, opt-in): after a block is
+       * applied, its new scenes get time/place facts in their own
+       * pending ChangeSet, reviewed by the same gate. Advisory: a failure
+       * never blocks ingestion.
+       */
+      timePlace?: { mode: import("../timeplace/faculty.js").VocabularyMode };
       /** Optional embedder for the faculty's embedding leg (null = graph patterns only). */
       embedder?: import("../../ground/connectors/embeddings.js").Embedder | null;
       onCausality?: (blockId: string, summary: import("../../solidifier/causality/faculty.js").CausalitySummary) => void;
@@ -314,6 +322,22 @@ export class BlockProcessor {
           result.changeset.status = "approved";
           await applyChangeSet(this.store, result.changeset, emit);
           mergedBlocks.push(block.blockId);
+          if (this.observation.timePlace && this.observation.novelDir) {
+            try {
+              const sceneIds = result.changeset.proposals.filter((proposal) => proposal.kind === "create_scene").map((proposal) => (proposal.payload as Scene).id);
+              const output = sceneIds.length ? await timePlaceForNewScenes({ novelDir: this.observation.novelDir, sentences: new Map(sentences.map((sentence) => [sentence.id, sentence])), mode: this.observation.timePlace.mode, work: this.observation.workModel, decisions: this.decisions, sceneIds, provenanceBlockId: block.blockId }) : null;
+              if (output?.changeset) {
+                await saveChangeSet(this.observation.novelDir, output.changeset);
+                const verdict = await this.review(output.changeset);
+                output.changeset.status = verdict;
+                await saveChangeSet(this.observation.novelDir, output.changeset);
+                if (verdict === "approved") await applyChangeSet(this.store, output.changeset, emit);
+                result.changeset.reviewNotes["time-place"] = `${output.changeset.id}: ${output.result.periods.length} period(s), ${output.result.periods.filter((period) => period.flashback).length} flashback(s) — ${verdict}.`;
+              }
+            } catch (error) {
+              result.changeset.reviewNotes["time-place"] = `Time-place pass failed (${error instanceof Error ? error.message : String(error)}); scenes keep no time facts until \`novel timeplace run\`.`;
+            }
+          }
           if (this.observation.entityMatching && this.observation.novelDir) {
             const summary = await runEmPassAfterApply({
               novelDir: this.observation.novelDir,

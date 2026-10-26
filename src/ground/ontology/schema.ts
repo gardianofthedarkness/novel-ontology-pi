@@ -23,6 +23,10 @@ export const LADYBUG_DDL: string[] = [
      id STRING, canonical_name STRING, PRIMARY KEY(id))`,
   `CREATE NODE TABLE IF NOT EXISTS Concept(
      id STRING, canonical_name STRING, PRIMARY KEY(id))`,
+  // Time anchors (time-place faculty, 2026-10-26). Additive table: existing
+  // stores gain it on the next init or rebuild from the bundle.
+  `CREATE NODE TABLE IF NOT EXISTS TimePoint(
+     id STRING, canonical_name STRING, PRIMARY KEY(id))`,
   `CREATE NODE TABLE IF NOT EXISTS Event(
      id STRING, timeline_id STRING, chapter_index INT64,
      chronological_order INT64, event_type STRING, summary_en STRING,
@@ -46,6 +50,7 @@ export const LADYBUG_DDL: string[] = [
   `CREATE REL TABLE IF NOT EXISTS PRESENT_IN(FROM Character TO Scene)`,
   `CREATE REL TABLE IF NOT EXISTS MENTIONED_IN(FROM Character TO Scene)`,
   `CREATE REL TABLE IF NOT EXISTS LOCATED_AT(FROM Scene TO Location)`,
+  `CREATE REL TABLE IF NOT EXISTS OCCURS_DURING(FROM Scene TO TimePoint)`,
   `CREATE REL TABLE IF NOT EXISTS KNOWS(FROM Character TO Character, degree DOUBLE)`,
   `CREATE REL TABLE IF NOT EXISTS SPEAKS_TO(FROM Character TO Character, scene_id STRING)`,
   `CREATE REL TABLE IF NOT EXISTS OWNS(FROM Character TO Item)`,

@@ -12,6 +12,9 @@ export type EntityKind =
   | "Organization"
   | "Item"
   | "Concept"
+  /** A time anchor found in the text (date, relative day, time of day,
+   * holiday, flashback marker). Scenes belong to it via OCCURS_DURING. */
+  | "TimePoint"
   | "Event"
   | "Scene"
   | "Timeline"
@@ -44,6 +47,8 @@ export type RelationType =
   | "PRESENT_IN"
   | "MENTIONED_IN"
   | "LOCATED_AT"
+  /** Scene -> TimePoint: the scene contains (anchor) or inherits that time. */
+  | "OCCURS_DURING"
   | "KNOWS"
   | "SPEAKS_TO"
   | "ADDRESSES"
