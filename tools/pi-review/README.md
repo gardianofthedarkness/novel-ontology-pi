@@ -290,6 +290,18 @@ captions and passive record selection use the current review targets rather than
 the previous extraction write. Inactive/older review history cannot steal focus
 from newer construction, and reading mode retains the user's independent view.
 
+### Scene reading order
+
+Scene contents use a single original-text order for events, dialogue exchanges
+and legacy turns. The read model derives a numeric source range from existing
+sentence provenance and gives both the orbital timeline and inspector the same
+display sequence, including live drafts. Event ordinals and dialogue-array
+indices are not comparable clocks. Overlapping spans remain distinct records
+with a deterministic display order; this does not infer story time or causality.
+Unanchored records follow anchored records in their stored order and are labelled
+as unplaced in the inspector. No extraction, identity or canonical record changes
+are needed, and raw sentence IDs/quotations remain outside the public read model.
+
 ### Interactive Pi console
 
 `PiConsole` is an expandable glass overlay showing actual command/status entries

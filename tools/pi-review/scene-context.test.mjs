@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sceneContext } from './scene-context.mjs';
+import { sceneContext, sourceRange } from './scene-context.mjs';
 
 const node = (id, kind, state = 'canon') => ({ id, label: id, kind, state, parent: 'chapter_0' });
 test('one exchange sphere links every stored member without inventing directed speech or presence', () => {
@@ -76,4 +76,67 @@ test('each stored spoken turn gets one stable sphere without exporting source qu
   assert.ok(!JSON.stringify(result).includes('sentenceIds'));
   assert.ok(!JSON.stringify(result).includes('PRIVATE QUOTE'));
   assert.equal(JSON.stringify({ nodes, scenes, events }), before);
+});
+
+test('source ranges sort blocks numerically, retain partial anchors and never invent missing ones', () => {
+  assert.deepEqual(sourceRange(['b0010_s0001', 'b0009_s9999', 'not-an-anchor']), { startBlock: 9, startSentence: 9999, endBlock: 10, endSentence: 1, complete: false });
+  assert.equal(sourceRange(['s1', 'private-source']), undefined);
+  assert.equal(sourceRange(null), undefined);
+  assert.equal(sourceRange(['b99999999999999999999_s0001']), undefined);
+});
+
+test('events and exchanges interleave by original text rather than independent event and card ordinals', async () => {
+  const nodes = [node('scene', 'scene'), node('event-late', 'event'), node('event-early', 'event'), node('event-middle', 'event')];
+  nodes.forEach((entry, index) => { entry.chrono = 100 - index; });
+  const scenes = [{ id: 'scene', chapterIndex: 0, sentenceIds: Array.from({ length: 12 }, (_, index) => `b0000_s${String(index).padStart(4, '0')}`), dialogues: [
+    { id: 'late-exchange', sentenceIds: ['b0000_s0009'], participantIds: [] },
+    { id: 'early-exchange', sentenceIds: ['b0000_s0003', 'b0000_s0002'], participantIds: [] },
+  ] }];
+  const events = [
+    { id: 'event-late', chapterIndex: 0, chronologicalOrder: 0, summaryEn: '最后的行动', evidence: { sentenceIds: ['b0000_s0011'] } },
+    { id: 'event-early', chapterIndex: 0, chronologicalOrder: 99, summaryEn: '最初的行动', evidence: { sentenceIds: ['b0000_s0000'] } },
+    { id: 'event-middle', chapterIndex: 0, chronologicalOrder: 1, summaryEn: '交谈之间的行动', evidence: { sentenceIds: ['b0000_s0005'] } },
+  ];
+  const before = structuredClone({ nodes, scenes, events });
+  const result = sceneContext(nodes, [], scenes, events);
+  const { orbitalContents, orbitalLevel } = await import('../../dist/apps/playground/src/data/orbitalModel.js');
+  const world = { laneNodes: [], laneEdges: [], interiors: { chapter_0: result } };
+  const level = orbitalLevel(world, { key: 'scene', label: 'scene', kind: 'scene', chapterId: 'chapter_0', sceneId: 'scene' });
+  const expected = ['event-early', 'view-card:scene:1', 'event-middle', 'view-card:scene:0', 'event-late'];
+  assert.deepEqual(level.main.map(entry => entry.node.id), expected);
+  assert.deepEqual(orbitalContents(result.nodes.find(entry => entry.id === 'scene'), level).map(entry => entry.id), expected);
+  assert.equal(result.nodes.find(entry => entry.id === 'scene').relatedSummaries[0].id, 'event-early');
+  assert.deepEqual(sceneContext(result.nodes, result.edges, scenes, events), result);
+  assert.deepEqual({ nodes, scenes, events }, before);
+  assert.ok(!JSON.stringify(result).includes('sentenceIds'));
+});
+
+test('shared and overlapping source spans remain distinct; unanchored records follow anchored records', () => {
+  const nodes = [node('scene', 'scene'), node('event-overlap', 'event'), node('event-unanchored', 'event')];
+  const scenes = [{ id: 'scene', chapterIndex: 0, sentenceIds: ['b0009_s0001', 'b0010_s0001'], dialogues: [
+    { id: 'exchange', sentenceIds: ['b0009_s0001', 'b0009_s0002'], participantIds: [] },
+    { id: 'unknown-exchange', sentenceIds: ['unknown'], participantIds: [] },
+  ] }];
+  const events = [
+    { id: 'event-overlap', chapterIndex: 0, chronologicalOrder: 999, evidence: { sentenceIds: ['b0009_s0001'] } },
+    { id: 'event-unanchored', chapterIndex: 0, chronologicalOrder: -100, evidence: { sentenceIds: ['unknown'] } },
+  ];
+  const result = sceneContext(nodes, [], scenes, events);
+  const event = result.nodes.find(entry => entry.id === 'event-overlap');
+  const card = result.nodes.find(entry => entry.id === 'view-card:scene:0');
+  const unknown = result.nodes.find(entry => entry.id === 'view-card:scene:1');
+  assert.equal(event.sourceRange.startSentence, card.sourceRange.startSentence);
+  assert.notEqual(event.chrono, card.chrono);
+  assert.equal(unknown.sourceRange, undefined);
+  assert.ok(unknown.chrono > card.chrono);
+  assert.ok(result.nodes.find(entry => entry.id === 'event-unanchored').chrono > card.chrono);
+});
+
+test('legacy turns use their actual spans across block boundaries, not array position', () => {
+  const scenes = [{ id: 'scene', chapterIndex: 0, sentenceIds: ['b0009_s9999', 'b0010_s0001'], turns: [
+    { speakerId: null, sentenceIds: ['b0010_s0001'] },
+    { speakerId: null, sentenceIds: ['b0009_s9999'] },
+  ] }];
+  const result = sceneContext([node('scene', 'scene')], [], scenes, []);
+  assert.ok(result.nodes.find(entry => entry.id === 'view-turn:scene:1').chrono < result.nodes.find(entry => entry.id === 'view-turn:scene:0').chrono);
 });

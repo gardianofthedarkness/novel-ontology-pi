@@ -1,13 +1,34 @@
 const clean = (value, limit = 800) => String(value ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, limit);
 
+export function sourceRange(references = []) {
+  if (!Array.isArray(references)) return undefined;
+  const positions = references.flatMap(reference => {
+    const match = typeof reference === 'string' && /^b(\d{4,})_s(\d{4,})$/.exec(reference);
+    if (!match) return [];
+    const block = Number(match[1]), sentence = Number(match[2]);
+    return Number.isSafeInteger(block) && Number.isSafeInteger(sentence) ? [{ block, sentence }] : [];
+  }).sort((first, second) => first.block - second.block || first.sentence - second.sentence);
+  if (!positions.length) return undefined;
+  const first = positions[0], last = positions.at(-1);
+  return { startBlock: first.block, startSentence: first.sentence, endBlock: last.block, endSentence: last.sentence, complete: positions.length === references.length };
+}
+
+export const compareSourceRanges = (first, second) => first && second
+  ? first.startBlock - second.startBlock || first.startSentence - second.startSentence || first.endBlock - second.endBlock || first.endSentence - second.endSentence
+  : first ? -1 : second ? 1 : 0;
+const fallbackOrder = (first, second) => (Number.isFinite(first.chrono) ? first.chrono : 0) - (Number.isFinite(second.chrono) ? second.chrono : 0) || first.id.localeCompare(second.id);
+
 export function sceneContext(inputNodes, inputEdges, scenes, events) {
   const nodes = inputNodes.map((node) => ({ ...node }));
   const edges = inputEdges.map((edge) => ({ ...edge }));
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const bySentence = new Map();
   const eventRecords = [...new Map(events.map((event) => [event.id, event])).values()].filter((event) => byId.has(event.id));
+  const eventRanges = new Map(eventRecords.map(event => [event.id, sourceRange(event.evidence?.sentenceIds)]));
+  const eventOrder = (first, second) => compareSourceRanges(eventRanges.get(first.id), eventRanges.get(second.id)) || first.chronologicalOrder - second.chronologicalOrder || first.id.localeCompare(second.id);
   for (const event of eventRecords) {
     const node = byId.get(event.id);
+    node.sourceRange = eventRanges.get(event.id);
     if (clean(event.summaryEn)) node.summary = clean(event.summaryEn);
     for (const sentence of event.evidence?.sentenceIds ?? []) {
       const matches = bySentence.get(sentence) ?? [];
@@ -24,11 +45,12 @@ export function sceneContext(inputNodes, inputEdges, scenes, events) {
   for (const scene of new Map(scenes.map((entry) => [entry.id, entry])).values()) {
     const node = byId.get(scene.id);
     if (!node) continue;
+    node.sourceRange = sourceRange(scene.sentenceIds);
     const matches = new Map();
     for (const sentence of scene.sentenceIds ?? []) for (const event of bySentence.get(sentence) ?? []) {
       if (event.chapterIndex === scene.chapterIndex) matches.set(event.id, event);
     }
-    const ordered = [...matches.values()].sort((first, second) => first.chronologicalOrder - second.chronologicalOrder || first.id.localeCompare(second.id));
+    const ordered = [...matches.values()].sort(eventOrder);
     const summaries = ordered.filter((event) => clean(event.summaryEn)).slice(0, 3).map((event) => ({ id: event.id, text: clean(event.summaryEn) }));
     if (clean(scene.summary) || summaries.length) {
       node.label = clean(scene.summary || summaries[0].text, 55);
@@ -47,7 +69,7 @@ export function sceneContext(inputNodes, inputEdges, scenes, events) {
       if (!byId.has(id)) {
         const dialogue = {
           ...node, id, kind: 'dialogue', label: `#${cardIndex + 1} · ${members.length ? members.map(member => member.label).join(' / ') : 'Participants unresolved'}`,
-          chrono: (Number.isFinite(node.chrono) ? node.chrono : 0) + (cardIndex + 1) / (((scene.dialogues?.length ?? 0) + 1) * 100),
+          chrono: cardIndex, sourceRange: sourceRange(card.sentenceIds),
           summary: clean(card.summary || matched?.summaryEn) || undefined, relatedSummaries: undefined,
           dialogue: { cardId: card.id, participantIds: members.map(member => member.id), participantLabels: members.map(member => member.label) },
         };
@@ -65,7 +87,7 @@ export function sceneContext(inputNodes, inputEdges, scenes, events) {
       if (!byId.has(id)) {
         const dialogue = {
           ...node, id, kind: 'dialogue', label: `#${turnIndex + 1}${speaker ? ` · ${speaker.label}` : ''}`,
-          chrono: (Number.isFinite(node.chrono) ? node.chrono : 0) + (turnIndex + 1) / ((scene.turns.length + 1) * 100),
+          chrono: turnIndex, sourceRange: sourceRange(turn.sentenceIds),
           summary: clean(matched?.summaryEn) || undefined, relatedSummaries: undefined,
           dialogue: { turn: turnIndex, speakerId: turn.speakerId ?? null, ...(speaker ? { speakerLabel: speaker.label } : {}) },
         };
@@ -79,7 +101,10 @@ export function sceneContext(inputNodes, inputEdges, scenes, events) {
   for (const node of nodes) {
     if (node.kind !== 'character') continue;
     const related = eventRecords.filter((event) => [...event.primaryActors ?? [], ...event.affectedCharacters ?? []].includes(node.id));
-    node.relatedSummaries = related.sort((first, second) => first.chronologicalOrder - second.chronologicalOrder).filter((event) => clean(event.summaryEn)).slice(0, 3).map((event) => ({ id: event.id, text: clean(event.summaryEn) }));
+    node.relatedSummaries = related.sort(eventOrder).filter((event) => clean(event.summaryEn)).slice(0, 3).map((event) => ({ id: event.id, text: clean(event.summaryEn) }));
   }
+  const records = nodes.filter(node => ['scene', 'event', 'dialogue'].includes(node.kind));
+  records.sort((first, second) => compareSourceRanges(first.sourceRange, second.sourceRange) || fallbackOrder(first, second));
+  records.forEach((node, index) => { node.chrono = index; });
   return { nodes, edges };
 }

@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { root, novel, agentEvents } from './config.mjs';
 import { runOutcome } from './run-outcome.mjs';
-import { sceneContext } from './scene-context.mjs';
+import { sceneContext, sourceRange, compareSourceRanges } from './scene-context.mjs';
 import { liveActivity } from './live-activity.mjs';
 import { timePlaceProjection } from './time-place.mjs';
 import { sessionReviewProgress } from './review-progress.mjs';
@@ -66,12 +66,13 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     bigEventLabels[chapterId] = chapterNode.label;
     const nodes = [];
     const edges = [];
-    const add = (payload, category, nodeState, sourceOrder) => {
+    const add = (payload, category, nodeState) => {
       if (!payload?.id || nodes.some((node) => node.id === payload.id)) return;
       const name = category === 'entity' ? payload.names?.find((form) => form.kind === 'canonical')?.text ?? payload.names?.[0]?.text : category === 'event' ? payload.summaryEn : payload.label ?? `Scene ${payload.id}`;
       const kind = category === 'entity' ? payload.kind === 'Character' ? 'character' : 'location' : category === 'event' ? payload.eventType === 'dialogue' ? 'dialogue' : 'event' : 'scene';
-      const chrono = sourceOrder ?? (category === 'event' ? payload.chronologicalOrder : category === 'scene' ? nodes.filter((node) => node.kind === 'scene').length : nodes.length);
-      const node = { id: payload.id, label: text(name || payload.id, 100), subLabel: `${category === 'entity' ? payload.kind : category} · ${nodeState} · ${payload.id}`, kind, state: nodeState, parent: chapterId, lane: 'canon', chrono: Number(chrono ?? 0), lanePos: [0, 0, 0], interiorPos: [0, 0, 0] };
+      const chrono = category === 'event' ? payload.chronologicalOrder : category === 'scene' ? nodes.filter((node) => node.kind === 'scene').length : nodes.length;
+      const range = sourceRange(category === 'event' ? payload.evidence?.sentenceIds : category === 'scene' ? payload.sentenceIds : []);
+      const node = { id: payload.id, label: text(name || payload.id, 100), subLabel: `${category === 'entity' ? payload.kind : category} · ${nodeState} · ${payload.id}`, kind, state: nodeState, parent: chapterId, lane: 'canon', chrono: Number(chrono ?? 0), ...(range ? { sourceRange: range } : {}), lanePos: [0, 0, 0], interiorPos: [0, 0, 0] };
       nodes.push(node);
       allNodes.set(node.id, node);
     };
@@ -100,7 +101,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
       const addDialogue = (unit, parentId) => {
         const dialogueId = `draft:${draft.blockId}:dialogue:${unit[0]}`;
         const turn = draft.turns.find(entry => entry.sentenceIds.includes(unit[0]));
-        if (!attached.has(unit[0])) add({ id: dialogueId, summaryEn: `Dialogue exchange · ${unit.length} sentence${unit.length === 1 ? '' : 's'} · ${draft.dialogueCards ? 'participant membership' : turn?.speakerId ? 'legacy speaker attributed' : 'membership pending'}`, eventType: 'dialogue' }, 'event', 'proposed', Number(unit[0]?.split('_s')[1] ?? 0));
+        if (!attached.has(unit[0])) add({ id: dialogueId, summaryEn: `Dialogue exchange · ${unit.length} sentence${unit.length === 1 ? '' : 's'} · ${draft.dialogueCards ? 'participant membership' : turn?.speakerId ? 'legacy speaker attributed' : 'membership pending'}`, eventType: 'dialogue', evidence: { sentenceIds: unit } }, 'event', 'proposed');
         attached.add(unit[0]);
         if (parentId) draftLinks.push([parentId, dialogueId, 'contains']);
         if (turn?.speakerId && entityMap.has(turn.speakerId)) {
@@ -110,7 +111,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
       };
       for (const [index, span] of remainingSpans.entries()) {
         const id = `draft:${draft.blockId}:scene:${span[0]}`;
-        add({ id, label: `Scene draft ${draft.completedScenes + index + 1} · Jev` }, 'scene', 'proposed', Number(span[0]?.split('_s')[1] ?? 0));
+        add({ id, label: `Scene draft ${draft.completedScenes + index + 1} · Jev`, sentenceIds: span }, 'scene', 'proposed');
         for (const unit of draft.dialogueUnits.filter((unit) => span.includes(unit[0]))) {
           addDialogue(unit, id);
         }
@@ -148,11 +149,12 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     for (const relation of [...relations, ...proposedRelations]) addEdge(relation.fromId, relation.toId, relation.type === 'CAUSES' || relation.type === 'PRECEDES' ? 'flow' : 'speaks', proposedRelations.includes(relation) ? state : 'canon', relation.type, { relationType: relation.type });
     for (const relation of proposedRelations) if (relation.type === 'CAUSES') proposedCausal.push({ relation, state });
     const allEvents = [...eventMap.values(), ...proposed.filter((proposal) => proposal.kind === 'create_event').map((proposal) => proposal.payload)];
-    const ordered = fold(allEvents).filter((event) => event.chapterIndex === chapter.index && ids.has(event.id)).sort((first, second) => first.chronologicalOrder - second.chronologicalOrder);
+    const ordered = fold(allEvents).filter((event) => event.chapterIndex === chapter.index && ids.has(event.id)).sort((first, second) => compareSourceRanges(allNodes.get(first.id)?.sourceRange, allNodes.get(second.id)?.sourceRange) || first.chronologicalOrder - second.chronologicalOrder || first.id.localeCompare(second.id));
     for (let index = 1; index < ordered.length; index++) addEdge(ordered[index - 1].id, ordered[index].id, 'flow', state, 'narrative-order');
     const allScenes = [...sceneMap.values(), ...proposed.filter((proposal) => proposal.kind === 'create_scene').map((proposal) => proposal.payload)];
     interiors[chapterId] = sceneContext(nodes, edges, allScenes, allEvents);
-    const overview = nodes.filter((node) => node.state !== 'canon').slice(-6);
+    const projected = new Map(interiors[chapterId].nodes.map(node => [node.id, node]));
+    const overview = nodes.filter((node) => node.state !== 'canon').slice(-6).map(node => projected.get(node.id));
     for (const node of overview) {
       if (laneNodes.some((entry) => entry.id === node.id)) continue;
       laneNodes.push(node);
