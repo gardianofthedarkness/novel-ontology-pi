@@ -25,10 +25,12 @@ export function framePositions(
   const height = stage?.clientHeight || window.innerHeight;
   const width = stage?.clientWidth || window.innerWidth;
   const bounds = stage?.getBoundingClientRect();
-  const sheet = document.querySelector<HTMLElement>(".inspector-sheet:not([hidden])")?.getBoundingClientRect();
-  const toolbar = document.querySelector<HTMLElement>(".scene-toolbar")?.getBoundingClientRect();
-  const sequence = document.querySelector<HTMLElement>(".scene-sequence")?.getBoundingClientRect();
-  const transport = document.querySelector<HTMLElement>(".pipeline")?.getBoundingClientRect();
+  // Chrome that is hidden (display: none) measures as an empty box at 0,0: ignore it.
+  const shown = (selector: string) => { const box = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect(); return box && box.height > 0 ? box : undefined; };
+  const sheet = shown(".inspector-sheet:not([hidden])");
+  const toolbar = shown(".scene-toolbar");
+  const sequence = shown(".scene-sequence");
+  const transport = shown(".pipeline");
   const inset = { left: 28, right: 65, top: Math.max(95, (sequence?.bottom ?? toolbar?.bottom ?? 170) - (bounds?.top ?? 0) + 18), bottom: transport && bounds ? bounds.bottom - transport.top + 32 : 200 };
   if (sheet && bounds && !options?.ignoreSheet) {
     if (sheet.width > width * 0.55) inset.bottom = Math.max(inset.bottom, bounds.bottom - sheet.top + 16);

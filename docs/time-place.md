@@ -82,7 +82,9 @@ in both Orbital and Traditional mode ([playground views](playground-views.md)):
   carries the previous scene's place within the same chapter, always shown
   as carried (dashed / asterisk), never as stated.
 
-Deep links: `?view=story`, `?view=places`.
+Deep links: `?view=story`, `?view=places`. In Orbital mode the same views are
+3D: period spheres in story order, and a space-time map (scenes above their
+place, rising in story time, filtered by a story-time window).
 
 ## Measured (2026-10-26)
 

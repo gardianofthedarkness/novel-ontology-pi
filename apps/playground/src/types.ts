@@ -40,6 +40,9 @@ export interface WorldNode {
     focusSceneId?: string;
   };
   kind: NodeKind;
+  /** View-only grouping label (orbital Story time / Places spheres: "Story
+   * period", "Flashback", "Place"); absent on ontology records. */
+  viewKind?: string;
   /** Sentence identities covered by this node (scenes only, for now).
    * Emitted by the CLI view builder in future work; until then it is
    * optional, and picture placement stays unplaced by design when a

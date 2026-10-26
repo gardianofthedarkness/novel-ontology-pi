@@ -19,6 +19,8 @@ import { NarrativeList } from "./components/NarrativeList";
 import "./narrative.css";
 import { PlaceMap } from "./components/PlaceMap";
 import type { TimePlaceProjection } from "./data/timePlace";
+import { atlasArrangement, atlasWorld, storyArrangement, storyWorld } from "./data/orbitalTimePlace";
+import { AtlasPanel } from "./components/AtlasPanel";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
 import type { Swipe } from "./data/gestures";
@@ -48,6 +50,10 @@ const EMPTY_TIME_PLACE: TimePlaceProjection = { available: false, times: [], sce
 type StageView = "narrative" | "story" | "places";
 const STAGE_VIEWS: [StageView, string][] = [["narrative", "Narrative"], ["story", "Story time"], ["places", "Places"]];
 const MODES: [boolean, string][] = [[true, "Orbital"], [false, "Traditional"]];
+const NO_NODES: WorldNode[] = [];
+const NO_EDGES: WorldEdge[] = [];
+const NO_JOINS: PendingJoin[] = [];
+const ignoreChapter = () => {};
 
 interface LiveSnapshot {
   /** Story time and places (time-place faculty); absent on older viewers. */
@@ -114,6 +120,8 @@ export default function App() {
     return requested === "story" || requested === "places" ? requested : "narrative";
   });
   const [timePlace, setTimePlace] = useState<TimePlaceProjection | null>(null);
+  /** Orbital Places: story periods rendered above the map (null: all). */
+  const [atlasPeriods, setAtlasPeriods] = useState<Set<string> | null>(null);
   const [orbitalReset, setOrbitalReset] = useState(0);
   const [orbitalInspection, setOrbitalInspection] = useState<OrbitalInspection | null>(null);
   const [orbitalPage, setOrbitalPage] = useState<{ key: string; label: string; kind: string; chapterId?: string } | null>(null);
@@ -682,6 +690,13 @@ export default function App() {
   }, [displayWorld, visibleDyn]);
   labelsRef.current = labels;
 
+  /** Orbital Story time / Places: the world regrouped by period or by place (view only). */
+  const regroupedOrbit = useMemo(() => {
+    if (!orbitalMode || stageView === "narrative" || !displayWorld || !timePlace?.available) return null;
+    if (stageView === "story") { const regrouped = storyWorld(displayWorld, timePlace); return { world: regrouped, arrangement: storyArrangement(regrouped) }; }
+    return timePlace.places.length ? { world: atlasWorld(displayWorld, timePlace, atlasPeriods), arrangement: atlasArrangement(timePlace, atlasPeriods) } : null;
+  }, [orbitalMode, stageView, displayWorld, timePlace, atlasPeriods]);
+
   const shownWorld: LoadedWorld = displayWorld ?? (world as LoadedWorld);
   const loadedBookEntry = books.find((book) => book.id === loadedBook) ?? null;
   const agentBookEntry = books.find((book) => book.id === agentBook) ?? null;
@@ -722,9 +737,11 @@ export default function App() {
             <div className="stage-group" role="group" aria-label="Mode">{MODES.map(([orbital, label]) => <button key={label} aria-pressed={orbitalMode === orbital} onClick={() => switchMode(orbital)} title={orbital ? "3D orbital views" : "Flat traditional views"}>{label}</button>)}</div>
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => setStageView(value)}>{label}</button>)}</div>
           </div>
-          {stageView === "story" ? <StoryTimeline data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("narrative"); if (node) requestOrbitalFocus(node); }} />
+          {regroupedOrbit && stageView === "places" && timePlace && <AtlasPanel data={timePlace} periods={atlasPeriods} onPeriods={setAtlasPeriods} onCharacter={(id) => requestOrbitalFocus({ id, label: timePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
+          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          : stageView === "story" ? <StoryTimeline data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("narrative"); if (node) requestOrbitalFocus(node); }} />
           : stageView === "places" ? <PlaceMap data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} />
-          : orbitalMode ? <OrbitalExplorer world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          : orbitalMode ? <OrbitalExplorer key="narrative" world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
           : <NarrativeList world={shownWorld} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} timePlace={timePlace} bookBar={bookBar} selectedId={selected?.id ?? null} focusRequest={orbitalFocus} onSelect={inspectOrbital} />}
         </section>
         <aside className={`inspector${inspectorOpen ? " is-open" : ""}`} aria-label="Record and processing details">
