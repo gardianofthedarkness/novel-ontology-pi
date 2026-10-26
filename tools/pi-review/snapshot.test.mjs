@@ -47,6 +47,35 @@ test('fresh database contains no sample ontology', () => fixture(async (director
   assert.equal(result.gates.length, 0);
 }));
 
+test('canonical events and live dialogue ghosts share source ordering across blocks', () => fixture(async (directory, runtime) => {
+  await writeFile(`${runtime}/chapters.json`, JSON.stringify([{ index: 0, blockIds: ['b0001', 'b0002'], title: '序章', characters: 100 }]));
+  await writeFile(`${directory}/ontology/events.jsonl`, JSON.stringify({ id: 'event_1', chapterIndex: 0, chronologicalOrder: 999, eventType: 'action', summaryEn: '先前行动', evidence: { sentenceIds: ['b0000_s0009'] } }) + '\n');
+  await mkdir(`${directory}/working`);
+  await writeFile(`${directory}/working/b0002.json`, JSON.stringify({ version: 1, blockId: 'b0002', chapterIndex: 0, stage: 'miniloop', patchId: 'dialogue-structure', updatedAt: new Date().toISOString(), sceneSpans: [['b0001_s0000', 'b0001_s0001']], dialogueUnits: [['b0001_s0000']], turns: [], completedScenes: 0, totalScenes: 1, proposals: [] }));
+  const result = await snapshot(directory, runtime);
+  const nodes = result.world.interiors.chapter_0.nodes;
+  const event = nodes.find(entry => entry.id === 'event_1');
+  const dialogue = nodes.find(entry => entry.id === 'draft:b0002:dialogue:b0001_s0000');
+  assert.ok(event.chrono < dialogue.chrono);
+  assert.equal(dialogue.sourceRange.startBlock, 1);
+  assert.equal(dialogue.state, 'proposed');
+  assert.equal(result.world.laneNodes.find(node => node.id === dialogue.id).chrono, dialogue.chrono);
+  assert.ok(!JSON.stringify(result).includes('sentenceIds'));
+}));
+
+test('view-only narrative arrows follow source order rather than reset event ordinals', () => fixture(async (directory, runtime) => {
+  await writeFile(`${directory}/ontology/events.jsonl`, [
+    { id: 'later', chapterIndex: 0, chronologicalOrder: 0, eventType: 'action', evidence: { sentenceIds: ['b0001_s0000'] } },
+    { id: 'earlier', chapterIndex: 0, chronologicalOrder: 100, eventType: 'action', evidence: { sentenceIds: ['b0000_s9999'] } },
+  ].map(JSON.stringify).join('\n') + '\n');
+  const result = await snapshot(directory, runtime);
+  const graph = result.world.interiors.chapter_0;
+  const arrow = graph.edges.find(edge => edge.id.includes(':narrative-order:'));
+  assert.equal(arrow.from, 'earlier');
+  assert.equal(arrow.to, 'later');
+  assert.equal(arrow.relationType, undefined);
+}));
+
 test('live snapshot preserves scene/event memberships and stored summaries instead of disconnected scene IDs', () => fixture(async (directory, runtime) => {
   await writeFile(`${directory}/ontology/events.jsonl`, JSON.stringify({ ...proposals[1].payload, evidence: { text: 'PRIVATE-SOURCE-QUOTE', sentenceIds: ['section0_sentence1'] } }) + '\n');
   await writeFile(`${directory}/ontology/scenes.jsonl`, JSON.stringify({ id: 'scene_1', chapterIndex: 0, sentenceIds: ['section0_sentence1'], charactersPresent: [], charactersMentioned: [], turns: [], locationId: null }) + '\n');

@@ -45,6 +45,7 @@ export interface WorldNode {
    * optional, and picture placement stays unplaced by design when a
    * scene carries no coverage — pictures are never force-assigned. */
   sentenceIds?: string[];
+  sourceRange?: { startBlock: number; startSentence: number; endBlock: number; endSentence: number; complete: boolean };
   state: CanonState;
   /** Which big event's interior this node lives in (null = lane-level node). */
   parent: string | null;
