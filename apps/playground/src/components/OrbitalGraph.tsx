@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type NodeRendererProps } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { AdditiveBlending, BoxGeometry, BufferGeometry, CurvePath, LineCurve3, TubeGeometry, DoubleSide, Points, PointsMaterial, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
+import { type Camera, AdditiveBlending, BoxGeometry, BufferGeometry, CurvePath, LineCurve3, TubeGeometry, DoubleSide, Points, PointsMaterial, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
 import { recordColor } from "../archive";
 import type { WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
@@ -309,10 +309,24 @@ function FloorMap({ marks }: { marks: FloorMark[] }) {
   </group>)}</>;
 }
 
+/** Arrowheads keep a small fixed size on screen, like a flat graph's,
+ * with the tip on the target's surface (capped to a share of the segment). */
+const HEAD_PX = 9;
+const worldPerPixel = (camera: Camera, width: number, point: Vector3) => {
+  const at = point.clone().project(camera);
+  const right = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0).add(point).project(camera);
+  return 1 / Math.max(0.000001, Math.abs(right.x - at.x) * width / 2);
+};
+/** Unit arrowhead (length 1, tip at the origin, pointing +Y); scale it to size. */
+function ArrowHead({ color, opacity = 1 }: { color: string; opacity?: number }) {
+  return <mesh raycast={noRaycast} position={[0, -0.5, 0]}><coneGeometry args={[0.34, 1, 10]} /><meshBasicMaterial color={color} transparent={opacity < 1} opacity={opacity} toneMapped={false} /></mesh>;
+}
+
 /** Path tones: the blue time string, an amber flashback thread, a character route, a faint move. */
 const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 }, thread: { color: "#ffc46b", arrow: "#ffc46b", opacity: 0.75 }, route: { color: "#ff9a6b", arrow: "#ffb48c", opacity: 0.95 }, link: { color: "#7cc8ff", arrow: "#7cc8ff", opacity: 0.16 } };
 
-function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean; motion: MotionBus; anchors: (string | undefined)[] }) {
+function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors, radii }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean; motion: MotionBus; anchors: (string | undefined)[]; radii: Map<string, number> }) {
+  const { camera, size } = useThree();
   const tone = PATH_TONES[path.tone ?? "time"];
   const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: tone.color, transparent: true, opacity: path.preview ? 0.85 : tone.opacity, depthWrite: false })), [path, tone]);
   const arrowGroups = useRef<(Group | null)[]>([]);
@@ -353,10 +367,14 @@ function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors }: { pat
     arrowIndices.forEach((pointIndex, index) => {
       const arrow = arrowGroups.current[index];
       if (!arrow) return;
-      const end = new Vector3(...points[pointIndex]);
-      const direction = end.clone().sub(new Vector3(...points[Math.max(0, pointIndex - 1)])).normalize();
-      arrow.position.copy(end);
+      const end = new Vector3(...points[pointIndex]), start = new Vector3(...points[Math.max(0, pointIndex - 1)]);
+      const segment = end.distanceTo(start);
+      const direction = end.clone().sub(start).normalize();
+      const target = anchors[pointIndex] ? radii.get(anchors[pointIndex]!) ?? 0 : 0;
+      const tip = end.clone().addScaledVector(direction, -Math.min(target, segment * 0.5));
+      arrow.position.copy(tip);
       arrow.quaternion.copy(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), direction));
+      arrow.scale.setScalar(Math.min(HEAD_PX * worldPerPixel(camera, size.width, tip), Math.max(1, segment * 0.4)));
     });
   });
   return <>
@@ -364,7 +382,7 @@ function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors }: { pat
     {tube && <mesh geometry={tube} raycast={noRaycast}><meshBasicMaterial color={tone.color} transparent opacity={0.8} depthWrite={false} toneMapped={false} /></mesh>}
     {path.tone === "route" && <mesh ref={bead} raycast={noRaycast}><sphereGeometry args={[34, 16, 12]} /><meshBasicMaterial color={tone.arrow} toneMapped={false} /></mesh>}
     {arrowIndices.map((pointIndex, index) => <group key={`${index}:${pointIndex}`} ref={(element) => { arrowGroups.current[index] = element; }}>
-      <mesh raycast={noRaycast}><coneGeometry args={[path.preview ? 2.6 : path.tone ? 10 : 13, path.preview ? 8 : path.tone ? 30 : 40, 8]} /><meshBasicMaterial color={tone.arrow} toneMapped={false} /></mesh>
+      <ArrowHead color={tone.arrow} />
     </group>)}
   </>;
 }
@@ -429,22 +447,22 @@ function CausalArc({ arrow, bus, radii, reducedMotion }: { arrow: CausalArrow; b
     if (arrow.projected) line.computeLineDistances();
     if (bead.current) {
       bead.current.visible = !reducedMotion;
-      if (!reducedMotion) bead.current.position.copy(curve.getPoint(startT + (endT - startT) * ((now() * 0.35 + phase) % 1)));
+      if (!reducedMotion) {
+        bead.current.position.copy(curve.getPoint(startT + (endT - startT) * ((now() * 0.35 + phase) % 1)));
+        bead.current.scale.setScalar(Math.min(2.2 * worldPerPixel(camera, size.width, bead.current.position), 4 * width));
+      }
     }
     if (head.current) {
       const tip = curve.getPoint(endT);
-      const projected = tip.clone().project(camera);
-      const offset = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0).add(tip).project(camera);
-      const pixelsPerUnit = Math.abs(offset.x - projected.x) * size.width / 2;
-      head.current.scale.setScalar(Math.min(Math.max(1, 3 / Math.max(0.000001, 6 * width * pixelsPerUnit)), distance / (60 * width)));
+      head.current.scale.setScalar(Math.min((HEAD_PX + 2 * (width - 1)) * worldPerPixel(camera, size.width, tip), Math.max(1, distance * 0.3)));
       head.current.position.copy(tip);
       head.current.quaternion.copy(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), curve.getTangent(endT).normalize()));
     }
   });
   return <>
     <primitive object={line} raycast={noRaycast} />
-    <group ref={bead}><mesh raycast={noRaycast}><sphereGeometry args={[5 * width, 10, 8]} /><meshBasicMaterial color="#ffd9c2" transparent opacity={arrow.state === "canon" ? 0.95 : 0.6} toneMapped={false} /></mesh></group>
-    <group ref={head}><mesh raycast={noRaycast} position={[0, -9 * width, 0]}><coneGeometry args={[6 * width, 18 * width, 8]} /><meshBasicMaterial color={CAUSAL_COLOR[arrow.state]} transparent opacity={arrow.state === "canon" ? 0.95 : 0.65} toneMapped={false} /></mesh></group>
+    <group ref={bead}><mesh raycast={noRaycast}><sphereGeometry args={[1, 10, 8]} /><meshBasicMaterial color="#ffd9c2" transparent opacity={arrow.state === "canon" ? 0.95 : 0.6} toneMapped={false} /></mesh></group>
+    <group ref={head}><ArrowHead color={CAUSAL_COLOR[arrow.state]} opacity={arrow.state === "canon" ? 0.95 : 0.65} /></group>
   </>;
 }
 
@@ -865,7 +883,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
-    {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} />)}
+    {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} radii={radii} />)}
     <VisibleConnections edges={edges} bus={bus} />
     {hoverEdges.length > 0 && <VisibleConnections edges={hoverEdges} bus={bus} color="#d9cbff" opacity={0.55} />}
     {!reducedMotion && <RippleRings motion={motion} />}
