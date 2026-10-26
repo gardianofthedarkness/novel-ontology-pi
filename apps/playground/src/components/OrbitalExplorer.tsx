@@ -5,7 +5,7 @@ import type { AlbumPortrait, WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
 import { canEnterOrbitalScope, orbitalContents, mainProminence, orbitalLevel, representativeScene, surroundingEntities, volumeScope, type OrbitalScope, type OrbitalWorld } from "../data/orbitalModel";
 import { layoutOrbitalLevel, layoutOrbitalPreview, layoutParentBackdrop, morphSpan, nestedEntityConnections, openingMorph, type OrbitalDraw, type OrbitalMorph, type OrbitalPose } from "../data/orbitalLayout";
-import { framePositions, type LabelBus } from "./WorldGraph";
+import { framePositions, type LabelBus } from "./graphCamera";
 import { OrbitalGraph, ORBITAL_TRANSITION_MS } from "./OrbitalGraph";
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalTouchAncestors, type OrbitalReadingBookmark } from "../data/orbitalActivity";
 import { activityFocus, piBusy, type LiveActivity } from "../data/liveActivity";

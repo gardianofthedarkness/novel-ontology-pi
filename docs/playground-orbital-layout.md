@@ -1,8 +1,9 @@
 # Orbital revolution explorer
 
-The default playground view is orbital; **Orbital / switch to classic** retains
-the existing chronology/cloud explorer. Layout groups and time paths are view
-objects, not ontology edits. No model calls or new dependencies are required.
+The default playground mode is **Orbital**; **Traditional** shows the same
+three views flat (see [playground views](playground-views.md)). Layout groups
+and time paths are view objects, not ontology edits. No model calls or new
+dependencies are required.
 
 ## Interaction
 

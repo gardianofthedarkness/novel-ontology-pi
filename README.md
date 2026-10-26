@@ -370,8 +370,8 @@ novel ingest <novel-dir> <file> --time-place            # inline, for blocks app
 
 Runs are incremental and continue the book's stored periods, so
 block-by-block equals the whole book. Output is a reviewable ChangeSet; the
-viewer's **Story time** and **Places** views (beside the orbit; `?view=story`
-or `?view=places`) read the applied facts. See
+viewer's **Story time** and **Places** views (in both Orbital and
+Traditional mode; `?view=story` or `?view=places`) read the applied facts. See
 [docs/time-place.md](docs/time-place.md) for the design and measured results.
 
 ## Gate review tooling: `match` / `fix` / `recall`

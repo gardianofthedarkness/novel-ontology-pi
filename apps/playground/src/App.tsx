@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GraphCanvasRef } from "reagraph";
 import { ActivityTab, DecisionFeed, GateQueue, type FeedEntry } from "./components/panels";
 import { PipelineStrip } from "./components/PipelineStrip";
 import { PiConsole } from "./components/PiConsole";
 import { PiReviewProgress } from "./components/PiReviewProgress";
-import { WorldGraph, framePositions, scaledPos, type LabelBus } from "./components/WorldGraph";
 import { loadWorld, type LoadedWorld } from "./data/loadWorld";
 import { FileEventSource } from "./events/fileSource";
 import { SseEventSource } from "./events/sseSource";
 import { RecordInspector } from "./components/RecordInspector";
 import { AlbumPanel, type AlbumPanelPicture } from "./components/AlbumPanel";
-import { ExplorerNavigation } from "./components/ExplorerNavigation";
 import { OrbitalExplorer, type OrbitalInspection } from "./components/OrbitalExplorer";
 import type { OrbitIllustration } from "./data/pictureNodes";
 import "./orbital.css";
@@ -18,6 +15,8 @@ import "./live.css";
 import "./glass.css";
 import "./timeplace.css";
 import { StoryTimeline } from "./components/StoryTimeline";
+import { NarrativeList } from "./components/NarrativeList";
+import "./narrative.css";
 import { PlaceMap } from "./components/PlaceMap";
 import type { TimePlaceProjection } from "./data/timePlace";
 import { RollingText } from "./components/RollingText";
@@ -25,13 +24,12 @@ import { attachSwipe } from "./swipe";
 import type { Swipe } from "./data/gestures";
 import type { LiveActivity } from "./data/liveActivity";
 import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
-import { useSceneExplorer } from "./data/useSceneExplorer";
 import { KIND_LABEL } from "./archive";
 import { worldCausalLinks } from "./data/causalProjection";
 import { freshIdentityEvents, type PendingJoin } from "./data/joinAnimation";
 import { liveAlbum, sameAlbumEntries, type LiveAlbum } from "./data/liveAlbum";
 import { acceptsSnapshot, bookName, bookOptionLabel, bookQuery, libraryBooks, parseBookParam, sameBooks, viewedBook, type BookEntry } from "./data/bookCatalog";
-import { arrangeTimeline, withOverviewActivity } from "./data/timelineLayout";
+import { withOverviewActivity } from "./data/timelineLayout";
 import type {
   AlbumPortrait,
   ChangeSet,
@@ -46,6 +44,10 @@ const KNIT_SITE = "chapter_0";
 const DB = "db/novel";
 let feedSeq = 0;
 const EMPTY_TIME_PLACE: TimePlaceProjection = { available: false, times: [], scenes: [], places: [], characters: [], names: {} };
+/** Two modes (Orbital 3D, Traditional flat), each with the same three views. */
+type StageView = "narrative" | "story" | "places";
+const STAGE_VIEWS: [StageView, string][] = [["narrative", "Narrative"], ["story", "Story time"], ["places", "Places"]];
+const MODES: [boolean, string][] = [[true, "Orbital"], [false, "Traditional"]];
 
 interface LiveSnapshot {
   /** Story time and places (time-place faculty); absent on older viewers. */
@@ -104,12 +106,12 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState<ViewState>({ mode: "lanes" });
   const [showRelations, setShowRelations] = useState(true);
-  const [orbitalMode, setOrbitalMode] = useState(true);
-  /** Orbit (reading order), Story time (when it happens) or Places (where). */
-  const [stageView, setStageView] = useState<"orbit" | "story" | "places">(() => {
-    // Deep link: ?view=story|places opens that view directly.
+  // Deep links: ?mode=orbital|traditional and ?view=narrative|story|places.
+  const [orbitalMode, setOrbitalMode] = useState(() => new URLSearchParams(window.location.search).get("mode") !== "traditional");
+  /** Narrative (reading order), Story time (when it happens) or Places (where). */
+  const [stageView, setStageView] = useState<StageView>(() => {
     const requested = new URLSearchParams(window.location.search).get("view");
-    return requested === "story" || requested === "places" ? requested : "orbit";
+    return requested === "story" || requested === "places" ? requested : "narrative";
   });
   const [timePlace, setTimePlace] = useState<TimePlaceProjection | null>(null);
   const [orbitalReset, setOrbitalReset] = useState(0);
@@ -150,7 +152,6 @@ export default function App() {
     () => new URLSearchParams(window.location.search).get("live"),
     [],
   );
-  const graphRef = useRef<GraphCanvasRef>(null);
   const phoneLive = useMemo(() => new URLSearchParams(window.location.search).has("phone"), []);
   const [liveLabel, setLiveLabel] = useState("Fresh database · connecting to Pi");
   const [liveCollection, setLiveCollection] = useState("Live novel / connecting");
@@ -179,16 +180,10 @@ export default function App() {
     const timer = setTimeout(() => setIdentityNotice(null), 6500);
     return () => clearTimeout(timer);
   }, [identityNotice]);
-  const focusFlight = useRef<number | null>(null);
   /** The most recently emerged ghost node — where System 1 is knitting right now (Phase B). */
   const lastKnitRef = useRef<{ node: WorldNode; chapterId: string } | null>(null);
-  useEffect(() => () => { if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current); }, []);
   // Glass panels catch the pointer (static under reduced motion).
   const inspectorRef = useRef<HTMLDivElement>(null);
-  const labelBus = useMemo<LabelBus>(
-    () => ({ targets: new Map(), active: new Set(), positions: new Map(), trackTargets: new Map() }),
-    [],
-  );
   const viewRef = useRef(view);
   viewRef.current = view;
 
@@ -570,7 +565,8 @@ export default function App() {
       if (!followingActivity) {
         readingPanelBookmark.current = { inspection: orbitalInspection, panel, open: inspectorOpen, selectedId };
         setInspectorOpen(false);
-        setOrbitalMode(true);
+        // Both modes follow Pi in their Narrative view.
+        setStageView("narrative");
       } else if (readingPanelBookmark.current) {
         const saved = readingPanelBookmark.current;
         setOrbitalInspection(saved.inspection);
@@ -582,45 +578,40 @@ export default function App() {
       setFollowingActivity(!followingActivity);
       return;
     }
-    // Phase B: if real work has emerged this session, fly to the
-    // latest ghost in its own chapter interior — the demo world's
-    // fixed knit site is only the fallback.
+    // Phase B: if real work has emerged this session, go to the latest
+    // ghost in its own chapter — the demo world's fixed knit site is only
+    // the fallback. Either mode's Narrative view answers the focus request.
     const knit = lastKnitRef.current;
-    if (knit && displayWorld?.interiors[knit.chapterId]) {
-      if (orbitalMode) setOrbitalFocus((current) => ({ node: knit.node, chapterId: knit.chapterId, sequence: (current?.sequence ?? 0) + 1 }));
-      setView({ mode: "interior", bigEventId: knit.chapterId });
-      setSelectedId(knit.node.id);
-      setPanel("review");
-      setInspectorOpen(true);
-      setActivity((a) => ({ ...a, count: 0, shine: false }));
-      return;
+    const target = knit && displayWorld?.interiors[knit.chapterId] ? knit : displayWorld?.interiors[KNIT_SITE]?.nodes[0] ? { node: displayWorld.interiors[KNIT_SITE].nodes[0], chapterId: KNIT_SITE } : null;
+    if (target) {
+      setStageView("narrative");
+      setOrbitalFocus((current) => ({ node: target.node, chapterId: target.chapterId, sequence: (current?.sequence ?? 0) + 1 }));
+      setView({ mode: "interior", bigEventId: target.chapterId });
+      setSelectedId(target.node.id);
     }
-    const target = displayWorld?.interiors[KNIT_SITE]?.nodes[0];
-    if (orbitalMode && target) setOrbitalFocus((current) => ({ node: target, chapterId: KNIT_SITE, sequence: (current?.sequence ?? 0) + 1 }));
-    setView({ mode: "interior", bigEventId: KNIT_SITE });
-    setSelectedId(displayWorld?.interiors[KNIT_SITE]?.nodes[0]?.id ?? null);
     setPanel("review");
     setInspectorOpen(true);
     setActivity((a) => ({ ...a, count: 0, shine: false }));
-    if (viewRef.current.mode === "interior" && viewRef.current.bigEventId === KNIT_SITE) {
-      framePositions(graphRef, [...labelBus.positions.values()], 1.18, !reducedMotion);
-    }
-  }, [displayWorld, reducedMotion, labelBus, orbitalMode, phoneLive, workSite, followingActivity, orbitalInspection, panel, inspectorOpen, selectedId]);
+  }, [displayWorld, phoneLive, followingActivity, orbitalInspection, panel, inspectorOpen, selectedId]);
 
-  const openNode = useCallback(
-    (node: WorldNode) => {
-      if (node.kind === "bigEvent" && displayWorld?.interiors[node.id]) {
-        setView({ mode: "interior", bigEventId: node.id });
-        setSelectedId(null);
-        setPanel("record");
-        setInspectorOpen(false);
-        if (node.id === KNIT_SITE) {
-          setActivity((a) => ({ ...a, count: 0, shine: false }));
-        }
-      }
-    },
-    [displayWorld],
-  );
+  /** Switch mode, keeping the view; an open record stays open in the other mode. */
+  const switchMode = (orbital: boolean) => {
+    if (orbital === orbitalMode) return;
+    setOrbitalMode(orbital);
+    const node = orbitalInspection?.node;
+    if (node && inspectorOpen && panel === "record") setOrbitalFocus({ node, sequence: Date.now() });
+    else setOrbitalInspection(null);
+  };
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const mode = orbitalMode ? null : "traditional", view = stageView === "narrative" ? null : stageView;
+      if (url.searchParams.get("mode") === mode && url.searchParams.get("view") === view) return;
+      if (mode) url.searchParams.set("mode", mode); else url.searchParams.delete("mode");
+      if (view) url.searchParams.set("view", view); else url.searchParams.delete("view");
+      window.history.replaceState(window.history.state, "", url);
+    } catch { /* the switch still works without a shareable URL */ }
+  }, [orbitalMode, stageView]);
 
   const { nodes: sourceNodes, edges: sourceEdges } = useMemo(() => {
     if (!displayWorld) return { nodes: [] as WorldNode[], edges: [] as WorldEdge[] };
@@ -635,44 +626,17 @@ export default function App() {
       edges: [...(interior?.edges ?? []), ...myEdges],
     };
   }, [displayWorld, view, visibleDyn]);
+  const nodes = useMemo(() => [...sourceNodes].sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id)), [sourceNodes]);
 
-  const explorer = useSceneExplorer(sourceNodes, sourceEdges, view.mode === "interior", view.mode === "lanes" ? "lanes" : view.bigEventId);
-  const { nodes, edges } = explorer;
-  const timeline = useMemo(() => explorer.timeline ?? arrangeTimeline(nodes, edges, view.mode === "interior", explorer.structure), [nodes, edges, view.mode, explorer.structure, explorer.timeline]);
-  const openableIds = useMemo(() => [...Object.keys(displayWorld?.interiors ?? {}), ...nodes.filter((node) => (node.cluster || node.kind === "scene") && !explorer.path.some((scope) => scope.key === node.id)).map((node) => node.id)], [displayWorld, nodes, explorer.path]);
-  const visibleEdges = useMemo(() => showRelations ? edges : [], [edges, showRelations]);
-
-  const displayNodes = orbitalMode && orbitalInspection ? orbitalInspection.nodes : nodes;
-  const selected = orbitalMode && orbitalInspection ? orbitalInspection.node : nodes.find((node) => node.id === selectedId) ?? nodes[0];
+  // Either renderer reports its selection as an inspection; without one the
+  // transport walks the current chapter list.
+  const displayNodes = orbitalInspection ? orbitalInspection.nodes : nodes;
+  const selected = orbitalInspection ? orbitalInspection.node : nodes.find((node) => node.id === selectedId) ?? nodes[0];
   const selectedIndex = selected ? Math.max(0, displayNodes.findIndex((node) => node.id === selected.id)) : 0;
   const pendingCount = changesets.filter((changeset) => changeset.status === "pending").length;
   useEffect(() => {
     inspectorRef.current?.scrollTo(0, 0);
   }, [panel, selected?.id, view.mode, inspectorOpen]);
-  const selectNode = (node: WorldNode) => {
-    setSelectedId(node.id); setPanel("record"); setInspectorOpen(true);
-    if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current);
-    focusFlight.current = requestAnimationFrame(() => {
-      const positioned = timeline.nodes.find((record) => record.id === node.id) ?? node;
-      const position = labelBus.positions.get(node.id) ?? scaledPos(positioned, view.mode === "interior");
-      framePositions(graphRef, [position], 1.2, !reducedMotion);
-    });
-  };
-  const stopCamera = () => {
-    if (focusFlight.current !== null) cancelAnimationFrame(focusFlight.current);
-    graphRef.current?.getControls?.()?.stop();
-  };
-  const activateNode = (node: WorldNode) => {
-    if (node.kind === "bigEvent" && displayWorld?.interiors[node.id]) { explorer.reset(); openNode(node); return; }
-    if (explorer.reveal(node) || explorer.open(node)) {
-      setSelectedId(node.id);
-      stopCamera();
-      setPanel("record");
-      setInspectorOpen(!node.cluster);
-      return;
-    }
-    selectNode(node);
-  };
   const requestOrbitalFocus = (node: WorldNode) => {
     if (orbitalInspection) setOrbitalInspection({ ...orbitalInspection, node });
     setOrbitalFocus({ node, sequence: Date.now() });
@@ -690,8 +654,7 @@ export default function App() {
     }
   };
   const stepRecord = (step: number) => {
-    if (orbitalMode && displayNodes.length) { requestOrbitalFocus(displayNodes[(selectedIndex + step + displayNodes.length) % displayNodes.length]); return; }
-    if (nodes.length) activateNode(nodes[(selectedIndex + step + nodes.length) % nodes.length]);
+    if (displayNodes.length) requestOrbitalFocus(displayNodes[(selectedIndex + step + displayNodes.length) % displayNodes.length]);
   };
   /** Phone swipes on the record bar: left/right step records, up/down move
    * one orbital level deeper or back (the canvas keeps its own drag). */
@@ -709,13 +672,6 @@ export default function App() {
     setPanel("record");
   };
 
-  const backLevel = () => {
-    if (!explorer.back()) { overview(); return; }
-    stopCamera();
-    setSelectedId(null);
-    setInspectorOpen(false);
-  };
-
   const labels = useMemo(() => {
     const map: Record<string, string> = { ...(displayWorld?.bigEventLabels ?? {}) };
     for (const n of [...(displayWorld?.laneNodes ?? []), ...visibleDyn.nodes]) map[n.id] = n.label;
@@ -725,10 +681,6 @@ export default function App() {
     return map;
   }, [displayWorld, visibleDyn]);
   labelsRef.current = labels;
-
-  useEffect(() => {
-    labelBus.active = new Set(nodes.map((n) => n.id));
-  }, [labelBus, nodes]);
 
   const shownWorld: LoadedWorld = displayWorld ?? (world as LoadedWorld);
   const loadedBookEntry = books.find((book) => book.id === loadedBook) ?? null;
@@ -750,7 +702,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${orbitalMode ? " orbital-active" : ""}${orbitalMode && stageView !== "orbit" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}`}>
+    <div className={`app orbital-active ${orbitalMode ? "mode-orbital" : "mode-traditional"}${stageView !== "narrative" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}`}>
       <header className="topbar">
         <button className="brand" onClick={overview} aria-label="Return to archive overview"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 32V8h7l18 24h7V8M4 32h7V18l18 14M19 8h17" fill="none" stroke="currentColor" strokeWidth="3" /></svg><span>NOVEL<span>ONTOLOGY / PI</span></span></button>
         <nav aria-label="Workspace navigation">
@@ -766,38 +718,14 @@ export default function App() {
       </div>
       <main className="workspace">
         <section className="scene-panel" aria-label="Archive graph">
-          <div className="design-switch stage-switch" role="group" aria-label="View">
-            {orbitalMode && ([["orbit", "Orbit"], ["story", "Story time"], ["places", "Places"]] as const).map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => setStageView(value)}>{label}</button>)}
-            <button className="classic-toggle" disabled={followingActivity} aria-pressed={!orbitalMode} onClick={() => { setOrbitalMode(!orbitalMode); setStageView("orbit"); setInspectorOpen(false); }} title={orbitalMode ? "Switch to the classic view" : "Switch to the orbital view"}>{orbitalMode ? "Classic" : "Classic / switch to orbital"}</button>
+          <div className="design-switch stage-switch" role="toolbar" aria-label="Mode and view">
+            <div className="stage-group" role="group" aria-label="Mode">{MODES.map(([orbital, label]) => <button key={label} aria-pressed={orbitalMode === orbital} onClick={() => switchMode(orbital)} title={orbital ? "3D orbital views" : "Flat traditional views"}>{label}</button>)}</div>
+            <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => setStageView(value)}>{label}</button>)}</div>
           </div>
-          {orbitalMode && stageView === "story" ? <StoryTimeline data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("orbit"); if (node) requestOrbitalFocus(node); }} />
-          : orbitalMode && stageView === "places" ? <PlaceMap data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} />
-          : orbitalMode ? <OrbitalExplorer world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} /> : <>
-          <div className="scene-toolbar"><span className="eyebrow">{view.mode === "lanes" ? "01 / TIMELINE COLLECTION" : "02 / EVENT INTERIOR"}</span><div>
-            <span className="direction-label">{view.mode === "interior" ? (explorer.structure === "cloud" ? "Shared links → closeness" : "Earlier → later") : "Chapter order →"}</span>
-            <button aria-pressed={showRelations} onClick={() => setShowRelations(!showRelations)}>{showRelations ? "Relations on" : "Relations off"}</button>
-            <button onClick={() => framePositions(graphRef, labelBus.positions.size ? [...labelBus.positions.values()] : timeline.nodes.map((node) => scaledPos(node, view.mode === "interior")), 1.18, !reducedMotion)}>Frame view ⌖</button>
-          </div></div>
-          {view.mode === "interior" && <ExplorerNavigation nodes={sourceNodes} selectedId={selected?.id ?? null} onSelect={activateNode} structure={explorer.structure} onStructure={explorer.setStructure} expandedCount={explorer.path.length} scopeLabel={explorer.path.at(-1)?.label} shown={nodes.length} total={sourceNodes.length} onBack={backLevel} onReset={() => { stopCamera(); explorer.reset(); setSelectedId(null); setInspectorOpen(false); }} />}
-          <div className="stage" tabIndex={0} aria-label="3D records. Arrow keys select, Enter opens an event, Escape returns to chronology." onKeyDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            if (event.key === "ArrowRight" || event.key === "ArrowLeft") { event.preventDefault(); stepRecord(event.key === "ArrowRight" ? 1 : -1); }
-            if (event.key === "Enter" && selected) { event.preventDefault(); activateNode(selected); }
-            if (event.key === "Escape") backLevel();
-          }}>
-            <div className="graph-canvas"><WorldGraph ref={graphRef} nodes={timeline.nodes} edges={visibleEdges} tracks={timeline.tracks} contextNodeIds={explorer.rootIds} interior={view.mode === "interior"} viewId={explorer.key} openableIds={openableIds} labelBus={labelBus} selectedId={selected?.id ?? null} reducedMotion={reducedMotion} onNodeClick={activateNode} onNodeOpen={activateNode} onViewBack={backLevel} join={joins[0] ?? null} onJoinSettled={settleJoin} /></div>
-            <div className="scene-coordinate" aria-hidden="true">X / Y / Z<br /><span>TIME → / RELATIONS<br />SPATIAL ONTOLOGY</span></div>
-            <div className="labels-layer">
-              {nodes.map((node, index) => <button key={node.id} className={`node-label k-${node.kind} s-${node.state}${selected?.id === node.id ? " is-selected" : ""}`} style={{ visibility: "hidden" }} aria-label={`${openableIds.includes(node.id) ? "Open" : "Select"} ${node.label}`} aria-pressed={selected?.id === node.id} ref={(element) => { if (element) labelBus.targets.set(node.id, element); else labelBus.targets.delete(node.id); }} onClick={() => activateNode(node)}>
-                <span className="node-code">{node.cluster ? `${node.cluster.ids.length} ${node.cluster.kind.toUpperCase()}` : node.kind === "scene" ? `SCENE ${explorer.rank.get(node.id) ?? index + 1}` : String(index + 1).padStart(2, "0")} / {node.lane.toUpperCase()}</span><b>{node.label}</b>{node.cluster && <em className="cluster-preview">{node.subLabel}</em>}<span>{node.cluster ? `${node.cluster.recordCount} records · ${explorer.path.some((scope) => scope.key === node.id) ? "collapse" : "expand"}${node.cluster.proposed ? ` · ${node.cluster.proposed} ghosts` : ""}${node.cluster.held ? ` · ${node.cluster.held} held` : ""}` : node.state !== "canon" ? node.state.toUpperCase() : KIND_LABEL[node.kind]}</span>
-                {node.kind === "bigEvent" && visibleDyn.nodes.some((child) => child.parent === node.id && child.state !== "canon") && <em className="node-updates">{visibleDyn.nodes.filter((child) => child.parent === node.id && child.state !== "canon").length} IN REVIEW</em>}
-              </button>)}
-            </div>
-            <div className="track-labels">{timeline.tracks.map((track) => <span key={track.id} className="track-label" ref={(element) => { if (element) labelBus.trackTargets.set(track.id, element); else labelBus.trackTargets.delete(track.id); }}>{track.label}<small>SEQUENCE →</small></span>)}</div>
-            <div className="stage-bottom"><span>CLICK TO INSPECT / SCROLL TO ZOOM</span><span>{view.mode === "interior" ? explorer.structure.toUpperCase() : `${timeline.tracks.length} TRACKS`} · {nodes.length} SHOWN</span></div>
-          </div>
-          <div className="scene-legend"><span><i className="canon" />Canon</span><span><i className="branch" />Branch</span><span><i className="proposed" />Proposed</span><span><i className="held" />Held</span><button aria-pressed={reducedMotion} onClick={() => setReducedMotion(!reducedMotion)}>{reducedMotion ? "Motion reduced" : "Motion on"}</button></div>
-          </>}
+          {stageView === "story" ? <StoryTimeline data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("narrative"); if (node) requestOrbitalFocus(node); }} />
+          : stageView === "places" ? <PlaceMap data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} />
+          : orbitalMode ? <OrbitalExplorer world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          : <NarrativeList world={shownWorld} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} timePlace={timePlace} bookBar={bookBar} selectedId={selected?.id ?? null} focusRequest={orbitalFocus} onSelect={inspectOrbital} />}
         </section>
         <aside className={`inspector${inspectorOpen ? " is-open" : ""}`} aria-label="Record and processing details">
           <div className="inspector-tabs" role="tablist" aria-orientation="vertical" aria-label="Inspector">
@@ -813,7 +741,7 @@ export default function App() {
           <div className="inspector-sheet" hidden={!inspectorOpen}>
           <div className="sheet-heading"><span className="eyebrow">ARCHIVE / {panel}</span><button aria-label="Close details" onClick={() => { setInspectorOpen(false); document.getElementById(`tab-${panel}`)?.focus(); }}>×</button></div>
           <div ref={inspectorRef} className="inspector-body" id={`panel-${panel}`} role="tabpanel" aria-labelledby={`tab-${panel}`}>
-            {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalMode && orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalMode && orbitalInspection ? orbitalInspection.edges : selected?.cluster ? edges : sourceEdges} orbital={orbitalMode} contents={orbitalMode ? orbitalInspection?.contents : []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? `api/record-source${bookQuery(phoneLive ? loadedBook : null)}` : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={!!selected && !!shownWorld.interiors[selected.id]} causalLinks={worldCausalLinks(shownWorld)} onSelect={orbitalMode ? requestOrbitalFocus : activateNode} />}
+            {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalInspection ? orbitalInspection.edges : sourceEdges} orbital={orbitalMode} contents={orbitalInspection?.contents ?? []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? `api/record-source${bookQuery(phoneLive ? loadedBook : null)}` : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={orbitalMode && !!selected && !!shownWorld.interiors[selected.id]} causalLinks={worldCausalLinks(shownWorld)} onSelect={requestOrbitalFocus} />}
             {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? "Waiting for the live stream."}</p><a href="replay/">Pi session replay ↗</a>{!phoneLive && <button onClick={startSession}>Reconnect</button>}</div><DecisionFeed entries={feed} /></>}
             {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>{phoneLive ? "Read-only live viewer. Pi reviews consequential facts; held facts stay outside canon." : "Review sample proposals."}</p></div><div inert={phoneLive ? true : undefined}><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></div></>}
             {panel === "album" && <AlbumPanel pictures={albumInfo.length ? albumInfo : albumPictures.map((picture) => ({ id: picture.id, asset: picture.asset, kind: picture.kind, label: picture.kind ? picture.kind[0].toUpperCase() + picture.kind.slice(1) : "Picture", placed: false, prevSceneLabel: null, nextSceneLabel: null, chrono: null }))} selectedId={selected?.id ?? null} onSelect={albumThumbnailSelect} />}

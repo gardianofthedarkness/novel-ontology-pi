@@ -1,0 +1,78 @@
+/* Traditional mode, Narrative view: chapters → scenes → records, flat. */
+.nl-view .tp-head .book-bar { margin-top: 6px; }
+.nl-live { max-width: 760px; margin: 0 auto 12px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; border: 1px solid #ffc46b55; background: #2a1f0c99; font-size: 12px; color: var(--tp-text); }
+.nl-live i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tp-flashback); animation: nl-pulse 1.6s ease-in-out infinite; }
+.nl-live span { flex: 1; min-width: 0; }
+.nl-live button { flex: none; padding: 3px 10px; border-radius: 999px; border: 1px solid #ffc46b88; background: transparent; color: var(--tp-flashback); font: inherit; font-size: 11px; cursor: pointer; }
+.nl-empty { max-width: 760px; margin: 0 auto; padding: 18px 12px; color: var(--tp-muted); font-size: 12px; text-align: center; }
+.nl-chapters, .nl-scenes, .nl-records { list-style: none; margin: 0; padding: 0; }
+.nl-chapters { max-width: 760px; margin: 0 auto; display: grid; gap: 10px; }
+.nl-chapter { border-radius: 12px; border: 1px solid var(--tp-edge); background: var(--tp-card); }
+.nl-chapter.is-live { border-color: #ffc46b77; }
+.nl-chapter.is-selected > .nl-chapter-head { box-shadow: inset 3px 0 0 #9fd8ff; }
+.nl-chapter-head { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: transparent; color: var(--tp-text); font: inherit; text-align: left; cursor: pointer; }
+.nl-chapter-head:hover { background: #9fd8ff0d; }
+.nl-index { font-size: 10px; letter-spacing: .06em; color: var(--tp-muted); font-variant-numeric: tabular-nums; padding-top: 3px; }
+.nl-chapter-title { display: grid; gap: 4px; min-width: 0; }
+.nl-chapter-title > b { font-size: 15px; font-weight: 600; }
+.nl-summary { font-size: 12px; line-height: 1.5; color: #b9d0e0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.nl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 10px; color: var(--tp-muted); }
+.nl-caret { font-size: 18px; line-height: 1; color: var(--tp-muted); padding-top: 2px; }
+.nl-cast { display: flex; flex-wrap: wrap; gap: 4px; }
+.nl-cast span { padding: 1px 7px; border-radius: 999px; border: 1px solid #ffffff1c; font-size: 10px; color: #cfe2ef; }
+.nl-cast span.is-new { border-style: dashed; border-color: #9fd8ff88; color: #9fd8ff; }
+.nl-cast .nl-more { border: 0; color: var(--tp-muted); }
+.nl-state { padding: 0 6px; border-radius: 4px; font-size: 9px; font-style: normal; letter-spacing: .06em; text-transform: uppercase; border: 1px solid currentColor; }
+.nl-state.is-proposed { color: #9fd8ff; border-style: dashed; }
+.nl-state.is-held { color: #c9b7ff; }
+.nl-state.is-branch { color: #ff9ab0; }
+.nl-state.is-live { color: var(--tp-flashback); }
+.nl-scenes { display: grid; gap: 4px; padding: 0 10px 12px 34px; }
+.nl-scene { border-radius: 8px; }
+.nl-scene.is-selected { background: #9fd8ff14; }
+.nl-scene.is-proposed { outline: 1px dashed #9fd8ff66; }
+.nl-scene.is-held { outline: 1px solid #c9b7ff55; }
+.nl-scene-row { display: flex; align-items: stretch; gap: 4px; }
+.nl-scene-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 34px 1fr; gap: 8px; padding: 7px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--tp-text); font: inherit; text-align: left; cursor: pointer; }
+.nl-scene-main:hover { background: #ffffff08; }
+.nl-scene-text { display: grid; gap: 4px; min-width: 0; }
+.nl-scene-label { font-size: 12px; line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.nl-chips { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 10px; }
+.nl-chip { color: var(--tp-muted); }
+.nl-chip.is-time { color: #9fd8ff; }
+.nl-chip.is-flashback { color: var(--tp-flashback); }
+.nl-chip.is-place { color: #a9e3c5; }
+.nl-chip.is-carried { color: var(--tp-muted); font-style: italic; }
+.nl-records-toggle { flex: none; align-self: start; margin-top: 5px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--tp-edge); background: transparent; color: var(--tp-muted); font: inherit; font-size: 10px; cursor: pointer; }
+.nl-records-toggle[aria-expanded="true"] { color: var(--tp-text); border-color: #9fd8ff66; }
+.nl-records { display: grid; gap: 1px; margin: 2px 0 8px 42px; border-left: 1px solid #9fd8ff2a; }
+.nl-records button { display: grid; grid-template-columns: 18px 1fr auto; gap: 6px; width: 100%; padding: 4px 8px; border: 0; background: transparent; color: #c6d9e6; font: inherit; font-size: 11px; line-height: 1.5; text-align: left; cursor: pointer; }
+.nl-records button:hover { background: #ffffff08; }
+.nl-records li.is-selected button { background: #9fd8ff1a; color: var(--tp-text); }
+.nl-records li.is-proposed button { color: #9fd8ff; }
+.nl-records li.is-held button { color: #c9b7ff; }
+.nl-kind { color: var(--tp-muted); font-size: 10px; padding-top: 1px; }
+.nl-loose { padding: 6px 0 0 8px; }
+.nl-loose .nl-records { margin-left: 0; }
+.nl-scene.is-touched, .nl-records li.is-touched { animation: nl-touch 2.4s ease-out; }
+@keyframes nl-pulse { 50% { opacity: .35; } }
+@keyframes nl-touch { 0% { box-shadow: 0 0 0 2px #ffc46b99; background: #ffc46b1f; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.reduce-motion .nl-live i, .reduce-motion .nl-scene.is-touched, .reduce-motion .nl-records li.is-touched { animation: none; }
+.reduce-motion .nl-scene.is-touched, .reduce-motion .nl-records li.is-touched { box-shadow: inset 2px 0 0 var(--tp-flashback); }
+@media (max-width: 700px) {
+  .nl-chapter-head { gap: 8px; padding: 10px; }
+  .nl-scenes { padding: 0 6px 10px 12px; }
+  .nl-scene-main { grid-template-columns: 28px 1fr; gap: 6px; }
+  .nl-records { margin-left: 20px; }
+}
+/* Keep the list clear of the open inspector where there is room beside it. */
+@media (min-width: 1100px) { .workspace:has(.inspector.is-open) .tp-view { padding-right: 420px; } }
+/* Mode × view switch: [Orbital | Traditional] [Narrative | Story time | Places]. */
+.design-switch.stage-switch { display: flex; align-items: center; gap: 6px; padding: 2px; }
+.stage-group { display: flex; gap: 2px; }
+.stage-group + .stage-group { padding-left: 6px; border-left: 1px solid #8ab6d33d; }
+@media (max-width: 700px) {
+  /* Five buttons need their own row under the heading status. */
+  .design-switch.stage-switch { top: 170px; left: 12px; right: 12px; justify-content: center; }
+  .orbital-navigation { top: 206px; }
+}

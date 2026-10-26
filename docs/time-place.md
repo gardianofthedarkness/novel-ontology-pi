@@ -70,7 +70,8 @@ retract relations, prefer incremental runs on a book with stored facts.
 
 ## Viewer
 
-Beside the orbit (reading order), two views read the applied facts:
+Beside the Narrative view (reading order), two views read the applied facts,
+in both Orbital and Traditional mode ([playground views](playground-views.md)):
 
 - **Story time** — periods in story order, earliest at the top; flashbacks
   offset, with when they were told and Jev's certainty; a reading-order

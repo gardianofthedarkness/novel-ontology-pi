@@ -76,7 +76,7 @@ export function RecordInspector({ selected, nodes, lookupNodes = nodes, edges, c
         <div><dt>{selected.library ? "Reading position" : "Sequence"}</dt><dd>{selected.library ? selected.library.readingOrder ?? "Unknown / not applicable" : String(selected.chrono).padStart(2, "0")}</dd></div>
         <div><dt>Connections</dt><dd>{connections.length}</dd></div>
       </dl>
-      {canOpen ? <p className="interior-summary">{childCount} interior records · {orbital ? "zoom to reveal; double-click a revealed sphere to enter" : "click the file to enter ↗"}</p> : !orbital && selected.kind === "bigEvent" && <p className="empty-state">No interior records in this sample.</p>}
+      {canOpen ? <p className="interior-summary">{childCount} interior records · {orbital ? "zoom to reveal; double-click a revealed sphere to enter" : "click the file to enter ↗"}</p> : !orbital && selected.kind === "bigEvent" && !contents.length && <p className="empty-state">No interior records in this sample.</p>}
       <div className="index-heading"><h3>Records in this view</h3><span>{nodes.length}</span></div>
       <ol className="record-index" aria-label="Archive records">
         {nodes.map((node, index) => (
