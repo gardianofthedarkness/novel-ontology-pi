@@ -51,8 +51,9 @@ through one <code>OntologyStore</code> interface.</p>
   <li><b>GraphRAG in one engine:</b> a question seeds via vector similarity (event summaries) and FTS (exact names), then Cypher traverses — causal chains, presence, timeline order — from the seeds.</li>
   <li><b>Closed schema, designed once:</b> Ladybug requires declared node/relation tables (<code>src/ground/ontology/schema.ts</code>). The English vocabulary is schema v1; new types arrive as CLI migrations.</li>
   <li><b>One writer, many readers:</b> only the merge gate writes; queries open read-only. That matches Ladybug's concurrency model exactly — and the CLI's.</li>
-  <li><b>Retrieval is GRAPH-FIRST (decided 2026-10-21, embeddings deferred):</b> every current need — presence, co-presence, causal chains, scene location, event streams, fork points — is a relational Cypher traversal (<code>src/ground/ontology/retrieval.ts</code>, implemented and tested). No embedding model gets chosen until one of those provably falls short. The fallback design, if that day comes: a lightweight local model on CPU (~500–1000 dims) for wide recall, <b>Jev post-selecting among the top 32</b> for precision.</li>
-  <li><b>Vector dimension is manifest data:</b> the embedding model + dimension are recorded per novel; changing models triggers <code>novel graph reindex</code>, not silent corruption.</li>
+  <li><b>Retrieval is GRAPH-FIRST (decided 2026-10-21, embeddings deferred) — with one scoped exception:</b> every current need — presence, co-presence, causal chains, scene location, event streams, fork points — is a relational Cypher traversal (<code>src/ground/ontology/retrieval.ts</code>, implemented and tested). The exception is causality (09b, decision #23): cross-scene causal nomination <i>requires</i> an embedding leg, so the deferral is lifted for causality only — a lightweight local CPU model (~500–1000 dims) for wide recall, <b>Jev post-selecting among the top 32</b> for precision, exactly the fallback design, now real for one faculty.</li>
+  <li><b>Vector dimension is manifest data:</b> the embedding model + dimension are recorded per novel in the embeddings manifest (<code>ontology/embeddings.jsonl</code> sidecar, built for causality); changing models triggers <code>novel graph reindex</code>, not silent corruption.</li>
+  <li><b>Schema grows by faculty:</b> scene time/place (08b) added <code>TimePoint</code> + <code>OCCURS_DURING</code> to the schema and reuses <code>LOCATED_AT</code> — but Ladybug stores only the TimePoint id and the bare edge; the full record (flashback, storyIndex, date, probability) lives only in the bundle JSONL for now.</li>
 </ul>
 
 <h2>Implementation</h2>
@@ -68,7 +69,7 @@ through one <code>OntologyStore</code> interface.</p>
   <ul class="tight oq" style="font-size:14px">
     <li>Embedding provider — <span class="status plan">deferred 2026-10-21</span><span>Graph-first: no embedding model until relational Cypher is proven insufficient for a concrete need. Fallback design stands by: local CPU model ~500–1000 dims + Jev top-32 post-selection.</span></li>
     <li>Incremental sync.<span>After each approved block, append deltas to Ladybug incrementally, or rebuild per block? Rebuild is simpler and safe; incremental is faster for long novels. Where's the crossover?</span></li>
-    <li>Library layout.<span>Many novels, one user: a <code>novels/</code> library folder with per-novel bundles — plus a cross-novel index? (Cross-novel character universes are a real light-novel pattern…)</span></li>
+    <li>Library layout — <span class="status done">✓ decided · built (PR #51)</span><span>Built as the library (10a, decision #24): content-addressed sources, a versioned catalog, universes → continuities → series → assignments, and isolated per-source workspaces. What remains future: a cross-novel index or shared graph — book databases are never fused in phase 1.</span></li>
     <li>Bundle in git.<span>Should a novel's bundle live in its own git repo for history/diffing of merges? ChangeSets map naturally to commits.</span></li>
   </ul>
 </div>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>08b Time &amp; place — novel-ontology-pi design</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="site" id="sitenav"></nav>
+
+<div class="sectorno">08b</div>
+<div class="kicker">sector 08b · Digger — scene time &amp; place</div>
+<h1>Time &amp; place — when and where scenes happen</h1>
+<p>
+  <span class="badge">status: implemented (phase 1)</span>
+  <span class="badge">repo: <code>src/digger/timeplace/</code></span>
+  <span class="badge">model: Jev roles + work-model vocabulary</span>
+</p>
+<p class="sub">Scenes already tile the block (02) and carry a cast (05). This faculty
+answers the next two questions for each scene: <b>when</b> does it happen, and
+<b>where</b>? Time words become <b>entities that scenes belong to</b> — a
+<code>TimePoint</code> holds the words as written, a normalised value, its role,
+a flashback mark with Jev's certainty, the period it was told from, a stated or
+derived date, and an <b>estimated</b> story order. Place words attach scenes to
+<code>Location</code> entities. Granularity is the scene: one scene, one period,
+one place.</p>
+
+<table class="io">
+  <tr><th>Inputs</th><td>New scenes + their sentences (after the block's main ChangeSet applies) + the time/place lexicon</td></tr>
+  <tr><th>Outputs</th><td><code>TimePoint</code> entities · <code>Scene -OCCURS_DURING→ TimePoint</code> (via anchor or inherited) · <code>Scene -LOCATED_AT→ Location</code> · <code>storyIndex</code> estimates</td></tr>
+  <tr><th>Depends on</th><td>02 Scene spans, 01 Sectioning (sentence IDs anchor every mention)</td></tr>
+  <tr><th>Feeds into</th><td>09 Merge gate (its own pending-review ChangeSet) · 13 Story time and Places views</td></tr>
+</table>
+
+<h2>Demo — a flashback finds its period</h2>
+<div class="panel">
+  <div class="caption" id="caption"><span class="stepno">▶</span>The demo plays and loops on its own.</div>
+  <div class="progressdots" id="dots"></div>
+  <div class="stage">
+    <div class="card" style="margin:0 0 10px"><h3 style="font-size:13.5px">Lantern Harbor · synthetic scene</h3>
+      <p style="margin:2px 0">林岚站在灯港旧桥上，望着夜航的灯火。她想起三年前那场风暴之后，旧桥第一次封桥的夜晚。</p></div>
+    <div id="events"></div>
+    <div class="items" id="props"></div>
+  </div>
+  <p style="margin-top:12px"><button class="replay" id="replay">↻ Replay</button></p>
+</div>
+
+<h2>Design details</h2>
+<ul class="tight" style="font-size:14px">
+  <li><b>TimePoint is an entity, not a label:</b> <code>expression, family, value, gloss, role, flashback, flashbackProbability, decidedBy, confidence, toldFromId, date, partOfDay, sentenceId, sceneId, chapterIndex, narrativeIndex, storyIndex, source</code>. Its id is <code>time_&lt;sentenceId&gt;_&lt;start&gt;</code> — anchored to the sentence that said it.</li>
+  <li><b>Jev decides roles, one question per scene:</b> each checkable mention gets <code>time_role</code> — ADVANCE / FLASHBACK / RETURN / REFERENCE ("choose REFERENCE when unsure") — plus a continuation question at each scene break after a flashback (CONTINUES_FLASHBACK vs RETURNS_TO_PRESENT). Thresholds are <b>new policy, distinct from the 0.85 standard</b> (decision #25): flashback 0.6, advance 0.5, soft-advance 0.6, past-marker probability 0.5.</li>
+  <li><b>Below threshold, the Jev path fails closed:</b> a sub-threshold FLASHBACK/ADVANCE/RETURN verdict downgrades to REFERENCE (recorded as <code>downgraded</code>), and unrecognised Jev values default to REFERENCE. Known gaps, stated honestly: rule-decided and heuristic paths bypass Jev thresholds, null confidence passes ADVANCE/RETURN, and continuation has no threshold — a below-threshold unit test and an explicit continuation call are still owed.</li>
+  <li><b>Story order is an estimate, never the timeline:</b> <code>orderStory</code> (pure code) puts the present line in reading order and each flashback before its host (dated flashbacks before the first later-dated present period, otherwise before <code>toldFromId</code>). It is stored as a <b>separate</b> field: <code>narrativeIndex</code> preserves reading order, <code>storyIndex</code> carries the estimate. Nothing touches chronological order, PRECEDES, or novel sequence — <b>novel sequence remains the timeline for v1</b>, and story order is labelled estimated everywhere it is shown ("dates marked *derived* are calculated from stated words, never guessed"). Story order is never treated as causation.</li>
+  <li><b>Vocabulary is a work-model list, not a prompt change:</b> the work model lists time/place words verbatim from the text; no existing extraction prompt is edited. Code validation (spans must occur verbatim in their sentence; bare connectives and quantity-less spans rejected) runs before the reviewer gate. <b>Quoted places are dropped</b>, not counted as mentions.</li>
+  <li><b>The gate is preserved:</b> the faculty runs after the main ChangeSet is approved and applied, over scenes without <code>OCCURS_DURING</code>, and its proposals go through a pending-review ChangeSet and the same reviewer — never straight to canon, never auto-approved. Failures only write a review note and never block ingestion.</li>
+  <li><b>Storage asymmetry, stated plainly:</b> the bundle JSONL is the full record, but Ladybug stores only the TimePoint id and the bare <code>OCCURS_DURING</code> edge — <code>via</code>, flashback, storyIndex, date and flashbackProbability live <b>only in the bundle</b>, so Cypher cannot see them yet. No in-place migration exists for an existing <code>graph.lbug</code> (rebuild from the bundle); a forced re-run can strand stale memberships, because dedupe suppresses re-proposal but never deletes. New Location minting matches exact normalised forms only — a variant spelling can mint a duplicate, since there is no variant fold or EM nomination on this path.</li>
+</ul>
+
+<h2>Implementation</h2>
+<ul class="tight" style="font-size:14px">
+  <li><code>src/digger/timeplace/faculty.ts</code> — proposals; <code>lexicon.ts</code> (Chinese-first, basic Japanese/English) · <code>periods.ts</code> (assembly + story ordering) · <code>roles.ts</code> (Jev roles + thresholds) · <code>vocabulary.ts</code> (work-model word list) · <code>cache.ts</code> · <code>afterApply.ts</code> (post-apply hook).</li>
+  <li>CLI: <code>novel ingest --time-place</code> · <code>novel timeplace run|show</code>. Schema: <code>TimePoint</code> + <code>OCCURS_DURING</code> in <code>src/ground/ontology/</code>; <code>LOCATED_AT</code> is pre-existing and reused.</li>
+  <li>Tests: 12 new time-place tests + 2 projection tests (docs/time-place.md).</li>
+</ul>
+
+<h2>Open questions — time &amp; place</h2>
+<div class="panel">
+  <ul class="tight oq" style="font-size:14px">
+    <li>Below-threshold coverage.<span>A unit test asserting below-threshold → REFERENCE + <code>downgraded</code> (including null-confidence and Jev-failure fallback) is owed, as is an explicit statement of the continuation no-threshold choice.</span></li>
+    <li>Cross-volume time.<span>Within-novel scene time is phase 1. Cross-volume temporal reconciliation and a universe timeline faculty are phase 2 (see 11) — storyIndex estimates must not be mistaken for a shared chronology.</span></li>
+    <li>Other genres and languages.<span>The lexicon is Chinese-first with basic Japanese/English; measured accuracy claims so far are tuning data, not blind results.</span></li>
+    <li>Ladybug parity.<span>Should storyIndex, dates and flashback probability be queryable in Cypher, or does the bundle remain the only full record? A schema decision for the next phase.</span></li>
+  </ul>
+</div>
+
+<div class="pager" id="pager"></div>
+<footer>novel-ontology-pi · design by sector · 2026-10-26</footer>
+</div>
+<script src="assets/sector.js"></script>
+<script>
+function resetAll(){document.getElementById('events').innerHTML='';document.getElementById('props').innerHTML='';}
+const steps=[
+ {t:2800,cap:["A mention is anchored","“三年前” is found verbatim in its sentence and anchored to that sentence's id — never to a raw character offset. The present scene (灯港旧桥, tonight) and the remembered night are two different periods."],run(){document.getElementById('events').innerHTML='<div class="verdict warn on">Mention · <b>三年前</b> <span style="color:var(--faint)">sentence-anchored · family: past-marker</span></div>';}},
+ {t:2800,cap:["Jev roles it: FLASHBACK at 0.8","One role question per scene. Confidence 0.8 clears the 0.6 flashback floor, so the mention becomes a TimePoint with flashbackProbability 0.8, told from the present period."],run(){document.getElementById('events').innerHTML+='<div class="verdict good on">TimePoint · <b>三年前的风暴后 · FLASHBACK 0.8</b> <span style="color:var(--faint)">toldFrom: present period · role decided by Jev</span></div>';}},
+ {t:2200,cap:["Story order estimates, reading order stays","The flashback's storyIndex sorts before its host; narrativeIndex keeps reading order. The orbit still renders reading order — Story time (13) is where the estimate is shown, labelled as estimated."],run(){document.getElementById('props').innerHTML='<span class="chip">＋ TimePoint ×1</span> <span class="chip">＋ OCCURS_DURING (via: anchor)</span> <span class="chip">＋ LOCATED_AT → 灯港旧桥</span> <span class="chip">storyIndex: estimate only</span>';}},
+];
+runSectorDemo(steps.map(s=>({...s,reset:resetAll})));
+</script>
+</body>
+</html>

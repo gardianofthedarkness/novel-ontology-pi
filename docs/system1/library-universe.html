@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>10a Library &amp; universes — novel-ontology-pi design</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="site" id="sitenav"></nav>
+
+<div class="sectorno">10a</div>
+<div class="kicker">sector 10a · Ground — library, universes &amp; continuities</div>
+<h1>Library &amp; universes — many files, one organization</h1>
+<p>
+  <span class="badge">status: implemented (universe phase 1)</span>
+  <span class="badge">repo: <code>src/ground/workspace/library.ts</code> · <code>src/solidifier/merge/identityLabels.ts</code> · <code>src/solidifier/causality/universe.ts</code></span>
+  <span class="badge">model: main agent + Jev (label-based)</span>
+</p>
+<p class="sub">One user has many files: volumes of a series, sequels, side stories,
+shared worlds. The library organizes them without fusing them. Sources are
+<b>content-addressed</b>, membership is <b>evidence-gated</b>, every file keeps its
+<b>own isolated workspace</b> — and identity across files is handled
+<b>fail-closed</b>, with readable labels the reviewer can actually correct.</p>
+
+<table class="io">
+  <tr><th>Inputs</th><td>EPUB/TXT sources (64 MB cap each) + evidence quotes verified at exact offsets</td></tr>
+  <tr><th>Outputs</th><td><code>catalog.json</code> (versioned) · universes → continuities → series → assignments (<code>confirmed</code>/<code>unresolved</code>) · isolated per-source workspaces · a separate universe causal ledger</td></tr>
+  <tr><th>Depends on</th><td>09 Shared gate (label-based review) · 10 Storage (bundle per workspace)</td></tr>
+  <tr><th>Feeds into</th><td>13 Series/continuity views · 09b Universe causal ledger · ingest/recall/album via <code>ontology/source.json</code></td></tr>
+</table>
+
+<h2>Demo — two files become one series, without merging</h2>
+<div class="panel">
+  <div class="caption" id="caption"><span class="stepno">▶</span>The demo plays and loops on its own.</div>
+  <div class="progressdots" id="dots"></div>
+  <div class="stage">
+    <div class="card" style="margin:0 0 10px"><h3 style="font-size:13.5px">Two synthetic volumes · same harbor world</h3>
+      <p style="margin:2px 0">lantern-harbor-1.txt · lantern-harbor-2.txt — both name 灯港旧桥 and the night ferry.</p></div>
+    <div id="events"></div>
+    <div class="items" id="props"></div>
+  </div>
+  <p style="margin-top:12px"><button class="replay" id="replay">↻ Replay</button></p>
+</div>
+
+<h2>Design details</h2>
+<ul class="tight" style="font-size:14px">
+  <li><b>Content-addressed sources:</b> each source gets an id from its content hash (<code>doc_&lt;sha256&gt;</code>). The same file twice is the same document; a changed file is a new document. The versioned <code>catalog.json</code> records universes → continuities → series → assignments, each <code>confirmed</code> or <code>unresolved</code> — unresolved assignments stay outside scoped results.</li>
+  <li><b>Evidence-gated plans:</b> a membership or ordering plan is only as good as its quotes, and quotes are verified at exact offsets before anything is decided. <code>prepare</code> builds an isolated per-source workspace and does <b>none</b> of: model calls, ingestion, identity merging. Ingest, recall and album binding all route through the workspace's <code>ontology/source.json</code>.</li>
+  <li><b>Isolation is the point:</b> block ids restart at <code>b0001</code> per file, so multi-source workspaces that shared ids would collide. The library refuses shared-workspace multi-file ingestion outright and cites that collision — federation, not fusion, is phase 1.</li>
+  <li><b>Fail-closed semantic identity (decision #24):</b> Jev and the main agent see <b>readable labels</b>, and code resolves labels to ids. Ambiguity fails closed instead of guessing. The gate shows a <code>meaning</code> per fact and accepts label-based <code>semanticReplacement</code> corrections; relation-endpoint edits are refused. Jev handling hardened alongside: an invalid or missing <code>noul</code> throws instead of defaulting to 0, there is no retry on malformed responses, and missing, duplicate or out-of-range scores force <code>uncertain</code> / held. Duplicate-proposal-id repair is audited.</li>
+  <li><b>Universe causal ledger, separate by design:</b> cross-file causal nomination is <b>name-hint only — deliberately no embedding leg</b>, unlike the within-file hybrid search (09b). A Jev sweep over the nominated pairs feeds independent review; accepted links go to a separate audited ledger (<code>&lt;library&gt;/causality/state.json</code>) with source-qualified endpoints (<code>doc_id::unitId</code>), cycle refusal, and <code>bookDatabasesModified: false</code> — per-book databases are never fused.</li>
+  <li><b>What phase 1 defers:</b> a story-time / universe timeline faculty (phase 2), cross-book EM, and shared-workspace multi-file ingestion. The main agent calls cross-file causality after a full run; the systematic path stays within one file.</li>
+</ul>
+
+<h2>Implementation</h2>
+<ul class="tight" style="font-size:14px">
+  <li><code>src/ground/workspace/library.ts</code> — content-addressed sources, versioned catalog, universes → continuities → series → assignments, evidence-gated plans, isolated <code>prepare</code> workspaces.</li>
+  <li><code>src/solidifier/merge/identityLabels.ts</code> — label-based identity: readable labels for Jev/Pi, code-side id resolution, fail-closed ambiguity, label-based gate review.</li>
+  <li><code>src/solidifier/causality/universe.ts</code> — cross-file nomination (name-hint only), Jev sweep, independent review, separate audited ledger.</li>
+  <li>Skill: <code>skills/novel-library/SKILL.md</code> — the library skill the main agent uses to inspect evidence and propose/review membership.</li>
+</ul>
+
+<h2>Open questions — library &amp; universes</h2>
+<div class="panel">
+  <ul class="tight oq" style="font-size:14px">
+    <li>Vol2 paired comparison unfinished.<span>Stated honestly: the post-merge paired comparison of the new identity path against baseline is unfinished on the second volume (provider caps stopped it). Completing it needs bounded approval for more provider calls. The merge rationale was safety + correction path, not an accuracy win.</span></li>
+    <li>Legacy-migration gap.<span>No migration command exists yet. Multi-source and history-bearing legacy workspaces fail closed with an explicit error — a follow-up, not a silent behavior.</span></li>
+    <li>Cross-book EM.<span>Same character across volumes is not merged by the library — that is phase-2 work, after the timeline faculty.</span></li>
+    <li>Shared-workspace ingestion.<span>Refused in phase 1 (the b0001 collision). Whether a shared workspace ever becomes safe is undecided.</span></li>
+  </ul>
+</div>
+
+<div class="pager" id="pager"></div>
+<footer>novel-ontology-pi · design by sector · 2026-10-26</footer>
+</div>
+<script src="assets/sector.js"></script>
+<script>
+function resetAll(){document.getElementById('events').innerHTML='';document.getElementById('props').innerHTML='';}
+const steps=[
+ {t:2800,cap:["Two files, two content ids","Each source hashes to doc_<sha256>. Same bytes, same id; changed bytes, new id. Nothing is keyed by filename, so renames cannot confuse the catalog."],run(){document.getElementById('events').innerHTML='<div class="verdict good on">Sources · <b>doc_a3f9…</b> · <b>doc_71c2…</b> <span style="color:var(--faint)">content-addressed · 64 MB cap</span></div>';}},
+ {t:2800,cap:["Evidence-gated assignment","A plan proposes both volumes into one series — but only after its quotes verify at exact offsets. The reviewer sees labels, not ids, and ambiguity would fail closed instead of guessing."],run(){document.getElementById('events').innerHTML+='<div class="verdict good on">Series · <b>lantern-harbor</b> · both volumes <span class="stamp" style="color:var(--green)">CONFIRMED</span> <span style="color:var(--faint)">quotes verified · labels reviewed</span></div>';}},
+ {t:2200,cap:["Organized, not fused","Each volume keeps its own workspace and its own database. A cross-file causal link lands in the separate ledger with source-qualified endpoints — bookDatabasesModified stays false."],run(){document.getElementById('props').innerHTML='<span class="chip">＋ catalog.json (versioned)</span> <span class="chip">＋ 2 isolated workspaces</span> <span class="chip">＋ universe ledger (separate)</span> <span class="chip">＋ book DBs untouched</span>';}},
+];
+runSectorDemo(steps.map(s=>({...s,reset:resetAll})));
+</script>
+</body>
+</html>

@@ -64,6 +64,7 @@ retired classify-then-stitch design.</div>
   <li><b>Quotes are a hint, not the rule:</b> 「」 makes dialogue likely, but narration quotes terms and thoughts too — that's why this is a decision patch, not a regex.</li>
   <li><b>Speech tags are narration:</b> 她说道。 classifies as narration — but it carries the speaker hint that sector 06 leans on, so the classification keeps it adjacent to its turn.</li>
   <li><b>Units, not sentences, flow downstream:</b> speaker attribution and extraction never see loose dialogue sentences, only stitched units.</li>
+  <li><b>Dialogue cards are causal endpoints:</b> the cross-scene causality search (09b) treats dialogue units and events as the same unit type — a stored CAUSES link can end on a card, and the stability proof accepts legitimate card endpoints while still rejecting missing cards.</li>
 </ul>
 
 <h2>Implementation</h2>

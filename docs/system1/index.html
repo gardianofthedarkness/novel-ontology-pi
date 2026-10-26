@@ -104,7 +104,7 @@ kept — deliberately empty for now.</p>
   <text class="zonelabel" x="248" y="650" style="fill:var(--amber)">🧱 THE SOLIDIFIER — MAKE IT CANON</text>
   <rect class="box sys1" x="248" y="660" width="180" height="54" rx="10"></rect>
   <text class="title" x="338" y="683" text-anchor="middle">🛂 Merge gate</text>
-  <text class="small" x="338" y="701" text-anchor="middle">semantic fact review</text>
+  <text class="small" x="338" y="701" text-anchor="middle">staged semantic review</text>
   <rect class="box" x="444" y="660" width="180" height="54" rx="10"></rect>
   <text class="title" x="534" y="683" text-anchor="middle">🧲 EM faculty</text>
   <text class="small" x="534" y="701" text-anchor="middle">per-block · cross-sectional sweep</text>
@@ -209,7 +209,7 @@ tunnel — it digs the next block while the last one is being lined.</p>
 <div class="grid three">
   <a class="card" href="../../skills/novel-ontology/SKILL.md"><h3>📜 The Skill</h3><p>Workflows that teach the host agent to run the CLI, staff the gate, break ties and repair. Its subskills mirror the CLI groups: <b>data-extraction</b> (digger / solidifier) and <b>simulation</b> (empty for now).</p><span class="go">Read the Skill →</span></a>
   <a class="card" href="roadmap.html"><h3>⌘ The CLI</h3><p>All machinery lives here: two command groups — <b>data extraction</b> and <b>simulation</b> — over an embedded ontology bundle. Deterministic where possible; models only where ambiguity is real.</p><span class="go">Roadmap &amp; decisions →</span></a>
-  <a class="card" href="roadmap.html"><h3>🔌 The Adaptor</h3><p>One adaptor makes Skill + CLI installable into every popular agent host — Pi, Codex, Claude Code, peers — in each host's native format. Spec: roadmap decision #21; built by Track C.</p><span class="go">See the decision →</span></a>
+  <a class="card" href="roadmap.html"><h3>🔌 The Adaptor</h3><p>One adaptor makes Skill + CLI installable into every popular agent host — Pi, Codex, Claude Code, peers — in each host's native format. Spec: roadmap decision #21; built by Track C. <b>Muse joined as a host (PR #43):</b> loopback relays bridge vault keys to the CLI without any key value ever moving, and Muse's visual input switches the portrait fallback on (<code>NOVEL_HOST_VISION</code>).</p><span class="go">See the decision →</span></a>
   <a class="card" href="playground-frontend.html"><h3>🖥️ The Frontend</h3><p>The playground: watches the CLI's event stream — Live Theater, gate queue, growing graph, join animations. Transparency for the user, replay for debugging.</p><span class="go">Open sector 13 →</span></a>
   <a class="card" href="storage-connectors.html"><h3>📦 The Ground</h3><p>What both CLI groups stand on: the JSONL bundle (source of truth) + the disposable Ladybug index. Sector 10.</p><span class="go">Open sector 10 →</span></a>
   <a class="card" href="../../DESIGN.md"><h3>📐 DESIGN.md</h3><p>The overall architecture in document form: decisions, schema v1, CLI surface, test plan.</p><span class="go">Read the doc →</span></a>
@@ -218,7 +218,8 @@ tunnel — it digs the next block while the last one is being lined.</p>
 <h2>The sectors — one page per functionality</h2>
 <a class="card" href="roadmap.html" style="margin-bottom:14px;border-color:var(--teal)"><h3>🗺 Roadmap — implementation timeline &amp; decision log</h3>
 <p>Phases and parallel tracks in implementation order, the milestone that ends each, and the decision log — <b>updated in GitHub every time something is completed.</b></p><span class="go">Open the roadmap →</span></a>
-<p class="sub">Sector pages keep their pipeline numbering (01–13); they are grouped below the way
+<p class="sub">Sector pages keep their pipeline numbering (01–13, with lettered pages 08b, 09b, 10a for
+faculties that arrived after the numbering); they are grouped below the way
 the CLI is grouped. Every sector page follows the same structure —
 <b>what it does → its own demo → design details → implementation mapping → open questions
 for that sector only</b>.</p>
@@ -234,13 +235,16 @@ for that sector only</b>.</p>
   <a class="card" href="miniloop-engine.html"><h3>07 · Miniloop engine</h3><p>The digger's engine room: the faculty graph, the shared pool, batched Jev calls, S2 adjudication, the legacy miniloop.</p><span class="go">Open →</span></a>
   <a class="card" href="extraction.html"><h3>08 · Extraction</h3><p>The work-LLM faculties read structured scenes and propose events, causality, state changes — and resolve identity at birth (own page: 08a).</p><span class="go">Open →</span></a>
   <a class="card" href="em-at-birth.html"><h3>08a · EM at birth</h3><p>Identity resolved before minting: descriptive candidates and name fragments get one strict Jev round; only true newcomers mint.</p><span class="go">Open →</span></a>
+  <a class="card" href="time-place.html"><h3>08b · Time &amp; place</h3><p>Scenes belong to time periods and places: TimePoint entities, Jev flashback roles, estimated story order kept strictly apart from reading order.</p><span class="go">Open →</span></a>
 </div>
 
 <h3 style="margin-top:22px">CLI · Data extraction — 🧱 The Solidifier <span style="color:var(--faint);font-size:13px">(from proposals to canon that holds)</span></h3>
 <div class="grid three">
-  <a class="card" href="merge-gate.html"><h3>09 · Merge gate</h3><p>The semantic fact gate: per-fact review under a revision digest; apply materializes accepted facts only. Identity's two dedicated pages: 08a (birth, Digger) and 09a (global, Solidifier).</p><span class="go">Open →</span></a>
+  <a class="card" href="merge-gate.html"><h3>09 · Merge gate</h3><p>The one staged semantic review gate for all faculties: show → evidence → decide → apply, across book, universe and library scopes. Decide stages; apply publishes. Identity's two dedicated pages: 08a (birth, Digger) and 09a (global, Solidifier).</p><span class="go">Open →</span></a>
   <a class="card" href="em-global.html"><h3>09a · EM across the novel</h3><p>The strict backstop: structural nomination across the whole graph, per block for new-entity pairs and cross-sectionally at chapter close; merges through the audited fix path.</p><span class="go">Open →</span></a>
+  <a class="card" href="causality.html"><h3>09b · Causality</h3><p>Cross-scene CAUSES links: Cypher + embedding hybrid search, Jev at 0.85, per-block birth plus chapter-close sweep — and a separate cross-file ledger that never fuses book databases.</p><span class="go">Open →</span></a>
   <a class="card" href="storage-connectors.html"><h3>10 · Storage connectors</h3><p>Where canon lands: the JSONL bundle (truth) and the Ladybug graph engine (hot queries), rebuilt from the bundle.</p><span class="go">Open →</span></a>
+  <a class="card" href="library-universe.html"><h3>10a · Library &amp; universes</h3><p>Many files, one organization: content-addressed sources, evidence-gated catalog, universes → continuities → series — federated, never fused, identity fail-closed.</p><span class="go">Open →</span></a>
 </div>
 
 <h3 style="margin-top:22px">CLI · Simulation group <span style="color:var(--faint);font-size:13px">(kept — empty for now)</span></h3>

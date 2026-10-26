@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>09b Causality — novel-ontology-pi design</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+<nav class="site" id="sitenav"></nav>
+
+<div class="sectorno">09b</div>
+<div class="kicker">sector 09b · Solidifier — causality across scenes</div>
+<h1>Causality — links that cross scenes</h1>
+<p>
+  <span class="badge">status: implemented</span>
+  <span class="badge">repo: <code>src/solidifier/causality/</code> · <code>src/ground/connectors/embeddings.ts</code></span>
+  <span class="badge">model: Jev over hybrid search · threshold 0.85</span>
+</p>
+<p class="sub">The value is <b>cross-scene</b> causality across the same universe. Scene-local
+causes were structurally unrepresentable as links — extraction could only list them —
+so this faculty determines causality at birth and in a chapter-close sweep, and stores
+it as real <code>CAUSES</code> links. Dialogue is the same type as event in the search:
+both are uniform search units, and a stored link can end on a dialogue card.</p>
+
+<table class="io">
+  <tr><th>Inputs</th><td>New units (events + dialogue cards) × the universe, per block; plus a chapter-close sweep over everything the block pass missed</td></tr>
+  <tr><th>Outputs</th><td>Stored <code>CAUSES</code> links, proposed through the shared review gate (09) — never written directly</td></tr>
+  <tr><th>Depends on</th><td>08 Extraction (events) · 08a/09a Identity (endpoints resolved) · 10 Storage (Cypher + embeddings sidecar)</td></tr>
+  <tr><th>Feeds into</th><td>09 Merge gate (proposals) · 13 Story spiral (arcs) · 10a Universe causal ledger (cross-file links)</td></tr>
+</table>
+
+<h2>Demo — one collapse causes one cancellation</h2>
+<div class="panel">
+  <div class="caption" id="caption"><span class="stepno">▶</span>The demo plays and loops on its own.</div>
+  <div class="progressdots" id="dots"></div>
+  <div class="stage">
+    <div class="card" style="margin:0 0 10px"><h3 style="font-size:13.5px">Lantern Harbor · synthetic scenes</h3>
+      <p style="margin:2px 0">Scene 3: 旧桥在风暴中倒塌。 Scene 6: 灯港夜航停运，渡口贴出告示。</p></div>
+    <div id="events"></div>
+    <div class="items" id="props"></div>
+  </div>
+  <p style="margin-top:12px"><button class="replay" id="replay">↻ Replay</button></p>
+</div>
+
+<h2>Design details</h2>
+<ul class="tight" style="font-size:14px">
+  <li><b>Hybrid search, Jev decides:</b> candidates come from two legs — graph patterns (Cypher) plus embedding similarity (top-32, floor 0.5) — capped at 500 pairs per pass. Jev judges each pair; a link is proposed only at <b>causal ≥ 0.85 AND succession ≤ 0.5</b> (decision #23). Contradictions hold and are never proposed.</li>
+  <li><b>Two paths, one machinery:</b> (a) systematic Jev-determined causality at birth — per-block new units × universe, plus the chapter-close sweep; (b) a main-agent-callable add-causality path after a full run. Both propose through the existing gate and apply path.</li>
+  <li><b>Extraction's <code>causes</code> field is removed:</b> it was scene-local before, and scene-local causes are exactly what cross-scene causality is not. Extraction proposes events; this faculty proposes links.</li>
+  <li><b>Novel sequence is the timeline for v1:</b> no universe timeline faculty was built in this pass — ordering for succession comes from novel sequence, and a universe timeline faculty comes later (see 11).</li>
+  <li><b>Scoped lift of the embeddings deferral:</b> graph-first (decision #4) still governs retrieval generally — but causality <i>requires</i> an embedding leg, so the deferral is lifted for causality only. Default is a lightweight local CPU model (~500–1000 dims); model + dimension live in the embeddings manifest (<code>ontology/embeddings.jsonl</code> sidecar), and changing models triggers reindex, not silent corruption.</li>
+  <li><b>Universe scope is one file for v1:</b> within one novel file, the hybrid search runs over the whole universe. Cross-file links are a separate system with a separate ledger (10a): name-hint nomination only, no embedding leg, book databases never fused.</li>
+  <li><b>Where the arrows live (owner decision, 2026-10-26):</b> book-level causal arrows are drawn in <b>Story time mode only</b>, not in Narrative views — reversing the earlier Narrative-orbit arrows by design. The inspector still lists causes and effects, and library/series overviews keep their cross-volume arrows.</li>
+</ul>
+
+<h2>Implementation</h2>
+<ul class="tight" style="font-size:14px">
+  <li><code>src/solidifier/causality/</code> — nomination, Jev sweep, gate proposals; <code>src/ground/connectors/embeddings.ts</code> — the embeddings sidecar.</li>
+  <li>CLI: <code>novel causality candidates|propose|sweep</code>. Skill reference: <code>skills/novel-ontology/references/causality.md</code>.</li>
+  <li>Rendering: the Story spiral (13) draws every stored link as a lane-routed arc; dialogue-card endpoints project onto their containing spheres.</li>
+</ul>
+
+<h2>Open questions — causality</h2>
+<div class="panel">
+  <ul class="tight oq" style="font-size:14px">
+    <li>Real cross-scene data.<span>Stated honestly: cross-scene arcs and portal arrows have been tested with fixtures only. One real volume's 143 stored links are all intra-scene; another has none. No real-data cross-scene arc has been seen yet.</span></li>
+    <li>Universe timeline faculty.<span>Succession still rides on novel sequence. A universe timeline faculty (explicit/relative time nodes + constraints) is the later build that replaces it (see 11).</span></li>
+    <li>Embedding model for production.<span>Local CPU is the default; whether a user-provided embedding API ever joins the sidecar is undecided.</span></li>
+  </ul>
+</div>
+
+<div class="pager" id="pager"></div>
+<footer>novel-ontology-pi · design by sector · 2026-10-26</footer>
+</div>
+<script src="assets/sector.js"></script>
+<script>
+function resetAll(){document.getElementById('events').innerHTML='';document.getElementById('props').innerHTML='';}
+const steps=[
+ {t:2800,cap:["Two units, three scenes apart","Scene 3's collapse and scene 6's cancellation are both in the universe. Neither scene mentions the other — a scene-local extractor could never link them."],run(){document.getElementById('events').innerHTML='<div class="verdict warn on">Units · <b>旧桥倒塌</b> (scene 3) · <b>夜航停运</b> (scene 6) <span style="color:var(--faint)">uniform units: event = dialogue card</span></div>';}},
+ {t:2800,cap:["Hybrid search nominates, Jev confirms at 0.91","Cypher patterns plus embedding top-32 surface the pair; Jev scores causal 0.91, succession 0.2 — past both bars. The link is proposed, not written."],run(){document.getElementById('events').innerHTML+='<div class="verdict good on">Proposed · <b>旧桥倒塌 —CAUSES→ 夜航停运</b> <span style="color:var(--faint)">causal 0.91 · succession 0.2 · via the shared gate</span></div>';}},
+ {t:2200,cap:["The sweep catches what the block pass missed","At chapter close, the sweep re-checks pairs the per-block pass skipped. A missed pair surfaces there — the same gate, the same bars, no second standard."],run(){document.getElementById('props').innerHTML='<span class="chip">＋ CAUSES ×1 (stored)</span> <span class="chip">＋ chapter-close sweep</span> <span class="chip">＋ drawn on the Story spiral</span>';}},
+];
+runSectorDemo(steps.map(s=>({...s,reset:resetAll})));
+</script>
+</body>
+</html>

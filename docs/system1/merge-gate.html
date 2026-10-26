@@ -18,17 +18,24 @@
   <span class="badge">repo: <code>src/solidifier/merge/</code> · <code>src/digger/processing/blockProcessor.ts</code></span>
   <span class="badge">reviewer: the main agent (System 2)</span>
 </p>
-<p class="sub">The processing model of the whole system. Ingestion rolls <b>block by block</b> —
-chapter, or long block. For each block, sectors 01–08 produce proposals; this sector accumulates
-them into one <b>ChangeSet</b> and holds it at the gate. The <b>main agent</b> — with all its
-memories and capabilities — reviews: <b>approve</b> the merge, <b>hold</b> it, or ask to
-<b>revise part</b> of it. Then the next block rolls, until the novel is done.</p>
+<p class="sub">The processing model of the whole system, and the one gate every faculty
+shares (decision #26). Ingestion rolls <b>block by block</b> — chapter, or long
+block. For each block, sectors 01–08 produce proposals; this sector decomposes
+them into <b>per-field facts</b> — identity, alias, actors, presence, mention,
+location, turn, dialogue-member, relation, state — each with a readable meaning,
+its original evidence, and a revision digest. The <b>main agent</b> — with all its
+memories and capabilities — reviews through one staged protocol:
+<code>novel review show</code> (read the facts) →
+<code>novel review evidence</code> (read the evidence) →
+<code>novel review decide</code> (stage per-fact <b>accept / hold / reject</b> with a
+reason) → <code>novel review apply</code> (publish). <b>Decide only stages; apply
+explicitly publishes.</b> Then the next block rolls, until the novel is done.</p>
 
 <table class="io">
-  <tr><th>Inputs</th><td>All proposals for one block (patches 02–06 + extraction 08), each with confidence + provenance</td></tr>
-  <tr><th>Outputs</th><td>Approved ChangeSets applied via OntologyStore (10) — or held / revised ChangeSets with review notes</td></tr>
-  <tr><th>Depends on</th><td>07 Miniloop engine, 08 Extraction</td></tr>
-  <tr><th>Feeds into</th><td>10 Storage (writes happen only here), then the next block</td></tr>
+  <tr><th>Inputs</th><td>All proposals for one block (patches 02–06 + extraction 08 + post-apply faculties like 08b), each decomposed into facts with confidence + provenance + evidence</td></tr>
+  <tr><th>Outputs</th><td>Staged decisions in the review state + audit history; on apply, only accepted, supported facts materialize via OntologyStore (10) — unreviewed facts stay held</td></tr>
+  <tr><th>Depends on</th><td>07 Miniloop engine, 08 Extraction, 08b Time &amp; place (post-apply), 09b Causality (proposals)</td></tr>
+  <tr><th>Feeds into</th><td>10 Storage (writes happen only here), then the next block; 10a Library &amp; universes (same protocol, other scopes)</td></tr>
 </table>
 
 <h2>Settled principle: every faculty shares one semantic gate</h2>
@@ -47,7 +54,7 @@ memories and capabilities — reviews: <b>approve</b> the merge, <b>hold</b> it,
   approval command to work around that. See <a href="../unified-review.md">the shared contract and compatibility boundaries</a>.</p>
 </div>
 
-<h2>Demo — three blocks, three verdicts</h2>
+<h2>Demo — one block through the staged protocol</h2>
 <div class="panel">
   <div class="caption" id="caption"><span class="stepno">▶</span>The demo plays and loops on its own.</div>
   <div class="progressdots" id="dots"></div>
@@ -56,26 +63,32 @@ memories and capabilities — reviews: <b>approve</b> the merge, <b>hold</b> it,
     <div id="gatearea"></div>
     <p style="color:var(--dim);font-size:13px;margin-bottom:4px">Novel progress — blocks merged:</p>
     <div class="novel-progress"><i id="novelFill"></i></div>
-    <p style="color:var(--faint);font-size:12.5px" id="novelLbl">0 of 3 blocks merged</p>
+    <p style="color:var(--faint);font-size:12.5px" id="novelLbl">0 of 1 block merged — nothing staged yet</p>
   </div>
   <p style="margin-top:12px"><button class="replay" id="replay">↻ Replay</button></p>
 </div>
 
-<h2>The three verdicts</h2>
-<div class="grid three">
-  <div class="card"><h3><span class="stamp" style="color:var(--green)">APPROVE</span></h3>
-    <p>Proposals are applied to the main graph through the OntologyStore. The next block rolls.</p></div>
-  <div class="card"><h3><span class="stamp" style="color:var(--amber)">HOLD</span></h3>
-    <p>Nothing is applied. Processing pauses; the agent explains why and consults the user.</p></div>
-  <div class="card"><h3><span class="stamp" style="color:var(--rose)">REVISE</span></h3>
-    <p>The agent names the parts it doubts; the miniloop re-runs only those parts and returns a revised ChangeSet for the block.</p></div>
+<h2>The four steps — and what each one cannot do</h2>
+<div class="grid two">
+  <div class="card"><h3><span class="stamp" style="color:var(--dim)">SHOW</span></h3>
+    <p>Read the packet's facts in bounded pages: each fact's meaning, its evidence pointers, and the revision digest. Read-only — showing stages nothing and applies nothing.</p></div>
+  <div class="card"><h3><span class="stamp" style="color:var(--dim)">EVIDENCE</span></h3>
+    <p>Read the original evidence behind a fact, paged. A causal accept requires the full assertion set and <b>both endpoints'</b> evidence to have been read — otherwise the fact cannot be accepted, however confident it looks.</p></div>
+  <div class="card"><h3><span class="stamp" style="color:var(--amber)">DECIDE</span></h3>
+    <p>Stage per-fact verdicts — accept, hold, or reject — each with a source-grounded reason, under the packet's revision. Deciding writes review state and audit history only. <b>It publishes nothing.</b></p></div>
+  <div class="card"><h3><span class="stamp" style="color:var(--green)">APPLY</span></h3>
+    <p>Publish the staged decisions: accepted, supported facts materialize; held and rejected facts stay out; unreviewed facts stay held by default. A second apply is rejected — duplicate-apply protection — and a changed revision voids the staged state.</p></div>
 </div>
+<p style="color:var(--dim);font-size:13.5px">The old block verdicts survive as pre-approval tools, not as the protocol:
+<b>hold</b> pauses a packet, and <b>revise</b> names the parts the agent doubts so the
+miniloop re-runs only those parts and returns a revised packet. Neither publishes anything.</p>
 
 <h2>Design details</h2>
 <ul class="tight" style="font-size:14px">
   <li><b>Why an agent behind the gate:</b> the miniloop is fast and local, but it cannot know that a nickname in chapter 30 belongs to a character introduced in chapter 2, or that two similar names are twins. The fast system proposes; the context-rich system decides.</li>
-  <li><b>Enforced in code, not convention:</b> <code>applyChangeSet</code> refuses any ChangeSet whose status is not <code>approved</code>. There is no other code path from proposals to the store.</li>
-  <li><b>The audit trail:</b> every proposal carries block ID, sentence IDs, producing patch, and confidence. Every node in the graph can answer: which block, which sentences, which patch, what confidence, whose approval.</li>
+  <li><b>Enforced in code, not convention:</b> decide writes review state and an append-only audit history — never canon. Apply requires staged decisions <b>under the same revision</b>, evidence coverage for every accepted fact (full assertion set and both endpoints for causal facts), and rejects a second apply. A changed revision voids the staged state. In the scoped Pi host, legacy approval spellings are blocked with an actionable migration error pointing at the staged protocol, and source-less legacy packets fail closed instead of finding a shortcut.</li>
+  <li><b>The audit trail:</b> every proposal carries block ID, sentence IDs, producing patch, and confidence; every decision carries its fact id, verdict, and source-grounded reason in the review state and <code>history.jsonl</code> (private review dir, never in the bundle). Every node in the graph can answer: which block, which sentences, which patch, what confidence, whose approval.</li>
+  <li><b>One gate, three scopes:</b> book, universe and library packets all flow through the same lifecycle — show, evidence, decide, apply — with storage adapters supplying domain validation (causal direction, endpoint and cycle checks; library plan atomicity). A new faculty registers its assertions and validators with the shared gate; it does not get its own approval command (decision #26, enforced: unregistered scopes throw).</li>
   <li><b>A natural end:</b> when the last block the user asked for merges, ingestion is done — the loop terminates on the work, not on a timer.</li>
   <li><b>Review is staged (decided 2026-10-22):</b> before the agent deliberates, System 1 pre-reviews the batch itself. Entity matching is the first stage: code nominates duplicate pairs (shared forms, script-variant folds, containment, near-identical forms), and one batched Jev checklist per batch (same entity? treated as distinct? mere form variant?) routes them — confident pairs arrive as ready merge fixes, only unsettled pairs are raised to the agent as real requests. Duplicates are the known failure mode of extraction; they are settled at the gate, not inside the extractor.</li>
   <li><b>Pointwise before wholesale:</b> small errors are fixed pointwise by the agent over the bundle (<code>novel fix merge|rename|add-form|relate|unrelate|remove-entity|remove-event</code>), each fix audited in <code>maintenance.jsonl</code> with the graph rebuilt after it. A block is never re-run for a typo.</li>
@@ -85,10 +98,11 @@ memories and capabilities — reviews: <b>approve</b> the merge, <b>hold</b> it,
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
   <li><code>src/solidifier/merge/changeset.ts</code> — ChangeSet / ChangeProposal types and lifecycle states.</li>
-  <li><code>src/solidifier/merge/apply.ts</code> — the single apply path, status-checked.</li>
-  <li><code>src/digger/processing/blockProcessor.ts</code> — the roll: section → faculty graph (legacy: miniloop) → review callback → apply / stop / revise. Revisions are surgical (<code>revise.ts</code>, reason required; applied packets refused).</li>
-  <li><b>Shared semantic gate:</b> <code>src/solidifier/merge/review.ts</code> owns the common lifecycle; <code>reviewAdapters.ts</code> supplies book, universe and library storage/domain validation. Proposals decompose into per-field assertions bound to a revision digest; only accepted, supported facts materialize. Historical <code>changeset facts|decide</code> spellings remain compatibility interfaces outside the scoped Pi host.</li>
-  <li><b>EM composition (decision #18):</b> birth-time identity output reaches the gate as ordinary identity facts; EM merges run post-apply through the audited fix path, never as gate proposals. Identity now has its own pages: <a href="em-at-birth.html">08a EM at birth</a> (Digger) and <a href="em-global.html">09a EM across the novel</a> (Solidifier).</li>
+  <li><code>src/solidifier/merge/apply.ts</code> — the single apply path; it runs only on staged, revision-matched decisions.</li>
+  <li><code>src/digger/processing/blockProcessor.ts</code> — the roll: section → faculty graph (legacy: miniloop) → staged review callback → apply / stop / revise. Revisions are surgical (<code>revise.ts</code>, reason required; applied packets refused); revise and hold remain available as pre-approval correction tools.</li>
+  <li><b>Shared semantic gate:</b> <code>src/solidifier/merge/review.ts</code> owns the common lifecycle; <code>reviewAdapters.ts</code> supplies book, universe and library storage/domain validation; <code>reviewTypes.ts</code> / <code>reviewBook.ts</code> / <code>approve.ts</code> carry the fact envelope and the book apply helper; <code>commands/extract/reviewCommands.ts</code> wires the <code>novel review show|evidence|decide|apply</code> CLI. Proposals decompose into per-field assertions bound to a revision digest; only accepted, supported facts materialize. Historical <code>changeset facts|decide</code> spellings remain compatibility interfaces outside the scoped Pi host — and even there, source-less packets fail closed. Scoped-host enforcement lives in <code>tools/pi-review/guard.mjs</code> + <code>run.mjs</code> + <code>shared-review.mjs</code>.</li>
+  <li><b>Known gaps, not hidden:</b> a crashed review command leaves its lock dir behind and later commands fail until it is manually removed; apply is not atomic across recording decisions and publishing them (re-apply recovers, but the recovery path is undocumented); library duplicate protection rests on the state file rather than the adapter flag.</li>
+  <li><b>EM composition (decision #18):</b> birth-time identity output reaches the gate as ordinary identity facts; EM merges run post-apply through the audited fix path, never as gate proposals. Identity now has its own pages: <a href="em-at-birth.html">08a EM at birth</a> (Digger) and <a href="em-global.html">09a EM across the novel</a> (Solidifier). Shared gate: decisions #17 + #26.</li>
   <li>The Skill teaches the agent its reviewer duties: <code>skills/novel-ontology/SKILL.md</code>.</li>
   <li>Review tooling (2026-10-22): <code>src/solidifier/matching/entityMatch.ts</code> + <code>novel match</code> — duplicate nomination + the System 1 batch checklist; <code>src/solidifier/maintenance/fixes.ts</code> + <code>novel fix …</code> — audited pointwise repairs with graph rebuild; <code>src/solidifier/maintenance/corrections.ts</code> + <code>novel recall</code> — pinned decisions honored on a single-block re-run.</li>
 </ul>
@@ -96,8 +110,9 @@ memories and capabilities — reviews: <b>approve</b> the merge, <b>hold</b> it,
 <h2>Open questions — the merge gate</h2>
 <div class="panel">
   <ul class="tight oq" style="font-size:14px">
-    <li>Revision granularity.<span>When the agent sends a ChangeSet back, what is the unit — a single proposal, a scene, or a patch's whole output for the block? The skeleton re-runs the block; finer units need per-proposal patch provenance to pay off.</span></li>
-    <li>Review presentation.<span>How should a ChangeSet be summarized for review — counts by kind, lowest-confidence first, new entities spotlighted? The agent reviews faster with the right digest; the user spot-checks with the same view.</span></li>
+    <li>Revision granularity — <span class="status done">✓ decided 2026-10-26</span><span>Decided (decision #26): the unit is the per-field fact, bound to a revision digest over packet + source + canonical context. A revision change voids staged state; the remaining question is review presentation at scale (bounded pages of 20), not granularity.</span></li>
+    <li>Review presentation.<span>How should a packet be summarized for review — counts by kind, lowest-confidence first, new entities spotlighted? The agent reviews faster with the right digest; the user spot-checks with the same view. Bounded paging (20 facts) is the current shape.</span></li>
+    <li>Lock recovery.<span>A crashed review command leaves its lock dir behind. Timeout, stale-lock detection, or a documented recovery command — one of the three is owed.</span></li>
     <li>Auto-approval envelope.<span>Should very high-confidence, low-risk proposal classes (e.g. PRESENT_IN at 0.97) ever skip review in bulk, with the agent auditing samples? Speed vs. the safety property.</span></li>
     <li>Cross-block consistency checks.<span>Before approving block N, should the gate run standing queries — duplicate-name suspects, state contradictions — against everything merged so far?</span></li>
   </ul>
@@ -109,14 +124,15 @@ memories and capabilities — reviews: <b>approve</b> the merge, <b>hold</b> it,
 <script src="assets/sector.js"></script>
 <script>
 const blocks=document.getElementById('blocks');
-blocks.innerHTML='<span class="chip" id="bk0">Chapter 1</span> <span class="chip" id="bk1">Chapter 2</span> <span class="chip" id="bk2">Chapter 3</span>';
+blocks.innerHTML='<span class="chip" id="bk0">Chapter 1 · packet cs_b0001 · revision 9f2c…</span>';
 let merged=0;
-function setProgress(){document.getElementById('novelFill').style.width=(merged/3*100)+'%';document.getElementById('novelLbl').textContent=merged+' of 3 blocks merged';}
-function resetAll(){merged=0;setProgress();document.getElementById('gatearea').innerHTML='';[0,1,2].forEach(i=>document.getElementById('bk'+i).style.borderColor='');}
+function setProgress(){document.getElementById('novelFill').style.width=(merged/1*100)+'%';document.getElementById('novelLbl').textContent=merged ? '1 of 1 block merged — accepted facts only' : '0 of 1 block merged — nothing staged yet';}
+function resetAll(){merged=0;setProgress();document.getElementById('gatearea').innerHTML='';document.getElementById('bk0').style.borderColor='';}
 const steps=[
- {t:3000,cap:["Block 1: a clean ChangeSet","18 proposals — 2 new characters, 9 events, all confidences ≥ 0.8. The main agent approves; the merge applies; block 2 rolls."],run(){document.getElementById('gatearea').innerHTML='<div class="verdict good on">ChangeSet cs_b0001 · 18 proposals · <span class="stamp" style="color:var(--green)">APPROVED</span></div>';document.getElementById('bk0').style.borderColor='var(--green)';merged=1;setProgress();}},
- {t:3400,cap:["Block 2: the agent doubts one part","A nickname proposal looks wrong — it would attach 黑子 as an alias of the wrong character. Verdict: REVISE, scoped to that proposal. The miniloop re-runs just the name patch for those sentences and returns a corrected ChangeSet, which is approved."],run(){document.getElementById('gatearea').innerHTML='<div class="verdict bad on">ChangeSet cs_b0002 · <span class="stamp" style="color:var(--rose)">REVISE</span> · note: “alias 黑子 — check against ch.1 cast”</div>';document.getElementById('bk1').style.borderColor='var(--amber)';}},
- {t:3000,cap:["Block 2 revised → approved; block 3 held","The corrected alias merges. In block 3, a new character's identity contradicts an earlier chapter — the agent HOLDS and asks the user. Nothing from block 3 touches the graph."],run(){document.getElementById('gatearea').innerHTML='<div class="verdict good on">ChangeSet cs_b0002 (rev. 2) · <span class="stamp" style="color:var(--green)">APPROVED</span></div><div class="verdict warn on">ChangeSet cs_b0003 · <span class="stamp" style="color:var(--amber)">HELD</span> · identity conflict — user consulted</div>';document.getElementById('bk1').style.borderColor='var(--green)';document.getElementById('bk2').style.borderColor='var(--amber)';merged=2;setProgress();}},
+ {t:3000,cap:["SHOW: three facts, one revision","18 proposals decompose into facts. Three are shown here: a new character (identity), an event with its actors, and a causal link. Each carries its meaning and its evidence pointers — and the packet's revision digest."],run(){document.getElementById('gatearea').innerHTML='<div class="verdict good on">fact_01 · identity · “new character: the night-ferry keeper” · evidence: s0011</div><div class="verdict good on">fact_02 · event · “the keeper warns the harbor” · actors: keeper, 林岚 · evidence: s0012–s0013</div><div class="verdict good on">fact_03 · causal · “storm damage —CAUSES→ ferry cancelled” · endpoints: evt_…41, evt_…42</div>';}},
+ {t:3400,cap:["EVIDENCE: both endpoints before any causal accept","The agent pages the evidence for fact_03 — the storm passage and the cancellation notice. Until both endpoints' evidence has been read, that fact cannot be accepted, however confident it looks."],run(){document.getElementById('gatearea').innerHTML+='<div class="verdict warn on">evidence read · fact_03 endpoints: storm passage ✓ · cancellation notice ✓ — acceptance now possible</div>';}},
+ {t:3000,cap:["DECIDE: staged, per fact — and nothing publishes","Verdicts stage with reasons: accept fact_01 and fact_03, hold fact_02 (an actor's identity is uncertain). The graph has not changed. Deciding wrote review state and audit history only."],run(){document.getElementById('gatearea').innerHTML+='<div class="verdict warn on">STAGED · fact_01 accept · fact_03 accept · fact_02 hold (“actor identity uncertain”) · graph unchanged</div>';document.getElementById('bk0').style.borderColor='var(--amber)';}},
+ {t:3000,cap:["APPLY: accepted facts only, then the block rolls","Apply publishes the staged decisions under the same revision: the character and the causal link materialize; the held event stays out, and the unreviewed remainder stays held by default. A second apply is rejected."],run(){document.getElementById('gatearea').innerHTML+='<div class="verdict good on">APPLIED · fact_01 ✓ · fact_03 ✓ · fact_02 held out · second apply → rejected (already applied)</div>';document.getElementById('bk0').style.borderColor='var(--green)';merged=1;setProgress();}},
 ];
 runSectorDemo(steps.map(s=>({...s,reset:resetAll})));
 </script>

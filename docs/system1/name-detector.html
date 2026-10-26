@@ -67,6 +67,7 @@ Then the <b>decision model</b> judges the leftovers: is this candidate a <b>new 
   <li><code>scanKnownNames(ctx)</code> — deterministic scan over <code>ctx.knownEntities</code> name forms; covered by the miniloop test (finds 御坂美琴 with no model call).</li>
   <li><code>nameDetector</code> patch — builds the two question types per candidate from <code>ctx.accepted.nameCandidates</code>; interprets answers into proposals / escalations.</li>
   <li>Current path (decisions #5, #18, #19): a <b>hybrid scan</b> against the cumulative per-novel name registry (zero-context LLM call only for genuinely new names), folded through the language map, with descriptive candidates and fragments resolved <b>at birth</b> under one strict Jev round. The patch questions above are the legacy miniloop path.</li>
+  <li>Label-based identity (decisions #24, #26): the detector's Jev answers now carry <b>readable labels, not entity ids</b> — code resolves labels to ids, and ambiguity <b>fails closed</b> instead of guessing. The reviewer corrects identity through label-based semantic replacements at the shared gate (09), which is also what makes cross-script pairs reviewable even though they still cannot fold automatically (see open question below).</li>
 </ul>
 
 <h2>Open questions — name detection</h2>

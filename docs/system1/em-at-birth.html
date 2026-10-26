@@ -59,7 +59,7 @@ first layer, and it runs inside the Digger, while the block is still being dug.<
   <li><code>src/digger/extraction/extraction.ts</code> — extraction mints through <code>mintEntity</code> with aliases attached; descriptive candidates arrive flagged (<code>descriptive: boolean</code>) in the scene result, and alias proposals (<code>add_alias</code>) are separated from new-entity proposals before the ChangeSet is built.</li>
   <li><code>src/solidifier/matching/fragmentMatch.ts</code> — <code>containmentTargets</code>: the variant-folded containment trigger for fragment candidates.</li>
   <li><code>src/solidifier/matching/entityMatch.ts</code> — <code>CONFIDENT_THRESHOLD = 0.85</code>: the attach bar for the strict round. The <code>formToId</code> registry is keyed by the language-map fold, so variant spellings resolve at ingest instead of minting duplicates.</li>
-  <li>Birth output reaches the reviewer as ordinary identity facts under the semantic fact gate (sector 09, decision #17) — it is not a side channel around the gate.</li>
+  <li>Birth output reaches the reviewer as ordinary identity facts under the shared staged review gate (sector 09, decisions #17 + #26) — it is not a side channel around the gate. Identity facts there show readable labels, and the reviewer can apply label-based semantic replacements instead of editing ids by hand.</li>
 </ul>
 
 <h2>Open questions — EM at birth</h2>

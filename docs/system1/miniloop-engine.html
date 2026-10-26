@@ -67,6 +67,7 @@ everything into the block's ChangeSet. It is the "autostep" in System 1's name.<
 <ul class="tight" style="font-size:14px">
   <li><code>src/digger/autostep/miniloop.ts</code> — <code>Miniloop.runBlock()</code>: window loop → patch loop → accumulate. This is the <b>legacy path</b>; the default live path is the dependency-aware <code>FacultyGraph</code> (decision #16) in <code>src/digger/processing/</code> — Jev keeps segmentation and dialogue structure, scene faculties stream per closed scene under one bounded pool, bounded S2 adjudication for uncertain calls. The miniloop stays available via <code>facultyGraph: false</code>.</li>
   <li><code>src/ground/connectors/jev.ts</code> — <code>DecisionModel</code> interface, <code>JevClient</code> (real System One wire format, pinned model, key resolved via the CLI secure store — env → store → env-indirection), <code>MockDecisionModel</code> for tests.</li>
+  <li><b>Post-apply faculties:</b> not every faculty runs before the gate. After the main ChangeSet applies, the time-place faculty (08b) runs over the new scenes and sends its own proposals through the shared gate (09) as a separate pending-review ChangeSet — faculties are no longer only pre-gate work.</li>
   <li>Patch registry order lives in <code>src/digger/autostep/patches/index.ts</code>.</li>
 </ul>
 

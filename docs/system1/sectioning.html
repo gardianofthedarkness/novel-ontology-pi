@@ -27,7 +27,7 @@ sectioning is the provenance anchor for the entire ontology.</p>
   <tr><th>Inputs</th><td>Raw novel file (EPUB / TXT), in any language</td></tr>
   <tr><th>Outputs</th><td>Blocks → sentences: <code>{ id, index, paragraphIndex, text, startOffset, endOffset }</code></td></tr>
   <tr><th>Depends on</th><td>Nothing — first sector in the pipeline</td></tr>
-  <tr><th>Feeds into</th><td>Every patch (02–06), the miniloop engine (07), extraction (08)</td></tr>
+  <tr><th>Feeds into</th><td>Every patch (02–06), the miniloop engine (07), extraction (08), album anchoring (intake pre-process)</td></tr>
 </table>
 
 <h2>Demo — a block segregates itself</h2>
@@ -50,6 +50,7 @@ sectioning is the provenance anchor for the entire ontology.</p>
   <li><b>Stable IDs:</b> <code>b0007_s0003</code> = block 7, sentence 3. IDs never change after assignment, so a ChangeSet proposal can cite a sentence forever.</li>
   <li><b>Offsets are evidence:</b> every sentence knows its exact character range in the source block, so any ontology node can be traced back to the literal text that produced it.</li>
   <li><b>Blocks are the processing unit:</b> ingestion rolls block by block (see sector 09); a block is one chapter when chapters exist, otherwise a long slice of text.</li>
+  <li><b>Sentence IDs anchor pictures too:</b> the album intake pre-process (PR #40) anchors each EPUB illustration to a sentence identity carried through sectioning — never to a raw character offset — so a picture survives re-sectioning exactly like a proposal does. Pictures are then positioned between neighboring scenes at render (sector 13), not assigned to a scene.</li>
 </ul>
 
 <h2>Implementation</h2>

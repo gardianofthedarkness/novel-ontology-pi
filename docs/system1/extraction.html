@@ -25,7 +25,7 @@ in the novel's original language (decision #7 — English is for process, not co
 
 <table class="io">
   <tr><th>Inputs</th><td>Structured scenes (spans, present cast, turns) + relevant graph context (who these characters are so far)</td></tr>
-  <tr><th>Outputs</th><td>Proposals appended to the block's ChangeSet: <code>create_event</code>, <code>add_relation</code> (CAUSES…), <code>set_state_change</code>, entity updates</td></tr>
+  <tr><th>Outputs</th><td>Proposals appended to the block's ChangeSet: <code>create_event</code>, <code>add_relation</code>, <code>set_state_change</code>, entity updates — but <b>not</b> CAUSES links (see below)</td></tr>
   <tr><th>Depends on</th><td>02–07 (structure), 10 Storage (context reads)</td></tr>
   <tr><th>Feeds into</th><td>09 Merge gate (same ChangeSet as the patches' proposals)</td></tr>
 </table>
@@ -48,8 +48,8 @@ in the novel's original language (decision #7 — English is for process, not co
   <li><b>Per scene, not per chapter:</b> the old system extracted 3–5 events per raw chapter and lost the thread. A scene is small, cast-bounded, and already structured — extraction quality follows.</li>
   <li><b>Original language first:</b> event summaries stay in the novel's language (decision #7); the scene's optional <code>summary</code> field is likewise original-language (decision #16). English appears only in process, never in content shown to the user.</li>
   <li><b>State is proposed as deltas:</b> "Mikoto: embarrassment +0.3, knowledge += patrol schedule" — state changes are proposals like everything else; the canonical state is always a deterministic fold of merged events (sector 10, decision #12).</li>
-  <li><b>Causality is explicit:</b> CAUSES edges are first-class proposals with confidence, not list properties on nodes — the legacy design's known weakness, fixed here.</li>
-  <li><b>Same gate:</b> extraction proposals join the patches' proposals in one ChangeSet per block. One review, one merge.</li>
+  <li><b>Causality left this sector on purpose:</b> CAUSES edges are first-class proposals with confidence, not list properties on nodes — but they are no longer extraction's proposals. The extraction <code>causes</code> field was <b>removed</b> (PR #50, decision #23): it was scene-local, and scene-local causes are exactly what cross-scene causality is not. Extraction proposes events; the causality faculty (09b) proposes the links, across scenes, through the same gate.</li>
+  <li><b>Same gate:</b> extraction proposals join the patches' proposals in one ChangeSet per block, reviewed through the shared staged protocol (09) — show, evidence, decide, apply. One review, one merge.</li>
 </ul>
 
 <h2>Implementation</h2>
@@ -58,7 +58,7 @@ in the novel's original language (decision #7 — English is for process, not co
   <li><code>src/digger/extraction/constraints.ts</code> — the constraints channel: the reviewing agent pins corrections that extraction must honor on re-runs.</li>
   <li>Entities are minted through the <code>formToId</code> registry over the language-map fold (decisions #19, #18): descriptive candidates and name fragments resolve <b>at birth</b> under one strict Jev round instead of minting duplicates.</li>
   <li><code>WorkModel</code> interface in <code>src/ground/connectors/llm.ts</code> — any user-provided LLM API works as the work model.</li>
-  <li>Output validated against schema v1 (<code>src/ground/ontology/types.ts</code>) before a proposal is admitted to the ChangeSet; extraction proposals reach the reviewer through the semantic fact gate (sector 09, decision #17).</li>
+  <li>Output validated against schema v1 (<code>src/ground/ontology/types.ts</code>) before a proposal is admitted to the ChangeSet; extraction proposals reach the reviewer through the shared staged review gate (sector 09, decisions #17 + #26).</li>
 </ul>
 
 <h2>Open questions — extraction</h2>
@@ -66,7 +66,7 @@ in the novel's original language (decision #7 — English is for process, not co
   <ul class="tight oq" style="font-size:14px">
     <li>Event granularity.<span>How many events per scene is right? Too few and causality thins; too many and the graph drowns in trivia. The event-worthiness candidate patch (Jev score) could pre-filter — or extraction decides alone.</span></li>
     <li>State dimensions.<span>Decided (decision #10): six dimensions — emotion, knowledge, goals, relationships, location, possessions — folded deterministically; stochastic only when simulating forward from a fork.</span></li>
-    <li>Causality: propose or originate?<span>Should the causal-candidate patch pre-propose CAUSES edges for extraction to confirm, or does extraction originate them? Split of labor between Jev and the LLM is undecided.</span></li>
+    <li>Causality: propose or originate? — <span class="status done">✓ decided 2026-10-25</span><span>Decided (decision #23): neither the causal-candidate patch nor extraction originates cross-scene links. The causality faculty (09b) nominates pairs by hybrid search and Jev confirms them; extraction's <code>causes</code> field is removed.</span></li>
     <li>Summary fidelity.<span>Settled in part (decisions #7, #16): summaries stay in the novel's language — no translation step to spot-check. The open part is self-reported confidence vs gate spot-checks.</span></li>
   </ul>
 </div>
@@ -79,8 +79,8 @@ in the novel's original language (decision #7 — English is for process, not co
 function resetAll(){document.getElementById('events').innerHTML='';document.getElementById('props').innerHTML='';}
 const steps=[
  {t:2800,cap:["The LLM reads structure, not raw text","The scene arrives pre-digested: cast, turns, spans. Its job is only meaning — what happened, who was involved, what changed."],run(){document.getElementById('events').innerHTML='<div class="verdict good on">Event evt_…41 · <b>arrival</b> — Uiharu enters the café, late, apologizing. <span style="color:var(--faint)">actors: Uiharu · evidence: s0004–s0005</span></div>';}},
- {t:2800,cap:["Events, state deltas, causal candidates","A second event (the apology lands, the group is complete) and a state delta join it. Everything is a proposal with confidence and evidence attached."],run(){document.getElementById('events').innerHTML+='<div class="verdict good on">Event evt_…42 · <b>reunion</b> — the group is complete; conversation can begin. <span style="color:var(--faint)">CAUSES ← evt_…41</span></div><div class="verdict warn on">State Δ · Mikoto: relief +0.2 · Uiharu: embarrassment +0.4</div>';}},
- {t:2200,cap:["Into the same ChangeSet","Extraction proposals append to the patches' proposals for this block — one review at the merge gate covers both."],run(){document.getElementById('props').innerHTML='<span class="chip">＋ create_event ×2</span> <span class="chip">＋ add_relation CAUSES ×1</span> <span class="chip">＋ set_state_change ×2</span>';}},
+ {t:2800,cap:["Events, state deltas — and a causal candidate for 09b","A second event (the apology lands, the group is complete) and a state delta join it. Everything is a proposal with confidence and evidence attached. The causal link itself is not extraction's to make — it is a candidate the causality faculty will judge."],run(){document.getElementById('events').innerHTML+='<div class="verdict good on">Event evt_…42 · <b>reunion</b> — the group is complete; conversation can begin. <span style="color:var(--faint)">candidate cause: evt_…41 — judged by 09b</span></div><div class="verdict warn on">State Δ · Mikoto: relief +0.2 · Uiharu: embarrassment +0.4</div>';}},
+ {t:2200,cap:["Into the same ChangeSet","Extraction proposals append to the patches' proposals for this block — one review at the merge gate covers both."],run(){document.getElementById('props').innerHTML='<span class="chip">＋ create_event ×2</span> <span class="chip">＋ set_state_change ×2</span>';}},
 ];
 runSectorDemo(steps.map(s=>({...s,reset:resetAll})));
 </script>

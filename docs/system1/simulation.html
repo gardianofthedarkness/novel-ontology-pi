@@ -62,7 +62,7 @@ different people.</p>
 <h2>Implementation</h2>
 <ul class="tight" style="font-size:14px">
   <li>State fold: <code>OntologyStore.getStateAt()</code> (10) over the timeline prefix (11).</li>
-  <li>Generation: the work LLM via <code>src/ground/connectors/llm.ts</code>, prompted with folded state + retrieved turns + scene context. No hybrid vector search exists — embeddings are deferred (decision #4); retrieval today is the graph/Cypher layer.</li>
+  <li>Generation: the work LLM via <code>src/ground/connectors/llm.ts</code>, prompted with folded state + retrieved turns + scene context. Retrieval today is the graph/Cypher layer (the causality-only embedding hybrid in 09b is a separate faculty, not simulation retrieval; embeddings stay deferred generally, decision #4).</li>
   <li>CLI surface: <code>novel simulate &lt;character&gt; [--branch &lt;id&gt;] [--at &lt;event-id&gt;]</code> — a design sketch, not a shipped command; the simulation CLI group is kept empty (decision #21). The form factor is the Pi Skill + CLI, not Discord (the legacy bot).</li>
 </ul>
 
