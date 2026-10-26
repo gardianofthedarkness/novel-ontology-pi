@@ -6,6 +6,7 @@ import type { Entity } from "../../ground/ontology/types.js";
 import { loadChangeSet, saveChangeSet } from "./changesetStore.js";
 import type { ChangeSet } from "./changeset.js";
 import { digest, factEvidence, materializeSemantic, semanticFacts, semanticRevision, validateStructure, type FactDecision } from "./semantic.js";
+import { normalizeFactDecisions, semanticIdentityCodec } from "./semanticIdentity.js";
 
 export async function semanticContext(novelDir: string) {
   const store = new BundleStore(join(novelDir, "ontology"));
@@ -29,6 +30,7 @@ export async function semanticPage(novelDir: string, id: string, options: { offs
   const context = await semanticContext(novelDir);
   const revision = semanticRevision(changeset, changeset.status === "approved" ? changeset.semanticReview?.contextDigest : digest(context));
   const { entities } = context;
+  const identities = semanticIdentityCodec(changeset, entities);
   const names = new Map(entities.map(entity => [entity.id, entity.names.map(name => name.text)]));
   for (const proposal of changeset.proposals) if (proposal.kind === "upsert_entity") names.set((proposal.payload as Entity).id, (proposal.payload as Entity).names.map(name => name.text));
   const decisions = changeset.semanticReview?.revision === revision ? changeset.semanticReview.decisions : [];
@@ -40,7 +42,9 @@ export async function semanticPage(novelDir: string, id: string, options: { offs
   if (options.factId) {
     const fact = facts.find(fact => fact.id === options.factId);
     if (!fact) throw new Error("Unknown semantic fact");
-    return { ...base, factId: fact.id, materialization: materialization(fact.id), ...factEvidence(fact, changeset.reviewSource!, options.offset, options.limit) };
+    const decision = decisions.find(entry => entry.factId === fact.id);
+    const value = decision && "replacement" in decision ? decision.replacement : fact.value;
+    return { ...base, factId: fact.id, field: fact.field, value, meaning: identities.meaning(fact, value), materialization: materialization(fact.id), ...factEvidence(fact, changeset.reviewSource!, options.offset, options.limit) };
   }
   const offset = options.offset ?? 0;
   const limit = options.limit ?? 20;
@@ -60,7 +64,7 @@ export async function semanticPage(novelDir: string, id: string, options: { offs
       return { id: event.id, eventType: event.eventType, derivedSummary: event.summaryEn };
     });
     const canonicalIdentity = fact.field === "identity" ? entities.find(entity => entity.id === (fact.value as Entity).id) : undefined;
-    const row = { id: fact.id, field: fact.field, value: reviewedValue, ...(fact.cardId ? { cardId: fact.cardId, candidateOnly: fact.candidateOnly } : {}), reviewed: !!decision, ...(decision && "replacement" in decision ? { originalCandidate: fact.value } : {}), canonicalIdentity,
+    const row = { id: fact.id, field: fact.field, value: reviewedValue, meaning: identities.meaning(fact, reviewedValue), ...(fact.cardId ? { cardId: fact.cardId, candidateOnly: fact.candidateOnly } : {}), reviewed: !!decision, ...(decision && "replacement" in decision ? { originalCandidate: fact.value } : {}), canonicalIdentity,
       sourceRange: { first: fact.sentenceIds[0] ?? null, last: fact.sentenceIds.at(-1) ?? null, count: fact.sentenceIds.length },
       eventIds: events.map(event => event.id), evidenceIds: evidence.sentences.map(sentence => sentence.id), evidencePage: evidence.page,
       verdict: decision?.verdict ?? "hold", materialization: materialization(fact.id) };
@@ -83,7 +87,7 @@ export async function decideFacts(novelDir: string, id: string, revision: string
   const contextDigest = digest(context);
   if (revision !== semanticRevision(changeset, contextDigest)) throw new Error("Stale semantic revision or canonical context; read current facts");
   const prior = changeset.semanticReview?.revision === revision && changeset.semanticReview.contextDigest === contextDigest ? changeset.semanticReview.decisions : [];
-  const updates = value as FactDecision[];
+  const updates = normalizeFactDecisions(changeset, context.entities, value);
   if (new Set(updates.map(decision => decision?.factId)).size !== updates.length) throw new Error("Duplicate decisions in batch");
   const merged = new Map(prior.map(decision => [decision.factId, decision]));
   updates.forEach(decision => {

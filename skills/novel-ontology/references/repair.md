@@ -1,6 +1,17 @@
 # Pending repair and recall
 
-These bulk edits are for legacy packets only. Semantic packets use targeted
+If `facts` fails with `Duplicate proposal ids`, use this metadata-only repair:
+
+`novel changeset revise <dir> <id> --edits '{"rekeyDuplicateIds":true}' --reason '<structural defect>'`
+
+This is the sole semantic-packet exception to bulk-revision rejection. It
+renames all colliding proposal IDs, preserves every payload/source/provenance
+and their order, archives the old packet, clears stale decisions and leaves
+the packet held. No dropping, merging or choosing between facts; no extraction
+or model call. Re-read the repaired `facts` and original evidence before review.
+Never use it on an applied packet or combine it with other edits.
+
+Payload-changing bulk edits below are for legacy packets only. Semantic packets use targeted
 `facts` / `decide` instead; bulk revision is rejected to protect speakers.
 For a legacy packet, read every source line and every proposal/note page,
 including after each revision, before approval. Do not retrofit an old
@@ -29,6 +40,9 @@ For an upstream cascade, pin a source-verified correction, then recall:
 `novel fix correct <dir> --block <block-id> --key extraction:constraints --value '<JSON>' --reason '<reason>'`
 
 `novel recall <dir> <block-id>`
+
+`recall` is a top-level command, not `novel changeset recall` or `reject`.
+For ID-only corruption, prefer the lossless repair above rather than a paid recall.
 
 Constraint fields: `distinctNames` (groups of DIFFERENT identities),
 `rejectCharacterNames` (unsupported placeholders), `instructions`

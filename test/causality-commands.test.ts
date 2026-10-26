@@ -20,6 +20,8 @@ import { listChangeSets, setChangeSetStatus } from "../src/solidifier/merge/chan
 import { applyChangeSet } from "../src/solidifier/merge/apply.js";
 import { BundleStore } from "../src/ground/connectors/bundle.js";
 import type { Entity, OntEvent, Relation, Scene } from "../src/ground/ontology/types.js";
+import { checkCausalLinks } from "../src/solidifier/causality/checklist.js";
+import { loadCausalityUniverse } from "../src/solidifier/causality/units.js";
 
 const entities: Entity[] = [
   { id: "char_a", kind: "Character", names: [{ text: "A", lang: "", kind: "canonical" }], properties: {}, confidence: 1 },
@@ -92,6 +94,36 @@ const stubDecisions: DecisionModel = {
       value: question.key.startsWith("causal:") ? 0.95 : 0.1,
     })),
 };
+
+test("causal checklist fails closed on missing, duplicate, and invalid veto scores", async context => {
+  const parent = await mkdtemp(join(tmpdir(), "causality-veto-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const dir = await writeNovelDir(parent);
+  const universe = await loadCausalityUniverse(dir);
+  const candidates = (await listCausalityCandidates(dir, { env: {}, limit: 1 })).candidates;
+  for (const veto of [undefined, Number.NaN, Number.POSITIVE_INFINITY, -1, 1.1]) {
+    const decisions: DecisionModel = { modelId: "invalid-stub", decide: async () => [{ key: "causal:0", value: 0.99 }, ...(veto === undefined ? [] : [{ key: "succession:0", value: veto }])] };
+    assert.equal((await checkCausalLinks(decisions, candidates, universe))[0].verdict, "uncertain");
+  }
+  const duplicate: DecisionModel = { modelId: "duplicate-stub", decide: async () => [{ key: "causal:0", value: 0.99 }, { key: "succession:0", value: 0.1 }, { key: "succession:0", value: 0.9 }] };
+  assert.equal((await checkCausalLinks(duplicate, candidates, universe))[0].verdict, "uncertain");
+});
+
+test("bounded sweep sends only its nominated budget and does not claim a full sweep", async context => {
+  const parent = await mkdtemp(join(tmpdir(), "causality-bounded-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const dir = await writeNovelDir(parent);
+  await writeFile(join(dir, "ontology", "causality.json"), JSON.stringify({ sweepPending: true }));
+  let questionsSent = 0;
+  const decisions: DecisionModel = { modelId: "bounded-stub", decide: async (state, questions) => { questionsSent += questions.length; return stubDecisions.decide(state, questions); } };
+  const result = await runCausalitySweep(dir, { env: {}, limit: 1, decisions });
+  assert.equal(result.nominated, 1);
+  assert.equal(questionsSent, 2);
+  assert.equal(JSON.parse(await readFile(join(dir, "ontology", "causality.json"), "utf8")).sweepPending, true);
+  await assert.rejects(() => runCausalitySweep(dir, { env: {}, limit: 0, decisions }), /1.*500/);
+  await assert.rejects(() => listCausalityCandidates(dir, { env: {}, chapterIndex: -1 }), /Chapter/);
+  await assert.rejects(() => listCausalityCandidates(dir, { env: {}, limit: 501 }), /limit/);
+});
 
 test("causality candidates: graph-only listing without an embedder, unit filter works", async (context) => {
   const parent = await mkdtemp(join(tmpdir(), "causality-cmd-cand-"));

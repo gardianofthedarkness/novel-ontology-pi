@@ -69,19 +69,25 @@ export async function checkCausalLinks(
       criteria: "Answer yes when the pair is only succession, topic overlap, or coincidence.",
     },
   ]);
+  const timelineRule = universe.units.some(unit => unit.origin)
+    ? "Cross-file story time is UNKNOWN unless the original passages establish direction. Reading order, filenames, chapter indices and publication order do NOT establish story time. Name overlap is a nomination hint, NOT confirmed entity identity. Reject unsupported direction/identity; succession, correlation and shared names alone are NOT causation."
+    : "A cause must precede its effect on the novel sequence, and succession, correlation, or shared topic alone is NOT causation.";
   const answers = await decisions.decide(
-    `Causality checklist. Judge each nominated pair on direct textual support and temporal consistency: a cause must precede its effect on the novel sequence, and succession, correlation, or shared topic alone is NOT causation. Score honestly; contradictory pairs are held, not proposed.\n\n${dossier}`,
+    `Causality checklist. Judge each nominated pair on direct textual support and temporal consistency: ${timelineRule} Score honestly; contradictory pairs are held, not proposed.\n\n${dossier}`,
     questions,
   );
-  const scoreOf = (key: string): number => {
-    const answer = answers.find((entry) => entry.key === key);
-    return typeof answer?.value === "number" ? answer.value : 0;
+  const scoreOf = (key: string): number | null => {
+    const matching = answers.filter((entry) => entry.key === key);
+    const answer = matching.length === 1 ? matching[0] : undefined;
+    return typeof answer?.value === "number" && Number.isFinite(answer.value) && answer.value >= 0 && answer.value <= 1 ? answer.value : null;
   };
   return candidates.map((candidate, index) => {
-    const causalScore = scoreOf(`causal:${index}`);
-    const successionScore = scoreOf(`succession:${index}`);
+    const causal = scoreOf(`causal:${index}`);
+    const succession = scoreOf(`succession:${index}`);
+    const causalScore = causal ?? 0;
+    const successionScore = succession ?? 1;
     const verdict: CausalVerdict["verdict"] =
-      causalScore >= CAUSALITY_THRESHOLD && successionScore <= SUCCESSION_VETO
+      causal === null || succession === null ? "uncertain" : causalScore >= CAUSALITY_THRESHOLD && successionScore <= SUCCESSION_VETO
         ? "confident"
         : causalScore >= CAUSALITY_UNCERTAIN_FLOOR
           ? "uncertain"

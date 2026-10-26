@@ -5,8 +5,10 @@ import { BundleStore } from "../../ground/connectors/bundle.js";
 import type { Entity, OntEvent, Scene, Relation } from "../../ground/ontology/types.js";
 import { appendAudit } from "../maintenance/fixes.js";
 import { loadChangeSet, saveChangeSet } from "./changesetStore.js";
+import { rekeyDuplicateProposalIds } from "./proposalIds.js";
 
 export interface ProposalRevision {
+  rekeyDuplicateIds?: boolean;
   dropProposalIds?: string[];
   removeEntityIds?: string[];
   sanitizeTypes?: boolean;
@@ -18,22 +20,38 @@ export async function reviseProposals(novelDir: string, id: string, value: unkno
   if (!reason.trim()) throw new Error("A source-grounded revision reason is required.");
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Revision must be a JSON object.");
   const edits = value as ProposalRevision;
-  if (Object.keys(edits).some((key) => !["dropProposalIds", "removeEntityIds", "sanitizeTypes", "retypeEntities", "mentionedOnlyEntityIds"].includes(key))) throw new Error("Unsupported revision field.");
+  if (Object.keys(edits).some((key) => !["rekeyDuplicateIds", "dropProposalIds", "removeEntityIds", "sanitizeTypes", "retypeEntities", "mentionedOnlyEntityIds"].includes(key))) throw new Error("Unsupported revision field.");
+  if (edits.rekeyDuplicateIds !== undefined && typeof edits.rekeyDuplicateIds !== "boolean") throw new Error("rekeyDuplicateIds must be boolean.");
+  const idRepair = edits.rekeyDuplicateIds === true;
+  if (idRepair && Object.keys(edits).length !== 1) throw new Error("Duplicate-ID repair cannot be combined with payload, type, or deletion edits.");
   for (const list of [edits.dropProposalIds, edits.removeEntityIds, edits.mentionedOnlyEntityIds]) {
     if (list !== undefined && (!Array.isArray(list) || list.length > 30 || list.some((item) => typeof item !== "string" || !item))) throw new Error("Revision id lists must contain at most 30 nonempty strings.");
   }
   if (edits.sanitizeTypes !== undefined && typeof edits.sanitizeTypes !== "boolean") throw new Error("sanitizeTypes must be boolean.");
   if (edits.retypeEntities !== undefined && (!Array.isArray(edits.retypeEntities) || edits.retypeEntities.length > 30 || edits.retypeEntities.some((entry) => !entry || typeof entry.entityId !== "string" || !entry.entityId || !["Character", "Location", "Organization", "Item", "Concept"].includes(entry.kind)))) throw new Error("Retyping requires at most 30 entity ids and supported entity kinds.");
   if (edits.retypeEntities?.length && !edits.sanitizeTypes) throw new Error("Retyping requires sanitizeTypes:true to normalize typed references atomically.");
-  if (!edits.dropProposalIds?.length && !edits.removeEntityIds?.length && !edits.sanitizeTypes && !edits.retypeEntities?.length && !edits.mentionedOnlyEntityIds?.length) throw new Error("Revision contains no edits.");
+  if (!idRepair && !edits.dropProposalIds?.length && !edits.removeEntityIds?.length && !edits.sanitizeTypes && !edits.retypeEntities?.length && !edits.mentionedOnlyEntityIds?.length) throw new Error("Revision contains no edits.");
   const changeset = await loadChangeSet(novelDir, id);
   if (!["held", "pending_review", "revision_requested"].includes(changeset.status)) throw new Error("Only unapproved review packets may be revised.");
-  if (changeset.reviewSource) throw new Error("Semantic packets require targeted fact decisions, not bulk proposal edits that can erase supported speakers");
+  if (changeset.reviewSource && !idRepair) throw new Error("Semantic packets require targeted fact decisions, not bulk proposal edits that can erase supported speakers");
   const history = await readFile(join(novelDir, "events.jsonl"), "utf8").catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error;
     return "";
   });
   if (history.split("\n").filter(Boolean).map((line) => JSON.parse(line)).some((record) => record.event.type === "changeset.applied" && record.event.changesetId === id)) throw new Error("Applied packets require a canonical rollback plan, not proposal revision.");
+  if (idRepair) {
+    const repair = rekeyDuplicateProposalIds(changeset.proposals);
+    if (!repair.renamed.length) return { id, status: changeset.status, proposals: changeset.proposals.length, dropped: 0, normalized: 0, rekeyed: 0, supersededKept: false };
+    const revisionId = randomUUID();
+    await copyFile(join(novelDir, "changesets", `${id}.json`), join(novelDir, "changesets", `${id}.superseded-revision-${revisionId}.json`));
+    changeset.proposals = repair.proposals;
+    changeset.status = "held";
+    delete changeset.semanticReview;
+    changeset.reviewNotes[`revision:${revisionId}`] = `Structural duplicate-ID repair: ${reason}. Renamed ${repair.renamed.length} proposal IDs; all payloads, confidence, provenance, order and source sentences are unchanged. Prior semantic decisions are invalidated; re-read current facts and source before deciding.`;
+    await saveChangeSet(novelDir, changeset);
+    await appendAudit(novelDir, "revise-proposals", { changesetId: id, revisionId, edits, renamed: repair.renamed, dropped: 0, normalized: 0 }, reason);
+    return { id, status: changeset.status, revisionId, proposals: changeset.proposals.length, dropped: 0, normalized: 0, rekeyed: repair.renamed.length, supersededKept: true };
+  }
   const drops = new Set(edits.dropProposalIds ?? []);
   const removed = new Set(edits.removeEntityIds ?? []);
   for (const proposalId of drops) if (!changeset.proposals.some((proposal) => proposal.id === proposalId)) throw new Error(`Unknown proposal ${proposalId}.`);

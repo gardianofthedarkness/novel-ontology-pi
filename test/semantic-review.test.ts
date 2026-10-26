@@ -66,6 +66,87 @@ test("fact review excludes segmentation and event detection but retains identiti
   assert.ok(!result.proposals.some(proposal => ["add_relation", "set_state_change", "upsert_entity"].includes(proposal.kind)));
 });
 
+test("review pages expose semantic identity meaning and CLI decisions bind labels without editing stored proposals", async context => {
+  const parent = await mkdtemp(join(tmpdir(), "semantic-label-review-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const directory = join(parent, "novel");
+  await initWorkspace(directory);
+  const { packet, first, second } = fixture();
+  const originalTurn = (packet.proposals.find(proposal => proposal.kind === "create_scene")!.payload as Scene).turns[0];
+  originalTurn.speakerId = second.id;
+  originalTurn.addresseeId = first.id;
+  const original = JSON.stringify(packet.proposals);
+  await saveChangeSet(directory, packet);
+  const page = await semanticPage(directory, packet.id);
+  assert.ok("facts" in page);
+  const rows = page.facts as { id: string; field: string; meaning: unknown }[];
+  assert.deepEqual(rows.find(fact => fact.field === "presence")?.meaning, ["小明", "小红"]);
+  const revision = page.revision;
+  const execute = promisify(execFile);
+  const cli = (...args: string[]) => execute(process.execPath, [resolve("dist/src/cli/cli.js"), ...args], { env: { ...process.env, WORK_LLM_API_KEY: "", TYPESAFE_API_KEY: "" } });
+  await cli("changeset", "decide", directory, packet.id, "--revision", revision, "--decisions", JSON.stringify([decision("first/identity"), decision("second/identity"), {
+    factId: "scene/turn/0", verdict: "accept", reason: "依据原文的人名核对", semanticReplacement: { speakerId: "小明", addresseeId: "小红" },
+  }]));
+  const state = packet.proposals.find(proposal => proposal.kind === "set_state_change")!.payload as unknown as StateChange;
+  await decideFacts(directory, packet.id, revision, [{ factId: "emotion/state", verdict: "accept", reason: "只修正状态归属的人名", semanticReplacement: { ...state, characterId: "小红", relationships: { 小明: 0.2 } } }]);
+  const stored = await loadChangeSet(directory, packet.id);
+  assert.equal(JSON.stringify(stored.proposals), original);
+  const corrected = stored.semanticReview!.decisions.find(entry => entry.factId === "emotion/state")!.replacement as StateChange;
+  assert.equal(corrected.characterId, second.id);
+  assert.deepEqual(corrected.relationships, { [first.id]: 0.2 });
+  assert.deepEqual(corrected.emotions, state.emotions);
+  const detail = await semanticPage(directory, packet.id, { factId: "emotion/state" });
+  assert.ok("meaning" in detail);
+  assert.deepEqual(detail.meaning, { character: "小红", relationships: { 小明: 0.2 } });
+  await assert.rejects(decideFacts(directory, packet.id, revision, [{ factId: "scene/turn/0", verdict: "accept", reason: "bad label", semanticReplacement: { speakerId: first.id, addresseeId: null } }]), /semantic identity label/);
+  await assert.rejects(decideFacts(directory, packet.id, "stale", [{ factId: "scene/turn/0", verdict: "accept", semanticReplacement: { speakerId: "小明", addresseeId: null } }]), /Stale/);
+  await cli("changeset", "approve", directory, packet.id);
+  const canonical = new BundleStore(join(directory, "ontology"));
+  assert.deepEqual((await canonical.loadFile<Scene>("scenes.jsonl"))[0].turns[0], { speakerId: first.id, addresseeId: second.id, sentenceIds: originalTurn.sentenceIds });
+  assert.equal((await canonical.loadFile<StateChange>("state-changes.jsonl"))[0].characterId, second.id);
+  assert.equal(JSON.stringify((await loadChangeSet(directory, packet.id)).proposals), original);
+});
+
+test("semantic identity edits reject ambiguous names, conflicting inputs, event reassignment and alias collisions", async context => {
+  const parent = await mkdtemp(join(tmpdir(), "semantic-label-guards-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const directory = join(parent, "novel");
+  await initWorkspace(directory);
+  const { packet } = fixture();
+  const second = packet.proposals[1].payload as Entity;
+  second.names.push({ text: "小明", lang: "zh", kind: "alias" }, { text: "阿红", lang: "zh", kind: "alias" });
+  await saveChangeSet(directory, packet);
+  const revision = (await semanticPage(directory, packet.id, { summary: true })).revision;
+  const apply = (factId: string, semanticReplacement: unknown, extra = {}) => decideFacts(directory, packet.id, revision, [{ factId, verdict: "accept", reason: "test", semanticReplacement, ...extra }]);
+  await assert.rejects(apply("scene/turn/0", { speakerId: "小明", addresseeId: null }), /ambiguous/);
+  await assert.rejects(apply("scene/turn/0", { speakerId: "小红", addresseeId: null }, { replacement: {} }), /cannot be combined/);
+  await assert.rejects(apply("scene/turn/0", {}, { verdict: "hold" }), /requires accept/);
+  const state = packet.proposals.find(proposal => proposal.kind === "set_state_change")!.payload as unknown as StateChange;
+  await assert.rejects(apply("emotion/state", { ...state, characterId: "小红", relationships: {}, afterEventId: "other" }), /reassign/);
+  await assert.rejects(apply("emotion/state", { ...state, characterId: "小红", relationships: { 小红: 0.2, 阿红: 0.5 } }), /same identity/);
+  await assert.rejects(apply("relationship/relation", { fromId: "小红", toId: "小红", type: "KNOWS", properties: {}, confidence: 1 }), /relation evidence workflow/);
+  await assert.rejects(apply("first/identity", packet.proposals[0].payload), /cannot supply storage IDs/);
+  assert.equal((await loadChangeSet(directory, packet.id)).semanticReview, undefined);
+});
+
+test("different unresolved state references remain distinct and readable without becoming valid identity choices", async context => {
+  const parent = await mkdtemp(join(tmpdir(), "semantic-unresolved-labels-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const directory = join(parent, "novel");
+  await initWorkspace(directory);
+  const { packet } = fixture();
+  const state = packet.proposals.find(proposal => proposal.kind === "set_state_change")!.payload as unknown as StateChange;
+  state.relationships = { unknown_a: 0.2, unknown_b: -0.3 };
+  await saveChangeSet(directory, packet);
+  const page = await semanticPage(directory, packet.id, { factId: "emotion/state" });
+  assert.ok("meaning" in page);
+  const meaning = page.meaning as { character: string; relationships: Record<string, number> };
+  assert.equal(Object.keys(meaning.relationships).length, 2);
+  assert.deepEqual(Object.values(meaning.relationships), [0.2, -0.3]);
+  assert.ok(Object.keys(meaning.relationships).every(label => label.startsWith("[unresolved identity ")));
+  await assert.rejects(decideFacts(directory, packet.id, page.revision, [{ factId: "emotion/state", verdict: "accept", reason: "invalid labels", semanticReplacement: { ...state, characterId: meaning.character, relationships: meaning.relationships } }]), /semantic identity label/);
+});
+
 test("presence replacement never clears a verified speaker, addressee, actor or source span", () => {
   const { packet } = fixture();
   packet.semanticReview = { version: 1, revision: semanticRevision(packet), decisions: semanticFacts(packet).map(fact => decision(fact.id, "accept", fact.field === "presence" ? [] : undefined)) };

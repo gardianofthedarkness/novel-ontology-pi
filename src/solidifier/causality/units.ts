@@ -23,6 +23,7 @@ import { BundleStore } from "../../ground/connectors/bundle.js";
 export type CausalUnitKind = "event" | "dialogue";
 
 export interface CausalUnit {
+  origin?: { sourceId: string; title: string; continuityId: string; seriesId: string | null; readingOrder: number | null };
   id: string;
   kind: CausalUnitKind;
   /** Owning scene id (dialogue cards) or null (events resolve via evidence). */
@@ -68,17 +69,19 @@ function sentenceIndexOf(sentenceIds: string[], sentenceId: string): number {
   return sentenceIds.indexOf(sentenceId);
 }
 
+const currentRecords = <Record extends { id: string }>(records: Record[]): Record[] => [...new Map(records.map(record => [record.id, record])).values()];
+
 /** Build a uniform unit list from canon bundle data plus proposed extras. */
 export async function loadCausalityUniverse(
   novelDir: string,
   extras: UniverseExtras = {},
 ): Promise<CausalityUniverse> {
   const bundle = new BundleStore(join(novelDir, "ontology"));
-  const canonEvents = await bundle.loadFile<OntEvent>("events.jsonl");
-  const canonScenes = await bundle.loadFile<Scene>("scenes.jsonl");
+  const canonEvents = currentRecords(await bundle.loadFile<OntEvent>("events.jsonl"));
+  const canonScenes = currentRecords(await bundle.loadFile<Scene>("scenes.jsonl"));
   const canonRelations = await bundle.loadFile<Relation>("relations.jsonl");
-  const canonStateChanges = await bundle.loadFile<StateChange>("state-changes.jsonl");
-  const entities = await bundle.loadFile<Entity>("entities.jsonl");
+  const canonStateChanges = currentRecords(await bundle.loadFile<StateChange>("state-changes.jsonl"));
+  const entities = currentRecords(await bundle.loadFile<Entity>("entities.jsonl"));
 
   const events = [...canonEvents];
   for (const event of extras.events ?? []) if (!events.some((e) => e.id === event.id)) events.push(event);
@@ -163,9 +166,17 @@ export async function loadCausalityUniverse(
     }
   }
 
+  const byId = new Map<string, CausalUnit>();
+  for (const unit of units) {
+    const previous = byId.get(unit.id);
+    if (previous && previous.kind !== unit.kind) throw new Error("Causal event/dialogue ID collision inside one book.");
+    byId.set(unit.id, previous ? { ...unit, sentenceIds: [...new Set([...previous.sentenceIds, ...unit.sentenceIds])], actors: [...new Set([...previous.actors, ...unit.actors])],
+      text: [...new Set([previous.text, unit.text])].join("\n"), summary: [...new Set([previous.summary, unit.summary])].filter(Boolean).join("\n"),
+      sceneId: previous.sceneId === unit.sceneId ? unit.sceneId : null, scenePosition: previous.sceneId === unit.sceneId ? previous.scenePosition : null } : unit);
+  }
   return {
-    units,
-    byId: new Map(units.map((unit) => [unit.id, unit])),
+    units: [...byId.values()],
+    byId,
     scenes,
     events,
     relations: canonRelations,
@@ -183,6 +194,7 @@ export async function loadCausalityUniverse(
  */
 export function compareOrder(a: CausalUnit, b: CausalUnit, universe: CausalityUniverse): -1 | 1 | null {
   if (a.id === b.id) return null;
+  if (a.origin && b.origin && a.origin.sourceId !== b.origin.sourceId) return null;
   if (a.chapterIndex !== b.chapterIndex) return a.chapterIndex < b.chapterIndex ? -1 : 1;
   if (a.sceneId && b.sceneId && a.sceneId === b.sceneId) {
     if (a.scenePosition !== null && b.scenePosition !== null && a.scenePosition !== b.scenePosition) {
@@ -228,5 +240,6 @@ export function alreadyLinked(universe: CausalityUniverse, fromId: string, toId:
 export function unitDossier(unit: CausalUnit): string {
   const kind = unit.kind === "dialogue" ? "Dialogue card" : "Event";
   const scene = unit.sceneId ? ` (scene ${unit.sceneId})` : "";
-  return `${kind} ${unit.id}${scene}: ${unit.text || unit.summary || "(no text)"}`;
+  const origin = unit.origin ? ` [${unit.origin.title}; continuity ${unit.origin.continuityId}; reading order ${unit.origin.readingOrder ?? "unknown"} is NOT an actual-time assertion]` : "";
+  return `${kind} ${unit.id}${scene}${origin}: ${unit.text || unit.summary || "(no text)"}`;
 }

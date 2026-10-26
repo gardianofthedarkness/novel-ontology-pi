@@ -128,6 +128,69 @@ test("extraction preserves source-language summaries, names, and state facts", a
   assert.deepEqual(state.goalsAdd, ["留在教室"]);
 });
 
+test("multiple state updates for the same resolved character/event have distinct deterministic proposal and fact IDs", async () => {
+  const character = { ...mikoto, names: [...mikoto.names, { text: "美琴", lang: "zh", kind: "alias" as const }] };
+  for (const faculty of [false, true]) {
+    const { input, ids } = makeInput({ text: "御坂美琴得知消息，感到紧张，却仍然打算留下。", known: [character], reply: "{}" });
+    const scene = { charactersPresent: ["御坂美琴"], charactersMentioned: [], events: [{ summaryEn: "御坂美琴得知消息并决定留下。", actors: ["御坂美琴"], evidence: ids,
+      stateChanges: [{ character: "御坂美琴", emotions: { nervous: 0.5 }, knowledgeAdd: ["得知消息"] }, { character: "美琴", goalsAdd: ["留下"] }] }] };
+    const work = stubWork(JSON.stringify(scene));
+    const extractInput = { ...input, ...(faculty ? { sceneResults: new Map([[ids[0], Promise.resolve({ scene, turns: [], dialogues: [], notes: [] })]]) } : {}) };
+    const output = await createExtractor(work)(extractInput);
+    const states = output.proposals.filter(proposal => proposal.kind === "set_state_change");
+    assert.equal(states.length, 2);
+    assert.notEqual(states[0].id, states[1].id);
+    assert.equal((states[0].payload as { characterId: string }).characterId, (states[1].payload as { characterId: string }).characterId);
+    const packet = { ...newChangeSet(input.blockId), proposals: output.proposals, reviewSource: input.sentences };
+    assert.doesNotThrow(() => validateStructure(packet));
+    const facts = semanticFacts(packet).filter(fact => fact.field === "state");
+    assert.equal(facts.length, 2);
+    assert.notEqual(facts[0].id, facts[1].id);
+    const repeated = await createExtractor(work)(extractInput);
+    assert.deepEqual(repeated.proposals.map(proposal => proposal.id), output.proposals.map(proposal => proposal.id));
+  }
+});
+
+test("selected aliases bind before actors, state, rosters, turns and cards without minting duplicates", async () => {
+  const second: Entity = { id: "char_000002", kind: "Character", names: [{ text: "小红", lang: "zh", kind: "canonical" }], properties: {}, confidence: 1 };
+  for (const mode of ["legacy", "turns", "cards"]) {
+    const faculty = mode !== "legacy";
+    const { input, ids } = makeInput({ text: "御坂美琴被称作电光，也被称作雷光，她向小红挥手。", known: [mikoto, second], reply: "{}" });
+    const aliases: ChangeProposal[] = ["电光", "雷光"].map((aliasText, index) => ({ id: `b0001_alias_${index}`, kind: "add_alias", payload: { entityId: mikoto.id, aliasText }, confidence: 0.99, provenance: { blockId: "b0001", sentenceIds: [], patchId: "name-detector" } }));
+    const scene = { charactersPresent: ["电光"], charactersMentioned: ["小红"], events: [{ summaryEn: "电光向小红挥手。", actors: ["电光", "御坂美琴"], affected: ["雷光"], evidence: ids, stateChanges: [{ character: "雷光", emotions: { 高兴: 0.2 }, relationships: { 小红: 0.1 } }] }] };
+    const result = await createExtractor(stubWork(JSON.stringify(scene)))({ ...input, proposals: aliases, ...(faculty ? { sceneResults: new Map([[ids[0], Promise.resolve({ scene, notes: [], turns: mode === "turns" ? [{ speakerName: "电光", addresseeName: "小红", sentenceIds: ids }] : [], ...(mode === "cards" ? { dialogues: [{ id: "card", sentenceIds: ids, participantNames: ["电光", "雷光", "小红"], unresolvedNames: [] }] } : {}) })]]) } : {}) });
+    const entities = result.proposals.filter(proposal => proposal.kind === "upsert_entity").map(proposal => proposal.payload as Entity);
+    assert.equal(entities.length, 1);
+    assert.equal(entities[0].id, mikoto.id);
+    assert.deepEqual(entities[0].names.map(name => name.text), ["御坂美琴", "电光", "雷光"]);
+    const event = result.proposals.find(proposal => proposal.kind === "create_event")!.payload as OntEvent;
+    assert.deepEqual(event.primaryActors, [mikoto.id]);
+    assert.deepEqual(event.affectedCharacters, [mikoto.id]);
+    const state = result.proposals.find(proposal => proposal.kind === "set_state_change")!.payload as { characterId: string; emotions: Record<string, number>; relationships: Record<string, number> };
+    assert.equal(state.characterId, mikoto.id);
+    assert.deepEqual(state.emotions, { 高兴: 0.2 });
+    assert.deepEqual(state.relationships, { [second.id]: 0.1 });
+    const stored = result.proposals.find(proposal => proposal.kind === "create_scene")!.payload as Scene;
+    assert.deepEqual(stored.charactersPresent, [mikoto.id]);
+    if (mode === "turns") assert.equal(stored.turns[0].speakerId, mikoto.id);
+    if (mode === "cards") assert.deepEqual(stored.dialogues?.[0].participantIds, [mikoto.id, second.id]);
+    assert.deepEqual(mikoto.names.map(name => name.text), ["御坂美琴"]);
+  }
+});
+
+test("ambiguous forms and declarations bridging distinct owners never overwrite identity bindings", async () => {
+  const second: Entity = { ...mikoto, id: "char_000002", names: [{ text: "小红", lang: "zh", kind: "canonical" }] };
+  const { input } = makeInput({ text: "御坂美琴向小红挥手。", known: [mikoto, second], reply: "{}" });
+  const output = await createExtractor(stubWork(JSON.stringify({ newEntities: [{ name: "小红", kind: "Character", aliases: [{ text: "御坂美琴", kind: "alias" }] }], events: [{ summaryEn: "挥手。", actors: ["御坂美琴", "小红"] }] })))(input);
+  assert.equal(output.proposals.filter(proposal => proposal.kind === "upsert_entity").length, 0);
+  assert.deepEqual((output.proposals.find(proposal => proposal.kind === "create_event")!.payload as OntEvent).primaryActors, [mikoto.id, second.id]);
+  assert.ok(Object.keys(output.notes).some(key => key.startsWith("extraction:identity-conflict:")));
+  const ambiguous = { ...second, names: mikoto.names };
+  const blocked = await createExtractor(stubWork(JSON.stringify({ events: [{ summaryEn: "挥手。", actors: ["御坂美琴"], stateChanges: [{ character: "御坂美琴", emotions: { 高兴: 0.2 } }] }] })))({ ...input, knownEntities: [mikoto, ambiguous] });
+  assert.deepEqual((blocked.proposals.find(proposal => proposal.kind === "create_event")!.payload as OntEvent).primaryActors, []);
+  assert.equal(blocked.proposals.filter(proposal => ["set_state_change", "upsert_entity"].includes(proposal.kind)).length, 0);
+});
+
 test("reviewer constraints prevent cross-identity alias folding and placeholder actors", async () => {
   const { work, input } = makeInput({
     text: "御坂美琴向食蜂操祈挥手。有人说话。",

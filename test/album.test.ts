@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createZip } from "../src/digger/intake/album/zip.js";
 import { importEpubAlbum, resolveAnchors } from "../src/digger/intake/album/album.js";
 import { initWorkspace } from "../src/ground/workspace/init.js";
+import { bindWorkspaceSource } from "../src/ground/workspace/source.js";
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 
@@ -113,4 +114,29 @@ test("album import refuses a non-workspace directory", async (context) => {
   const epubPath = join(parent, "fixture.epub");
   await writeFile(epubPath, fixtureEpub());
   await assert.rejects(() => importEpubAlbum(join(parent, "nope"), epubPath), /novel init/);
+});
+
+test("album import preserves a bound source basename and refuses legacy source replacement before writes", async (context) => {
+  const parent = await mkdtemp(join(tmpdir(), "novel-album-source-"));
+  context.after(async () => { const { rm } = await import("node:fs/promises"); await rm(parent, { recursive: true, force: true }); });
+  const epub = join(parent, "book.epub");
+  await writeFile(epub, fixtureEpub());
+  const workspace = join(parent, "novel");
+  await initWorkspace(workspace);
+  const first = await importEpubAlbum(workspace, epub);
+  const input = join(parent, "assigned.txt");
+  await writeFile(input, await readFile(join(workspace, first.sourceText)));
+  const bound = await bindWorkspaceSource(workspace, input, 500);
+  const next = await importEpubAlbum(workspace, epub);
+  assert.equal(next.sourceText, `source/${bound.file}`);
+  const source = await readFile(join(workspace, next.sourceText), "utf8");
+  const badEpub = fixtureEpub();
+  const { unzipAll } = await import("../src/digger/intake/album/zip.js");
+  const entries = unzipAll(badEpub);
+  entries.set("OEBPS/ch1.xhtml", Buffer.from("<html><body><p>全新的不同故事。</p></body></html>"));
+  await writeFile(epub, createZip([...entries].map(([name, data]) => ({ name, data })), true));
+  const albumBefore = await readFile(join(workspace, "ontology/album.json"), "utf8");
+  await assert.rejects(importEpubAlbum(workspace, epub), /fresh workspace/);
+  assert.equal(await readFile(join(workspace, next.sourceText), "utf8"), source);
+  assert.equal(await readFile(join(workspace, "ontology/album.json"), "utf8"), albumBefore);
 });

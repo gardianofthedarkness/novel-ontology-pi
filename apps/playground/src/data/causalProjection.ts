@@ -2,6 +2,9 @@ import type { CanonState, CausalLink } from "../types.js";
 import type { OrbitalLevel, OrbitalWorld } from "./orbitalModel.js";
 import type { OrbitalDraw } from "./orbitalLayout.js";
 import { sceneIndex } from "./sceneHierarchy.js";
+import type { LibraryView } from "./libraryModel.js";
+
+type UniverseCausalLink = NonNullable<LibraryView["causal"]>["links"][number];
 
 /**
  * Stored CAUSES links drawn on the current orbital level. An endpoint event
@@ -14,7 +17,7 @@ export interface CausalArrow {
   id: string;
   from: string;
   to: string;
-  links: CausalLink[];
+  links: (CausalLink | UniverseCausalLink)[];
   /** True when either end is a container rather than the event itself. */
   projected: boolean;
   state: CanonState;
@@ -40,6 +43,32 @@ export function worldCausalLinks(world: OrbitalWorld): CausalLink[] {
 
 const size = (draw: OrbitalDraw) => draw.entry?.members.length ?? draw.node.cluster?.ids.length ?? 1;
 const weakest = (states: CanonState[]): CanonState => states.includes("held") ? "held" : states.includes("proposed") ? "proposed" : "canon";
+
+export function libraryCausalProjection(level: OrbitalLevel, draws: OrbitalDraw[], library: LibraryView | undefined): CausalProjection {
+  const result: CausalProjection = { arrows: [], inside: 0, insideBy: new Map(), elsewhere: 0 };
+  if (!library || level.scope.planId || !["library", "series"].includes(level.scope.kind)) return result;
+  const confirmed = new Set(library.organization.assignments.filter(entry => entry.status === "confirmed").map(entry => entry.sourceId));
+  const candidates = draws.filter(draw => (draw.role === "main" || draw.role === "preview") && draw.node.library && !draw.node.library.planId).sort((first, second) => size(first) - size(second));
+  const holder = (sourceId: string) => candidates.find(draw => draw.entry?.members.includes(sourceId));
+  const arrows = new Map<string, CausalArrow>();
+  for (const link of library.causal?.links ?? []) {
+    if (link.stale || !confirmed.has(link.from.sourceId) || !confirmed.has(link.to.sourceId)) continue;
+    const from = holder(link.from.sourceId), to = holder(link.to.sourceId);
+    if (!from || !to) { result.elsewhere++; continue; }
+    if (from.node.id === to.node.id) {
+      result.inside++;
+      result.insideBy.set(from.node.id, (result.insideBy.get(from.node.id) ?? 0) + 1);
+      continue;
+    }
+    const id = `universe-causal:${from.node.id}>${to.node.id}`;
+    const arrow = arrows.get(id) ?? { id, from: from.node.id, to: to.node.id, links: [], projected: true, state: "canon" as CanonState };
+    arrow.links.push(link);
+    arrow.state = weakest(arrow.links.map(entry => entry.state));
+    arrows.set(id, arrow);
+  }
+  result.arrows = [...arrows.values()];
+  return result;
+}
 
 export function causalProjection(level: OrbitalLevel, draws: OrbitalDraw[], links: CausalLink[] = [], dialogueScenes: Record<string, string> = {}): CausalProjection {
   const chapterId = level.scope.chapterId;

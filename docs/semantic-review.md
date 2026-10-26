@@ -20,6 +20,11 @@ Legacy `turn` facts are retained only for older single-speaker packets.
 
 `changeset facts` projects the complete consequential values, ID/name labels,
 canonical identity snapshots, derived event context and bounded source excerpts.
+Each fact also exposes human-readable identity `meaning`. Pi judges those names
+and roles against the source, not opaque storage IDs. `semanticReplacement` binds
+displayed names/registered aliases to current unique identities in the CLI before
+the same type, source, dependency and revision checks; raw replacements remain
+compatible. See [identity flow](identity-flow.md) for the mapping and boundaries.
 Raw scene payloads, all segmentation notes and repeated participation proposals
 are not mandatory reading. Matching generated participation edges share the
 actor decision rather than requiring a second identical semantic decision.

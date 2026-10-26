@@ -150,6 +150,33 @@ Report raw extraction and applied canon separately. The old 38-sentence speaker
 scores remain historical diagnostics, not product acceptance criteria. See
 [dialogue-card benchmark protocol](docs/dialogue-card-benchmark.md).
 
+### Open main next steps — series, universes and story time (2026-10-25)
+
+A source file is not necessarily a whole story. **Phase 1:** a separate, concise
+`novel-library` skill + `novel library` CLI now let the main agent propose/review
+series and universe/continuity membership and volume/reading order. Phase 1 uses
+federated, stable-document-ID workspaces and source bindings to prevent collisions;
+reordering never renumbers facts. Existing databases are not concatenated or
+migrated, and grouping never automatically merges entities or starts ingestion.
+
+**Phase 2:** different series in one universe may overlap in time or place. Add a
+time faculty with first-class, evidence-backed temporal nodes/constraints, then a
+Solidifier global alignment pass. Reading/publication order is not necessarily
+story chronology; time precedence is not causality; shared universe is not an
+automatic entity merge. Preserve parallel/unknown/conflicting times and separate
+continuities. **Phase 1 is locally implemented; phase 2/time schema remains open.**
+
+See [series, universe and time design](docs/series-universe-time.md) for the
+skill/CLI contract, source-ID blocker, dependency flow, at-birth/global distinction,
+frontend boundary and acceptance criteria.
+
+**Universe causality is locally implemented:** an explicit post-extraction pass
+can nominate and review cross-file event/dialogue causes within confirmed shared
+continuities. Source-qualified IDs and an independently reviewed library ledger
+preserve book isolation. Reading order/name overlap alone proves neither time,
+identity nor causation. See [universe causal contract](docs/universe-causality.md).
+The time faculty, global EM and physical graph fusion remain separate open work.
+
 ## 5. The processing model — blocks and the merge gate
 
 This is how a novel actually gets ingested, end to end:

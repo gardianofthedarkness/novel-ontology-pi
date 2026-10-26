@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
-import { mkdtemp, readFile, writeFile, appendFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, appendFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initWorkspace } from "../src/ground/workspace/init.js";
@@ -13,6 +13,8 @@ import { EventLog } from "../src/ground/events/log.js";
 import { semanticFacts, semanticRevision } from "../src/solidifier/merge/semantic.js";
 import { decideFacts, prepareSemantic, semanticPage } from "../src/solidifier/merge/semanticCommands.js";
 import { buildGraphFromBundle } from "../src/ground/connectors/ladybug.js";
+import { libraryAdd, libraryDecide, libraryInit, libraryPrepare, libraryPropose, libraryShow, type LibrarySource } from "../src/ground/workspace/library.js";
+import { createZip } from "../src/digger/intake/album/zip.js";
 
 /**
  * End-to-end ingest over a LOOPBACK Jev wire mock: the real JevClient
@@ -228,14 +230,61 @@ test("ingest in gate mode stops at the first merge gate with the ChangeSet held"
     const before = await readFile(packetPath, "utf8");
     const sourceBefore = await readFile(join(dir, "source", "chapter.txt"), "utf8");
     const callsBefore = jev.seenKeys.length;
-    await writeFile(file, NOVEL_TEXT + "\n补充内容。");
     await assert.rejects(ingestNovel(dir, file, { env }), /Existing held packet/);
+    await writeFile(file, NOVEL_TEXT + "\n补充内容。");
+    await assert.rejects(ingestNovel(dir, file, { env }), /different source/);
     assert.equal(await readFile(packetPath, "utf8"), before);
     assert.equal(await readFile(join(dir, "source", "chapter.txt"), "utf8"), sourceBefore);
     assert.equal(jev.seenKeys.length, callsBefore);
   } finally {
     await jev.close();
   }
+});
+
+test("two EPUB volumes organize, prepare and ingest independently through real held gates with loopback Jev", async (t) => {
+  const parent = await mkdtemp(join(tmpdir(), "novel-series-ingest-"));
+  t.after(() => rm(parent, { recursive: true, force: true }));
+  const jev = await startMockJev();
+  t.after(() => jev.close());
+  const library = join(parent, "library");
+  await libraryInit(library);
+  const registered: LibrarySource[] = [];
+  for (const volume of [1, 2]) {
+    const filename = join(parent, `故事第${volume}卷.epub`);
+    const bytes = createZip([
+      { name: "META-INF/container.xml", data: Buffer.from('<container><rootfile full-path="book.opf"/></container>') },
+      { name: "book.opf", data: Buffer.from(`<package><metadata><dc:title>故事第${volume}卷</dc:title></metadata><manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="chapter"/></spine></package>`) },
+      { name: "chapter.xhtml", data: Buffer.from(`<html><body><h1>第一章 旅途</h1><p>这是第${volume}卷。一个人走在路上。</p></body></html>`) },
+    ]);
+    await writeFile(filename, bytes);
+    registered.push((await libraryAdd(library, filename)).source);
+  }
+  const evidence = (index: number) => [{ sourceId: registered[index].id, field: "title", quote: registered[index].title }];
+  const organization = {
+    universes: [{ id: "world", title: "故事世界", evidence: evidence(0) }],
+    continuities: [{ id: "canon", title: "正史", universeId: "world", evidence: evidence(0) }],
+    series: [{ id: "story", title: "故事", evidence: evidence(0) }],
+    assignments: registered.map((source, index) => ({ sourceId: source.id, seriesId: "story", continuityId: "canon", readingOrder: index + 1, status: "confirmed", evidence: evidence(index), note: "卷次为阅读顺序。" })),
+  };
+  const planFile = join(parent, "plan.json");
+  await writeFile(planFile, JSON.stringify(organization));
+  const plan = await libraryPropose(library, planFile, (await libraryShow(library)).revision);
+  await libraryDecide(library, plan.planId, plan.revision, "approve", "Checked synthetic series and volume evidence.");
+  const volumes = await libraryShow(library, { kind: "series", id: "story" });
+  const results = [];
+  for (const source of volumes.sources) {
+    const prepared = await libraryPrepare(library, source.id);
+    const result = await ingestNovel(prepared.workspace, prepared.input, { noExtract: true, env: {
+      TYPESAFE_API_KEY: FAKE_KEY, JEV_ENDPOINT: jev.url, NOVEL_SECRETS_DIR: join(parent, "secrets"),
+    } });
+    results.push(result);
+    assert.equal(result.stoppedAt, "b0001");
+    assert.deepEqual(result.skippedBlocks, []);
+    assert.equal((await listChangeSets(prepared.workspace))[0].status, "held");
+    assert.equal(await readFile(join(prepared.workspace, "ontology", "entities.jsonl"), "utf8"), "");
+  }
+  assert.notEqual(results[0].source.sourceId, results[1].source.sourceId);
+  assert.ok(jev.seenKeys.length > 0);
 });
 
 test("gate-mode resume skips an applied chapter and preserves the next chapter's provenance", async () => {

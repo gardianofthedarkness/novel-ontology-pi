@@ -50,9 +50,91 @@ export function authorize(command, scope) {
   }
   if (tokens.shift() !== 'novel') throw new Error('Use only novel commands or cat of the supplied skill/source block');
   const [verb, operation] = tokens;
+  const changesetIds = [...blockIds.map(id => `cs_${id}`), ...(scope.causalityChangesetIds ?? [])];
   let valid = false;
+  if (verb === 'causality' && operation === 'universe') {
+    const sub = tokens[2], library = scope.library;
+    if (!library || tokens[3] !== library.directory || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(tokens[4] ?? '')) throw new Error('Universe causality requires the assigned reviewed library');
+    const count = ['evidence', 'propose'].includes(sub) ? 2 : ['show', 'decide'].includes(sub) ? 1 : 0;
+    const values = tokens.slice(5, 5 + count);
+    if (values.length !== count || values.some(value => count === 2 ? !/^doc_[a-f0-9]{64}::[a-zA-Z0-9][a-zA-Z0-9_:.-]{0,511}$/.test(value) : !/^uc_[a-f0-9]{64}$/.test(value))) throw new Error('Invalid qualified causal endpoint/packet');
+    const allowed = { candidates: ['--offset', '--limit'], sweep: ['--offset', '--limit', '--revision'], evidence: ['--offset', '--limit', '--packet'], propose: ['--revision', '--reason'], show: ['--offset', '--limit'], decide: ['--revision', '--decisions'], list: ['--offset', '--limit'] };
+    if (!Object.hasOwn(allowed, sub)) throw new Error('Unsupported universe causal operation');
+    const flags = new Map();
+    for (let index = 5 + count; index < tokens.length; index += 2) {
+      if (!allowed[sub].includes(tokens[index]) || !tokens[index + 1] || flags.has(tokens[index])) throw new Error('Universe causal options require unique bounded values');
+      flags.set(tokens[index], tokens[index + 1]);
+    }
+    for (const [name, value] of flags) {
+      if (['--offset', '--limit'].includes(name) && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < (name === '--limit' ? 1 : 0) || Number(value) > (name === '--limit' ? 20 : 500))) throw new Error('Universe causal page exceeds its budget');
+      if (name === '--packet' && !/^uc_[a-f0-9]{64}$/.test(value)) throw new Error('Invalid universe causal packet');
+      if (name === '--revision' && !/^[a-f0-9]{64}$/.test(value)) throw new Error('Invalid universe causal revision');
+      if (name === '--reason' && (!value.trim() || value.length > 2000)) throw new Error('Causal reason exceeds its budget');
+      if (name === '--decisions' && (Buffer.byteLength(value) > 64000 || !Array.isArray(JSON.parse(value)))) throw new Error('Causal decisions require a bounded JSON array');
+    }
+    if (['sweep', 'propose', 'decide'].includes(sub) && !flags.has('--revision') || sub === 'propose' && !flags.has('--reason') || sub === 'decide' && !flags.has('--decisions')) throw new Error('Universe causal mutation needs its current revision and explicit arguments');
+    if (['candidates', 'sweep', 'evidence', 'show', 'list'].includes(sub) && !flags.has('--limit')) tokens.push('--limit', '10');
+    return { kind: 'cli', args: tokens, label: `novel causality universe ${sub}` };
+  }
+  if (verb === 'causality') {
+    const base = ['propose', 'evidence'].includes(operation) ? 5 : 3;
+    const flags = new Map();
+    for (let index = base; index < tokens.length; index += 2) {
+      if (!tokens[index].startsWith('--') || !tokens[index + 1] || flags.has(tokens[index])) throw new Error('Causality options require unique values');
+      flags.set(tokens[index], tokens[index + 1]);
+    }
+    const only = names => [...flags.keys()].every(name => names.includes(name));
+    const number = (name, max, min = 0) => !flags.has(name) || /^\d+$/.test(flags.get(name)) && Number.isSafeInteger(Number(flags.get(name))) && Number(flags.get(name)) >= min && Number(flags.get(name)) <= max;
+    const unit = value => typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_:.-]{0,255}$/.test(value);
+    valid = tokens[2] === novel;
+    if (operation === 'candidates') valid &&= only(['--unit', '--chapter', '--limit']) && (!flags.has('--unit') || unit(flags.get('--unit'))) && number('--chapter', Number.MAX_SAFE_INTEGER);
+    else if (operation === 'sweep') valid &&= only(['--limit']);
+    else if (operation === 'evidence') valid &&= unit(tokens[3]) && unit(tokens[4]) && only(['--changeset', '--offset', '--limit']) && number('--offset', Number.MAX_SAFE_INTEGER) && (!flags.has('--changeset') || changesetIds.includes(flags.get('--changeset')));
+    else if (operation === 'propose') valid &&= unit(tokens[3]) && unit(tokens[4]) && only(['--reason']) && (!flags.has('--reason') || flags.get('--reason').trim().length > 0 && flags.get('--reason').length <= 2000);
+    else valid = false;
+    valid &&= number('--limit', 20, 1);
+    if (!valid) throw new Error('Causality command outside the assigned bounded scope');
+    if (['candidates', 'sweep', 'evidence'].includes(operation) && !flags.has('--limit')) tokens.push('--limit', '10');
+    return { kind: 'cli', args: tokens, label: `novel causality ${operation}` };
+  }
+  if (verb === 'library') {
+    const library = scope.library;
+    if (!library || tokens[2] !== library.directory) throw new Error('Library path is not assigned');
+    const sourceId = /^doc_[a-f0-9]{64}$/;
+    const planId = /^plan_[a-f0-9]{64}$/;
+    const revision = /^[a-f0-9]{64}$/;
+    const base = ['evidence', 'plan', 'decide'].includes(operation) ? 4 : 3;
+    const flags = new Map();
+    for (let index = base; index < tokens.length; index += 2) {
+      if (!tokens[index].startsWith('--') || !tokens[index + 1] || flags.has(tokens[index])) throw new Error('Library options require unique values');
+      flags.set(tokens[index], tokens[index + 1]);
+    }
+    const only = names => [...flags.keys()].every(name => names.includes(name));
+    const number = (name, maximum, minimum = 0) => !flags.has(name) || /^\d+$/.test(flags.get(name)) && Number.isSafeInteger(Number(flags.get(name))) && Number(flags.get(name)) >= minimum && Number(flags.get(name)) <= maximum;
+    if (operation === 'show') valid = only(['--series', '--universe', '--continuity', '--offset', '--limit']) && ['--series', '--universe', '--continuity'].filter(name => flags.has(name)).length <= 1 && ['--series', '--universe', '--continuity'].every(name => !flags.has(name) || /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(flags.get(name)));
+    if (operation === 'plan') valid = planId.test(tokens[3] ?? '') && only(['--offset', '--limit']);
+    if (operation === 'evidence') valid = sourceId.test(tokens[3] ?? '') && library.bindings.some(binding => binding.sourceId === tokens[3]) && only(['--offset', '--limit']) && number('--limit', 2000, 1);
+    if (operation === 'propose') {
+      valid = flags.size === 2 && only(['--organization', '--revision']) && revision.test(flags.get('--revision') ?? '') && Buffer.byteLength(flags.get('--organization') ?? '') <= 2 * 1024 * 1024;
+      if (valid) { const value = JSON.parse(flags.get('--organization')); valid = !!value && typeof value === 'object' && !Array.isArray(value); }
+    }
+    if (operation === 'decide') valid = planId.test(tokens[3] ?? '') && flags.size === 3 && only(['--revision', '--decision', '--reason']) && revision.test(flags.get('--revision') ?? '') && ['approve', 'hold', 'reject'].includes(flags.get('--decision')) && !!flags.get('--reason')?.trim() && flags.get('--reason').length <= 2000;
+    if (operation === 'history') valid = tokens.length === 3;
+    valid &&= number('--offset', Number.MAX_SAFE_INTEGER);
+    if (['show', 'plan'].includes(operation)) {
+      valid &&= number('--limit', 20, 1);
+      if (!flags.has('--offset')) tokens.push('--offset', '0');
+      if (!flags.has('--limit')) tokens.push('--limit', '10');
+    }
+    if (!valid) throw new Error('Library command outside the assigned organization scope; registration, preparation and arbitrary files are unavailable');
+    return { kind: 'cli', args: tokens, label: `novel library ${operation}` };
+  }
   if (verb === 'help' || verb === 'config') valid = tokens.length === 1;
   if (verb === 'init') valid = tokens.length === 2 && operation === novel;
+  if (verb === 'album') {
+    valid = tokens[2] === novel && ((['list', 'portraits'].includes(operation) && tokens.length === 3)
+      || operation === 'import' && tokens.length === 4 && scope.album?.importAllowed === true && tokens[3] === scope.album.epub);
+  }
   if (verb === 'ingest') {
     const options = tokens.slice(3);
     valid = operation === novel && tokens[2] === input;
@@ -68,9 +150,9 @@ export function authorize(command, scope) {
   }
   if (verb === 'changeset') valid = tokens[2] === novel && (
     (operation === 'list' && tokens.length === 3) ||
-    (['show', 'approve', 'hold'].includes(operation) && tokens.length === 4 && blockIds.map((id) => `cs_${id}`).includes(tokens[3]))
+    (['show', 'approve', 'hold'].includes(operation) && tokens.length === 4 && changesetIds.includes(tokens[3]))
   );
-  if (verb === 'changeset' && operation === 'show' && tokens[2] === novel && blockIds.map((id) => `cs_${id}`).includes(tokens[3])) {
+  if (verb === 'changeset' && operation === 'show' && tokens[2] === novel && changesetIds.includes(tokens[3])) {
     const options = tokens.slice(4);
     valid = options.length > 0;
     for (let index = 0; index < options.length; index++) {
@@ -111,6 +193,7 @@ export function authorize(command, scope) {
     valid = operations.has(operation) && tokens[2] === novel && tokens.includes('--reason') && tokens.length <= 12;
     const options = tokens.slice(3).filter((token) => token.startsWith('--'));
     valid &&= options.every((token) => ['--reason', '--kind'].includes(token));
+    if (operation === 'relate' && tokens.some(token => ['CAUSES', 'CAUSED_BY'].includes(token.toUpperCase()))) valid = false;
     if (operation === 'corrections') valid = tokens.length === 3 && tokens[2] === novel;
     if (operation === 'correct') {
       const flags = tokens.slice(3);
@@ -129,5 +212,5 @@ export function authorize(command, scope) {
   if (verb === 'inspect') valid = operation === novel && tokens.length === 2;
   if (verb === 'timeline') valid = operation === 'list' && tokens.length === 3 && tokens[2] === novel;
   if (!valid) throw new Error('Command outside this block/workspace CLI allowlist; no shell, direct file writes, credential access, or auto-approve');
-  return { kind: 'cli', args: tokens, label: `novel ${verb}${['changeset', 'fix', 'graph', 'timeline'].includes(verb) ? ` ${operation}` : ''}` };
+  return { kind: 'cli', args: tokens, label: `novel ${verb}${['album', 'changeset', 'fix', 'graph', 'timeline'].includes(verb) ? ` ${operation}` : ''}` };
 }

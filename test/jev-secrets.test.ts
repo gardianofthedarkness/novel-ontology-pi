@@ -199,6 +199,15 @@ test("JevClient speaks the real wire format and maps answers back", async (t) =>
   ]);
 });
 
+test("JevClient refuses missing or invalid probabilities without substituting a false veto or retrying", async (context) => {
+  for (const noul of [undefined, null, "0.1", -0.1, 1.1]) {
+    const mock = await startJevMock(context, () => ({ status: 200, body: { answers: { q: { type: "noul", noul } } } }));
+    const client = new JevClient({ apiKey: FAKE_KEY, endpoint: mock.endpoint, model: "jev-1.13.0" });
+    await assert.rejects(() => client.decide("synthetic", [{ key: "q", primitive: "noul", instructions: "?" }]), /invalid probability/);
+    assert.equal(mock.requests.length, 1);
+  }
+});
+
 test("JevClient retries a 529 once, then succeeds; a 401 fails at once", async (t) => {
   let n = 0;
   const flaky = await startJevMock(t, () => {

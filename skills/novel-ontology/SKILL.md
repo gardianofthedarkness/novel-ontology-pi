@@ -11,6 +11,10 @@ without keys. Missing credentials require secure entry, never chat.
 
 ## Ingest and review
 
+For multiple files, first use the separate `novel-library` skill to establish
+series/continuity and reading order. Its CLI prepares one source-bound workspace
+per document; never ingest a second volume into the first volume's workspace.
+
 1. Read `NOVEL_JOB.json` when provided: ordered inputs, workspaces, block
    evidence and limits. Otherwise initialize with `novel init <dir>`.
 2. Resolve an existing held packet before `novel ingest <dir> <file>`.
@@ -20,6 +24,9 @@ without keys. Missing credentials require secure entry, never chat.
    aliases, dialogue-card participant memberships, presence, actors, relations and state.
    Source excerpts and canonical identities accompany the facts; request
    more evidence when insufficient. See [fact decisions](references/semantic-review.md).
+   Judge the human-readable `meaning` against the source, not opaque IDs.
+   Correct identity references with `semanticReplacement` using displayed names;
+   the CLI binds unique labels to storage IDs. Ambiguous names stay held.
 4. Accept only source-supported facts. Hold uncertainty; reject disproven
    assertions. Correct only the affected fact, never clear a person's
    dialogue members/actors to fix presence. Do not optimize scene/dialogue boundaries,
@@ -33,6 +40,10 @@ without keys. Missing credentials require secure entry, never chat.
    deferred proposals and unfinished work separately. Processing completion
    does not mean all facts are known. Legacy packets without fact review
    retain the full-page workflow in [legacy repair](references/repair.md).
+
+If `facts` fails on duplicate proposal IDs, follow the metadata-only exception
+in [repair](references/repair.md). Preserve all facts, keep the packet held and
+re-read its fresh revision. Never drop conflicting updates merely to clear a gate.
 
 ## Source fidelity
 
@@ -81,6 +92,11 @@ without keys. Missing credentials require secure entry, never chat.
   a link you judge causal (event or dialogue-card ids) into a
   `pending_review` changeset; `novel causality sweep <dir>` re-runs the
   systematic Jev pass on demand. Full workflow: references/causality.md.
+- Across reviewed books: `novel causality universe candidates|sweep|evidence|
+  propose|show|decide|list <library-dir> <universe-id> ...`. Use source-qualified
+  IDs, the same continuity, original evidence from both books, and an explicit
+  temporal reason. Cross-book links live in a reviewed universe ledger; do not
+  fuse book databases or infer story time/identity from volume order/names.
 - Direct textual support + novel-sequence order decide. Succession,
   correlation, or shared topic alone is never causation, and order or
   adjacency alone never implies a link.
@@ -88,6 +104,11 @@ without keys. Missing credentials require secure entry, never chat.
 ## Album (EPUB illustrations + character portraits)
 
 - `novel album import <dir> <book.epub>` is a PRE-PROCESS at intake:
+  In a scoped host, use the assigned `album.epub` from `NOVEL_JOB.json`
+  only when `album.importAllowed` is true. Import before ingestion; keep
+  the assigned input unchanged. A source mismatch needs a fresh workspace,
+  never silently replace text or re-anchor an applied book. `novel album
+  list <dir>` and `novel album portraits <dir>` are scoped CLI commands.
   a spine walk in reading order writes images to `assets/`, the
   extracted text to `source/` (ingest THAT file), and anchor records to
   `ontology/illustrations.jsonl` (cover / plate / story / paratext).
