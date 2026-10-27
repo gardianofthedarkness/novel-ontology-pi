@@ -95,3 +95,24 @@ test("Jev judges cross-book containment; the universe tree refuses a second pare
   assert.equal(tree.parent.get("b::harbour"), "a::city");
   assert.ok(sources.length === 2);
 });
+
+test("a held atlas pair is not re-asked while nothing about it changed, and is reopened when its places change", async (context) => {
+  const { directory, sources, bindings } = await twoBooks(context);
+  const env = { NOVEL_SECRETS_DIR: join(tmpdir(), "no-atlas-keys"), NOVEL_CAUSAL_BINDINGS: join(directory, "..", "bindings.json") };
+  await writeFile(env.NOVEL_CAUSAL_BINDINGS, JSON.stringify(bindings));
+  const swept = await atlasSweep(await atlasContext(directory, "star", bindings), { propose: true });
+  const target = { directory, packetId: swept.packetId!, scope: "universe" as const, universeId: "star" };
+  const page = await review("show", target, { limit: 20 }, env) as { revision: string; facts: { id: string }[] };
+  for (const fact of page.facts) { let offset: number | null = 0; do { offset = ((await review("evidence", target, { factId: fact.id, offset, limit: 20 }, env)) as { page: { nextOffset: number | null } }).page.nextOffset; } while (offset !== null); }
+  await review("decide", target, { revision: page.revision, decisions: page.facts.map((fact) => ({ factId: fact.id, verdict: "hold", reason: "两卷原文还不足以判断。" })) }, env);
+  await review("apply", target, { revision: page.revision }, env);
+  // Nothing changed: no pair is asked again (no loop, no spend).
+  assert.equal((await atlasSweep(await atlasContext(directory, "star", bindings))).candidates, 0);
+  // Book 2 now says its District East lies in Star City: only pairs touching those places reopen.
+  const relations = join(bindings.bindings[1].workspace, "ontology", "relations.jsonl");
+  await writeFile(relations, (await readFile(relations, "utf8")) + JSON.stringify(part("east2", "city2")) + "\n");
+  const reopened = await atlasSweep(await atlasContext(directory, "star", bindings));
+  const pairs = reopened.proposals.map((proposal) => [proposal.a, proposal.b].sort().join(" "));
+  assert.ok(reopened.candidates >= 1 && reopened.candidates < 3, `only the changed places' pairs reopen (got ${reopened.candidates})`);
+  assert.ok(pairs.some((pair) => pair.includes(`${sources[1].id}::east2`)), "the district whose parent appeared is asked again");
+});
