@@ -31,7 +31,7 @@ export function framePositions(
   const toolbar = shown(".scene-toolbar");
   const sequence = shown(".scene-sequence");
   const transport = shown(".pipeline");
-  const inset = { left: 28, right: 65, top: Math.max(95, (sequence?.bottom ?? toolbar?.bottom ?? 170) - (bounds?.top ?? 0) + 18), bottom: transport && bounds ? bounds.bottom - transport.top + 32 : 200 };
+  const inset = { left: 28, right: 65, top: Math.max(95, (sequence?.bottom ?? toolbar?.bottom ?? 170) - (bounds?.top ?? 0) + 18), bottom: transport && bounds ? bounds.bottom - transport.top + 32 : 72 };
   if (sheet && bounds && !options?.ignoreSheet) {
     if (sheet.width > width * 0.55) inset.bottom = Math.max(inset.bottom, bounds.bottom - sheet.top + 16);
     else inset.right = Math.max(inset.right, bounds.right - sheet.left + 18);
@@ -55,4 +55,30 @@ export interface LabelBus {
   active: Set<string>;
   positions: Map<string, [number, number, number]>;
   trackTargets: Map<string, HTMLElement>;
+}
+
+/**
+ * Brings a selection into view without changing how close the reader is:
+ * nothing moves while it is already comfortably on screen; otherwise the
+ * camera glides sideways (same distance, same angle) until it is centred.
+ * Only a selection too large for the current distance is reframed.
+ */
+export function revealPositions(ref: { current: GraphCanvasRef | null }, positions: [number, number, number][], radius: number, animated = true): void {
+  if (!positions.length) return;
+  const controls = ref.current?.getControls?.();
+  if (!controls) return;
+  const camera = controls.camera as PerspectiveCamera;
+  camera.updateMatrixWorld();
+  const visible = (point: Vector3) => { const at = point.clone().project(camera); return at.z < 1 && Math.abs(at.x) < 0.72 && Math.abs(at.y) < 0.68; };
+  const points = positions.map((position) => new Vector3(...position));
+  if (points.every(visible)) return;
+  const center = points.reduce((sum, point) => sum.add(point), new Vector3()).divideScalar(points.length);
+  const extent = Math.max(radius, ...points.map((point) => point.distanceTo(center) + radius));
+  const position = controls.getPosition(new Vector3(), false);
+  const target = controls.getTarget(new Vector3(), false);
+  const visibleHalfHeight = position.distanceTo(target) * Math.tan((camera.fov || 45) * Math.PI / 360);
+  if (extent > visibleHalfHeight * 0.8) { framePositions(ref, positions, 1.15, animated, { preserveDirection: true }); return; }
+  const shift = center.sub(target);
+  controls.stop();
+  void controls.setLookAt(...position.add(shift).toArray(), ...target.add(shift).toArray(), animated);
 }

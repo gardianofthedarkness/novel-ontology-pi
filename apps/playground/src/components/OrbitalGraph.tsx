@@ -23,6 +23,8 @@ interface GlyphData {
   transparent: boolean;
   selected: boolean;
   touched: boolean;
+  /** Unrelated to the current selection: drawn receded. */
+  dimmed: boolean;
   motion: MotionBus;
 }
 export const ORBITAL_TRANSITION_MS = 1100;
@@ -52,11 +54,11 @@ const noRaycast = () => undefined;
 function SphereGlyph({ node, active }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
-  const { draw, morph, reducedMotion, transparent, selected, touched, motion } = data;
+  const { draw, morph, reducedMotion, transparent, selected, touched, dimmed, motion } = data;
   const carried = useCarriedPose(draw, morph, reducedMotion);
   const body = useRef<MeshStandardMaterial>(null);
   /** Followers for hover swell and selection lift (view only). */
-  const hover = useRef(0), lift = useRef(0);
+  const hover = useRef(0), lift = useRef(0), dim = useRef(0);
   /** Frosted reveal: 0 = frosted (normal), 1 = cleared (revealed parent). */
   const clear = useRef(transparent ? 1 : 0);
   /** Ghost → canon: when this record's state becomes canon, it clears into solid. */
@@ -71,15 +73,16 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
     if (!group.current) return;
     const pose = carried(delta);
     const t = now();
-    hover.current += ((motion.hoveredId === draw.node.id ? 1 : 0) - hover.current) * (reducedMotion ? 1 : Math.min(1, delta * 10));
+    hover.current += ((motion.hoveredId === draw.node.id ? 1 : 0) - hover.current) * (reducedMotion ? 1 : Math.min(1, delta * 14));
     lift.current += ((selected && (draw.role === "main" || draw.role === "preview") ? 1 : 0) - lift.current) * (reducedMotion ? 1 : Math.min(1, delta * 6));
+    dim.current += ((dimmed ? 1 : 0) - dim.current) * (reducedMotion ? 1 : Math.min(1, delta * 6));
     const breath = reducedMotion || (selected && nebula) ? [0, 0, 0] : breathOffset(draw, t);
     const ripple = reducedMotion ? [0, 0, 0] : rippleOffset(draw.position, t, motion.ripples);
     const raise = draw.radius * 0.22 * lift.current;
     const sway = swayOf(motion, draw.node.id);
     group.current.position.set(pose.position[0] - draw.position[0] + breath[0] + ripple[0] + sway[0], pose.position[1] - draw.position[1] + breath[1] + ripple[1] + raise + sway[1], pose.position[2] - draw.position[2] + breath[2] + ripple[2] + sway[2]);
     const pulse = draw.node.state === "proposed" && !reducedMotion ? 1 + 0.035 * Math.sin(t * 2.2) : 1;
-    group.current.scale.setScalar(pose.radius / draw.radius * (1 + 0.08 * hover.current) * pulse);
+    group.current.scale.setScalar(pose.radius / draw.radius * (1 + 0.16 * hover.current) * pulse);
     // Frost front: the frosted shell keeps only what lies below a horizontal
     // front that sweeps top → bottom as the sphere clears (and back up).
     clear.current += ((transparent ? 1 : 0) - clear.current) * (reducedMotion ? 1 : Math.min(1, delta / 0.12));
@@ -90,7 +93,7 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
     const arriving = arrival.current ? Math.min(1, (t - arrival.current.start) / 0.9) : 1;
     if (arriving >= 1) arrival.current = null;
     const eased = clear.current * clear.current * (3 - 2 * clear.current);
-    if (body.current) body.current.opacity = (arrival.current ? arrival.current.from + (solid - arrival.current.from) * arriving : solid + (0.055 - solid) * eased) * (preimage ? 0.75 : 1);
+    if (body.current) body.current.opacity = (arrival.current ? arrival.current.from + (solid - arrival.current.from) * arriving : solid + (0.055 - solid) * eased) * (preimage ? 0.75 : 1) * (1 - 0.72 * dim.current);
     if (frost.current) {
       const front = arrival.current ? arriving : clear.current;
       const active = arrival.current !== null || (clear.current > 0.01 && clear.current < 0.99);
@@ -102,7 +105,7 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
         frost.current.color.set(arrival.current ? "#ffe2a8" : "#e8f4ff");
       }
     }
-    if (body.current) body.current.emissiveIntensity = baseGlow + 0.35 * hover.current + (reducedMotion ? 0 : 0.7 * glintLevel(motion.glints.get(draw.node.id), t));
+    if (body.current) body.current.emissiveIntensity = baseGlow + 0.6 * hover.current + (reducedMotion ? 0 : 0.7 * glintLevel(motion.glints.get(draw.node.id), t));
   });
   /** Nebula weight: strongly linked entities are solid, weak ones faint —
    * proposed/held keep their own (lower) bands so states stay distinct. */
@@ -864,21 +867,34 @@ const EXTREME_BACK_SETTLE_MS = 1800;
 type Enclosure = { center: Position3; radius: number };
 const EXTREME_BACK_ENCLOSURE_FACTOR = 12;
 
-function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, reducedMotion, enabled, direction, span }: { graphRef: { current: GraphCanvasRef | null }; draws: OrbitalDraw[]; selectedId: string | null; enclosure?: Enclosure; levelKey: string; reducedMotion: boolean; enabled: boolean; direction?: Position3; span?: Position3[] }) {
+/** The view every level opens with, from one steady side (a reset returns to it). */
+const ARRIVAL_DIRECTION: Position3 = [0.14, 0.3, 1];
+
+function OrbitalFraming({ graphRef, draws, selectedId, enclosure, levelKey, reducedMotion, enabled, direction, span, resetToken = 0 }: { graphRef: { current: GraphCanvasRef | null }; draws: OrbitalDraw[]; selectedId: string | null; enclosure?: Enclosure; levelKey: string; reducedMotion: boolean; enabled: boolean; direction?: Position3; span?: Position3[]; resetToken?: number }) {
   const { camera, size } = useThree();
   // Narrow (portrait) screens frame fewer neighbours so spheres stay readable.
-  const positions = span && span.length > 1 && !selectedId ? span : entryFrame(draws, selectedId, size.width / Math.max(1, size.height) < 0.8 ? 2 : 5);
-  const latest = useRef({ positions, enclosure }); latest.current = { positions, enclosure };
+  const neighbours = size.width / Math.max(1, size.height) < 0.8 ? 2 : 5;
+  const positions = span && span.length > 1 && !selectedId ? span : entryFrame(draws, selectedId, neighbours);
+  // "Reset view" ignores the selection: it is the level's own arrival view.
+  const arrival = span && span.length > 1 ? span : entryFrame(draws, null, neighbours);
+  const latest = useRef({ positions, arrival, enclosure }); latest.current = { positions, arrival, enclosure };
   const framingEnabled = useRef(enabled); framingEnabled.current = enabled;
+  const lastReset = useRef(resetToken);
   useEffect(() => {
     (camera as { fov: number }).fov = 42; camera.near = 1; camera.far = 2000000; camera.updateProjectionMatrix();
-    const timeout = setTimeout(() => { if (framingEnabled.current) framePositions(graphRef, latest.current.positions, 1.2, !reducedMotion, { direction: direction ?? (levelKey.length % 2 ? [0.18, 0.22, 1] : [-0.18, 0.22, 1]), within: latest.current.enclosure, ignoreSheet: true }); }, 100);
+    const reset = resetToken !== lastReset.current;
+    lastReset.current = resetToken;
+    const timeout = setTimeout(() => { if (framingEnabled.current || reset) framePositions(graphRef, reset ? latest.current.arrival : latest.current.positions, 1.2, !reducedMotion, { direction: direction ?? ARRIVAL_DIRECTION, within: latest.current.enclosure, ignoreSheet: true }); }, 100);
     return () => clearTimeout(timeout);
-  }, [levelKey, reducedMotion, camera, graphRef, size.width, size.height]);
+  }, [levelKey, reducedMotion, camera, graphRef, size.width, size.height, resetToken]);
   return null;
 }
 
 interface Props {
+  /** Bumped by "Reset view": the camera returns to this level's arrival view. */
+  viewToken?: number;
+  /** The selection and what it links to; other spheres recede. */
+  focusIds?: ReadonlySet<string> | null;
   /** Working faculties to animate, grouped by the sphere they play on. */
   faculties?: FacultyAnchor[];
   /** A flat map on the floor (orbital Places); world units. */
@@ -919,15 +935,15 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], renderDistance, frameDirection, frameSpan, onCenter }, ref) {
-  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion]);
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
+  const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), dimmed: !!focusIds && !focusIds.has(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion, focusIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
   const enclosure = useMemo(() => { const ghost = backdrop?.ghosts.find((entry) => entry.current); return ghost ? { center: ghost.position, radius: ghost.radius } : undefined; }, [backdrop]);
   const spine = useMemo(() => paths.find((path) => !path.preview)?.points ?? [], [paths]);
   /** Which sphere sits on each path point, so the string follows their sway. */
   const pathAnchors = useMemo(() => new Map(paths.map((path) => [path.id, path.points.map((point) => draws.find((draw) => draw.position.every((value, axis) => value === point[axis]))?.node.id)])), [paths, draws]);
-  return <GraphCanvas ref={ref} nodes={nodes} edges={[]} theme={theme} renderNode={renderSphere} labelType="none" layoutType="forceDirected3d" cameraMode="rotate" draggable={false} animated={false} minDistance={16} maxDistance={1000000} selections={[]} glOptions={{ antialias: true, preserveDrawingBuffer: true }}
+  return <GraphCanvas ref={ref} nodes={nodes} edges={[]} theme={theme} renderNode={renderSphere} labelType="none" layoutType="forceDirected3d" cameraMode="pan" draggable={false} animated={false} minDistance={16} maxDistance={1000000} selections={[]} glOptions={{ antialias: true, preserveDrawingBuffer: true }}
     onNodeClick={(node) => onSelect((node.data.glyph as GlyphData).draw)} onNodeDoubleClick={(node) => onEnter((node.data.glyph as GlyphData).draw)}
     onNodePointerOver={(node) => { if ((node.data.glyph as GlyphData).draw.role !== "preimage") onHover?.(node.id); }} onNodePointerOut={(node) => { if (motion.hoveredId === node.id) onHover?.(null); }}
     onCanvasClick={(event) => onBlank?.(event)}>
@@ -950,6 +966,6 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
     <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} opening={!!morph?.delays} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} onCenter={onCenter} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
-    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} direction={frameDirection} span={frameSpan} />
+    <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} direction={frameDirection} span={frameSpan} resetToken={viewToken} />
   </GraphCanvas>;
 });

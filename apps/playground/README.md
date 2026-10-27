@@ -39,7 +39,7 @@ the app uses system fonts and does not load remote visual assets.
   the straight chronological rails. Turn it off for a quieter timeline.
   Overview parent tethers come from each live record's `parent` field; links
   to hidden interior endpoints appear when that interior is open.
-  **Frame view** fits current positions. Activity never
+  **Reset view** (⌂) returns to the level's arrival view. Activity never
   reframes the scene automatically; the activity button is an explicit flight.
 - **Record**, **Activity**, and **Review** toggle a translucent inspector over
   the fullscreen scene. Click the active side tab again or the close button
@@ -129,8 +129,13 @@ testing).
   immediately. Clicking it opens the review inspector at the work site.
   Agent activity never moves the camera on its own — framing happens
   on view/viewport changes and explicit user actions.
-- Camera notes: `cameraMode="rotate"` — Reagraph's `"orbit"` is an
-  auto-rotating showcase mode (20°/s), not mouse-orbit. Node
+- Camera notes: map-style controls (`cameraMode="pan"`, tuned in
+  `ScaleNavigation`): left drag pans, right drag or Shift/Space + drag
+  turns (gently, never under the floor), wheel/pinch zooms to the cursor,
+  two fingers pinch and turn. Orbit-on-left-drag was tried and swung the
+  whole timeline on a short drag. Selecting never zooms: an off-screen
+  selection is slid into view at the same distance (`revealPositions`).
+  Reagraph's `"orbit"` is an auto-rotating showcase mode (20°/s), not mouse-orbit. Node
   positions are pinned via `fx/fy/fz` (v4.32 ignores a `position`
   field). Initial framing uses the chronological positions; explicit
   reframing uses the scene's current positions. The settling frame is

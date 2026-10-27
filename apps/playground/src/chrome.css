@@ -1,0 +1,95 @@
+/* Clean chrome: one slim top bar (brand · views · live), one navigation row
+   (back, where you are, which book), round view controls at the right edge,
+   and a processing dock that folds away to a single line. Loaded last. */
+.app .topbar { padding: 12px 24px; }
+.topbar .sample-badge { margin-left: auto; }
+.app .brand svg { width: 30px; height: 30px; }
+.app .brand { font-size: 13px; }
+
+/* The page heading only speaks while following Pi (the dock line carries the status otherwise). */
+.app .page-heading { display: none; }
+.app.following-orbital .page-heading { display: flex; top: 112px; left: 24px; right: auto; }
+.following-orbital .page-heading .eyebrow, .following-orbital .page-heading small { display: none; }
+.following-orbital .page-heading h1 { font-size: 20px; margin: 0; }
+.following-orbital .page-heading .live-runtime-status { margin-top: 4px; font-size: 11px; }
+
+.design-switch.stage-switch { position: fixed; top: 14px; left: 50%; right: auto; transform: translateX(-50%); z-index: 30; gap: 10px; }
+.stage-switch button { transition: background .15s, color .15s; }
+.stage-switch .stage-group:first-child button { font-size: 9px; letter-spacing: .06em; }
+
+.app .scene-sequence.orbital-navigation { top: 62px; left: 24px; right: 84px; align-items: stretch; }
+.app .orbital-navigation-top { gap: 12px; flex-wrap: nowrap; width: 100%; }
+.orbital-navigation-top .orbital-location { flex: 0 1 auto; min-width: 0; }
+.orbital-navigation-top .book-bar { margin-left: auto; }
+.nav-back { width: 30px; height: 30px; padding: 0 !important; border-radius: 50% !important; font-size: 14px !important; flex: 0 0 auto; }
+.nav-back:disabled { opacity: .3; }
+
+.view-controls { position: absolute; right: 24px; bottom: 76px; z-index: 12; display: flex; flex-direction: column; gap: 6px; transition: bottom .25s ease; }
+.dock-open .view-controls { bottom: 262px; }
+.view-controls > button, .view-help > summary { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 1px solid #75b9df40; background: #0b2033cc; color: #cfe7f7; font-size: 15px; line-height: 1; cursor: pointer; list-style: none; backdrop-filter: blur(8px); transition: background .15s, border-color .15s, transform .15s; }
+.view-help > summary::-webkit-details-marker { display: none; }
+.view-controls > button:hover, .view-help > summary:hover { background: #163a57; border-color: #9fdcff88; transform: scale(1.06); }
+.view-controls > button[aria-pressed=true] { border-color: #6fd0ff; color: #9fe2ff; box-shadow: 0 0 12px #36adff55; }
+.view-help { position: relative; }
+.view-help[open] > summary { background: #163a57; border-color: #9fdcff88; }
+.view-help-card { position: absolute; right: 44px; bottom: 0; width: 330px; padding: 14px 16px; display: flex; flex-direction: column; gap: 9px; color: #b9d3e4; font-size: 11px; line-height: 1.55; background: #08131ce8; border: 1px solid #69bfff42; border-radius: 12px; backdrop-filter: blur(14px); }
+.view-help-card p { margin: 0; }
+.view-help-card b { color: #e6f4ff; margin-right: 6px; }
+.view-help-card .time-key { color: #83cfff; }
+.view-help-card .time-key i { display: inline-block; width: 20px; height: 2px; background: #68caff; margin: 0 8px 3px 0; }
+.view-help-card .time-key span { display: block; color: #8aa6bc; font-size: 10px; }
+.view-help-card .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: #8aa6bc; font-size: 10px; }
+.view-help-card .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.view-help-card .legend i { width: 7px; height: 7px; background: var(--olive); }
+.view-help-card .legend i.proposed { background: transparent; border: 1px dashed var(--amber); }
+.view-help-card .legend i.held { background: #819398; }
+.view-help-card > button { align-self: flex-start; font-size: 10px; padding: 4px 9px; border-radius: 12px; }
+
+/* Grab cursor while panning; spheres keep their pointer. */
+.orbital-stage canvas { cursor: grab; }
+.orbital-stage canvas.is-grabbing { cursor: grabbing !important; }
+
+/* Processing dock: folded, only its one-line status shows. */
+.dock-toggle { position: fixed; left: 20px; bottom: 16px; z-index: 81; display: flex; align-items: center; gap: 9px; max-width: min(520px, calc(100vw - 260px)); padding: 7px 12px; border-radius: 16px; border: 1px solid #69bfff42; background: #08131cd0; color: #c4e5ff; font-size: 11px; backdrop-filter: blur(12px); cursor: pointer; }
+.dock-toggle:hover { border-color: #9fdcff88; }
+.dock-toggle .dock-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.dock-toggle i { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #6f8a9c; }
+.dock-toggle i.is-busy { background: #ffc777; box-shadow: 0 0 10px #ffc777; animation: agent-working 1.2s ease-in-out infinite alternate; }
+.dock-toggle > span[aria-hidden] { color: #7fb9dc; }
+.dock-open .dock-toggle { bottom: 222px; }
+.dock-closed .pipeline, .dock-closed .pi-review-progress, .dock-closed .transport { display: none !important; }
+.dock-open .pi-review-progress { bottom: 262px; }
+
+.app .inspector, .app .inspector.is-open.album-open { top: 112px; bottom: 70px; }
+.app.dock-open .inspector { bottom: 240px; }
+/* "Follow Pi" lives in the top bar, beside the live badge. */
+.app .activity-dock { position: fixed; top: 13px; right: 92px; bottom: auto; z-index: 31; }
+
+/* Flat views share the slimmer header. */
+.tp-view, .narrative-list { padding-top: 0; }
+
+@media (max-width: 700px) {
+  .design-switch.stage-switch { top: 56px; }
+  .app .scene-sequence.orbital-navigation { top: 96px; left: 14px; right: 14px; }
+  .app .orbital-navigation-top { flex-wrap: wrap; }
+  .app .activity-dock { top: 12px; right: 12px; }
+  .view-controls, .dock-open .view-controls { flex-direction: row; right: 12px; bottom: 64px; }
+  .dock-open .view-controls { bottom: 236px; }
+  .view-help-card { right: 0; bottom: 44px; }
+  .design-switch.stage-switch { left: 12px; right: 12px; transform: none; justify-content: center; font-size: 9px; }
+  .app .topbar .sample-badge { display: none; }
+  .view-help-card { width: min(300px, calc(100vw - 80px)); }
+  .dock-toggle { left: 12px; max-width: calc(100vw - 150px); }
+  .app .inspector { top: 160px; }
+}
+
+/* Selection emphasis: labels of unrelated spheres recede with them. */
+.orbital-label.is-dim { opacity: .28; transition: opacity .3s; }
+.orbital-label.is-hovered b { color: #fff; }
+
+/* The Places side panel folds like the dock: its title is the handle. */
+.app .atlas-panel { top: 112px; max-height: calc(100% - 200px); }
+.atlas-panel summary { position: relative; padding-right: 18px; }
+.atlas-panel summary::after { content: "▾"; position: absolute; right: 0; top: 0; color: #7fb9dc; }
+.atlas-panel:not([open]) summary::after { content: "▸"; }
+@media (min-width: 701px) { .phone-live .transport { right: 290px; } }
