@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useChromeInsets } from "./useChromeInsets";
-import { dateLine, readingJumps, scenePeriod, storyRows, type StoryScene, type StoryTime, type TimePlaceProjection } from "../data/timePlace";
+import { dateLine, readingJumps, scenePeriod, storyRows, universeStoryRows, type StoryScene, type StoryTime, type TimePlaceProjection } from "../data/timePlace";
 
 /**
  * Story time view (time-place faculty, phase 1): the story in the order it
@@ -18,12 +18,21 @@ interface Props {
   /** Scenes Pi is touching; followed (scrolled to) while following Pi. */
   touched?: ReadonlySet<string>;
   following?: boolean;
+  /** The book picker and "Pi working on …" status, as in every view. */
+  bookBar?: ReactNode;
+  /** Universe views: the book being read; the list glides to it and the other books recede. */
+  focusBook?: number | null;
 }
 
 const hue = (index: number, total: number) => `hsl(${200 - Math.round(150 * index / Math.max(1, total - 1))} 70% 62%)`;
 
-export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, following = false }: Props) {
-  const rows = useMemo(() => storyRows(data), [data]);
+export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, following = false, bookBar, focusBook = null }: Props) {
+  const universe = data.scope === "universe";
+  const rows = useMemo(() => universe ? universeStoryRows(data) : storyRows(data).map((row) => ({ ...row, book: null, continuityId: null })), [data, universe]);
+  const rowKey = (scene: StoryScene) => scenePeriod(scene) ?? (universe ? `unplaced:${scene.book}` : "unplaced");
+  const bookRefs = useRef(new Map<number, HTMLElement>());
+  // Universe: choosing a book glides the list to it.
+  useEffect(() => { if (universe && focusBook !== null) bookRefs.current.get(focusBook)?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [focusBook, universe]);
   const jumps = useMemo(() => new Set(readingJumps(data).map((jump) => jump.sceneId)), [data]);
   const timeById = useMemo(() => new Map(data.times.map((time) => [time.id, time])), [data]);
   const [selected, setSelected] = useState<StoryScene | null>(null);
@@ -36,31 +45,39 @@ export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, f
   useEffect(() => {
     if (!following || !touched?.size) return;
     const scene = data.scenes.find((entry) => touched.has(entry.id));
-    if (scene) rowRefs.current.get(scenePeriod(scene) ?? "unplaced")?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (scene) rowRefs.current.get(rowKey(scene))?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [touched, following]); // eslint-disable-line react-hooks/exhaustive-deps
-  const reading = [...data.scenes].sort((first, second) => first.index - second.index);
+  // The reading-order ribbon follows one book (the chosen one, in a universe).
+  const reading = [...data.scenes].filter((scene) => !universe || focusBook === null || scene.book === focusBook).sort((first, second) => first.index - second.index);
   const colourOf = (scene: StoryScene) => {
     const time = timeById.get(scenePeriod(scene) ?? "");
     return !time ? "var(--tp-unplaced)" : time.flashback ? "var(--tp-flashback)" : hue(time.storyIndex, data.times.length);
   };
   const jumpTo = (scene: StoryScene) => {
     setSelected(scene);
-    rowRefs.current.get(scenePeriod(scene) ?? "unplaced")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    rowRefs.current.get(rowKey(scene))?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   };
-  if (!data.available) return <div className="tp-empty" style={insets}><b>No story time yet</b><span>Run the time-place faculty for this book (<code>novel timeplace run</code>) and approve its changeset to see the story in time order.</span></div>;
+  if (!data.available) return <div className="tp-empty" style={insets}>{bookBar}<b>No story time yet</b><span>Run the time-place faculty for this book (<code>novel timeplace run</code>) and approve its changeset to see the story in time order.</span></div>;
   return <section className="tp-view tp-story" aria-label="Story timeline" style={insets}>
+    {bookBar}
     <header className="tp-head">
-      <div><span className="eyebrow">Story time · phase 1</span><b>{data.times.length} time period{data.times.length === 1 ? "" : "s"}{flashbacks ? ` · ${flashbacks} flashback${flashbacks === 1 ? "" : "s"}` : ""}{proposed ? ` · ${proposed} proposed, awaiting review` : ""}</b></div>
-      <p>Earliest at the top. A period starts at a time word in the text and lasts until the next; order is estimated from the text, and dates marked <i>derived</i> are calculated from stated words, never guessed.</p>
+      <div><span className="eyebrow">{universe ? `Story time · universe · ${data.universe?.title ?? ""} · ${data.books?.length ?? 0} books` : "Story time"}</span><b>{data.times.length} time period{data.times.length === 1 ? "" : "s"}{flashbacks ? ` · ${flashbacks} flashback${flashbacks === 1 ? "" : "s"}` : ""}{proposed ? ` · ${proposed} proposed, awaiting review` : ""}</b></div>
+      <p>{universe ? "Each continuity keeps its own clock; books follow their reading order. " : ""}Earliest at the top. A period starts at a time word in the text and lasts until the next; order is estimated from the text, and dates marked <i>derived</i> are calculated from stated words, never guessed.</p>
     </header>
     <div className="tp-ribbon" role="list" aria-label="Reading order: each scene coloured by its story period">
       <span className="tp-ribbon-label">Reading order →</span>
       <div className="tp-ribbon-cells">{reading.map((scene) => <button key={scene.id} role="listitem" className={`tp-cell${selected?.id === scene.id ? " is-selected" : ""}${jumps.has(scene.id) ? " is-jump" : ""}`} style={{ background: colourOf(scene) }} title={`${scene.label} — ${timeById.get(scenePeriod(scene) ?? "")?.label ?? "time not stated"}`} aria-label={`Scene ${scene.index + 1}, chapter ${scene.chapterIndex}: ${scene.label}`} onClick={() => jumpTo(scene)} />)}</div>
     </div>
     <ol className="tp-spine">
-      {rows.map(({ time, scenes }) => {
+      {rows.flatMap(({ time, scenes, book, continuityId }, index) => {
         const host = time?.toldFromId ? timeById.get(time.toldFromId) : undefined;
-        return <li key={time?.id ?? "unplaced"} ref={(element) => { if (element) rowRefs.current.set(time?.id ?? "unplaced", element); }} className={`tp-row${time?.flashback ? " is-flashback" : ""}${!time ? " is-unplaced" : ""}${time?.proposed ? " is-proposed" : ""}${time && emerging?.has(time.id) ? " is-emerging" : ""}`} style={time && !time.flashback ? { ["--tp-row" as string]: hue(time.storyIndex, data.times.length) } : undefined}>
+        const key = time?.id ?? (universe ? `unplaced:${book}` : "unplaced");
+        const previous = rows[index - 1];
+        const headings = [];
+        if (universe && (index === 0 || previous.continuityId !== continuityId)) headings.push(<li key={`continuity:${continuityId}`} className="tp-continuity" role="presentation"><span className="eyebrow">Continuity</span><b>{data.continuities?.find((entry) => entry.id === continuityId)?.title ?? "No continuity"}</b></li>);
+        if (universe && book !== null && (index === 0 || previous.book !== book)) { const entry = data.books?.find((item) => item.volume === book); headings.push(<li key={`book:${book}`} ref={(element) => { if (element) bookRefs.current.set(book, element); }} className={`tp-book-marker${focusBook === book ? " is-focus" : ""}`} role="presentation"><span>Book {entry?.readingOrder ?? book}</span><b lang="zh">{entry?.title ?? `Volume ${book}`}</b></li>); }
+        const away = universe && focusBook !== null && book !== focusBook;
+        return [...headings, <li key={key} ref={(element) => { if (element) rowRefs.current.set(key, element); }} className={`tp-row${time?.flashback ? " is-flashback" : ""}${!time ? " is-unplaced" : ""}${time?.proposed ? " is-proposed" : ""}${time && emerging?.has(time.id) ? " is-emerging" : ""}${away ? " is-other-book" : ""}`} style={time && !time.flashback ? { ["--tp-row" as string]: hue(time.storyIndex, data.times.length) } : undefined}>
           <div className="tp-row-head">
             <span className="tp-dot" aria-hidden="true" />
             <div className="tp-row-title">
@@ -70,7 +87,7 @@ export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, f
           </div>
           {time?.flashback && <p className="tp-told">Flashback{host ? <> told during <b lang="zh">{host.label}</b> (ch {host.chapterIndex})</> : ""} · Jev {Math.round(time.flashbackProbability * 100)}% sure it goes back in time</p>}
           <div className="tp-scenes">{scenes.map((scene) => <SceneChip key={scene.id} scene={scene} names={names} touched={!!touched?.has(scene.id)} selected={selected?.id === scene.id} anchor={!!time && scene.times.some((entry) => entry.id === time.id && entry.via === "anchor")} onClick={() => setSelected(scene)} />)}</div>
-        </li>;
+        </li>];
       })}
     </ol>
     {selected && <SceneDetail scene={selected} names={names} times={timeById} onClose={() => setSelected(null)} onShowInOrbit={onShowInOrbit} />}

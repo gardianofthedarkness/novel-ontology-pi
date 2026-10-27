@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { GraphCanvas, darkTheme, type GraphCanvasRef, type NodeRendererProps } from "reagraph";
 import { useFrame, useThree } from "@react-three/fiber";
-import { type Camera, AdditiveBlending, BoxGeometry, BufferGeometry, CurvePath, LineCurve3, TubeGeometry, DoubleSide, Points, PointsMaterial, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
+import { type Camera, AdditiveBlending, Fog, BoxGeometry, BufferGeometry, CurvePath, LineCurve3, TubeGeometry, DoubleSide, Points, PointsMaterial, Plane, CanvasTexture, EdgesGeometry, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RingGeometry, Float32BufferAttribute, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, QuadraticBezierCurve3, Quaternion, SRGBColorSpace, Vector3, type Group } from "three";
 import { recordColor } from "../archive";
 import type { WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
@@ -314,6 +314,40 @@ function FloorMap({ marks }: { marks: FloorMark[] }) {
       <mesh raycast={noRaycast}><ringGeometry args={[mark.radius * (mark.proposed ? 0.993 : rim), mark.radius, mark.region ? 72 : 48]} /><meshBasicMaterial color={mark.proposed ? "#ffd36b" : "#7cc8ff"} transparent opacity={mark.active ? (mark.region ? 0.6 : 0.85) : 0.22} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>
     </group>;
   })}</>;
+}
+
+/**
+ * Render distance, the way a block game does it: around the point the
+ * camera looks at, things stay clear; with distance they fade into the
+ * background fog, and past the edge they are not drawn at all (so a whole
+ * universe stays light). Labels go a little before their spheres do.
+ */
+function RenderDistance({ graphRef, radius }: { graphRef: { current: GraphCanvasRef | null }; radius: number }) {
+  const { scene, camera } = useThree();
+  const fog = useMemo(() => new Fog("#050b15", 1, 2), []);
+  useEffect(() => {
+    const previous = scene.fog;
+    scene.fog = fog;
+    // Leaving a universe view: everything drawn again, no fog.
+    return () => { scene.fog = previous; scene.traverse((object) => { if (object.userData.orbitalGlyph) { object.visible = true; object.userData.distanceFaded = false; } }); };
+  }, [scene, fog]);
+  const target = useMemo(() => new Vector3(), []);
+  const place = useMemo(() => new Vector3(), []);
+  useFrame(() => {
+    const controls = graphRef.current?.getControls?.();
+    if (!controls) return;
+    controls.getTarget(target, false);
+    const distance = camera.position.distanceTo(target);
+    fog.near = Math.hypot(distance, radius * 0.45);
+    fog.far = Math.hypot(distance, radius * 1.05);
+    scene.traverse((object) => {
+      if (!object.userData.orbitalGlyph) return;
+      const away = object.getWorldPosition(place).distanceTo(target);
+      object.visible = away <= radius * 1.1;
+      object.userData.distanceFaded = away > radius * 0.8;
+    });
+  });
+  return null;
 }
 
 /** Arrowheads keep a small fixed size on screen, like a flat graph's,
@@ -757,6 +791,8 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
       const pixels = Math.abs(horizontal.x - point.x) * size.width / 2;
       const element = bus.targets.get(draw.node.id);
       if (element) element.style.visibility = "hidden";
+      // Beyond the render distance: no label (the sphere itself fades or is not drawn).
+      if (!object.visible || object.userData.distanceFaded && selectedId !== draw.node.id) return;
       if (sampleCentre && draw.role === "main" && point.z < 1 && Math.abs(point.x) < 0.45 && Math.abs(point.y) < 0.55) central.push(draw.node.id);
       const selectedPreview = draws.some((entry) => entry.node.id === selectedId && entry.previewParentId === draw.node.id);
       if (!transitioning && selectedPreview && world.distanceTo(camera.position) < draw.radius * 4) closest = { id: draw.node.id, pixels, score: 1000000 };
@@ -843,6 +879,8 @@ interface Props {
   faculties?: FacultyAnchor[];
   /** A flat map on the floor (orbital Places); world units. */
   floor?: FloorMark[];
+  /** Minecraft-style render distance (world units) around where the camera looks. */
+  renderDistance?: number;
   /** Camera direction for automatic framing (default: a slight side view). */
   frameDirection?: Position3;
   /** What automatic framing frames (default: the selection's neighbourhood or every main sphere). */
@@ -877,7 +915,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], frameDirection, frameSpan, onCenter }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], renderDistance, frameDirection, frameSpan, onCenter }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -902,6 +940,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <CameraInertia draws={draws} motion={motion} enabled={!reducedMotion} graphRef={ref as { current: GraphCanvasRef | null }} />
     {!reducedMotion && heartbeatId && <><FaceCamera /><PiHeartbeat spine={spine} targetId={heartbeatId} draws={draws} bus={bus} /></>}
     <LocalClipping />
+    {renderDistance ? <RenderDistance graphRef={ref as { current: GraphCanvasRef | null }} radius={renderDistance} /> : null}
     <PointerParallax graphRef={ref as { current: GraphCanvasRef | null }} enabled={!reducedMotion} />
     {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} reducedMotion={reducedMotion} />)}
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />

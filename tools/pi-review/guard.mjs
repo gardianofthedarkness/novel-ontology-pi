@@ -72,7 +72,7 @@ export function authorize(command, scope) {
     const kind = flags.get('--scope') ?? 'book';
     const assigned = kind === 'book' ? tokens[2] === novel && changesetIds.includes(tokens[3]) && !flags.has('--universe')
       : kind === 'library' ? tokens[2] === scope.library?.directory && /^plan_[a-f0-9]{64}$/.test(tokens[3] ?? '') && !flags.has('--universe')
-      : kind === 'universe' && tokens[2] === scope.library?.directory && /^uc_[a-f0-9]{64}$/.test(tokens[3] ?? '') && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(flags.get('--universe') ?? '');
+      : kind === 'universe' && tokens[2] === scope.library?.directory && /^u[ca]_[a-f0-9]{64}$/.test(tokens[3] ?? '') && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(flags.get('--universe') ?? '');
     if (!assigned) throw new Error('Review target is outside the assigned scope');
     for (const name of ['--offset', '--limit']) if (flags.has(name) && (!/^\d+$/.test(flags.get(name)) || !Number.isSafeInteger(Number(flags.get(name))) || Number(flags.get(name)) < (name === '--limit' ? 1 : 0) || name === '--limit' && Number(flags.get(name)) > 20)) throw new Error('Review page exceeds its budget');
     if (operation === 'evidence' && (!flags.get('--fact') || flags.get('--fact').length > 2000)) throw new Error('Use --fact from review show');
@@ -237,6 +237,24 @@ export function authorize(command, scope) {
       }
       valid = tokens[2] === novel && flags.length === 8 && values.size === 4 && ['--block', '--key', '--value', '--reason'].every((key) => values.has(key)) && blockIds.includes(values.get('--block'));
     }
+  }
+  if (verb === 'atlas') {
+    // Universe atlas: cross-book place links are only proposed here (ua_ packets), and reviewed through novel review --scope universe.
+    const library = scope.library?.directory;
+    const universe = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(tokens[3] ?? '');
+    const options = tokens.slice(4);
+    const flags = new Set();
+    let index = 0;
+    for (; index < options.length; index++) {
+      const name = options[index];
+      if (flags.has(name) || !['--propose', '--no-jev', '--max-questions'].includes(name)) break;
+      flags.add(name);
+      if (name === '--max-questions') { const value = options[++index]; if (!/^\d+$/.test(value ?? '') || Number(value) < 1 || Number(value) > 200) { index = -1; break; } }
+    }
+    if (operation === 'show') valid = !!library && tokens[2] === library && universe && tokens.length === 4;
+    if (operation === 'sweep') valid = !!library && tokens[2] === library && universe && index === options.length && flags.has('--propose');
+    if (!valid) throw new Error('Atlas commands work on the assigned library: novel atlas show <library> <universe-id> or novel atlas sweep <library> <universe-id> --propose [--max-questions N] [--no-jev]; review ua_ packets through novel review --scope universe --universe <id>');
+    return { kind: 'cli', args: tokens, label: `novel atlas ${operation}` };
   }
   if (verb === 'timeplace') {
     // Time-place faculty: proposals only (reviewed through the shared gate), bounded options, no file outputs.

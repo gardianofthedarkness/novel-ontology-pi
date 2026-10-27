@@ -140,9 +140,21 @@ re-read its fresh revision. Never drop conflicting updates merely to clear a gat
   the parent — never from outside knowledge; neighbours, routes and two
   names for one place are not containment. The gate refuses a second parent
   or a loop: hold the weaker link instead.
+- Story time and places belong to a universe. Book databases stay
+  separate; the universe atlas (a reviewed ledger in the library) says which
+  places in different books are the SAME place and which lie inside places
+  of another book. `novel atlas sweep <library> <universe-id> --propose
+  [--max-questions N]` nominates pairs across books (same name, a generic
+  place under same-named parents, name prefix), Jev judges them, and a
+  pending `ua_` packet is reviewed with `novel review ... --scope universe
+  --universe <id>`; `novel atlas show <library> <universe-id>` prints the
+  universe places as paths. Accept SAME_PLACE only when both books' sentences
+  describe one place (not merely a shared common word); joining two places
+  that sit inside different places is refused: hold it.
 - Do not treat story order as causation, a carried-over place as stated,
-  or a derived date as a stated one. Spatial relations beyond containment
-  and cross-volume time/place alignment are later phases.
+  or a derived date as a stated one. Story time is per continuity (books in
+  reading order); aligning periods across books and spatial relations
+  beyond containment are later phases.
 
 ## Album (EPUB illustrations + character portraits)
 

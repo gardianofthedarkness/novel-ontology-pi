@@ -22,6 +22,9 @@ export interface StoryTime {
   sceneIds: string[];
   /** Proposed by the faculty, still awaiting review (not canon). */
   proposed?: boolean;
+  /** Universe views: the book (volume) and continuity this period belongs to. */
+  book?: number;
+  continuityId?: string | null;
 }
 export interface StoryScene {
   id: string;
@@ -33,6 +36,9 @@ export interface StoryScene {
   placeIds: string[];
   placeCarried: boolean;
   characterIds: string[];
+  /** Universe views: the book (volume) and continuity of this scene. */
+  book?: number;
+  continuityId?: string | null;
 }
 export interface StoryPlace {
   id: string; label: string; sceneIds: string[]; statedScenes: number; characterIds: string[];
@@ -41,7 +47,9 @@ export interface StoryPlace {
   parentId?: string | null; parentProposed?: boolean; depth?: number; path?: string[];
   /** Scenes here or anywhere inside this place. */ totalScenes?: number;
   /** A generic place ("车站前") that exists only inside its named parent. */ generic?: boolean;
+  /** Universe views: the books it appears in, and its book places (`<volume>:<id>`). */ books?: number[]; members?: string[];
 }
+export interface UniverseBook { volume: number; sourceId: string; title: string; continuityId: string | null; readingOrder: number | null }
 export interface TimePlaceProjection {
   available: boolean;
   times: StoryTime[];
@@ -50,6 +58,18 @@ export interface TimePlaceProjection {
   characters: { id: string; label: string; scenes: number }[];
   /** Display names for every place and character the scenes refer to. */
   names: Record<string, string>;
+  /** "universe": every hosted book of the reader's universe, ids qualified by volume (`<volume>:<id>`, places `u:…`). */
+  scope?: "book" | "universe";
+  universe?: { id: string; title: string };
+  books?: UniverseBook[];
+  continuities?: { id: string; title: string }[];
+}
+
+/** Map one book's ids into a universe projection (identity for a book projection). */
+export function universeIds(data: TimePlaceProjection | null | undefined, volume: number | null) {
+  if (data?.scope !== "universe" || volume === null) return { scene: (id: string) => id, time: (id: string) => id, place: (id: string) => id };
+  const placeOf = new Map((data.places ?? []).flatMap((place) => (place.members ?? []).map((member) => [member, place.id] as const)));
+  return { scene: (id: string) => `${volume}:${id}`, time: (id: string) => `${volume}:${id}`, place: (id: string) => placeOf.get(`${volume}:${id}`) ?? id };
 }
 
 export const PART_OF_DAY: Record<string, string> = { dawn: "dawn", morning: "morning", noon: "noon", afternoon: "afternoon", evening: "evening", night: "night", "late-night": "late night", "after-school": "after school", daytime: "daytime" };
@@ -67,6 +87,25 @@ export function storyRows(data: TimePlaceProjection): { time: StoryTime | null; 
   const rows = data.times.map((time) => ({ time, scenes: time.sceneIds.map((id) => byId.get(id)!).filter(Boolean).sort((first, second) => first.index - second.index) }));
   const unplaced = data.scenes.filter((scene) => !scene.times.length);
   return unplaced.length ? [{ time: null, scenes: unplaced }, ...rows] : rows;
+}
+
+/** Universe story rows: each continuity in turn; within it, books in reading order, each book's
+ * "time not stated" scenes just before its own periods (no cross-book reordering is invented). */
+export function universeStoryRows(data: TimePlaceProjection): { time: StoryTime | null; scenes: StoryScene[]; book: number | null; continuityId: string | null }[] {
+  const byId = new Map(data.scenes.map((scene) => [scene.id, scene]));
+  const lanes = [...(data.continuities ?? []).map((continuity) => continuity.id as string | null), null];
+  const rows: { time: StoryTime | null; scenes: StoryScene[]; book: number | null; continuityId: string | null }[] = [];
+  for (const lane of lanes) {
+    const books = (data.books ?? []).filter((book) => (book.continuityId ?? null) === lane || lane === null && !lanes.includes(book.continuityId ?? null)).sort((first, second) => (first.readingOrder ?? Infinity) - (second.readingOrder ?? Infinity) || first.volume - second.volume);
+    for (const book of books) {
+      const unplaced = data.scenes.filter((scene) => scene.book === book.volume && !scene.times.length).sort((first, second) => first.index - second.index);
+      if (unplaced.length) rows.push({ time: null, scenes: unplaced, book: book.volume, continuityId: lane });
+      for (const time of data.times.filter((entry) => entry.book === book.volume).sort((first, second) => first.storyIndex - second.storyIndex)) {
+        rows.push({ time, scenes: time.sceneIds.map((id) => byId.get(id)!).filter(Boolean).sort((first, second) => first.index - second.index), book: book.volume, continuityId: lane });
+      }
+    }
+  }
+  return rows;
 }
 
 /** Each scene's main period: its own anchor if it has one, else the last inherited. */

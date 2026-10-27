@@ -55,6 +55,7 @@ import { causalityEvidence } from "../solidifier/causality/evidence.js";
 import { universeCausalityCommand } from "./commands/extract/universeCausalityCommands.js";
 import { reviewCommand } from "./commands/extract/reviewCommands.js";
 import { approveBook } from "../solidifier/merge/approve.js";
+import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
   listChangeSets,
@@ -91,6 +92,10 @@ const COMMANDS: Record<string, string> = {
     "Time-place faculty (phase 1): time words and places become TimePoint/Location entities that scenes belong to; Jev marks flashback signs; code builds periods and an estimated story order. By default runs only scenes without time facts, continuing the book's stored periods (as at birth); --force re-runs selected scenes from scratch. Writes a report; --propose saves a pending_review ChangeSet. Never writes canon. `novel changeset approve ... --time-place` runs it for a just-approved block.",
   "novel timeplace tree <novel-dir> [--no-jev] [--max-questions N] [--cache dir] [--out file] [--propose]":
     "Place-tree sweep (phase 2): nominate place pairs (name prefix, same sentence, same scene), let Jev judge which is inside which, and with --propose save a pending ChangeSet of PART_OF links (one parent per place) for the shared review gate. Never writes canon.",
+  "novel atlas sweep <library-dir> <universe-id> [--propose] [--no-jev] [--max-questions N]":
+    "Universe atlas (phase 3): nominate places across a universe's books (same name, scoped generic places, name prefix), let Jev judge same place / inside / neither, and with --propose save a pending ua_ packet for `novel review ... --scope universe --universe <id>`. Book databases are never fused.",
+  "novel atlas show <library-dir> <universe-id>":
+    "The universe's places: one per cluster of book places, with its path through the universe place tree.",
   "novel timeplace show <novel-dir>":
     "Applied time periods in story order, places as paths through the place tree, and the tree's links.",
   "novel causality sweep <novel-dir> [--limit N]":
@@ -493,6 +498,8 @@ async function main(): Promise<void> {
     }), pretty);
     return;
   }
+
+  if (cmd === "atlas") { out(await atlasCommand(positional.slice(1)), pretty); return; }
 
   if (cmd === "causality") {
     const sub = positional[1];
