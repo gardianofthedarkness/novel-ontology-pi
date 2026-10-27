@@ -1,4 +1,5 @@
 import { parentMap } from "../../ground/ontology/placeTree.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BundleStore } from "../../ground/connectors/bundle.js";
 import type { DecisionModel } from "../../ground/connectors/jev.js";
@@ -19,6 +20,21 @@ const fold = <T extends { id: string }>(records: T[]) => [...new Map(records.map
 const order = (id: string) => { const match = /^b(\d+)_s(\d+)$/.exec(id); return match ? Number(match[1]) * 1_000_000 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
 
 export interface TimePlaceRunOutput { changeset: ChangeSet | null; result: TimePlaceResult; scenes: number }
+
+/** Scenes a proposing time-place run already covered (`<dir>/timeplace/attempted.json`). A scene
+ * whose facts were held, or that states no time, stays without a period; incremental runs skip it
+ * (no paid re-asking) and the analysis checklist does not count it as missing. --force redoes all. */
+const attemptedPath = (novelDir: string) => join(novelDir, "timeplace", "attempted.json");
+export async function timePlaceAttempted(novelDir: string): Promise<Set<string>> {
+  try { return new Set((JSON.parse(await readFile(attemptedPath(novelDir), "utf8")) as { sceneIds: string[] }).sceneIds); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Set(); throw error; }
+}
+export async function rememberTimePlaceAttempt(novelDir: string, sceneIds: string[]): Promise<void> {
+  if (!sceneIds.length) return;
+  const known = await timePlaceAttempted(novelDir);
+  await mkdir(join(novelDir, "timeplace"), { recursive: true, mode: 0o700 });
+  await writeFile(attemptedPath(novelDir), JSON.stringify({ sceneIds: [...new Set([...known, ...sceneIds])] }), { mode: 0o600 });
+}
 
 /**
  * The original sentences a time-place packet's proposals cite, in reading
@@ -46,6 +62,8 @@ export async function timePlaceForNewScenes(input: {
   /** Carry the cited sentences for the shared semantic gate (default). Off only
    * for hosts still on legacy direct approval. */
   reviewSource?: boolean;
+  /** Record the processed scenes as attempted (runs whose packet is kept). */
+  remember?: boolean;
 }): Promise<TimePlaceRunOutput> {
   const bundle = new BundleStore(join(input.novelDir, "ontology"));
   const scenes = fold(await bundle.loadFile<Scene>("scenes.jsonl")).sort((first, second) => order(first.sentenceIds[0] ?? "") - order(second.sentenceIds[0] ?? ""));
@@ -64,6 +82,7 @@ export async function timePlaceForNewScenes(input: {
   });
   const anchorSentences = new Map(entities.filter((entity) => entity.kind === "TimePoint" && typeof entity.properties?.sentenceId === "string").map((entity) => [entity.id, entity.properties.sentenceId as string]));
   const proposals = timePlaceProposals(result, { entityIds: new Set(entities.map((entity) => entity.id)), relationKeys: new Set(relations.map((relation) => `${relation.type}:${relation.fromId}:${relation.toId}`)), anchorSentences, parents: parentMap(relations) }, input.provenanceBlockId);
+  if (input.remember) await rememberTimePlaceAttempt(input.novelDir, selected.map((scene) => scene.id));
   if (!proposals.length) return { changeset: null, result, scenes: selected.length };
   const flashbacks = result.periods.filter((period) => period.flashback).length;
   const changeset: ChangeSet = {

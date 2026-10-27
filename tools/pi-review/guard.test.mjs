@@ -126,7 +126,7 @@ test('rejects shell injection, arbitrary reads, paths, writes, and gate bypass',
     `novel query '${novel}' 'MATCH (entity) DELETE entity'`,
     `novel graph build '${novel}/ontology' /tmp/other`,
     `novel changeset approve '${novel}' cs_b0003`,
-    `sed -n '1,100p' /etc/passwd`, `sed -n '1,300p' '${chapterOne}'`,
+    `sed -n '1,100p' /etc/passwd`, `sed -n '0,10p' '${chapterOne}'`,
     `novel changeset show '${novel}' cs_b0001 --output /tmp/leak`,
     `novel changeset show '${novel}' cs_b0001`, `novel changeset show '${novel}' cs_b0001 --limit 100`,
     `novel recall '${novel}' b0003`,
@@ -209,4 +209,31 @@ test('the universe atlas proposes cross-book place links on the assigned library
     `novel atlas sweep ${novel} world --propose`,
   ]) assert.throws(() => authorize(command, scope), command);
   assert.throws(() => authorize(`novel atlas show ${library.directory} world`), 'no library assigned');
+});
+test('the analysis checklist is read-only and limited to assigned books and the assigned library', () => {
+  const library = { directory: '/private/library', bindings: [] };
+  const scope = { ...defaultScope, library };
+  assert.equal(authorize(`novel checklist ${novel}`, scope).label, 'novel checklist');
+  assert.equal(authorize(`novel checklist ${library.directory} --universe world`, scope).label, 'novel checklist');
+  for (const command of [`novel checklist /tmp/other`, `novel checklist ${novel} --input /etc/passwd`, `novel checklist ${library.directory}`, `novel checklist ${library.directory} --universe '../x'`]) assert.throws(() => authorize(command, scope), command);
+});
+
+test('refusals say what to change; long pages are clamped; help and status forms resolve', () => {
+  // A long page is clamped to 150 lines, and the next page is named.
+  const page = authorize(`sed -n '1,300p' '${chapterOne}'`);
+  assert.deepEqual([page.start, page.end], [1, 150]);
+  assert.match(page.note, /next: sed -n '151,300p'/);
+  // Help in any spelling, and "what is left" questions.
+  for (const command of ['novel --help', 'novel help changeset', `novel causality sweep --help`]) assert.deepEqual(authorize(command).args, ['help'], command);
+  assert.deepEqual(authorize(`novel status ${novel}`).args, ['checklist', novel, '--input', input]);
+  assert.deepEqual(authorize(`novel checklist ${novel}`).args, ['checklist', novel, '--input', input], 'the checklist knows the assigned input');
+  // A refused form quotes the allowed one; an unknown command lists what exists; shell tools are named.
+  assert.throws(() => authorize(`novel causality sweep ${novel} --limit 50`), /Use: novel causality .*sweep <book> \[--limit 1-20\]/);
+  assert.throws(() => authorize(`novel state ${novel} char_1`), /novel state is not available here\. Available: .*checklist/);
+  assert.throws(() => authorize('date -u'), /Shell tools \(ls, cd, grep, date, pipes\) are not/);
+  assert.throws(() => authorize(`novel changeset hold ${novel} cs_b0001`, { ...defaultScope, reviewProtocol: 'review-v1' }), /Use novel review/);
+  // A time-place run's report for this book is readable; another book's is not.
+  assert.equal(authorize(`cat ${novel}/timeplace/run-2026.json`).kind, 'read');
+  assert.throws(() => authorize(`cat ${novel}/timeplace/../ontology/entities.jsonl`));
+  assert.throws(() => authorize('cat /private/other/timeplace/run.json'));
 });

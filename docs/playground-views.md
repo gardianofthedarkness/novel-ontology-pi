@@ -2,15 +2,20 @@
 
 The viewer has two **modes** and the same three **views** in each:
 
-| View | Orbital (3D) | Traditional (flat, no WebGL) |
+| View | 3D (orbital) | Flat (no WebGL) |
 | --- | --- | --- |
 | **Narrative** — reading order | The orbit: chapter spheres on a string, scenes inside, entities around | Chapters → scenes → events and dialogue as lists |
 | **Story time** — when it happens | Every scene of the book on one spiral in story order, with every stored causal link as a curved arrow | Story-time list |
 | **Places** — where it happens | Space-time: the schematic map on the floor, scenes floating above their place and rising in story order, a story-time window choosing what floats | Schematic map with a story-time slider |
 
-- The switch reads `Orbital | Traditional` and `Narrative | Story time |
+- The switch at the top centre reads `3D | Flat` and `Narrative | Story time |
   Places`. Deep links: `?mode=traditional` and `?view=story` or
-  `?view=places` (the defaults, Orbital and Narrative, need no parameter).
+  `?view=places` (the defaults, 3D and Narrative, need no parameter).
+- One navigation row: back (Esc), where you are (click a crumb to go up),
+  and the book picker. Round view controls at the right edge: zoom, reset
+  view, connections, and `?` (how to move, the legend, counts, motion).
+- The processing dock (pipeline, Pi review, record bar) folds to one status
+  line at the bottom left; the choice is remembered per browser.
 - Library and series overviews keep their cross-volume (universe) causal
   arrows; book-level causal arrows live in Story time.
 - Both modes share the inspector, record stepping, book choice and live

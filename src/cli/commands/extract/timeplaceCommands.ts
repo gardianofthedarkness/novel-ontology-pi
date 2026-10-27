@@ -12,7 +12,7 @@ import { sectionBlock, type Sentence } from "../../../digger/intake/sectioning.j
 import { runTimePlace, timePlaceProposals, type TimePlaceResult, type VocabularyMode } from "../../../digger/timeplace/faculty.js";
 import { saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
 import { cachedDecisions, cachedWork } from "../../../digger/timeplace/cache.js";
-import { timePlaceForNewScenes, timePlaceReviewSource } from "../../../digger/timeplace/afterApply.js";
+import { timePlaceAttempted, timePlaceForNewScenes, timePlaceReviewSource } from "../../../digger/timeplace/afterApply.js";
 import type { ChangeSet } from "../../../solidifier/merge/changeset.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { askStrandQuestions, planStrandQuestions, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "../../../digger/timeplace/strandQuestions.js";
@@ -115,11 +115,12 @@ export async function timeplaceRun(novelDir: string, options: TimeplaceRunOption
 async function timeplaceIncremental(novelDir: string, options: TimeplaceRunOptions & { mode: VocabularyMode }, models: { work?: import("../../../ground/connectors/llm.js").WorkModel; decisions?: import("../../../ground/connectors/jev.js").DecisionModel }): Promise<Record<string, unknown>> {
   const { scenes, relations } = await loadBundle(novelDir);
   const timed = new Set(relations.filter((relation) => relation.type === "OCCURS_DURING").map((relation) => relation.fromId));
-  let wanted = scenes.filter((scene) => !timed.has(scene.id) && (options.chapter === undefined || scene.chapterIndex === options.chapter));
+  const attempted = await timePlaceAttempted(novelDir);
+  let wanted = scenes.filter((scene) => !timed.has(scene.id) && !attempted.has(scene.id) && (options.chapter === undefined || scene.chapterIndex === options.chapter));
   if (options.limit !== undefined) wanted = wanted.slice(0, options.limit);
-  if (!wanted.length) return { scenes: 0, proposals: 0, changesetId: null, note: "Every selected scene already has time facts; nothing to do (use --force to re-run from scratch)." };
+  if (!wanted.length) return { scenes: 0, proposals: 0, changesetId: null, note: "Every selected scene already has time facts or was already processed (held facts stay held); nothing to do (use --force to re-run from scratch)." };
   const started = Date.now();
-  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: options.mode, ...models, sceneIds: wanted.map((scene) => scene.id), provenanceBlockId: options.chapter === undefined ? "time-place" : `time-place-ch${options.chapter}`, budget: { maxWorkCalls: options.maxCalls, maxDecisionQuestions: options.maxQuestions } });
+  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: options.mode, ...models, sceneIds: wanted.map((scene) => scene.id), provenanceBlockId: options.chapter === undefined ? "time-place" : `time-place-ch${options.chapter}`, budget: { maxWorkCalls: options.maxCalls, maxDecisionQuestions: options.maxQuestions }, remember: !!options.propose });
   const out = options.out ?? join(novelDir, "timeplace", `run-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
   await mkdir(join(out, ".."), { recursive: true, mode: 0o700 });
   await writeFile(out, JSON.stringify({ novelDir, scenes: output.scenes, seconds: (Date.now() - started) / 1000, ...output.result, proposals: output.changeset?.proposals.length ?? 0 }, null, 1), { mode: 0o600 });
@@ -132,7 +133,7 @@ export async function timeplaceAfterApprove(novelDir: string, approved: ChangeSe
   const sceneIds = approved.proposals.filter((proposal) => proposal.kind === "create_scene").map((proposal) => (proposal.payload as Scene).id);
   if (!sceneIds.length) return null;
   const work = env.WORK_LLM_API_KEY?.trim() ? workModelFromEnv(env) : undefined;
-  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: work ? "hybrid" : "programmatic", work, decisions: jevFromEnv(env), sceneIds, provenanceBlockId: approved.blockId });
+  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: work ? "hybrid" : "programmatic", work, decisions: jevFromEnv(env), sceneIds, provenanceBlockId: approved.blockId, remember: true });
   if (output.changeset) await saveChangeSet(novelDir, output.changeset);
   return { changesetId: output.changeset?.id ?? null, scenes: output.scenes, periods: output.result.periods.length, flashbacks: output.result.periods.filter((period) => period.flashback).length, usage: output.result.usage };
 }

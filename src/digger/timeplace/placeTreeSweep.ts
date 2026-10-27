@@ -16,8 +16,8 @@ import type { Sentence } from "../intake/sectioning.js";
  *   - scenes linked to both places.
  * Jev judges each pair with its sentences (inside / inside / neither). Only
  * confident verdicts become PART_OF proposals, which go through the shared
- * review gate like every other fact; confident "neither" verdicts are
- * remembered and skipped until their evidence grows. One parent per place:
+ * review gate like every other fact. Every pair asked is remembered and
+ * skipped until its evidence grows, so a finished sweep stays finished. One parent per place:
  * when several parents are judged, the deepest wins. Without Jev only
  * name-prefix pairs are proposed.
  */
@@ -124,9 +124,8 @@ export async function sweepPlaceTree(input: { entities: Entity[]; relations: Rel
         const choice = chosen === 0 ? "A_IN_B" : chosen === 1 ? "B_IN_A" : "NEITHER";
         const probability = answer?.distribution?.[question.options![Math.max(0, chosen === -1 ? 2 : chosen)]] ?? answer?.confidence ?? 0;
         verdicts.push({ a: candidate.a, b: candidate.b, choice, probability, sentenceIds: candidate.sentenceIds, signals: candidate.signals });
-        if (choice === "NEITHER" && probability >= PLACE_TREE_MIN_CONFIDENCE) {
-          memory.distinct = [...memory.distinct.filter((entry) => entry.pair !== pairKey(candidate.a, candidate.b)), { pair: pairKey(candidate.a, candidate.b), evidence: candidate.sentenceIds.length }];
-        }
+        // Remember every asked pair (a confident "neither" and an unsure answer alike): asked again only with more evidence.
+        memory.distinct = [...memory.distinct.filter((entry) => entry.pair !== pairKey(candidate.a, candidate.b)), { pair: pairKey(candidate.a, candidate.b), evidence: candidate.sentenceIds.length }];
       });
     }
   }
