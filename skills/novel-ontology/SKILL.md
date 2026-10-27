@@ -46,6 +46,23 @@ If review fails on duplicate proposal IDs, follow the metadata-only exception
 in [repair](references/repair.md). Preserve all facts, keep the packet held and
 re-read its fresh revision. Never drop conflicting updates merely to clear a gate.
 
+## When a command fails
+
+Failures print one JSON object: `error` (what happened), `aspect` (what kind
+of problem), `code`, `hint` (what to change) and often `next` (commands to
+run). Act on the aspect; do not retry variants blindly:
+
+- `usage` — fix the arguments to the form in `hint` (`novel help` lists all).
+- `path` / `not_found` — use assigned paths from `NOVEL_JOB.json` and real ids
+  from review pages, `novel query` or `novel search`.
+- `query` — rewrite the Cypher with the tables/properties in `details.schema`;
+  `graph` — rebuild with `next` (`novel graph build`).
+- `review` — fix only the named decision (`Decision #N …`); `stale` — re-read
+  the pages and use the new revision; `evidence` — read every evidence page.
+- `conflict` — the assertion contradicts or repeats canon: hold it, never force.
+- `source`, `model`, `budget` — stop and report; these need the owner.
+- `internal` — report the command and message; do not work around it.
+
 ## Source fidelity
 
 - Keep summaries in the source language and names/aliases in their

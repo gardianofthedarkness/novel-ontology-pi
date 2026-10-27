@@ -283,7 +283,7 @@ test("llm ping via CLI without a key fails loudly and calls nothing", async (t) 
     WORK_LLM_BASE_URL: mock.baseUrl,
     WORK_LLM_MODEL: "mock-model",
   });
-  assert.equal(r.status, 1);
+  assert.equal(r.status, 6, "a missing model credential exits 6");
   const err = JSON.parse(r.stderr);
   assert.match(err.error, /WORK_LLM_API_KEY is missing/);
   assert.equal(mock.requests.length, 0);
@@ -292,6 +292,6 @@ test("llm ping via CLI without a key fails loudly and calls nothing", async (t) 
     WORK_LLM_API_KEY: FAKE_KEY,
     WORK_LLM_BASE_URL: mock.baseUrl,
   });
-  assert.equal(bogus.status, 1);
+  assert.equal(bogus.status, 2, "usage errors exit 2");
   assert.match(JSON.parse(bogus.stderr).error, /Usage: novel llm ping\|probe/);
 });

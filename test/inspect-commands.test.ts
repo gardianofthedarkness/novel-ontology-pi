@@ -150,9 +150,9 @@ test("CLI: inspect prints JSON (and --pretty), missing dir is exit 1", async (t)
   assert.equal(pretty.status, 0, pretty.stderr);
   assert.ok(pretty.stdout.includes("\n  \"manifest\""));
   const missing = runCli(["inspect", join(novelDir, "nope")]);
-  assert.equal(missing.status, 1);
+  assert.equal(missing.status, 3, "a missing workspace exits 3");
   assert.match(JSON.parse(missing.stderr).error, /novel directory not found/);
   const usage = runCli(["inspect"]);
-  assert.equal(usage.status, 1);
+  assert.equal(usage.status, 2, "usage errors exit 2");
   assert.match(JSON.parse(usage.stderr).error, /Usage: novel inspect/);
 });

@@ -42,7 +42,7 @@ export async function semanticPage(novelDir: string, id: string, options: { offs
   if (options.summary) return base;
   if (options.factId) {
     const fact = facts.find(fact => fact.id === options.factId);
-    if (!fact) throw new Error("Unknown semantic fact");
+    if (!fact) throw new Error(`Unknown semantic fact ${JSON.stringify(options.factId)} in ${id}; take factIds from its review pages.`);
     const decision = decisions.find(entry => entry.factId === fact.id);
     const value = decision && "replacement" in decision ? decision.replacement : fact.value;
     return { ...base, factId: fact.id, field: fact.field, value, meaning: identities.meaning(fact, value), materialization: materialization(fact.id), ...factEvidence(fact, changeset.reviewSource!, options.offset, options.limit) };
@@ -81,7 +81,7 @@ export async function semanticPage(novelDir: string, id: string, options: { offs
 }
 
 export async function decideFacts(novelDir: string, id: string, revision: string, value: unknown, replace = false) {
-  if (!Array.isArray(value) || value.length > 50) throw new Error("Decisions must be a batch of at most 50 fact decisions");
+  if (!Array.isArray(value) || value.length > 50) throw new Error(`Decisions must be a JSON array of at most 50 fact decisions (got ${Array.isArray(value) ? `${value.length}` : typeof value}); split larger reviews into batches.`);
   const changeset = await reviewBook(novelDir, id);
   if (!["held", "pending_review", "revision_requested"].includes(changeset.status)) throw new Error("Only pending packets can receive fact decisions");
   const context = await semanticContext(novelDir);
@@ -89,7 +89,8 @@ export async function decideFacts(novelDir: string, id: string, revision: string
   if (revision !== semanticRevision(changeset, contextDigest)) throw new Error("Stale semantic revision or canonical context; read current facts");
   const prior = !replace && changeset.semanticReview?.revision === revision && changeset.semanticReview.contextDigest === contextDigest ? changeset.semanticReview.decisions : [];
   const updates = normalizeFactDecisions(changeset, context.entities, value);
-  if (new Set(updates.map(decision => decision?.factId)).size !== updates.length) throw new Error("Duplicate decisions in batch");
+  const repeated = updates.map(decision => decision?.factId).filter((factId, index, all) => all.indexOf(factId) !== index);
+  if (repeated.length) throw new Error(`Duplicate decisions in batch for ${[...new Set(repeated)].slice(0, 5).join(", ")}; send each factId once.`);
   const merged = new Map(prior.map(decision => [decision.factId, decision]));
   updates.forEach(decision => {
     const previous = merged.get(decision?.factId);

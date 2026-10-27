@@ -7,6 +7,7 @@
  * extraction, the merge gate, and the database connectors.
  * All commands print JSON by default; add --pretty for humans.
  */
+import { describeError, EXIT_CODES } from "../ground/errors.js";
 import { readFile } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 import { EventLog } from "../ground/events/log.js";
@@ -691,6 +692,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(JSON.stringify({ error: String(err) }));
-  process.exit(1);
+  // One agent-readable report: what kind of failure (aspect, code), why, and what to do next.
+  const report = describeError(err, process.argv.slice(2));
+  console.error(JSON.stringify(report));
+  process.exit(EXIT_CODES[report.aspect]);
 });

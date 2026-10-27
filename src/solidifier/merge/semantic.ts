@@ -1,3 +1,4 @@
+import { NovelError } from "../../ground/errors.js";
 import { createHash } from "node:crypto";
 import type { ChangeProposal, ChangeSet } from "./changeset.js";
 import type { Entity, OntEvent, Relation, Scene, StateChange } from "../../ground/ontology/types.js";
@@ -152,8 +153,14 @@ export function materializeSemantic(changeset: ChangeSet, knownEntities: Entity[
   const facts = semanticFacts(changeset);
   const byFact = new Map(facts.map(fact => [fact.id, fact]));
   const decisions = new Map<string, FactDecision>();
-  for (const decision of changeset.semanticReview.decisions) {
-    if (!record(decision) || !byFact.has(decision.factId) || decisions.has(decision.factId) || !["accept", "hold", "reject"].includes(decision.verdict) || typeof decision.reason !== "string" || !decision.reason.trim()) throw new Error("Invalid, duplicate or unknown fact decision");
+  for (const [index, decision] of changeset.semanticReview.decisions.entries()) {
+    // Say which decision is wrong and how, so the reviewer can fix just that one.
+    const problem = !record(decision) ? "is not an object {factId, verdict, reason}"
+      : !byFact.has(decision.factId) ? `has unknown factId ${JSON.stringify(decision.factId)} (use ids from review show for this packet)`
+      : decisions.has(decision.factId) ? `repeats factId ${decision.factId}`
+      : !["accept", "hold", "reject"].includes(decision.verdict) ? `has verdict ${JSON.stringify(decision.verdict)}; use accept, hold or reject`
+      : typeof decision.reason !== "string" || !decision.reason.trim() ? `(${decision.factId}) needs a non-empty reason` : null;
+    if (problem) throw new NovelError(`Decision #${index + 1} ${problem}`, { aspect: "review", code: "DECISION_INVALID", hint: "Each decision is {factId, verdict: accept|hold|reject, reason}; fix this one and resend the batch.", details: { index, factId: record(decision) ? decision.factId : null } });
     if (decision.verdict !== "accept" && decision.replacement !== undefined) throw new Error("Only accepted facts can have a replacement");
     decisions.set(decision.factId, decision);
   }

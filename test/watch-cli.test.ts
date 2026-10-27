@@ -38,7 +38,7 @@ test("CLI watch exits cleanly on SIGTERM; it rejects public bind options", async
   // The server intentionally closes an active SSE connection on shutdown.
   await client.body!.cancel().catch(() => undefined);
   const invalid = spawn(process.execPath, [cli, "watch", root, "--host", "0.0.0.0"], { stdio: "ignore" });
-  assert.equal((await once(invalid, "exit"))[0], 1);
+  assert.equal((await once(invalid, "exit"))[0], 2, "a refused option is a usage error (exit 2)");
 });
 
 test("real CLI approval emits approved, merged and rebuilt separately; failed graph rebuild emits no success", async (t) => {
