@@ -133,7 +133,12 @@ export default function App() {
   const noteStoryCentre = useCallback((ids: string[]) => { storyCentre.current = ids.map(sceneOfSpiral).filter((id): id is string => !!id); }, []);
   /** Story time → Places (orbital): Places opens on the stretch of the spiral that was in view. */
   const chooseStageView = (next: StageView) => {
-    if (orbitalMode && stageView === "story" && next === "places" && storyCentre.current.length) setAtlasFocus(new Set(storyCentre.current));
+    if (orbitalMode && stageView === "story" && next === "places" && storyCentre.current.length) {
+      // Only scenes Places can show (placed, same ids); none left means open on everything, never an empty map.
+      const placed = new Set((viewTimePlace?.scenes ?? []).filter((scene) => scene.placeIds.length).map((scene) => scene.id));
+      const focus = storyCentre.current.filter((id) => placed.has(id));
+      setAtlasFocus(focus.length ? new Set(focus) : null);
+    }
     setStageView(next);
   };
   const [orbitalReset, setOrbitalReset] = useState(0);
@@ -786,8 +791,9 @@ export default function App() {
   const regroupedOrbit = useMemo(() => {
     if (!orbitalMode || stageView === "narrative" || !displayWorld) return null;
     if (stageView === "story") {
-      // Without time facts yet, the spiral runs in reading order (its causal arrows still show).
-      const order = viewTimePlace?.available ? viewTimePlace : readingOrderProjection(displayWorld);
+      // Without time facts yet, the spiral runs in reading order (its causal arrows still show);
+      // a universe stays a universe: every book in reading order, not just the book being read.
+      const order = viewTimePlace?.available || viewTimePlace?.scope === "universe" ? viewTimePlace : readingOrderProjection(displayWorld);
       const spiral = spiralWorld(displayWorld, order, loadedBook);
       return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook) };
     }
