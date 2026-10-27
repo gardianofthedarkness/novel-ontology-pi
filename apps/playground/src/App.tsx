@@ -677,6 +677,7 @@ export default function App() {
   /** Periods and places that just emerged (new, or proposed → confirmed), for the highlight. */
   const [emerging, setEmerging] = useState<{ times: Set<string>; places: Set<string>; at: number } | null>(null);
   const previousTimePlace = useRef<TimePlaceProjection | null>(null);
+  const previousBook = useRef<number | null>(null);
   const lastWork = useRef<string | null | undefined>(undefined);
   const lastAutoSwitch = useRef(0);
   const queuedSwitch = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -693,6 +694,9 @@ export default function App() {
   // run points to Story time and other new work to Narrative. A view stays
   // at least 5 s unless something new emerged.
   useEffect(() => {
+    // A different book is not new work: its periods and places must not read as "just emerged"
+    // (that focused its first scene and pulled the camera off the book the reader flew to).
+    if (previousBook.current !== loadedBook) { previousBook.current = loadedBook; previousTimePlace.current = null; }
     const change = timePlace ? timePlaceEmergence(previousTimePlace.current, timePlace) : { times: [], places: [] };
     if (timePlace) previousTimePlace.current = timePlace;
     if (change.times.length || change.places.length) setEmerging({ times: new Set(change.times), places: new Set(change.places), at: Date.now() });
