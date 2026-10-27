@@ -292,6 +292,14 @@ nothing was predicted for a slice; recall is `null` when the slice
 has no golden records. A completed scoring run exits 0 whatever the
 numbers are — non-zero exits mean usage, IO, or format errors only.
 
+### `novel eval story-order <gold.json> <predicted.json> [--timeplace] [--ties]` — story order as a partial order
+
+Scores story order pair by pair (before / after / parallel) against a
+strand gold: strands of scenes in story order plus cross-strand evidence.
+`--timeplace` reads a time-place run report as the prediction. See
+[story strands](docs/story-strands.md) for the format and the measured
+results. No model calls.
+
 ### `novel eval extract <novel-dir> <predictions-dir>` — predictions from a bundle
 
 `eval run` scores predictions as data; `eval extract` is the producer
