@@ -1,6 +1,6 @@
 ---
 name: novel-ontology
-description: Ingest novels, review and repair ontology proposals, and query characters, events and timelines using the novel CLI.
+description: Ingest novels, review and repair ontology proposals, complete every analysis faculty (extraction, causality, story time, places, place tree, cross-book atlas), and query characters, events and timelines using the novel CLI.
 ---
 
 # Novel ontology
@@ -8,6 +8,19 @@ description: Ingest novels, review and repair ontology proposals, and query char
 Use `novel` commands, not direct database/file edits or model calls.
 `novel help` lists commands; `novel config` reports model configuration
 without keys. Missing credentials require secure entry, never chat.
+
+## Completed analysis — start here
+
+When asked to inspect a novel, continue, finish the analysis or find what is
+missing: run `novel checklist <dir>` for each assigned book (and, with a
+library, `novel checklist <library> --universe <id>`). It reports every
+faculty as done / todo / review / blocked / optional, in dependency order,
+with the exact next command. Work its `next` list from the top: review any
+waiting packet before producing more of the same faculty, then re-run the
+checklist. Stop when complete, when a step changes nothing (report it as
+stuck), or at the job's limits. Dependencies, what "done" means for each
+faculty and the stopping rules: [analysis](references/analysis.md).
+`novel inspect` stays a raw count/integrity report, not a to-do list.
 
 ## Ingest and review
 
@@ -173,8 +186,9 @@ re-read its fresh revision. Never drop conflicting updates merely to clear a gat
 
 ## Measure
 
-- `novel inspect <dir>` reports bundle counts, coverage and reference
-  integrity without repairing data or opening the graph.
+- `novel checklist <dir>` (or `<library> --universe <id>`) is the analysis
+  to-do list; `novel inspect <dir>` reports raw bundle counts, coverage and
+  reference integrity without repairing data or opening the graph.
 - `novel eval run <dataset-dir> <predictions-dir>` reports precision,
   recall, F1 and missed/spurious keys using the format and matching rules
   in README's "Measuring" section. It makes no model calls, sets no

@@ -238,6 +238,13 @@ export function authorize(command, scope) {
       valid = tokens[2] === novel && flags.length === 8 && values.size === 4 && ['--block', '--key', '--value', '--reason'].every((key) => values.has(key)) && blockIds.includes(values.get('--block'));
     }
   }
+  if (verb === 'checklist') {
+    // Read-only: what a completed analysis still lacks, for an assigned book or the assigned library's universe.
+    const library = scope.library?.directory;
+    valid = tokens.length === 2 && operation === novel || !!library && tokens.length === 4 && operation === library && tokens[2] === '--universe' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(tokens[3]);
+    if (!valid) throw new Error('Checklist runs on an assigned book (novel checklist <book>) or the assigned library (novel checklist <library> --universe <id>)');
+    return { kind: 'cli', args: tokens, label: 'novel checklist' };
+  }
   if (verb === 'atlas') {
     // Universe atlas: cross-book place links are only proposed here (ua_ packets), and reviewed through novel review --scope universe.
     const library = scope.library?.directory;

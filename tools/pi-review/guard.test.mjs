@@ -199,3 +199,11 @@ test('the universe atlas proposes cross-book place links on the assigned library
   ]) assert.throws(() => authorize(command, scope), command);
   assert.throws(() => authorize(`novel atlas show ${library.directory} world`), 'no library assigned');
 });
+
+test('the analysis checklist is read-only and limited to assigned books and the assigned library', () => {
+  const library = { directory: '/private/library', bindings: [] };
+  const scope = { ...defaultScope, library };
+  assert.equal(authorize(`novel checklist ${novel}`, scope).label, 'novel checklist');
+  assert.equal(authorize(`novel checklist ${library.directory} --universe world`, scope).label, 'novel checklist');
+  for (const command of [`novel checklist /tmp/other`, `novel checklist ${novel} --input /etc/passwd`, `novel checklist ${library.directory}`, `novel checklist ${library.directory} --universe '../x'`]) assert.throws(() => authorize(command, scope), command);
+});
