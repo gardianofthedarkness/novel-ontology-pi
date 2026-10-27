@@ -43,6 +43,11 @@ the earliest unblocked item; for a library, finish books in reading order.
   scenes and pairs are remembered as processed or asked, and are not
   re-asked; that is not a gap. Re-asking needs new evidence, or `--force`
   on an explicit request.
+- **Atlas exception: holds are revisable when their places change.** Places
+  are paths that grow (a book can add a parent or an intermediate level), so
+  a held or already-asked cross-book pair is reopened when either of its
+  places changes (names, kind, parent, universe cluster) — and only then,
+  not on every sweep.
 - **Re-run the checklist after each step.** If a step leaves its item
   unchanged, stop and report it as stuck with the reason. Do not loop.
 - **Paid steps** (ingest, the sweeps, time-place runs) spend model and Jev

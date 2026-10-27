@@ -30,7 +30,7 @@ export type AtlasKind = "same_place" | "part_of";
 export interface AtlasProposal { id: string; kind: AtlasKind; /** part_of: a is the child, b the parent. */ a: string; b: string; confidence: number; method: "jev" | "name"; evidence: { a: string[]; b: string[] } }
 export interface AtlasPacket { id: string; universeId: string; revision: string; createdAt: string; proposals: AtlasProposal[] }
 export interface AtlasDecision { proposalId: string; verdict: "accept" | "hold" | "reject"; reason: string }
-interface AtlasRecord extends AtlasDecision { packetId: string; universeId: string; kind: AtlasKind; a: string; b: string; at: string }
+interface AtlasRecord extends AtlasDecision { packetId: string; universeId: string; kind: AtlasKind; a: string; b: string; at: string; /** The pair's state when decided (holds reopen when it changes). */ fingerprint?: string }
 interface AtlasLedger { version: 1; decisions: AtlasRecord[] }
 
 const identifier = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/;
@@ -39,11 +39,13 @@ export const qualifyPlace = (sourceId: string, entityId: string) => `${sourceId}
 const sha = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export const normalisePlaceName = (text: string) => text.replace(/[\s·・]/g, "").replace(/^(?:这个|那个|这座|那座|这家|那家|这所|那所|该|此)(?=..)/, "");
 const ledgerPath = (directory: string) => join(directory, "atlas", "state.json");
-/** Pairs a sweep already asked about (any answer), per universe: not asked again. */
+/** Pairs a sweep already asked about (any answer), per universe, with the pair's fingerprint then:
+ * asked again only when one of its places changed. (Entries from before fingerprints reopen once.) */
 const askedPath = (directory: string) => join(directory, "atlas", "asked.json");
-export async function atlasAsked(directory: string, universeId: string): Promise<Set<string>> {
-  const asked = await jsonFile<Record<string, string[]>>(askedPath(resolve(directory)), {});
-  return new Set(asked[universeId] ?? []);
+export async function atlasAsked(directory: string, universeId: string): Promise<Map<string, string>> {
+  const asked = await jsonFile<Record<string, Record<string, string> | string[]>>(askedPath(resolve(directory)), {});
+  const entry = asked[universeId];
+  return new Map(Array.isArray(entry) ? [] : Object.entries(entry ?? {}));
 }
 const packetPath = (directory: string, id: string) => join(directory, "atlas", "packets", `${id}.json`);
 
@@ -145,15 +147,34 @@ export function atlasTree(places: AtlasPlace[], links: { kind: AtlasKind; a: str
   return { cluster, parent, conflicts };
 }
 
+/**
+ * What a held pair depended on: both places' names, kind, in-book parent and
+ * universe cluster/parent. Places are paths that grow (a book adds a parent or
+ * an intermediate level), so a hold is not final like an EM "distinct": it is
+ * reopened when this fingerprint changes, and only then (no re-asking while
+ * nothing about the pair changed).
+ */
+export function pairFingerprint(context: AtlasContext, tree: ReturnType<typeof atlasTree>, a: string, b: string): string {
+  const side = (qualified: string) => {
+    const place = context.byQualified.get(qualified);
+    const cluster = tree.cluster.get(qualified) ?? qualified;
+    return place ? [place.names, place.generic, place.scopedTo, place.parent, cluster, tree.parent.get(cluster) ?? null, [...tree.cluster].filter(([, id]) => id === cluster).length] : null;
+  };
+  return sha([a, b].sort().map(side));
+}
+
 /** Accepted cross-book links for a universe. */
 export async function atlasLinks(directory: string, universeId: string) {
   return latest(await ledger(resolve(directory)), universeId).filter((record) => record.verdict === "accept").map(({ kind, a, b }) => ({ kind, a, b }));
 }
 
 /** Pairs worth asking about: places from different books not yet joined or decided. */
-export function atlasCandidates(context: AtlasContext, decided: { kind: AtlasKind; a: string; b: string; verdict: string }[], asked: ReadonlySet<string> = new Set()): { kind: AtlasKind; a: string; b: string }[] {
+export function atlasCandidates(context: AtlasContext, decided: { kind: AtlasKind; a: string; b: string; verdict: string; fingerprint?: string }[], asked: ReadonlyMap<string, string> = new Map()): { kind: AtlasKind; a: string; b: string }[] {
   const tree = atlasTree(context.places, decided.filter((entry) => entry.verdict === "accept"));
-  const settled = new Set([...decided.filter((entry) => entry.verdict !== "hold").map((entry) => [entry.a, entry.b].sort().join("|")), ...asked]);
+  // Accepted and rejected pairs are settled; a held pair, or one Jev was asked about, only while nothing about it changed since.
+  const unchanged = (a: string, b: string, fingerprint: string | undefined) => !!fingerprint && fingerprint === pairFingerprint(context, tree, a, b);
+  const settled = new Set(decided.filter((entry) => entry.verdict !== "hold" || unchanged(entry.a, entry.b, (entry as AtlasRecord).fingerprint)).map((entry) => [entry.a, entry.b].sort().join("|")));
+  for (const [pair, fingerprint] of asked) { const [a, b] = pair.split("|"); if (unchanged(a, b, fingerprint)) settled.add(pair); }
   const order = new Map(context.books.map((book, index) => [book.sourceId, index]));
   const sorted = [...context.places].sort((first, second) => (order.get(first.sourceId)! - order.get(second.sourceId)!) || first.qualified.localeCompare(second.qualified));
   const found = new Map<string, { kind: AtlasKind; a: string; b: string }>();
@@ -260,10 +281,13 @@ export async function atlasSweep(context: AtlasContext, options: { decisions?: D
       });
     }
   }
-  // Remember what Jev was asked (whatever it answered), so a finished sweep stays finished.
+  // Remember what Jev was asked (whatever it answered) and the pair's state then: a finished
+  // sweep stays finished until one of the pair's places changes.
   if (answered.length) {
-    const all = await jsonFile<Record<string, string[]>>(askedPath(context.directory), {});
-    all[context.universeId] = [...new Set([...(all[context.universeId] ?? []), ...answered.map((candidate) => [candidate.a, candidate.b].sort().join("|"))])];
+    const all = await jsonFile<Record<string, Record<string, string> | string[]>>(askedPath(context.directory), {});
+    const tree = atlasTree(context.places, decided.filter((entry) => entry.verdict === "accept"));
+    const previous = all[context.universeId];
+    all[context.universeId] = { ...(Array.isArray(previous) ? {} : previous ?? {}), ...Object.fromEntries(answered.map((candidate) => [[candidate.a, candidate.b].sort().join("|"), pairFingerprint(context, tree, candidate.a, candidate.b)])) };
     await atomicJson(askedPath(context.directory), all);
   }
   let packetId: string | null = null;
@@ -325,9 +349,11 @@ export async function atlasDecide(context: AtlasContext, packetId: string, decis
   const violation = atlasViolation(context, accepted, adding);
   if (violation) throw new Error(violation);
   const at = new Date().toISOString();
+  // Fingerprints describe the universe as it stands after this packet's accepts.
+  const after = atlasTree(context.places, [...accepted, ...adding]);
   const records: AtlasRecord[] = packet.proposals.map((proposal) => {
     const decision = decisions.find((entry) => entry.proposalId === proposal.id) ?? { proposalId: proposal.id, verdict: "hold" as const, reason: "Unreviewed assertion; default hold." };
-    return { ...decision, packetId, universeId: context.universeId, kind: proposal.kind, a: proposal.a, b: proposal.b, at };
+    return { ...decision, packetId, universeId: context.universeId, kind: proposal.kind, a: proposal.a, b: proposal.b, at, fingerprint: pairFingerprint(context, after, proposal.a, proposal.b) };
   });
   await atomicJson(ledgerPath(context.directory), { version: 1, decisions: [...state.decisions, ...records] } satisfies AtlasLedger);
   return { applied: records.filter((record) => record.verdict === "accept").length, held: records.filter((record) => record.verdict === "hold").length, rejected: records.filter((record) => record.verdict === "reject").length };
