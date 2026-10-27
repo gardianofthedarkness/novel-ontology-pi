@@ -19,6 +19,17 @@ import type { StoryScene, TimePlaceProjection } from "./timePlace.js";
  */
 export type StrandEdgeKind = "worldline" | "carried" | "flashback" | "time";
 export interface StrandEdge { from: string; to: string; kind: StrandEdgeKind; characterId?: string }
+/**
+ * Time and place checked against each other. Strands part only by going to
+ * different places and meet only at one, so every split and merge either has
+ * place evidence or is a guess; and one person cannot be in two places at
+ * one stated moment.
+ * - split: `places differ` (evidence), `same place` (doubtful: maybe one scene), `unplaced`;
+ * - merge: `joins` (the others came to one strand's place), `meets` (all at a new place), `unplaced`;
+ * - apart: a chapter ends with strands not yet rejoined (`count` strands);
+ * - conflict: a character at two places at one stated moment (time, place or cast is wrong).
+ */
+export interface StrandCheck { kind: "split" | "merge" | "apart" | "conflict"; sceneId: string; status: string; otherId?: string; characterId?: string; count?: number }
 export interface StoryStrands {
   /** Story position: below every predecessor, otherwise near where the scene is told. */
   layer: Map<string, number>;
@@ -36,6 +47,7 @@ export interface StoryStrands {
   lanes: number;
   /** Scene pairs with no evidence ordering them. */
   parallelPairs: number;
+  checks: StrandCheck[];
   /** a reaches b (a happened before b). */
   before: (a: string, b: string) => boolean;
 }
@@ -147,6 +159,39 @@ export function storyStrands(data: TimePlaceProjection): StoryStrands {
   }
 
   const story = (a: number, b: number) => kinds.get(`${a}>${b}`)?.kind !== "time";
+  const checks: StrandCheck[] = [];
+  /** A scene's place: stated, or carried from earlier in its chapter. */
+  const placeOf = (v: number) => scenes[v].placeIds[0] ?? null;
+  for (let v = 0; v < n; v++) {
+    const heads = rsucc[v].filter((x) => story(v, x));
+    if (new Set(heads.map((x) => lane[x])).size > 1) {
+      const places = heads.map(placeOf);
+      const known = places.filter(Boolean);
+      checks.push({ kind: "split", sceneId: scenes[v].id, status: known.length < 2 ? "unplaced" : new Set(known).size > 1 ? "places differ" : "same place" });
+    }
+    const tails = pred[v].filter((p) => story(p, v));
+    if (new Set(tails.map((p) => lane[p])).size > 1) {
+      const here = placeOf(v);
+      checks.push({ kind: "merge", sceneId: scenes[v].id, status: !here ? "unplaced" : tails.some((p) => placeOf(p) === here) ? "joins" : "meets" });
+    }
+  }
+  for (const chapter of new Set(scenes.map((scene) => scene.chapterIndex))) {
+    const inside = scenes.map((scene, v) => ({ scene, v })).filter(({ scene }) => scene.chapterIndex === chapter);
+    const last = inside.at(-1);
+    if (!last) continue;
+    const lastOfLane = new Map<number, number>();
+    for (const { v } of inside) lastOfLane.set(lane[v], v);
+    const apart = [...lastOfLane.values()].filter((v) => v !== last.v && !reach[v].has(last.v) && !reach[last.v].has(v)).length;
+    if (apart) checks.push({ kind: "apart", sceneId: last.scene.id, status: "chapter ends apart", count: apart + 1 });
+  }
+  // One person, one place: recorded casts at one stated moment (day and part of day).
+  const stated = scenes.map((scene, v) => ({ v, key: key(scene), place: placeOf(v) })).filter((entry) => entry.key && entry.key[2] !== null && entry.place && !scenes[entry.v].placeCarried);
+  for (let i = 0; i < stated.length; i++) for (let j = i + 1; j < stated.length; j++) {
+    const a = stated[i], b = stated[j];
+    if (a.key!.join() !== b.key!.join() || a.place === b.place || scenes[a.v].flashback || scenes[b.v].flashback) continue;
+    const shared = scenes[a.v].characterIds.find((id) => scenes[b.v].characterIds.includes(id));
+    if (shared) checks.push({ kind: "conflict", sceneId: scenes[a.v].id, otherId: scenes[b.v].id, characterId: shared, status: "two places at one moment" });
+  }
   let parallelPairs = 0;
   for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) if (!reach[a].has(b) && !reach[b].has(a)) parallelPairs++;
   const ids = (values: number[]) => new Map(scenes.map((scene, index) => [scene.id, values[index]]));
@@ -157,7 +202,7 @@ export function storyStrands(data: TimePlaceProjection): StoryStrands {
     carried,
     merges: new Set(scenes.filter((_, v) => new Set(pred[v].filter((p) => story(p, v)).map((p) => lane[p])).size > 1).map((scene) => scene.id)),
     forks: new Set(scenes.filter((_, v) => new Set(rsucc[v].filter((x) => story(v, x)).map((x) => lane[x])).size > 1).map((scene) => scene.id)),
-    layers: Math.max(0, ...layer) + 1, lanes: Math.max(0, ...lane) + 1, parallelPairs,
+    checks, layers: Math.max(0, ...layer) + 1, lanes: Math.max(0, ...lane) + 1, parallelPairs,
     before: (a, b) => { const x = at.get(a), y = at.get(b); return x !== undefined && y !== undefined && reach[x].has(y); },
   };
 }

@@ -7,6 +7,8 @@ import { canEnterOrbitalScope, orbitalContents, mainProminence, orbitalLevel, re
 import { layoutOrbitalLevel, layoutOrbitalPreview, layoutParentBackdrop, morphSpan, nestedEntityConnections, openingMorph, type OrbitalDraw, type OrbitalMorph, type OrbitalPose } from "../data/orbitalLayout";
 import { framePositions, type LabelBus } from "./graphCamera";
 import { OrbitalGraph, ORBITAL_TRANSITION_MS } from "./OrbitalGraph";
+/** Each sphere's glide when the arrangement changes shape (its start is staggered by the arrangement). */
+const SHAPE_MORPH_MS = 1100;
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalTouchAncestors, type OrbitalReadingBookmark } from "../data/orbitalActivity";
 import { activityFocus, piBusy, type LiveActivity } from "../data/liveActivity";
 import { type OrbitIllustration } from "../data/pictureNodes";
@@ -176,9 +178,23 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   const levelPaths = useMemo(() => arranged?.paths ? arranged.paths(layout.draws, selectedId) : layout.paths, [arranged, layout.draws, layout.paths, selectedId]);
   const paths = useMemo(() => [...levelPaths.map((track) => {
     if (!morph) return track;
-    const fromPoints = track.points.map((point) => {
+    // Points on a sphere move with it; points between spheres (a sampled curve) move with the
+    // spheres on either side, blended by how far along they are, so curves bend smoothly as they go.
+    const moves = track.points.map((point): Position3 | null => {
       const draw = layout.draws.find((entry) => entry.role === "main" && entry.position.every((value, axis) => value === point[axis]));
-      return draw ? morph.from.get(draw.node.id)?.position ?? point : point;
+      const from = draw ? morph.from.get(draw.node.id)?.position : undefined;
+      return from ? from.map((value, axis) => value - point[axis]) as Position3 : draw ? [0, 0, 0] : null;
+    });
+    const fromPoints = track.points.map((point, index) => {
+      const move = moves[index];
+      if (move) return point.map((value, axis) => value + move[axis]) as Position3;
+      let before = index - 1, after = index + 1;
+      while (before >= 0 && !moves[before]) before--;
+      while (after < moves.length && !moves[after]) after++;
+      const a = before >= 0 ? moves[before]! : null, b = after < moves.length ? moves[after]! : null;
+      const t = a && b ? (index - before) / (after - before) : 0;
+      const blend = a && b ? a.map((value, axis) => value + (b[axis] - value) * t) : a ?? b ?? [0, 0, 0];
+      return point.map((value, axis) => value + blend[axis]) as Position3;
     });
     if (fromPoints.length > 2) {
       fromPoints[0] = fromPoints[1];
@@ -259,6 +275,25 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     setMorph(null);
   }, [scope.kind, scope.sceneId]);
   useEffect(() => { onChapter(scope.chapterId ?? null); }, [scope.chapterId, onChapter]);
+  /** The arrangement changed shape on this level (one line shredding into strands, or a strand
+   * detection that moved scenes): spheres glide from where they were, staggered in story order. */
+  const shapeKey = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const next = arranged?.morphKey;
+    const previous = shapeKey.current;
+    shapeKey.current = next;
+    if (!previous || !next || previous === next || reducedMotion) return;
+    const from = new Map(lastPoses.current.key === scope.key ? [...lastPoses.current.poses].map(([id, pose]): [string, OrbitalPose] => [id, { position: pose.position, radius: pose.radius }]) : []);
+    if (!from.size) return;
+    const shredding = next.startsWith("strands") && !previous.startsWith("strands");
+    setShapeCaption(shredding ? "Shredding the story line into strands…" : next.startsWith("line") && previous.startsWith("strands") ? "Weaving the strands back into one line…" : "Strands moving to new evidence…");
+    setMorph({ startedAt: performance.now(), from, durationMs: SHAPE_MORPH_MS, delays: arranged?.morphDelays?.(draws) });
+    // The new shape is framed the way the view opens.
+    const span = arranged?.initialFrame?.(layout.draws);
+    if (span?.length) framePositions(graphRef, span, 1.15, true, { direction: arranged?.direction });
+  }, [arranged?.morphKey]);
+  const [shapeCaption, setShapeCaption] = useState<string | null>(null);
+  useEffect(() => { if (!morph) setShapeCaption(null); }, [morph]);
   useEffect(() => { onPage?.({ key: scope.key, label: pageLabel, kind: scope.kind, chapterId: scope.chapterId }); }, [scope.key, scope.kind, scope.chapterId, pageLabel, onPage]);
   useEffect(() => () => { if (singleClick.current) clearTimeout(singleClick.current); }, []);
   useEffect(() => {
@@ -587,7 +622,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       </button>)}</div>
       <div ref={hoverCard} className="orbital-hover-card" aria-hidden="true" style={{ visibility: "hidden" }}>{hoveredDraw && <HoverCard key={hoveredDraw.node.id} draw={hoveredDraw} links={hoverEdges.length} causalInside={causal.insideBy.get(hoveredDraw.node.id) ?? 0} enterable={!!hoveredDraw.entry?.scope} />}</div>
       <div className="orbital-time-key" aria-hidden="true"><i />{arranged ? arranged.timeKey.label : scope.kind === "library" ? "SERIES" : scope.kind === "series" ? "READING ORDER →" : "TIME →"}<span>{arranged ? arranged.timeKey.detail : scope.kind === "library" ? "No chronological order between series" : scope.kind === "series" ? "Volume order, not actual story time" : "Blue arrows follow narrative order"}</span></div>
-      {morph && <div className="orbital-transition-status" role="status">Uncoiling into the local timeline…</div>}
+      {morph && <div className="orbital-transition-status" role="status">{shapeCaption ?? "Uncoiling into the local timeline…"}</div>}
     </div>
     <div className="scene-legend"><span><i className="canon" />Canon</span><span><i className="proposed" />Proposed</span><span><i className="held" />Held</span><span>Spheres / weighted nebula</span>{causalShown && <span className="causal-key"><i />Causes (stored) · dashed = projected</span>}<button aria-pressed={reducedMotion} onClick={onMotion}>{reducedMotion ? "Motion reduced" : "Motion on"}</button></div>
   </div>;

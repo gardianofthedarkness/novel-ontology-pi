@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { storyStrands } from "../apps/playground/src/data/storyStrands.js";
-import { spiralArrangement, spiralNodeId } from "../apps/playground/src/data/orbitalTimePlace.js";
+import { spiralArrangement, spiralNodeId, strandSummary } from "../apps/playground/src/data/orbitalTimePlace.js";
 import type { StoryScene, TimePlaceProjection } from "../apps/playground/src/data/timePlace.js";
 
 // Invented: Ming and Lan leave the station together (s1), then the story cuts
@@ -44,15 +44,41 @@ test("a flashback is placed before the scene it is told at, not after its teller
   assert.ok(!strands.before("s6", "fb"));
 });
 
-test("Story time strands lay parallel scenes on one ruling of a helicoid, at different radii", () => {
+test("Story time strands put parallel strands on separate coils, one moment at one angle", () => {
   const arrangement = spiralArrangement(data, undefined, null, "strands");
   const strands = storyStrands(data);
-  const radius = (id: string) => { const point = arrangement.anchors!.get(spiralNodeId(id))!; return Math.hypot(point[1], point[2]); };
-  const angle = (id: string) => { const point = arrangement.anchors!.get(spiralNodeId(id))!; return Math.atan2(point[2], point[1]); };
-  const sameLayer = ["m1", "l1"].every((id) => strands.layer.get(id) === strands.layer.get("m1"));
-  if (sameLayer) assert.ok(Math.abs(angle("m1") - angle("l1")) < 1e-9);
-  assert.notEqual(Math.round(radius("m1")), Math.round(radius("l1")));
+  const at = (id: string) => arrangement.anchors!.get(spiralNodeId(id))!;
+  if (strands.layer.get("m1") === strands.layer.get("l1")) {
+    assert.equal(at("m1")[0], at("l1")[0]);
+    assert.equal(at("m1")[2], at("l1")[2]);
+  }
+  assert.ok(Math.abs(at("m1")[1] - at("l1")[1]) > 400);
   assert.equal(arrangement.timeKey.label, "STORY STRANDS →");
   const line = spiralArrangement(data, undefined, null, "line");
   assert.equal(line.timeKey.label, "STORY TIME →");
+});
+
+test("time and place check each other: splits and meetings by place, open ends, one person in two places", () => {
+  const strands = storyStrands(data);
+  assert.deepEqual(strands.checks.find((check) => check.kind === "split"), { kind: "split", sceneId: "s1", status: "places differ" });
+  assert.deepEqual(strands.checks.find((check) => check.kind === "merge"), { kind: "merge", sceneId: "s6", status: "meets" });
+  // Lan goes to Ming at the port instead: she joins his strand's place.
+  const joins = storyStrands({ ...data, scenes: data.scenes.map((entry) => entry.id === "s6" ? { ...entry, placeIds: ["port"] } : entry) });
+  assert.equal(joins.checks.find((check) => check.kind === "merge")?.status, "joins");
+  // The chapter ends before they meet.
+  const apart = storyStrands({ ...data, scenes: data.scenes.slice(0, 5) });
+  assert.equal(apart.checks.find((check) => check.kind === "apart")?.count, 2);
+  // Both scenes state the same evening, at two places, with Ming in each.
+  const evening = { ...data.times[0], id: "t_eve", date: { month: 12, day: 24, derived: false }, partOfDay: "evening" };
+  const twice = storyStrands({ ...data, times: [...data.times, evening], scenes: data.scenes.map((entry) => ["m1", "m2"].includes(entry.id) ? { ...entry, times: [{ id: "t_eve", via: "anchor" as const }], placeIds: [entry.id === "m1" ? "port" : "hill"] } : entry) });
+  assert.equal(twice.checks.filter((check) => check.kind === "conflict").length, 1);
+  assert.match(strandSummary(strands.checks), /splits: 1 at different places/);
+});
+
+test("the arrangement changes shape with a signature and shreds in story order", () => {
+  const line = spiralArrangement(data, undefined, null, "line"), strands = spiralArrangement(data, undefined, null, "strands");
+  assert.notEqual(line.morphKey, strands.morphKey);
+  const draws = ["s1", "s6"].map((id) => ({ node: { id: spiralNodeId(id) }, position: [0, 0, 0], radius: 1, role: "main" })) as never;
+  const delays = strands.morphDelays!(draws);
+  assert.ok(delays.get(spiralNodeId("s1"))! < delays.get(spiralNodeId("s6"))!);
 });
