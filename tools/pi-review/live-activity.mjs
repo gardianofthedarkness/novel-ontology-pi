@@ -2,7 +2,7 @@
 // System 1 calls start and finish between two viewer polls.
 export const RECENT_FACULTY_MS = 5000;
 
-export function liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, afterId, reviewProgress, now = Date.now() }) {
+export function liveActivity({ processing, agent, drafts, changesets, interiors, blockChapters, dialogueScenes = {}, afterId, reviewProgress, now = Date.now() }) {
   const visible = new Set(Object.values(interiors).flatMap(graph => graph.nodes.map(node => node.id)));
   const proposals = new Map(changesets.flatMap(packet => packet.proposals.map(proposal => [proposal.id, proposal])));
   const calls = new Map();
@@ -48,17 +48,18 @@ export function liveActivity({ processing, agent, drafts, changesets, interiors,
     if (event.type === 'entity.merged') ids = [event.keepId];
     if (event.type === 'proposal.added') {
       const proposal = proposals.get(event.proposal.id);
-      ids = [proposal?.payload?.needsExtraction ? `draft:${proposal.id}` : proposal?.payload?.id].filter(Boolean);
+      ids = [proposal?.payload?.needsExtraction ? `draft:${proposal.id}` : proposal?.payload?.id, proposal?.payload?.fromId, proposal?.payload?.toId].filter(Boolean);
     }
-    const nodeIds = ids.filter(id => visible.has(id));
+    const nodeIds = [...new Set(ids.flatMap(id => visible.has(id) ? [id] : dialogueScenes[id] && visible.has(dialogueScenes[id]) ? [dialogueScenes[id]] : []))];
     const nodeId = nodeIds.at(-1);
     if (nodeId) {
       latestTouch = { id: `${record.id}:${nodeId}`, nodeId, timestamp: record.timestamp, faculty: event.faculty ?? event.patchId ?? event.proposal?.provenance?.patchId ?? 'CLI', precision: ids.length > 1 ? 'batch' : 'record' };
-      touches.push({ index, id: record.id, nodeIds, timestamp: record.timestamp, faculty: latestTouch.faculty, chapterId: `chapter_${blockChapters.get(event.blockId ?? activeBlock) ?? 0}` });
+      const chapters = Object.entries(interiors).filter(([, graph]) => graph.nodes.some(node => nodeIds.includes(node.id))).map(([id]) => id);
+      touches.push({ index, id: record.id, nodeIds, timestamp: record.timestamp, faculty: latestTouch.faculty, chapterIds: chapters.length ? chapters : [`chapter_${blockChapters.get(event.blockId ?? activeBlock) ?? 0}`] });
     }
   }
   const changed = afterIndex < 0 ? touches.slice(-1) : touches.filter(touch => touch.index > afterIndex);
-  const batch = changed.length ? { id: changed.at(-1).id, nodeIds: [...new Set(changed.flatMap(touch => touch.nodeIds))], chapterIds: [...new Set(changed.map(touch => touch.chapterId))], faculties: [...new Set(changed.map(touch => touch.faculty))], timestamp: changed.at(-1).timestamp } : null;
+  const batch = changed.length ? { id: changed.at(-1).id, nodeIds: [...new Set(changed.flatMap(touch => touch.nodeIds))], chapterIds: [...new Set(changed.flatMap(touch => touch.chapterIds))], faculties: [...new Set(changed.map(touch => touch.faculty))], timestamp: changed.at(-1).timestamp } : null;
   const construction = [...drafts].sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))[0];
   const blockId = construction?.blockId ?? processing.findLast(record => record.event.type === 'block.started')?.event.blockId;
   const terminal = agent.findLast(record => record.type === 'pi.status');
@@ -69,7 +70,7 @@ export function liveActivity({ processing, agent, drafts, changesets, interiors,
     const proposalIds = new Set([...(review.proposalIds ?? []), ...(review.factIds ?? []).map(id => id.split('/')[0])]);
     review.nodeIds = [...new Set([...proposalIds].flatMap(id => {
       const payload = proposals.get(id)?.payload;
-      return payload ? [payload.id, payload.fromId, payload.toId, payload.entityId, payload.characterId, payload.afterEventId].filter(id => visible.has(id)) : [];
+      return payload ? [payload.id, payload.fromId, payload.toId, payload.entityId, payload.characterId, payload.afterEventId].flatMap(id => visible.has(id) ? [id] : dialogueScenes[id] && visible.has(dialogueScenes[id]) ? [dialogueScenes[id]] : []) : [];
     }))];
   }
   const identityEvents = processing.filter(record => ['entity.merged', 'entity.distinct'].includes(record.event.type)).map(record => ({ id: record.id, timestamp: record.timestamp, event: record.event.type === 'entity.merged' ? { type: 'entity.merged', keepId: record.event.keepId, dropId: record.event.dropId } : { type: 'entity.distinct', aId: record.event.aId, bId: record.event.bId } }));

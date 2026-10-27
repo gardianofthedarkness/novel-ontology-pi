@@ -95,6 +95,23 @@ const stubDecisions: DecisionModel = {
     })),
 };
 
+test("bounded sweeps resume past rejected candidates instead of repeating the first page", async context => {
+  const parent = await mkdtemp(join(tmpdir(), "causality-resume-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const dir = await writeNovelDir(parent);
+  const model: DecisionModel = { modelId: "reject", decide: async (_state, questions) => questions.map(question => ({ key: question.key, value: question.key.startsWith("causal:") ? 0.1 : 0.9 })) };
+  const first = await runCausalitySweep(dir, { env: {}, limit: 1, decisions: model });
+  assert.equal(first.complete, false);
+  const second = await runCausalitySweep(dir, { env: {}, limit: 1, decisions: model });
+  assert.equal(second.evaluatedTotal, 2);
+  let result = second;
+  for (let attempt = 0; attempt < 20 && !result.complete; attempt++) result = await runCausalitySweep(dir, { env: {}, limit: 1, decisions: model });
+  assert.equal(result.complete, true);
+  const finished = await runCausalitySweep(dir, { env: {}, limit: 1, decisions: model });
+  assert.equal(finished.nominated, 0);
+  assert.equal(finished.evaluatedTotal, result.evaluatedTotal);
+});
+
 test("causal checklist fails closed on missing, duplicate, and invalid veto scores", async context => {
   const parent = await mkdtemp(join(tmpdir(), "causality-veto-"));
   context.after(() => rm(parent, { recursive: true, force: true }));

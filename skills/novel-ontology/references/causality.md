@@ -10,12 +10,19 @@ CAUSES link, systematic and agent-adjudicated alike.
 touching the block's new events and dialogue cards; and at chapter close,
 over old × old pairs. Candidate generation is hybrid — graph patterns
 (shared actors, shared location, state-change chains) plus embedding top-K
-over events and dialogue cards as uniform search units — and one batched
+over events and dialogue cards as uniform search units — and bounded
 Jev checklist adjudicates at threshold 0.85 (direct textual support +
 temporal consistency on the novel sequence; succession, correlation, or
 shared topic alone is NOT causation). Confident links join the block's
 ChangeSet or a sweep changeset for the same gate review as everything
 else. Nothing here writes canon directly.
+
+Nominate only earlier endpoints in DIFFERENT known scenes, filtering before
+embedding top-K. Prefer stored story order; `timeline: reading-order-fallback`
+explicitly means actual story time is unavailable, not established. Similarity
+must pass its raw floor before a soft earlier-position boost (at most 25%).
+Skip A→C when canonical directed reachability already contains A→…→C; this
+does not assert a new direct cause. Unknown ordering/membership is not guessed.
 
 **Agent-adjudicated (this skill).** After a full run, you adjudicate:
 
@@ -67,6 +74,13 @@ On demand, the systematic sweep runs outside ingest:
 ```
 novel causality sweep <novel-dir> --limit 10
 ```
+
+Repeat bounded sweeps while `remaining` or `truncated` indicates more work.
+The source/policy-bound scan remembers examined pairs, including rejected
+pairs; source changes invalidate that coverage. Report `evaluatedTotal`,
+`deferredTotal`, `timeline`, and `complete`, not "full volume done" after one
+batch. Oversized endpoint context is explicitly deferred. Proposed arrows
+appear after each small Jev batch, before the independent shared review gate.
 
 ## Across books in one universe
 

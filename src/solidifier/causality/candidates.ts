@@ -10,19 +10,17 @@
  *    participant with an event's actors). Run over bundle data here because
  *    the faculty's home is the bundle, not a live graph; the patterns are
  *    graph patterns, not text heuristics.
- * 2. Embedding top-K: for each unit, the K most similar units by cosine
- *    similarity over the causality sidecar vectors (K = 32, the ratified
- *    fallback shape; candidacy floor 0.5).
+ * 2. Embedding top-K: earlier units in different scenes, softly weighted
+ *    toward earlier story positions (K = 32; raw cosine floor 0.5).
  *
  * Nomination is deliberately NOT adjacency: mere succession is not a leg.
- * A pair needs at least one graph leg or an embedding leg. Direction follows
- * novel-sequence order; order-ambiguous pairs are emitted in chapter/id order
- * and flagged so Jev's temporal-consistency criterion can reject them.
+ * With vectors, graph legs reweight retrieved pairs; without vectors, graph
+ * legs nominate directly. Unknown ordering is excluded, not guessed.
  * Existing CAUSES links (either direction) are never re-nominated, and the
  * pair count is capped so a big novel cannot blow up a Jev batch.
  */
 
-import { topKSimilar } from "../../ground/connectors/embeddings.js";
+import { cosineSimilarity } from "../../ground/connectors/embeddings.js";
 import { alreadyLinked, compareOrder, type CausalityUniverse } from "./units.js";
 
 export interface CausalCandidate {
@@ -42,6 +40,35 @@ export const EMBEDDING_CANDIDACY_FLOOR = 0.5;
 export const EMBEDDING_TOP_K = 32;
 /** Safety cap on pairs per pass. */
 export const MAX_CANDIDATE_PAIRS = 500;
+export const EARLIER_STORY_BOOST = 0.25;
+
+export function causalReachability(universe: CausalityUniverse): (fromId: string, toId: string) => boolean {
+  const adjacency = new Map<string, Set<string>>();
+  for (const relation of universe.relations) {
+    if (!["CAUSES", "CAUSED_BY"].includes(relation.type)) continue;
+    const from = relation.type === "CAUSES" ? relation.fromId : relation.toId;
+    const to = relation.type === "CAUSES" ? relation.toId : relation.fromId;
+    const next = adjacency.get(from) ?? new Set<string>();
+    next.add(to);
+    adjacency.set(from, next);
+  }
+  const cache = new Map<string, Set<string>>();
+  return (fromId, toId) => {
+    let reached = cache.get(fromId);
+    if (!reached) {
+      reached = new Set<string>();
+      const pending = [...(adjacency.get(fromId) ?? [])];
+      while (pending.length) {
+        const id = pending.pop()!;
+        if (reached.has(id)) continue;
+        reached.add(id);
+        pending.push(...(adjacency.get(id) ?? []));
+      }
+      cache.set(fromId, reached);
+    }
+    return reached.has(toId);
+  };
+}
 
 export interface CandidateOptions {
   /** Per-block passes: only pairs touching one of these unit ids. Null = sweep (all pairs). */
@@ -50,6 +77,7 @@ export interface CandidateOptions {
   vectors?: Map<string, number[]>;
   topK?: number;
   maxPairs?: number;
+  excludedPairs?: ReadonlySet<string>;
 }
 
 export function nominateCausalCandidates(
@@ -60,6 +88,7 @@ export function nominateCausalCandidates(
   const topK = opts.topK ?? EMBEDDING_TOP_K;
   const maxPairs = opts.maxPairs ?? MAX_CANDIDATE_PAIRS;
   const vectors = opts.vectors ?? new Map<string, number[]>();
+  const reaches = causalReachability(universe);
 
   // State-change chains: character -> set of event ids after which a delta lands.
   const deltaAfter = new Map<string, Set<string>>();
@@ -79,6 +108,7 @@ export function nominateCausalCandidates(
   }
 
   const pairs = new Map<string, CausalCandidate>();
+  const embeddingPairs = new Set<string>();
   const addLeg = (fromId: string, toId: string, leg: string, scoreBoost: number) => {
     if (fromId === toId) return;
     if (touched && !touched.has(fromId) && !touched.has(toId)) return;
@@ -86,30 +116,23 @@ export function nominateCausalCandidates(
     const a = universe.byId.get(fromId);
     const b = universe.byId.get(toId);
     if (!a || !b) return;
-    // Direction follows novel-sequence order; ambiguous pairs keep
-    // chapter/id order and are flagged.
+    if (!a.sceneId || !b.sceneId || a.sceneId === b.sceneId) return;
     const order = compareOrder(a, b, universe);
-    let from = fromId;
-    let to = toId;
-    let ambiguous = false;
-    if (order === 1) {
-      from = toId;
-      to = fromId;
-    } else if (order === null) {
-      ambiguous = true;
-      if (a.chapterIndex !== b.chapterIndex ? a.chapterIndex > b.chapterIndex : a.id > b.id) {
-        from = toId;
-        to = fromId;
-      }
-    }
+    if (order === null) return;
+    const from = order === 1 ? toId : fromId;
+    const to = order === 1 ? fromId : toId;
     const key = `${from}|${to}`;
+    if (touched && !touched.has(to)) return;
+    if (opts.excludedPairs?.has(key)) return;
+    if (reaches(from, to)) return;
     const existing = pairs.get(key);
     if (existing) {
-      if (!existing.legs.includes(leg)) existing.legs.push(leg);
-      existing.codeScore += scoreBoost;
-      existing.orderAmbiguous = existing.orderAmbiguous && ambiguous;
+      if (!existing.legs.includes(leg)) {
+        existing.legs.push(leg);
+        existing.codeScore += scoreBoost;
+      }
     } else {
-      pairs.set(key, { fromId: from, toId: to, legs: [leg], codeScore: scoreBoost, orderAmbiguous: ambiguous });
+      pairs.set(key, { fromId: from, toId: to, legs: [leg], codeScore: scoreBoost, orderAmbiguous: false });
     }
   };
 
@@ -150,21 +173,33 @@ export function nominateCausalCandidates(
       }
     }
   }
-  // Leg 2: embedding top-K (both directions nominate; direction re-resolved
-  // in addLeg by novel-sequence order).
   if (vectors.size > 0) {
     const pool = universe.units
       .filter((unit) => vectors.has(unit.id))
       .map((unit) => ({ id: unit.id, vector: vectors.get(unit.id)! }));
-    for (const unit of pool) {
-      for (const hit of topKSimilar(unit.vector, pool, topK, new Set([unit.id]))) {
-        if (hit.score < EMBEDDING_CANDIDACY_FLOOR) continue;
-        addLeg(unit.id, hit.id, `embedding:${hit.score.toFixed(2)}`, hit.score);
+    for (const query of pool) {
+      if (touched && !touched.has(query.id)) continue;
+      const current = universe.byId.get(query.id)!;
+      if (!current.sceneId) continue;
+      const earlier = pool.filter(entry => {
+        const previous = universe.byId.get(entry.id)!;
+        return previous.sceneId && previous.sceneId !== current.sceneId && compareOrder(previous, current, universe) === -1 && !reaches(previous.id, current.id);
+      }).sort((first, second) => compareOrder(universe.byId.get(first.id)!, universe.byId.get(second.id)!, universe) ?? first.id.localeCompare(second.id));
+      const ranked = earlier.map((entry, index) => {
+        const similarity = cosineSimilarity(query.vector, entry.vector);
+        const encouragement = earlier.length > 1 ? (earlier.length - index - 1) / (earlier.length - 1) : 1;
+        return { id: entry.id, similarity, score: similarity * (1 + EARLIER_STORY_BOOST * encouragement) };
+      }).filter(hit => hit.similarity >= EMBEDDING_CANDIDACY_FLOOR)
+        .sort((first, second) => second.score - first.score || first.id.localeCompare(second.id)).slice(0, topK);
+      for (const hit of ranked) {
+        embeddingPairs.add(`${hit.id}|${query.id}`);
+        addLeg(hit.id, query.id, `embedding:${hit.similarity.toFixed(2)}`, hit.score);
       }
     }
   }
 
   return [...pairs.values()]
+    .filter(candidate => !vectors.size || embeddingPairs.has(`${candidate.fromId}|${candidate.toId}`))
     .sort((a, b) => b.codeScore - a.codeScore || a.fromId.localeCompare(b.fromId) || a.toId.localeCompare(b.toId))
     .slice(0, maxPairs);
 }

@@ -16,10 +16,11 @@ import { loadConfig } from "../../config.js";
 import { loadEmbedder } from "../../../ground/connectors/embeddings.js";
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
 import { saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
-import { nominateCausalCandidates, type CausalCandidate } from "../../../solidifier/causality/candidates.js";
+import { causalReachability, nominateCausalCandidates, type CausalCandidate } from "../../../solidifier/causality/candidates.js";
 import {
   clearCausalitySweepPending,
   ensureUnitVectors,
+  enrichCausalText,
   runCausalityPass,
 } from "../../../solidifier/causality/faculty.js";
 import {
@@ -28,6 +29,10 @@ import {
   loadCausalityUniverse,
 } from "../../../solidifier/causality/units.js";
 import type { ChangeProposal } from "../../../solidifier/merge/changeset.js";
+import { readFile, writeFile, rename } from "node:fs/promises";
+import { join } from "node:path";
+import { digest } from "../../../solidifier/merge/semantic.js";
+import { EventLog } from "../../../ground/events/log.js";
 
 function embedderFromEnv(env: NodeJS.ProcessEnv) {
   const cfg = loadConfig(env);
@@ -52,6 +57,7 @@ export async function listCausalityCandidates(
   if (opts.chapterIndex !== undefined && (!Number.isSafeInteger(opts.chapterIndex) || opts.chapterIndex < 0)) throw new Error("Chapter must be a nonnegative integer.");
   const env = opts.env ?? process.env;
   const universe = await loadCausalityUniverse(novelDir);
+  await enrichCausalText(novelDir, universe);
   const { vectors, embedded } = await ensureUnitVectors(novelDir, universe, embedderFromEnv(env));
   const touched = opts.unitId ? new Set([opts.unitId]) : null;
   if (touched && !universe.byId.has(opts.unitId!)) throw new Error(`Unknown unit id ${opts.unitId}.`);
@@ -107,6 +113,7 @@ export async function proposeCausalityLink(
     throw new Error(`A CAUSES link already exists between ${fromId} and ${toId}.`);
   }
   const order = compareOrder(from, to, universe);
+  if (causalReachability(universe)(fromId, toId)) throw new Error("A directed causal path already connects these endpoints; skip the redundant check.");
   if (order === 1) {
     throw new Error(
       `Novel-sequence order contradicts ${fromId} -> ${toId}: the to unit precedes the from unit. Swap from/to if the direction is reversed.`,
@@ -157,31 +164,63 @@ export async function runCausalitySweep(
   rejected: number;
   embedded: number;
   embeddingLeg: boolean;
+  complete: boolean;
+  evaluatedTotal: number;
+  deferredTotal: number;
+  remaining: number;
+  truncated: boolean;
+  timeline: string;
 }> {
   const env = opts.env ?? process.env;
-  const pass = await runCausalityPass({
-    novelDir,
-    limit: opts.limit,
-    decisions: opts.decisions ?? jevFromEnv(env),
-    embedder: embedderFromEnv(env),
-  });
+  const universe = await loadCausalityUniverse(novelDir);
+  const sourceHash = await enrichCausalText(novelDir, universe);
+  const revision = digest({ policy: "cross-scene-earlier-v1", sourceHash, units: universe.units, storyIndex: [...universe.storyIndex ?? []], scenes: universe.scenes,
+    stateChanges: universe.stateChanges, relations: universe.relations.filter(relation => !["CAUSES", "CAUSED_BY"].includes(relation.type)),
+    embedding: loadConfig(env).embeddings });
+  const path = join(novelDir, "ontology", "causality-scan.json");
+  let scan = { revision, evaluated: [] as string[], deferred: 0 };
+  try {
+    const previous = JSON.parse(await readFile(path, "utf8")) as typeof scan;
+    if (previous.revision === revision) scan = previous;
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  const log = new EventLog(novelDir);
+  const changeset = { id: `cs_causality_sweep_${Date.now()}`, blockId: "causality-sweep", proposals: [] as ChangeProposal[], status: "accumulating" as "accumulating" | "pending_review", reviewNotes: {} as Record<string, string>, createdAt: new Date().toISOString() };
+  const callId = changeset.id;
+  await log.emit({ type: "faculty.activity", blockId: changeset.blockId, callId, faculty: "causality", system: "system1", status: "started" });
+  let pass;
+  try {
+    pass = await runCausalityPass({
+      novelDir,
+      limit: opts.limit,
+      decisions: opts.decisions ?? jevFromEnv(env),
+      embedder: embedderFromEnv(env),
+      excludedPairs: new Set(scan.evaluated),
+      onBatch: async (verdicts, proposals) => {
+        changeset.proposals.push(...proposals);
+        if (changeset.proposals.length) await saveChangeSet(novelDir, changeset);
+        await log.emit({ type: "draft.updated", blockId: changeset.blockId, patchId: "causality-faculty", stage: "extraction", touchedIds: [...new Set(verdicts.flatMap(verdict => [verdict.fromId, verdict.toId]))] });
+      },
+    });
+    await log.emit({ type: "faculty.activity", blockId: changeset.blockId, callId, faculty: "causality", system: "system1", status: "completed" });
+  } catch (error) {
+    await log.emit({ type: "faculty.activity", blockId: changeset.blockId, callId, faculty: "causality", system: "system1", status: "failed" });
+    throw error;
+  }
   let changesetId: string | null = null;
   if (pass.proposals.length > 0) {
-    const changeset = {
-      id: `cs_causality_sweep_${Date.now()}`,
-      blockId: "causality-sweep",
-      proposals: pass.proposals,
-      status: "pending_review" as const,
-      reviewNotes: {
-        "causality-faculty": `On-demand sweep: ${pass.summary.nominated} nominated, ${pass.summary.proposed} proposed, ${pass.summary.uncertain} uncertain, ${pass.summary.rejected} rejected${pass.summary.embeddingLeg ? " (embedding leg on)" : " (graph patterns only)"}.`,
-      },
-      createdAt: new Date().toISOString(),
-    };
+    changeset.proposals = pass.proposals;
+    changeset.status = "pending_review";
+    changeset.reviewNotes["causality-faculty"] = `On-demand sweep: ${pass.summary.nominated} nominated, ${pass.summary.proposed} proposed, ${pass.summary.uncertain} uncertain, ${pass.summary.rejected} rejected; ${pass.summary.deferred} deferred; timeline ${pass.summary.timeline}; embedding ${pass.summary.embeddingLeg}.`;
     await saveChangeSet(novelDir, changeset);
     changesetId = changeset.id;
   }
-  if (opts.limit === undefined) await clearCausalitySweepPending(novelDir);
-  return { changesetId, ...pass.summary };
+  scan.evaluated = [...new Set([...scan.evaluated, ...pass.attemptedPairs])];
+  scan.deferred += pass.summary.deferred;
+  await writeFile(`${path}.tmp`, JSON.stringify(scan), { mode: 0o600 });
+  await rename(`${path}.tmp`, path);
+  const complete = !pass.summary.truncated && pass.summary.remaining === 0 && scan.deferred === 0;
+  if (complete) await clearCausalitySweepPending(novelDir);
+  return { changesetId, ...pass.summary, complete, evaluatedTotal: scan.evaluated.length, deferredTotal: scan.deferred };
 }
 
 export function causalityCommandsHelp(): Record<string, string> {
