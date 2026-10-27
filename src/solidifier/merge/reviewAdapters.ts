@@ -6,6 +6,7 @@ import { digest, materializeSemantic, semanticFacts, semanticRevision, validateS
 import { semanticContext, decideFacts } from "./semanticCommands.js";
 import { normalizeFactDecisions, semanticIdentityCodec } from "./semanticIdentity.js";
 import { reviewBook } from "./reviewBook.js";
+import { atlasContext, atlasDecide, atlasEvidence, atlasLinks, atlasPacket, atlasPacketApplied, atlasViolation } from "../atlas/universeAtlas.js";
 import { join } from "node:path";
 import { BundleStore } from "../../ground/connectors/bundle.js";
 import { treeViolation } from "../../ground/ontology/placeTree.js";
@@ -102,8 +103,37 @@ async function book(target: ReviewTarget, env: NodeJS.ProcessEnv): Promise<Revie
     } };
 }
 
+/** Universe atlas packets (`ua_*`): cross-book place identity and containment. */
+async function atlas(target: ReviewTarget, env: NodeJS.ProcessEnv): Promise<ReviewAdapter> {
+  const context = await atlasContext(target.directory, target.universeId!, await universeBindings(env));
+  const packet = await atlasPacket(target.directory, target.packetId);
+  if (packet.universeId !== context.universeId) throw new Error("Packet belongs to another universe.");
+  const stale = packet.revision !== context.revision;
+  const label = (qualified: string) => { const place = context.byQualified.get(qualified); return { name: place?.label ?? null, book: context.books.find((book) => book.sourceId === place?.sourceId)?.title ?? null }; };
+  const facts: ReviewFact[] = [];
+  for (const proposal of packet.proposals) {
+    const evidence = stale ? [] : await atlasEvidence(context, proposal);
+    facts.push({ id: proposal.id, field: "relation", value: { type: proposal.kind === "same_place" ? "SAME_PLACE" : "PART_OF", from: proposal.a, to: proposal.b },
+      meaning: { type: proposal.kind === "same_place" ? "SAME_PLACE" : "PART_OF", from: label(proposal.a), to: label(proposal.b), method: proposal.method, confidence: proposal.confidence },
+      evidence, requiredEvidence: evidence.map((entry) => entry.id), requireAllEvidence: true, context: { proposal } });
+  }
+  return { revision: digest({ packet: packet.id, revision: context.revision }), stale, applied: await atlasPacketApplied(target.directory, packet.id), facts, requireFullReview: true,
+    async validate(decisions) {
+      if (decisions.some(decision => "replacement" in decision || "semanticReplacement" in decision)) throw new Error("Place links change only through a new evidence-bound proposal.");
+      const accepted = (await atlasLinks(target.directory, context.universeId));
+      const violation = atlasViolation(context, accepted, decisions.filter(decision => decision.verdict === "accept").map(decision => packet.proposals.find(proposal => proposal.id === decision.factId)!).filter(Boolean));
+      if (violation) throw new Error(violation);
+      return decisions;
+    },
+    async apply(decisions) {
+      const result = await atlasDecide(context, packet.id, decisions.map(({ factId, verdict, reason }) => ({ proposalId: factId, verdict, reason })));
+      return { verified: result.applied, held: result.held, rejected: result.rejected, deferredProposals: 0, result };
+    } };
+}
+
 async function universe(target: ReviewTarget, env: NodeJS.ProcessEnv): Promise<ReviewAdapter> {
   if (!target.universeId) throw new Error("Universe review requires --universe <reviewed-universe-id>.");
+  if (target.packetId.startsWith("ua_")) return atlas(target, env);
   const context = await loadUniverseContext(target.directory, target.universeId, await universeBindings(env));
   const data = await universePacket(context, target.packetId);
   const facts: ReviewFact[] = [];

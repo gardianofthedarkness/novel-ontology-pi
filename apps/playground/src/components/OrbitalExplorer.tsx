@@ -210,6 +210,22 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   overviewPositions.current = layout.draws.map(draw => draw.position);
 
   useEffect(() => { setPath(initialPath()); setSelectedId(null); setRevealedId(null); setMorph(null); }, [resetToken]);
+  // Universe views: choosing another book flies the camera to it (its stretch of spiral, or its columns and map).
+  const bookFlight = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const key = arranged?.bookKey;
+    if (!key || key === bookFlight.current || followingActivity) return;
+    const first = bookFlight.current === undefined;
+    bookFlight.current = key;
+    if (first) return; // arrival already frames the book (initialFrame)
+    const span = arranged?.bookFrame?.(layout.draws);
+    if (!span?.length) return;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const fly = () => { if (!graphRef.current?.getControls?.() && ++attempts < 40) { timer = setTimeout(fly, 50); return; } setSelectedId(null); framePositions(graphRef, span, 1.15, !reducedMotion, { direction: arranged?.direction }); };
+    timer = setTimeout(fly, 60);
+    return () => clearTimeout(timer);
+  }, [arranged, layout.draws, followingActivity, reducedMotion]);
   /** Another book's world: start at its overview, except when returning to
    * the book whose reading bookmark was just restored after following Pi. */
   const shownBook = useRef(bookId);
@@ -563,7 +579,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       if (!event.metaKey && !event.ctrlKey && ["+", "=", "-", "_"].includes(event.key)) { event.preventDefault(); zoomBy(event.key === "+" || event.key === "=" ? -80 : 80); }
       if (event.key === "Enter" && selected) { event.preventDefault(); if (event.shiftKey) enter(selected); else inspect(selected); }
     }}>
-      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
+      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} renderDistance={arranged?.renderDistance} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
       {intro && <div className="orbital-intro-skip" aria-hidden="true">Tap anywhere to skip</div>}
       <div className="labels-layer faculty-chips">{working.map((anchor) => <button key={anchor.id} type="button" className="faculty-chip" data-faculty-anchor={anchor.id} onClick={openFacultyStrip} aria-label={`Working here: ${anchor.faculties.join(", ")}. Open faculty activity`}>{facultyChipText(anchor)}</button>)}</div>
       <div className="labels-layer orbital-labels">{draws.filter((draw) => draw.role !== "preimage" && draw.envelope !== "hidden").map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}${draw.role === "nebula" && (draw.prominence ?? 1) < 0.35 && selectedId !== draw.node.id ? " is-faint" : ""}${hoveredId === draw.node.id ? " is-hovered" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onPointerEnter={() => setHover(draw.node.id)} onPointerLeave={() => { if (motion.hoveredId === draw.node.id) setHover(null); }} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
