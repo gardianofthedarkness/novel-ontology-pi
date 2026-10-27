@@ -90,6 +90,45 @@ Deep links: `?view=story`, `?view=places`. In Orbital mode the same views are
   their place, rising in story time. A story-time window filters what
   floats, or the stretch of the spiral that was in view does.
 
+## Strands and "who is present?" (second tier)
+
+`novel timeplace strands <dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]`
+reads the stored story time (and time-place proposals awaiting review) and
+estimates story strands: which scenes run in parallel, where strands split
+and meet, each split and meeting graded against places. It writes a report
+(including a happens-before graph for `novel eval story-order`) and nothing
+to canon.
+
+A scene with no recorded cast borrows a nearby scene's, and the borrowed cast
+links it into a strand. That is the only trigger for a question: "who is
+present?", the chapter's characters to choose from (work model, multi-select,
+four scenes per call; a name not on the list is ignored). Planning is free;
+`--ask` spends calls, at most `--max-questions` (default 30) per run, only in
+chapters of at least `--min-impact` scenes (default 8). Replies are cached
+with `--cache`.
+
+Measured on the two hand-read volumes (2026-10-27), with perfect answers
+standing in for the model, so these are ceilings:
+
+| | Vol 1 | Vol 2 |
+| --- | --- | --- |
+| Strands without questions | 0.872 | 0.875 |
+| + 15 questions (5 calls) | 0.873 | 0.885 |
+| + 25 questions (8–10 calls) | 0.889 | 0.896 |
+| + every borrowed link (28–29 questions, 9–10 calls) | 0.895 | 0.915 |
+
+- About 10 work-model calls per volume, against 130–150 for the time-place
+  run itself.
+- Links from recorded casts were almost all right (52 of 56); about half of
+  the borrowed links were wrong (22 of 60). Rejecting a borrowed cast made
+  order worse (0.68 and 0.67 with every one rejected), because the scene then
+  lost the order it had right. Naming who is really present is what helps.
+- Asking where a cast was disputed between nearby scenes, or asking only at
+  strand switches, did not help, even with perfect answers.
+- The rest of the gap is recorded casts that miss a main character (the cast
+  extraction finds about two thirds of the main characters present). With
+  every cast correct, strands reach 0.96 and 0.98.
+
 ## Measured (2026-10-26)
 
 Two already-extracted volumes of one series (Chinese), on disposable copies.

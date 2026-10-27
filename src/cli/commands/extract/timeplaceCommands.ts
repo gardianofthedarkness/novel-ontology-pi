@@ -14,6 +14,8 @@ import { saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
 import { cachedDecisions, cachedWork } from "../../../digger/timeplace/cache.js";
 import { timePlaceForNewScenes, timePlaceReviewSource } from "../../../digger/timeplace/afterApply.js";
 import type { ChangeSet } from "../../../solidifier/merge/changeset.js";
+import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
+import { askStrandQuestions, planStrandQuestions, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "../../../digger/timeplace/strandQuestions.js";
 
 /**
  * `novel timeplace run|tree|show` — the time-place faculty over a
@@ -210,4 +212,54 @@ export async function timeplaceTree(novelDir: string, options: TimeplaceTreeOpti
   };
 }
 
-export const TIMEPLACE_USAGE = "novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--cache dir] [--out file] [--propose] [--force] | novel timeplace tree <novel-dir> [--no-jev] [--max-questions N] [--cache dir] [--out file] [--propose] | novel timeplace show <novel-dir>";
+export interface TimeplaceStrandsOptions { ask?: boolean; maxQuestions?: number; minImpact?: number; cache?: string; out?: string; env?: NodeJS.ProcessEnv }
+
+/**
+ * Story strands over the stored story time (and time-place proposals awaiting
+ * review): which scenes run in parallel, where strands split and meet, and
+ * the place checks. Plans "who is present?" questions only where a borrowed
+ * cast creates a strand link; asks them (work model, within --max-questions)
+ * only with --ask. Writes a report; nothing is written to canon.
+ */
+export async function timeplaceStrands(novelDir: string, options: TimeplaceStrandsOptions = {}): Promise<Record<string, unknown>> {
+  const env = options.env ?? process.env;
+  const { scenes, entities, relations } = await loadBundle(novelDir);
+  const pending = (await listChangeSets(novelDir)).filter((changeset) => changeset.status === "pending_review" && changeset.id.startsWith("cs_timeplace")).flatMap((changeset) => changeset.proposals as unknown as { kind: string; payload: Record<string, unknown> }[]);
+  const data = strandProjection({ scenes, entities, relations, pending });
+  if (!data.available) throw new Error("No story time yet: run `novel timeplace run` first (strands build on its periods).");
+  const limits = { maxQuestions: options.maxQuestions ?? STRAND_QUESTION_DEFAULTS.maxQuestions, minImpact: options.minImpact ?? STRAND_QUESTION_DEFAULTS.minImpact };
+  const before = storyStrands(data);
+  const plan = planStrandQuestions(data, before, limits);
+  let asked: Awaited<ReturnType<typeof askStrandQuestions>>["asked"] = [];
+  let strands = before;
+  const usage = { workCalls: 0 };
+  if (options.ask && plan.questions.length) {
+    const sentences = await loadWorkspaceSentences(novelDir);
+    const byScene = new Map(scenes.map((scene) => [scene.id, scene]));
+    const passage = (sceneId: string) => {
+      const lines = (byScene.get(sceneId)?.sentenceIds ?? []).map((id) => sentences.get(id)?.text ?? "").filter(Boolean);
+      return [...lines.slice(0, 8), ...(lines.length > 10 ? ["…", ...lines.slice(-2)] : lines.slice(8))].join("\n").slice(0, 900);
+    };
+    const work = options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env);
+    const metered = { modelId: work.modelId, generate: async (request: Parameters<typeof work.generate>[0]) => { usage.workCalls++; return work.generate(request); } };
+    const result = await askStrandQuestions({ work: metered, plan, names: data.names, passage, options: limits });
+    asked = result.asked;
+    strands = storyStrands(data, result.answers);
+  }
+  const summary = (value: typeof strands) => ({ lanes: value.lanes, layers: value.layers, parallelPairs: value.parallelPairs, splits: value.forks.size, meetings: value.merges.size, guessedCasts: value.carried.size,     checks: Object.fromEntries([...new Set(value.checks.map((check) => `${check.kind}:${check.status}`))].map((label) => [label, value.checks.filter((check) => `${check.kind}:${check.status}` === label).length])) });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const out = options.out ?? join(novelDir, "timeplace", `strands-${stamp}.json`);
+  await mkdir(join(out, ".."), { recursive: true, mode: 0o700 });
+  const report = {
+    novelDir, before: summary(before), after: options.ask ? summary(strands) : null,
+    plan: { limits, estimate: plan.estimate, belowThreshold: plan.belowThreshold, overBudget: plan.overBudget, questions: plan.questions.map((question) => ({ key: question.key, impact: question.impact, characters: question.characterIds.length })) },
+    asked, usage,
+    // For `novel eval story-order`: the happens-before graph.
+    prediction: { kind: "dag", edges: strands.edges.map((edge) => [edge.from, edge.to]) },
+  };
+  await writeFile(out, JSON.stringify(report, null, 1), { mode: 0o600 });
+  return { ...summary(strands), plan: report.plan.estimate, belowThreshold: plan.belowThreshold, overBudget: plan.overBudget, asked: asked.length, applied: asked.filter((entry) => entry.applied).length, usage, report: out,
+    ...(options.ask ? {} : { note: plan.questions.length ? `Planned ${plan.questions.length} "who is present?" question(s) in ${plan.estimate.calls} work-model call(s); add --ask to ask them.` : "Nothing worth asking above the impact threshold." }) };
+}
+
+export const TIMEPLACE_USAGE = "novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--cache dir] [--out file] [--propose] [--force] | novel timeplace tree <novel-dir> [--no-jev] [--max-questions N] [--cache dir] [--out file] [--propose] | novel timeplace show <novel-dir> | novel timeplace strands <novel-dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]";

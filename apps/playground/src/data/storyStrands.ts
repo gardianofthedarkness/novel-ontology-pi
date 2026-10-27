@@ -54,7 +54,10 @@ export interface StoryStrands {
 
 const SLOTS: Record<string, number> = { "late-night": 0, dawn: 1, "early-morning": 1, morning: 2, noon: 3, afternoon: 4, evening: 5, night: 6 };
 
-export function storyStrands(data: TimePlaceProjection): StoryStrands {
+/** Answers that override estimates: who is present in a scene (second tier, `novel timeplace strands --ask`). */
+export interface StrandAnswers { presence?: Map<string, string[]> }
+
+export function storyStrands(data: TimePlaceProjection, answers: StrandAnswers = {}): StoryStrands {
   const scenes = [...data.scenes].sort((first, second) => first.index - second.index);
   const n = scenes.length;
   const at = new Map(scenes.map((scene, index) => [scene.id, index]));
@@ -72,7 +75,7 @@ export function storyStrands(data: TimePlaceProjection): StoryStrands {
   };
 
   // Casts: recorded, or carried from a recent scene of the same chapter and region.
-  const cast = scenes.map((scene) => [...new Set(scene.characterIds)]);
+  const cast = scenes.map((scene) => [...new Set(answers.presence?.get(scene.id) ?? scene.characterIds)]);
   const carried = new Set<string>();
   const appearances = new Map<string, number>();
   for (const ids of cast) for (const id of ids) appearances.set(id, (appearances.get(id) ?? 0) + 1);
