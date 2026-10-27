@@ -22,6 +22,7 @@ const proposals = [
 ];
 
 test('parallel dialogue drafts appear before scene segmentation and attach in place when the scene arrives', () => fixture(async (directory, runtime) => {
+  await writeFile(`${directory}/ontology/illustrations.jsonl`, JSON.stringify({ id: 'ill_1', asset: 'assets/picture.jpg', kind: 'story', sentenceId: 'b0000_s0001' }));
   await mkdir(`${directory}/working`);
   const draft = { version: 1, blockId: 'b0001', chapterIndex: 0, stage: 'miniloop', patchId: 'dialogue-structure', updatedAt: new Date().toISOString(), sceneSpans: [], dialogueUnits: [['b0000_s0001']], turns: [], completedScenes: 0, totalScenes: 0, proposals: [] };
   const path = `${directory}/working/b0001.json`;
@@ -34,6 +35,8 @@ test('parallel dialogue drafts appear before scene segmentation and attach in pl
   await writeFile(path, JSON.stringify(draft));
   const linked = await snapshot(directory, runtime);
   const graph = linked.world.interiors.chapter_0;
+  assert.equal(linked.album.pictures[0].sceneId, 'draft:b0001:scene:b0000_s0000');
+  assert.equal(linked.album.pictures[0].sceneFraction, 2 / 3);
   assert.equal(graph.nodes.filter(node => node.id === id).length, 1);
   assert.ok(graph.edges.some(edge => edge.from === 'draft:b0001:scene:b0000_s0000' && edge.to === id && edge.kind === 'contains'));
   assert.ok(!JSON.stringify(linked).includes('sentenceIds'));

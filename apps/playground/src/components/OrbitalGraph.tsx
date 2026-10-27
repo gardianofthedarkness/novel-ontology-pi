@@ -13,6 +13,8 @@ import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";
 import type { FloorMark } from "../data/orbitalTimePlace";
+import { useAlbumTexture } from "./useAlbumTexture";
+import { containedImageSize } from "../data/albumImage";
 
 interface GlyphData {
   draw: OrbitalDraw;
@@ -141,9 +143,6 @@ function SphereGlyph({ node, active }: NodeRendererProps) {
     </mesh>}
   </group>;
 }
-/** Canvas-generated picture card face: gradient + kind label + short id.
- * No external image assets and no EPUB-derived art — the card is a
- * placeholder face until real thumbnails are wired (open follow-up). */
 const pictureTextures = new Map<string, CanvasTexture>();
 function pictureTexture(kind: string, shortId: string): CanvasTexture {
   const key = `${kind}:${shortId}`;
@@ -209,6 +208,7 @@ function PictureGlyph({ node }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
   const { draw, morph, reducedMotion, transparent, selected, touched, motion } = data;
+  const texture = useAlbumTexture(draw.asset);
   const carried = useCarriedPose(draw, morph, reducedMotion);
   const { camera } = useThree();
   useFrame((_, delta) => {
@@ -234,6 +234,7 @@ function PictureGlyph({ node }: NodeRendererProps) {
   });
   const width = draw.radius * 2;
   const height = draw.radius * 1.5;
+  const imageSize = texture ? containedImageSize(texture.image.width, texture.image.height, width, height) : [width, height];
   const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? 0.3 : draw.node.state === "held" ? 0.5 : 0.95;
   const shortId = draw.node.id.replace(/^pic-?/i, "").slice(0, 18) || draw.node.id.slice(0, 18);
   return <group ref={group} userData={{ orbitalGlyph: draw.node.id }}>
@@ -243,8 +244,12 @@ function PictureGlyph({ node }: NodeRendererProps) {
       <meshStandardMaterial color="#0d1a26" metalness={0.2} roughness={0.6} transparent opacity={opacity} />
     </mesh>
     <mesh position={[0, 0, Math.max(1, draw.radius * 0.05)]}>
-      <planeGeometry args={[width, height]} />
-      <meshBasicMaterial map={pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
+      <planeGeometry args={[imageSize[0], imageSize[1]]} />
+      <meshBasicMaterial map={texture ?? pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
+    </mesh>
+    <mesh position={[0, 0, -Math.max(1, draw.radius * 0.05)]} rotation={[0, Math.PI, 0]}>
+      <planeGeometry args={[imageSize[0], imageSize[1]]} />
+      <meshBasicMaterial map={texture ?? pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
     </mesh>
     {!transparent && <GlassCase id={draw.node.id} width={width} height={height} depth={Math.max(1, draw.radius * 0.08)} opacity={opacity} motion={data.motion} reducedMotion={reducedMotion} />}
     {selected && <mesh raycast={noRaycast} position={[0, 0, Math.max(1, draw.radius * 0.06)]}>
@@ -253,13 +258,11 @@ function PictureGlyph({ node }: NodeRendererProps) {
     </mesh>}
   </group>;
 }
-/** A bound portrait: a portrait-orientation framed card billboarded next to
- * its character's sphere. Canvas face only — no external artwork is loaded,
- * so a simulated asset id renders exactly like a real bound portrait. */
 function PortraitGlyph({ node }: NodeRendererProps) {
   const group = useRef<Group>(null);
   const data = node.data.glyph as GlyphData;
   const { draw, morph, reducedMotion, transparent, selected, touched, motion } = data;
+  const texture = useAlbumTexture(draw.asset);
   const carried = useCarriedPose(draw, morph, reducedMotion);
   const { camera } = useThree();
   useFrame((_, delta) => {
@@ -272,6 +275,7 @@ function PortraitGlyph({ node }: NodeRendererProps) {
   });
   const width = draw.radius * 1.5;
   const height = draw.radius * 2;
+  const imageSize = texture ? containedImageSize(texture.image.width, texture.image.height, width, height) : [width, height];
   const opacity = transparent ? 0.055 : draw.node.state === "proposed" ? 0.3 : draw.node.state === "held" ? 0.5 : 0.95;
   const shortId = draw.node.id.replace(/^por-?/i, "").slice(0, 18) || draw.node.id.slice(0, 18);
   return <group ref={group} userData={{ orbitalGlyph: draw.node.id }}>
@@ -281,8 +285,8 @@ function PortraitGlyph({ node }: NodeRendererProps) {
       <meshStandardMaterial color="#12211e" metalness={0.2} roughness={0.6} transparent opacity={opacity} />
     </mesh>
     <mesh position={[0, 0, Math.max(1, draw.radius * 0.05)]}>
-      <planeGeometry args={[width, height]} />
-      <meshBasicMaterial map={pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
+      <planeGeometry args={[imageSize[0], imageSize[1]]} />
+      <meshBasicMaterial map={texture ?? pictureTexture(draw.node.label, shortId)} transparent opacity={opacity} toneMapped={false} />
     </mesh>
     {!transparent && <GlassCase id={draw.node.id} width={width} height={height} depth={Math.max(1, draw.radius * 0.08)} opacity={opacity} motion={data.motion} reducedMotion={reducedMotion} />}
     {selected && <mesh raycast={noRaycast} position={[0, 0, Math.max(1, draw.radius * 0.06)]}>

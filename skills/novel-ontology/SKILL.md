@@ -163,13 +163,12 @@ Act on the aspect; do not retry variants blindly:
   `album.importAllowed` is true. Ingest the returned extracted source;
   keep assigned inputs immutable. A mismatch needs a fresh workspace,
   never source replacement or re-anchoring an applied book.
-- `novel album list <dir>` inspects sentence-bound illustrations;
-  `novel album portraits <dir>` finalizes portraits. Pictures are not
-  ontology entities or semantic gate proposals; never force-assign them.
-- Portraits stay hidden until bound to a unique identity and follow EM
-  merges. Assign remaining portrait tasks only when the host supports
-  visual input (`NOVEL_HOST_VISION=1`); otherwise leave them hidden.
-  Never invent a portrait or ask the user to assign one.
+- `novel album list <dir>` inspects sentence-bound illustrations. After
+  the full volume is extracted and applied, use the separate
+  [novel-portraits skill](../novel-portraits/SKILL.md) and `novel album assign
+  <dir>` for local OCR/cropping/assignment. `album portraits` only finalizes
+  existing crops. Pictures are not ontology entities or semantic gate proposals;
+  never force-assign them. Unresolved portraits stay hidden and follow EM merges.
 
 ## Measure
 

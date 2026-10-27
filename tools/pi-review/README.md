@@ -132,13 +132,25 @@ node tools/pi-review/run.mjs /private/job.json
   are checked before skipping an applied block.
 - The private manifest exposes `album.epub`, a pinned byte hash and
   `album.importAllowed`. Pi can execute `novel album import <workspace> <epub>`,
-  `novel album list <workspace>` and `novel album portraits <workspace>`.
+  `novel album list <workspace>`, `novel album portraits <workspace>` and
+  `novel album assign <workspace> [--check]`.
   Import rechecks EPUB bytes and exact extracted/assigned text before writing.
   A legacy story-only input remains readable but cannot be silently replaced by
   full EPUB text; use a fresh workspace for its album intake. The core importer
   also protects bound/legacy sources for other host agents. Album mutations have
   private pre-operation ontology checkpoints and do not approve semantic facts.
-  Portrait finalization binds existing crops; it does not run Python cropping.
+  Portrait finalization only binds existing crops. The separate `novel-portraits`
+  skill is loaded and readable by Pi; `album assign` invokes the fixed local
+  OCR/head-crop tool after every source block has an approved packet and application
+  audit. `--check` is read-only, including no checkpoint. Existing per-fact holds
+  stay held. The assignment mutation requires reading its skill and uses the same
+  private pre-operation checkpoints as other album mutations, not a new fact gate.
+  Install the optional Python requirements in `tools/album-portraits/requirements.txt`
+  on the host and set `NOVEL_PORTRAIT_PYTHON` to that interpreter before starting Pi.
+  No scripts, interpreter paths or threshold overrides are accepted from Pi.
+  The text-only Pi model is explicitly given `NOVEL_HOST_VISION=0`; OCR is local
+  and does not pretend to be visual LLM review. Unmatched portraits stay hidden.
+  Restart an existing Pi session to load the new skill/command scope.
 - `minutes` bounds the run. `limits` sets recalls/revisions per block and
   total command calls. The example's 2 recalls / 3 revisions are historical
   test settings, **not recommended universal limits for large packets**.

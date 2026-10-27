@@ -29,6 +29,9 @@ test('interactive mode fails closed without credentials and does not create a re
     await assert.rejects(access(join(home, 'runtime/full-loop.lock')));
     const manifest = JSON.parse(await readFile(join(home, 'runtime/NOVEL_JOB.json'), 'utf8'));
     assert.match(manifest.purpose, /Wait for user messages/);
+    assert.equal(manifest.portraits.visualInput, false);
+    assert.match(manifest.portraits.skill, /skills\/novel-portraits\/SKILL.md$/);
+    assert.equal(manifest.portraits.command, 'novel album assign <workspace>');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

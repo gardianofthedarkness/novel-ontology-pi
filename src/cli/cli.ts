@@ -44,6 +44,7 @@ import {
 import { resolveJevKey } from "../ground/connectors/secrets.js";
 import { inspectNovel } from "./commands/extract/inspectCommands.js";
 import { albumImport, albumList, albumPortraits } from "./commands/extract/albumCommands.js";
+import { albumAssign } from "./commands/extract/portraitCommands.js";
 import { evalExtract, evalRun } from "./commands/extract/evalCommands.js";
 import { evalDialogueCards } from "./commands/extract/dialogueEval.js";
 import { sectionBlock } from "../digger/intake/sectioning.js";
@@ -147,6 +148,8 @@ const COMMANDS: Record<string, string> = {
     "List illustrations with each anchor resolved to chapter / block / sentence / scene (scene once the block is ingested)",
   "novel album portraits <novel-dir>":
     "Portrait finalization: EM-merge follow, birth fold-match binding, then reviewer tasks for characters still without a portrait (skipped when the host is known not to support visual input; portraits stay hidden until bound)",
+  "novel album assign <novel-dir> [--check]":
+    "After full-volume extraction/application: local OCR/head crops and unique character assignment; --check reports readiness/dependencies without writes. Preserves existing portraits; ambiguous matches stay unassigned.",
   "novel eval run <dataset-dir> <predictions-dir>":
     "Score prediction files against a golden-chapter dataset (precision/recall; metrics only, no thresholds)",
   "novel eval dialogues <gold-cards.json> <predicted-cards.json>":
@@ -266,6 +269,10 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "album") {
+    if (sub === "assign" && positional[2] && (positional.length === 3 || positional.length === 4 && positional[3] === "--check")) {
+      out(await albumAssign(positional[2], positional[3] === "--check"), pretty);
+      return;
+    }
     if (sub === "import" && positional.length === 4 && positional[2] && positional[3] && !positional[3].startsWith("--")) {
       out(await albumImport(positional[2], positional[3]), pretty);
       return;
@@ -283,7 +290,7 @@ async function main(): Promise<void> {
       out(await albumPortraits(positional[2]), pretty);
       return;
     }
-    throw new Error("Usage: novel album import <novel-dir> <epub-file> | novel album list <novel-dir> [--block-size N] | novel album portraits <novel-dir>");
+    throw new Error("Usage: novel album import <novel-dir> <epub-file> | novel album list <novel-dir> [--block-size N] | novel album portraits <novel-dir> | novel album assign <novel-dir> [--check]");
   }
 
   if (cmd === "eval") {

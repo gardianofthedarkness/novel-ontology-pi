@@ -1,19 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { albumScrollOffset, type AlbumPanelPicture } from "../data/albumEntries";
+import { albumImageUrl } from "../data/albumImage";
+export type { AlbumPanelPicture } from "../data/albumEntries";
 
 /** One album entry for the side panel: a placed picture knows its
  * neighboring scenes; an unplaced picture (anchor sentence in no scene
  * yet) is still listed in the album, just not drawn on the orbit. */
-export interface AlbumPanelPicture {
-  id: string;
-  asset: string;
-  kind: string;
-  label: string;
-  placed: boolean;
-  prevSceneLabel: string | null;
-  nextSceneLabel: string | null;
-  chrono: number | null;
-}
-
 interface Props {
   pictures: AlbumPanelPicture[];
   selectedId: string | null;
@@ -63,19 +55,23 @@ function PictureFace({ label, shortId, small }: { label: string; shortId: string
  * canvas face matching the 3D card. The image stays hidden until it loads,
  * so an unserved asset never flashes a broken icon. */
 function PictureArt({ picture, small }: { picture: AlbumPanelPicture; small?: boolean }) {
-  const [loaded, setLoaded] = useState(false);
-  const servable = picture.asset.includes("/") || picture.asset.startsWith("http");
+  const [loadedAsset, setLoadedAsset] = useState<string | null>(null);
+  const asset = albumImageUrl(picture.asset, window.location.href);
+  const loaded = loadedAsset === asset && asset !== null;
   return (
-    <div className="glass-frame">
-      {servable && (
+    <div className="glass-frame" style={{ aspectRatio: "4 / 3", position: "relative" }}>
+      {asset && (
         <img
-          src={picture.asset}
+          key={asset}
+          src={asset}
           alt={`${picture.label} ${picture.id}`}
-          onLoad={() => setLoaded(true)}
-          style={{ width: "100%", display: loaded ? "block" : "none", border: small ? "1px solid #ffd166" : "2px solid #ffd166" }}
+          referrerPolicy="no-referrer"
+          onLoad={() => setLoadedAsset(asset)}
+          onError={() => setLoadedAsset(null)}
+          style={{ width: "100%", height: "100%", objectFit: "contain", display: loaded ? "block" : "none", border: small ? "1px solid #ffd166" : "2px solid #ffd166" }}
         />
       )}
-      {(!servable || !loaded) && <PictureFace label={picture.label} shortId={picture.id} small={small} />}
+      {!loaded && <PictureFace label={picture.label} shortId={picture.id} small={small} />}
     </div>
   );
 }
@@ -88,13 +84,20 @@ function placementText(picture: AlbumPanelPicture): string {
 
 export function AlbumPanel({ pictures, selectedId, onSelect }: Props) {
   const [localId, setLocalId] = useState<string | null>(selectedId);
+  const selectedEntry = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (selectedId && pictures.some((picture) => picture.id === selectedId)) setLocalId(selectedId);
-  }, [selectedId, pictures]);
-  if (!pictures.length) return <p className="empty-state">No pictures in this album yet.</p>;
-  const placed = pictures.filter((picture) => picture.placed);
-  const unplaced = pictures.filter((picture) => !picture.placed);
-  const selected = pictures.find((picture) => picture.id === localId) ?? placed[0] ?? pictures[0];
+    if (selectedId) setLocalId(selectedId);
+  }, [selectedId]);
+  const ordered = [...pictures].sort((first, second) => Number(second.placed) - Number(first.placed) || (first.chrono ?? 0) - (second.chrono ?? 0));
+  const selected = pictures.find((picture) => picture.id === localId) ?? ordered[0];
+  useLayoutEffect(() => {
+    const entry = selectedEntry.current;
+    const container = entry?.closest<HTMLElement>(".inspector-body");
+    if (!entry || !container) return;
+    const itemTop = entry.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+    container.scrollTop = albumScrollOffset(container.scrollTop, container.clientHeight, itemTop, entry.offsetHeight);
+  }, [selected?.id]);
+  if (!selected) return <p className="empty-state">No pictures in this album yet.</p>;
   const choose = (picture: AlbumPanelPicture) => {
     setLocalId(picture.id);
     if (picture.placed) onSelect(picture.id);
@@ -103,53 +106,16 @@ export function AlbumPanel({ pictures, selectedId, onSelect }: Props) {
     <div className="album-panel">
       <div className="panel-intro">
         <span className="eyebrow">ALBUM</span>
-        <h2>{selected.label}</h2>
-        <p>{placementText(selected)}</p>
+        <h2>Illustrations</h2>
+        <p>Earlier → later. Select a picture to find it on the timeline.</p>
       </div>
-      <PictureArt picture={selected} />
-      <dl className="record-facts">
-        <div><dt>Picture ID</dt><dd>{selected.id}</dd></div>
-        <div><dt>Asset</dt><dd>{selected.asset}</dd></div>
-        <div><dt>Kind</dt><dd>{selected.kind}</dd></div>
-        {selected.chrono !== null && <div><dt>Sequence</dt><dd>{selected.chrono}</dd></div>}
-      </dl>
-      {!!placed.length && (
-        <section aria-label="Pictures on the timeline">
-          <h3>On the timeline · earlier → later</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-            {placed.map((picture) => (
-              <button
-                key={picture.id}
-                onClick={() => choose(picture)}
-                aria-pressed={picture.id === selected.id}
-                style={{ padding: 0, background: "none", border: picture.id === selected.id ? "2px solid #ffd166" : "1px solid transparent", cursor: "pointer", textAlign: "left" }}
-              >
-                <PictureArt picture={picture} small />
-                <small style={{ display: "block", padding: "4px 2px" }}>{picture.label} · {picture.id}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-      {!!unplaced.length && (
-        <section aria-label="Pictures not yet placed">
-          <h3>Not yet on the orbit</h3>
-          <p className="empty-state">These pictures are in the album but their anchor sentences belong to no scene yet, so they draw nowhere on the timeline.</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-            {unplaced.map((picture) => (
-              <button
-                key={picture.id}
-                onClick={() => choose(picture)}
-                aria-pressed={picture.id === selected.id}
-                style={{ padding: 0, background: "none", border: picture.id === selected.id ? "2px solid #ffd166" : "1px solid transparent", cursor: "pointer", textAlign: "left" }}
-              >
-                <PictureArt picture={picture} small />
-                <small style={{ display: "block", padding: "4px 2px" }}>{picture.label} · {picture.id}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      {ordered.map(picture => <section key={picture.id} ref={picture.id === selected.id ? selectedEntry : undefined} className={`album-entry${picture.id === selected.id ? " is-selected" : ""}`} data-album-id={picture.id} aria-label={`${picture.label} ${picture.id}`}>
+        <button onClick={() => choose(picture)} aria-pressed={picture.id === selected.id} className="album-image-button">
+          <span>{picture.label} · {picture.id}</span>
+          <PictureArt picture={picture} />
+        </button>
+        <p>{placementText(picture)}</p>
+      </section>)}
     </div>
   );
 }

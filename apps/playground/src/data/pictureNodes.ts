@@ -34,6 +34,8 @@ export interface OrbitIllustration {
   asset: string;
   kind: string;
   sentenceId: string | null;
+  sceneId?: string | null;
+  sceneFraction?: number | null;
 }
 
 export type PicturePlacement =
@@ -71,15 +73,16 @@ export function placePictures(
   });
   return illustrations.map((ill) => {
     const base = { pictureId: ill.id, asset: ill.asset, kind: ill.kind };
-    if (!ill.sentenceId) return { ...base, placed: false as const, prevSceneId: null, nextSceneId: null, chrono: null };
-    const sceneIndex = sceneBySentence.get(ill.sentenceId);
-    if (sceneIndex === undefined) {
+    const mapped = ill.sceneId !== undefined;
+    const sceneIndex = mapped ? scenes.findIndex((scene) => scene.id === ill.sceneId) : ill.sentenceId ? sceneBySentence.get(ill.sentenceId) : undefined;
+    if (sceneIndex === undefined || sceneIndex < 0) {
       return { ...base, placed: false as const, prevSceneId: null, nextSceneId: null, chrono: null };
     }
     const prev = scenes[sceneIndex];
     const next = scenes[sceneIndex + 1] ?? null;
-    const at = prev.sentenceIds.indexOf(ill.sentenceId);
-    const fraction = (at + 1) / (prev.sentenceIds.length + 1);
+    const at = ill.sentenceId ? prev.sentenceIds.indexOf(ill.sentenceId) : -1;
+    const fraction = mapped ? ill.sceneFraction : (at + 1) / (prev.sentenceIds.length + 1);
+    if (typeof fraction !== "number" || !Number.isFinite(fraction) || fraction <= 0 || fraction >= 1) return { ...base, placed: false as const, prevSceneId: null, nextSceneId: null, chrono: null };
     let gap = next ? next.chrono - prev.chrono : 1;
     if (!(gap > 0)) gap = 1;
     return {
