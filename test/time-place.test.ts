@@ -130,8 +130,12 @@ test("the faculty asks Jev only about checkable words, keeps quoted ones as refe
   assert.equal(result.usage.workCalls, 2);
   const proposals = timePlaceProposals(result, { entityIds: new Set(["loc_7"]), relationKeys: new Set() });
   const relations = proposals.filter((proposal) => proposal.kind === "add_relation").map((proposal) => proposal.payload as { type: string; fromId: string; toId: string; properties: Record<string, unknown> });
-  assert.ok(relations.some((relation) => relation.type === "LOCATED_AT" && relation.fromId === "scene_1" && relation.toId === "loc_7"), "known place reused, not re-minted");
-  assert.ok(!proposals.some((proposal) => proposal.kind === "upsert_entity" && (proposal.payload as Entity).names[0].text === "小巷"), "generic settings are not entities");
+  // "中央区的小巷": the generic alley is kept only as a place inside the known ward (phase 2 place tree).
+  const alley = proposals.find((proposal) => proposal.kind === "upsert_entity" && (proposal.payload as Entity).names[0].text === "小巷")?.payload as Entity;
+  assert.deepEqual(alley?.properties, { source: "time-place", firstSceneId: "scene_1", generic: true, scopedTo: "loc_7" }, "a generic setting exists only under its stated named parent");
+  assert.ok(relations.some((relation) => relation.type === "PART_OF" && relation.fromId === alley.id && relation.toId === "loc_7"), "known place reused as the parent, not re-minted");
+  assert.ok(relations.some((relation) => relation.type === "LOCATED_AT" && relation.fromId === "scene_1" && relation.toId === alley.id), "the scene sits in its most specific place");
+  assert.ok(!proposals.some((proposal) => proposal.kind === "upsert_entity" && (proposal.payload as Entity).id === "loc_7"), "the known ward is not re-minted");
   const times = proposals.filter((proposal) => proposal.kind === "upsert_entity" && (proposal.payload as Entity).kind === "TimePoint");
   assert.equal(times.length, result.periods.length);
   assert.equal((times.find((proposal) => (proposal.payload as Entity).properties.flashback)!.payload as Entity).properties.flashbackProbability, 0.8);

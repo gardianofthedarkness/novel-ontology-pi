@@ -49,6 +49,8 @@ export type RelationType =
   | "LOCATED_AT"
   /** Scene -> TimePoint: the scene contains (anchor) or inherits that time. */
   | "OCCURS_DURING"
+  /** Location -> Location: the child place is inside the parent (one parent per place; a tree). */
+  | "PART_OF"
   | "KNOWS"
   | "SPEAKS_TO"
   | "ADDRESSES"

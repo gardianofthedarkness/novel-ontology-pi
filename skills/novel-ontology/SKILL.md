@@ -109,7 +109,7 @@ re-read its fresh revision. Never drop conflicting updates merely to clear a gat
   correlation, or shared topic alone is never causation, and order or
   adjacency alone never implies a link.
 
-## Story time and places (phase 1)
+## Story time and places
 
 - `novel timeplace run <dir> --propose [--mode hybrid|llm|programmatic]
   [--chapter N]` finds scene time/place anchors and writes a pending
@@ -128,9 +128,21 @@ re-read its fresh revision. Never drop conflicting updates merely to clear a gat
   may jump or rewind), hold that fact with the reason instead of rebuilding
   the whole book's chronology in one reply; `novel search <dir> <time word>
   [--limit N]` finds where a time word is stated.
+- Places form a strict tree: `PART_OF` links a place to the ONE place it is
+  inside (room ⊂ building ⊂ district ⊂ city); a scene sits at its most
+  specific place and the path implies the rest. A run proposes containment
+  stated in one sentence ("东京都新宿区", "新宿区的车站前"); a generic place
+  ("车站前") is kept only under such a named parent. `novel timeplace tree
+  <dir> --propose [--max-questions N]` sweeps stored places (name prefix,
+  same sentence, same scene), lets Jev judge which is inside which, and
+  writes a pending `place-tree` packet for the same gate.
+- Accept `PART_OF` only when the cited sentences show the child lies within
+  the parent — never from outside knowledge; neighbours, routes and two
+  names for one place are not containment. The gate refuses a second parent
+  or a loop: hold the weaker link instead.
 - Do not treat story order as causation, a carried-over place as stated,
-  or a derived date as a stated one. Hierarchy (room ⊂ building ⊂ city),
-  spatial relations and cross-volume time alignment are later phases.
+  or a derived date as a stated one. Spatial relations beyond containment
+  and cross-volume time/place alignment are later phases.
 
 ## Album (EPUB illustrations + character portraits)
 

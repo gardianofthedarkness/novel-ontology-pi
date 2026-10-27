@@ -52,6 +52,16 @@
 .tp-place-node circle { fill: #12304a; stroke: #7cc8ff; stroke-width: 1.5; }
 .tp-place-node circle.is-carried { stroke-dasharray: 3 3; }
 .tp-place-node.is-dim { opacity: .3; }
+/* Place tree: a place containing others is a region around them, tinted deeper by depth. */
+.tp-region circle { fill: rgba(60, 140, 200, .07); stroke: rgba(124, 200, 255, .55); stroke-width: 1.2; }
+.tp-region.depth-1 circle { fill: rgba(60, 140, 200, .1); }
+.tp-region.depth-2 circle, .tp-region.depth-3 circle { fill: rgba(90, 170, 220, .13); }
+.tp-region.is-link-proposed circle, .tp-place-node.is-link-proposed circle:not(.tp-emerge-ring) { stroke-dasharray: 5 4; }
+.tp-region.is-dim { opacity: .35; }
+.tp-region.is-emerging circle { stroke: #ffd36b; }
+.tp-region-label { fill: var(--tp-text); font-size: 12px; font-weight: 600; text-anchor: middle; paint-order: stroke; stroke: #050b15; stroke-width: 3px; }
+.tp-region-count { fill: var(--tp-muted); font-size: 9.5px; text-anchor: middle; letter-spacing: .02em; }
+.tp-place-node.is-region-own circle:not(.tp-emerge-ring) { fill: #7cc8ff; stroke: #050b15; }
 .tp-place-label { fill: var(--tp-text); font-size: 12px; text-anchor: middle; paint-order: stroke; stroke: #050b15; stroke-width: 3px; }
 .tp-place-count { fill: #cfe7f7; font-size: 10px; text-anchor: middle; }
 .tp-track { fill: none; stroke: var(--tp-track); stroke-width: 2.5; }
@@ -85,6 +95,8 @@
   /* The 600-unit map is drawn ~330px wide on a phone: enlarge its text. */
   .tp-place-label { font-size: 20px; stroke-width: 5px; }
   .tp-place-count { font-size: 16px; }
+  .tp-region-label { font-size: 19px; stroke-width: 5px; }
+  .tp-region-count { font-size: 14px; }
   .tp-step { font-size: 18px; }
   .tp-occupant circle { r: 14; }
   .tp-occupant text { font-size: 11px; }

@@ -2,7 +2,7 @@ import type { CausalLink, CausalSummary, WorldEdge, WorldNode } from "../types.j
 import type { CausalArrow } from "./causalProjection.js";
 import type { Position3 } from "./spatialLayout.js";
 import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
-import { dateLine, placeLayout, placeLinks, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
+import { dateLine, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
 
 /**
  * Orbital Story time and Places (time-place phase 1, view only). Each is the
@@ -60,7 +60,8 @@ export interface OrbitalArrangement {
   envelope?: "shell" | "hidden";
   timeKey: { label: string; detail: string };
 }
-export interface FloorMark { id: string; x: number; z: number; radius: number; active: boolean }
+/** A place's disc on the floor; a region (a place containing others) is a wider, fainter disc under its children. */
+export interface FloorMark { id: string; x: number; z: number; radius: number; active: boolean; depth?: number; region?: boolean; proposed?: boolean }
 
 
 /** A scene with everything around it in its chapter: records it covers and
@@ -316,7 +317,8 @@ const recordsAt = (nodes: WorldNode[], levels: AtlasLevels) => nodes
   .filter((node) => (levels.event && node.kind === "event") || (levels.dialogue && node.kind === "dialogue" && !!node.dialogue))
   .sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id));
 
-/** The map (schematic, not geography) on the floor; each scene above its
+/** The map (schematic, not geography) on the floor, nested by the place
+ * tree (a region's disc holds its places); each scene above its
  * place at a height set by its story rank; a thread from each scene down to
  * its place; the story-order string through the air; a selected character's
  * path through their scenes. With event or dialogue levels on, each scene's
@@ -324,27 +326,31 @@ const recordsAt = (nodes: WorldNode[], levels: AtlasLevels) => nodes
 export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter, world?: RegroupedWorld): OrbitalArrangement {
   const levels = filter.levels ?? SCENE_LEVEL;
   const links = placeLinks(data);
-  const layout = placeLayout(data.places, links, 600);
+  const layout = placeTreeLayout(data.places, links, 600);
+  const SCALE = 6;
+  /** Where each place's scenes, pin and moves attach (a region's spot is inside its upper rim). */
   const map = new Map<string, { x: number; z: number }>();
   for (const place of data.places) {
     const point = layout.get(place.id);
-    if (point) map.set(place.id, { x: (point.x - 300) * 7, z: (point.y - 300) * 5 });
+    if (point) map.set(place.id, { x: (point.spotX - 300) * SCALE, z: (point.spotY - 300) * SCALE });
   }
+  const placePaths = new Map(data.places.map((place) => [place.id, place.path ?? [place.id]]));
+  const inside = (placeId: string | undefined, ancestor: string) => !!placeId && (placePaths.get(placeId) ?? [placeId]).includes(ancestor);
   const scenes = atlasScenes(data, filter);
-  const shown = new Set(scenes.flatMap((scene) => scene.placeIds.slice(0, 1)));
+  const shown = new Set(scenes.flatMap((scene) => scene.placeIds.slice(0, 1).flatMap((id) => placePaths.get(id) ?? [id])));
   const step = Math.max(12, Math.min(70, 900 / Math.max(1, scenes.length)));
   const anchors = new Map<string, Position3>();
   scenes.forEach((scene, rank) => {
     const spot = map.get(scene.placeIds[0]);
     if (spot) anchors.set(atlasNodeId(scene.id), [spot.x / 3, (FLOOR_Y + 260) / 3 + rank * step, spot.z / 3]);
   });
-  const counts = new Map(data.places.map((place) => [place.id, place.sceneIds.length]));
-  const most = Math.max(1, ...counts.values());
-  const radiusOf = (placeId: string) => 70 + 150 * Math.sqrt((counts.get(placeId) ?? 0) / most);
-  const floor: FloorMark[] = [...map].map(([id, spot]) => ({ id, x: spot.x, z: spot.z, radius: radiusOf(id), active: shown.has(id) }));
+  const floor: FloorMark[] = data.places.flatMap((place): FloorMark[] => {
+    const point = layout.get(place.id);
+    return point ? [{ id: place.id, x: (point.x - 300) * SCALE, z: (point.y - 300) * SCALE, radius: Math.max(40, point.r * SCALE), active: shown.has(place.id), depth: point.depth, region: point.region, proposed: !!place.parentProposed }] : [];
+  }).sort((first, second) => (first.depth ?? 0) - (second.depth ?? 0));
   const pins: OrbitalDraw[] = data.places.flatMap((place): OrbitalDraw[] => {
     const spot = map.get(place.id);
-    return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: place.proposed ? "proposed" : "canon", parent: null, lane: "canon", chrono: 0, summary: `${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it) · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
+    return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: place.proposed ? "proposed" : "canon", parent: null, lane: "canon", chrono: 0, summary: `${(place.path?.length ?? 1) > 1 ? `${placePathLabel(place, data.names)} · ` : ""}${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it)${(place.totalScenes ?? 0) > place.sceneIds.length ? ` · ${place.totalScenes} inside` : ""}${place.parentProposed ? " · inside-link proposed" : ""} · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
   });
   const withRecords = levels.event || levels.dialogue;
   /** Records sit inside their scene, whose sphere (scaled like the main
@@ -378,7 +384,8 @@ export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter,
       const placeId = selectedId.startsWith("pin:") ? selectedId.slice(4) : sceneOf.get(selectedId)?.placeIds[0];
       if (placeId && !characters.has(selectedId)) {
         const spot = map.get(placeId);
-        const column = draws.filter((draw) => draw.role === "main" && sceneOf.get(draw.node.id)?.placeIds[0] === placeId).map((draw) => draw.position);
+        // A region frames every column inside it.
+        const column = draws.filter((draw) => draw.role === "main" && inside(sceneOf.get(draw.node.id)?.placeIds[0], placeId)).map((draw) => draw.position);
         const span = [...column, ...(spot ? [[spot.x, FLOOR_Y, spot.z] as Position3] : [])];
         return span.length > 1 ? span : null;
       }

@@ -7,6 +7,8 @@ import { describeTime, detectTimeMentions, leadingDateCue, needsRoleCheck, quote
 import { decideContinuation, decideRoles, heuristicRole, type RoleVerdict, type StoryState } from "./roles.js";
 import { extractVocabulary, meterWork, newUsage, type MeteredWorkModel, type PlaceMention, type UsageMeter } from "./vocabulary.js";
 import { meterDecisions } from "./cache.js";
+import { statedContainment } from "./containment.js";
+import { mostSpecific, treeViolation } from "../../ground/ontology/placeTree.js";
 import { assemblePeriods, dateFor, isMicroJump, periodIdFor, type AnchoredMention, type PeriodSeed, type SceneTime, type StoryPeriod } from "./periods.js";
 
 /**
@@ -20,9 +22,13 @@ import { assemblePeriods, dateFor, isMicroJump, periodIdFor, type AnchoredMentio
  *   3. assembly — code builds periods (a time anchor until the next one),
  *      the flashback stack and an estimated story order;
  *   4. places — scenes are LOCATED_AT the specific places they happen in.
- * Hierarchies (room ⊂ building ⊂ city), spatial relations and cross-volume
- * time alignment are later phases. Output is a reviewable ChangeSet; nothing
- * here writes canon.
+ * Phase 2 adds the place tree: a place written inside another named place in
+ * the same sentence is proposed PART_OF it, and a generic place with a named
+ * parent becomes a place scoped under it ("新宿区 › 车站前"); scenes are linked
+ * to their most specific place. Places already stored get parents from the
+ * place-tree sweep (placeTreeSweep.ts). Spatial relations beyond containment
+ * and cross-volume time alignment are later phases. Output is a reviewable
+ * ChangeSet; nothing here writes canon.
  */
 export type VocabularyMode = "programmatic" | "llm" | "hybrid";
 
@@ -43,6 +49,10 @@ export interface ScenePlace {
   specific: boolean;
   sentenceId: string;
   source: PlaceMention["source"] | "scene";
+  /** The place this one is stated to be inside, in the same sentence (phase 2). */
+  parent?: { id: string; name: string; known: boolean; sentenceId: string; via: "adjacent" | "llm" };
+  /** A generic place ("车站前") kept only as a place inside its stated named parent. */
+  scoped?: boolean;
 }
 
 export interface TimePlaceResult {
@@ -207,16 +217,32 @@ export async function runTimePlace(raw: TimePlaceInput): Promise<TimePlaceResult
     input.seed,
   );
 
-  // 4. Places: specific settings resolve to known Location entities by name form.
+  // 4. Places: specific settings resolve to known Location entities by name
+  //    form. Stated containment gives a place its parent; a generic place is
+  //    kept only under a stated named parent ("新宿区 › 车站前").
   const places: ScenePlace[] = [];
+  const sentenceText = new Map(input.scenes.flatMap((scene) => scene.sentences.map((sentence) => [sentence.id, sentence.text] as const)));
+  const resolved = (mention: PlaceMention) => {
+    const key = normalisePlace(mention.text);
+    const known = placeForms.get(key);
+    return { key: known ? `entity:${known.id}` : `text:${key}`, name: known ? known.names.find((form) => form.kind === "canonical")?.text ?? mention.text : key, entityId: known?.id ?? null };
+  };
   for (const { scene, places: found } of perScene) {
+    const stated = new Map(statedContainment(found, (id) => sentenceText.get(id)).map((entry) => [entry.child, entry]));
     for (const raw of found) {
       // Speech rarely names where the scene itself is: a quoted place is a mention.
-      const place = raw.inQuote ? { ...raw, role: "mentioned" as const } : raw;
-      if (place.inQuote) continue;
-      const key = normalisePlace(place.text);
-      const known = placeForms.get(key);
-      places.push({ sceneId: scene.id, key: known ? `entity:${known.id}` : `text:${key}`, name: known ? known.names.find((form) => form.kind === "canonical")?.text ?? place.text : key, entityId: known?.id ?? null, role: place.role, specific: place.specific || !!known, sentenceId: place.sentenceId, source: place.source });
+      if (raw.inQuote) continue;
+      const own = resolved(raw);
+      const ownId = own.entityId ?? placeIdFor(own.key);
+      const containment = stated.get(raw);
+      const parentOf = containment ? resolved(containment.parent) : null;
+      const parent = parentOf && (parentOf.entityId ?? placeIdFor(parentOf.key)) !== ownId ? { id: parentOf.entityId ?? placeIdFor(parentOf.key), name: parentOf.name, known: !!parentOf.entityId, sentenceId: raw.sentenceId, via: containment!.via } : undefined;
+      const specific = raw.specific || !!own.entityId;
+      if (!specific && parent) {
+        places.push({ sceneId: scene.id, key: `in:${parent.id}/${own.name}`, name: own.name, entityId: null, role: raw.role, specific: true, sentenceId: raw.sentenceId, source: raw.source, parent, scoped: true });
+        continue;
+      }
+      places.push({ sceneId: scene.id, key: own.key, name: own.name, entityId: own.entityId, role: raw.role, specific, sentenceId: raw.sentenceId, source: raw.source, ...(parent && specific ? { parent } : {}) });
     }
     if (scene.locationId && !places.some((place) => place.sceneId === scene.id && place.entityId === scene.locationId)) {
       const known = input.knownEntities.find((entity) => entity.id === scene.locationId);
@@ -237,7 +263,7 @@ export const placeIdFor = (key: string) => `loc_tp_${fnv(key)}`;
  * new Location entities for specific places not yet known, and LOCATED_AT
  * for scene settings. Relations already in the bundle are not re-proposed.
  */
-export function timePlaceProposals(result: TimePlaceResult, existing: { entityIds: Set<string>; relationKeys: Set<string>; /** Stored periods' anchor sentences (periods from earlier runs). */ anchorSentences?: Map<string, string> }, provenanceBlockId = "time-place"): ChangeProposal[] {
+export function timePlaceProposals(result: TimePlaceResult, existing: { entityIds: Set<string>; relationKeys: Set<string>; /** Stored periods' anchor sentences (periods from earlier runs). */ anchorSentences?: Map<string, string>; /** Stored place tree (child -> parent). */ parents?: Map<string, string> }, provenanceBlockId = "time-place"): ChangeProposal[] {
   const proposals: ChangeProposal[] = [];
   const relationKey = (relation: Pick<Relation, "fromId" | "toId" | "type">) => `${relation.type}:${relation.fromId}:${relation.toId}`;
   const addRelation = (relation: Relation, sentenceIds: string[]) => {
@@ -275,15 +301,36 @@ export function timePlaceProposals(result: TimePlaceResult, existing: { entityId
     addRelation({ fromId: scene.sceneId, toId: periodId, type: "OCCURS_DURING", properties: { via, flashback: period.flashback }, confidence: via === "anchor" ? period.anchor.verdict.confidence ?? 0.7 : 0.6 }, via === "anchor" ? [period.anchor.sentenceId] : inheritedEvidence(scene.sceneId, period.anchor.sentenceId));
   }
   const minted = new Set<string>();
+  const mintPlace = (id: string, name: string, sentenceId: string, sceneId: string, extra: Record<string, unknown> = {}) => {
+    if (existing.entityIds.has(id) || minted.has(id)) return;
+    minted.add(id);
+    const entity: Entity = { id, kind: "Location", names: [{ text: name, lang: /[一-鿿]/.test(name) ? "zh" : "en", kind: "canonical" }], properties: { source: "time-place", firstSceneId: sceneId, ...extra }, confidence: 0.7 };
+    proposals.push({ id: `tp_ent_${id}`, kind: "upsert_entity", payload: entity, confidence: 0.7, provenance: { blockId: provenanceBlockId, sentenceIds: [sentenceId], patchId: "time-place" } } as ChangeProposal);
+  };
+  const idOf = (place: ScenePlace) => place.entityId ?? placeIdFor(place.key);
+  const scopedProperties = (place: ScenePlace) => place.scoped && place.parent ? { generic: true, scopedTo: place.parent.id } : {};
+  // Containment first (one parent per place, no loops), so each scene can be
+  // linked to its most specific place below.
+  const parents = new Map(existing.parents ?? []);
   for (const place of result.places) {
-    if (!place.specific || place.role !== "setting") continue;
-    const id = place.entityId ?? placeIdFor(place.key);
-    if (!place.entityId && !existing.entityIds.has(id) && !minted.has(id)) {
-      minted.add(id);
-      const entity: Entity = { id, kind: "Location", names: [{ text: place.name, lang: /[一-鿿]/.test(place.name) ? "zh" : "en", kind: "canonical" }], properties: { source: "time-place", firstSceneId: place.sceneId }, confidence: 0.7 };
-      proposals.push({ id: `tp_ent_${id}`, kind: "upsert_entity", payload: entity, confidence: 0.7, provenance: { blockId: provenanceBlockId, sentenceIds: [place.sentenceId], patchId: "time-place" } } as ChangeProposal);
+    if (!place.parent || !place.specific || !(place.entityId || place.role === "setting")) continue;
+    const id = idOf(place);
+    if (parents.has(id) || treeViolation([...parents].map(([fromId, toId]) => ({ fromId, toId, type: "PART_OF" as const })), [{ fromId: id, toId: place.parent.id, type: "PART_OF" }])) continue;
+    parents.set(id, place.parent.id);
+    if (!place.entityId) mintPlace(id, place.name, place.sentenceId, place.sceneId, scopedProperties(place));
+    if (!place.parent.known) mintPlace(place.parent.id, place.parent.name, place.parent.sentenceId, place.sceneId);
+    addRelation({ fromId: id, toId: place.parent.id, type: "PART_OF", properties: { via: "stated", source: place.parent.via }, confidence: place.parent.via === "adjacent" ? 0.8 : 0.7 }, [place.sentenceId]);
+  }
+  const settings = new Map<string, ScenePlace[]>();
+  for (const place of result.places) if (place.specific && place.role === "setting") settings.set(place.sceneId, [...(settings.get(place.sceneId) ?? []), place]);
+  for (const list of settings.values()) {
+    const deepest = new Set(mostSpecific(list.map(idOf), parents));
+    for (const place of list) {
+      const id = idOf(place);
+      if (!deepest.has(id)) continue;
+      if (!place.entityId) mintPlace(id, place.name, place.sentenceId, place.sceneId, scopedProperties(place));
+      addRelation({ fromId: place.sceneId, toId: id, type: "LOCATED_AT", properties: { role: "setting", via: place.source }, confidence: 0.7 }, place.sentenceId ? [place.sentenceId] : []);
     }
-    addRelation({ fromId: place.sceneId, toId: id, type: "LOCATED_AT", properties: { role: "setting", via: place.source }, confidence: 0.7 }, place.sentenceId ? [place.sentenceId] : []);
   }
   return proposals;
 }

@@ -34,7 +34,14 @@ export interface StoryScene {
   placeCarried: boolean;
   characterIds: string[];
 }
-export interface StoryPlace { id: string; label: string; sceneIds: string[]; statedScenes: number; characterIds: string[]; /** Proposed, awaiting review. */ proposed?: boolean }
+export interface StoryPlace {
+  id: string; label: string; sceneIds: string[]; statedScenes: number; characterIds: string[];
+  /** Proposed, awaiting review. */ proposed?: boolean;
+  /** Place tree (phase 2): the place this one is inside, its depth and root-first path of ids. */
+  parentId?: string | null; parentProposed?: boolean; depth?: number; path?: string[];
+  /** Scenes here or anywhere inside this place. */ totalScenes?: number;
+  /** A generic place ("车站前") that exists only inside its named parent. */ generic?: boolean;
+}
 export interface TimePlaceProjection {
   available: boolean;
   times: StoryTime[];
@@ -161,6 +168,122 @@ export function placeLayout(places: StoryPlace[], links: { from: string; to: str
   const scale = Math.min(3, (size - 2 * margin) / Math.max(1, maxX - minX), (size - 2 * margin) / Math.max(1, maxY - minY));
   const offsetX = (size - (maxX - minX) * scale) / 2, offsetY = (size - (maxY - minY) * scale) / 2;
   return new Map(nodes.map((node) => [node.id, { x: Math.round(offsetX + (node.x - minX) * scale), y: Math.round(offsetY + (node.y - minY) * scale), r: Math.round(node.r) }]));
+}
+
+/** "星城 › 东区 › 医院": a place as its path through the place tree. */
+export function placePathLabel(place: Pick<StoryPlace, "id" | "label" | "path"> | undefined, names: Map<string, string> | Record<string, string>): string {
+  if (!place) return "";
+  const name = (id: string) => (names instanceof Map ? names.get(id) : names[id]) ?? id;
+  return (place.path?.length ? place.path : [place.id]).map((id) => id === place.id ? place.label : name(id)).join(" › ");
+}
+
+export interface PlaceSpot {
+  /** Centre and radius of the place's circle; a region's circle holds its children. */
+  x: number; y: number; r: number; depth: number; region: boolean;
+  /** Where the place's own scenes, label and routes attach: the centre of a
+   * leaf, just inside the upper rim of a region (clear of its children). */
+  spotX: number; spotY: number;
+}
+
+/** Compact, deterministic circle packing around the origin: overlapping
+ * circles push apart, linked ones pull together, everything falls inward. */
+function packCircles(nodes: { id: string; r: number }[], links: { from: string; to: string; count: number }[], gap: number): Map<string, { x: number; y: number }> {
+  const mean = nodes.reduce((sum, node) => sum + node.r, 0) / Math.max(1, nodes.length);
+  const items = nodes.map((node, index) => ({ ...node, x: Math.cos(index * 2.399963) * (mean + gap) * 1.3 * Math.sqrt(index), y: Math.sin(index * 2.399963) * (mean + gap) * 1.3 * Math.sqrt(index) }));
+  const byId = new Map(items.map((item) => [item.id, item]));
+  for (let step = 0; step < 300; step++) {
+    const cooling = 1 - step / 320;
+    for (const item of items) { item.x -= item.x * 0.03 * cooling; item.y -= item.y * 0.03 * cooling; }
+    for (const link of links) {
+      const from = byId.get(link.from), to = byId.get(link.to);
+      if (!from || !to) continue;
+      const dx = to.x - from.x, dy = to.y - from.y, distance = Math.max(1, Math.hypot(dx, dy));
+      const pull = (distance - (from.r + to.r + gap * 2)) * 0.01 * Math.min(3, link.count) * cooling;
+      if (pull <= 0) continue;
+      from.x += dx / distance * pull; from.y += dy / distance * pull; to.x -= dx / distance * pull; to.y -= dy / distance * pull;
+    }
+    for (let first = 0; first < items.length; first++) for (let second = first + 1; second < items.length; second++) {
+      const a = items[first], b = items[second];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      if (!dx && !dy) { dx = 0.5; dy = 0.3; }
+      const distance = Math.hypot(dx, dy), least = a.r + b.r + gap;
+      if (distance >= least) continue;
+      const push = (least - distance) / 2;
+      a.x -= dx / distance * push; a.y -= dy / distance * push; b.x += dx / distance * push; b.y += dy / distance * push;
+    }
+  }
+  if (items.length) {
+    // Centre the cluster on its enclosing box.
+    const cx = (Math.min(...items.map((item) => item.x - item.r)) + Math.max(...items.map((item) => item.x + item.r))) / 2;
+    const cy = (Math.min(...items.map((item) => item.y - item.r)) + Math.max(...items.map((item) => item.y + item.r))) / 2;
+    for (const item of items) { item.x -= cx; item.y -= cy; }
+  }
+  return new Map(items.map((item) => [item.id, { x: item.x, y: item.y }]));
+}
+
+/**
+ * The place tree as nested circles (schematic, not geography): each place
+ * that contains others is a region whose circle packs its children; busy
+ * places are larger; places linked by moves sit closer. Without parents
+ * every place is a top-level circle, as before the tree.
+ */
+export function placeTreeLayout(places: StoryPlace[], links: { from: string; to: string; count: number }[], size = 600): Map<string, PlaceSpot> {
+  const ids = new Set(places.map((place) => place.id));
+  const byId = new Map(places.map((place) => [place.id, place]));
+  const parentOf = (place: StoryPlace) => place.parentId && ids.has(place.parentId) && place.parentId !== place.id ? place.parentId : null;
+  const children = new Map<string, StoryPlace[]>();
+  const roots: StoryPlace[] = [];
+  for (const place of places) { const parent = parentOf(place); if (parent) children.set(parent, [...(children.get(parent) ?? []), place]); else roots.push(place); }
+  const pathOf = (id: string) => { const path: string[] = []; const seen = new Set<string>(); for (let at: string | null = id; at && !seen.has(at); at = byId.get(at) ? parentOf(byId.get(at)!) : null) { seen.add(at); path.unshift(at); } return path; };
+  /** Moves lifted to the circles packed together at one level. */
+  const lifted = (level: Set<string>) => {
+    const counts = new Map<string, number>();
+    for (const link of links) {
+      const from = pathOf(link.from).find((id) => level.has(id)), to = pathOf(link.to).find((id) => level.has(id));
+      if (!from || !to || from === to) continue;
+      const key = [from, to].sort().join("\u0000");
+      counts.set(key, (counts.get(key) ?? 0) + link.count);
+    }
+    return [...counts].map(([key, count]) => { const [from, to] = key.split("\u0000"); return { from, to, count }; });
+  };
+  const radius = new Map<string, number>();
+  const offset = new Map<string, { x: number; y: number }>();
+  const LABEL = 16, GAP = 22;
+  const measure = (place: StoryPlace, seen: Set<string>): number => {
+    const own = 8 + 4 * Math.sqrt(place.sceneIds.length);
+    const kids = (children.get(place.id) ?? []).filter((kid) => !seen.has(kid.id));
+    if (!kids.length) { radius.set(place.id, own); return own; }
+    for (const kid of kids) measure(kid, new Set([...seen, place.id]));
+    const packed = packCircles(kids.map((kid) => ({ id: kid.id, r: radius.get(kid.id)! })), lifted(new Set(kids.map((kid) => kid.id))), GAP);
+    // Children sit a little low, leaving the upper rim for the region's label and own scenes.
+    let enclose = 0;
+    for (const kid of kids) { const at = packed.get(kid.id)!; offset.set(kid.id, { x: at.x, y: at.y + LABEL / 2 }); enclose = Math.max(enclose, Math.hypot(at.x, at.y + LABEL / 2) + radius.get(kid.id)!); }
+    const r = Math.max(own * 2, enclose + LABEL + 6);
+    radius.set(place.id, r);
+    return r;
+  };
+  for (const root of roots) measure(root, new Set());
+  const top = packCircles(roots.map((root) => ({ id: root.id, r: radius.get(root.id)! })), lifted(new Set(roots.map((root) => root.id))), 36);
+  const absolute = new Map<string, { x: number; y: number }>();
+  const place = (id: string, at: { x: number; y: number }, seen: Set<string>) => {
+    absolute.set(id, at);
+    for (const kid of children.get(id) ?? []) if (!seen.has(kid.id) && offset.has(kid.id)) place(kid.id, { x: at.x + offset.get(kid.id)!.x, y: at.y + offset.get(kid.id)!.y }, new Set([...seen, id]));
+  };
+  for (const root of roots) place(root.id, top.get(root.id) ?? { x: 0, y: 0 }, new Set());
+  const placed = places.filter((entry) => absolute.has(entry.id));
+  if (!placed.length) return new Map();
+  // Fit the canvas (labels below leaves need a margin).
+  const margin = 40;
+  const [minX, maxX] = [Math.min(...placed.map((entry) => absolute.get(entry.id)!.x - radius.get(entry.id)!)), Math.max(...placed.map((entry) => absolute.get(entry.id)!.x + radius.get(entry.id)!))];
+  const [minY, maxY] = [Math.min(...placed.map((entry) => absolute.get(entry.id)!.y - radius.get(entry.id)!)), Math.max(...placed.map((entry) => absolute.get(entry.id)!.y + radius.get(entry.id)! + 14))];
+  const scale = Math.min(3, (size - 2 * margin) / Math.max(1, maxX - minX), (size - 2 * margin) / Math.max(1, maxY - minY));
+  const offsetX = (size - (maxX - minX) * scale) / 2, offsetY = (size - (maxY - minY) * scale) / 2;
+  return new Map(placed.map((entry) => {
+    const at = absolute.get(entry.id)!, r = radius.get(entry.id)! * scale;
+    const x = offsetX + (at.x - minX) * scale, y = offsetY + (at.y - minY) * scale;
+    const region = (children.get(entry.id) ?? []).length > 0;
+    return [entry.id, { x: Math.round(x), y: Math.round(y), r: Math.round(r), depth: pathOf(entry.id).length - 1, region, spotX: Math.round(x), spotY: Math.round(region ? y - r + Math.min(44, r) : y) }];
+  }));
 }
 
 /**

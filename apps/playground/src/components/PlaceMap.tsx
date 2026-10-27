@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { useChromeInsets } from "./useChromeInsets";
-import { characterTrack, dateLine, placeLayout, placeLinks, whereDuring, type TimePlaceProjection } from "../data/timePlace";
+import { characterTrack, dateLine, placeLinks, placePathLabel, placeTreeLayout, whereDuring, type TimePlaceProjection } from "../data/timePlace";
 
 /**
- * Places view (time-place faculty, phase 1): a schematic map — no
- * geography — of the named places scenes happen in. Busy places sit toward
- * the centre; lines are moves between consecutive scenes. Pick a character
+ * Places view (time-place faculty): a schematic map — no geography — of the
+ * named places scenes happen in, nested by the place tree: a place that
+ * contains others is a region drawn around them (dashed while its link is
+ * only proposed). Busy places are larger; lines are moves between
+ * consecutive scenes. Pick a character
  * to trace their route in story order (dashed where a scene did not name
  * its place and the previous scene's place was carried over); slide through
  * story time to see who is where.
@@ -18,7 +20,13 @@ const initials = (name: string) => [...name.replace(/[·・\s]/g, "")].slice(0, 
 export function PlaceMap({ data, names, emerging }: Props) {
   const insets = useChromeInsets();
   const links = useMemo(() => placeLinks(data), [data]);
-  const layout = useMemo(() => placeLayout(data.places, links, SIZE), [data.places, links]);
+  const layout = useMemo(() => placeTreeLayout(data.places, links, SIZE), [data.places, links]);
+  const placeById = useMemo(() => new Map(data.places.map((place) => [place.id, place])), [data.places]);
+  const pathLabel = (id: string) => placePathLabel(placeById.get(id), names);
+  const pathOf = (id: string) => placeById.get(id)?.path ?? [id];
+  /** Where a place's own scenes, moves and routes attach. */
+  const spot = (id: string) => { const point = layout.get(id); return point ? { x: point.spotX, y: point.spotY, r: point.region ? 6 : point.r } : undefined; };
+  const regions = data.places.filter((place) => layout.get(place.id)?.region).sort((first, second) => (layout.get(first.id)!.depth - layout.get(second.id)!.depth));
   const [characterId, setCharacterId] = useState<string | null>(null);
   const [timeIndex, setTimeIndex] = useState<number | null>(null);
   const track = useMemo(() => characterId ? characterTrack(data, characterId) : [], [data, characterId]);
@@ -31,8 +39,8 @@ export function PlaceMap({ data, names, emerging }: Props) {
   for (const [id, where] of present) occupants.set(where.placeId, [...(occupants.get(where.placeId) ?? []), { id, carried: where.carried }]);
   return <section className="tp-view tp-places" aria-label="Location map" style={insets}>
     <header className="tp-head">
-      <div><span className="eyebrow">Places · schematic, not geographic</span><b>{data.places.length} named place{data.places.length === 1 ? "" : "s"} · {data.scenes.length - unnamed} of {data.scenes.length} scenes placed</b></div>
-      <p>Solid: the scene names its place. Dashed: carried over from the previous scene in the same chapter.{unnamed ? ` ${unnamed} scene${unnamed === 1 ? "" : "s"} name no place.` : ""}</p>
+      <div><span className="eyebrow">Places · schematic, not geographic</span><b>{data.places.length} named place{data.places.length === 1 ? "" : "s"}{regions.length ? ` · ${regions.length} containing others` : ""} · {data.scenes.length - unnamed} of {data.scenes.length} scenes placed</b></div>
+      <p>A place inside another sits within its circle (dashed while that link is only proposed). Solid dot: the scene names its place. Dashed: carried over from the previous scene in the same chapter.{unnamed ? ` ${unnamed} scene${unnamed === 1 ? "" : "s"} name no place.` : ""}</p>
     </header>
     <div className="tp-controls">
       <div className="tp-characters" role="radiogroup" aria-label="Trace a character">
@@ -43,9 +51,21 @@ export function PlaceMap({ data, names, emerging }: Props) {
     </div>
     <svg className="tp-map" viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label={`Schematic map of ${data.places.length} places`}>
       <defs><marker id="tp-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--tp-track)" /></marker></defs>
-      {links.map((link) => { const from = layout.get(link.from), to = layout.get(link.to); return from && to ? <line key={`${link.from}-${link.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} className="tp-link" strokeWidth={1 + 3 * link.count / maxLink} /> : null; })}
+      {regions.map((place) => {
+        const point = layout.get(place.id)!;
+        const onTrack = track.some((step) => pathOf(step.placeId).includes(place.id));
+        const here = [...occupants].filter(([placeId]) => pathOf(placeId).includes(place.id)).length;
+        const dim = (characterId && !onTrack) || (time && !here);
+        return <g key={place.id} className={`tp-region depth-${Math.min(3, point.depth)}${dim ? " is-dim" : ""}${place.proposed ? " is-proposed" : ""}${place.parentProposed ? " is-link-proposed" : ""}${emerging?.has(place.id) ? " is-emerging" : ""}`}>
+          <circle cx={point.x} cy={point.y} r={point.r} />
+          <text className="tp-region-label" x={point.x} y={point.y - point.r + 14} lang="zh">{place.label}{place.proposed ? " · proposed" : ""}</text>
+          <text className="tp-region-count" x={point.x} y={point.y - point.r + 26}>{place.totalScenes ?? place.sceneIds.length} scene{(place.totalScenes ?? place.sceneIds.length) === 1 ? "" : "s"} inside</text>
+          <title>{pathLabel(place.id)}</title>
+        </g>;
+      })}
+      {links.map((link) => { const from = spot(link.from), to = spot(link.to); return from && to ? <line key={`${link.from}-${link.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} className="tp-link" strokeWidth={1 + 3 * link.count / maxLink} /> : null; })}
       {track.slice(1).map((step, index) => {
-        const from = layout.get(track[index].placeId), to = layout.get(step.placeId);
+        const from = spot(track[index].placeId), to = spot(step.placeId);
         if (!from || !to) return null;
         const dx = to.x - from.x, dy = to.y - from.y, distance = Math.max(1, Math.hypot(dx, dy));
         const bend = 14 + (index % 3) * 6;
@@ -53,27 +73,31 @@ export function PlaceMap({ data, names, emerging }: Props) {
         const end = { x: to.x - dx / distance * (to.r + 3), y: to.y - dy / distance * (to.r + 3) };
         return <g key={index}><path d={`M${from.x},${from.y} Q${mx},${my} ${end.x},${end.y}`} className={`tp-track${step.carried ? " is-carried" : ""}`} markerEnd="url(#tp-arrow)" /><text x={mx} y={my} className="tp-step">{index + 2}</text></g>;
       })}
-      {data.places.map((place) => {
-        const point = layout.get(place.id)!;
+      {data.places.filter((place) => !layout.get(place.id)?.region || place.sceneIds.length).map((place) => {
+        const tree = layout.get(place.id);
+        if (!tree) return null;
+        // A region's own scenes (they name only the region) gather at its spot under the label.
+        const point = tree.region ? { x: tree.spotX, y: tree.spotY, r: 7 } : tree;
         const onTrack = track.some((step) => step.placeId === place.id);
         const here = occupants.get(place.id) ?? [];
         const dim = (characterId && !onTrack) || (time && !here.length);
-        return <g key={place.id} className={`tp-place-node${dim ? " is-dim" : ""}${place.proposed ? " is-proposed" : ""}${emerging?.has(place.id) ? " is-emerging" : ""}`} transform={`translate(${point.x},${point.y})`}>
+        return <g key={place.id} className={`tp-place-node${tree.region ? " is-region-own" : ""}${dim ? " is-dim" : ""}${place.proposed ? " is-proposed" : ""}${place.parentProposed ? " is-link-proposed" : ""}${emerging?.has(place.id) ? " is-emerging" : ""}`} transform={`translate(${point.x},${point.y})`}>
+          <title>{pathLabel(place.id)}</title>
           <circle r={point.r} className={place.statedScenes ? "" : "is-carried"} />
           {track[0]?.placeId === place.id && <text className="tp-step" y={-point.r - 4}>1</text>}
           {emerging?.has(place.id) && <circle r={point.r + 10} className="tp-emerge-ring" />}
-          <text className="tp-place-label" y={point.r + 13} lang="zh">{place.label}{place.proposed ? " · proposed" : ""}</text>
-          <text className="tp-place-count" y={4}>{place.sceneIds.length}</text>
+          {!tree.region && <text className="tp-place-label" y={point.r + 13} lang="zh">{place.label}{place.proposed ? " · proposed" : ""}</text>}
+          {!tree.region && <text className="tp-place-count" y={4}>{place.sceneIds.length}</text>}
           {here.slice(0, 6).map((occupant, index) => { const angle = -Math.PI / 2 + index * (Math.PI / 3.2); return <g key={occupant.id} transform={`translate(${Math.cos(angle) * (point.r + 11)},${Math.sin(angle) * (point.r + 11)})`} className={`tp-occupant${occupant.carried ? " is-carried" : ""}`}><circle r={9} /><text y={3} lang="zh">{initials(names.get(occupant.id) ?? "?")}</text><title>{names.get(occupant.id)}</title></g>; })}
         </g>;
       })}
     </svg>
     {time && <ul className="tp-whereabouts" aria-label={`Who is where during ${time.label}`}>
-      {occupants.size ? [...occupants].sort((first, second) => second[1].length - first[1].length).map(([placeId, people]) => <li key={placeId}><b lang="zh">{names.get(placeId) ?? placeId}</b> <span lang="zh">{people.map((person) => `${names.get(person.id) ?? person.id}${person.carried ? "*" : ""}`).join("、")}</span></li>) : <li>No placed scenes in this period.</li>}
+      {occupants.size ? [...occupants].sort((first, second) => second[1].length - first[1].length).map(([placeId, people]) => <li key={placeId}><b lang="zh">{pathLabel(placeId) || names.get(placeId) || placeId}</b> <span lang="zh">{people.map((person) => `${names.get(person.id) ?? person.id}${person.carried ? "*" : ""}`).join("、")}</span></li>) : <li>No placed scenes in this period.</li>}
       {[...occupants.values()].some((people) => people.some((person) => person.carried)) && <li className="tp-footnote">* place carried over from the previous scene, not named in the scene itself</li>}
     </ul>}
     {characterId && <ol className="tp-track-list" aria-label="Route in story order">
-      {track.length ? track.map((step, index) => <li key={index} className={step.carried ? "is-carried" : ""}><b>{index + 1}</b> <span lang="zh">{names.get(step.placeId) ?? step.placeId}</span> <small lang="zh">{step.timeLabel} · {step.sceneIds.length} scene{step.sceneIds.length === 1 ? "" : "s"}{step.carried ? " · carried" : ""}</small></li>) : <li>No placed scenes for this character yet.</li>}
+      {track.length ? track.map((step, index) => <li key={index} className={step.carried ? "is-carried" : ""}><b>{index + 1}</b> <span lang="zh">{pathLabel(step.placeId) || names.get(step.placeId) || step.placeId}</span> <small lang="zh">{step.timeLabel} · {step.sceneIds.length} scene{step.sceneIds.length === 1 ? "" : "s"}{step.carried ? " · carried" : ""}</small></li>) : <li>No placed scenes for this character yet.</li>}
     </ol>}
   </section>;
 }

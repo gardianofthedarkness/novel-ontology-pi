@@ -300,13 +300,20 @@ function renderSphere(props: NodeRendererProps) {
   return <SphereGlyph {...props} />;
 }
 
-/** The flat map of orbital Places: a disc and rim per place on the floor
- * (sized by scenes; dim when no scene of the chosen periods is there). */
+/** The flat map of orbital Places: a disc and rim per place on the floor,
+ * nested by the place tree — a region is a wide, faint disc under the places
+ * inside it, each level raised a hair to stay on top (dim when no scene of
+ * the chosen periods is there; a dashed-looking thin rim while the region
+ * link is only proposed). */
 function FloorMap({ marks }: { marks: FloorMark[] }) {
-  return <>{marks.map((mark) => <group key={mark.id} position={[mark.x, -944, mark.z]} rotation={[-Math.PI / 2, 0, 0]}>
-    <mesh raycast={noRaycast}><circleGeometry args={[mark.radius, 48]} /><meshBasicMaterial color="#16405e" transparent opacity={mark.active ? 0.55 : 0.18} depthWrite={false} toneMapped={false} /></mesh>
-    <mesh raycast={noRaycast}><ringGeometry args={[mark.radius * 0.94, mark.radius, 48]} /><meshBasicMaterial color="#7cc8ff" transparent opacity={mark.active ? 0.85 : 0.25} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>
-  </group>)}</>;
+  return <>{marks.map((mark) => {
+    const fill = mark.region ? (mark.active ? 0.16 + 0.06 * (mark.depth ?? 0) : 0.07) : mark.active ? 0.55 : 0.18;
+    const rim = mark.region ? 0.985 : 0.94;
+    return <group key={mark.id} position={[mark.x, -944 + 1.5 * (mark.depth ?? 0) + (mark.region ? 0 : 0.8), mark.z]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh raycast={noRaycast}><circleGeometry args={[mark.radius, mark.region ? 72 : 48]} /><meshBasicMaterial color={mark.region ? "#1d5a80" : "#16405e"} transparent opacity={fill} depthWrite={false} toneMapped={false} /></mesh>
+      <mesh raycast={noRaycast}><ringGeometry args={[mark.radius * (mark.proposed ? 0.993 : rim), mark.radius, mark.region ? 72 : 48]} /><meshBasicMaterial color={mark.proposed ? "#ffd36b" : "#7cc8ff"} transparent opacity={mark.active ? (mark.region ? 0.6 : 0.85) : 0.22} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>
+    </group>;
+  })}</>;
 }
 
 /** Arrowheads keep a small fixed size on screen, like a flat graph's,

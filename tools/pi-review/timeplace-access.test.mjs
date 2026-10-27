@@ -30,3 +30,14 @@ test('standalone-run packets carry the digit suffix the filter requires', async 
   assert.deepEqual(await timePlaceChangesetIds(workspace), ['cs_timeplace_2026-10-26T22-59-25-869Z_1761501565000']);
   await rm(workspace, { recursive: true, force: true });
 });
+
+test('place-tree sweep packets of PART_OF links are reviewable too', async () => {
+  const workspace = await mkdtemp(join(tmpdir(), 'tp-access-tree-'));
+  await mkdir(join(workspace, 'changesets'));
+  const packet = (id, blockId, type) => writeFile(join(workspace, 'changesets', `${id}.json`), JSON.stringify({ id, blockId, status: 'pending_review', reviewSource: [{ id: 'b0000_s0000', text: '城里的医院。' }], proposals: [{ id: 'p1', kind: 'add_relation', payload: { type, fromId: 'loc_a', toId: 'loc_b' } }] }));
+  await packet('cs_timeplace_place-tree_1', 'place-tree', 'PART_OF');
+  await packet('cs_timeplace_place-tree_2', 'other-faculty', 'PART_OF');
+  await packet('cs_timeplace_place-tree_3', 'place-tree', 'KNOWS');
+  assert.deepEqual(await timePlaceChangesetIds(workspace), ['cs_timeplace_place-tree_1']);
+  await rm(workspace, { recursive: true, force: true });
+});

@@ -63,6 +63,7 @@ const REL_DEFS: Partial<
   MENTIONED_IN: { from: "Character", to: "Scene", props: [] },
   LOCATED_AT: { from: "Scene", to: "Location", props: [] },
   OCCURS_DURING: { from: "Scene", to: "TimePoint", props: [] },
+  PART_OF: { from: "Location", to: "Location", props: [] },
   KNOWS: { from: "Character", to: "Character", props: ["degree"] },
   SPEAKS_TO: { from: "Character", to: "Character", props: ["scene_id"] },
   OWNS: { from: "Character", to: "Item", props: [] },

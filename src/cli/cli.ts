@@ -55,7 +55,7 @@ import { causalityEvidence } from "../solidifier/causality/evidence.js";
 import { universeCausalityCommand } from "./commands/extract/universeCausalityCommands.js";
 import { reviewCommand } from "./commands/extract/reviewCommands.js";
 import { approveBook } from "../solidifier/merge/approve.js";
-import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow } from "./commands/extract/timeplaceCommands.js";
+import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
   listChangeSets,
   loadChangeSet,
@@ -89,8 +89,10 @@ const COMMANDS: Record<string, string> = {
     "Cross-file causal ledger for reviewed universe/continuity membership; qualified IDs, independent source review, bounded Jev batches, no book database fusion.",
   "novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--cache dir] [--out file] [--propose] [--force]":
     "Time-place faculty (phase 1): time words and places become TimePoint/Location entities that scenes belong to; Jev marks flashback signs; code builds periods and an estimated story order. By default runs only scenes without time facts, continuing the book's stored periods (as at birth); --force re-runs selected scenes from scratch. Writes a report; --propose saves a pending_review ChangeSet. Never writes canon. `novel changeset approve ... --time-place` runs it for a just-approved block.",
+  "novel timeplace tree <novel-dir> [--no-jev] [--max-questions N] [--cache dir] [--out file] [--propose]":
+    "Place-tree sweep (phase 2): nominate place pairs (name prefix, same sentence, same scene), let Jev judge which is inside which, and with --propose save a pending ChangeSet of PART_OF links (one parent per place) for the shared review gate. Never writes canon.",
   "novel timeplace show <novel-dir>":
-    "Applied time periods in story order and places with their scenes.",
+    "Applied time periods in story order, places as paths through the place tree, and the tree's links.",
   "novel causality sweep <novel-dir> [--limit N]":
     "On-demand systematic sweep: Jev-determined CAUSES pass over the whole universe (same machinery as the ingest chapter-close sweep).",
   "novel match <novel-dir> [--changeset <id>]":
@@ -471,9 +473,9 @@ async function main(): Promise<void> {
 
   if (cmd === "timeplace") {
     const novelDir = positional[2];
-    if (!["run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${TIMEPLACE_USAGE}`);
+    if (!["run", "tree", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${TIMEPLACE_USAGE}`);
     if (sub === "show") { out(await timeplaceShow(novelDir), pretty); return; }
-    const valued = ["--mode", "--chapter", "--limit", "--max-calls", "--max-questions", "--out", "--cache"], switches = ["--no-jev", "--propose", "--force"];
+    const valued = sub === "tree" ? ["--max-questions", "--out", "--cache"] : ["--mode", "--chapter", "--limit", "--max-calls", "--max-questions", "--out", "--cache"], switches = sub === "tree" ? ["--no-jev", "--propose"] : ["--no-jev", "--propose", "--force"];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];
@@ -482,6 +484,7 @@ async function main(): Promise<void> {
       if (valued.includes(name)) { const value = positional[++index]; if (!value || value.startsWith("--")) throw new Error(`${name} needs a value.`); }
     }
     const number = (name: string) => { const value = flag(positional, name); if (value === undefined) return undefined; const parsed = Number(value); if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${name} must be a non-negative integer.`); return parsed; };
+    if (sub === "tree") { out(await timeplaceTree(novelDir, { jev: !positional.includes("--no-jev"), maxQuestions: number("--max-questions"), out: flag(positional, "--out"), cache: flag(positional, "--cache"), propose: positional.includes("--propose") }), pretty); return; }
     out(await timeplaceRun(novelDir, {
       mode: flag(positional, "--mode") as "hybrid" | "llm" | "programmatic" | undefined,
       jev: !positional.includes("--no-jev"), chapter: number("--chapter"), limit: number("--limit"),
