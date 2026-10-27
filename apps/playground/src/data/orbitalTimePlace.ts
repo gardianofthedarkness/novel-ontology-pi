@@ -2,6 +2,7 @@ import type { CausalLink, CausalSummary, WorldEdge, WorldNode } from "../types.j
 import type { CausalArrow } from "./causalProjection.js";
 import type { Position3 } from "./spatialLayout.js";
 import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
+import { storyStrands, type StrandEdge } from "./storyStrands.js";
 import { dateLine, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
 
 /**
@@ -203,6 +204,43 @@ const renderReach = (order: StoryScene[]) => {
   const typical = [...perBook.values()].sort((first, second) => first - second)[Math.floor(perBook.size / 2)] ?? order.length;
   return Math.max(4500, typical * SPIRAL.step * 3 * 1.6);
 };
+export type StoryShape = "line" | "strands";
+/** Helicoid (strands): the spiral widened into a ribbon. A ruling — the line from the axis out at one
+ * story position — holds the scenes of that moment; each strand keeps its own distance from the axis.
+ * The busiest lane runs at the spiral's radius, others alternate outside and inside it. */
+const HELICOID = { radius: 420, gap: 120 };
+function helicoidLanes(strands: { lane: Map<string, number> }): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const lane of strands.lane.values()) counts.set(lane, (counts.get(lane) ?? 0) + 1);
+  return new Map([...counts].sort((first, second) => second[1] - first[1] || first[0] - second[0]).map(([lane], rank) => [lane, rank === 0 ? 0 : rank % 2 ? (rank + 1) / 2 : -rank / 2]));
+}
+const helicoidPoint = (layer: number, total: number, offset: number): Position3 => {
+  const angle = layer / SPIRAL.perTurn * Math.PI * 2, radius = Math.max(60, HELICOID.radius + offset * HELICOID.gap);
+  return [(layer - (total - 1) / 2) * SPIRAL.step, Math.cos(angle) * radius, Math.sin(angle) * radius];
+};
+/** Strands per book (a universe stacks its books in reading order along each continuity's axis). */
+function strandLayout(data: TimePlaceProjection, lanes: Map<number, StoryScene[]>) {
+  const anchors = new Map<string, Position3>(), layer = new Map<string, number>(), continues = new Map<string, string | null>();
+  const edges: StrandEdge[] = [];
+  for (const [lane, scenes] of lanes) {
+    const books = [...new Set(scenes.map((scene) => scene.book ?? 0))];
+    const sets = books.map((book) => storyStrands({ ...data, scope: "book", scenes: scenes.filter((scene) => (scene.book ?? 0) === book) }));
+    const total = sets.reduce((sum, set) => sum + set.layers, 0);
+    let offset = 0;
+    sets.forEach((set) => {
+      const radial = helicoidLanes(set);
+      for (const [id, at] of set.layer) {
+        const point = helicoidPoint(offset + at, total, radial.get(set.lane.get(id)!) ?? 0);
+        anchors.set(id, [point[0], point[1], point[2] + lane * SPIRAL.laneGap]);
+        layer.set(id, offset + at);
+        continues.set(id, set.continues.get(id) ?? null);
+      }
+      edges.push(...set.edges);
+      offset += set.layers;
+    });
+  }
+  return { anchors, layer, continues, edges };
+}
 const spiralPoint = (rank: number, total: number): Position3 => {
   const angle = rank / SPIRAL.perTurn * Math.PI * 2;
   return [(rank - (total - 1) / 2) * SPIRAL.step, Math.cos(angle) * SPIRAL.radius, Math.sin(angle) * SPIRAL.radius];
@@ -255,14 +293,18 @@ const causalRecords = (nodes: WorldNode[], ends: ReadonlySet<string>) => nodes
  * bubble around the events and dialogue its causal arrows start or end at
  * (entering the scene shows all its records); an amber thread from each
  * flashback scene to the scene it was told after. */
-export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWorld, focusBook?: number | null): OrbitalArrangement {
+export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWorld, focusBook?: number | null, shape: StoryShape = "line"): OrbitalArrangement {
   const order = storyOrderScenes(data);
   // A universe: one spiral per continuity, side by side (alternate lines do not share a clock).
   const laneOf = continuityLanes(data);
   const lanes = new Map<number, StoryScene[]>();
   for (const scene of order) lanes.set(laneOf(scene), [...(lanes.get(laneOf(scene)) ?? []), scene]);
   const anchors = new Map<string, Position3>();
-  for (const [lane, scenes] of lanes) scenes.forEach((scene, rank) => { const point = spiralPoint(rank, scenes.length); anchors.set(spiralNodeId(scene.id), [point[0], point[1], point[2] + lane * SPIRAL.laneGap]); });
+  /** Story position of a spiral sphere: its rank on the line, or its strand layer. */
+  const position = new Map<string, number>();
+  const strands = shape === "strands" && data.available ? strandLayout(data, lanes) : null;
+  if (strands) for (const [id, point] of strands.anchors) { anchors.set(spiralNodeId(id), point); position.set(spiralNodeId(id), strands.layer.get(id)!); }
+  else for (const [lane, scenes] of lanes) scenes.forEach((scene, rank) => { const point = spiralPoint(rank, scenes.length); anchors.set(spiralNodeId(scene.id), [point[0], point[1], point[2] + lane * SPIRAL.laneGap]); position.set(spiralNodeId(scene.id), rank); });
   const universe = data.scope === "universe";
   const reading = [...data.scenes].sort((first, second) => first.index - second.index);
   const sceneById = new Map(data.scenes.map((scene) => [scene.id, scene]));
@@ -300,17 +342,20 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
   });
   return {
     anchors, radiusScale: 0.42, causal: true, extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
-    timeKey: data.available
+    timeKey: strands
+      ? { label: "STORY STRANDS →", detail: `Story time as strands (estimated from who is in each scene): each lane of the ribbon follows the same characters · a faint rung joins scenes at one moment that nothing orders · faint links: where strands split and meet · amber: a flashback, threaded to where it is told` }
+      : data.available
       ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told` }
       : { label: "READING ORDER →", detail: `Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""}` },
-    initialFrame: (draws) => (universe && focusBook !== null && focusBook !== undefined ? bookPositions(focusBook, draws) : null) ?? draws.filter((draw) => draw.role === "main" && draw.node.chrono < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
+    initialFrame: (draws) => (universe && focusBook !== null && focusBook !== undefined ? bookPositions(focusBook, draws) : null) ?? draws.filter((draw) => draw.role === "main" && (position.get(draw.node.id) ?? draw.node.chrono) < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
     ...(universe ? { bookFrame: (draws: OrbitalDraw[]) => focusBook === null || focusBook === undefined ? null : bookPositions(focusBook, draws), bookKey: `story:${focusBook ?? ""}`, renderDistance: renderReach(order) } : {}),
     // A selected scene is framed with its neighbours on the spiral (about half a turn); a book marker frames its book.
     focusFor: (selectedId, draws) => {
       if (selectedId.startsWith("book:")) return bookPositions(Number(selectedId.slice(5)), draws);
       const self = draws.find((draw) => draw.role === "main" && draw.node.id === selectedId);
       if (!self) return null;
-      return draws.filter((draw) => draw.role === "main" && Math.abs(draw.node.chrono - self.node.chrono) <= 3).map((draw) => draw.position);
+      const here = position.get(self.node.id) ?? self.node.chrono;
+      return draws.filter((draw) => draw.role === "main" && Math.abs((position.get(draw.node.id) ?? draw.node.chrono) - here) <= 3).map((draw) => draw.position);
     },
     routeCausal: routeCausalArcs,
     paths: (draws) => {
@@ -318,6 +363,30 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
       if (!main.length) return [];
       const at = new Map(main.map((draw) => [draw.node.id, draw.position]));
       const threads = [...toldAfter].flatMap(([flashback, teller]): OrbitalPath[] => at.get(flashback) && at.get(teller) ? [{ id: `told:${flashback}`, tone: "thread", points: [at.get(teller)!, at.get(flashback)!] }] : []);
+      if (strands) {
+        // One string per strand run, in story order; faint links where strands split and meet.
+        const runOf = new Map<string, string>();
+        const run = (id: string): string => runOf.get(id) ?? (() => { const previous = strands.continues.get(id); const value = previous ? run(previous) : id; runOf.set(id, value); return value; })();
+        const runs = new Map<string, Position3[]>();
+        for (const scene of [...order].sort((first, second) => strands.layer.get(first.id)! - strands.layer.get(second.id)!)) {
+          const point = at.get(spiralNodeId(scene.id));
+          if (point) runs.set(run(scene.id), [...(runs.get(run(scene.id)) ?? []), point]);
+        }
+        const joins = strands.edges.filter((edge) => (edge.kind === "worldline" || edge.kind === "carried") && strands.continues.get(edge.to) !== edge.from).flatMap((edge): OrbitalPath[] => {
+          const from = at.get(spiralNodeId(edge.from)), to = at.get(spiralNodeId(edge.to));
+          return from && to ? [{ id: `strand-join:${edge.from}:${edge.to}`, tone: "link", points: [from, to] }] : [];
+        });
+        // Rungs: the ruling at each story position that holds parallel scenes (one moment, several places).
+        const moments = new Map<string, Position3[]>();
+        for (const draw of main) {
+          const layer = position.get(draw.node.id), scene = sceneById.get(sceneOfSpiral(draw.node.id) ?? "");
+          if (layer === undefined || !scene) continue;
+          const key = `${laneOf(scene)}:${layer}`;
+          moments.set(key, [...(moments.get(key) ?? []), draw.position]);
+        }
+        const rungs = [...moments].filter(([, points]) => points.length > 1).map(([key, points]): OrbitalPath => ({ id: `moment:${key}`, tone: "link", points: points.sort((first, second) => Math.hypot(first[1], first[2]) - Math.hypot(second[1], second[2])) }));
+        return [...[...runs].filter(([, points]) => points.length > 1).map(([id, points]): OrbitalPath => ({ id: `strand:${id}`, points })), ...joins, ...rungs, ...threads];
+      }
       // One string per continuity (a universe's alternate lines are separate spirals).
       const strings = new Map<number, Position3[]>();
       for (const draw of main) { const scene = sceneById.get(sceneOfSpiral(draw.node.id) ?? ""); const lane = scene ? laneOf(scene) : 0; strings.set(lane, [...(strings.get(lane) ?? []), draw.position]); }

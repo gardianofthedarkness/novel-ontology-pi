@@ -77,6 +77,15 @@ usual spheres, motion, inspector and entering:
   - **Hand-off to Places:** the view keeps track of which stretch of the
     spiral sits at its centre. Switching to Places then shows just those
     scenes ("From Story time: N scenes · Show all").
+- **Story time · Strands** (orbital switch `Line | Strands`, remembered per
+  browser): the spiral widens into a ribbon (a helicoid). Each lane follows
+  the same characters; a scene comes after another only with evidence (a
+  shared character, a flashback, stated times), so scenes the story cuts
+  between at different places sit side by side on one rung, unordered, and
+  lanes rejoin where characters meet. Estimated from who is in each scene
+  (scenes without a recorded cast borrow a nearby scene's); about 0.87 of
+  scene pairs agree with a hand-read gold on two volumes. A universe gives
+  each book its own strands, books in reading order along the axis.
 - **Places**: the schematic map (not geography) lies flat on the floor, one
   disc per named place, with faint lines for moves between places. Each placed
   scene floats above its place, and higher means later in story time. A thread

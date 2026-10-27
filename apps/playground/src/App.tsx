@@ -20,7 +20,7 @@ import { NarrativeList } from "./components/NarrativeList";
 import "./narrative.css";
 import { PlaceMap } from "./components/PlaceMap";
 import { followTarget, timePlaceEmergence, universeIds, type TimePlaceProjection } from "./data/timePlace";
-import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProjection, sceneOfSpiral, spiralNodeId, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels } from "./data/orbitalTimePlace";
+import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProjection, sceneOfSpiral, spiralNodeId, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels, type StoryShape } from "./data/orbitalTimePlace";
 import { AtlasPanel } from "./components/AtlasPanel";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
@@ -129,6 +129,9 @@ export default function App() {
   /** Orbital Places: only the scenes that were at the centre of the Story time spiral (null: no limit). */
   const [atlasFocus, setAtlasFocus] = useState<Set<string> | null>(null);
   const [atlasLevels, setAtlasLevels] = useState<AtlasLevels>(SCENE_LEVEL);
+  /** Orbital Story time: one spiral line, or strands on a ribbon (remembered per browser). */
+  const [storyShape, setStoryShape] = useState<StoryShape>(() => { try { return localStorage.getItem("story-shape") === "strands" ? "strands" : "line"; } catch { return "line"; } });
+  const chooseStoryShape = (shape: StoryShape) => { setStoryShape(shape); try { localStorage.setItem("story-shape", shape); } catch { /* per-browser convenience only */ } };
   /** Scenes at the centre of the Story time spiral, kept for the switch to Places. */
   const storyCentre = useRef<string[]>([]);
   const noteStoryCentre = useCallback((ids: string[]) => { storyCentre.current = ids.map(sceneOfSpiral).filter((id): id is string => !!id); }, []);
@@ -808,13 +811,13 @@ export default function App() {
       // a universe stays a universe: every book in reading order, not just the book being read.
       const order = viewTimePlace?.available || viewTimePlace?.scope === "universe" ? viewTimePlace : readingOrderProjection(displayWorld);
       const spiral = spiralWorld(displayWorld, order, loadedBook);
-      return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook) };
+      return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook, storyShape) };
     }
     if (!viewTimePlace?.places.length) return null;
     const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels };
     const regrouped = atlasWorld(displayWorld, viewTimePlace, filter, loadedBook);
     return { world: regrouped, arrangement: atlasArrangement(viewTimePlace, filter, regrouped, focusBook) };
-  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, loadedBook, focusBook]);
+  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, loadedBook, focusBook, storyShape]);
   /** Live highlights and Pi's touches, in the ids the shown projection uses. */
   const shownEmerging = useMemo(() => emerging ? { times: new Set([...emerging.times].map(universeId.time)), places: new Set([...emerging.places].map(universeId.place)) } : null, [emerging, universeId]);
   const shownTouched = useMemo(() => new Set([...touchedScenes].map(universeId.scene)), [touchedScenes, universeId]);
@@ -858,9 +861,10 @@ export default function App() {
           <div className="design-switch stage-switch" role="toolbar" aria-label="Mode and view">
             <div className="stage-group" role="group" aria-label="Mode">{MODES.map(([orbital, label]) => <button key={label} aria-pressed={orbitalMode === orbital} onClick={() => switchMode(orbital)} title={orbital ? "3D orbital views" : "Flat traditional views"}>{label}</button>)}</div>
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
+            {orbitalMode && stageView === "story" && viewTimePlace?.available && <div className="stage-group" role="group" aria-label="Story shape">{([["line", "Line"], ["strands", "Strands"]] as const).map(([value, label]) => <button key={value} aria-pressed={storyShape === value} title={value === "strands" ? "Scenes that run in parallel side by side (estimated from who is in each scene)" : "Every scene on one line in story order"} onClick={() => chooseStoryShape(value)}>{label}</button>)}</div>}
           </div>
           {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
-          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} albumPictures={stageView === "story" ? albumPictures : []} albumPortraits={albumPortraits} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          {regroupedOrbit ? <OrbitalExplorer key={stageView === "story" ? `story:${storyShape}` : stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} albumPictures={stageView === "story" ? albumPictures : []} albumPortraits={albumPortraits} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
           : stageView === "story" ? <StoryTimeline pictures={albumPictures} album={storyAlbum} onPicture={selectStoryPicture} data={viewTimePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(viewTimePlace?.names ?? {}))} bookBar={bookBar} focusBook={focusBook} emerging={shownEmerging?.times} touched={emerging && Date.now() - emerging.at < 9000 ? undefined : shownTouched} following={followingActivity} onShowInOrbit={(sceneId) => {
             // Universe ids are "<volume>:<scene>": another book opens first.
             const scene = viewTimePlace?.scenes.find((entry) => entry.id === sceneId);
