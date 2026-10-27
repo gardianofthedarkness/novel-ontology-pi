@@ -8,7 +8,10 @@
  *   and the places it happens in. A scene that names no place carries the
  *   previous scene's place within the same chapter, flagged `carried` so the
  *   map never presents it as stated;
- * - places: named places with the scenes and characters seen there.
+ * - places: named places with the scenes and characters seen there, as a
+ *   tree (phase 2): each place's parent (PART_OF), depth and root-first
+ *   path. Ancestors appear even when no scene names them; a scene keeps only
+ *   its most specific place (the path implies the rest).
  *
  * `pending` are time-place proposals still awaiting review: their new periods
  * and places are included, flagged `proposed`, so the views can show them
@@ -23,12 +26,19 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
   const proposedEntities = pending.filter((proposal) => proposal.kind === 'upsert_entity' && ['TimePoint', 'Location'].includes(proposal.payload?.kind) && !known.has(proposal.payload.id)).map((proposal) => proposal.payload);
   const proposedIds = new Set(proposedEntities.map((entity) => entity.id));
   const entities = [...applied, ...proposedEntities];
-  const relations = [...appliedRelations, ...pending.filter((proposal) => proposal.kind === 'add_relation' && ['OCCURS_DURING', 'LOCATED_AT'].includes(proposal.payload?.type)).map((proposal) => proposal.payload)];
+  const pendingRelations = pending.filter((proposal) => proposal.kind === 'add_relation' && ['OCCURS_DURING', 'LOCATED_AT', 'PART_OF'].includes(proposal.payload?.type)).map((proposal) => proposal.payload);
+  const relations = [...appliedRelations, ...pendingRelations];
+  const proposedLinks = new Set(pendingRelations.filter((relation) => relation.type === 'PART_OF').map((relation) => relation.fromId));
   const byId = new Map(entities.map((entity) => [entity.id, entity]));
   const times = entities.filter((entity) => entity.kind === 'TimePoint');
   const ordered = [...scenes].sort((first, second) => order(first.sentenceIds?.[0]) - order(second.sentenceIds?.[0]));
   const during = new Map();
   const located = new Map();
+  // Place tree: one parent per place (the first stated link wins; the gate keeps it a tree).
+  const parents = new Map();
+  for (const relation of relations) if (relation.type === 'PART_OF' && byId.get(relation.fromId)?.kind === 'Location' && byId.get(relation.toId)?.kind === 'Location' && !parents.has(relation.fromId)) parents.set(relation.fromId, relation.toId);
+  const pathOf = (id) => { const path = []; const seen = new Set(); for (let at = id; at && !seen.has(at); at = parents.get(at)) { seen.add(at); path.unshift(at); } return path; };
+  const deepest = (ids) => ids.filter((id) => !ids.some((other) => other !== id && pathOf(other).slice(0, -1).includes(id)));
   for (const relation of relations) {
     if (relation.type === 'OCCURS_DURING' && byId.get(relation.toId)?.kind === 'TimePoint') {
       const list = during.get(relation.fromId) ?? [];
@@ -58,7 +68,7 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
     const row = {
       id: scene.id, index, chapterIndex: scene.chapterIndex, label: clip(scene.summary, 90) || clip(firstEvent.get(scene.id), 90) || ((scene.charactersPresent ?? []).filter((id) => byId.get(id)?.kind === 'Character').slice(0, 3).map((id) => nameOf(byId.get(id))).join(' · ') || `Scene ${index + 1}`),
       times: timeIds, flashback: timeIds.some((time) => byId.get(time.id)?.properties?.flashback === true),
-      placeIds: own.size ? [...own] : carried ? [...previous.placeIds] : [], placeCarried: !!carried,
+      placeIds: own.size ? deepest([...own]) : carried ? [...previous.placeIds] : [], placeCarried: !!carried,
       characterIds: (scene.charactersPresent ?? []).filter((id) => byId.get(id)?.kind === 'Character'),
     };
     sceneRows.push(row);
@@ -75,10 +85,14 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
     };
   }).sort((first, second) => first.storyIndex - second.storyIndex);
   const placeIds = new Set(sceneRows.flatMap((scene) => scene.placeIds));
+  for (const id of [...placeIds]) for (const ancestor of pathOf(id)) placeIds.add(ancestor);
+  const within = (id, scene) => scene.placeIds.some((placeId) => pathOf(placeId).includes(id));
   const places = [...placeIds].map((id) => {
     const here = sceneRows.filter((scene) => scene.placeIds.includes(id));
-    return { id, label: nameOf(byId.get(id)), sceneIds: here.map((scene) => scene.id), statedScenes: here.filter((scene) => !scene.placeCarried).length, characterIds: [...new Set(here.flatMap((scene) => scene.characterIds))], proposed: proposedIds.has(id) };
-  }).sort((first, second) => second.sceneIds.length - first.sceneIds.length);
+    const path = pathOf(id);
+    return { id, label: nameOf(byId.get(id)), sceneIds: here.map((scene) => scene.id), statedScenes: here.filter((scene) => !scene.placeCarried).length, characterIds: [...new Set(here.flatMap((scene) => scene.characterIds))], proposed: proposedIds.has(id),
+      parentId: parents.get(id) ?? null, parentProposed: proposedLinks.has(id), depth: path.length - 1, path, totalScenes: sceneRows.filter((scene) => within(id, scene)).length, generic: byId.get(id)?.properties?.generic === true };
+  }).sort((first, second) => second.totalScenes - first.totalScenes || second.sceneIds.length - first.sceneIds.length);
   const characterCounts = new Map();
   for (const scene of sceneRows) for (const id of scene.characterIds) characterCounts.set(id, (characterCounts.get(id) ?? 0) + 1);
   const characters = [...characterCounts].sort((first, second) => second[1] - first[1]).slice(0, 40).map(([id, scenes]) => ({ id, label: nameOf(byId.get(id)), scenes }));

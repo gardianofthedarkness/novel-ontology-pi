@@ -82,7 +82,7 @@ const relationKinds: Record<string, [string[], string[]]> = {
   PARTICIPATES_IN: [["Character"], ["Event"]], PRESENT_IN: [["Character"], ["Scene"]], MENTIONED_IN: [["Character"], ["Scene"]], LOCATED_AT: [["Scene"], ["Location"]],
   KNOWS: [["Character"], ["Character"]], SPEAKS_TO: [["Character"], ["Character"]], ADDRESSES: [["Character"], ["Character"]], OWNS: [["Character"], ["Item"]], MEMBER_OF: [["Character"], ["Organization"]],
   STATE_BEFORE: [["Character"], ["Event"]], STATE_AFTER: [["Character"], ["Event"]], FORKS_FROM: [["Branch"], ["Event"]],
-  OCCURS_DURING: [["Scene"], ["TimePoint"]],
+  OCCURS_DURING: [["Scene"], ["TimePoint"]], PART_OF: [["Location"], ["Location"]],
 };
 
 export function validateStructure(changeset: ChangeSet): void {

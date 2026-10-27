@@ -175,6 +175,8 @@ test('time-place runs only propose for the assigned book, and their packets revi
   const scope = { ...defaultScope, reviewProtocol: 'review-v1', timePlaceChangesetIds: ['cs_timeplace_time-place_1700000000000'] };
   assert.equal(authorize(`novel timeplace run ${novel} --propose --mode hybrid --chapter 2`, scope).label, 'novel timeplace run');
   assert.equal(authorize(`novel timeplace show ${novel}`, scope).label, 'novel timeplace show');
+  assert.equal(authorize(`novel timeplace tree ${novel} --propose --max-questions 30`, scope).label, 'novel timeplace tree');
+  for (const command of [`novel timeplace tree ${novel}`, `novel timeplace tree ${novel} --propose --mode llm`, `novel timeplace tree ${novel} --propose --max-questions 500`, `novel timeplace tree /tmp/other --propose`]) assert.throws(() => authorize(command, scope), command);
   assert.equal(authorize(`novel review show ${novel} cs_timeplace_time-place_1700000000000 --scope book --limit 20`, scope).kind, 'cli');
   for (const command of [
     `novel timeplace run ${novel}`,

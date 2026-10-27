@@ -1,3 +1,4 @@
+import { parentMap } from "../../ground/ontology/placeTree.js";
 import { join } from "node:path";
 import { BundleStore } from "../../ground/connectors/bundle.js";
 import type { DecisionModel } from "../../ground/connectors/jev.js";
@@ -62,7 +63,7 @@ export async function timePlaceForNewScenes(input: {
     knownEntities: entities, mode: input.mode, work: input.work, decisions: input.decisions, seed, budget: input.budget,
   });
   const anchorSentences = new Map(entities.filter((entity) => entity.kind === "TimePoint" && typeof entity.properties?.sentenceId === "string").map((entity) => [entity.id, entity.properties.sentenceId as string]));
-  const proposals = timePlaceProposals(result, { entityIds: new Set(entities.map((entity) => entity.id)), relationKeys: new Set(relations.map((relation) => `${relation.type}:${relation.fromId}:${relation.toId}`)), anchorSentences }, input.provenanceBlockId);
+  const proposals = timePlaceProposals(result, { entityIds: new Set(entities.map((entity) => entity.id)), relationKeys: new Set(relations.map((relation) => `${relation.type}:${relation.fromId}:${relation.toId}`)), anchorSentences, parents: parentMap(relations) }, input.provenanceBlockId);
   if (!proposals.length) return { changeset: null, result, scenes: selected.length };
   const flashbacks = result.periods.filter((period) => period.flashback).length;
   const changeset: ChangeSet = {

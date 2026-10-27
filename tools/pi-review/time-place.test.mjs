@@ -23,7 +23,7 @@ test('story time and places project in story order; unnamed places carry within 
   assert.equal(second.flashback, true);
   assert.equal(first.label, '小明', 'a scene without a summary or events is named by who is present');
   assert.equal(timePlaceProjection({ entities, scenes, relations, events: [{ id: 'e1', chronologicalOrder: 0, summaryEn: '小明醒来。', evidence: { sentenceIds: ['b0001_s0000'] } }] }).scenes[0].label, '小明醒来。', 'else by its first event');
-  assert.deepEqual(projection.places[0], { id: 'loc_7', label: '中央区', sceneIds: ['s1', 's2'], statedScenes: 1, characterIds: ['c_1'], proposed: false });
+  assert.deepEqual(projection.places[0], { id: 'loc_7', label: '中央区', sceneIds: ['s1', 's2'], statedScenes: 1, characterIds: ['c_1'], proposed: false, parentId: null, parentProposed: false, depth: 0, path: ['loc_7'], totalScenes: 2, generic: false });
   assert.equal(projection.names.c_1, '小明');
   assert.ok(!JSON.stringify(projection).includes('sentenceIds'), 'no source references leak');
 });
@@ -47,6 +47,22 @@ test('pending time-place proposals show as proposed periods and places, never as
   assert.deepEqual(projection.places.map((entry) => [entry.id, entry.proposed]), [['loc_new', true]]);
   const confirmed = timePlaceProjection({ entities: [time('t_new', '早上', 0, 0)], scenes, relations: [rel('OCCURS_DURING', 's1', 't_new', { via: 'anchor' })], pending });
   assert.equal(confirmed.times[0].proposed, false, 'once applied, the stored fact wins');
+});
+
+test('places project as a tree: ancestors appear, scenes keep their most specific place, proposed links are marked', () => {
+  const entities = [time('t_eve', '平安夜', 0, 0), place('city', '星城'), place('d7', '东区'), place('hospital', '医院'), place('d10', '西区')];
+  const scenes = [scene('s1', 1, 0), scene('s2', 2, 0), scene('s3', 3, 0)];
+  const relations = [rel('OCCURS_DURING', 's1', 't_eve'), rel('PART_OF', 'd7', 'city'), rel('PART_OF', 'hospital', 'd7'), rel('LOCATED_AT', 's1', 'hospital'), rel('LOCATED_AT', 's1', 'city'), rel('LOCATED_AT', 's2', 'd10')];
+  const pending = [{ id: 'p1', kind: 'add_relation', payload: rel('PART_OF', 'd10', 'city') }];
+  const projection = timePlaceProjection({ entities, scenes, relations, pending });
+  const byId = new Map(projection.places.map((entry) => [entry.id, entry]));
+  assert.deepEqual(projection.scenes[0].placeIds, ['hospital'], 'the city is implied by the path, not repeated');
+  assert.deepEqual(byId.get('hospital').path, ['city', 'd7', 'hospital']);
+  assert.equal(byId.get('hospital').depth, 2);
+  assert.deepEqual([byId.get('d7').sceneIds, byId.get('d7').totalScenes], [[], 1], 'an ancestor appears with its descendants\' scenes counted');
+  assert.deepEqual([byId.get('city').totalScenes, byId.get('city').depth], [3, 0]);
+  assert.deepEqual([byId.get('d10').parentId, byId.get('d10').parentProposed], ['city', true]);
+  assert.equal(projection.places[0].id, 'city', 'roots with the most scenes first');
 });
 
 test('known scene locations remain available to Places when actual story time is unavailable', () => {

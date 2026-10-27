@@ -253,7 +253,9 @@ export function authorize(command, scope) {
     const count = (name, max) => !flags.has(name) || /^\d+$/.test(flags.get(name) ?? '') && Number(flags.get(name)) <= max;
     if (operation === 'show') valid = tokens.length === 3 && tokens[2] === novel;
     if (operation === 'run') valid = tokens[2] === novel && flags.has('--propose') && (!flags.has('--mode') || ['hybrid', 'llm', 'programmatic'].includes(flags.get('--mode'))) && count('--chapter', 10000) && count('--limit', 10000) && count('--max-calls', 2000) && count('--max-questions', 2000);
-    if (!valid) throw new Error('Time-place runs must propose for the assigned book (review through novel review --scope book)');
+    // Place-tree sweep: proposes PART_OF links for the shared gate; only its question budget and Jev switch are options.
+    if (operation === 'tree') valid = tokens[2] === novel && flags.has('--propose') && [...flags.keys()].every(name => ['--propose', '--max-questions', '--no-jev'].includes(name)) && count('--max-questions', 200);
+    if (!valid) throw new Error('Time-place runs must propose for the assigned book: novel timeplace run <book> --propose [options] or novel timeplace tree <book> --propose [--max-questions N] [--no-jev]; review through novel review --scope book');
     return { kind: 'cli', args: tokens, label: `novel timeplace ${operation}` };
   }
   if (verb === 'recall') valid = operation === novel && tokens.length === 3 && blockIds.includes(tokens[2]);

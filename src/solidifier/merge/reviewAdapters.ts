@@ -6,6 +6,9 @@ import { digest, materializeSemantic, semanticFacts, semanticRevision, validateS
 import { semanticContext, decideFacts } from "./semanticCommands.js";
 import { normalizeFactDecisions, semanticIdentityCodec } from "./semanticIdentity.js";
 import { reviewBook } from "./reviewBook.js";
+import { join } from "node:path";
+import { BundleStore } from "../../ground/connectors/bundle.js";
+import { treeViolation } from "../../ground/ontology/placeTree.js";
 import { approveBook } from "./approve.js";
 import type { OntEvent, Relation, Scene } from "../../ground/ontology/types.js";
 import type { ReviewAdapter, ReviewEvidence, ReviewFact, ReviewTarget } from "./reviewTypes.js";
@@ -79,6 +82,13 @@ async function book(target: ReviewTarget, env: NodeJS.ProcessEnv): Promise<Revie
         pending.push(...adjacency.get(next) ?? []);
       }
       add(fromId, toId);
+    }
+    // Places form a strict tree: accepted PART_OF links keep one parent per place and no loops.
+    const accepted = normalized.filter(decision => decision.verdict === "accept").map(decision => (decision.replacement ?? facts.find(fact => fact.id === decision.factId)!.value) as Relation).filter(relation => relation?.type === "PART_OF");
+    if (accepted.length) {
+      const stored = await new BundleStore(join(target.directory, "ontology")).loadFile<Relation>("relations.jsonl");
+      const violation = treeViolation(stored, accepted);
+      if (violation) throw new Error(violation);
     }
     return normalized;
   };

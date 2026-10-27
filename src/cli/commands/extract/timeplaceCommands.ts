@@ -1,3 +1,5 @@
+import { parentMap, placePath } from "../../../ground/ontology/placeTree.js";
+import { sweepPlaceTree, type PlaceTreeMemory } from "../../../digger/timeplace/placeTreeSweep.js";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
@@ -14,10 +16,12 @@ import { timePlaceForNewScenes, timePlaceReviewSource } from "../../../digger/ti
 import type { ChangeSet } from "../../../solidifier/merge/changeset.js";
 
 /**
- * `novel timeplace run|show` — the time-place faculty over a workspace's
- * existing scenes (phase 1). `run` writes a full report and, with
- * --propose, a pending_review ChangeSet for the merge gate; it never writes
- * canon. `show` reads applied time/place facts back in story order.
+ * `novel timeplace run|tree|show` — the time-place faculty over a
+ * workspace's existing scenes. `run` writes a full report and, with
+ * --propose, a pending_review ChangeSet for the merge gate; `tree` is the
+ * place-tree sweep (phase 2), proposing PART_OF parents for stored places;
+ * neither writes canon. `show` reads applied time/place facts back in story
+ * order, places as paths through the place tree.
  */
 
 const fold = <T extends { id: string }>(records: T[]) => [...new Map(records.map((record) => [record.id, record])).values()];
@@ -82,7 +86,7 @@ export async function timeplaceRun(novelDir: string, options: TimeplaceRunOption
     budget: { maxWorkCalls: options.maxCalls, maxDecisionQuestions: options.maxQuestions },
   });
   const anchorSentences = new Map(entities.filter((entity) => entity.kind === "TimePoint" && typeof entity.properties?.sentenceId === "string").map((entity) => [entity.id, entity.properties.sentenceId as string]));
-  const proposals = timePlaceProposals(result, { entityIds: new Set(entities.map((entity) => entity.id)), relationKeys: new Set(relations.map((relation) => `${relation.type}:${relation.fromId}:${relation.toId}`)), anchorSentences });
+  const proposals = timePlaceProposals(result, { entityIds: new Set(entities.map((entity) => entity.id)), relationKeys: new Set(relations.map((relation) => `${relation.type}:${relation.fromId}:${relation.toId}`)), anchorSentences, parents: parentMap(relations) });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const out = options.out ?? join(novelDir, "timeplace", `run-${stamp}.json`);
   await mkdir(join(out, ".."), { recursive: true, mode: 0o700 });
@@ -156,12 +160,54 @@ export async function timeplaceShow(novelDir: string): Promise<Record<string, un
   const during = relations.filter((relation) => relation.type === "OCCURS_DURING");
   const located = relations.filter((relation) => relation.type === "LOCATED_AT");
   const names = new Map(entities.map((entity) => [entity.id, entity.names.find((form) => form.kind === "canonical")?.text ?? entity.names[0]?.text ?? entity.id]));
+  const parents = parentMap(relations);
+  const path = (id: string) => placePath(id, parents).map((step) => names.get(step) ?? step).join(" › ");
   return {
     scenes: scenes.length,
     placedScenes: new Set(during.map((relation) => relation.fromId)).size,
     timeline: times.map((time) => `${time.properties.storyIndex}. ${time.properties.flashback ? "↶ " : ""}${names.get(time.id)} [${time.properties.gloss ?? ""}] ×${during.filter((relation) => relation.toId === time.id).length}`),
-    places: [...new Set(located.map((relation) => relation.toId))].map((id) => `${names.get(id) ?? id} ×${new Set(located.filter((relation) => relation.toId === id).map((relation) => relation.fromId)).size}`),
+    places: [...new Set(located.map((relation) => relation.toId))].map((id) => `${path(id)} ×${new Set(located.filter((relation) => relation.toId === id).map((relation) => relation.fromId)).size}`),
+    tree: [...parents].map(([child, parent]) => `${names.get(child) ?? child} ⊂ ${names.get(parent) ?? parent}`),
   };
 }
 
-export const TIMEPLACE_USAGE = "novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--cache dir] [--out file] [--propose] [--force] | novel timeplace show <novel-dir>";
+export interface TimeplaceTreeOptions { propose?: boolean; jev?: boolean; maxQuestions?: number; cache?: string; out?: string; env?: NodeJS.ProcessEnv }
+
+/**
+ * Place-tree sweep over a workspace's stored places: nominate pairs, let Jev
+ * judge containment, and (with --propose) write a pending `place-tree`
+ * ChangeSet of PART_OF links for the shared review gate. Confident
+ * "neither" verdicts are remembered in timeplace/place-tree.json.
+ */
+export async function timeplaceTree(novelDir: string, options: TimeplaceTreeOptions = {}): Promise<Record<string, unknown>> {
+  const env = options.env ?? process.env;
+  const { scenes, entities, relations } = await loadBundle(novelDir);
+  const sentences = await loadWorkspaceSentences(novelDir);
+  const memoryPath = join(novelDir, "timeplace", "place-tree.json");
+  const memory = JSON.parse(await readFile(memoryPath, "utf8").catch(() => '{"distinct":[]}')) as PlaceTreeMemory;
+  const decisions = options.jev === false ? undefined : options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env);
+  const started = Date.now();
+  const result = await sweepPlaceTree({ entities, relations, scenes, sentences, decisions, maxQuestions: options.maxQuestions, memory });
+  await mkdir(join(novelDir, "timeplace"), { recursive: true, mode: 0o700 });
+  await writeFile(memoryPath, JSON.stringify(result.memory, null, 1), { mode: 0o600 });
+  const names = new Map(entities.map((entity) => [entity.id, entity.names.find((form) => form.kind === "canonical")?.text ?? entity.names[0]?.text ?? entity.id]));
+  const out = options.out ?? join(novelDir, "timeplace", `tree-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+  await writeFile(out, JSON.stringify({ novelDir, seconds: (Date.now() - started) / 1000, candidates: result.candidates, asked: result.asked, verdicts: result.verdicts, proposals: result.proposals.length, notes: result.notes }, null, 1), { mode: 0o600 });
+  let changesetId: string | null = null;
+  if (options.propose && result.proposals.length) {
+    changesetId = `cs_timeplace_place-tree_${Date.now()}`;
+    await saveChangeSet(novelDir, {
+      id: changesetId, blockId: "place-tree", proposals: result.proposals, status: "pending_review", reviewSource: timePlaceReviewSource(result.proposals, sentences),
+      reviewNotes: { "place-tree": `Place-tree sweep (phase 2${decisions ? ", Jev judged each pair" : ", name prefixes only (no Jev)"}): ${result.candidates} candidate pair(s), ${result.asked} asked, ${result.proposals.length} PART_OF link(s) proposed (child ⊂ parent; one parent per place; the deepest judged parent kept). Accept a link only if its sentences show the child lies within the parent.${result.notes.length ? ` Notes: ${result.notes.slice(0, 4).join(" ")}` : ""}` },
+      createdAt: new Date().toISOString(),
+    });
+  }
+  return {
+    candidates: result.candidates, asked: result.asked, proposals: result.proposals.length, changesetId, report: out, seconds: (Date.now() - started) / 1000,
+    links: result.proposals.map((proposal) => { const relation = proposal.payload as Relation; return `${names.get(relation.fromId) ?? relation.fromId} ⊂ ${names.get(relation.toId) ?? relation.toId} (${Number(proposal.confidence).toFixed(2)})`; }),
+    neither: result.verdicts.filter((verdict) => verdict.choice === "NEITHER").length, unsure: result.verdicts.filter((verdict) => verdict.choice !== "NEITHER" && verdict.probability < 0.7).length,
+    notes: result.notes.slice(0, 10),
+  };
+}
+
+export const TIMEPLACE_USAGE = "novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--cache dir] [--out file] [--propose] [--force] | novel timeplace tree <novel-dir> [--no-jev] [--max-questions N] [--cache dir] [--out file] [--propose] | novel timeplace show <novel-dir>";
