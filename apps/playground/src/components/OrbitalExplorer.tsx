@@ -9,7 +9,8 @@ import { framePositions, type LabelBus } from "./graphCamera";
 import { OrbitalGraph, ORBITAL_TRANSITION_MS } from "./OrbitalGraph";
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalTouchAncestors, type OrbitalReadingBookmark } from "../data/orbitalActivity";
 import { activityFocus, piBusy, type LiveActivity } from "../data/liveActivity";
-import { placePictures, type OrbitIllustration } from "../data/pictureNodes";
+import { type OrbitIllustration } from "../data/pictureNodes";
+import { albumEntries } from "../data/albumEntries";
 import { orbitalLocation } from "../data/orbitalLocation";
 import { causalProjection, libraryCausalProjection, worldCausalLinks } from "../data/causalProjection";
 import { planJoins, type LastPose, type PendingJoin } from "../data/joinAnimation";
@@ -23,9 +24,6 @@ import { facultyAnchors, facultyChipText } from "../data/facultyEffects";
 import type { OrbitalArrangement } from "../data/orbitalTimePlace";
 import { portraitDraws as buildPortraitDraws } from "../data/liveAlbum";
 import { pictureDraws as buildPictureDraws } from "../data/pictureDraws";
-
-const PICTURE_KIND_LABELS: Record<string, string> = { cover: "Cover", plate: "Plate", story: "Illustration", paratext: "Paratext" };
-const pictureKindLabel = (kind: string) => PICTURE_KIND_LABELS[kind] ?? (kind ? kind[0].toUpperCase() + kind.slice(1) : "Picture");
 
 export interface OrbitalInspection { node: WorldNode; nodes: WorldNode[]; edges: WorldEdge[]; lookupNodes: WorldNode[]; contents: WorldNode[]; inspect?: boolean; passive?: boolean; album?: AlbumPanelPicture[] }
 interface Props {
@@ -138,27 +136,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
    * plus scene labels, so the side panel can show every album picture —
    * placed ones between their neighboring scenes, unplaced ones listed
    * as not yet on the orbit. */
-  const albumInfo = useMemo((): AlbumPanelPicture[] => {
-    if (!albumPictures.length) return [];
-    const scenes = level.sourceNodes
-      .filter((node) => node.kind === "scene")
-      .sort((first, second) => first.chrono - second.chrono)
-      .map((node) => ({ id: node.id, chrono: node.chrono, sentenceIds: node.sentenceIds ?? [], label: node.label }));
-    if (!scenes.length) {
-      return albumPictures.map((picture) => ({ id: picture.id, asset: picture.asset, kind: picture.kind, label: pictureKindLabel(picture.kind), placed: false, prevSceneLabel: null, nextSceneLabel: null, chrono: null }));
-    }
-    const labelFor = (id: string | null) => scenes.find((scene) => scene.id === id)?.label ?? null;
-    return placePictures(scenes, albumPictures).map((placement) => ({
-      id: placement.pictureId,
-      asset: placement.asset,
-      kind: placement.kind,
-      label: pictureKindLabel(placement.kind),
-      placed: placement.placed,
-      prevSceneLabel: placement.placed ? labelFor(placement.prevSceneId) : null,
-      nextSceneLabel: placement.placed ? labelFor(placement.nextSceneId) : null,
-      chrono: placement.chrono,
-    }));
-  }, [albumPictures, level.sourceNodes]);
+  const albumInfo = useMemo(() => albumEntries(level.sourceNodes, albumPictures), [albumPictures, level.sourceNodes]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
   const causalLinks = useMemo(() => scope.kind === "library" || scope.kind === "series" || !showCausal ? [] : worldCausalLinks(world), [world, scope.kind, showCausal]);
   const causal = useMemo(() => {

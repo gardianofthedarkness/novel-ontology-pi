@@ -8,6 +8,7 @@ import { FileEventSource } from "./events/fileSource";
 import { SseEventSource } from "./events/sseSource";
 import { RecordInspector } from "./components/RecordInspector";
 import { AlbumPanel, type AlbumPanelPicture } from "./components/AlbumPanel";
+import { albumEntries } from "./data/albumEntries";
 import { OrbitalExplorer, type OrbitalInspection } from "./components/OrbitalExplorer";
 import type { OrbitIllustration } from "./data/pictureNodes";
 import "./orbital.css";
@@ -391,6 +392,7 @@ export default function App() {
     setDynEdges([]);
     setAlbumPictures([]);
     setAlbumPortraits([]);
+    setAlbumInfo([]);
     setProposalsByCs({});
     setHeldMap({});
     seenMerges.current = new Set();
@@ -407,6 +409,7 @@ export default function App() {
     setDynEdges([]);
     setAlbumPictures([]);
     setAlbumPortraits([]);
+    setAlbumInfo([]);
     setProposalsByCs({});
     setFeed([]);
     setChangesets([]);
@@ -652,7 +655,7 @@ export default function App() {
   const selectedIndex = selected ? Math.max(0, displayNodes.findIndex((node) => node.id === selected.id)) : 0;
   const pendingCount = changesets.filter((changeset) => changeset.status === "pending").length;
   useEffect(() => {
-    inspectorRef.current?.scrollTo(0, 0);
+    if (panel !== "album") inspectorRef.current?.scrollTo(0, 0);
   }, [panel, selected?.id, view.mode, inspectorOpen]);
   /** Scene that holds each record (for following Pi in the scene-based views). */
   const sceneOfRecord = useMemo(() => {
@@ -740,6 +743,16 @@ export default function App() {
       setSelectedId(id);
     }
   };
+  const storyAlbum = useMemo(() => {
+    if (!displayWorld || orbitalMode || stageView !== "story") return [];
+    const order = timePlace?.available ? timePlace : readingOrderProjection(displayWorld);
+    return albumEntries(spiralWorld(displayWorld, order).laneNodes, albumPictures);
+  }, [displayWorld, timePlace, albumPictures, orbitalMode, stageView]);
+  const selectStoryPicture = (id: string) => {
+    const picture = storyAlbum.find(entry => entry.id === id);
+    if (!picture) return;
+    inspectOrbital({ node: { id, label: picture.label, kind: "picture", state: "canon", parent: null, lane: "canon", chrono: picture.chrono ?? 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, nodes: [], edges: [], lookupNodes: [], contents: [], album: storyAlbum });
+  };
   const stepRecord = (step: number) => {
     if (displayNodes.length) requestOrbitalFocus(displayNodes[(selectedIndex + step + displayNodes.length) % displayNodes.length]);
   };
@@ -825,12 +838,12 @@ export default function App() {
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
           </div>
           {regroupedOrbit && stageView === "places" && timePlace && <AtlasPanel data={timePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: timePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
-          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
-          : stageView === "story" ? <StoryTimeline data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} emerging={emerging?.times} touched={emerging && Date.now() - emerging.at < 9000 ? undefined : touchedScenes} following={followingActivity} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("narrative"); if (node) requestOrbitalFocus(node); }} />
+          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} albumPictures={stageView === "story" ? albumPictures : []} albumPortraits={albumPortraits} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          : stageView === "story" ? <StoryTimeline pictures={albumPictures} album={storyAlbum} onPicture={selectStoryPicture} data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} emerging={emerging?.times} touched={emerging && Date.now() - emerging.at < 9000 ? undefined : touchedScenes} following={followingActivity} onShowInOrbit={(sceneId) => { const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === sceneId); setStageView("narrative"); if (node) requestOrbitalFocus(node); }} />
           : stageView === "places" ? <PlaceMap data={timePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(timePlace?.names ?? {}))} emerging={emerging?.places} />
           : orbitalMode ? <OrbitalExplorer key="narrative" world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />          : <NarrativeList world={shownWorld} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} timePlace={timePlace} bookBar={bookBar} selectedId={selected?.id ?? null} focusRequest={orbitalFocus} onSelect={inspectOrbital} />}
         </section>
-        <aside className={`inspector${inspectorOpen ? " is-open" : ""}`} aria-label="Record and processing details">
+        <aside className={`inspector${inspectorOpen ? " is-open" : ""}${panel === "album" ? " album-open" : ""}`} aria-label="Record and processing details">
           <div className="inspector-tabs" role="tablist" aria-orientation="vertical" aria-label="Inspector">
             {(["record", "activity", "review", "album"] as const).map((tab, index, tabs) => <button key={tab} id={`tab-${tab}`} role="tab" tabIndex={panel === tab ? 0 : -1} aria-selected={inspectorOpen && panel === tab} aria-controls={`panel-${tab}`} onClick={() => { setInspectorOpen(panel === tab ? !inspectorOpen : true); setPanel(tab); }} onKeyDown={(event) => {
               if (!["ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
@@ -847,7 +860,7 @@ export default function App() {
             {panel === "record" && <RecordInspector selected={selected} nodes={displayNodes} lookupNodes={orbitalInspection ? orbitalInspection.lookupNodes : sourceNodes} edges={orbitalInspection ? orbitalInspection.edges : sourceEdges} orbital={orbitalMode} contents={orbitalInspection?.contents ?? []} sourceEndpoint={new URLSearchParams(location.search).has("source") ? `api/record-source${bookQuery(phoneLive ? loadedBook : null)}` : undefined} childCount={selected ? (shownWorld.interiors[selected.id]?.nodes.length ?? 0) + visibleDyn.nodes.filter((node) => node.parent === selected.id).length : 0} canOpen={orbitalMode && !!selected && !!shownWorld.interiors[selected.id]} causalLinks={worldCausalLinks(shownWorld)} onSelect={requestOrbitalFocus} />}
             {panel === "activity" && <><div className="panel-intro"><span className="eyebrow">PROCESSING JOURNAL</span><h2>In the making.</h2><p>{blockLabel ?? "Waiting for the live stream."}</p><a href="replay/">Pi session replay ↗</a>{!phoneLive && <button onClick={startSession}>Reconnect</button>}</div><DecisionFeed entries={feed} /></>}
             {panel === "review" && <><div className="panel-intro"><span className="eyebrow">THE MERGE GATE</span><h2>Before it is canon.</h2><p>{phoneLive ? "Read-only live viewer. Pi reviews consequential facts; held facts stay outside canon." : "Review sample proposals."}</p></div><div inert={phoneLive ? true : undefined}><GateQueue changesets={changesets} heldMap={heldMap} labels={labels} onApprove={approve} /></div></>}
-            {panel === "album" && <AlbumPanel pictures={albumInfo.length ? albumInfo : albumPictures.map((picture) => ({ id: picture.id, asset: picture.asset, kind: picture.kind, label: picture.kind ? picture.kind[0].toUpperCase() + picture.kind.slice(1) : "Picture", placed: false, prevSceneLabel: null, nextSceneLabel: null, chrono: null }))} selectedId={selected?.id ?? null} onSelect={albumThumbnailSelect} />}
+            {panel === "album" && <AlbumPanel key={loadedBook ?? "sample"} pictures={albumInfo.length ? albumInfo : albumPictures.map((picture) => ({ id: picture.id, asset: picture.asset, kind: picture.kind, label: picture.kind ? picture.kind[0].toUpperCase() + picture.kind.slice(1) : "Picture", placed: false, prevSceneLabel: null, nextSceneLabel: null, chrono: null }))} selectedId={selected?.id ?? null} onSelect={albumThumbnailSelect} />}
           </div>
           </div>
         </aside>

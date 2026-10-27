@@ -65,6 +65,7 @@ test("proposed causal links project onto scene containers in both Story time and
 
 test("story time: every scene on one spiral in story order, the flashback first, causes carried", () => {
   const spiral = spiralWorld(causalWorld, data);
+  assert.deepEqual(spiral.laneNodes.map(entry => entry.albumSceneId), ["s2", "s1", "s3"], "illustrations retain their canonical scene anchors after story-order regrouping");
   assert.deepEqual(spiral.laneNodes.map((entry) => [entry.id, entry.chrono]), [[spiralNodeId("s2"), 0], [spiralNodeId("s1"), 1], [spiralNodeId("s3"), 2]], "story order, unplaced scenes included");
   assert.equal(spiral.laneNodes[0].viewKind, "↶ back then", "each scene names its period");
   assert.equal(spiral.causal?.links.length, 2);

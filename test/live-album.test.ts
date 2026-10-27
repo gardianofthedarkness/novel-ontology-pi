@@ -5,6 +5,42 @@ import { albumImageUrl, albumTextureSize, containedImageSize } from "../apps/pla
 import type { OrbitalDraw } from "../apps/playground/src/data/orbitalLayout.js";
 import { placePictures } from "../apps/playground/src/data/pictureNodes.js";
 import { pictureDraws } from "../apps/playground/src/data/pictureDraws.js";
+import { albumEntries, albumScenes, albumScrollOffset } from "../apps/playground/src/data/albumEntries.js";
+import type { WorldNode } from "../apps/playground/src/types.js";
+
+const sceneNode = (id: string, chrono: number, parent: string | null = null): WorldNode => ({ id, chrono, parent, label: id, kind: "scene", state: "canon", lane: "canon", lanePos: [0, 0, 0], interiorPos: [0, 0, 0] });
+
+test("album follows scene proxies in story order and preserves canonical scene anchors", () => {
+  const scenes = [{ ...sceneNode("spiral:later-in-book", 0), kind: "bigEvent" as const, albumSceneId: "later-in-book" }, { ...sceneNode("spiral:earlier-in-book", 1), kind: "bigEvent" as const, albumSceneId: "earlier-in-book" }];
+  const pictures = [{ id: "ill_1", asset: "api/album-asset?id=ill_1&volume=2", kind: "story", sentenceId: null, sceneId: "later-in-book", sceneFraction: 0.5 }];
+  const base: OrbitalDraw[] = scenes.map((node, index) => ({ node, radius: 30, role: "main", position: [index * 500, 0, 0] }));
+  const entries = albumEntries(scenes, pictures);
+  assert.equal(entries[0].placed, true);
+  assert.equal(entries[0].prevSceneLabel, "spiral:later-in-book");
+  assert.equal(entries[0].nextSceneLabel, "spiral:earlier-in-book");
+  const draws = pictureDraws(scenes, pictures, base);
+  assert.equal(draws.length, 1);
+  assert.equal(draws[0].asset, pictures[0].asset);
+  assert.deepEqual(draws[0].position, [250, 0, 0]);
+  assert.equal(pictures[0].sceneId, "later-in-book");
+  assert.equal(albumEntries(scenes, [{ ...pictures[0], sceneId: "another-book" }])[0].placed, false);
+});
+
+test("album scene ordering respects chapter order instead of interleaving chapter-local ordinals", () => {
+  const nodes = [{ ...sceneNode("chapter_1", 1), kind: "bigEvent" as const }, { ...sceneNode("chapter_2", 2), kind: "bigEvent" as const }, sceneNode("first", 0, "chapter_1"), sceneNode("second", 20, "chapter_1"), sceneNode("third", 0, "chapter_2")];
+  assert.deepEqual(albumScenes(nodes).map(scene => scene.id), ["first", "second", "third"]);
+  const entry = albumEntries(nodes, [{ id: "image", asset: "image.png", kind: "story", sentenceId: null, sceneId: "second", sceneFraction: 0.5 }])[0];
+  assert.equal(entry.nextSceneLabel, "third");
+  assert.equal(entry.chrono, 1.5);
+});
+
+test("album scroll reveals the selected image locally without moving a visible selection", () => {
+  assert.equal(albumScrollOffset(0, 400, 1200, 300), 1100);
+  assert.equal(albumScrollOffset(1100, 400, 1200, 300), 1100);
+  assert.equal(albumScrollOffset(1100, 400, 50, 300), 50);
+  assert.equal(albumScrollOffset(0, 400, 1200, 700), 1200);
+  assert.equal(albumScrollOffset(0, 0, 0, 0), 0);
+});
 
 test("live album maps snapshot pictures and portraits to book-scoped asset URLs", () => {
   const album = liveAlbum({ pictures: [{ id: "ill_0001", kind: "plate", sentenceId: "b0001_s0004" }], portraits: [{ id: "portrait:assets/portraits/a b.png", entityId: "char_1", entityLabel: "御坂美琴" }] }, 2);

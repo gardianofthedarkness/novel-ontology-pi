@@ -2,13 +2,17 @@ import type { WorldNode } from "../types.js";
 import type { OrbitalDraw } from "./orbitalLayout.js";
 import { placePictures, type OrbitIllustration } from "./pictureNodes.js";
 import type { Position3 } from "./spatialLayout.js";
+import { albumScenes } from "./albumEntries.js";
 
 const labels: Record<string, string> = { cover: "Cover", plate: "Plate", story: "Illustration", paratext: "Paratext" };
 
 export function pictureDraws(sourceNodes: WorldNode[], pictures: OrbitIllustration[], baseDraws: OrbitalDraw[]): OrbitalDraw[] {
-  const scenes = sourceNodes.filter((node) => node.kind === "scene").sort((first, second) => first.chrono - second.chrono).map((node) => ({ id: node.id, chrono: node.chrono, sentenceIds: node.sentenceIds ?? [] }));
+  const scenes = albumScenes(sourceNodes);
   const known = new Set(baseDraws.map((draw) => draw.node.id));
-  const findDraw = (id: string) => baseDraws.find((draw) => draw.node.id === id) ?? baseDraws.find((draw) => draw.node.cluster?.ids.includes(id));
+  const findDraw = (id: string) => {
+    const drawId = scenes.find(scene => scene.id === id)?.drawId ?? id;
+    return baseDraws.find(draw => draw.node.id === drawId) ?? baseDraws.find(draw => draw.node.cluster?.ids.includes(drawId));
+  };
   const draws: OrbitalDraw[] = [];
   for (const placement of placePictures(scenes, pictures)) {
     if (!placement.placed || known.has(placement.pictureId)) continue;
