@@ -5,6 +5,7 @@ import { orbitalLevel, surroundingEntities, mainProminence } from "../apps/playg
 import { layoutOrbitalLevel } from "../apps/playground/src/data/orbitalLayout.js";
 import type { TimePlaceProjection } from "../apps/playground/src/data/timePlace.js";
 import type { WorldEdge, WorldNode } from "../apps/playground/src/types.js";
+import { causalProjection } from "../apps/playground/src/data/causalProjection.js";
 
 const node = (id: string, kind: WorldNode["kind"], parent: string | null, chrono: number): WorldNode =>
   ({ id, label: id, kind, parent, chrono, lane: "canon", state: "canon", lanePos: [0, 0, 0], interiorPos: [0, 0, 0], summary: `${id} summary` });
@@ -48,6 +49,19 @@ const causalWorld = {
   interiors: { ...world.interiors, ch_1: { ...world.interiors.ch_1, nodes: [...world.interiors.ch_1.nodes, node("e1b", "event", "ch_1", 2)], edges: [...world.interiors.ch_1.edges, edge("s1", "e1b", "contains", "ch_1", "Shared source coverage")] } },
   causal: { unresolved: 0, links: [{ id: "c1", from: "e1", to: "e3", fromChapter: "ch_1", toChapter: "ch_2", state: "canon" as const }, { id: "c2", from: "e1", to: "e1b", fromChapter: "ch_1", toChapter: "ch_1", state: "canon" as const }] },
 };
+
+test("proposed causal links project onto scene containers in both Story time and Places", () => {
+  const input = { ...causalWorld, causal: { ...causalWorld.causal, links: causalWorld.causal.links.map(link => ({ ...link, state: "proposed" as const })) } };
+  for (const regrouped of [spiralWorld(input, data), atlasWorld(input, data, { periods: null })]) {
+    const level = orbitalLevel(regrouped);
+    const draws = layoutOrbitalLevel(level, []).draws;
+    const projection = causalProjection(level, draws, regrouped.causal!.links);
+    assert.equal(projection.arrows.length, 1);
+    assert.equal(projection.arrows[0].state, "proposed");
+    assert.equal(projection.inside, 1);
+    assert.equal(projection.elsewhere, 0);
+  }
+});
 
 test("story time: every scene on one spiral in story order, the flashback first, causes carried", () => {
   const spiral = spiralWorld(causalWorld, data);

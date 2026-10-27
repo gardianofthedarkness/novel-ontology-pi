@@ -179,6 +179,7 @@ export function topKSimilar(
 // ---------------------------------------------------------------------------
 
 export interface EmbeddingRecord {
+  contentHash?: string;
   id: string;
   kind: EmbeddingUnitKind;
   model: string;

@@ -31,7 +31,6 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
   const proposedLinks = new Set(pendingRelations.filter((relation) => relation.type === 'PART_OF').map((relation) => relation.fromId));
   const byId = new Map(entities.map((entity) => [entity.id, entity]));
   const times = entities.filter((entity) => entity.kind === 'TimePoint');
-  if (!times.length && !relations.some((relation) => relation.type === 'LOCATED_AT' || relation.type === 'PART_OF')) return { available: false, times: [], scenes: [], places: [], characters: [], names: {} };
   const ordered = [...scenes].sort((first, second) => order(first.sentenceIds?.[0]) - order(second.sentenceIds?.[0]));
   const during = new Map();
   const located = new Map();

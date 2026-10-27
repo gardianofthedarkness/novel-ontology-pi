@@ -88,7 +88,7 @@ export function ActivityTab({ count, shine, caughtUp, active, onClick }: TabProp
     <button
       className={`activity-tab ${shine ? "shine" : ""} ${caughtUp ? "caught" : ""}`}
       onClick={onClick}
-      title={active ? "Return to your previous reading position" : "Follow Pi's live work in the Narrative view"}
+      title={active ? "Return to your previous reading position" : "Follow Pi's live work in the current view"}
       aria-pressed={active ?? false}
     >
       {active ? "← Return to reading" : "✦ Agent activity"}

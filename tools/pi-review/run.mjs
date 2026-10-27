@@ -19,6 +19,7 @@ import { loadJob } from './job.mjs';
 import { inspectAlbumAccess, readAppliedSource, verifyAlbumAccess } from './album-access.mjs';
 import { createLibraryAccess } from './library-access.mjs';
 import { createCausalityAccess } from './causality-access.mjs';
+import { embeddingEnvironment } from './embedding-env.mjs';
 import { createUniverseCausalityAccess } from './universe-causality-access.mjs';
 import { requireSharedReviewSkills, sharedReviewReceipt } from './shared-review.mjs';
 
@@ -272,7 +273,7 @@ try {
       await writeFile(`${checkpoint}/operation.json`, JSON.stringify({ args }), { mode: 0o600 });
     }
     const result = await new Promise((resolveResult, reject) => {
-      const child = spawn(process.execPath, [cli, ...args], { cwd: repo, env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'en_US.UTF-8', TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY, NOVEL_SECRETS_DIR: process.env.NOVEL_SECRETS_DIR, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME, JEV_API_KEY_ENV: process.env.JEV_API_KEY_ENV, NOVEL_DIALOGUE_SCOPE: process.env.NOVEL_DIALOGUE_SCOPE, ...(universeConfig ? { NOVEL_CAUSAL_BINDINGS: universeConfigPath } : {}), ...(process.env.JEV_API_KEY_ENV ? { [process.env.JEV_API_KEY_ENV]: process.env[process.env.JEV_API_KEY_ENV] } : {}), WORK_LLM_API_KEY: apiKey, WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-flash', JEV_MODEL: 'jev-1.13.0', ...observer.env }, signal: options.signal, timeout: Math.min(1800000, Math.max(1, deadline - Date.now())), stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(process.execPath, [cli, ...args], { cwd: repo, env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'en_US.UTF-8', TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY, NOVEL_SECRETS_DIR: process.env.NOVEL_SECRETS_DIR, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME, JEV_API_KEY_ENV: process.env.JEV_API_KEY_ENV, NOVEL_DIALOGUE_SCOPE: process.env.NOVEL_DIALOGUE_SCOPE, ...embeddingEnvironment(), ...(universeConfig ? { NOVEL_CAUSAL_BINDINGS: universeConfigPath } : {}), ...(process.env.JEV_API_KEY_ENV ? { [process.env.JEV_API_KEY_ENV]: process.env[process.env.JEV_API_KEY_ENV] } : {}), WORK_LLM_API_KEY: apiKey, WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-flash', JEV_MODEL: 'jev-1.13.0', ...observer.env }, signal: options.signal, timeout: Math.min(1800000, Math.max(1, deadline - Date.now())), stdio: ['ignore', 'pipe', 'pipe'] });
       let output = ''; let size = 0;
       for (const stream of [child.stdout, child.stderr]) stream.on('data', (data) => { size += data.length; if (size <= (args[0] === 'library' ? 3 * 1024 * 1024 : 100000)) output += observer.redact(data.toString()); });
       child.once('error', () => reject(new Error('Scoped CLI interrupted')));

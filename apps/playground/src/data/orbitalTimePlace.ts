@@ -127,6 +127,12 @@ export function storyOrderScenes(data: TimePlaceProjection): StoryScene[] {
 export const spiralNodeId = (sceneId: string) => `spiral:${sceneId}`;
 export const sceneOfSpiral = (id: string) => id.startsWith("spiral:") ? id.slice(7) : null;
 
+function causalContainers(world: RegroupedWorld): void {
+  if (!world.causal) return;
+  const owners = new Map(Object.entries(world.interiors).flatMap(([id, interior]) => interior.nodes.map(node => [node.id, id] as const)));
+  world.causal = { ...world.causal, links: world.causal.links.map(link => ({ ...link, fromChapter: owners.get(link.from) ?? link.fromChapter, toChapter: owners.get(link.to) ?? link.toChapter })) };
+}
+
 /** Story time: every scene of the book on one spiral in story order. Each
  * sphere is a scene (inside: its events and dialogue); its code line names
  * its period. The book's stored causal links come along for the arrows. */
@@ -146,6 +152,7 @@ export function spiralWorld(world: WorldLike & { causal?: CausalSummary; library
     const bundle = regroup(bundles, id, [scene]);
     result.interiors[id] = { nodes: bundle.nodes.filter((node) => node.id !== scene.id), edges: bundle.edges.filter((edge) => edge.from !== scene.id && edge.to !== scene.id) };
   });
+  causalContainers(result);
   // Cross-volume causes (the universe ledger): one end here, the other at a
   // portal for the other volume, before or after the spiral by reading order.
   const here = world.sourceId, sources = world.library?.sources ?? [];
@@ -160,7 +167,7 @@ export function spiralWorld(world: WorldLike & { causal?: CausalSummary; library
       portals.set(other.sourceId, portal);
       return { id: `universe:${link.id}`, from: link.from.sourceId === here ? link.from.unitId : portal.id, to: link.to.sourceId === here ? link.to.unitId : portal.id, fromChapter: "", toChapter: "", state: link.state, universeId: link.universeId };
     });
-    result.causal = { unresolved: world.causal?.unresolved ?? 0, dialogueScenes: world.causal?.dialogueScenes, links: [...(world.causal?.links ?? []), ...links] };
+    result.causal = { unresolved: result.causal?.unresolved ?? 0, dialogueScenes: result.causal?.dialogueScenes, links: [...(result.causal?.links ?? []), ...links] };
     result.portals = [...portals.values()];
   }
   return result;
@@ -293,10 +300,10 @@ export function atlasScenes(data: TimePlaceProjection, filter: AtlasFilter): Sto
 
 /** Places (space-time): one sphere per placed scene passing the filter;
  * entering it shows the scene's events and dialogue. */
-export function atlasWorld(world: WorldLike, data: TimePlaceProjection, filter: AtlasFilter): RegroupedWorld {
+export function atlasWorld(world: WorldLike & { causal?: CausalSummary }, data: TimePlaceProjection, filter: AtlasFilter): RegroupedWorld {
   const bundles = sceneBundles(world);
   const timeById = new Map(data.times.map((time) => [time.id, time]));
-  const result: RegroupedWorld = { laneNodes: [], laneEdges: [], interiors: {}, bigEventLabels: {} };
+  const result: RegroupedWorld = { laneNodes: [], laneEdges: [], interiors: {}, bigEventLabels: {}, causal: world.causal };
   atlasScenes(data, filter).forEach((scene, rank) => {
     const id = atlasNodeId(scene.id);
     const time = timeById.get(scenePeriod(scene) ?? "");
@@ -309,6 +316,7 @@ export function atlasWorld(world: WorldLike, data: TimePlaceProjection, filter: 
     // The sphere is the scene: inside are its records (and the people and places around them).
     result.interiors[id] = { nodes: bundle.nodes.filter((node) => node.id !== scene.id), edges: bundle.edges.filter((edge) => edge.from !== scene.id && edge.to !== scene.id) };
   });
+  causalContainers(result);
   return result;
 }
 

@@ -462,10 +462,8 @@ test("ingest with a work LLM requires explicit fact decisions before graph appli
     // scores every causality noul 0.1, so the faculty rejects every
     // pair here; confident-link coverage lives in causality.test.ts.
     assert.ok(graph.relations >= 4, `relations: ${graph.relations}`);
-    // The per-block causality pass still ran inside ingest (nominated
-    // pairs, zero proposals under the rejecting mock).
     assert.ok(result.causality.perBlock.length >= 1);
-    assert.ok(result.causality.perBlock[0].nominated > 0);
+    assert.equal(result.causality.perBlock[0].nominated, 0);
     assert.equal(result.causality.perBlock[0].proposed, 0);
 
     const changesets = await listChangeSets(dir);

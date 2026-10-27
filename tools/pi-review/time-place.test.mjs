@@ -64,3 +64,11 @@ test('places project as a tree: ancestors appear, scenes keep their most specifi
   assert.deepEqual([byId.get('d10').parentId, byId.get('d10').parentProposed], ['city', true]);
   assert.equal(projection.places[0].id, 'city', 'roots with the most scenes first');
 });
+
+test('known scene locations remain available to Places when actual story time is unavailable', () => {
+  const projection = timePlaceProjection({ entities: [place('station', '车站')], scenes: [scene('s1', 1, 0, { locationId: 'station' })], relations: [] });
+  assert.equal(projection.available, false);
+  assert.deepEqual(projection.scenes[0].placeIds, ['station']);
+  assert.equal(projection.places[0].id, 'station');
+  assert.deepEqual(projection.times, []);
+});
