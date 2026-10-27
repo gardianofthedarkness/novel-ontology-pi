@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mostSpecific, parentMap, placePath, treeViolation } from "../src/ground/ontology/placeTree.js";
@@ -11,7 +11,10 @@ import { timePlaceReviewSource } from "../src/digger/timeplace/afterApply.js";
 import type { PlaceMention } from "../src/digger/timeplace/vocabulary.js";
 import { sectionBlock } from "../src/digger/intake/sectioning.js";
 import { initWorkspace } from "../src/ground/workspace/init.js";
-import { saveChangeSet } from "../src/solidifier/merge/changesetStore.js";
+import { loadChangeSet, saveChangeSet } from "../src/solidifier/merge/changesetStore.js";
+import { approveBook } from "../src/solidifier/merge/approve.js";
+import { digest, semanticFacts, semanticRevision } from "../src/solidifier/merge/semantic.js";
+import { decideFacts, semanticContext } from "../src/solidifier/merge/semanticCommands.js";
 import { review } from "../src/solidifier/merge/review.js";
 import type { DecisionModel } from "../src/ground/connectors/jev.js";
 import type { WorkModel } from "../src/ground/connectors/llm.js";
@@ -122,4 +125,33 @@ test("the shared gate refuses an accepted second parent", async (context) => {
   let offset: number | null = 0;
   do { offset = ((await review("evidence", target, { factId: page.facts[0].id, offset, limit: 5 }, env)) as { page: { nextOffset: number | null } }).page.nextOffset; } while (offset !== null);
   await assert.rejects(review("decide", target, { revision: page.revision, decisions: [{ factId: page.facts[0].id, verdict: "accept", reason: "原文说医院在星城。" }] }, env), /exactly one parent/);
+});
+
+test("apply refuses a second parent decided before the first applied (inter-packet race)", async (context) => {
+  const parent = await mkdtemp(join(tmpdir(), "place-tree-race-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const directory = join(parent, "novel");
+  await initWorkspace(directory);
+  const text = "东区医院在星城。\n东区医院的灯还亮着。";
+  await writeFile(join(directory, "source", "novel.txt"), text);
+  const sentences = new Map(sectionBlock(text, 0).sentences.map((sentence) => [sentence.id, sentence]));
+  await writeFile(join(directory, "ontology", "entities.jsonl"), [place("city", "星城"), place("d7", "东区"), place("d8", "西区"), place("hospital", "东区医院")].map((entity) => JSON.stringify(entity)).join("\n") + "\n");
+  await writeFile(join(directory, "ontology", "scenes.jsonl"), JSON.stringify({ id: "scene_1", chapterIndex: 0, sentenceIds: [...sentences.keys()], charactersPresent: [], charactersMentioned: [], locationId: null } as unknown as Scene) + "\n");
+  const makePacket = async (id: string, toId: string) => {
+    const proposals = [{ id: `pt_rel_hospital_${toId}`, kind: "add_relation" as const, payload: { ...part("hospital", toId), properties: { via: "sweep" } }, confidence: 0.9, provenance: { blockId: "place-tree", sentenceIds: [[...sentences.keys()][0]], patchId: "place-tree" } }];
+    await saveChangeSet(directory, { id, blockId: "place-tree", proposals, status: "pending_review", reviewSource: timePlaceReviewSource(proposals, sentences), reviewNotes: {}, createdAt: new Date().toISOString() });
+    // Stage an accepted decision the way the gate's apply path does, before
+    // either packet is applied: both decide against the same stored tree.
+    const packet = await loadChangeSet(directory, id);
+    const revision = semanticRevision(packet, digest(await semanticContext(directory)));
+    const fact = semanticFacts(packet).find((entry) => entry.field === "relation")!;
+    await decideFacts(directory, id, revision, [{ factId: fact.id, verdict: "accept", reason: "原文说医院在该区。" }]);
+  };
+  await makePacket("cs_timeplace_place-tree_a", "d7");
+  await makePacket("cs_timeplace_place-tree_b", "d8");
+  await approveBook(directory, "cs_timeplace_place-tree_a");
+  await assert.rejects(approveBook(directory, "cs_timeplace_place-tree_b"), /exactly one parent/);
+  assert.equal((await loadChangeSet(directory, "cs_timeplace_place-tree_b")).status, "pending_review", "a refused packet stays pending, never approved-but-unapplied");
+  const stored = (await readFile(join(directory, "ontology", "relations.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Relation);
+  assert.deepEqual(stored.map((relation) => [relation.fromId, relation.toId]), [["hospital", "d7"]], "only the first parent lands");
 });
