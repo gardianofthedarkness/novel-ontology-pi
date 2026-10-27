@@ -166,6 +166,7 @@ export function authorize(command, scope) {
   if (verb === 'init') valid = tokens.length === 2 && operation === novel;
   if (verb === 'album') {
     valid = tokens[2] === novel && ((['list', 'portraits'].includes(operation) && tokens.length === 3)
+      || operation === 'assign' && (tokens.length === 3 || tokens.length === 4 && tokens[3] === '--check')
       || operation === 'import' && tokens.length === 4 && scope.album?.importAllowed === true && tokens[3] === scope.album.epub);
   }
   if (verb === 'ingest') {

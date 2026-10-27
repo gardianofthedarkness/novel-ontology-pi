@@ -97,11 +97,11 @@ test('stale/altered plan pages, foreign source bindings and expanded catalogs ne
 
 const fixtureDataPath = config => resolve(config.directory, '..');
 
-test('both concise skills load through the actual Pi resource loader without a model prompt', async context => {
+test('all three concise skills load through the actual Pi resource loader without a model prompt', async context => {
   const { DefaultResourceLoader, SettingsManager } = await import('@earendil-works/pi-coding-agent');
   const directory = await mkdtemp(join(tmpdir(), 'library-skills-'));
   context.after(() => rm(directory, { recursive: true, force: true }));
-  const paths = [resolve('skills/novel-ontology/SKILL.md'), resolve('skills/novel-library/SKILL.md')];
+  const paths = [resolve('skills/novel-ontology/SKILL.md'), resolve('skills/novel-library/SKILL.md'), resolve('skills/novel-portraits/SKILL.md')];
   const loader = new DefaultResourceLoader({ cwd: directory, agentDir: directory, settingsManager: SettingsManager.inMemory({}), noExtensions: true, noContextFiles: true, noPromptTemplates: true, noThemes: true, additionalSkillPaths: paths });
   await loader.reload();
   const skills = loader.getSkills().skills;

@@ -8,6 +8,19 @@ story forking** at a time point the user chooses.
 No Docker or hosted database required. Download it, drop in your novel, provide
 two API keys (one work LLM + one decision model), and start.
 
+## Post-extraction character portraits
+
+The separate [`novel-portraits` skill](skills/novel-portraits/SKILL.md) lets an
+agent run `novel album assign <workspace> --check`, then `novel album assign
+<workspace>` after the full volume is extracted, reviewed and applied. The CLI
+uses the imported EPUB album and canonical cast; local OCR/head detection creates
+crops and uniquely binds character names. Existing assignments are preserved;
+uncertain matches stay hidden. No model API calls or ontology approvals.
+
+This optional feature needs [local Python dependencies](tools/album-portraits/README.md).
+The scoped Pi host loads the skill and permits the command without general shell
+access. No artwork is generated; it only uses pictures in the book's imported album.
+
 ## Optional team playground
 
 The root-level [playground/](playground/README.md) contains the separate team
