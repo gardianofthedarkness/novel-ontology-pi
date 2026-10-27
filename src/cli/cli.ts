@@ -8,6 +8,8 @@
  * All commands print JSON by default; add --pretty for humans.
  */
 import { describeError, EXIT_CODES } from "../ground/errors.js";
+import { ERROR_CATALOG } from "../ground/errorCatalog.js";
+import { diagnose } from "./diagnose.js";
 import { readFile } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 import { EventLog } from "../ground/events/log.js";
@@ -135,6 +137,8 @@ const COMMANDS: Record<string, string> = {
   "novel jev status": "Jev key status: source only (env / secure store / indirection), never the value",
   "novel jev logout": "Remove the Jev key from the secure store",
   "novel jev ping": "Jev smoke test: one tiny live decision via the resolved key",
+  "novel explain <error-code> | novel explain --list":
+    "What an error code means, why it happens and how to fix it (every failure's report names its code).",
   "novel inspect <novel-dir>":
     "Corpus diagnostics over a novel bundle (counts, coverage, integrity tallies — no judgments)",
   "novel album import <novel-dir> <epub-file>":
@@ -242,6 +246,15 @@ async function main(): Promise<void> {
       return;
     }
     throw new Error("Usage: novel llm ping|probe");
+  }
+
+  if (cmd === "explain") {
+    // The long explanation of an error code (like rustc --explain); --list prints every code.
+    if (sub === "--list" || !sub) { out(Object.fromEntries(Object.entries(ERROR_CATALOG).map(([code, entry]) => [code, `${entry.aspect}: ${entry.title}`])), pretty); return; }
+    const entry = ERROR_CATALOG[sub.toUpperCase()];
+    if (!entry) throw new Error(`Unknown error code ${sub}; novel explain --list shows them all.`);
+    out({ code: sub.toUpperCase(), ...entry }, pretty);
+    return;
   }
 
   if (cmd === "inspect") {
@@ -691,9 +704,12 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err) => {
-  // One agent-readable report: what kind of failure (aspect, code), why, and what to do next.
-  const report = describeError(err, process.argv.slice(2));
+main().catch(async (err) => {
+  // One agent-readable report: what kind of failure (aspect, code), why, the evidence the CLI
+  // observed, where the problem is and graded fixes (`novel explain <code>` for the long form).
+  const argv = process.argv.slice(2).filter((value) => value !== "--pretty");
+  const base = describeError(err, argv);
+  const report = await diagnose(base, argv).catch(() => base);
   console.error(JSON.stringify(report));
   process.exit(EXIT_CODES[report.aspect]);
 });

@@ -163,6 +163,8 @@ export function authorize(command, scope) {
     return { kind: 'cli', args: tokens, label: `novel library ${operation}` };
   }
   if (verb === 'help' || verb === 'config') valid = tokens.length === 1;
+  // Error explanations are static text.
+  if (verb === 'explain') valid = tokens.length === 2 && /^(--list|[A-Za-z_]{2,40})$/.test(operation ?? '');
   if (verb === 'init') valid = tokens.length === 2 && operation === novel;
   if (verb === 'album') {
     valid = tokens[2] === novel && ((['list', 'portraits'].includes(operation) && tokens.length === 3)

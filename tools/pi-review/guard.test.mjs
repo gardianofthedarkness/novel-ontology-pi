@@ -180,3 +180,9 @@ test('time-place runs only propose for the assigned book, and their packets revi
   ]) assert.throws(() => authorize(command, scope), /Time-place/);
   assert.throws(() => authorize(`novel review show ${novel} cs_timeplace_time-place_9 --scope book`, scope), /outside the assigned scope/);
 });
+
+test('error explanations are available to Pi', () => {
+  assert.equal(authorize('novel explain QUERY_UNKNOWN_PROPERTY').kind, 'cli');
+  assert.equal(authorize('novel explain --list').kind, 'cli');
+  for (const command of ['novel explain', 'novel explain ../x', 'novel explain A B']) assert.throws(() => authorize(command), command);
+});

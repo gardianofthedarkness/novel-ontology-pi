@@ -23,8 +23,23 @@ import { LADYBUG_DDL } from "./ontology/schema.js";
  * by message so the 400+ existing throw sites report usefully too.
  */
 export type ErrorAspect = "usage" | "path" | "not_found" | "query" | "graph" | "review" | "stale" | "evidence" | "conflict" | "source" | "model" | "budget" | "internal";
-export interface ErrorInfo { aspect: ErrorAspect; code: string; hint?: string; next?: string[]; details?: Record<string, unknown> }
-export interface ErrorReport extends ErrorInfo { error: string }
+/** Where the problem is: an argument of the command (0 = the verb), a decision in a batch, or text inside an argument (a query). */
+export type ErrorSpan = { argument: number; text: string } | { decision: number; factId?: string | null } | { argument: number; text: string; offset: number; length: number };
+/**
+ * A fix, with how safe it is to apply (as rustc grades its suggestions):
+ * machine-applicable — the corrected command is certainly what was meant;
+ * maybe-incorrect — likely right, check it against the evidence first;
+ * has-placeholders — the shape is right, fill in the <…> parts.
+ */
+export interface Suggestion { message: string; applicability: "machine-applicable" | "maybe-incorrect" | "has-placeholders"; command?: string[] }
+export interface ErrorInfo {
+  aspect: ErrorAspect; code: string; hint?: string; next?: string[]; details?: Record<string, unknown>;
+  span?: ErrorSpan;
+  /** What the system observed while diagnosing (evidence for the suggestions). */
+  notes?: string[];
+  suggestions?: Suggestion[];
+}
+export interface ErrorReport extends ErrorInfo { error: string; /** `novel explain <code>` prints the long explanation. */ explain?: string }
 
 export const EXIT_CODES: Record<ErrorAspect, number> = { internal: 1, usage: 2, path: 3, not_found: 3, query: 4, graph: 4, review: 5, stale: 5, evidence: 5, conflict: 5, source: 5, model: 6, budget: 6 };
 
@@ -48,7 +63,7 @@ export function graphSchema(): { nodes: Record<string, string[]>; relationships:
   return { nodes, relationships };
 }
 
-const distance = (a: string, b: string) => {
+export const distance = (a: string, b: string) => {
   const row = Array.from({ length: b.length + 1 }, (_, index) => index);
   for (let i = 1; i <= a.length; i++) {
     let previous = row[0]; row[0] = i;
@@ -56,9 +71,9 @@ const distance = (a: string, b: string) => {
   }
   return row[b.length];
 };
-const snake = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+export const snake = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 /** Closest known names (snake_case variants first). */
-function closest(name: string, known: string[], count = 3): string[] {
+export function closest(name: string, known: string[], count = 3): string[] {
   const exact = known.filter((candidate) => candidate === snake(name) || candidate.toLowerCase() === name.toLowerCase());
   const ranked = [...new Set(known)].map((candidate) => ({ candidate, score: distance(snake(name), candidate) })).sort((first, second) => first.score - second.score).filter((entry) => entry.score <= Math.max(2, Math.floor(name.length / 2))).map((entry) => entry.candidate);
   return [...new Set([...exact, ...ranked])].slice(0, count);
@@ -74,7 +89,7 @@ function argsOf(command: string[]) {
 }
 
 /** Properties agents reach for that the graph names differently. */
-const PROPERTY_ALIASES: Record<string, string> = {
+export const PROPERTY_ALIASES: Record<string, string> = {
   name: "canonical_name", names: "canonical_name (aliases are not in the graph)", canonicalName: "canonical_name", aliases: "canonical_name (aliases are not in the graph)",
   kind: "label(n)", type: "label(n) / label(r)", _label: "label(n)", label: "label(n)",
   location_id: "the LOCATED_AT relationship: (s:Scene)-[:LOCATED_AT]->(l:Location)", locationId: "the LOCATED_AT relationship: (s:Scene)-[:LOCATED_AT]->(l:Location)",
@@ -85,10 +100,10 @@ const QUERY_TIPS = "Ladybug Cypher: label(n) instead of n:Label in WHERE or type
 /** Describe any thrown value as an agent-readable report. */
 export function describeError(error: unknown, command: string[] = []): ErrorReport {
   const message = (error instanceof Error ? error.message : String(error)).replace(/^Error: /, "");
-  if (error instanceof NovelError) return { error: message, ...error.info };
   const args = argsOf(command);
   const reviewNext = args.packet && args.dir ? [`novel review show ${args.dir} ${args.packet} --scope ${args.scope}${args.universe ? ` --universe ${args.universe}` : ""} --offset 0 --limit 20`] : undefined;
-  const report = (aspect: ErrorAspect, code: string, extra: Omit<ErrorInfo, "aspect" | "code"> = {}): ErrorReport => ({ error: message, aspect, code, ...extra });
+  if (error instanceof NovelError) return { error: message, ...error.info, ...(error.info.aspect === "review" && !error.info.next && reviewNext ? { next: reviewNext } : {}), explain: `novel explain ${error.info.code}` };
+  const report = (aspect: ErrorAspect, code: string, extra: Omit<ErrorInfo, "aspect" | "code"> = {}): ErrorReport => ({ error: message, aspect, code, ...extra, explain: `novel explain ${code}` });
   let match: RegExpMatchArray | null;
 
   if ((match = message.match(/^Usage: ([\s\S]+)/))) return report("usage", "USAGE", { hint: `Expected: ${match[1].split("\n")[0]}`, next: ["novel help"] });
@@ -118,6 +133,7 @@ export function describeError(error: unknown, command: string[] = []): ErrorRepo
   if (/Decision #\d+|Invalid, duplicate or unknown fact decision|Duplicate decisions|at most \d+ fact decisions|Unknown semantic fact|Invalid factId|explicit decisions/i.test(message)) return report("review", "DECISION_INVALID", { hint: "Each decision is {factId (from review show), verdict: accept|hold|reject, reason (non-empty)}; at most 50 per call; each factId once.", next: reviewNext });
   if (/already (applied|linked|exists|has a parent)|A CAUSES link already exists|exactly one parent|loop|cycle|contradict|same entity|two parents|refused/i.test(message)) return report("conflict", "CONFLICTS_WITH_CANON", { hint: "The assertion contradicts stored canon or repeats it. Hold it with the reason; do not force it." });
   if (/Original source changed|source provenance mismatch|unambiguous stored source|stored source|Source text changed/i.test(message)) return report("source", "SOURCE_MISMATCH", { hint: "The stored original is missing, ambiguous or changed; facts cite it, so restore it rather than editing records." });
+  if ((match = message.match(/(?:Invalid|Unknown|duplicate)[^.]*? option (--?[\w-]+|\S+)/i))) return report("usage", "UNKNOWN_OPTION", { hint: `${match[1]} is not an option here (or is repeated, or has no value).`, details: { option: match[1] } });
   // Gate refusals of a decision or edit as stated (review, changeset decide/revise/facts).
   if (args.verb === "review" || args.verb === "changeset" && ["decide", "revise", "facts", "show"].includes(args.operation ?? "")) {
     if (/Duplicate proposal ids/.test(message)) return report("review", "PACKET_DUPLICATE_IDS", { hint: "The packet has duplicate proposal ids: follow the metadata-only repair in references/repair.md; keep it held, keep every fact.", next: reviewNext });

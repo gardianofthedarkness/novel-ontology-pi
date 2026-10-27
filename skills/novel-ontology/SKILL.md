@@ -49,8 +49,15 @@ re-read its fresh revision. Never drop conflicting updates merely to clear a gat
 ## When a command fails
 
 Failures print one JSON object: `error` (what happened), `aspect` (what kind
-of problem), `code`, `hint` (what to change) and often `next` (commands to
-run). Act on the aspect; do not retry variants blindly:
+of problem), `code`, `hint` (what to change), often `next` (commands to run),
+`span` (which argument, decision or query text is wrong), `notes` (what the
+CLI observed: the query's bound tables, the packet's real facts, merges,
+nearby workspaces) and `suggestions` — each a full corrected `command` with
+an `applicability`: machine-applicable (run it), maybe-incorrect (check it
+against the notes/evidence first), has-placeholders (fill in the <…> parts).
+`novel explain <code>` prints why it happens and how to fix it. Never apply a
+suggestion that changes a review decision without re-reading the fact.
+Act on the aspect; do not retry variants blindly:
 
 - `usage` — fix the arguments to the form in `hint` (`novel help` lists all).
 - `path` / `not_found` — use assigned paths from `NOVEL_JOB.json` and real ids

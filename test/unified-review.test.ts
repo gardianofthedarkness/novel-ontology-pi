@@ -85,7 +85,7 @@ test("shared review refuses no-decision apply, stale evidence, unknown facts, du
   const page = await run("show", target);
   const factId = page.facts[0].id;
   await assert.rejects(run("apply", target, { revision: page.revision }), /explicit decisions/);
-  await assert.rejects(run("decide", target, { revision: page.revision, decisions: [accept("missing")] }), /Invalid factId/);
+  await assert.rejects(run("decide", target, { revision: page.revision, decisions: [accept("missing")] }), /Decision #1 has unknown factId "missing"/);
   await assert.rejects(run("decide", target, { revision: page.revision, decisions: [accept(factId), accept(factId)] }), /Duplicate/);
   await readEvidence(target, factId);
   await assert.rejects(run("decide", target, { revision: page.revision, decisions: [{ ...accept(factId), semanticReplacement: { fromId: "different" } }] }), /relation evidence workflow/);
