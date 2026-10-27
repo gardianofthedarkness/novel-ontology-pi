@@ -27,6 +27,13 @@ The viewer has two **modes** and the same three **views** in each:
   1024 pixels on their longest side. Missing images keep a placeholder.
 - Ambiguous or unresolved image anchors stay unplaced. Images between scenes
   hidden in the same collapsed group stay hidden until that group opens.
+- Sentence offsets preserve the complete original paragraph separators, including
+  blank lines and CRLF. This corrects positional image anchors without changing
+  sentence IDs, scene membership or ontology decisions. Albums imported before
+  the fix need their stored sentence anchors regenerated from the unchanged
+  source and its bound block size. `novel album list` resolves offsets read-only;
+  re-importing the identical EPUB regenerates stored anchors. Back up the album
+  and quiesce its writer before repair; never substitute another source.
 - **Following Pi** reads its work across all three views, in either mode:
   - **Switching:** following switches tabs by itself. New or newly confirmed
     story periods open Story time; new places open Places, a few seconds

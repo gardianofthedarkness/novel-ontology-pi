@@ -30,3 +30,34 @@ test("paragraphs are tracked", () => {
   assert.equal(sentences.length, 3);
   assert.equal(sentences[2].paragraphIndex, 1);
 });
+
+test("sentence offsets preserve the full original paragraph separators", () => {
+  for (const separator of ["\n", "\n\n", "\n\n\n\n", "\n \t\n", "\r\n", "\r\n\r\n", "\n　\n"]) {
+    const text = `　甲。${separator} 乙！${separator}😀丙？\n\n`;
+    const { sentences, paragraphCount } = sectionBlock(text, 7);
+    assert.equal(paragraphCount, 3);
+    assert.deepEqual(sentences.map(sentence => ({ id: sentence.id, index: sentence.index, paragraph: sentence.paragraphIndex, text: sentence.text })), [
+      { id: "b0007_s0000", index: 0, paragraph: 0, text: "甲。" },
+      { id: "b0007_s0001", index: 1, paragraph: 1, text: "乙！" },
+      { id: "b0007_s0002", index: 2, paragraph: 2, text: "😀丙？" },
+    ]);
+    for (const sentence of sentences) {
+      assert.equal(text.slice(sentence.startOffset, sentence.endOffset), sentence.text, JSON.stringify(separator));
+      assert.equal(sentence.startOffset, text.indexOf(sentence.text));
+    }
+  }
+});
+
+test("repeated paragraphs and leading blank lines keep exact ordered spans", () => {
+  const text = "\n\n同じ。\n\n\n同じ。\n \t\n同じ。";
+  const { sentences } = sectionBlock(text, 2);
+  assert.deepEqual(sentences.map(sentence => sentence.paragraphIndex), [1, 2, 3]);
+  let previousEnd = 0;
+  for (const sentence of sentences) {
+    assert.equal(sentence.startOffset, text.indexOf(sentence.text, previousEnd));
+    assert.equal(text.slice(sentence.startOffset, sentence.endOffset), sentence.text);
+    previousEnd = sentence.endOffset;
+  }
+  assert.deepEqual(sectionBlock("", 0), { sentences: [], paragraphCount: 0 });
+  assert.deepEqual(sectionBlock("\n \t\n", 0), { sentences: [], paragraphCount: 0 });
+});

@@ -56,6 +56,7 @@ export function sectionBlock(
   const sentences: Sentence[] = [];
   const blockId = `b${String(blockIndex).padStart(4, "0")}`;
   const paragraphs = text.split(/\n\s*\n|\n/);
+  const separators = text.match(/\n\s*\n|\n/g) ?? [];
   let globalOffset = 0;
   let sIndex = 0;
   let pCount = 0;
@@ -99,7 +100,7 @@ export function sectionBlock(
       }
     }
     if (start < trimmed.length) push(trimmed.length);
-    globalOffset += para.length + 1; // paragraph separator
+    globalOffset += para.length + (separators[pIdx]?.length ?? 0);
   });
 
   return { sentences, paragraphCount: pCount };
