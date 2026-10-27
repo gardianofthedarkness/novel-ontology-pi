@@ -51,5 +51,10 @@ Missing order is unknown, not zero; reading order is not story time or CAUSES.
 For cross-book causal review after organization, switch to `novel-ontology` and
 its `references/causality.md`; do not treat library approval as causal approval.
 Shared-universe queries must keep continuity/source scope; a universe-wide list
-is not a combined graph. Cross-book EM, migration of old DBs and actual-time
-alignment are not implemented. Do not copy/renumber active databases to fake them.
+is not a combined graph. Places are joined across books only by the reviewed
+universe atlas (`novel atlas`, see the novel-ontology skill); characters are not
+joined across books, and story periods are not aligned across books (reading
+order within a continuity). Migration of old DBs is not implemented. Do not
+copy/renumber active databases to fake any of these. After organization,
+`novel checklist <library> --universe <id>` lists what each book and the
+universe still need.
