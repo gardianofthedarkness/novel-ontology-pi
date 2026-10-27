@@ -5,7 +5,7 @@ import type { AlbumPortrait, WorldEdge, WorldNode } from "../types";
 import type { Position3 } from "../data/spatialLayout";
 import { canEnterOrbitalScope, orbitalContents, mainProminence, orbitalLevel, representativeScene, surroundingEntities, volumeScope, type OrbitalScope, type OrbitalWorld } from "../data/orbitalModel";
 import { layoutOrbitalLevel, layoutOrbitalPreview, layoutParentBackdrop, morphSpan, nestedEntityConnections, openingMorph, type OrbitalDraw, type OrbitalMorph, type OrbitalPose } from "../data/orbitalLayout";
-import { framePositions, type LabelBus } from "./graphCamera";
+import { framePositions, revealPositions, type LabelBus } from "./graphCamera";
 import { OrbitalGraph, ORBITAL_TRANSITION_MS } from "./OrbitalGraph";
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalTouchAncestors, type OrbitalReadingBookmark } from "../data/orbitalActivity";
 import { activityFocus, piBusy, type LiveActivity } from "../data/liveActivity";
@@ -84,6 +84,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   /** Selection last sent to the inspector (undefined = nothing sent yet). */
   const lastInspected = useRef<string | null | undefined>(undefined);
   const graphRef = useRef<GraphCanvasRef>(null);
+  const [viewToken, setViewToken] = useState(0);
   const singleClick = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFocus = useRef(-1);
   const readingBookmark = useRef<OrbitalReadingBookmark | null>(null);
@@ -138,6 +139,14 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
    * as not yet on the orbit. */
   const albumInfo = useMemo(() => albumEntries(level.sourceNodes, albumPictures), [albumPictures, level.sourceNodes]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
+  /** A selection with links keeps itself and what it links to bright; everything else recedes. */
+  const focusIds = useMemo(() => {
+    if (!selectedId || followingActivity || !connections.edges.length) return null;
+    const linked = new Set([selectedId, ...connections.edges.flatMap((edge) => [edge.from, edge.to])]);
+    // Spheres that hold a linked record (a scene inside an event group) stay bright too.
+    for (const draw of baseDraws) if (draw.entry?.members.some((id) => linked.has(id))) linked.add(draw.node.id);
+    return linked;
+  }, [selectedId, followingActivity, connections.edges, baseDraws]);
   const causalLinks = useMemo(() => scope.kind === "library" || scope.kind === "series" || !showCausal ? [] : worldCausalLinks(world), [world, scope.kind, showCausal]);
   const causal = useMemo(() => {
     if (scope.kind === "library" || scope.kind === "series") return libraryCausalProjection(level, baseDraws, world.library);
@@ -314,12 +323,12 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     for (const draw of draws) if (draw.role !== "preimage") poses.set(draw.node.id, { node: draw.node, position: bus.positions.get(draw.node.id) ?? draw.position, radius: draw.radius });
     lastPoses.current = { key: scope.key, poses };
   }, [draws, scope.key, bus]);
+  // Selecting never zooms: the selection (or a character's whole route, in a
+  // regrouped level) is only brought into view when it is off screen.
   const focus = useCallback((draw: OrbitalDraw) => {
-    // A regrouped level may frame more than the sphere (a character's whole route).
     const span = arranged?.focusFor?.(draw.node.id, layout.draws);
-    if (span && span.length > 1) { framePositions(graphRef, span, 1.15, !reducedMotion, { direction: arranged?.direction }); return; }
-    const center = bus.positions.get(draw.node.id) ?? draw.position;
-    framePositions(graphRef, [center], 1.2, !reducedMotion, { focusRadius: draw.radius });
+    if (span && span.length > 1) { revealPositions(graphRef, span, draw.radius, !reducedMotion); return; }
+    revealPositions(graphRef, [bus.positions.get(draw.node.id) ?? draw.position], draw.radius, !reducedMotion);
   }, [bus, reducedMotion, arranged, layout.draws]);
   const [pendingFocus, setPendingFocus] = useState<OrbitalDraw | null>(null);
   useLayoutEffect(() => {
@@ -537,6 +546,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   /** Faculties working right now, placed on the sphere where their block is built. */
   const working = useMemo(() => facultyAnchors(activity?.faculties, draws, scope.chapterId), [activity?.faculties, draws, scope.chapterId]);
   const openFacultyStrip = () => {
+    document.querySelector<HTMLButtonElement>(".dock-toggle[aria-expanded=false]")?.click();
     const strip = document.querySelector<HTMLDetailsElement>(".faculty-pipeline details");
     if (!strip) return;
     strip.open = true;
@@ -557,20 +567,18 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     return () => stage?.removeEventListener("orbital-nav", command);
   }, []);
   const reveal = useCallback((id: string | null) => setRevealedId((current) => current === id ? current : id), []);
-  const allPositions = layout.draws.map((draw) => bus.positions.get(draw.node.id) ?? draw.position);
   const zoomBy = (delta: number) => document.querySelector(".orbital-stage")?.dispatchEvent(new CustomEvent("orbital-zoom", { detail: { delta } }));
   return <div className="orbital-explorer">
     <nav className="scene-sequence orbital-navigation" aria-label="Orbital levels">
-      <div className="orbital-navigation-top"><button onClick={back} disabled={path.length <= 1 || !!morph} aria-label="Back one orbital level">← Back</button>{world.library && <button onClick={() => { setPath([libraryScope]); setSelectedId(null); setRevealedId(null); }} disabled={followingActivity || !!morph}>Series overview</button>}<span className="orbital-level"><RollingText text={`${String(path.length).padStart(2, "0")} / ${scope.kind === "scene" ? "SCENE · CONVERSATIONS" : scope.kind.toUpperCase()}`} /></span><button onClick={() => zoomBy(-80)} aria-label="Zoom in" title="Zoom in (+); Shift + scroll for fine control">＋</button><button onClick={() => zoomBy(80)} aria-label="Zoom out" title="Zoom out (−)">−</button><button onClick={() => framePositions(graphRef, allPositions, 1.2, !reducedMotion, { direction: arranged?.direction })}>Frame view ⌖</button><button aria-pressed={showRelations} onClick={onRelations}>Connections {showRelations ? "on" : "off"}</button></div>
-      {bookBar}
-      <ol ref={locationRef} className="orbital-location" aria-label="Location in the book">{location.map((crumb, index) => {
-        const content = <><b><RollingText text={crumb.label} /></b>{crumb.detail && <span>{crumb.detail}</span>}</>;
-        const navigable = crumb.pathIndex !== undefined && crumb.pathIndex < path.length - 1;
-        return <li key={`${index}:${crumb.key}`} className={`location-${crumb.kind}${crumb.selection ? " is-selection" : ""}`} aria-current={index === location.length - 1 ? "location" : undefined} title={[crumb.label, crumb.detail].filter(Boolean).join(" · ")}>{navigable ? <button onClick={() => jumpTo(crumb.pathIndex!)} disabled={!!morph} aria-label={`Go to ${crumb.label}`}>{content}</button> : <span>{content}</span>}</li>;
-      })}</ol>
-      <div className="orbital-help"><span>Click to inspect · zoom to reveal · enter scene groups; conversations stay in place</span><span className="orbital-count" role="status">{level.main.length} main · {nebula.length} surrounding · {preview.draws.length} revealed · {edges.length} links{causalShown ? ` · ${causal.arrows.length} causal${causal.inside ? ` (+${causal.inside} inside spheres)` : ""}${causal.elsewhere ? ` · ${causal.elsewhere} to other chapters` : ""}` : ""}</span></div>
+      <div className="orbital-navigation-top"><button className="nav-back" onClick={back} disabled={path.length <= 1 || !!morph} aria-label="Back one orbital level" title="Back one level (Esc)">←</button>
+        <ol ref={locationRef} className="orbital-location" aria-label="Location in the book">{location.map((crumb, index) => {
+          const content = <><b><RollingText text={crumb.label} /></b>{crumb.detail && <span>{crumb.detail}</span>}</>;
+          const navigable = crumb.pathIndex !== undefined && crumb.pathIndex < path.length - 1;
+          return <li key={`${index}:${crumb.key}`} className={`location-${crumb.kind}${crumb.selection ? " is-selection" : ""}`} aria-current={index === location.length - 1 ? "location" : undefined} title={[crumb.label, crumb.detail].filter(Boolean).join(" · ")}>{navigable ? <button onClick={() => jumpTo(crumb.pathIndex!)} disabled={!!morph} aria-label={`Go to ${crumb.label}`}>{content}</button> : <span>{content}</span>}</li>;
+        })}</ol>
+        {bookBar}
+      </div>
       {followingActivity && activity && !libraryActive && <div className="orbital-live-status" role="status"><b>Following activity · {activity.blockId ?? "waiting"} · page overview</b><span>{activity.phase}</span>{activityTarget.timestamp && <small>{activityTarget.historical ? "Last observed · " : ""}{touchedNodeIds.length ? `Blue bounds · ${touchedNodeIds.length} ${activityTarget.kind === "review" ? "review targets (not edits)" : "edited records"}` : "No visible graph target for this tool action"} · {activityTarget.faculty} · {new Date(activityTarget.timestamp).toLocaleTimeString()}</small>}</div>}
-      {(scope.kind === "library" || scope.kind === "series") && <div className="orbital-live-status"><b>{scope.kind === "library" ? "Series / continuity groups" : "Files in reading order — not story time"}</b><span>{world.library?.plans.length ?? 0} proposed/held plans · {world.library?.omittedPlans ? `${world.library.omittedPlans} older plans not shown · ` : ""}Unattached files are inspect-only; opening a file never starts Pi.</span></div>}
       {followingActivity && libraryActive && <div className="orbital-live-status" role="status"><b>Following library activity · {libraryEvent.type.replaceAll(".", " / ")}</b><span>{libraryEvent.sourceIds.length} organization targets · {new Date(libraryEvent.timestamp).toLocaleTimeString()}</span></div>}
     </nav>
     <div className="stage orbital-stage" tabIndex={0} aria-label="Orbital timeline. Scroll or pinch to zoom; Shift scroll for fine control; plus and minus zoom. Select a sphere to inspect; Shift Enter on a revealed sphere enters its level. Escape returns one level." onKeyDown={(event) => {
@@ -579,17 +587,30 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       if (!event.metaKey && !event.ctrlKey && ["+", "=", "-", "_"].includes(event.key)) { event.preventDefault(); zoomBy(event.key === "+" || event.key === "=" ? -80 : 80); }
       if (event.key === "Enter" && selected) { event.preventDefault(); if (event.shiftKey) enter(selected); else inspect(selected); }
     }}>
-      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} renderDistance={arranged?.renderDistance} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
+      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} viewToken={viewToken} focusIds={focusIds} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} renderDistance={arranged?.renderDistance} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
       {intro && <div className="orbital-intro-skip" aria-hidden="true">Tap anywhere to skip</div>}
       <div className="labels-layer faculty-chips">{working.map((anchor) => <button key={anchor.id} type="button" className="faculty-chip" data-faculty-anchor={anchor.id} onClick={openFacultyStrip} aria-label={`Working here: ${anchor.faculties.join(", ")}. Open faculty activity`}>{facultyChipText(anchor)}</button>)}</div>
-      <div className="labels-layer orbital-labels">{draws.filter((draw) => draw.role !== "preimage" && draw.envelope !== "hidden").map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}${draw.role === "nebula" && (draw.prominence ?? 1) < 0.35 && selectedId !== draw.node.id ? " is-faint" : ""}${hoveredId === draw.node.id ? " is-hovered" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onPointerEnter={() => setHover(draw.node.id)} onPointerLeave={() => { if (motion.hoveredId === draw.node.id) setHover(null); }} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
+      <div className="labels-layer orbital-labels">{draws.filter((draw) => draw.role !== "preimage" && draw.envelope !== "hidden").map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}${draw.role === "nebula" && (draw.prominence ?? 1) < 0.35 && selectedId !== draw.node.id ? " is-faint" : ""}${hoveredId === draw.node.id ? " is-hovered" : ""}${focusIds && !focusIds.has(draw.node.id) ? " is-dim" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onPointerEnter={() => setHover(draw.node.id)} onPointerLeave={() => { if (motion.hoveredId === draw.node.id) setHover(null); }} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
         <span className="node-code">{draw.role === "preview" && !arranged?.envelope ? "REVEALED / " : ""}{(draw.node.viewKind ?? draw.node.library?.type ?? draw.node.kind).toUpperCase()}{draw.node.state !== "canon" ? ` · ${draw.node.state}` : ""}</span><b>{draw.node.label}</b>{draw.node.cluster && <span>{draw.node.cluster.ids.length} records · orbital group</span>}{showRelations && !!causal.insideBy.get(draw.node.id) && <span className="causal-inside">{causal.insideBy.get(draw.node.id)} causal inside</span>}
       </button>)}</div>
       <div ref={hoverCard} className="orbital-hover-card" aria-hidden="true" style={{ visibility: "hidden" }}>{hoveredDraw && <HoverCard key={hoveredDraw.node.id} draw={hoveredDraw} links={hoverEdges.length} causalInside={causal.insideBy.get(hoveredDraw.node.id) ?? 0} enterable={!!hoveredDraw.entry?.scope} />}</div>
-      <div className="orbital-time-key" aria-hidden="true"><i />{arranged ? arranged.timeKey.label : scope.kind === "library" ? "SERIES" : scope.kind === "series" ? "READING ORDER →" : "TIME →"}<span>{arranged ? arranged.timeKey.detail : scope.kind === "library" ? "No chronological order between series" : scope.kind === "series" ? "Volume order, not actual story time" : "Blue arrows follow narrative order"}</span></div>
+      <div className="view-controls" role="toolbar" aria-label="View controls">
+        <button onClick={() => zoomBy(-80)} aria-label="Zoom in" title="Zoom in (+)">＋</button>
+        <button onClick={() => zoomBy(80)} aria-label="Zoom out" title="Zoom out (−)">−</button>
+        <button onClick={() => setViewToken((token) => token + 1)} aria-label="Reset view" title="Reset view">⌂</button>
+        <button aria-pressed={showRelations} onClick={onRelations} aria-label="Connections" title={showRelations ? "Hide connections" : "Show connections"}>⌁</button>
+        <details className="view-help"><summary aria-label="Help and legend" title="Help and legend">?</summary><div className="view-help-card">
+          <p><b>Move</b> Drag to pan · right-drag or Shift-drag to turn · scroll or pinch to zoom · Esc goes back a level</p>
+          <p><b>Explore</b> Click a sphere to inspect it · zoom in to reveal what is inside · double-click a revealed sphere to enter</p>
+          <p className="time-key"><i />{arranged ? arranged.timeKey.label : scope.kind === "library" ? "SERIES" : scope.kind === "series" ? "READING ORDER →" : "TIME →"}<span>{arranged ? arranged.timeKey.detail : scope.kind === "library" ? "No chronological order between series" : scope.kind === "series" ? "Volume order, not actual story time" : "Blue arrows follow narrative order"}</span></p>
+          <p className="legend"><span><i className="canon" />Canon</span><span><i className="proposed" />Proposed</span><span><i className="held" />Held</span><span>Spheres / weighted nebula</span>{causalShown && <span className="causal-key"><i />Causes (stored) · dashed = projected</span>}</p>
+          {(scope.kind === "library" || scope.kind === "series") && <p><b>{scope.kind === "library" ? "Series / continuity groups" : "Files in reading order — not story time"}</b> {world.library?.plans.length ?? 0} proposed/held plans · {world.library?.omittedPlans ? `${world.library.omittedPlans} older plans not shown · ` : ""}Unattached files are inspect-only; opening a file never starts Pi.</p>}
+          <p><span className="orbital-count" role="status">{level.main.length} main · {nebula.length} surrounding · {preview.draws.length} revealed · {edges.length} links{causalShown ? ` · ${causal.arrows.length} causal${causal.inside ? ` (+${causal.inside} inside spheres)` : ""}${causal.elsewhere ? ` · ${causal.elsewhere} to other chapters` : ""}` : ""}</span></p>
+          <button aria-pressed={reducedMotion} onClick={onMotion}>{reducedMotion ? "Motion reduced" : "Motion on"}</button>
+        </div></details>
+      </div>
       {morph && <div className="orbital-transition-status" role="status">Uncoiling into the local timeline…</div>}
     </div>
-    <div className="scene-legend"><span><i className="canon" />Canon</span><span><i className="proposed" />Proposed</span><span><i className="held" />Held</span><span>Spheres / weighted nebula</span>{causalShown && <span className="causal-key"><i />Causes (stored) · dashed = projected</span>}<button aria-pressed={reducedMotion} onClick={onMotion}>{reducedMotion ? "Motion reduced" : "Motion on"}</button></div>
   </div>;
 }
 

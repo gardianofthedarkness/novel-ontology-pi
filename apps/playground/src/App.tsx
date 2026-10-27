@@ -18,6 +18,7 @@ import "./timeplace.css";
 import { StoryTimeline } from "./components/StoryTimeline";
 import { NarrativeList } from "./components/NarrativeList";
 import "./narrative.css";
+import "./chrome.css";
 import { PlaceMap } from "./components/PlaceMap";
 import { followTarget, timePlaceEmergence, universeIds, type TimePlaceProjection } from "./data/timePlace";
 import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProjection, sceneOfSpiral, spiralNodeId, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels } from "./data/orbitalTimePlace";
@@ -25,7 +26,7 @@ import { AtlasPanel } from "./components/AtlasPanel";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
 import type { Swipe } from "./data/gestures";
-import { activityFocus, type LiveActivity } from "./data/liveActivity";
+import { activityFocus, piBusy, type LiveActivity } from "./data/liveActivity";
 import { applySnapshotChanges } from "../../../tools/pi-review/snapshot-delta.mjs";
 import { KIND_LABEL } from "./archive";
 import { worldCausalLinks } from "./data/causalProjection";
@@ -47,10 +48,10 @@ const KNIT_SITE = "chapter_0";
 const DB = "db/novel";
 let feedSeq = 0;
 const EMPTY_TIME_PLACE: TimePlaceProjection = { available: false, times: [], scenes: [], places: [], characters: [], names: {} };
-/** Two modes (Orbital 3D, Traditional flat), each with the same three views. */
+/** Two modes (3D orbital, flat), each with the same three views. */
 type StageView = "narrative" | "story" | "places";
 const STAGE_VIEWS: [StageView, string][] = [["narrative", "Narrative"], ["story", "Story time"], ["places", "Places"]];
-const MODES: [boolean, string][] = [[true, "Orbital"], [false, "Traditional"]];
+const MODES: [boolean, string][] = [[true, "3D"], [false, "Flat"]];
 const NO_NODES: WorldNode[] = [];
 const NO_EDGES: WorldEdge[] = [];
 const NO_JOINS: PendingJoin[] = [];
@@ -153,6 +154,9 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>("chapter_0");
   const [panel, setPanel] = useState<"record" | "activity" | "review" | "album">("record");
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  /** The processing dock (pipeline, Pi review, record bar) folds away to one line; the choice is remembered. */
+  const [dockOpen, setDockOpen] = useState(() => { try { return localStorage.getItem("dock-open") === "1"; } catch { return false; } });
+  const toggleDock = () => setDockOpen((open) => { try { localStorage.setItem("dock-open", open ? "0" : "1"); } catch { /* storage unavailable: remember for this visit only */ } return !open; });
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [dynNodes, setDynNodes] = useState<WorldNode[]>([]);
   const [dynEdges, setDynEdges] = useState<WorldEdge[]>([]);
@@ -839,14 +843,9 @@ export default function App() {
   }
 
   return (
-    <div className={`app orbital-active ${orbitalMode ? "mode-orbital" : "mode-traditional"}${stageView !== "narrative" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}`}>
+    <div className={`app orbital-active ${orbitalMode ? "mode-orbital" : "mode-traditional"}${stageView !== "narrative" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}${dockOpen ? " dock-open" : " dock-closed"}`}>
       <header className="topbar">
         <button className="brand" onClick={overview} aria-label="Return to archive overview"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 32V8h7l18 24h7V8M4 32h7V18l18 14M19 8h17" fill="none" stroke="currentColor" strokeWidth="3" /></svg><span>NOVEL<span>ONTOLOGY / PI</span></span></button>
-        <nav aria-label="Workspace navigation">
-          <button className={panel === "record" ? "active" : ""} onClick={overview}>Archive <span>↗</span></button>
-          <button className={inspectorOpen && panel === "activity" ? "active" : ""} onClick={() => { setPanel("activity"); setInspectorOpen(true); }}>Activity <span>/</span></button>
-          <button className={inspectorOpen && panel === "review" ? "active" : ""} onClick={() => { setPanel("review"); setInspectorOpen(true); }}>Review <span>{String(pendingCount).padStart(2, "0")}</span></button>
-        </nav>
         <span className="sample-badge"><i />{phoneLive || liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">
@@ -893,6 +892,7 @@ export default function App() {
         </aside>
         <div className="activity-dock"><ActivityTab count={activity.count} shine={activity.shine} caughtUp={activity.caughtUp} active={followingActivity} onClick={flyToSite} /></div>
       </main>
+      <button className="dock-toggle" aria-expanded={dockOpen} onClick={toggleDock} title={dockOpen ? "Fold the processing dock" : "Show the processing dock"}><i className={piBusy(liveActivity) ? "is-busy" : ""} /><span className="dock-label">{dockOpen ? "Hide processing" : phoneLive ? liveLabel : `Processing · ${processingStatus}`}</span><span aria-hidden="true">{dockOpen ? "▾" : "▴"}</span></button>
       <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} faculties={liveActivity?.faculties} telemetryNote={liveActivity?.telemetryNote} />
       {phoneLive && (!libraryAtTop || liveActivity?.review) && <PiReviewProgress review={liveActivity?.review} />}
       {phoneLive && <PiConsole />}
