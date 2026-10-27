@@ -87,6 +87,14 @@ test("shared review refuses no-decision apply, stale evidence, unknown facts, du
   await assert.rejects(run("apply", target, { revision: page.revision }), /explicit decisions/);
   await assert.rejects(run("decide", target, { revision: page.revision, decisions: [accept("missing")] }), /Decision #1 has unknown factId "missing"/);
   await assert.rejects(run("decide", target, { revision: page.revision, decisions: [accept(factId), accept(factId)] }), /Duplicate/);
+  try {
+    await run("decide", target, { revision: page.revision, decisions: [accept(factId), accept(factId)] });
+    assert.fail("duplicate decisions should be refused");
+  } catch (error) {
+    const info = (error as { info?: { aspect?: string; code?: string } }).info;
+    assert.equal(info?.aspect, "review", "duplicate decisions classify as review, not internal");
+    assert.equal(info?.code, "DECISION_INVALID");
+  }
   await readEvidence(target, factId);
   await assert.rejects(run("decide", target, { revision: page.revision, decisions: [{ ...accept(factId), semanticReplacement: { fromId: "different" } }] }), /relation evidence workflow/);
   const packet = await loadChangeSet(directory, target.packetId);

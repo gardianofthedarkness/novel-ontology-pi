@@ -60,7 +60,9 @@ function decisionsFrom(value: unknown, adapter: ReviewAdapter): ReviewDecision[]
     if (problem) throw new NovelError(`Decision #${index + 1} ${problem}.`, { aspect: "review", code: "DECISION_INVALID", hint: "Each decision is {factId, verdict: accept|hold|reject, reason}; fix this one and resend the batch.", details: { index, factId: entry && typeof entry === "object" ? (entry as { factId?: unknown }).factId ?? null : null } });
     if (entry.verdict !== "accept" && ("replacement" in entry || "semanticReplacement" in entry)) throw new Error("Only accepted assertions can have semantic corrections.");
   }
-  if (new Set(value.map(entry => entry.factId)).size !== value.length) throw new Error("Duplicate fact decisions in batch.");
+  const factIds = value.map(entry => entry.factId);
+  const duplicate = factIds.find((id, index) => factIds.indexOf(id) !== index);
+  if (duplicate) throw new NovelError(`Duplicate fact decisions in batch: ${JSON.stringify(duplicate)} appears more than once; keep one decision per factId.`, { aspect: "review", code: "DECISION_INVALID", hint: "Each decision is {factId, verdict: accept|hold|reject, reason}; remove the duplicate and resend the batch." });
   return value;
 }
 

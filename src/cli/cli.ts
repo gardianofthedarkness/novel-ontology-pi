@@ -7,7 +7,7 @@
  * extraction, the merge gate, and the database connectors.
  * All commands print JSON by default; add --pretty for humans.
  */
-import { describeError, EXIT_CODES } from "../ground/errors.js";
+import { describeError, EXIT_CODES, NovelError } from "../ground/errors.js";
 import { ERROR_CATALOG } from "../ground/errorCatalog.js";
 import { diagnose } from "./diagnose.js";
 import { readFile } from "node:fs/promises";
@@ -252,7 +252,7 @@ async function main(): Promise<void> {
     // The long explanation of an error code (like rustc --explain); --list prints every code.
     if (sub === "--list" || !sub) { out(Object.fromEntries(Object.entries(ERROR_CATALOG).map(([code, entry]) => [code, `${entry.aspect}: ${entry.title}`])), pretty); return; }
     const entry = ERROR_CATALOG[sub.toUpperCase()];
-    if (!entry) throw new Error(`Unknown error code ${sub}; novel explain --list shows them all.`);
+    if (!entry) throw new NovelError(`Unknown error code ${sub}; novel explain --list shows them all.`, { aspect: "usage", code: "INVALID_ARGUMENT", hint: "Use a code from novel explain --list." });
     out({ code: sub.toUpperCase(), ...entry }, pretty);
     return;
   }
