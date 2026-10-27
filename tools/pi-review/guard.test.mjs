@@ -107,6 +107,8 @@ test('permits only scoped, explicit CLI operations', () => {
   assert.equal(authorize(`wc -l '${chapterOne}'`).count, true);
   assert.equal(authorize(`novel fix correct '${novel}' --block b0001 --key extraction:constraints --value '{"distinctNames":[["甲","乙"]]}' --reason '原文中是不同人物'`).kind, 'cli');
   assert.equal(authorize(`novel recall '${novel}' b0001`).kind, 'cli');
+  assert.equal(authorize(`novel search '${novel}' '黄昏'`).kind, 'cli');
+  assert.equal(authorize(`novel search '${novel}' '黄昏' --limit 30`).args.at(-1), '30');
   assert.equal(authorize(`novel changeset revise '${novel}' cs_b0002 --edits '{"sanitizeTypes":true}' --reason '类型检查'`).kind, 'cli');
 });
 
@@ -123,6 +125,7 @@ test('rejects shell injection, arbitrary reads, paths, writes, and gate bypass',
     `novel changeset show '${novel}' cs_b0001 --output /tmp/leak`,
     `novel changeset show '${novel}' cs_b0001`, `novel changeset show '${novel}' cs_b0001 --limit 100`,
     `novel recall '${novel}' b0003`,
+    `novel search '${novel}' '黄昏' --limit 31`, `novel search '${novel}' '黄昏' --output /tmp/leak`, `novel search /tmp/other '黄昏'`,
     `novel fix correct '${novel}' --block b0003 --key extraction:constraints --value '{}' --reason 'test'`,
     `novel fix correct '${novel}' --block b0001 --key key --value '{}' --reason 'test' --output /tmp/leak`,
     `novel changeset revise '${novel}' cs_b0003 --edits '{}' --reason 'test'`,
@@ -161,4 +164,19 @@ test('fact decisions remain workspace-scoped and require a revision without shel
     "novel changeset decide /tmp/novel cs_b0001 --revision stale --decisions '[]'",
     `novel changeset decide /tmp/novel cs_b0002 --revision ${'a'.repeat(64)} --decisions '[]'`,
   ]) assert.throws(() => authorizeScoped(command, scope));
+});
+
+test('time-place runs only propose for the assigned book, and their packets review through the shared gate', () => {
+  const scope = { ...defaultScope, reviewProtocol: 'review-v1', timePlaceChangesetIds: ['cs_timeplace_time-place_1700000000000'] };
+  assert.equal(authorize(`novel timeplace run ${novel} --propose --mode hybrid --chapter 2`, scope).label, 'novel timeplace run');
+  assert.equal(authorize(`novel timeplace show ${novel}`, scope).label, 'novel timeplace show');
+  assert.equal(authorize(`novel review show ${novel} cs_timeplace_time-place_1700000000000 --scope book --limit 20`, scope).kind, 'cli');
+  for (const command of [
+    `novel timeplace run ${novel}`,
+    `novel timeplace run ${novel} --propose --force`,
+    `novel timeplace run ${novel} --propose --out /tmp/x.json`,
+    `novel timeplace run ${novel} --propose --mode everything`,
+    `novel timeplace run /elsewhere --propose`,
+  ]) assert.throws(() => authorize(command, scope), /Time-place/);
+  assert.throws(() => authorize(`novel review show ${novel} cs_timeplace_time-place_9 --scope book`, scope), /outside the assigned scope/);
 });

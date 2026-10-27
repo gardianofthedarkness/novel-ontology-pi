@@ -50,7 +50,7 @@ export function authorize(command, scope) {
   }
   if (tokens.shift() !== 'novel') throw new Error('Use only novel commands or cat of the supplied skill/source block');
   const [verb, operation] = tokens;
-  const changesetIds = [...blockIds.map(id => `cs_${id}`), ...(scope.causalityChangesetIds ?? [])];
+  const changesetIds = [...blockIds.map(id => `cs_${id}`), ...(scope.causalityChangesetIds ?? []), ...(scope.timePlaceChangesetIds ?? [])];
   if (scope.reviewProtocol === 'review-v1' && (
     verb === 'changeset' && ['facts', 'decide', 'approve'].includes(operation) && tokens[2] === novel
     || verb === 'library' && operation === 'decide' && tokens[2] === scope.library?.directory
@@ -238,10 +238,25 @@ export function authorize(command, scope) {
       valid = tokens[2] === novel && flags.length === 8 && values.size === 4 && ['--block', '--key', '--value', '--reason'].every((key) => values.has(key)) && blockIds.includes(values.get('--block'));
     }
   }
+  if (verb === 'timeplace') {
+    // Time-place faculty: proposals only (reviewed through the shared gate), bounded options, no file outputs.
+    const flags = new Map();
+    for (let index = 3; index < tokens.length; index++) {
+      const name = tokens[index];
+      if (flags.has(name) || !['--mode', '--chapter', '--limit', '--max-calls', '--max-questions', '--propose', '--no-jev'].includes(name)) throw new Error('Time-place options are bounded: --propose [--mode M] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--no-jev]');
+      if (['--propose', '--no-jev'].includes(name)) { flags.set(name, true); continue; }
+      flags.set(name, tokens[++index]);
+    }
+    const count = (name, max) => !flags.has(name) || /^\d+$/.test(flags.get(name) ?? '') && Number(flags.get(name)) <= max;
+    if (operation === 'show') valid = tokens.length === 3 && tokens[2] === novel;
+    if (operation === 'run') valid = tokens[2] === novel && flags.has('--propose') && (!flags.has('--mode') || ['hybrid', 'llm', 'programmatic'].includes(flags.get('--mode'))) && count('--chapter', 10000) && count('--limit', 10000) && count('--max-calls', 2000) && count('--max-questions', 2000);
+    if (!valid) throw new Error('Time-place runs must propose for the assigned book (review through novel review --scope book)');
+    return { kind: 'cli', args: tokens, label: `novel timeplace ${operation}` };
+  }
   if (verb === 'recall') valid = operation === novel && tokens.length === 3 && blockIds.includes(tokens[2]);
   if (verb === 'graph') valid = operation === 'build' && tokens.length === 3 && tokens[2] === `${novel}/ontology`;
   if (verb === 'query') valid = operation === novel && tokens.length === 3 && /^\s*MATCH\b/i.test(tokens[2]) && !/\b(CREATE|MERGE|SET|DELETE|DROP|ALTER|COPY|LOAD|INSTALL|ATTACH|CALL|REMOVE)\b|;/i.test(tokens[2]);
-  if (verb === 'search') valid = operation === novel && tokens.length === 3;
+  if (verb === 'search') valid = operation === novel && (tokens.length === 3 || tokens.length === 5 && tokens[3] === '--limit' && /^\d+$/.test(tokens[4]) && Number(tokens[4]) >= 1 && Number(tokens[4]) <= 30);
   if (verb === 'inspect') valid = operation === novel && tokens.length === 2;
   if (verb === 'timeline') valid = operation === 'list' && tokens.length === 3 && tokens[2] === novel;
   if (!valid) throw new Error('Command outside this block/workspace CLI allowlist; no shell, direct file writes, credential access, or auto-approve');

@@ -85,7 +85,8 @@ async function book(target: ReviewTarget, env: NodeJS.ProcessEnv): Promise<Revie
   const revision = digest({ semanticReviewRevision, facts, relations: causalContext.relations, stateChanges: causalContext.stateChanges });
   return { revision, stale: false, applied: packet.status === "approved", facts, validate, requireFullReview: /^cs_causality_/.test(packet.id),
     async apply(decisions) {
-      await decideFacts(target.directory, packet.id, semanticReviewRevision, decisions, true);
+      // The fact writer takes batches of at most 50: replace with the first, merge the rest.
+      for (let start = 0; start === 0 || start < decisions.length; start += 50) await decideFacts(target.directory, packet.id, semanticReviewRevision, decisions.slice(start, start + 50), start === 0);
       const result = await approveBook(target.directory, packet.id, env);
       return { verified: result.verifiedFacts ?? 0, held: result.deferredFacts ?? 0, rejected: result.rejectedFacts ?? 0, deferredProposals: result.deferred, result };
     } };

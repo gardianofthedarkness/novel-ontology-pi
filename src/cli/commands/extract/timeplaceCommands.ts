@@ -10,7 +10,7 @@ import { sectionBlock, type Sentence } from "../../../digger/intake/sectioning.j
 import { runTimePlace, timePlaceProposals, type TimePlaceResult, type VocabularyMode } from "../../../digger/timeplace/faculty.js";
 import { saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
 import { cachedDecisions, cachedWork } from "../../../digger/timeplace/cache.js";
-import { timePlaceForNewScenes } from "../../../digger/timeplace/afterApply.js";
+import { timePlaceForNewScenes, timePlaceReviewSource } from "../../../digger/timeplace/afterApply.js";
 import type { ChangeSet } from "../../../solidifier/merge/changeset.js";
 
 /**
@@ -81,16 +81,20 @@ export async function timeplaceRun(novelDir: string, options: TimeplaceRunOption
     ...models(),
     budget: { maxWorkCalls: options.maxCalls, maxDecisionQuestions: options.maxQuestions },
   });
-  const proposals = timePlaceProposals(result, { entityIds: new Set(entities.map((entity) => entity.id)), relationKeys: new Set(relations.map((relation) => `${relation.type}:${relation.fromId}:${relation.toId}`)) });
+  const anchorSentences = new Map(entities.filter((entity) => entity.kind === "TimePoint" && typeof entity.properties?.sentenceId === "string").map((entity) => [entity.id, entity.properties.sentenceId as string]));
+  const proposals = timePlaceProposals(result, { entityIds: new Set(entities.map((entity) => entity.id)), relationKeys: new Set(relations.map((relation) => `${relation.type}:${relation.fromId}:${relation.toId}`)), anchorSentences });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const out = options.out ?? join(novelDir, "timeplace", `run-${stamp}.json`);
   await mkdir(join(out, ".."), { recursive: true, mode: 0o700 });
   await writeFile(out, JSON.stringify({ novelDir, scenes: selected.length, seconds: (Date.now() - started) / 1000, ...result, proposals: proposals.length }, null, 1), { mode: 0o600 });
   let changesetId: string | null = null;
   if (options.propose && proposals.length) {
-    changesetId = `cs_timeplace_${stamp}`;
+    // The reviewability filter (tools/pi-review/timeplace-access.mjs) requires a
+    // trailing _<digits> suffix, as at-birth packets already carry; a bare ISO
+    // stamp ends in "Z" and would never be listed for hosted-Pi review.
+    changesetId = `cs_timeplace_${stamp}_${Date.now()}`;
     await saveChangeSet(novelDir, {
-      id: changesetId, blockId: "time-place", proposals, status: "pending_review",
+      id: changesetId, blockId: "time-place", proposals, status: "pending_review", reviewSource: timePlaceReviewSource(proposals, sentences),
       reviewNotes: { "time-place": `Time-place faculty (phase 1, mode ${mode}${result.usedJev ? ", Jev roles" : ", rule roles"}): ${result.periods.length} time periods (${result.periods.filter((period) => period.flashback).length} flashback), ${new Set(result.places.filter((place) => place.specific && place.role === "setting").map((place) => place.key)).size} setting places over ${selected.length} scenes. Story order is estimated; derived dates come only from stated words.${result.notes.length ? ` Notes: ${result.notes.slice(0, 5).join(" ")}` : ""}` },
       createdAt: new Date().toISOString(),
     });
