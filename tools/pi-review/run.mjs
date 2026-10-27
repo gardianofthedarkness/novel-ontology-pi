@@ -162,7 +162,9 @@ try {
     interactiveDeadline = Math.min(deadline, Date.parse(control.expiresAt));
     consoleChannel = createPiConsole({ directory: `${cwd}/pi-console`, agentEvents, controlToken: control.token, expiresAt: interactiveDeadline });
   }
-  const sourcePaths = [skill, causalityReference, `${repo}/skills/novel-ontology/references/repair.md`, `${repo}/skills/novel-ontology/references/semantic-review.md`, `${repo}/skills/novel-ontology/references/analysis.md`, manifestPath, 'NOVEL_JOB.json', ...volumes.flatMap((volume) => volume.blocks.map((block) => block.evidence))];
+  const sourcePaths = [skill, causalityReference, `${repo}/skills/novel-ontology/references/repair.md`, `${repo}/skills/novel-ontology/references/semantic-review.md`, `${repo}/skills/novel-ontology/references/analysis.md`, manifestPath, 'NOVEL_JOB.json', ...volumes.flatMap((volume) => volume.blocks.map((block) => block.evidence)),
+    // Each book's stored original (read-only; evidence pages still come from the block files).
+    ...volumes.map((volume) => `${volume.workspace}/source/${volume.input.split('/').at(-1)}`)];
   if (libraryAccess) sourcePaths.push(librarySkill, librarySchema);
   const scopes = volumes.map((volume) => ({ novel: volume.workspace, input: volume.input, album: volume.album, library: libraryAccess?.config, skill, sourcePaths, blockIds: volume.blocks.map((block) => block.id), maxBlocks: volume.maxBlocks, reviewProtocol: 'review-v1' }));
   let queue = Promise.resolve();
@@ -170,9 +172,17 @@ try {
     if (cancelled || Date.now() >= deadline || ++calls > manifest.limits.commands) throw new Error('Run window or command budget exhausted');
     let permitted;
     let refusal;
-    // A refusal from the book the command names tells Pi what to change (page size, options); others stay generic.
-    const names = (scope) => command.split(/\s+/).some((token) => token.replace(/^['"]|['"]$/g, '') === scope.novel);
-    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); scope.timePlaceChangesetIds = await timePlaceChangesetIds(scope.novel); permitted = authorize(command, scope); break; } catch (error) { if (error.message.startsWith('Use novel review') || names(scope) && !error.message.startsWith('Command outside')) refusal ??= error.message; } }
+    // Tell Pi what to change: the refusal from the book (or library) the command names; else the first one
+    // (verb and form problems are the same for every book); a path that is no assigned book is said so.
+    const unquote = (token) => token.replace(/^['"]|['"]$/g, '');
+    const named = (scope) => command.split(/\s+/).map(unquote).some((token) => token === scope.novel || token === scope.library?.directory || token.startsWith(`${scope.novel}/`));
+    const refusals = [];
+    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); scope.timePlaceChangesetIds = await timePlaceChangesetIds(scope.novel); permitted = authorize(command, scope); break; } catch (error) { refusals.push({ scope, message: error.message }); } }
+    if (!permitted) {
+      const strays = command.split(/\s+/).map(unquote).filter((token) => /^\/(Users|private|tmp|var|home)\//.test(token) && !scopes.some((scope) => token === scope.novel || token === scope.input || token === scope.library?.directory || token.startsWith(`${scope.novel}/`) || scope.sourcePaths.includes(token)));
+      refusal = refusals.find((entry) => named(entry.scope))?.message
+        ?? (strays.length && command.trim().startsWith('novel') ? `${strays[0]} is not an assigned book, input or library. Use the absolute paths in NOVEL_JOB.json (volumes[].workspace, volumes[].input, library.directory).` : refusals[0]?.message);
+    }
     if (!permitted) {
       await emit({ type: 'pi.command', label: 'Scoped command rejected', status: 'error', reasonCode: 'allowlist' });
       throw new Error(refusal ?? 'Command outside scoped CLI allowlist. Run ONE command per call: novel ..., cat NOVEL_JOB.json, cat <absolute skill/reference path>, wc -l <evidence>, or sed -n \'1,150p\' <evidence>. No pipes, joins, ls, head, scripts or expansions. Read workspace paths from NOVEL_JOB.json.');
@@ -181,7 +191,8 @@ try {
     if (permitted.kind === 'read') {
       const path = resolve(cwd, permitted.path);
       const content = await readFile(path, 'utf8');
-      const { lines, output } = sourcePage(content, permitted, path);
+      const { lines, output: page } = sourcePage(content, permitted, path);
+      const output = permitted.note ? `${page}${page.endsWith('\n') ? '' : '\n'}${permitted.note}\n` : page;
       if (!permitted.count) {
         const covered = sourceCoverage.get(path) ?? new Set();
         for (let index = (permitted.start ?? 1) - 1; index < Math.min(permitted.end ?? lines.length, lines.length); index++) covered.add(index);

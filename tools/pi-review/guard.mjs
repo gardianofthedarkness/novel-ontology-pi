@@ -34,25 +34,66 @@ export function tokenize(command) {
   return tokens;
 }
 
+/** The allowed form of each command, quoted back when a command is refused so Pi can correct it. */
+const FORMS = {
+  checklist: 'novel checklist <book> | novel checklist <library> --universe <id>  (what the analysis still needs, with next commands)',
+  ingest: 'novel ingest <book> <its assigned input: NOVEL_JOB.json volumes[].input> [--max-blocks N] [--block-size 24000]',
+  search: 'novel search <book> <text> [--limit 1-30]',
+  query: "novel query <book> 'MATCH … RETURN …'  (one read-only Cypher string)",
+  inspect: 'novel inspect <book>', timeline: 'novel timeline list <book>', recall: 'novel recall <book> <blockId>', init: 'novel init <book>',
+  review: 'novel review show|evidence|decide|apply <book|library> <packet> --scope book|universe|library [--universe <id>] [--offset N] [--limit 1-20]',
+  changeset: 'novel changeset show <book> <packet> [--offset N] [--limit 1-20] | list <book> | revise …  (decisions and approval: novel review)',
+  causality: 'novel causality candidates <book> [--unit ID] [--chapter N] [--limit 1-20] | sweep <book> [--limit 1-20] | evidence <book> <from> <to> | propose <book> <from> <to> --reason "…"',
+  timeplace: 'novel timeplace show <book> | run <book> --propose [--mode M] [--chapter N] [--limit N] | tree <book> --propose [--max-questions N]',
+  atlas: 'novel atlas show <library> <universe-id> | novel atlas sweep <library> <universe-id> --propose [--max-questions N]',
+  match: 'novel match <book> --changeset cs_bNNNN', fix: 'novel fix <operation> <book> … --reason "…"  (references/repair.md)',
+  graph: 'novel graph build <book>/ontology', album: 'novel album list|portraits <book>', library: 'novel library … <library>  (novel-library skill)',
+  help: 'novel help', config: 'novel config',
+};
+const READS = "Reads: cat NOVEL_JOB.json, cat <skill/reference path>, wc -l <source or evidence file>, sed -n 'A,Bp' <file> (at most 150 lines per page).";
+
 export function authorize(command, scope) {
+  try { return permit(command, scope); }
+  catch (error) {
+    // Name what to change: the command's allowed form, or what exists.
+    const words = String(command).trim().split(/\s+/);
+    const verb = words[0] === 'novel' ? words[1] : null;
+    if (error.message.startsWith('Command outside this block/workspace')) {
+      throw new Error(verb && FORMS[verb] ? `Not allowed in this form. Use: ${FORMS[verb]}. Paths must be the assigned ones from NOVEL_JOB.json; one command per call, no shell.` : verb ? `novel ${verb} is not available here. Available: ${Object.keys(FORMS).join(', ')}. ${READS}` : error.message);
+    }
+    if (error.message.startsWith('Use only novel commands')) throw new Error(`Only novel commands and these reads are available. ${READS} Shell tools (ls, cd, grep, date, pipes) are not.`);
+    // A verb's own refusal without a usable form gets the form appended.
+    if (verb && FORMS[verb] && !/\bnovel [a-z]+ [a-z<]/.test(error.message)) throw new Error(`${error.message.replace(/\.$/, '')}. Use: ${FORMS[verb]}`);
+    throw error;
+  }
+}
+
+function permit(command, scope) {
   const { novel, input, skill, sourcePaths, blockIds, maxBlocks } = scope;
   const tokens = tokenize(command);
-  if (tokens[0] === 'wc' && tokens[1] === '-l' && tokens.length === 3 && sourcePaths.includes(tokens[2])) {
+  // Reports a time-place run wrote for this book (paths printed by the run) are readable too.
+  const readable = (path) => sourcePaths.includes(path) || typeof path === 'string' && !path.includes('..') && path.startsWith(`${novel}/timeplace/`) && /\.json$/.test(path);
+  if (tokens[0] === 'wc' && tokens[1] === '-l' && tokens.length === 3 && readable(tokens[2])) {
     return { kind: 'read', path: tokens[2], count: true, label: 'Count source lines' };
   }
-  if (tokens[0] === 'sed' && tokens[1] === '-n' && tokens.length === 4 && sourcePaths.includes(tokens[3])) {
+  if (tokens[0] === 'sed' && tokens[1] === '-n' && tokens.length === 4 && readable(tokens[3])) {
     const range = tokens[2].match(/^(\d+),(\d+)p$/);
-    if (!range || Number(range[1]) < 1 || Number(range[2]) < Number(range[1]) || Number(range[2]) - Number(range[1]) >= 150) throw new Error('Source reads allow 1–150 lines per page');
-    return { kind: 'read', path: tokens[3], start: Number(range[1]), end: Number(range[2]), label: `Read source lines ${range[1]}–${range[2]}` };
+    if (!range || Number(range[1]) < 1 || Number(range[2]) < Number(range[1])) throw new Error("Source reads use sed -n 'A,Bp' with 1 <= A <= B (at most 150 lines per page)");
+    // A longer page is clamped to 150 lines (with the next page named), not refused.
+    const start = Number(range[1]), end = Math.min(Number(range[2]), start + 149);
+    return { kind: 'read', path: tokens[3], start, end, label: `Read source lines ${start}–${end}`, ...(end < Number(range[2]) ? { note: `[Showed lines ${start}–${end} (pages are at most 150 lines); next: sed -n '${end + 1},${end + 150}p' ${tokens[3]}]` } : {}) };
   }
-  if (tokens[0] === 'cat' && tokens.length === 2 && sourcePaths.includes(tokens[1])) {
+  if (tokens[0] === 'cat' && tokens.length === 2 && readable(tokens[1])) {
     return { kind: 'read', path: tokens[1], label: tokens[1] === skill ? 'Read ontology skill' : 'Read supplied source/reference' };
   }
   if (tokens.shift() !== 'novel') throw new Error('Use only novel commands or cat of the supplied skill/source block');
+  // Help in any spelling shows the full help; status/review list mean "what is left", which the checklist answers.
+  if (tokens[0] === '--help' || tokens[0] === 'help' && tokens.length === 2 || tokens.length >= 2 && tokens.at(-1) === '--help' && !tokens.slice(0, -1).some((token) => token.startsWith('/'))) return { kind: 'cli', args: ['help'], label: 'novel help' };
+  if ((tokens[0] === 'status' && tokens.length === 2 || tokens[0] === 'review' && tokens[1] === 'list' && tokens[2] === novel) && (tokens[0] === 'status' ? tokens[1] : tokens[2]) === novel) return { kind: 'cli', args: ['checklist', novel, ...(input ? ['--input', input] : [])], label: 'novel checklist' };
   const [verb, operation] = tokens;
   const changesetIds = [...blockIds.map(id => `cs_${id}`), ...(scope.causalityChangesetIds ?? []), ...(scope.timePlaceChangesetIds ?? [])];
   if (scope.reviewProtocol === 'review-v1' && (
-    verb === 'changeset' && ['facts', 'decide', 'approve'].includes(operation) && tokens[2] === novel
+    verb === 'changeset' && ['facts', 'decide', 'approve', 'hold', 'reject', 'recall', 'notes'].includes(operation) && tokens[2] === novel
     || verb === 'library' && operation === 'decide' && tokens[2] === scope.library?.directory
     || verb === 'causality' && operation === 'universe' && tokens[2] === 'decide' && tokens[3] === scope.library?.directory
   )) throw new Error('Use novel review show|evidence|decide|apply with --scope book|universe|library; every faculty shares the same gate.');
@@ -243,7 +284,8 @@ export function authorize(command, scope) {
     const library = scope.library?.directory;
     valid = tokens.length === 2 && operation === novel || !!library && tokens.length === 4 && operation === library && tokens[2] === '--universe' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(tokens[3]);
     if (!valid) throw new Error('Checklist runs on an assigned book (novel checklist <book>) or the assigned library (novel checklist <library> --universe <id>)');
-    return { kind: 'cli', args: tokens, label: 'novel checklist' };
+    // The book's assigned input makes the checklist's ingest step exact.
+    return { kind: 'cli', args: tokens.length === 2 && input ? [...tokens, '--input', input] : tokens, label: 'novel checklist' };
   }
   if (verb === 'atlas') {
     // Universe atlas: cross-book place links are only proposed here (ua_ packets), and reviewed through novel review --scope universe.
