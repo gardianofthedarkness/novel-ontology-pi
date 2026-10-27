@@ -48,3 +48,11 @@ test('pending time-place proposals show as proposed periods and places, never as
   const confirmed = timePlaceProjection({ entities: [time('t_new', '早上', 0, 0)], scenes, relations: [rel('OCCURS_DURING', 's1', 't_new', { via: 'anchor' })], pending });
   assert.equal(confirmed.times[0].proposed, false, 'once applied, the stored fact wins');
 });
+
+test('known scene locations remain available to Places when actual story time is unavailable', () => {
+  const projection = timePlaceProjection({ entities: [place('station', '车站')], scenes: [scene('s1', 1, 0, { locationId: 'station' })], relations: [] });
+  assert.equal(projection.available, false);
+  assert.deepEqual(projection.scenes[0].placeIds, ['station']);
+  assert.equal(projection.places[0].id, 'station');
+  assert.deepEqual(projection.times, []);
+});

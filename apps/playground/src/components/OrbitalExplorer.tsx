@@ -284,7 +284,11 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   const activityTarget = useMemo(() => activityFocus(activity), [activity]);
   const libraryEvent = world.library?.events.at(-1);
   const libraryActive = !!libraryEvent && (!activityTarget.timestamp || libraryEvent.timestamp > activityTarget.timestamp);
-  const touchedNodeIds = libraryActive ? libraryEvent.sourceIds : activityTarget.nodeIds;
+  const touchedNodeIds = useMemo(() => libraryActive ? libraryEvent!.sourceIds : [...new Set(activityTarget.nodeIds.flatMap(id => {
+    const sceneId = world.causal?.dialogueScenes?.[id];
+    const container = Object.entries(world.interiors).find(([, interior]) => interior.nodes.some(node => node.id === id || node.id === sceneId));
+    return [id, ...(sceneId ? [sceneId] : []), ...(arrangement && container ? [container[0]] : [])];
+  }))], [libraryActive, libraryEvent, activityTarget.nodeIds, world, arrangement]);
   const touchAncestors = useMemo(() => new Set(touchedNodeIds.flatMap(id => [...orbitalTouchAncestors(level.sourceNodes, level.sourceEdges, id)])), [touchedNodeIds, level.sourceNodes, level.sourceEdges]);
   const touchedIds = useMemo(() => draws.filter(draw => touchAncestors.has(draw.node.id) || draw.entry?.members.some(id => touchAncestors.has(id))).map(draw => draw.node.id), [draws, touchAncestors]);
   const pageLabel = scope.sceneId ? level.sourceNodes.find(node => node.id === scope.sceneId)?.summary ?? level.sourceNodes.find(node => node.id === scope.sceneId)?.label ?? scope.label : scope.kind === "chapter" ? world.laneNodes.find(node => node.id === scope.chapterId)?.label ?? scope.label : scope.kind === "scenes" ? representativeScene(level.sourceNodes, level.sourceEdges, level.sourceNodes.filter(node => scope.ids?.includes(node.id)))?.summary ?? scope.label : scope.label;
@@ -447,7 +451,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     const key = libraryActive ? libraryEvent!.id : activityTarget.id ?? `${activity?.chapterId}:waiting`;
     if (lastFollow.current === key) return;
     const firstFollow = !lastFollow.current;
-    const route = libraryActive ? { path: libraryActivityPath(world, libraryEvent!), targetId: null }
+    const route = arrangement ? { path: [volumeScope], targetId: null } : libraryActive ? { path: libraryActivityPath(world, libraryEvent!), targetId: null }
       : orbitalActivityBatchPath(world, touchedNodeIds, activity?.chapterId ?? "", activityNodes, activityEdges, path);
     if (!libraryActive && world.library) route.path = [...readingPrefix, ...route.path.map(entry => entry.kind === "volume" ? volumeRoot : entry)];
     lastFollow.current = key;
@@ -462,7 +466,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     } else if (firstFollow) {
       setFollowTarget({ key: nextKey });
     }
-  }, [followingActivity, activity, activityTarget.id, world, activityNodes, activityEdges, path, restoreRequest, touchedNodeIds, libraryActive, libraryEvent, readingPrefix, volumeRoot]);
+  }, [followingActivity, activity, activityTarget.id, world, activityNodes, activityEdges, path, restoreRequest, touchedNodeIds, libraryActive, libraryEvent, readingPrefix, volumeRoot, arrangement]);
   useEffect(() => {
     if (!followingActivity || !followTarget) return;
     let timer: ReturnType<typeof setTimeout>;

@@ -32,7 +32,9 @@ import {
 } from "../../ground/connectors/embeddings.js";
 import { nominateCausalCandidates } from "./candidates.js";
 import { checkCausalLinks, type CausalVerdict } from "./checklist.js";
-import { loadCausalityUniverse, type UniverseExtras } from "./units.js";
+import { loadCausalityUniverse, unitDossier, type CausalityUniverse, type UniverseExtras } from "./units.js";
+import { causalSource } from "./evidence.js";
+import { createHash } from "node:crypto";
 
 export interface CausalitySummary {
   nominated: number;
@@ -45,6 +47,10 @@ export interface CausalitySummary {
   embeddingLeg: boolean;
   /** Whether the graph-pattern leg ran (always, when units exist). */
   graphLeg: boolean;
+  deferred: number;
+  remaining: number;
+  truncated: boolean;
+  timeline: "story" | "reading-order-fallback";
 }
 
 export interface CausalityPassInput {
@@ -57,9 +63,12 @@ export interface CausalityPassInput {
   extras?: UniverseExtras;
   /** Provenance block id for proposals. Defaults to "causality-sweep". */
   provenanceBlockId?: string;
+  excludedPairs?: ReadonlySet<string>;
+  onBatch?: (verdicts: CausalVerdict[], proposals: ChangeProposal[]) => Promise<void>;
 }
 
 export interface CausalityPassResult {
+  attemptedPairs: string[];
   proposals: ChangeProposal[];
   summary: CausalitySummary;
   verdicts: CausalVerdict[];
@@ -103,14 +112,15 @@ export async function ensureUnitVectors(
   const ontologyDir = joinOntologyDir(novelDir);
   const sidecar = await loadEmbeddingSidecar(ontologyDir);
   const vectors = new Map<string, number[]>();
-  for (const [id, record] of sidecar) if (universe.byId.has(id)) vectors.set(id, record.vector);
+  const textHashes = new Map(universe.units.map(unit => [unit.id, createHash("sha256").update(unit.text).digest("hex")]));
+  for (const [id, record] of sidecar) if (universe.byId.has(id) && (!embedder || record.model === embedder.model && record.contentHash === textHashes.get(id))) vectors.set(id, record.vector);
   let embedded = 0;
   if (embedder) {
     const missing = universe.units.filter((unit) => !vectors.has(unit.id) && unit.text.trim().length > 0);
     if (missing.length > 0) {
       const newRecords: EmbeddingRecord[] = [];
-      for (let start = 0; start < missing.length; start += 100) {
-        const batch = missing.slice(start, start + 100);
+      for (let start = 0; start < missing.length; start += 16) {
+        const batch = missing.slice(start, start + 16);
         const batchVectors = await embedder.embed(batch.map((unit) => unit.text));
         batch.forEach((unit, index) => {
           vectors.set(unit.id, batchVectors[index]);
@@ -120,6 +130,7 @@ export async function ensureUnitVectors(
             model: embedder.model,
             dimension: batchVectors[index].length,
             vector: batchVectors[index],
+            contentHash: textHashes.get(unit.id),
           });
         });
       }
@@ -136,16 +147,53 @@ export async function ensureUnitVectors(
   return { vectors, embedded };
 }
 
+export async function enrichCausalText(novelDir: string, universe: CausalityUniverse): Promise<string | null> {
+  try {
+    const source = await causalSource(novelDir);
+    const sentences = new Map(source.sentences.map(sentence => [sentence.id, sentence.text]));
+    for (const unit of universe.units) {
+      if (unit.sentenceIds.length && unit.sentenceIds.every(id => sentences.has(id))) unit.text = unit.sentenceIds.map(id => sentences.get(id)!).join("\n");
+    }
+    return source.hash;
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  return null;
+}
+
 export async function runCausalityPass(input: CausalityPassInput): Promise<CausalityPassResult> {
   if (input.limit !== undefined && (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 500)) throw new Error("Causality limit must be an integer from 1 to 500.");
   const universe = await loadCausalityUniverse(input.novelDir, input.extras ?? {});
+  await enrichCausalText(input.novelDir, universe);
   const { vectors, embedded } = await ensureUnitVectors(input.novelDir, universe, input.embedder ?? null);
 
-  const candidates = nominateCausalCandidates(universe, {
+  const nominated = nominateCausalCandidates(universe, {
     touchedIds: input.touchedIds ?? null,
     vectors: vectors.size > 0 ? vectors : undefined,
-  }).slice(0, input.limit ?? 500);
-  const verdicts = await checkCausalLinks(input.decisions, candidates, universe);
+    excludedPairs: input.excludedPairs,
+  });
+  const candidates = nominated.slice(0, input.limit ?? 500);
+  const verdicts: CausalVerdict[] = [];
+  let batch: typeof candidates = [];
+  let characters = 0;
+  const flush = async () => {
+    if (!batch.length) return;
+    const checked = await checkCausalLinks(input.decisions, batch, universe);
+    verdicts.push(...checked);
+    if (input.onBatch) await input.onBatch(checked, checked.filter(verdict => verdict.verdict === "confident").map(verdict => causalityProposal(verdict, {
+      blockId: input.provenanceBlockId ?? "causality-sweep",
+      sentenceIds: [...new Set([...universe.byId.get(verdict.fromId)!.sentenceIds, ...universe.byId.get(verdict.toId)!.sentenceIds])],
+    })));
+    batch = [];
+    characters = 0;
+  };
+  let deferred = 0;
+  for (const candidate of candidates) {
+    const cost = unitDossier(universe.byId.get(candidate.fromId)!).length + unitDossier(universe.byId.get(candidate.toId)!).length + 1800;
+    if (cost > 16000) { deferred++; continue; }
+    if (batch.length >= 10 || characters + cost > 16000) await flush();
+    batch.push(candidate);
+    characters += cost;
+  }
+  await flush();
 
   const provenanceBlockId = input.provenanceBlockId ?? "causality-sweep";
   const proposals: ChangeProposal[] = [];
@@ -167,6 +215,7 @@ export async function runCausalityPass(input: CausalityPassInput): Promise<Causa
 
   return {
     proposals,
+    attemptedPairs: candidates.map(candidate => `${candidate.fromId}|${candidate.toId}`),
     verdicts,
     summary: {
       nominated: candidates.length,
@@ -176,6 +225,10 @@ export async function runCausalityPass(input: CausalityPassInput): Promise<Causa
       embedded,
       embeddingLeg: vectors.size > 0,
       graphLeg: universe.units.length > 0,
+      deferred,
+      remaining: nominated.length - candidates.length,
+      truncated: nominated.length === 500,
+      timeline: universe.storyIndex?.size ? "story" : "reading-order-fallback",
     },
   };
 }
