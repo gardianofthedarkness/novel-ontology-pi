@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useChromeInsets } from "./useChromeInsets";
+import type { AlbumPanelPicture } from "../data/albumEntries";
+import { placePictures, type OrbitIllustration } from "../data/pictureNodes";
+import { albumImageUrl } from "../data/albumImage";
 import { dateLine, readingJumps, scenePeriod, storyRows, universeStoryRows, type StoryScene, type StoryTime, type TimePlaceProjection } from "../data/timePlace";
 
 /**
@@ -13,6 +16,9 @@ interface Props {
   data: TimePlaceProjection;
   names: Map<string, string>;
   onShowInOrbit?: (sceneId: string) => void;
+  pictures?: OrbitIllustration[];
+  album?: AlbumPanelPicture[];
+  onPicture?: (id: string) => void;
   /** Periods that just emerged live (highlighted and scrolled to). */
   emerging?: ReadonlySet<string>;
   /** Scenes Pi is touching; followed (scrolled to) while following Pi. */
@@ -26,13 +32,14 @@ interface Props {
 
 const hue = (index: number, total: number) => `hsl(${200 - Math.round(150 * index / Math.max(1, total - 1))} 70% 62%)`;
 
-export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, following = false, bookBar, focusBook = null }: Props) {
+export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, following = false, pictures = [], album = [], onPicture, bookBar, focusBook = null }: Props) {
   const universe = data.scope === "universe";
   const rows = useMemo(() => universe ? universeStoryRows(data) : storyRows(data).map((row) => ({ ...row, book: null, continuityId: null })), [data, universe]);
   const rowKey = (scene: StoryScene) => scenePeriod(scene) ?? (universe ? `unplaced:${scene.book}` : "unplaced");
   const bookRefs = useRef(new Map<number, HTMLElement>());
   // Universe: choosing a book glides the list to it.
   useEffect(() => { if (universe && focusBook !== null) bookRefs.current.get(focusBook)?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [focusBook, universe]);
+  const illustrations = useMemo(() => placePictures(rows.flatMap(row => row.scenes).map((scene, index) => ({ id: scene.id, chrono: index, sentenceIds: [] })), pictures).filter(placement => placement.placed), [rows, pictures]);
   const jumps = useMemo(() => new Set(readingJumps(data).map((jump) => jump.sceneId)), [data]);
   const timeById = useMemo(() => new Map(data.times.map((time) => [time.id, time])), [data]);
   const [selected, setSelected] = useState<StoryScene | null>(null);
@@ -86,7 +93,7 @@ export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, f
             <span className="tp-meta">{time ? `ch ${time.chapterIndex} · ` : ""}{scenes.length} scene{scenes.length === 1 ? "" : "s"}</span>
           </div>
           {time?.flashback && <p className="tp-told">Flashback{host ? <> told during <b lang="zh">{host.label}</b> (ch {host.chapterIndex})</> : ""} · Jev {Math.round(time.flashbackProbability * 100)}% sure it goes back in time</p>}
-          <div className="tp-scenes">{scenes.map((scene) => <SceneChip key={scene.id} scene={scene} names={names} touched={!!touched?.has(scene.id)} selected={selected?.id === scene.id} anchor={!!time && scene.times.some((entry) => entry.id === time.id && entry.via === "anchor")} onClick={() => setSelected(scene)} />)}</div>
+          <div className="tp-scenes">{scenes.map((scene) => <Fragment key={scene.id}><SceneChip scene={scene} names={names} touched={!!touched?.has(scene.id)} selected={selected?.id === scene.id} anchor={!!time && scene.times.some((entry) => entry.id === time.id && entry.via === "anchor")} onClick={() => setSelected(scene)} />{illustrations.filter(picture => picture.prevSceneId === scene.id).map(picture => <button key={picture.pictureId} className="tp-illustration" aria-label={`Open album picture ${picture.pictureId}`} onClick={() => onPicture?.(picture.pictureId)}><img src={albumImageUrl(picture.asset, window.location.href) ?? undefined} referrerPolicy="no-referrer" alt={album.find(entry => entry.id === picture.pictureId)?.label ?? "Illustration"} /><span>Illustration · {picture.pictureId}</span></button>)}</Fragment>)}</div>
         </li>];
       })}
     </ol>

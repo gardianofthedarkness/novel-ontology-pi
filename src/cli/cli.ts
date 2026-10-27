@@ -7,6 +7,9 @@
  * extraction, the merge gate, and the database connectors.
  * All commands print JSON by default; add --pretty for humans.
  */
+import { describeError, EXIT_CODES, NovelError } from "../ground/errors.js";
+import { ERROR_CATALOG } from "../ground/errorCatalog.js";
+import { diagnose } from "./diagnose.js";
 import { readFile } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 import { EventLog } from "../ground/events/log.js";
@@ -41,6 +44,7 @@ import {
 import { resolveJevKey } from "../ground/connectors/secrets.js";
 import { inspectNovel } from "./commands/extract/inspectCommands.js";
 import { albumImport, albumList, albumPortraits } from "./commands/extract/albumCommands.js";
+import { albumAssign } from "./commands/extract/portraitCommands.js";
 import { evalExtract, evalRun } from "./commands/extract/evalCommands.js";
 import { evalDialogueCards } from "./commands/extract/dialogueEval.js";
 import { sectionBlock } from "../digger/intake/sectioning.js";
@@ -144,6 +148,8 @@ const COMMANDS: Record<string, string> = {
   "novel jev status": "Jev key status: source only (env / secure store / indirection), never the value",
   "novel jev logout": "Remove the Jev key from the secure store",
   "novel jev ping": "Jev smoke test: one tiny live decision via the resolved key",
+  "novel explain <error-code> | novel explain --list":
+    "What an error code means, why it happens and how to fix it (every failure's report names its code).",
   "novel inspect <novel-dir>":
     "Corpus diagnostics over a novel bundle (counts, coverage, integrity tallies — no judgments)",
   "novel album import <novel-dir> <epub-file>":
@@ -152,6 +158,8 @@ const COMMANDS: Record<string, string> = {
     "List illustrations with each anchor resolved to chapter / block / sentence / scene (scene once the block is ingested)",
   "novel album portraits <novel-dir>":
     "Portrait finalization: EM-merge follow, birth fold-match binding, then reviewer tasks for characters still without a portrait (skipped when the host is known not to support visual input; portraits stay hidden until bound)",
+  "novel album assign <novel-dir> [--check]":
+    "After full-volume extraction/application: local OCR/head crops and unique character assignment; --check reports readiness/dependencies without writes. Preserves existing portraits; ambiguous matches stay unassigned.",
   "novel eval run <dataset-dir> <predictions-dir>":
     "Score prediction files against a golden-chapter dataset (precision/recall; metrics only, no thresholds)",
   "novel eval dialogues <gold-cards.json> <predicted-cards.json>":
@@ -253,6 +261,15 @@ async function main(): Promise<void> {
     throw new Error("Usage: novel llm ping|probe");
   }
 
+  if (cmd === "explain") {
+    // The long explanation of an error code (like rustc --explain); --list prints every code.
+    if (sub === "--list" || !sub) { out(Object.fromEntries(Object.entries(ERROR_CATALOG).map(([code, entry]) => [code, `${entry.aspect}: ${entry.title}`])), pretty); return; }
+    const entry = ERROR_CATALOG[sub.toUpperCase()];
+    if (!entry) throw new NovelError(`Unknown error code ${sub}; novel explain --list shows them all.`, { aspect: "usage", code: "INVALID_ARGUMENT", hint: "Use a code from novel explain --list." });
+    out({ code: sub.toUpperCase(), ...entry }, pretty);
+    return;
+  }
+
   if (cmd === "inspect") {
     if (!sub || sub.startsWith("--")) {
       throw new Error("Usage: novel inspect <novel-dir>");
@@ -262,6 +279,10 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "album") {
+    if (sub === "assign" && positional[2] && (positional.length === 3 || positional.length === 4 && positional[3] === "--check")) {
+      out(await albumAssign(positional[2], positional[3] === "--check"), pretty);
+      return;
+    }
     if (sub === "import" && positional.length === 4 && positional[2] && positional[3] && !positional[3].startsWith("--")) {
       out(await albumImport(positional[2], positional[3]), pretty);
       return;
@@ -279,7 +300,7 @@ async function main(): Promise<void> {
       out(await albumPortraits(positional[2]), pretty);
       return;
     }
-    throw new Error("Usage: novel album import <novel-dir> <epub-file> | novel album list <novel-dir> [--block-size N] | novel album portraits <novel-dir>");
+    throw new Error("Usage: novel album import <novel-dir> <epub-file> | novel album list <novel-dir> [--block-size N] | novel album portraits <novel-dir> | novel album assign <novel-dir> [--check]");
   }
 
   if (cmd === "eval") {
@@ -705,7 +726,12 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err) => {
-  console.error(JSON.stringify({ error: String(err) }));
-  process.exit(1);
+main().catch(async (err) => {
+  // One agent-readable report: what kind of failure (aspect, code), why, the evidence the CLI
+  // observed, where the problem is and graded fixes (`novel explain <code>` for the long form).
+  const argv = process.argv.slice(2).filter((value) => value !== "--pretty");
+  const base = describeError(err, argv);
+  const report = await diagnose(base, argv).catch(() => base);
+  console.error(JSON.stringify(report));
+  process.exit(EXIT_CODES[report.aspect]);
 });

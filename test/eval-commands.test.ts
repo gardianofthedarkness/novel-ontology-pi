@@ -109,9 +109,9 @@ test("CLI: eval run prints JSON, --pretty works, usage errors exit 1", async () 
   assert.equal(pretty.status, 0, pretty.stderr);
   assert.ok(pretty.stdout.includes("\n  \"kinds\""));
   const usage = runCli(["eval", "run", exampleDataset]);
-  assert.equal(usage.status, 1);
+  assert.equal(usage.status, 2, "usage errors exit 2");
   assert.match(JSON.parse(usage.stderr).error, /Usage: novel eval run/);
   const missing = runCli(["eval", "run", exampleDataset, join(exampleDataset, "no-such-dir")]);
-  assert.equal(missing.status, 1);
+  assert.equal(missing.status, 3, "a missing directory exits 3");
   assert.match(JSON.parse(missing.stderr).error, /predictions directory not found/);
 });

@@ -28,7 +28,8 @@
  * never gate proposals. This module only reads/writes portraits.jsonl
  * and portrait-tasks.jsonl — it never touches the ontology bundle.
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { lstat, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { formKey } from "../../../ground/language/nameForms.js";
 import type { Entity } from "../../../ground/ontology/types.js";
@@ -66,17 +67,29 @@ export interface PortraitTask {
 }
 
 export async function loadPortraits(novelDir: string): Promise<PortraitRecord[]> {
-  const raw = await readFile(join(novelDir, "ontology", "portraits.jsonl"), "utf8").catch(() => null);
+  const raw = await readFile(join(novelDir, "ontology", "portraits.jsonl"), "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+    return null;
+  });
   if (raw === null) return [];
   return raw.split("\n").filter((l) => l.trim().length > 0).map((l) => JSON.parse(l) as PortraitRecord);
 }
 
 export async function savePortraits(novelDir: string, records: PortraitRecord[]): Promise<void> {
-  await writeFile(
-    join(novelDir, "ontology", "portraits.jsonl"),
-    records.map((r) => JSON.stringify(r)).join("\n") + (records.length ? "\n" : ""),
-    "utf8",
-  );
+  await atomicMetadata(novelDir, "portraits.jsonl", records);
+}
+
+async function atomicMetadata(novelDir: string, file: string, records: unknown[]): Promise<void> {
+  const target = join(novelDir, "ontology", file);
+  const info = await lstat(target).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; });
+  if (info?.isSymbolicLink()) throw new Error("Portrait metadata must not be a symlink");
+  const temporary = `${target}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, records.map((record) => JSON.stringify(record)).join("\n") + (records.length ? "\n" : ""), { flag: "wx", mode: 0o600 });
+    await rename(temporary, target);
+  } finally {
+    await unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
+  }
 }
 
 /**
@@ -98,6 +111,7 @@ export function hostVisionFromEnv(env: NodeJS.ProcessEnv = process.env): boolean
 export function bindPortraitsAtBirth(entities: Entity[], portraits: PortraitRecord[]): number {
   const byFold = new Map<string, string[]>();
   for (const entity of entities) {
+    if (entity.kind !== "Character") continue;
     for (const form of entity.names ?? []) {
       const key = formKey(form.text);
       const ids = byFold.get(key) ?? [];
@@ -168,7 +182,9 @@ export async function finalizePortraits(
 ): Promise<PortraitFinalizeResult> {
   const portraits = await loadPortraits(novelDir);
   if (portraits.length === 0) {
-    return { portraitsFile: false, bound: 0, followed: 0, unboundCharacters: [], tasksWritten: false, visionSkipped: false, tasks: [] };
+    return { portraitsFile: false, bound: 0, followed: 0,
+      unboundCharacters: opts.entities.filter((entity) => entity.kind === "Character").map((entity) => ({ id: entity.id, name: entity.names[0]?.text ?? entity.id, forms: entity.names.map((form) => form.text) })),
+      tasksWritten: false, visionSkipped: opts.hostSupportsVisualInput === false, tasks: [] };
   }
   const followed = followPortraitMerges(opts.mergedPairs, portraits);
   const bound = bindPortraitsAtBirth(opts.entities, portraits);
@@ -181,6 +197,7 @@ export async function finalizePortraits(
     .map((e) => ({ id: e.id, name: e.names[0]?.text ?? e.id, forms: (e.names ?? []).map((n) => n.text) }));
 
   if (opts.hostSupportsVisualInput === false) {
+    await atomicMetadata(novelDir, "portrait-tasks.jsonl", []);
     return { portraitsFile: true, bound, followed, unboundCharacters, tasksWritten: false, visionSkipped: true, tasks: [] };
   }
   const orphans = portraits.filter((p) => p.entityId === null);
@@ -201,12 +218,6 @@ export async function finalizePortraits(
         ? "Act on this task only if you (the reviewing agent) can see the face images; if you cannot, leave the portrait unbound and hidden."
         : "Match the character to a candidate portrait by face; leave unbound when no candidate fits — never invent a portrait.",
   }));
-  if (tasks.length > 0) {
-    await writeFile(
-      join(novelDir, "ontology", "portrait-tasks.jsonl"),
-      tasks.map((t) => JSON.stringify(t)).join("\n") + "\n",
-      "utf8",
-    );
-  }
+  await atomicMetadata(novelDir, "portrait-tasks.jsonl", tasks);
   return { portraitsFile: true, bound, followed, unboundCharacters, tasksWritten: tasks.length > 0, visionSkipped: false, tasks };
 }

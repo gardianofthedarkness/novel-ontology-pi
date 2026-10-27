@@ -100,7 +100,7 @@ test("init refuses a populated workspace and preserves all existing bytes", asyn
   const manifest = await readFile(manifestPath);
   await writeFile(entitiesPath, "existing data\n");
   const result = run(root, ["init", novelDir]);
-  assert.equal(result.status, 1);
+  assert.equal(result.status, 5, "an existing target is a conflict (exit 5)");
   assert.equal(result.stdout, "");
   assert.match(JSON.parse(result.stderr).error, /EEXIST/);
   assert.deepEqual(await readFile(manifestPath), manifest);
@@ -115,7 +115,7 @@ test("init refuses existing empty directories, files, and symlinks", async (t) =
   await symlink(join(root, "missing"), join(root, "dangling"));
   for (const path of ["empty", "file", "link", "dangling"]) {
     const result = run(root, ["init", path]);
-    assert.equal(result.status, 1, path);
+    assert.equal(result.status, 5, path);
     assert.equal(result.stdout, "");
     assert.match(JSON.parse(result.stderr).error, /EEXIST/);
   }
@@ -131,7 +131,7 @@ test("init rejects missing paths, unsupported flags, and extra arguments as JSON
     ["init", "--force"], ["init", "novel", "extra"], ["init", "novel", "--force"],
   ]) {
     const result = run(root, args);
-    assert.equal(result.status, 1, JSON.stringify(args));
+    assert.ok([2, 3].includes(result.status ?? 0), JSON.stringify(args));
     assert.equal(result.stdout, "");
     assert.match(JSON.parse(result.stderr).error, /Usage: novel init/);
   }

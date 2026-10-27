@@ -27,10 +27,21 @@ async function records(directory) {
 
 /** Pictures with their sentence anchors, and portraits bound to a known entity
  * (unbound portraits stay hidden by design). Assets are referenced by id. */
-export async function albumProjection(directory, entityLabels = new Map()) {
+export async function albumProjection(directory, entityLabels = new Map(), sceneRecords) {
   const { illustrations, portraits } = await records(directory);
+  const scenes = [...new Map((sceneRecords ?? await rows(`${directory}/ontology/scenes.jsonl`)).map(scene => [scene.id, scene])).values()];
+  const anchors = new Map();
+  for (const scene of scenes) {
+    if (typeof scene.id !== 'string' || !Array.isArray(scene.sentenceIds)) continue;
+    for (const [index, sentenceId] of scene.sentenceIds.entries()) {
+      if (typeof sentenceId !== 'string') continue;
+      if (anchors.has(sentenceId)) {
+        if (anchors.get(sentenceId)?.sceneId !== scene.id) anchors.set(sentenceId, null);
+      } else anchors.set(sentenceId, { sceneId: scene.id, sceneFraction: (index + 1) / (scene.sentenceIds.length + 1) });
+    }
+  }
   return {
-    pictures: illustrations.map((record) => ({ id: record.id, kind: typeof record.kind === 'string' ? record.kind : 'story', sentenceId: typeof record.sentenceId === 'string' ? record.sentenceId : null })),
+    pictures: illustrations.map((record) => ({ id: record.id, kind: typeof record.kind === 'string' ? record.kind : 'story', sentenceId: typeof record.sentenceId === 'string' ? record.sentenceId : null, sceneId: anchors.get(record.sentenceId)?.sceneId ?? null, sceneFraction: anchors.get(record.sentenceId)?.sceneFraction ?? null })),
     portraits: portraits.filter((record) => typeof record.entityId === 'string' && entityLabels.has(record.entityId)).map((record) => ({ id: portraitId(record), entityId: record.entityId, entityLabel: entityLabels.get(record.entityId) })),
   };
 }

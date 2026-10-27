@@ -70,6 +70,7 @@
   .phone-live .orbital-time-key { bottom: 170px; }
   .orbital-time-key span { display: none; }
   .orbital-active .inspector.is-open { height: min(260px, 31svh); }
+  .orbital-active .inspector.is-open.album-open { height: min(480px, 54svh); }
 }
 @media (max-height: 600px) {
   .design-switch { top: 74px; right: 20px; font-size: 8px; }

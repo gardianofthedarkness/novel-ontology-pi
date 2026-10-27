@@ -21,6 +21,7 @@ export interface OrbitalDraw {
    * so the card plane stands perpendicular to the timeline). When absent,
    * glyphs fall back to camera billboarding. */
   facing?: Position3;
+  asset?: string;
 }
 /** tone: "thread" (amber, flashback → told during), "route" (a character's
  * path through places), "link" (faint move between places); default the time string. */

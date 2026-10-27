@@ -6,11 +6,13 @@ import { join } from "node:path";
 import { createZip } from "../src/digger/intake/album/zip.js";
 import {
   importEpubAlbum,
+  locateAnchor,
   picturesByBlock,
   resolveAnchors,
   type IllustrationRecord,
 } from "../src/digger/intake/album/album.js";
 import { cutBlocks } from "../src/digger/intake/blocks.js";
+import { sectionBlock } from "../src/digger/intake/sectioning.js";
 import {
   bindPortraitsAtBirth,
   finalizePortraits,
@@ -25,6 +27,23 @@ import { projectProcessingEvent } from "../apps/playground/src/events/project.js
 import type { Entity } from "../src/ground/ontology/types.js";
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+
+test("image anchors in whitespace stay with preceding prose instead of drifting into the next scene", () => {
+  const text = "第一章\n\n戦いが終わった。\n\n\n\n行間\n\n百年前の出来事だった。\n\n\n次の話。";
+  const blocks = cutBlocks(text);
+  const block = blocks[0];
+  const sentences = sectionBlock(block.text, block.index).sentences;
+  const ending = sentences.find(sentence => sentence.text === "戦いが終わった。")!;
+  const interlude = sentences.find(sentence => sentence.text === "行間")!;
+  const offset = text.indexOf("戦いが終わった。") + "戦いが終わった。".length + 2;
+  const located = locateAnchor(blocks, offset);
+  assert.equal(located.sentenceId, ending.id);
+  assert.equal(locateAnchor(blocks, text.indexOf("行間")).sentenceId, interlude.id);
+  const pictures = [{ id: "illustration", asset: "assets/example.jpg", kind: "story", sentenceId: located.sentenceId }];
+  const placed = placePictures([{ id: "battle", chrono: 0, sentenceIds: [ending.id] }, { id: "history", chrono: 1, sentenceIds: [interlude.id] }], pictures)[0];
+  assert.equal(placed.prevSceneId, "battle");
+  assert.equal(placed.nextSceneId, "history");
+});
 
 function fixtureEpub(): Buffer {
   const opf = `<?xml version="1.0" encoding="utf-8"?>
@@ -86,6 +105,20 @@ test("v2: legacy records without sentence identities still resolve via charOffse
   const { illustrations } = await resolveAnchors(novelDir);
   assert.equal(illustrations[0].sentenceId, records[0].sentenceId);
   assert.equal(illustrations[0].blockId, records[0].blockId);
+});
+
+test("v2: resolving stale cached image anchors uses exact offsets without changing album records", async (context) => {
+  const { novelDir } = await novelWithAlbum(context);
+  const path = join(novelDir, "ontology", "illustrations.jsonl");
+  const original = JSON.parse((await readFile(path, "utf8")).trim()) as IllustrationRecord;
+  const stale = JSON.stringify({ ...original, sentenceId: "b0000_s9999" }) + "\n";
+  await writeFile(path, stale);
+  const { illustrations } = await resolveAnchors(novelDir);
+  assert.equal(illustrations[0].sentenceId, original.sentenceId);
+  assert.equal(illustrations[0].id, original.id);
+  assert.equal(illustrations[0].asset, original.asset);
+  assert.equal(illustrations[0].charOffset, original.charOffset);
+  assert.equal(await readFile(path, "utf8"), stale);
 });
 
 test("v2: picturesByBlock maps intake pictures to blocks by anchor sentence", async (context) => {

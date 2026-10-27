@@ -273,8 +273,8 @@ test("CLI: invalid arguments and unknown ids are clear errors (exit 1)", async (
   ];
   for (const { args, error } of cases) {
     const result = runCli(args);
-    assert.equal(result.status, 1, `${args.join(" ")} -> ${result.stdout}`);
-    const parsed = JSON.parse(result.stderr) as { error: string };
+    const parsed = JSON.parse(result.stderr) as { error: string; aspect: string };
+    assert.equal(result.status, parsed.aspect === "not_found" || parsed.aspect === "path" ? 3 : 2, `${args.join(" ")} -> ${result.stdout} ${parsed.aspect}`);
     assert.match(parsed.error, error, args.join(" "));
   }
 });

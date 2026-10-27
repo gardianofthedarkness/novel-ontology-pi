@@ -167,7 +167,7 @@ export function spiralWorld(world: WorldLike & { causal?: CausalSummary; library
     const place = scene.placeIds[0] ? data.names[scene.placeIds[0]] ?? scene.placeIds[0] : null;
     const book = scene.book !== undefined ? data.books?.find((entry) => entry.volume === scene.book)?.title : undefined;
     const summary = `${book ? `${book} · ` : ""}${period}${time?.flashback ? ` · flashback${host ? ` told during ${host.label}` : ""}` : ""}${place ? ` · ⌖ ${place}${scene.placeCarried ? " (carried over)" : ""}` : ""} · scene ${scene.index + 1} in reading order, chapter ${scene.chapterIndex}`;
-    result.laneNodes.push(groupNode(id, scene.label, period, rank, time?.flashback ? "flashback" : "present", summary, !!time?.proposed));
+    result.laneNodes.push({ ...groupNode(id, scene.label, period, rank, time?.flashback ? "flashback" : "present", summary, !!time?.proposed), albumSceneId: scene.id });
     result.bigEventLabels[id] = scene.label;
     const bundle = regroup(bundles, id, [scene], volume);
     const local = localScene(scene, volume);

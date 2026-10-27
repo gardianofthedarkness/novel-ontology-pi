@@ -40,6 +40,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   const laneEdges = [];
   const bigEventLabels = {};
   const gates = [];
+  const albumScenes = [];
   const provenanceChapter = new Map();
   const proposedCausal = [];
   for (const packet of causalSets) {
@@ -70,6 +71,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     const edges = [];
     const add = (payload, category, nodeState) => {
       if (!payload?.id || nodes.some((node) => node.id === payload.id)) return;
+      if (category === 'scene') albumScenes.push(payload);
       const name = category === 'entity' ? payload.names?.find((form) => form.kind === 'canonical')?.text ?? payload.names?.[0]?.text : category === 'event' ? payload.summaryEn : payload.label ?? `Scene ${payload.id}`;
       const kind = category === 'entity' ? payload.kind === 'Character' ? 'character' : 'location' : category === 'event' ? payload.eventType === 'dialogue' ? 'dialogue' : 'event' : 'scene';
       const chrono = category === 'event' ? payload.chronologicalOrder : category === 'scene' ? nodes.filter((node) => node.kind === 'scene').length : nodes.length;
@@ -246,7 +248,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     reasonCodes: outcome?.held.includes(publicStatus?.changesetId) ? publicStatus.reasonCodes : [],
     counts: { entities: entityMap.size, events: eventMap.size, scenes: sceneMap.size, relations: relations.length, repairs: maintenance.length, ghosts: Object.values(interiors).flatMap((interior) => interior.nodes).filter((node) => node.state !== 'canon').length },
     chapters: chapters.map((chapter) => ({ index: chapter.index, title: chapter.title, characters: chapter.characters })),
-    album: await albumProjection(directory, new Map([...entityMap.values()].map((entity) => [entity.id, entity.names?.find((form) => form.kind === 'canonical')?.text ?? entity.names?.[0]?.text ?? entity.id]))),
+    album: await albumProjection(directory, new Map([...entityMap.values()].map((entity) => [entity.id, entity.names?.find((form) => form.kind === 'canonical')?.text ?? entity.names?.[0]?.text ?? entity.id])), albumScenes),
     updatedAt: new Date().toISOString(),
   };
 }

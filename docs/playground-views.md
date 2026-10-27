@@ -15,6 +15,25 @@ The viewer has two **modes** and the same three **views** in each:
   arrows; book-level causal arrows live in Story time.
 - Both modes share the inspector, record stepping, book choice and live
   updates. A record open in the inspector stays open when the mode changes.
+- Album illustrations render as image cards between their anchored scene and
+  the next scene in the current view's order, including the Story time spiral
+  and flat Story-time list. Story-time regrouping preserves the canonical
+  scene anchor; it never changes the source or asserts a new chronology.
+- Clicking an illustration opens Album, highlights that exact book-scoped
+  picture, and scrolls only the inspector to it. Repeated clicks keep Album
+  open. Passive live refreshes do not reopen the panel or reset its scroll.
+- Bound character portraits render next to visible characters. Both portrait
+  and illustration artwork preserve aspect ratio; 3D textures are capped at
+  1024 pixels on their longest side. Missing images keep a placeholder.
+- Ambiguous or unresolved image anchors stay unplaced. Images between scenes
+  hidden in the same collapsed group stay hidden until that group opens.
+- Sentence offsets preserve the complete original paragraph separators, including
+  blank lines and CRLF. This corrects positional image anchors without changing
+  sentence IDs, scene membership or ontology decisions. Albums imported before
+  the fix need their stored sentence anchors regenerated from the unchanged
+  source and its bound block size. `novel album list` resolves offsets read-only;
+  re-importing the identical EPUB regenerates stored anchors. Back up the album
+  and quiesce its writer before repair; never substitute another source.
 - **Following Pi** reads its work across all three views, in either mode:
   - **Switching:** following switches tabs by itself. New or newly confirmed
     story periods open Story time; new places open Places, a few seconds

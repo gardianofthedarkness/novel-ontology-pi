@@ -59,6 +59,30 @@ If review fails on duplicate proposal IDs, follow the metadata-only exception
 in [repair](references/repair.md). Preserve all facts, keep the packet held and
 re-read its fresh revision. Never drop conflicting updates merely to clear a gate.
 
+## When a command fails
+
+Failures print one JSON object: `error` (what happened), `aspect` (what kind
+of problem), `code`, `hint` (what to change), often `next` (commands to run),
+`span` (which argument, decision or query text is wrong), `notes` (what the
+CLI observed: the query's bound tables, the packet's real facts, merges,
+nearby workspaces) and `suggestions` — each a full corrected `command` with
+an `applicability`: machine-applicable (run it), maybe-incorrect (check it
+against the notes/evidence first), has-placeholders (fill in the <…> parts).
+`novel explain <code>` prints why it happens and how to fix it. Never apply a
+suggestion that changes a review decision without re-reading the fact.
+Act on the aspect; do not retry variants blindly:
+
+- `usage` — fix the arguments to the form in `hint` (`novel help` lists all).
+- `path` / `not_found` — use assigned paths from `NOVEL_JOB.json` and real ids
+  from review pages, `novel query` or `novel search`.
+- `query` — rewrite the Cypher with the tables/properties in `details.schema`;
+  `graph` — rebuild with `next` (`novel graph build`).
+- `review` — fix only the named decision (`Decision #N …`); `stale` — re-read
+  the pages and use the new revision; `evidence` — read every evidence page.
+- `conflict` — the assertion contradicts or repeats canon: hold it, never force.
+- `source`, `model`, `budget` — stop and report; these need the owner.
+- `internal` — report the command and message; do not work around it.
+
 ## Source fidelity
 
 - Keep summaries in the source language and names/aliases in their
@@ -176,13 +200,12 @@ re-read its fresh revision. Never drop conflicting updates merely to clear a gat
   `album.importAllowed` is true. Ingest the returned extracted source;
   keep assigned inputs immutable. A mismatch needs a fresh workspace,
   never source replacement or re-anchoring an applied book.
-- `novel album list <dir>` inspects sentence-bound illustrations;
-  `novel album portraits <dir>` finalizes portraits. Pictures are not
-  ontology entities or semantic gate proposals; never force-assign them.
-- Portraits stay hidden until bound to a unique identity and follow EM
-  merges. Assign remaining portrait tasks only when the host supports
-  visual input (`NOVEL_HOST_VISION=1`); otherwise leave them hidden.
-  Never invent a portrait or ask the user to assign one.
+- `novel album list <dir>` inspects sentence-bound illustrations. After
+  the full volume is extracted and applied, use the separate
+  [novel-portraits skill](../novel-portraits/SKILL.md) and `novel album assign
+  <dir>` for local OCR/cropping/assignment. `album portraits` only finalizes
+  existing crops. Pictures are not ontology entities or semantic gate proposals;
+  never force-assign them. Unresolved portraits stay hidden and follow EM merges.
 
 ## Measure
 

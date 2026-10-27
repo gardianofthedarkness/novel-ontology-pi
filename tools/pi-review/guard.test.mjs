@@ -88,10 +88,15 @@ test('album CLI permits only the assigned matching EPUB and scoped workspace', (
   assert.equal(authorize(`novel album import '${novel}' '${album.epub}'`, scope).label, 'novel album import');
   assert.equal(authorize(`novel album list '${novel}'`, scope).kind, 'cli');
   assert.equal(authorize(`novel album portraits '${novel}'`, scope).kind, 'cli');
+  assert.equal(authorize(`novel album assign '${novel}'`, scope).kind, 'cli');
+  assert.equal(authorize(`novel album assign '${novel}' --check`, scope).kind, 'cli');
   for (const command of [
     `cat '${album.epub}'`, `novel album import '${novel}' /tmp/other.epub`,
     `novel album import /tmp/other '${album.epub}'`, `novel album list '${novel}' --output /tmp/leak`,
     `novel album portraits '${novel}' --auto-approve`,
+    `novel album assign /tmp/other`, `novel album assign '${novel}' --names-file /tmp/names`,
+    `novel album assign '${novel}' --min-conf 0.1`, `novel album assign '${novel}' --check --check`,
+    `novel album assign '${novel}' --python /tmp/script`, `python3 tools/album-portraits/portraits.py '${novel}'`,
   ]) assert.throws(() => authorize(command, scope));
   assert.throws(() => authorize(`novel album import '${novel}' '${album.epub}'`, { ...scope, album: { ...album, importAllowed: false } }));
   assert.throws(() => authorize(`novel album import '${novel}' '${album.epub}'`));
@@ -181,6 +186,12 @@ test('time-place runs only propose for the assigned book, and their packets revi
     `novel timeplace run /elsewhere --propose`,
   ]) assert.throws(() => authorize(command, scope), /Time-place/);
   assert.throws(() => authorize(`novel review show ${novel} cs_timeplace_time-place_9 --scope book`, scope), /outside the assigned scope/);
+});
+
+test('error explanations are available to Pi', () => {
+  assert.equal(authorize('novel explain QUERY_UNKNOWN_PROPERTY').kind, 'cli');
+  assert.equal(authorize('novel explain --list').kind, 'cli');
+  for (const command of ['novel explain', 'novel explain ../x', 'novel explain A B']) assert.throws(() => authorize(command), command);
 });
 
 test('the universe atlas proposes cross-book place links on the assigned library only; ua_ packets review through the shared gate', () => {
