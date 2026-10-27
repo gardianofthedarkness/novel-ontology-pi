@@ -193,3 +193,20 @@ test('error explanations are available to Pi', () => {
   assert.equal(authorize('novel explain --list').kind, 'cli');
   for (const command of ['novel explain', 'novel explain ../x', 'novel explain A B']) assert.throws(() => authorize(command), command);
 });
+
+test('the universe atlas proposes cross-book place links on the assigned library only; ua_ packets review through the shared gate', () => {
+  const library = { directory: '/private/library', bindings: [] };
+  const scope = { ...defaultScope, library, reviewProtocol: 'review-v1' };
+  assert.equal(authorize(`novel atlas sweep ${library.directory} world --propose --max-questions 30`, scope).label, 'novel atlas sweep');
+  assert.equal(authorize(`novel atlas show ${library.directory} world`, scope).label, 'novel atlas show');
+  assert.equal(authorize(`novel review show ${library.directory} ua_${'d'.repeat(64)} --scope universe --universe world --limit 20`, scope).kind, 'cli');
+  for (const command of [
+    `novel atlas sweep ${library.directory} world`,
+    `novel atlas sweep /tmp/other world --propose`,
+    `novel atlas sweep ${library.directory} world --propose --max-questions 500`,
+    `novel atlas sweep ${library.directory} world --propose --out /tmp/leak`,
+    `novel atlas show ${library.directory}`,
+    `novel atlas sweep ${novel} world --propose`,
+  ]) assert.throws(() => authorize(command, scope), command);
+  assert.throws(() => authorize(`novel atlas show ${library.directory} world`), 'no library assigned');
+});

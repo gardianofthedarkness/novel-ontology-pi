@@ -114,3 +114,15 @@
 @keyframes tp-ring { 0% { opacity: 1; } 100% { opacity: 0; } }
 .reduce-motion .tp-row.is-emerging { animation: none; box-shadow: inset 3px 0 0 #ffc46b; }
 .reduce-motion .tp-emerge-ring { animation: none; }
+
+/* Universe views: the chosen book stays bright; other books recede (a 2D render distance). */
+.tp-region.is-other-book, .tp-place-node.is-other-book { opacity: .22; transition: opacity .5s ease; }
+.tp-region, .tp-place-node { transition: opacity .5s ease; }
+.tp-map-zoom { max-width: 760px; margin: 0 auto 6px; display: flex; gap: 10px; align-items: center; font-size: 11px; color: var(--tp-muted); }
+.tp-map-zoom button { border: 1px solid #36adff66; background: #0c2234; color: #cfe9ff; padding: 3px 9px; border-radius: 999px; font-size: 11px; }
+.tp-continuity { list-style: none; margin: 18px 0 4px; display: flex; gap: 8px; align-items: baseline; }
+.tp-continuity b { font-size: 15px; }
+.tp-book-marker { list-style: none; margin: 10px 0 2px; padding: 4px 10px; border-left: 3px solid #36adff55; display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--tp-muted); scroll-margin-top: 90px; }
+.tp-book-marker.is-focus { border-left-color: #7cc8ff; color: #d8efff; }
+.tp-book-marker b { color: inherit; }
+.tp-row.is-other-book { opacity: .45; transition: opacity .4s ease; }

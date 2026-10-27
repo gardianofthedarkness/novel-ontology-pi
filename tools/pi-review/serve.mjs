@@ -10,6 +10,7 @@ import { createPiConsole } from './pi-console.mjs';
 import { bookCatalog } from './book-catalog.mjs';
 import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
+import { readUniverseTimePlace } from './universe-time-place.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -113,7 +114,10 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
     const data = await readLive(options);
     if (!libraryDirectory) return data;
     const bindings = libraryBindings ?? (readLive === configuredLive ? await configuredLibraryBindings((await liveConfiguration()).volumes, root) : []);
-    return withLibraryLive(data, await libraryReader(libraryDirectory, bindings, undefined, resolveWorkspace));
+    const live = withLibraryLive(data, await libraryReader(libraryDirectory, bindings, undefined, resolveWorkspace));
+    // Story time and places belong to the universe: every hosted book of the reader's universe, joined by the reviewed atlas.
+    const universeTimePlace = resolveWorkspace ? await readUniverseTimePlace(libraryDirectory, bindings, resolveWorkspace, data.volume ?? 1).catch(() => null) : null;
+    return universeTimePlace ? { ...live, universeTimePlace } : live;
   };
   if (!Array.isArray(paths) || paths.some(path => typeof path !== 'string')) throw new TypeError('Invalid watch paths');
   const access = randomBytes(32).toString('base64url');

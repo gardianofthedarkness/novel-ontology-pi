@@ -235,7 +235,7 @@ try {
     const volume = volumes.find((volume) => args.includes(volume.workspace) || args.includes(`${volume.workspace}/ontology`));
     if (volume) { volumeId = volume.id; await writeFile(`${cwd}/active-volume.json`, JSON.stringify({ volume: volumeId }), { mode: 0o600 }); }
     if (args[0] === 'album' && args[1] === 'import') await verifyAlbumAccess(volume.album, volume.input);
-    const mutations = args[0] === 'review' && ['decide', 'apply'].includes(args[1]) || args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'causality' && ['propose', 'sweep'].includes(args[1]) || args[0] === 'timeplace' && ['run', 'tree'].includes(args[1]) || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise', 'decide'].includes(args[1]);
+    const mutations = args[0] === 'review' && ['decide', 'apply'].includes(args[1]) || args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'causality' && ['propose', 'sweep'].includes(args[1]) || args[0] === 'timeplace' && ['run', 'tree'].includes(args[1]) || args[0] === 'atlas' && args[1] === 'sweep' || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise', 'decide'].includes(args[1]);
     if (volume && mutations && volume.id > 1 && (await jobState()).some((state) => state.volume < volume.id && !state.applied)) throw new Error('Earlier volumes must pass their merge gates before later-volume mutations');
     if (args[0] === 'ingest') {
       const states = (await jobState()).filter((state) => state.volume === volume.id);
