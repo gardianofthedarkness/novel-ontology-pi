@@ -1,18 +1,21 @@
 import { review } from "../../../solidifier/merge/review.js";
 import type { ReviewTarget } from "../../../solidifier/merge/reviewTypes.js";
 
+/** Options each review operation takes (also used to suggest the right one for a mistyped option). */
+export const REVIEW_OPTIONS: Record<string, string[]> = {
+  show: ["--scope", "--universe", "--offset", "--limit"],
+  evidence: ["--scope", "--universe", "--fact", "--offset", "--limit"],
+  decide: ["--scope", "--universe", "--revision", "--decisions"],
+  apply: ["--scope", "--universe", "--revision"],
+};
+
 export async function reviewCommand(args: string[], env: NodeJS.ProcessEnv = process.env) {
   const [operation, directory, packetId, ...rest] = args;
-  const allowed: Record<string, string[]> = {
-    show: ["--scope", "--universe", "--offset", "--limit"],
-    evidence: ["--scope", "--universe", "--fact", "--offset", "--limit"],
-    decide: ["--scope", "--universe", "--revision", "--decisions"],
-    apply: ["--scope", "--universe", "--revision"],
-  };
+  const allowed = REVIEW_OPTIONS;
   if (!directory || !packetId || !Object.hasOwn(allowed, operation)) throw new Error("Usage: novel review show|evidence|decide|apply <root> <packet> --scope book|universe|library ...");
   const flags = new Map<string, string>();
   for (let index = 0; index < rest.length; index += 2) {
-    if (!allowed[operation].includes(rest[index]) || flags.has(rest[index]) || !rest[index + 1] || rest[index + 1].startsWith("--")) throw new Error(`Invalid or duplicate review option ${rest[index]}.`);
+    if (!allowed[operation].includes(rest[index]) || flags.has(rest[index]) || !rest[index + 1] || rest[index + 1].startsWith("--")) throw new Error(`Invalid or duplicate review option ${rest[index]}; ${operation} takes ${allowed[operation].join(", ")}, each once with a value.`);
     flags.set(rest[index], rest[index + 1]);
   }
   const scope = flags.get("--scope") ?? "book";

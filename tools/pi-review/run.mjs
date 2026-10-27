@@ -1,4 +1,5 @@
 import { timePlaceChangesetIds } from './timeplace-access.mjs';
+import { cliFailure } from './cli-failure.mjs';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { appendFile, cp, mkdir, open, readFile, unlink, writeFile } from 'node:fs/promises';
@@ -328,7 +329,9 @@ try {
       for (let index = offset; index < Math.min(offset + limit, total); index++) (notes ? coverage.notes : coverage.proposals).add(index);
       coverages.set(key, coverage);
     }
-    await emit({ type: 'pi.command', label: permitted.label, status: result.exitCode ? 'error' : 'ok' });
+    // A failed CLI command reports what kind of failure it was (the CLI's error code), not just that it failed.
+    const failure = result.exitCode ? cliFailure(result.output) : null;
+    await emit({ type: 'pi.command', label: permitted.label, status: result.exitCode ? 'error' : 'ok', ...(failure ? { reasonCode: failure.code, aspect: failure.aspect } : {}) });
     await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status: 'working', states: await jobState(), updatedAt: new Date().toISOString() }), { mode: 0o600 });
     return { exitCode: result.exitCode };
   };

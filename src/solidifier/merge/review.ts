@@ -1,3 +1,4 @@
+import { NovelError } from "../../ground/errors.js";
 import { randomUUID } from "node:crypto";
 import { appendFile, lstat, mkdir, readFile, rename, rmdir, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -47,11 +48,21 @@ function requireEvidence(adapter: ReviewAdapter, state: ReviewState, decisions: 
 function decisionsFrom(value: unknown, adapter: ReviewAdapter): ReviewDecision[] {
   if (!Array.isArray(value) || value.length > 50 || Buffer.byteLength(JSON.stringify(value)) > 64000) throw new Error("Use a bounded JSON array of at most 50 fact decisions / 64 KiB.");
   const allowed = new Set(["factId", "verdict", "reason", "replacement", "semanticReplacement", "temporalReason"]);
-  for (const entry of value) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry) || Object.keys(entry).some(key => !allowed.has(key)) || !adapter.facts.some(fact => fact.id === entry.factId) || !["accept", "hold", "reject"].includes(entry.verdict) || typeof entry.reason !== "string" || !entry.reason.trim() || entry.reason.length > 2000 || entry.temporalReason !== undefined && typeof entry.temporalReason !== "string") throw new Error("Invalid factId, verdict or reason in review decision.");
+  for (const [index, entry] of value.entries()) {
+    // Name the decision and the problem, so only that entry is fixed.
+    const problem = !entry || typeof entry !== "object" || Array.isArray(entry) ? "is not an object {factId, verdict, reason}"
+      : Object.keys(entry).find(key => !allowed.has(key)) ? `has an unknown field ${JSON.stringify(Object.keys(entry).find(key => !allowed.has(key)))} (fields: ${[...allowed].join(", ")})`
+      : !adapter.facts.some(fact => fact.id === entry.factId) ? `has unknown factId ${JSON.stringify(entry.factId)} (use ids from this packet's review pages)`
+      : !["accept", "hold", "reject"].includes(entry.verdict) ? `(${entry.factId}) has verdict ${JSON.stringify(entry.verdict)}; use accept, hold or reject`
+      : typeof entry.reason !== "string" || !entry.reason.trim() ? `(${entry.factId}) needs a non-empty reason`
+      : entry.reason.length > 2000 ? `(${entry.factId}) has a reason over 2000 characters`
+      : entry.temporalReason !== undefined && typeof entry.temporalReason !== "string" ? `(${entry.factId}) has a temporalReason that is not text` : null;
+    if (problem) throw new NovelError(`Decision #${index + 1} ${problem}.`, { aspect: "review", code: "DECISION_INVALID", hint: "Each decision is {factId, verdict: accept|hold|reject, reason}; fix this one and resend the batch.", details: { index, factId: entry && typeof entry === "object" ? (entry as { factId?: unknown }).factId ?? null : null } });
     if (entry.verdict !== "accept" && ("replacement" in entry || "semanticReplacement" in entry)) throw new Error("Only accepted assertions can have semantic corrections.");
   }
-  if (new Set(value.map(entry => entry.factId)).size !== value.length) throw new Error("Duplicate fact decisions in batch.");
+  const factIds = value.map(entry => entry.factId);
+  const duplicate = factIds.find((id, index) => factIds.indexOf(id) !== index);
+  if (duplicate) throw new NovelError(`Duplicate fact decisions in batch: ${JSON.stringify(duplicate)} appears more than once; keep one decision per factId.`, { aspect: "review", code: "DECISION_INVALID", hint: "Each decision is {factId, verdict: accept|hold|reject, reason}; remove the duplicate and resend the batch." });
   return value;
 }
 
