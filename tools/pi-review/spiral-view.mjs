@@ -13,7 +13,7 @@ export async function readSpiral(root, universeId, rename) {
   let file;
   try { file = JSON.parse(await readFile(join(resolve(root), 'calendar', `${universeId}.spiral.json`), 'utf8')); }
   catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
-  if (file?.version !== 1 || !Array.isArray(file.continuities)) return null;
+  if (file?.version !== 2 || !Array.isArray(file.continuities)) return null;
   const view = (qualified) => { const at = String(qualified).indexOf('::'); return at < 0 ? null : rename(qualified.slice(0, at), qualified.slice(at + 2)); };
   const runs = [], links = [], days = [];
   file.continuities.forEach((continuity, lane) => {
@@ -25,5 +25,7 @@ export async function readSpiral(root, universeId, rename) {
     for (const link of continuity.links) { const from = view(link.from), to = view(link.to); if (from && to) links.push({ from, to, lane }); }
     for (const day of continuity.days) days.push({ ...day, lane });
   });
-  return runs.length ? { builtAt: file.builtAt, scale: file.scale, runs, links, days } : null;
+  // One floor box for every lane: the widest and tallest continuity's.
+  const frame = (key) => Math.max(0, ...file.continuities.map((continuity) => continuity.frame?.[key] ?? 0));
+  return runs.length ? { builtAt: file.builtAt, scale: { ...file.scale, width: frame('width'), height: frame('height') }, runs, links, days } : null;
 }

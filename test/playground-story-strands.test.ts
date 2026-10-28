@@ -127,7 +127,7 @@ test("the calendar, not a file, focuses Story time: a chosen day frames every sc
 
 test("a precomputed spiral is drawn as stored: knots, coloured tracks, tube guides; newer scenes wait below it", () => {
   const knot = (id: string, k: number, lane = 0) => ({ id, x: k * 9, q: [lane * 50, 10] as [number, number] });
-  const stored: TimePlaceProjection = { ...data, spiral: { builtAt: "2026-10-28T20:00:00Z", scale: { dx: 9, radial: 120, knot: 5.5 }, links: [], days: [],
+  const stored: TimePlaceProjection = { ...data, spiral: { builtAt: "2026-10-28T20:00:00Z", scale: { dx: 9, knot: 14, width: 900, height: 300 }, links: [], days: [],
     runs: [
       { id: "ming", lane: 0, color: "#ff8899", tube: 35, knots: [knot("s1", 0), knot("m1", 1), knot("m2", 3), knot("s6", 5), knot("s7", 7)], track: [[0, 0, 10], [9, 3, 12], [27, 1, 9]], axis: [[0, 0, 0], [27, 0, 0]] },
       { id: "lan", lane: 0, color: "#88ccff", tube: 35, knots: [knot("l1", 2, 1), knot("l2", 4, 1)], track: [[18, 50, 10], [36, 50, 10]], axis: [[18, 50, 0], [36, 50, 0]] },
@@ -138,8 +138,14 @@ test("a precomputed spiral is drawn as stored: knots, coloured tracks, tube guid
   assert.ok(at("l1")[1] > at("m1")[1], "the cross-section as solved");
   assert.ok(at("fb")[1] < at("s1")[1] - 100, "a scene not in the stored spiral waits below it");
   assert.equal(arrangement.guides?.length, 2);
-  assert.ok(Math.abs(arrangement.guides![0].radius - 35 * (260 / 120) * 3) < 1e-6, "tube guides at the solved radius");
+  assert.ok(Math.abs(arrangement.guides![0].radius - 35 * (40 / 9) * 3) < 1e-6, "tube guides at the solved radius, one scale across and along");
+  assert.ok(Math.abs((at("m1")[0] - at("s1")[0]) - 40) < 1e-6, "a quiet story layer is one step along time");
   const draws = [...arrangement.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never);
   const tracks = arrangement.paths!(draws, null).filter((path) => path.id.startsWith("spiral-track:"));
   assert.deepEqual(tracks.map((track) => track.color), ["#ff8899", "#88ccff"]);
+  // A phone opens on a stretch of time about as long as the floor box is deep, not the whole book.
+  const later: TimePlaceProjection = { ...stored, spiral: { ...stored.spiral!, runs: [...stored.spiral!.runs, { id: "late", lane: 0, color: "#cccccc", tube: 30, knots: [knot("s8", 600)], track: [], axis: [] }] } };
+  const framed = (aspect: number) => { const arranged = spiralArrangement(later, undefined, null, "strands", null, aspect); return arranged.initialFrame!([...arranged.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never)).length; };
+  assert.equal(framed(0.46), 7, "the late scene (and the newer one waiting after it) is left for the reader to fly to");
+  assert.equal(framed(6), 9, "a very wide screen opens on more time");
 });
