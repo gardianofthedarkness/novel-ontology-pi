@@ -12,7 +12,7 @@ import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";
-import type { CalendarPin, FloorMark, StrandGuide } from "../data/orbitalTimePlace";
+import type { CalendarPin, FloorMark } from "../data/orbitalTimePlace";
 import { useAlbumTexture } from "./useAlbumTexture";
 import { containedImageSize } from "../data/albumImage";
 
@@ -321,17 +321,6 @@ function FloorMap({ marks }: { marks: FloorMark[] }) {
       <mesh raycast={noRaycast}><ringGeometry args={[mark.radius * (mark.proposed ? 0.993 : rim), mark.radius, mark.region ? 72 : 48]} /><meshBasicMaterial color={mark.proposed ? "#ffd36b" : "#7cc8ff"} transparent opacity={mark.active ? (mark.region ? 0.6 : 0.85) : 0.22} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>
     </group>;
   })}</>;
-}
-
-/** Dim neutral tubes around the strands of a precomputed spiral, built once from the stored axes. Never raycast. */
-function GuideTubes({ guides }: { guides: StrandGuide[] }) {
-  const built = useMemo(() => guides.map((guide) => {
-    const curve = new CurvePath<Vector3>();
-    for (let index = 1; index < guide.points.length; index++) curve.add(new LineCurve3(new Vector3(...guide.points[index - 1]), new Vector3(...guide.points[index])));
-    return { id: guide.id, geometry: new TubeGeometry(curve, Math.min(600, guide.points.length - 1), guide.radius, 10, false) };
-  }), [guides]);
-  useEffect(() => () => { for (const entry of built) entry.geometry.dispose(); }, [built]);
-  return <>{built.map((entry) => <mesh key={entry.id} geometry={entry.geometry} raycast={noRaycast} renderOrder={-1}><meshBasicMaterial color="#8aa6bc" transparent opacity={0.035} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>)}</>;
 }
 
 /** A calendar pin's date: large soft lettering (no card), the year and book small beneath. */
@@ -962,8 +951,6 @@ interface Props {
   floor?: FloorMark[];
   /** Giant calendar pins behind the story (orbital Story time); world units. */
   pins?: CalendarPin[];
-  /** Pale tubes around a precomputed spiral's strands; world units. */
-  guides?: StrandGuide[];
   /** Minecraft-style render distance (world units) around where the camera looks. */
   renderDistance?: number;
   /** Camera direction for automatic framing (default: a slight side view). */
@@ -1000,7 +987,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], guides = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), dimmed: !!focusIds && !focusIds.has(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion, focusIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -1016,7 +1003,6 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
     {pins.length > 0 && <CalendarPins pins={pins} />}
-    {guides.length > 0 && <GuideTubes guides={guides} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} radii={radii} />)}
     <VisibleConnections edges={edges} bus={bus} />

@@ -20,7 +20,7 @@ export async function readSpiral(root, universeId, rename) {
     for (const run of continuity.runs) {
       const knots = run.knots.flatMap((knot) => { const id = view(knot.id); return id ? [{ id, x: knot.x, q: knot.q }] : []; });
       if (!knots.length) continue;
-      runs.push({ id: run.id, lane, tube: run.tube, knots, track: run.track, axis: run.axis });
+      runs.push({ id: run.id, lane, knots, track: run.track, axis: run.axis });
     }
     for (const link of continuity.links) { const from = view(link.from), to = view(link.to); if (from && to) links.push({ from, to, lane }); }
     for (const day of continuity.days) days.push({ ...day, lane });
