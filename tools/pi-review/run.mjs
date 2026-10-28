@@ -1,4 +1,5 @@
 import { timePlaceChangesetIds } from './timeplace-access.mjs';
+import { progressLine } from './run-outcome.mjs';
 import { cliFailure } from './cli-failure.mjs';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
@@ -388,7 +389,7 @@ try {
         }
         const status = proof?.complete ? 'complete' : states.some(state => state.status !== 'not-started' && !state.applied) ? 'review' : 'waiting';
         await writeFile(`${jobRoot}/progress.json`, JSON.stringify({ status, states, updatedAt: new Date().toISOString() }), { mode: 0o600 });
-        await consoleChannel.record({ kind: 'status', text: `${states.filter(state => state.applied).length}/${states.length} assigned blocks applied · ${states.reduce((sum, state) => sum + state.deferredFacts, 0)} semantic facts held · ${states.reduce((sum, state) => sum + state.deferred, 0)} proposals deferred`, status });
+        await consoleChannel.record({ kind: 'status', text: progressLine(volumes, states, volumeId), status });
       },
     });
   } else {

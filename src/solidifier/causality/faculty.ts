@@ -30,7 +30,7 @@ import {
   type Embedder,
   type EmbeddingRecord,
 } from "../../ground/connectors/embeddings.js";
-import { nominateCausalCandidates } from "./candidates.js";
+import { MAX_CANDIDATE_PAIRS, nominateCausalCandidates } from "./candidates.js";
 import { checkCausalLinks, type CausalVerdict } from "./checklist.js";
 import { loadCausalityUniverse, unitDossier, type CausalityUniverse, type UniverseExtras } from "./units.js";
 import { causalSource } from "./evidence.js";
@@ -48,7 +48,9 @@ export interface CausalitySummary {
   /** Whether the graph-pattern leg ran (always, when units exist). */
   graphLeg: boolean;
   deferred: number;
+  /** Eligible pairs not judged in this pass (the whole pool, not a capped page). */
   remaining: number;
+  /** More pairs were eligible than this pass judged. */
   truncated: boolean;
   timeline: "story" | "reading-order-fallback";
 }
@@ -165,12 +167,15 @@ export async function runCausalityPass(input: CausalityPassInput): Promise<Causa
   await enrichCausalText(input.novelDir, universe);
   const { vectors, embedded } = await ensureUnitVectors(input.novelDir, universe, input.embedder ?? null);
 
+  // The whole eligible pool, best first: a pass judges the top of it, and
+  // `remaining` is the true count left (a capped pool always read 500 − limit).
   const nominated = nominateCausalCandidates(universe, {
     touchedIds: input.touchedIds ?? null,
     vectors: vectors.size > 0 ? vectors : undefined,
     excludedPairs: input.excludedPairs,
+    maxPairs: Number.MAX_SAFE_INTEGER,
   });
-  const candidates = nominated.slice(0, input.limit ?? 500);
+  const candidates = nominated.slice(0, input.limit ?? MAX_CANDIDATE_PAIRS);
   const verdicts: CausalVerdict[] = [];
   let batch: typeof candidates = [];
   let characters = 0;
@@ -227,7 +232,7 @@ export async function runCausalityPass(input: CausalityPassInput): Promise<Causa
       graphLeg: universe.units.length > 0,
       deferred,
       remaining: nominated.length - candidates.length,
-      truncated: nominated.length === 500,
+      truncated: nominated.length > candidates.length,
       timeline: universe.storyIndex?.size ? "story" : "reading-order-fallback",
     },
   };

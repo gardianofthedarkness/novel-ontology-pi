@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parentMap, placePath } from "../../../ground/ontology/placeTree.js";
 import { sweepPlaceTree, type PlaceTreeMemory } from "../../../digger/timeplace/placeTreeSweep.js";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -242,13 +243,20 @@ export async function strandInputs(novelDir: string, limits: { maxQuestions?: nu
   const candidates = castCandidates(data.scenes.map((scene) => ({ id: scene.id, chapterIndex: scene.chapterIndex, index: scene.index, text: lines(scene.id).join("\n"), present: byScene.get(scene.id)?.charactersPresent ?? [], mentioned: byScene.get(scene.id)?.charactersMentioned ?? [] })), characters);
   const names = { ...Object.fromEntries(entities.filter((entity) => entity.kind === "Character").map((entity) => [entity.id, entity.names?.find((name) => name.kind === "canonical")?.text ?? entity.names?.[0]?.text ?? entity.id])), ...data.names };
   const plan = data.available ? planStrandQuestions(data, before, { ...limits, candidates }) : { questions: [], belowThreshold: 0, overBudget: 0, estimate: { questions: 0, calls: 0 } };
-  return { data, before, plan, lines, characters, names };
+  // What the strands read, and nothing else (a new causal link or event must not make the report stale).
+  const fingerprint = createHash("sha256").update(JSON.stringify({
+    scenes: data.scenes.map((scene) => [scene.id, scene.chapterIndex, scene.index, scene.times, scene.flashback, scene.placeIds, scene.placeCarried, scene.characterIds]),
+    times: data.times.map((time) => [time.id, time.storyIndex, time.date, time.partOfDay, time.flashback]),
+    places: data.places.map((place) => [place.id, place.parentId]),
+    candidates: [...candidates].map(([sceneId, list]) => [sceneId, list.map((candidate) => [candidate.id, candidate.score])]),
+  })).digest("hex").slice(0, 16);
+  return { data, before, plan, lines, characters, names, fingerprint };
 }
 
 export async function timeplaceStrands(novelDir: string, options: TimeplaceStrandsOptions = {}): Promise<Record<string, unknown>> {
   const env = options.env ?? process.env;
   const limits = { maxQuestions: options.maxQuestions ?? STRAND_QUESTION_DEFAULTS.maxQuestions, minImpact: options.minImpact ?? STRAND_QUESTION_DEFAULTS.minImpact };
-  const { data, before, plan, lines, characters, names } = await strandInputs(novelDir, limits);
+  const { data, before, plan, lines, characters, names, fingerprint } = await strandInputs(novelDir, limits);
   if (!data.available) throw new Error("No story time yet: run `novel timeplace run` first (strands build on its periods).");
   let asked: Awaited<ReturnType<typeof askStrandQuestions>>["asked"] = [];
   let answers: StrandAnswers = {};
@@ -269,7 +277,7 @@ export async function timeplaceStrands(novelDir: string, options: TimeplaceStran
   const out = options.out ?? join(novelDir, "timeplace", `strands-${stamp}.json`);
   await mkdir(join(out, ".."), { recursive: true, mode: 0o700 });
   const report = {
-    novelDir, before: summary(before), after: options.ask ? summary(strands) : null,
+    novelDir, inputs: fingerprint, before: summary(before), after: options.ask ? summary(strands) : null,
     plan: { limits, estimate: plan.estimate, belowThreshold: plan.belowThreshold, overBudget: plan.overBudget, questions: plan.questions.map((question) => ({ key: question.key, impact: question.impact, characters: question.characterIds.length })) },
     asked, usage,
     // The casts the answers set (character ids), for scoring against a presence key.

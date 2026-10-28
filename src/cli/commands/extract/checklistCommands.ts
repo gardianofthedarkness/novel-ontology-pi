@@ -121,20 +121,24 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
   const newest = Math.max(0, ...await Promise.all(["entities", "relations", "events", "scenes"].map((name) => stat(join(novelDir, "ontology", `${name}.jsonl`)).then((info) => info.mtimeMs, () => 0))));
 
   // Strands: who is in each scene where a borrowed cast would decide the story order ("who is present?",
-  // work model). Done when nothing is worth asking, or the latest asked report is newer than the casts and
-  // story time it read. Report only: it feeds the story-strands view; no review packet.
-  const timeplaceFiles = (await readdir(join(novelDir, "changesets")).catch(() => [] as string[])).filter((name) => name.startsWith("cs_timeplace"));
-  const inputsAt = Math.max(newest, ...await Promise.all(timeplaceFiles.map((name) => stat(join(novelDir, "changesets", name)).then((info) => info.mtimeMs, () => 0))));
-  let askedAt = 0;
+  // work model). Done when nothing is worth asking, or the latest asked report read the same casts, story
+  // time, places and cast candidates as now (its `inputs` fingerprint): new causal links or events do not
+  // make it stale. Report only: it feeds the story-strands view; no review packet.
+  const strand = timed.size ? await strandInputs(novelDir) : null;
+  let asked: { inputs?: string; at: number } | null = null;
   for (const name of (await readdir(join(novelDir, "timeplace")).catch(() => [] as string[])).filter((entry) => /^strands-.+\.json$/.test(entry)).sort().reverse()) {
-    const report = JSON.parse(await readFile(join(novelDir, "timeplace", name), "utf8").catch(() => "null")) as { after?: unknown } | null;
-    if (report?.after) { askedAt = (await stat(join(novelDir, "timeplace", name))).mtimeMs; break; }
+    const report = JSON.parse(await readFile(join(novelDir, "timeplace", name), "utf8").catch(() => "null")) as { after?: unknown; inputs?: string } | null;
+    if (report?.after) { asked = { inputs: report.inputs, at: (await stat(join(novelDir, "timeplace", name))).mtimeMs }; break; }
   }
-  const strandPlan = timed.size ? (await strandInputs(novelDir)).plan : null;
-  const toAsk = strandPlan?.questions.length ?? 0, current = !!askedAt && askedAt >= inputsAt;
+  // Reports from before the fingerprint: current when newer than the bundle and time-place packets.
+  const timeplaceFiles = (await readdir(join(novelDir, "changesets")).catch(() => [] as string[])).filter((name) => name.startsWith("cs_timeplace"));
+  const legacyCurrent = async (at: number) => at >= Math.max(newest, ...await Promise.all(timeplaceFiles.map((name) => stat(join(novelDir, "changesets", name)).then((info) => info.mtimeMs, () => 0))));
+  const strandPlan = strand?.plan ?? null;
+  const toAsk = strandPlan?.questions.length ?? 0;
+  const current = !!asked && (asked.inputs ? asked.inputs === strand?.fingerprint : await legacyCurrent(asked.at));
   items.push({ id: "strands", title: "Story strands (who is in each scene, what runs in parallel)", dependsOn: ["time-place"],
     status: !timed.size || !toAsk || current ? "done" : "todo",
-    counts: { questions: toAsk, calls: strandPlan?.estimate.calls ?? 0, asked: !!askedAt, current },
+    counts: { questions: toAsk, calls: strandPlan?.estimate.calls ?? 0, asked: !!asked, current },
     next: timed.size && toAsk && !current ? [`novel timeplace strands ${dir} --ask`] : [],
     note: !timed.size ? "No story periods to build strands on." : toAsk && !current ? `About ${strandPlan!.estimate.calls} work-model call(s); writes a report the story view uses, nothing to canon.` : undefined });
 
