@@ -3,7 +3,7 @@ import type { CausalArrow } from "./causalProjection.js";
 import type { Position3 } from "./spatialLayout.js";
 import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
 import { storyStrands, type StrandCheck, type StrandEdge } from "./storyStrands.js";
-import { calendarDay, calendarDayKey, dateLine, sceneDays, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
+import { calendarDay, calendarDayKey, dateLine, sceneDays, type SpiralView, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
 
 /**
  * Orbital Story time and Places (time-place phase 1, view only). Each is the
@@ -49,6 +49,8 @@ export interface OrbitalArrangement {
   floor?: FloorMark[];
   /** Giant calendar pins behind the story (world units): where each calendar day starts. */
   pins?: CalendarPin[];
+  /** Pale tubes around the strands of a precomputed spiral (world units). */
+  guides?: StrandGuide[];
   /** Main sphere size factor and camera direction for this arrangement. */
   radiusScale?: number;
   direction?: Position3;
@@ -346,6 +348,26 @@ export function calendarPins(data: TimePlaceProjection, anchors: Map<string, Pos
   return pins;
 }
 
+/** A pale tube around a strand's axis (world units): the stored spiral's tube guide. */
+export interface StrandGuide { id: string; points: Position3[]; radius: number; color: string }
+/**
+ * The stored spiral (precomputed offline by `novel calendar build`): scene
+ * spheres on the knots, each strand's coil track in its colour, its axis as
+ * a pale tube guide. Time is stretched along x so forks read gently; the
+ * cross-section is drawn as solved. No optimisation happens here.
+ */
+function storedSpiral(spiral: SpiralView) {
+  const along = SPIRAL.step / spiral.scale.dx, across = SPIRAL.radius / spiral.scale.radial;
+  const xs = spiral.runs.flatMap((run) => run.knots.map((knot) => knot.x)), middle = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const layout = (x: number, y: number, z: number, lane: number): Position3 => [(x - middle) * along, y * across, z * across + lane * SPIRAL.laneGap];
+  const anchors = new Map<string, Position3>(), layer = new Map<string, number>();
+  for (const run of spiral.runs) for (const knot of run.knots) { anchors.set(knot.id, layout(knot.x, knot.q[0], knot.q[1], run.lane)); layer.set(knot.id, knot.x / spiral.scale.dx); }
+  const world = (point: Position3) => point.map((value) => value * 3) as Position3;
+  const tracks = spiral.runs.filter((run) => run.track.length > 1).map((run): OrbitalPath => ({ id: `spiral-track:${run.id}`, color: run.color, points: run.track.map(([x, y, z]) => world(layout(x, y, z, run.lane))) }));
+  const guides = spiral.runs.filter((run) => run.axis.length > 1).map((run): StrandGuide => ({ id: `spiral-guide:${run.id}`, color: run.color, radius: run.tube * across * 3, points: run.axis.map(([x, y, z]) => world(layout(x, y, z, run.lane))) }));
+  return { anchors, layer, tracks, guides, links: spiral.links, built: spiral.builtAt, bottom: -(SPIRAL.radius + 120), layout };
+}
+
 const spiralPoint = (rank: number, total: number): Position3 => {
   const angle = rank / SPIRAL.perTurn * Math.PI * 2;
   return [(rank - (total - 1) / 2) * SPIRAL.step, Math.cos(angle) * SPIRAL.radius, Math.sin(angle) * SPIRAL.radius];
@@ -407,8 +429,16 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
   const anchors = new Map<string, Position3>();
   /** Story position of a spiral sphere: its rank on the line, or its strand layer. */
   const position = new Map<string, number>();
-  const strands = shape === "strands" && data.available ? strandLayout(data, lanes) : null;
-  if (strands) for (const [id, point] of strands.anchors) { anchors.set(spiralNodeId(id), point); position.set(spiralNodeId(id), strands.layer.get(id)!); }
+  // A precomputed spiral is drawn as stored; without one, strands are laid out here as before.
+  const stored = shape === "strands" && data.available && data.spiral?.runs.length ? storedSpiral(data.spiral) : null;
+  const strands = !stored && shape === "strands" && data.available ? strandLayout(data, lanes) : null;
+  if (stored) {
+    for (const [id, point] of stored.anchors) { anchors.set(spiralNodeId(id), point); position.set(spiralNodeId(id), stored.layer.get(id)!); }
+    // Scenes newer than the last build wait on a faint line under the spiral, in story order, until it is rebuilt.
+    const known = [...stored.layer.values()], last = known.length ? Math.max(...known) : 0;
+    order.filter((scene) => !stored.anchors.has(scene.id)).forEach((scene, rank) => { const point = stored.layout((last + 2 + rank) * (data.spiral!.scale.dx), 0, 0, laneOf(scene)); anchors.set(spiralNodeId(scene.id), [point[0], stored.bottom, point[2]]); position.set(spiralNodeId(scene.id), last + 2 + rank); });
+  }
+  else if (strands) for (const [id, point] of strands.anchors) { anchors.set(spiralNodeId(id), point); position.set(spiralNodeId(id), strands.layer.get(id)!); }
   else for (const [lane, scenes] of lanes) scenes.forEach((scene, rank) => { const point = spiralPoint(rank, scenes.length); anchors.set(spiralNodeId(scene.id), [point[0], point[1], point[2] + lane * SPIRAL.laneGap]); position.set(spiralNodeId(scene.id), rank); });
   const universe = data.scope === "universe";
   const reading = [...data.scenes].sort((first, second) => first.index - second.index);
@@ -452,20 +482,23 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
   const pins = calendarPins(data, anchors, laneOf);
   const pinNote = pins.length ? " · tall pins behind: where each calendar day starts (the universe calendar)" : "";
   return {
-    anchors, radiusScale: 0.42, causal: true,
+    // On a stored spiral the scenes are beads on the coils: drawn smaller so the spiral reads.
+    anchors, radiusScale: stored ? 0.22 : 0.42, causal: true,
     // Strands: seen from the side, coils stacked like the rows of a braid.
-    ...(strands ? { direction: [0, 0.22, 1] as Position3 } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
-    morphKey: `${strands ? "strands" : "line"}:${[...anchors].map(([id, point]) => `${id}@${point.map(Math.round).join("/")}`).join(",")}`,
+    ...(strands || stored ? { direction: [0, 0.22, 1] as Position3 } : {}), ...(stored ? { guides: stored.guides } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
+    morphKey: `${stored ? "spiral" : strands ? "strands" : "line"}:${[...anchors].map(([id, point]) => `${id}@${point.map(Math.round).join("/")}`).join(",")}`,
     // The calendar behind the story: a giant pin where each day starts.
     pins,
     // Shredding: in story order, each scene peels off the one line onto its strand.
     morphDelays: (draws) => { const last = Math.max(1, ...position.values()); return new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / last) * SHRED_MS)])); },
-    timeKey: strands
+    timeKey: stored
+      ? { label: "STORY SPIRAL →", detail: `Story time as a precomputed spiral (built ${stored.built.slice(0, 16).replace("T", " ")}): each strand a coloured coil around its own axis inside a pale tube, forks and merges joined smoothly, laid out offline to keep scenes apart as you turn the view${anchors.size > stored.anchors.size ? ` · ${anchors.size - stored.anchors.size} newer scene${anchors.size - stored.anchors.size === 1 ? "" : "s"} wait under it until \`novel calendar build\`` : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
+      : strands
       ? { label: "STORY STRANDS →", detail: `Story time as strands, estimated from who is in each scene (a guess where a scene names no one): each coil follows the same characters · S-curves: strands splitting and meeting · a faint rung: scenes nothing orders, side by side at one moment · amber: a flashback, threaded to where it is told · orange arcs: causes between the records inside the bubbles, judged in this order · place check: ${strandSummary(strands.checks)}${pinNote}` }
       : data.available
       ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
       : { label: "READING ORDER →", detail: `Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""}` },
-    initialFrame: (draws) => focusFrame(draws) ?? draws.filter((draw) => draw.role === "main" && (position.get(draw.node.id) ?? draw.node.chrono) < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
+    initialFrame: (draws) => focusFrame(draws) ?? draws.filter((draw) => draw.role === "main" && (position.get(draw.node.id) ?? draw.node.chrono) < (stored ? 30 : SPIRAL.perTurn * 1.5)).map((draw) => draw.position),
     // The camera flies to the chosen day (or, with none, the book being read) whenever the choice changes.
     ...(universe || focusDay ? { bookFrame: focusFrame, bookKey: focusDay ? `story:day:${focusDay}` : `story:${focusBook ?? ""}` } : {}),
     ...(universe ? { renderDistance: renderReach(order) } : {}),
@@ -483,6 +516,11 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
       if (!main.length) return [];
       const at = new Map(main.map((draw) => [draw.node.id, draw.position]));
       const threads = [...toldAfter].flatMap(([flashback, teller]): OrbitalPath[] => at.get(flashback) && at.get(teller) ? [{ id: `told:${flashback}`, tone: "thread", points: [at.get(teller)!, at.get(flashback)!] }] : []);
+      if (stored) {
+        // As stored: each strand's coil track in its colour; faint links where a character crosses strands mid-way.
+        const crossings = stored.links.flatMap((link): OrbitalPath[] => { const from = at.get(spiralNodeId(link.from)), to = at.get(spiralNodeId(link.to)); return from && to ? [{ id: `spiral-cross:${link.from}:${link.to}`, tone: "link", points: [from, to] }] : []; });
+        return [...stored.tracks, ...crossings, ...threads];
+      }
       if (strands) {
         // The skeleton: one curve per strand run along its coil, S-curves where strands split and meet.
         const runOf = new Map<string, string>();

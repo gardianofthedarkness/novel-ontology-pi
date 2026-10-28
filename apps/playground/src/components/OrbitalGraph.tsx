@@ -12,7 +12,7 @@ import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";
-import type { CalendarPin, FloorMark } from "../data/orbitalTimePlace";
+import type { CalendarPin, FloorMark, StrandGuide } from "../data/orbitalTimePlace";
 import { useAlbumTexture } from "./useAlbumTexture";
 import { containedImageSize } from "../data/albumImage";
 
@@ -323,6 +323,17 @@ function FloorMap({ marks }: { marks: FloorMark[] }) {
   })}</>;
 }
 
+/** Pale tubes around the strands of a precomputed spiral, built once from the stored axes. Never raycast. */
+function GuideTubes({ guides }: { guides: StrandGuide[] }) {
+  const built = useMemo(() => guides.map((guide) => {
+    const curve = new CurvePath<Vector3>();
+    for (let index = 1; index < guide.points.length; index++) curve.add(new LineCurve3(new Vector3(...guide.points[index - 1]), new Vector3(...guide.points[index])));
+    return { id: guide.id, color: guide.color, geometry: new TubeGeometry(curve, Math.min(600, guide.points.length - 1), guide.radius, 10, false) };
+  }), [guides]);
+  useEffect(() => () => { for (const entry of built) entry.geometry.dispose(); }, [built]);
+  return <>{built.map((entry) => <mesh key={entry.id} geometry={entry.geometry} raycast={noRaycast} renderOrder={-1}><meshBasicMaterial color={entry.color} transparent opacity={0.07} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>)}</>;
+}
+
 /** A calendar pin's date: large soft lettering (no card), the year and book small beneath. */
 function pinTexture(label: string, detail: string) {
   const canvas = document.createElement("canvas");
@@ -415,7 +426,7 @@ const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 },
 function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors, radii }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean; motion: MotionBus; anchors: (string | undefined)[]; radii: Map<string, number> }) {
   const { camera, size } = useThree();
   const tone = PATH_TONES[path.tone ?? "time"];
-  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: tone.color, transparent: true, opacity: path.preview ? 0.85 : tone.opacity, depthWrite: false })), [path, tone]);
+  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: path.color ?? tone.color, transparent: true, opacity: path.preview ? 0.85 : path.color ? 0.9 : tone.opacity, depthWrite: false })), [path, tone]);
   const arrowGroups = useRef<(Group | null)[]>([]);
   const arrowCount = path.tone === "link" ? 0 : path.tone === "thread" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
   const arrowIndices = useMemo(() => Array.from({ length: arrowCount }, (_, index) => Math.max(1, Math.round((index + 1) * (path.points.length - 1) / arrowCount))), [path, arrowCount]);
@@ -940,6 +951,8 @@ interface Props {
   floor?: FloorMark[];
   /** Giant calendar pins behind the story (orbital Story time); world units. */
   pins?: CalendarPin[];
+  /** Pale tubes around a precomputed spiral's strands; world units. */
+  guides?: StrandGuide[];
   /** Minecraft-style render distance (world units) around where the camera looks. */
   renderDistance?: number;
   /** Camera direction for automatic framing (default: a slight side view). */
@@ -976,7 +989,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], guides = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), dimmed: !!focusIds && !focusIds.has(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion, focusIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -992,6 +1005,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
     {pins.length > 0 && <CalendarPins pins={pins} />}
+    {guides.length > 0 && <GuideTubes guides={guides} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} radii={radii} />)}
     <VisibleConnections edges={edges} bus={bus} />
