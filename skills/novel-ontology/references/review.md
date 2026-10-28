@@ -36,7 +36,13 @@ When the user named nothing, audit in this order:
    - `guessedCasts`: scenes whose cast was borrowed from a neighbour. If the
      strands item of the checklist is `todo`, run `novel timeplace strands
      <book> --ask` (paid, bounded) so those scenes get a real cast.
-3. Spot-check the scenes the user cares about (or the busiest characters)
+3. `novel em show <book>`: one person split into several records (a full
+   name, a short form, a description) or two people fused. A `um_` packet
+   lists matches EM was not sure of: for each, read both sides' lines —
+   accept when the text makes them one character, reject when it shows two.
+   For a split EM never raised, `novel em sweep <book>` asks again (Jev,
+   bounded); a merge that the text contradicts is repaired with `novel fix`.
+4. Spot-check the scenes the user cares about (or the busiest characters)
    with `novel query`, comparing presence with the text: a name in thought,
    memory, talk or on the phone is not presence.
 

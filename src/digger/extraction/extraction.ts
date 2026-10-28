@@ -97,7 +97,16 @@ export interface LlmScene {
   charactersPresent?: string[];
   charactersMentioned?: string[];
   events?: LlmEvent[];
-  newEntities?: { name?: string; kind?: string; descriptive?: boolean; aliases?: { text?: string; kind?: string }[] }[];
+  newEntities?: {
+    name?: string; kind?: string; descriptive?: boolean; aliases?: { text?: string; kind?: string }[];
+    /** Universal EM: the universe person this name is (shared character list). */
+    person?: string;
+    /** Universal EM: a likely match too uncertain to act on, raised for review. */
+    possibleSame?: { ref: string; label: string; where: string; confidence: number }[];
+    /** Universal EM bound this name to an identity whose name may not be in the text. */
+    identityBound?: boolean;
+    emNote?: string;
+  }[];
 }
 
 export interface NamedTurn {
@@ -449,6 +458,8 @@ export function createExtractor(work: WorkModel) {
           continue;
         }
         const entity = mintEntity(ne.name, kind, aliases);
+        if (ne.person) entity.properties.person = ne.person;
+        if (ne.possibleSame?.length) entity.properties.possibleSame = ne.possibleSame;
         const stub = stubByCandidate.get(ne.name);
         if (stub) {
           upsertFor(entity, { ...stub, payload: entity });
@@ -461,8 +472,9 @@ export function createExtractor(work: WorkModel) {
             confidence: EXTRACTION_CONFIDENCE,
             provenance: { blockId: input.blockId, sentenceIds: sourceIds, patchId: "extraction" },
           });
-          notes[`extraction:new-entity:${entity.id}`] =
-            `Declared in extraction's newEntities for ${origin} without a Jev new-name judgment — the gate should scrutinize this identity.`;
+          notes[`extraction:new-entity:${entity.id}`] = ne.emNote
+            ? `${origin}: universal EM — ${ne.emNote}.`
+            : `Declared in extraction's newEntities for ${origin} without an identity check — the gate should scrutinize this identity.`;
         }
       }
     };
@@ -493,7 +505,7 @@ export function createExtractor(work: WorkModel) {
 
     const blockDeclarations = input.miniloop.accepted["blockIdentityDeclarations"] as LlmScene["newEntities"] | undefined;
     if (Array.isArray(blockDeclarations)) for (const declaration of blockDeclarations) {
-      if (!declaration || typeof declaration.name !== "string" || !declaration.name.trim() || !["Character", "Location", "Organization", "Item", "Concept"].includes(declaration.kind ?? "") || !input.sentences.some(sentence => sentence.text.includes(declaration.name!))) {
+      if (!declaration || typeof declaration.name !== "string" || !declaration.name.trim() || !["Character", "Location", "Organization", "Item", "Concept"].includes(declaration.kind ?? "") || !input.sentences.some(sentence => [declaration.name!, ...(declaration.identityBound ? (declaration.aliases ?? []).map(alias => alias?.text ?? "") : [])].some(form => !!form && sentence.text.includes(form)))) {
         notes["faculty:block-identity-unsupported"] = "Unsupported block identity omitted; no name or source evidence was guessed.";
         continue;
       }

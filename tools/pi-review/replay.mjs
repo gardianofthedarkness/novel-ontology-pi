@@ -18,7 +18,7 @@ export function replayCommand(command) {
     const token = tokens[index];
     if (['--reason', '--edits', '--value', '--key'].includes(token)) { parts.push(token, '[private argument]'); index++; }
     else if (token.startsWith('/') || token.includes('/')) parts.push('[workspace/input]');
-    else if (index === 1 && ['help', 'config', 'init', 'ingest', 'changeset', 'fix', 'match', 'recall', 'query', 'search', 'timeline', 'graph'].includes(token)) parts.push(token);
+    else if (index === 1 && ['help', 'config', 'init', 'ingest', 'changeset', 'fix', 'em', 'recall', 'query', 'search', 'timeline', 'graph'].includes(token)) parts.push(token);
     else if (index === 2 && ['changeset', 'fix', 'timeline', 'graph'].includes(tokens[1]) && ['list', 'show', 'approve', 'hold', 'revise', 'merge', 'rename', 'add-form', 'relate', 'unrelate', 'remove-entity', 'remove-event', 'correct', 'corrections', 'build'].includes(token)) parts.push(token);
     else if (/^(--[a-z-]+|cs_b\d+|b\d+|(?:char|loc|org|item|concept|evt|scene)_\d+|\d+)$/.test(token)) parts.push(token);
     else parts.push('[private argument]');

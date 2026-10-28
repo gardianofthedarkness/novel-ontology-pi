@@ -14,14 +14,10 @@ import { DecisionRouter, type DecisionRouterOptions } from "./decisionRouter.js"
 import { readSpeakerGuesses, speakerQuestions } from "./dialogueDecisions.js";
 import { attributeBlockTurns, joinAttributedTurns } from "./turnAttribution.js";
 import { attributeDialogueCards, joinDialogueCards, type NamedDialogueCard } from "./dialogueCards.js";
-import { containmentTargets, type FragmentTarget } from "../../solidifier/matching/fragmentMatch.js";
+import { resolveBlockIdentities, type BlockUniverse } from "./blockIdentity.js";
 import { addSceneCandidates, type EntityCandidate } from "./entityCandidates.js";
 
 const IDENTITY_SYSTEM = `FACULTY: entities-participants. Read only the supplied source. Return JSON with newEntities:[{name,kind,aliases:[{text,kind}]}], charactersPresent:[name], charactersMentioned:[name], locationName:string|null. Allowed kinds: Character, Location, Organization, Item, Concept. Copy every name and alias exactly from the source or registry, preserving its language/script. Include people newly named in this scene, even when merely mentioned, but distinguish physical presence from mention. Include grounded role descriptions when no personal name is given, never invented placeholders. A narrator's description is not a person's alias. Do not create animal entities. Household groups are Organizations. Registry membership never proves presence. Do not fuse different people on generic pronouns or descriptions. No events or summaries. Set "descriptive":true on a newEntities entry whose name is a role or appearance description rather than a proper name.`;
-
-/** Alias-at-birth: a descriptive candidate attaches to an existing
- * character only when the strict Jev round is this confident. */
-export const BIRTH_ALIAS_THRESHOLD = 0.85;
 
 const DIALOGUE_SYSTEM = `FACULTY: dialogue-adjudication. Resolve uncertain System 1 dialogue and speakers using ONLY the supplied original sentences and candidate names. Return JSON {"turns":[{"first":"sentence id","last":"sentence id","speaker":"exact candidate name or null","addressee":"exact candidate name or null","continuesPrevious":false}]}. Each turn has ONE speaker. Split whenever the speaker changes, even in the same conversation/scene. Keep consecutive sentences of one utterance together, including sentences continuing an already-open quote. Start at its first spoken sentence and end at its last spoken sentence. At most two brief narration/action sentences may stay BETWEEN speech of the SAME speaker. Three consecutive non-verbal sentences require a new turn. Exclude trailing narration, interior thoughts, quoted labels and standalone quoted silence. Explicit lip-reading communication is dialogue, not a thought. Recover speech missed by System 1. Output only turns whose first/last sentences are in CORE, in source order without overlaps. CONTEXT is read-only for interpreting CORE, not output. If a turn crosses a CORE boundary, output the CORE portion and set continuesPrevious only when it truly continues the same speaker's preceding utterance. Do not guess identities from mere presence or who is being addressed. Use null for ambiguous or unavailable candidates. No commentary.`;
 
@@ -64,12 +60,11 @@ export class FacultyGraph {
     knownEntities: Entity[];
     contextSentences?: Sentence[];
     pins?: Map<string, unknown>;
-    /** Fragment declines remembered per novel (matching.json): pairs
-     * the birth check must not re-ask. */
-    fragmentDeclines?: { form: string; entityId: string }[];
+    /** The universe's shared character list, for identity at birth (universal EM). */
+    universe?: BlockUniverse;
     constraints?: ExtractionConstraints;
     onProgress?: (progress: Partial<WorkingDraft>) => Promise<void>;
-  }): Promise<{ miniloop: MiniloopResult; sceneResults: Map<string, Promise<SceneFacultyResult>>; fragmentDeclines: { form: string; entityId: string }[] }> {
+  }): Promise<{ miniloop: MiniloopResult; sceneResults: Map<string, Promise<SceneFacultyResult>> }> {
     const blockTurnScope = this.options.dialogueScope === "block-turn" && !input.pins?.size;
     const cardScope = (this.options.dialogueScope ?? "card") === "card";
     const changeset = newChangeSet(input.blockId);
@@ -257,157 +252,6 @@ export class FacultyGraph {
       if (routed.stage === "unresolved") notes.push("Dialogue attribution remains unresolved after bounded routing; Pi review is required.");
       return routed.value.turns;
     };
-    /**
-     * Birth resolution (identification policy, 2026-10-23): two
-     * checks before any Character is minted.
-     *  - Alias-at-birth: a DESCRIPTIVE candidate ("honey-colored
-     *    girl") faces one strict Jev choice round over the scene
-     *    passage; if it belongs to an existing character it is born
-     *    as that character's alias and no entity is minted.
-     *  - Fragment-at-birth: a name candidate that contains or is
-     *    contained in a known character's name (surname-only,
-     *    given-name-only, short forms) faces the same strict round,
-     *    scoped to its containment matches. Fragments partition the
-     *    text, so no later structural pass can see them; and naive
-     *    substring folding is dangerous (relatives, clones), so the
-     *    Jev round is load-bearing.
-     * Both attach only at BIRTH_ALIAS_THRESHOLD. Declined fragment
-     * pairs are returned for per-novel memory so the question is
-     * not re-asked every block. Descriptions that are already
-     * recorded forms fold without a call.
-     */
-    const newFragmentDeclines: { form: string; entityId: string }[] = [];
-    const resolveBirths = async (llm: LlmScene, sceneSentences: Sentence[], notes: string[]): Promise<LlmScene> => {
-      const declarations = llm.newEntities ?? [];
-      const descriptive = declarations.filter(d => d.kind === "Character" && d.descriptive && typeof d.name === "string" && d.name.length > 0);
-      const registryCandidates = input.knownEntities
-        .filter(e => e.kind === "Character")
-        .map(e => ({ name: e.names[0]?.text ?? e.id, id: e.id as string | undefined, forms: e.names.map(n => n.text) }));
-      const sceneCandidates = declarations
-        .filter(d => d.kind === "Character" && !d.descriptive && typeof d.name === "string")
-        .map(d => ({ name: d.name as string, id: undefined as string | undefined, forms: [d.name as string, ...(d.aliases ?? []).flatMap(a => a.text ? [a.text] : [])] }));
-      const candidates = [...registryCandidates, ...sceneCandidates];
-      if (!candidates.length) return llm;
-      const uniqueTarget = (targets: FragmentTarget[]) => {
-        if (new Set(targets.flatMap(target => target.id ? [target.id] : [])).size > 1 || new Set(targets.map(target => target.name)).size > 1) return undefined;
-        return targets.find(target => target.id) ?? targets[0];
-      };
-      const remaining = [...declarations];
-      // Folds chain: a name folded into a host that is itself folded
-      // later in this same pass must land on the final survivor,
-      // never resurrect the intermediate declaration.
-      const foldedInto = new Map<string, string>();
-      const hostNameOf = (name: string): string => {
-        let current = name;
-        const seen = new Set<string>();
-        while (foldedInto.has(current) && !seen.has(current)) {
-          seen.add(current);
-          current = foldedInto.get(current)!;
-        }
-        return current;
-      };
-      const attach = (descName: string, target: { name: string; id?: string }) => {
-        const hostName = hostNameOf(target.name);
-        const idx = remaining.findIndex(d => d.name === descName);
-        if (idx >= 0) remaining.splice(idx, 1);
-        const host = remaining.find(d => d.name === hostName && d.kind === "Character");
-        if (host) {
-          host.aliases = [...(host.aliases ?? []), { text: descName, kind: "alias" }];
-        } else {
-          remaining.push({ name: hostName, kind: "Character", aliases: [{ text: descName, kind: "alias" }] });
-        }
-        foldedInto.set(descName, hostName);
-        const swap = (list?: string[]) => [...new Set((list ?? []).map(n => (n === descName ? hostName : n)))];
-        llm.charactersPresent = swap(llm.charactersPresent);
-        llm.charactersMentioned = swap(llm.charactersMentioned);
-      };
-      const pending: typeof descriptive = [];
-      for (const d of descriptive) {
-        const owner = uniqueTarget(candidates.filter(c => c.forms.includes(d.name!)));
-        if (owner) {
-          attach(d.name!, owner);
-          notes.push(`alias-at-birth: "${d.name}" is already a recorded form of ${owner.name}; folded without a new entity.`);
-        } else pending.push(d);
-      }
-      // Fragment pendings are computed over what remains after
-      // descriptive folding: name-shaped Character declarations whose
-      // name containment-matches a candidate, minus remembered
-      // declines (registry targets only — memory keys on entity ids).
-      const declined = new Set((input.fragmentDeclines ?? []).map(fd => `${fd.form}|${fd.entityId}`));
-      const fragPending: { name: string; targets: FragmentTarget[] }[] = [];
-      for (const d of remaining) {
-        if (d.kind !== "Character" || d.descriptive || typeof d.name !== "string" || !d.name) continue;
-        const targets = containmentTargets(d.name, candidates)
-          .filter(t => !(t.id && declined.has(`${d.name}|${t.id}`)));
-        if (targets.length) fragPending.push({ name: d.name, targets });
-      }
-      // Mutual pairs: two declarations in this same pass that are
-      // fragments of EACH OTHER (黄泉川 / 黄泉川爱穗 declared side by
-      // side) get ONE question, not two — asked both ways, Jev can
-      // fold each into the other and the pair survives as two
-      // entities (the duplicate class this check exists to prevent;
-      // on the card path it also splits dialogue-card membership
-      // across scene fragments). The shorter form is the fragment;
-      // the longer name is the canonical survivor.
-      const fragAsks = fragPending.filter((f, i) => !fragPending.some((g, j) =>
-        j !== i
-        && g.targets.some(t => t.name === f.name)
-        && f.targets.some(t => t.name === g.name)
-        && ([...g.name].length < [...f.name].length
-          || ([...g.name].length === [...f.name].length && j < i))));
-      if (!pending.length && !fragAsks.length) return { ...llm, newEntities: remaining };
-      const candList = candidates.map(c => `- ${c.name} (forms: ${c.forms.join(", ")})`).join("\n");
-      const state = `${constraints}PASSAGE:\n${renderSentences(sceneSentences)}\n\nEXISTING CHARACTERS:\n${candList}`;
-      const questions = [
-        ...pending.map(d => ({
-          key: `birth:${d.name}`,
-          primitive: "choice" as const,
-          instructions: `In the passage, the narrator refers to a figure as "${d.name}". Which EXISTING character does this description refer to in this passage? Choose that character's exact name from the options. Choose NEW_PERSON if the figure is a different person, a new character, or the passage does not establish the identity with confidence. A figure who merely appears in the same scene as a character, or interacts with them, is NOT that character.`,
-          options: [...new Set([...candidates.map(c => c.name), "NEW_PERSON"])],
-        })),
-        ...fragAsks.map(f => ({
-          key: `fragment:${f.name}`,
-          primitive: "choice" as const,
-          instructions: `In the passage, a figure is referred to as "${f.name}", a shortened or extended form of a known character's name (${f.targets.map(t => t.name).join(", ")}). A fragment of a known character's name (surname-only or given-name-only reference) usually denotes that same character — but it can also be a DIFFERENT person: a relative sharing the surname, a clone, or a namesake. Which listed character does "${f.name}" refer to in this passage? Choose NEW_PERSON if it is a different or newly introduced person, or if the passage does not establish the identity with confidence.`,
-          options: [...new Set([...f.targets.map(t => t.name), "NEW_PERSON"])],
-        })),
-      ];
-      try {
-        const answers = await decide(state, questions);
-        for (const d of pending) {
-          const a = answers.find(x => x.key === `birth:${d.name}`);
-          const value = typeof a?.value === "string" ? a.value : "NEW_PERSON";
-          const conf = a?.confidence ?? 0;
-          const target = value === "NEW_PERSON" ? undefined : uniqueTarget(candidates.filter(c => c.name === value));
-          if (target && conf >= BIRTH_ALIAS_THRESHOLD) {
-            attach(d.name!, target);
-            notes.push(`alias-at-birth: "${d.name}" attached to ${target.name} (Jev confidence ${conf.toFixed(2)}); no new entity minted.`);
-          } else {
-            notes.push(`alias-at-birth: "${d.name}" kept as a new entity (Jev: ${value}, confidence ${conf.toFixed(2)}).`);
-          }
-        }
-        for (const f of fragAsks) {
-          const a = answers.find(x => x.key === `fragment:${f.name}`);
-          const value = typeof a?.value === "string" ? a.value : "NEW_PERSON";
-          const conf = a?.confidence ?? 0;
-          const target = value === "NEW_PERSON" ? undefined : uniqueTarget(f.targets.filter(t => t.name === value));
-          if (target && conf >= BIRTH_ALIAS_THRESHOLD) {
-            attach(f.name, target);
-            notes.push(`fragment-at-birth: "${f.name}" folded into ${target.name} (Jev confidence ${conf.toFixed(2)}); no new entity minted.`);
-          } else {
-            notes.push(`fragment-at-birth: "${f.name}" kept as a new entity (Jev: ${value}, confidence ${conf.toFixed(2)}).`);
-            for (const t of f.targets) {
-              if (t.id && !newFragmentDeclines.some(fd => fd.form === f.name && fd.entityId === t.id)) {
-                newFragmentDeclines.push({ form: f.name, entityId: t.id });
-              }
-            }
-          }
-        }
-      } catch {
-        notes.push("birth checks unavailable; descriptive and fragment candidates were kept as new entities for review.");
-      }
-      return { ...llm, newEntities: remaining };
-    };
 
     /** Record entities a faculty just found, before extraction mints them. Draft-only telemetry: never let candidate recording fail identity work. */
     const foundEntities = async (identities: LlmScene, firstSentenceId?: string) => {
@@ -424,7 +268,7 @@ export class FacultyGraph {
     const blockIdentityNotes: string[] = [];
     const blockIdentities = blockTurnScope || cardScope ? Promise.all(sourceChunks(input.sentences, { maxBytes: 7000, maxSentences: 48, margin: 4 }).map(async (chunk, index) => {
       try {
-        const identities = await resolveBirths(await identityChunk(chunk, blockIdentityNotes), chunk.context, blockIdentityNotes);
+        const identities = await identityChunk(chunk, blockIdentityNotes);
         await foundEntities(identities, chunk.core[0]?.id);
         return identities;
       } catch {
@@ -445,7 +289,7 @@ export class FacultyGraph {
       const identity = safely<LlmScene>("entities-participants", async () => {
         const parts = await Promise.all(sourceChunks(sentences, { maxBytes: 7_000, maxSentences: 48, margin: 4 }).map(chunk => safely<LlmScene>("entities-participants chunk", () => identityChunk(chunk, notes), { newEntities: [], charactersPresent: [], charactersMentioned: [] })));
         return { newEntities: parts.flatMap(part => part.newEntities ?? []), charactersPresent: [...new Set(parts.flatMap(part => part.charactersPresent ?? []))], charactersMentioned: [...new Set(parts.flatMap(part => part.charactersMentioned ?? []))], locationName: parts.map(part => part.locationName).find(Boolean) ?? null } satisfies LlmScene;
-      }, { newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null } as LlmScene).then(llm => resolveBirths(llm, sentences, notes)).then(async identities => {
+      }, { newEntities: [], charactersPresent: [], charactersMentioned: [], locationName: null } as LlmScene).then(async identities => {
         await foundEntities(identities, span[0]);
         return identities;
       });
@@ -518,6 +362,13 @@ export class FacultyGraph {
     });
     const pipelineResults = await Promise.allSettled([dialoguePipeline, scenesPipeline]);
     await Promise.allSettled(sceneResults.values());
+    // Universal EM at birth: the block's new names against the universal recommender, before anything is minted.
+    const identity = await resolveBlockIdentities({
+      chapterIndex: input.chapterIndex, sentences: input.sentences, sceneSpans, sceneResults,
+      blockDeclarations: blockIdentities ? (await blockIdentities.catch(() => null))?.newEntities ?? [] : null,
+      knownEntities: input.knownEntities, universe: input.universe, decide, note,
+    });
+    for (const [key, result] of identity.sceneResults) sceneResults.set(key, Promise.resolve(result));
     await progressChain;
     for (const result of pipelineResults) if (result.status === "rejected") throw new Error("A System 1 faculty failed; no proposals were approved");
     const dialogues = await dialoguePipeline;
@@ -531,9 +382,8 @@ export class FacultyGraph {
     note("execution", JSON.stringify({ topology: "scene-streaming", ...this.pool.metrics, decisionRouting: this.router.metrics, unresolvedPolicy: "retain review notes; never auto-approve" }));
     changeset.status = "pending_review";
     return {
-      miniloop: { changeset, escalations, appliedPins: [...appliedPins], accepted: { sceneSpans: scenes.spans, dialogueUnits: dialogues.spans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), dialogueUnitScenes: linkExchangeScenes(input.sentences, dialogues.spans, scenes.spans), nameHits: [], facultyMetrics: { ...this.pool.metrics }, decisionRouting: this.router.metrics, ...(blockIdentities ? { blockIdentityDeclarations: (await blockIdentities).newEntities } : {}), ...(blockDialogue ? { blockNamedTurns: await blockDialogue } : {}) }, windows: [] },
+      miniloop: { changeset, escalations, appliedPins: [...appliedPins], accepted: { sceneSpans: scenes.spans, dialogueUnits: dialogues.spans.map(([first, last]) => input.sentences.slice(first, last + 1).map(sentence => sentence.id)), dialogueUnitScenes: linkExchangeScenes(input.sentences, dialogues.spans, scenes.spans), nameHits: [], facultyMetrics: { ...this.pool.metrics }, decisionRouting: this.router.metrics, ...(identity.blockDeclarations ? { blockIdentityDeclarations: identity.blockDeclarations } : {}), ...(blockDialogue ? { blockNamedTurns: await blockDialogue } : {}) }, windows: [] },
       sceneResults,
-      fragmentDeclines: newFragmentDeclines,
     };
   }
 }

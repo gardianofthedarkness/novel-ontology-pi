@@ -11,10 +11,9 @@ import { loadConfig } from "../../config.js";
 import { resolveJevKey } from "../../../ground/connectors/secrets.js";
 import { EventLog } from "../../../ground/events/log.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
-import type { Entity, OntEvent, Relation, Scene } from "../../../ground/ontology/types.js";
+import type { Entity } from "../../../ground/ontology/types.js";
 import { loadExtractionCounts } from "../../../digger/processing/counts.js";
 import { facultyOptionsFromEnv } from "../../../digger/processing/facultyOptions.js";
-import { runEntityMatching, loadMatchMemory, saveMatchMemory } from "../../../solidifier/matching/emFaculty.js";
 import { loadEmbedder } from "../../../ground/connectors/embeddings.js";
 import { markCausalitySweepPending } from "../../../solidifier/causality/faculty.js";
 import { albumPortraits, emitAlbumAnchors } from "./albumCommands.js";
@@ -132,7 +131,7 @@ export async function ingestNovel(
     opts.autoApprove ? "approved" : "held";
   if (opts.autoApprove && workModel) throw new Error("Live semantic extraction requires fact review; --auto-approve cannot bypass it");
 
-  const emPerBlock: { blockId: string; nominated: number; merged: number; distinct: number; uncertain: number }[] = [];
+  const emPerBlock: { blockId: string; joined: number; created: number; checked: number; merged: number; review: string | null }[] = [];
   const causalityPerBlock: { blockId: string; nominated: number; proposed: number; uncertain: number; rejected: number; embedded: number; embeddingLeg: boolean; graphLeg: boolean }[] = [];
   const cfg = loadConfig(env);
 
@@ -156,10 +155,11 @@ export async function ingestNovel(
     entityMatching: true,
     onEntityMatching: (blockId, summary) => emPerBlock.push({
       blockId,
-      nominated: summary.nominated,
+      joined: summary.joined,
+      created: summary.created,
+      checked: summary.checked,
       merged: summary.merged.length,
-      distinct: summary.distinct.length,
-      uncertain: summary.uncertain.length,
+      review: summary.review?.packetId ?? null,
     }),
     // Per-block causality waits for story time and strands (see the sweep below).
     causality: false,
@@ -177,44 +177,6 @@ export async function ingestNovel(
   const result = await processor.processNovel(
     blocks.map((b) => ({ blockId: b.id, text: b.text, chapterIndex: b.chapterIndex, sectionIndex: b.index })),
   );
-
-  // Chapter-completion sweep (owner cadence, 2026-10-23): old x old
-  // pairs are reviewed only when a whole first-level node completes.
-  // Completion is observed as full coverage of the file's blocks by
-  // (merged in this run ∪ applied in earlier runs and skipped now),
-  // with canon changed since the last sweep — in gate mode applies
-  // land via `novel changeset approve` between runs, and the
-  // post-apply EM pass marks that in matching.json (sweepPending).
-  let emChapterSweep: { nominated: number; merged: number; distinct: number; uncertain: number } | null = null;
-  const coveredBlocks = new Set([...result.mergedBlocks, ...skippedBlocks]);
-  if (selectedBlocks.length > 0 && selectedBlocks.every((b) => coveredBlocks.has(b.id))) {
-    const memory = await loadMatchMemory(novelDir);
-    if (result.mergedBlocks.length > 0 || memory.sweepPending) {
-      try {
-        const summary = await runEntityMatching({
-          novelDir,
-          decisions: jevFromEnv(env),
-          events: log.emit,
-          data: {
-            entities: await loadKnownEntities(),
-            events: await bundle.loadFile<OntEvent>("events.jsonl"),
-            scenes: await bundle.loadFile<Scene>("scenes.jsonl"),
-            relations: await bundle.loadFile<Relation>("relations.jsonl"),
-          },
-        });
-        emChapterSweep = {
-          nominated: summary.nominated,
-          merged: summary.merged.length,
-          distinct: summary.distinct.length,
-          uncertain: summary.uncertain.length,
-        };
-        const after = await loadMatchMemory(novelDir);
-        await saveMatchMemory(novelDir, { ...after, sweepPending: false });
-      } catch {
-        emChapterSweep = null;
-      }
-    }
-  }
 
   // Causality waits for story time and strands: a cause must come first in story time, and a direct cause
   // across parallel strands needs something carrying it over, so causes are judged by the on-demand sweep
@@ -259,7 +221,7 @@ export async function ingestNovel(
     mergedBlocks: result.mergedBlocks,
     stoppedAt: result.stoppedAt,
     stopReason: result.stopReason,
-    entityMatching: { perBlock: emPerBlock, chapterSweep: emChapterSweep },
+    identity: { perBlock: emPerBlock },
     causality: { perBlock: causalityPerBlock, chapterSweep: causalityChapterSweep },
     graph,
     album,

@@ -12,14 +12,17 @@ import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/a
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { loadWorkspaceSentences, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
+import { castScope, loadCast } from "../../../solidifier/identity/cast.js";
+import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js";
 
 /**
  * `novel checklist` — what a completed analysis still lacks, in dependency
  * order, with the exact next command for each gap. A book's analysis is
  * complete when every faculty below is "done":
  *
- *   source ─▶ blocks ─┬─▶ time-place ─┬─▶ place-tree
- *   (album, optional) │               └─▶ strands (who is in each scene) ─▶ causality (in-book, cross-scene sweep,
+ *   source ─▶ blocks ─┬─▶ identities (universal EM: the universe's shared character list)
+ *   (album, optional) ├─▶ time-place ─┬─▶ place-tree
+ *                     │               └─▶ strands (who is in each scene) ─▶ causality (in-book, cross-scene sweep,
  *                     │                                                    ordered by story time and strands)
  *                     └─▶ graph (rebuilt after canon changes)
  *
@@ -50,7 +53,7 @@ function settle(items: ChecklistItem[]): ChecklistItem[] {
   return items;
 }
 
-export async function bookChecklist(novelDir: string, options: { input?: string } = {}): Promise<BookChecklist> {
+export async function bookChecklist(novelDir: string, options: { input?: string; env?: NodeJS.ProcessEnv } = {}): Promise<BookChecklist> {
   const dir = quote(novelDir);
   const store = new BundleStore(join(novelDir, "ontology"));
   const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}")) as { title?: string };
@@ -80,6 +83,19 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
     status: blockReview.length ? "review" : missingBlocks.length ? "todo" : blocks.length ? "done" : "todo",
     counts: { blocks: blocks.length, applied: blocks.length - missingBlocks.length, awaitingReview: blockReview.length, scenes: scenes.length, entities: entities.length },
     next: blockReview.length ? blockReview.map((changeset) => reviewCommand(changeset.id)) : missingBlocks.length ? [options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>  (continues at ${missingBlocks[0]})`] : [] });
+
+  // Identities: every character is someone in the universe's shared list; less confident matches reviewed.
+  const castAt = await castScope(novelDir, options.env ?? process.env);
+  const cast = await loadCast(castAt);
+  const characters = entities.filter((entity) => entity.kind === "Character");
+  const outside = characters.filter((entity) => !cast.persons.some((person) => person.members.some((member) => member.sourceId === castAt.sourceId && member.entityId === entity.id)));
+  const identityReview = await openIdentityPackets(castAt, castAt.sourceId);
+  const identityCommand = (id: string) => castAt.standalone ? reviewCommand(id) : `novel review show ${quote(castAt.root)} ${id} --scope universe --universe ${castAt.universeId} --offset 0 --limit 20`;
+  items.push({ id: "identities", title: "Characters in the universe's shared list (universal EM)", dependsOn: ["blocks"],
+    status: identityReview.length ? "review" : outside.length ? "todo" : "done",
+    counts: { characters: characters.length, outsideTheList: outside.length, sharedWithOtherBooks: cast.persons.filter((person) => person.members.some((member) => member.sourceId === castAt.sourceId) && person.members.some((member) => member.sourceId !== castAt.sourceId)).length, awaitingReview: identityReview.reduce((sum, packet) => sum + packet.proposals.length, 0) },
+    next: identityReview.length ? identityReview.map((packet) => identityCommand(packet.id)) : outside.length ? [`novel em sweep ${dir}`] : [],
+    note: "Applying a block runs universal EM; a sweep checks every character again." });
 
   // Story time and places: every scene in a period, packets reviewed.
   const timed = new Set(relations.filter((relation) => relation.type === "OCCURS_DURING").map((relation) => relation.fromId));
@@ -221,5 +237,5 @@ export async function checklistCommand(args: string[], env: NodeJS.ProcessEnv = 
   const [target, flag, value, ...rest] = args;
   if (!target || target.startsWith("--") || rest.length || flag !== undefined && !["--input", "--universe"].includes(flag) || flag && !value) throw new Error(`Usage: ${CHECKLIST_USAGE}`);
   if (flag === "--universe") return universeChecklist(target, value, env);
-  return bookChecklist(target, { input: flag === "--input" ? value : undefined });
+  return bookChecklist(target, { input: flag === "--input" ? value : undefined, env });
 }

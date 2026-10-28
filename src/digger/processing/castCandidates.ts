@@ -31,7 +31,7 @@ export interface CastSceneInput {
   mentioned: string[];
 }
 export interface CastCharacter { id: string; forms: string[] }
-export type CastEvidence = "named" | "recorded" | "neighbour" | "shared-name" | "chapter" | "volume";
+export type CastEvidence = "named" | "recorded" | "neighbour" | "shared-name" | "chapter" | "volume" | "universe";
 export interface CastCandidate { id: string; score: number; evidence: CastEvidence }
 
 export const CAST_CANDIDATE_LIMIT = 32;

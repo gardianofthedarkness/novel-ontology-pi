@@ -9,6 +9,7 @@ import { bookChecklist } from "../src/cli/commands/extract/checklistCommands.js"
 import { rememberTimePlaceAttempt } from "../src/digger/timeplace/afterApply.js";
 import { markCausalitySweepPending } from "../src/solidifier/causality/faculty.js";
 import type { ChangeSet } from "../src/solidifier/merge/changeset.js";
+import { runIdentityAfterApply } from "../src/solidifier/identity/afterApply.js";
 
 async function workspace(context: { after: (callback: () => Promise<void>) => void }) {
   const parent = await mkdtemp(join(tmpdir(), "checklist-"));
@@ -25,12 +26,13 @@ test("the checklist lists each faculty in dependency order with its next command
   const { directory, packet } = await workspace(context);
   const statusOf = async () => Object.fromEntries((await bookChecklist(directory)).items.map((item) => [item.id, item.status]));
   // Nothing applied yet: extraction is the gap; everything after it waits.
-  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", causality: "blocked", "time-place": "blocked", "place-tree": "blocked", strands: "blocked", graph: "blocked" });
+  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", identities: "blocked", causality: "blocked", "time-place": "blocked", "place-tree": "blocked", strands: "blocked", graph: "blocked" });
   await saveChangeSet(directory, packet("cs_b0001", "b0001", "approved"));
   await markCausalitySweepPending(directory);
   const after = await bookChecklist(directory);
   const byId = new Map(after.items.map((item) => [item.id, item]));
   assert.equal(byId.get("blocks")!.status, "done");
+  assert.equal(byId.get("identities")!.status, "done", "no characters, nothing outside the shared list");
   // Causality waits for story time and strands: causes are ordered by them.
   assert.equal(byId.get("causality")!.status, "blocked");
   assert.match(byId.get("causality")!.note!, /Waits for time-place, strands/);
@@ -58,4 +60,15 @@ test("the checklist lists each faculty in dependency order with its next command
   const causality = (await bookChecklist(directory)).items.find((item) => item.id === "causality")!;
   assert.equal(causality.status, "todo");
   assert.match(causality.next[0], /^novel causality sweep /);
+});
+
+test("identities: characters outside the universe's shared list are a gap until universal EM sees them", async (context) => {
+  const { directory, packet } = await workspace(context);
+  await saveChangeSet(directory, packet("cs_b0001", "b0001", "approved"));
+  await writeFile(join(directory, "ontology", "entities.jsonl"), JSON.stringify({ id: "char_000001", kind: "Character", names: [{ text: "小明", lang: "zh", kind: "canonical" }], properties: {}, confidence: 0.9 }) + "\n");
+  const before = (await bookChecklist(directory, { env: {} })).items.find((item) => item.id === "identities")!;
+  assert.deepEqual([before.status, before.counts.outsideTheList, before.next[0]?.startsWith("novel em sweep ")], ["todo", 1, true]);
+  await runIdentityAfterApply({ novelDir: directory, decisions: null, all: true, env: {} });
+  const after = (await bookChecklist(directory, { env: {} })).items.find((item) => item.id === "identities")!;
+  assert.deepEqual([after.status, after.counts.outsideTheList], ["done", 0]);
 });
