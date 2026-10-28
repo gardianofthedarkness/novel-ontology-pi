@@ -129,11 +129,6 @@ export class BlockProcessor {
     stopReason: string | null;
   }> {
     const mergedBlocks: string[] = [];
-    const miniloop = new Miniloop(this.decisions, {
-      refineNameCandidates: this.observation.workModel
-        ? createCandidateRefiner(this.observation.workModel)
-        : undefined,
-    });
     const extract = this.observation.workModel
       ? (blockId: string) => createExtractor(emit ? observeWork(this.observation.workModel!, emit, { blockId, faculty: "extraction" }) : this.observation.workModel!)
       : undefined;
@@ -185,6 +180,11 @@ export class BlockProcessor {
         // Every model call made for this block reports itself, faculties after apply included.
         const observedDecisions = emit ? observeDecisions(this.decisions, emit, { blockId: block.blockId }) : this.decisions;
         const observedWork = (faculty: string) => this.observation.workModel && emit ? observeWork(this.observation.workModel, emit, { blockId: block.blockId, faculty }) : this.observation.workModel;
+        // The miniloop keeps no state across blocks, so it is built per block with observed clients.
+        const refinerModel = observedWork("newname");
+        const miniloop = new Miniloop(observedDecisions, {
+          refineNameCandidates: refinerModel ? createCandidateRefiner(refinerModel) : undefined,
+        });
         const graphOptions = this.observation.facultyGraph || {};
         const graph = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
           ? new FacultyGraph(observedDecisions, this.observation.workModel, { ...graphOptions, onCall: call => {

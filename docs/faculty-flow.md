@@ -89,8 +89,10 @@ Before this change only the per-block scene faculties and `novel causality`
 reported calls. Everything else ran dark:
 
 - Inside `novel ingest`, the causality pass, the chapter-close causality sweep,
-  time and place after apply and the entity-matching pass were handed the
-  unobserved Jev client, and extraction called the work model directly.
+  time and place after apply, the entity-matching pass and the miniloop (the
+  path without a work model) were handed the unobserved Jev client, and
+  extraction and the miniloop's name refiner called the work model directly.
+- `novel changeset approve` ran entity matching after an approval unobserved.
 - `novel timeplace run|tree` and `novel match` wrote no activity at all.
 
 `observeDecisions` and `observeWork` (`src/ground/events/observe.ts`) now wrap
