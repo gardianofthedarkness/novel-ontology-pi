@@ -11,7 +11,8 @@ export type ProcessingEvent =
   | { type: "changeset.merged"; changesetId: string; target: "store" }
   | { type: "graph.rebuilt"; counts: { entities: number; events: number; scenes: number; relations: number; branches: number } }
   | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate"; touchedIds?: string[] }
-  | { type: "faculty.activity"; blockId: string; callId: string; faculty: string; system: "system1" | "system2" | "work"; status: "started" | "completed" | "failed" }
+  /** blockId is omitted for work across the whole novel (a time-place run, a matching sweep). */
+  | { type: "faculty.activity"; blockId?: string; callId: string; faculty: string; system: "system1" | "system2" | "work"; status: "started" | "completed" | "failed" }
   | { type: "entity.merged"; keepId: string; dropId: string }
   | { type: "entity.distinct"; aId: string; bId: string }
   /** Album pre-process: intake-known picture anchors for one block (sentence identities, not canon). */
@@ -49,7 +50,7 @@ export function projectEvent(event: ProcessingEvent): ProcessingEvent {
       return { type: event.type, counts: { entities: c.entities, events: c.events, scenes: c.scenes, relations: c.relations, branches: c.branches } };
     }
     case "draft.updated": return { type: event.type, blockId: event.blockId, patchId: event.patchId, stage: event.stage, ...(event.touchedIds ? { touchedIds: [...event.touchedIds] } : {}) };
-    case "faculty.activity": return { type: event.type, blockId: event.blockId, callId: event.callId, faculty: event.faculty, system: event.system, status: event.status };
+    case "faculty.activity": return { type: event.type, ...(event.blockId ? { blockId: event.blockId } : {}), callId: event.callId, faculty: event.faculty, system: event.system, status: event.status };
     case "entity.merged": return { type: event.type, keepId: event.keepId, dropId: event.dropId };
     case "entity.distinct": return { type: event.type, aId: event.aId, bId: event.bId };
     case "album.anchored": return { type: event.type, blockId: event.blockId, pictures: event.pictures.map((p) => ({ id: p.id, asset: p.asset, kind: p.kind, sentenceId: p.sentenceId })) };

@@ -19,6 +19,7 @@ import { applyChangeSet } from "../../solidifier/merge/apply.js";
 import { saveChangeSet } from "../../solidifier/merge/changesetStore.js";
 import { EventLog } from "../../ground/events/log.js";
 import type { EventSink } from "../../ground/events/types.js";
+import { observeDecisions, observeWork } from "../../ground/events/observe.js";
 import { saveWorkingDraft, touchedDraftIds, type WorkingDraft } from "./draft.js";
 import { resolveCandidates } from "./entityCandidates.js";
 import { timePlaceForNewScenes } from "../timeplace/afterApply.js";
@@ -134,7 +135,7 @@ export class BlockProcessor {
         : undefined,
     });
     const extract = this.observation.workModel
-      ? createExtractor(this.observation.workModel)
+      ? (blockId: string) => createExtractor(emit ? observeWork(this.observation.workModel!, emit, { blockId, faculty: "extraction" }) : this.observation.workModel!)
       : undefined;
     const emit = this.observation.emit ?? (this.observation.novelDir ? new EventLog(this.observation.novelDir).emit : undefined);
 
@@ -180,24 +181,10 @@ export class BlockProcessor {
         const constraintsValue = corrections.find(correction => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)?.value;
         const constraints = constraintsValue ? parseExtractionConstraints(constraintsValue) : undefined;
         const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
-        let callSequence = 0;
         let telemetry = Promise.resolve();
-        const observedDecisions: DecisionModel = {
-          modelId: this.decisions.modelId,
-          decide: async (state, questions, options) => {
-            const callId = `${observationId}:system1:${revisionRounds}:${++callSequence}`;
-            const faculty = (questions[0]?.key.split(":")[0] ?? "decisions").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
-            await emit?.({ type: "faculty.activity", blockId: block.blockId, callId, faculty, system: "system1", status: "started" });
-            try {
-              const result = await this.decisions.decide(state, questions, options);
-              await emit?.({ type: "faculty.activity", blockId: block.blockId, callId, faculty, system: "system1", status: "completed" });
-              return result;
-            } catch (error) {
-              await emit?.({ type: "faculty.activity", blockId: block.blockId, callId, faculty, system: "system1", status: "failed" });
-              throw error;
-            }
-          },
-        };
+        // Every model call made for this block reports itself, faculties after apply included.
+        const observedDecisions = emit ? observeDecisions(this.decisions, emit, { blockId: block.blockId }) : this.decisions;
+        const observedWork = (faculty: string) => this.observation.workModel && emit ? observeWork(this.observation.workModel, emit, { blockId: block.blockId, faculty }) : this.observation.workModel;
         const graphOptions = this.observation.facultyGraph || {};
         const graph = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
           ? new FacultyGraph(observedDecisions, this.observation.workModel, { ...graphOptions, onCall: call => {
@@ -247,7 +234,7 @@ export class BlockProcessor {
           const counts = this.observation.loadCounts
             ? await this.observation.loadCounts()
             : { events: 0, scenes: 0 };
-          const out: ExtractionOutput = await extract({
+          const out: ExtractionOutput = await extract(block.blockId)({
             blockId: block.blockId,
             chapterIndex: block.chapterIndex ?? 0,
             sentences,
@@ -285,7 +272,7 @@ export class BlockProcessor {
             ]);
             const pass = await runCausalityPass({
               novelDir: this.observation.novelDir,
-              decisions: this.decisions,
+              decisions: observedDecisions,
               embedder: this.observation.embedder ?? null,
               touchedIds,
               extras: {
@@ -325,7 +312,7 @@ export class BlockProcessor {
           if (this.observation.timePlace && this.observation.novelDir) {
             try {
               const sceneIds = result.changeset.proposals.filter((proposal) => proposal.kind === "create_scene").map((proposal) => (proposal.payload as Scene).id);
-              const output = sceneIds.length ? await timePlaceForNewScenes({ novelDir: this.observation.novelDir, sentences: new Map(sentences.map((sentence) => [sentence.id, sentence])), mode: this.observation.timePlace.mode, work: this.observation.workModel, decisions: this.decisions, sceneIds, provenanceBlockId: block.blockId , reviewSource: !!this.observation.semanticReview, remember: true }) : null;
+              const output = sceneIds.length ? await timePlaceForNewScenes({ novelDir: this.observation.novelDir, sentences: new Map(sentences.map((sentence) => [sentence.id, sentence])), mode: this.observation.timePlace.mode, work: observedWork("timeplace") ?? undefined, decisions: observedDecisions, sceneIds, provenanceBlockId: block.blockId , reviewSource: !!this.observation.semanticReview, remember: true }) : null;
               if (output?.changeset) {
                 await saveChangeSet(this.observation.novelDir, output.changeset);
                 // Semantic hosts review time-place packets through the shared gate (novel review); legacy hosts approve here.
@@ -342,7 +329,7 @@ export class BlockProcessor {
           if (this.observation.entityMatching && this.observation.novelDir) {
             const summary = await runEmPassAfterApply({
               novelDir: this.observation.novelDir,
-              decisions: this.decisions,
+              decisions: observedDecisions,
               changeset: result.changeset,
               events: this.observation.emit ?? new EventLog(this.observation.novelDir).emit,
             });
