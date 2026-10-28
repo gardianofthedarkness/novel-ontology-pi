@@ -1,4 +1,5 @@
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
+import { libraryCallSink, observeDecisions } from "../../../ground/events/observe.js";
 import { loadUniverseContext, universeBindings, universeCandidates, universeCausalView, universeDecide, universeEvidence, universePacket, universePropose, universeSweep } from "../../../solidifier/causality/universe.js";
 
 export async function universeCausalityCommand(args: string[], env: NodeJS.ProcessEnv = process.env) {
@@ -25,7 +26,7 @@ export async function universeCausalityCommand(args: string[], env: NodeJS.Proce
   const context = await loadUniverseContext(directory, universeId, config);
   if (operation === "candidates") return universeCandidates(context, offset, limit);
   if (["propose", "sweep"].includes(operation) && flags.get("--revision") !== context.revision) throw new Error("Read candidates and supply their current --revision before proposing or running a paid universe sweep.");
-  if (operation === "sweep") return universeSweep(context, jevFromEnv(env), offset, limit);
+  if (operation === "sweep") return universeSweep(context, observeDecisions(jevFromEnv(env), await libraryCallSink(directory), { faculty: "universe-causality" }), offset, limit);
   if (operation === "evidence") return universeEvidence(context, values[0], values[1], { packetId: flags.get("--packet"), offset, limit });
   if (operation === "propose") return universePropose(context, values[0], values[1], flags.get("--reason") ?? "");
   if (operation === "show") {
