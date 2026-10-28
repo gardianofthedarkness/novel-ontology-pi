@@ -817,7 +817,9 @@ export default function App() {
       // a universe stays a universe: every book in reading order, not just the book being read.
       const order = viewTimePlace?.available || viewTimePlace?.scope === "universe" ? viewTimePlace : readingOrderProjection(displayWorld);
       const spiral = spiralWorld(displayWorld, order, loadedBook);
-      return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook, "strands", focusDay) };
+      // The screen's shape sets how long a stretch of time a stored spiral opens on.
+      const aspect = typeof window === "undefined" ? 1.6 : window.innerWidth / Math.max(1, window.innerHeight);
+      return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook, "strands", focusDay, aspect) };
     }
     if (!viewTimePlace?.places.length) return null;
     const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels };

@@ -3,28 +3,35 @@
  * strands as coils around their own axes along one time axis, laid out
  * offline so the view only draws stored geometry.
  *
- * Time runs along x (a scene's story position); only the transverse
- * position q = (height, depth) is laid out. A strand run e has a constant
- * axis centre c_e, a coil radius a_e and a phase φ_e:
+ * Time runs along x (a scene's story position, widened where many strands
+ * are alive: stretchTime); only the transverse position q = (height, depth)
+ * is laid out. A strand run e has a constant axis centre c_e, a coil radius
+ * a_e and a phase φ_e. The coil radius is the run's importance, not a free
+ * variable: the denser its scenes, the thicker its cylinder
+ * (a_e = a_min + (a_max − a_min)·ρ_e/max ρ, ρ_e = scenes / max(layers spanned, one turn)).
  *
  *   q(x) = c(x) + a_e·f(x)·(cos(ωx + φ_e), sin(ωx + φ_e))
  *
  * c(x) leaves the parent's centre after a fork and joins the merge target's
  * centre with the quintic s(u) = 10u³ − 15u⁴ + 6u⁵ (C²); the coil amplitude
  * f(x) fades to zero at both events so tracks meet with matching
- * derivatives. The objective is the handout's:
+ * derivatives. Strands sit as far apart as the old stacked coils (readable),
+ * but placed per period and spread over the floor before they stack up:
  *
  *   J = mean over pairs |Δx| < S of Φ_A(B)        (projected crowding, averaged
  *                                                   exactly over a half-turn)
- *     + λ_b Σ (120/7)‖b/R‖²/(ℓ/L₀)³ + λ_ℓ Σ ℓ/L₀    (bending, transition length)
- *     + λ_s Σ [a_e + a_f + S − ‖c_e − c_f‖]₊²/S²   (unrelated tubes apart)
+ *     + λ_b Σ (120/7)‖b/D‖²/(ℓ/L₀)³ + λ_ℓ Σ ℓ/L₀    (bending, transition length)
+ *     + λ_s Σ [a_e + a_f + S + G − ‖c_e − c_f‖]₊²/D²
+ *                                                  (tubes alive together apart)
+ *     + λ_y Σ (n_e/N)·y_e/H + λ_z Σ (n_e/N)·(z_e/W)²  (busy strands low and
+ *                                                   central: the floor fills first)
  *
- * with A = 1 − Δx²/S², B = ‖Δq‖²/S², subject to ‖c‖ + a + r ≤ R (every knot
- * in the frame at every rotation) and bounds on a. Transition lengths take
- * the closed-form optimum ℓ* = [360λ_b‖b̂‖²/(7λ_ℓ)]^¼ L₀ (clipped) between
- * gradient steps. The knot radius r and frame R only normalise the problem
- * (they keep it from spreading without bound); the view draws at any scale.
- * Pure and deterministic: fixed starts, fixed iterations.
+ * with A = 1 − Δx²/S², B = ‖Δq‖²/S², n_e the run's scenes of N, subject to a
+ * box on the floor (a + r ≤ y ≤ H − a − r, |z| ≤ W − a − r, 2W = 3H, sized
+ * for the most strands alive at once). Transition lengths
+ * take the closed-form optimum ℓ* = [360λ_b‖b/D‖²/(7λ_ℓ)]^¼ L₀ (clipped)
+ * between gradient steps. The view draws it at one uniform scale. Pure and
+ * deterministic: fixed starts, fixed iterations.
  */
 export interface SpiralRun {
   id: string;
@@ -48,14 +55,31 @@ export interface SpiralSolution {
   overlap: number;
   initial: { objective: number; visibility: number; overlap: number };
   pairs: number;
+  /** The floor box the centres were kept in: full width (depth) and height. */
+  frame: { width: number; height: number };
 }
 
-/** x units per story layer, frame radius, knot radius, gap. Normalisation only. */
-export const SPIRAL = { dx: 9, radial: 120, knot: 5.5, gap: 2, turnLayers: 8, fadeLayers: 1.5, coil: [6, 30] as [number, number], transitionLayers: [3, 14] as [number, number] };
+/** x units per quiet story layer; scene radius and gap; clearance between tubes; floor box width : height. */
+export const SPIRAL = { dx: 9, knot: 14, gap: 4, clearance: 90, aspect: 3, turnLayers: 12, fadeLayers: 1.5, coil: [18, 58] as [number, number], transitionLayers: [3, 14] as [number, number] };
 const S = 2 * SPIRAL.knot + SPIRAL.gap;
 const OMEGA = (2 * Math.PI) / (SPIRAL.turnLayers * SPIRAL.dx);
 const L0 = 10 * SPIRAL.dx;
-const WEIGHTS = { bend: 8e-5, length: 0.01, separation: 0.05 };
+/** Nominal spacing of two strands alive together (largest coils): normalises spacing and bending. */
+const D = 2 * SPIRAL.coil[1] + S + SPIRAL.clearance;
+const WEIGHTS = { bend: 8e-5, length: 0.01, separation: 0.05, low: 0.02, central: 0.05 };
+
+/**
+ * Story positions along time for layers 0…layers−1 given each run's layer
+ * span: a step widens by half a layer for every extra strand alive at it,
+ * so busy stretches get room and quiet ones stay compact.
+ */
+export function stretchTime(spans: [number, number][], layers: number): number[] {
+  const alive = new Array<number>(Math.max(1, layers)).fill(0);
+  for (const [from, to] of spans) for (let layer = Math.max(0, from); layer <= Math.min(layers - 1, to); layer++) alive[layer]++;
+  const x = [0];
+  for (let layer = 1; layer < layers; layer++) x.push(x[layer - 1] + SPIRAL.dx * (1 + 0.5 * (Math.max(1, alive[layer - 1], alive[layer]) - 1)));
+  return x;
+}
 
 /** C² ease and its derivative. */
 export const ease = (u: number) => { const t = Math.min(1, Math.max(0, u)); return t * t * t * (10 + t * (-15 + 6 * t)); };
@@ -86,6 +110,12 @@ interface Prepared {
   related: Set<string>;
   /** Where each run's coil shrinks to zero: its own fork and merge, and wherever another run leaves it or joins it. */
   events: number[][];
+  /** Scenes per run over all scenes (how strongly it sinks to the floor's middle); the floor box. */
+  weight: number[];
+  /** Each run's coil radius: thicker the denser its scenes. */
+  coil: number[];
+  height: number;
+  width: number;
 }
 
 function prepare(input: SpiralRun[]): Prepared {
@@ -110,7 +140,17 @@ function prepare(input: SpiralRun[]): Prepared {
     if (forkX[at] !== null) { events[at].push(forkX[at]!); events[parent[at]].push(forkX[at]!); }
     if (mergeX[at] !== null) { events[at].push(mergeX[at]!); events[target[at]].push(mergeX[at]!); }
   });
-  return { runs, index, knots, pairs, span, forkX, mergeX, parent, target, related, events: events.map((xs) => [...new Set(xs)]) };
+  // The box holds the most strands alive at once side by side: area n·D², width : height = aspect.
+  const ends = span.flatMap(([from, to]) => [[from, 1], [to, -1]] as [number, number][]).sort((first, second) => first[0] - second[0] || second[1] - first[1]);
+  let alive = 0, most = 1;
+  for (const [, change] of ends) { alive += change; most = Math.max(most, alive); }
+  const height = D * Math.max(1.5, Math.sqrt(most / SPIRAL.aspect));
+  const weight = runs.map((run) => run.knots.length / Math.max(1, knots.length));
+  // Importance: scenes per layer spanned, over at least one coil turn (a lone scene is not "dense"); the densest run gets the thickest coil.
+  const density = runs.map((run) => run.knots.length / Math.max(SPIRAL.turnLayers, (run.knots.at(-1)!.x - run.knots[0].x) / SPIRAL.dx + 1));
+  const densest = Math.max(...density, 1e-9);
+  const coil = density.map((value) => SPIRAL.coil[0] + (SPIRAL.coil[1] - SPIRAL.coil[0]) * (value / densest));
+  return { runs, index, knots, pairs, span, forkX, mergeX, parent, target, related, events: events.map((xs) => [...new Set(xs)]), weight, coil, height, width: SPIRAL.aspect * height };
 }
 
 interface Params { c: [number, number][]; a: number[]; p: number[]; lf: number[]; lm: number[] }
@@ -128,7 +168,7 @@ function place(prep: Prepared, v: Params, run: number, x: number) {
   const center: [number, number] = [own * c[0] + fromParent * cp[0] + toTarget * ct[0], own * c[1] + fromParent * cp[1] + toTarget * ct[1]];
   const amp = v.a[run] * shrink, angle = OMEGA * x + v.p[run];
   const cos = Math.cos(angle), sin = Math.sin(angle);
-  return { q: [center[0] + amp * cos, center[1] + amp * sin] as [number, number], center, amp, own, fromParent, toTarget, dA: [shrink * cos, shrink * sin], dP: [-amp * sin, amp * cos] };
+  return { q: [center[0] + amp * cos, center[1] + amp * sin] as [number, number], center, amp, own, fromParent, toTarget, dP: [-amp * sin, amp * cos] };
 }
 
 function evaluate(prep: Prepared, v: Params, gradient = true) {
@@ -144,50 +184,54 @@ function evaluate(prep: Prepared, v: Params, gradient = true) {
     const g = (dphi(A, B) * 2) / (S * S) / P;
     gq[i][0] += g * dy; gq[i][1] += g * dz; gq[j][0] -= g * dy; gq[j][1] -= g * dz;
   }
-  const gc = v.c.map(() => [0, 0]), ga = v.a.map(() => 0), gp = v.p.map(() => 0);
+  const gc = v.c.map(() => [0, 0]), gp = v.p.map(() => 0);
   if (gradient) prep.knots.forEach((knot, at) => {
     const k = placed[at], g = gq[at], run = knot.run;
     for (const [target, weight] of [[run, k.own], [prep.parent[run], k.fromParent], [prep.target[run], k.toTarget]] as [number, number][]) {
       if (target < 0 || !weight) continue;
       gc[target][0] += weight * g[0]; gc[target][1] += weight * g[1];
     }
-    ga[run] += g[0] * k.dA[0] + g[1] * k.dA[1];
     gp[run] += g[0] * k.dP[0] + g[1] * k.dP[1];
   });
   // Bending and length of every transition (exact for the quintic on a straight trunk).
   let regular = 0;
   const bend = (run: number, other: number, length: number) => {
-    const b = [(v.c[run][0] - v.c[other][0]) / SPIRAL.radial, (v.c[run][1] - v.c[other][1]) / SPIRAL.radial], scale = (120 / 7) / (length / L0) ** 3;
+    const b = [(v.c[run][0] - v.c[other][0]) / D, (v.c[run][1] - v.c[other][1]) / D], scale = (120 / 7) / (length / L0) ** 3;
     regular += WEIGHTS.bend * scale * (b[0] * b[0] + b[1] * b[1]) + WEIGHTS.length * (length / L0);
     if (!gradient) return;
-    for (const axis of [0, 1]) { const g = (WEIGHTS.bend * scale * 2 * b[axis]) / SPIRAL.radial; gc[run][axis] += g; gc[other][axis] -= g; }
+    for (const axis of [0, 1]) { const g = (WEIGHTS.bend * scale * 2 * b[axis]) / D; gc[run][axis] += g; gc[other][axis] -= g; }
   };
   for (let run = 0; run < n; run++) {
     if (prep.parent[run] >= 0) bend(run, prep.parent[run], v.lf[run]);
     if (prep.target[run] >= 0) bend(run, prep.target[run], v.lm[run]);
   }
   // Tubes alive together keep apart once settled (a fork or merge partner may meet it only at the event):
-  // a mean over the pairs alive together, so many strands do not drown the visibility term.
+  // every pair in full, so a small strand cannot fold back into its parent's tube to save a bend.
   const together: [number, number][] = [];
   for (let e = 0; e < n; e++) for (let f = e + 1; f < n; f++) {
     const [e0, e1] = [prep.span[e][0] + (prep.parent[e] >= 0 ? v.lf[e] : 0), prep.span[e][1] - (prep.target[e] >= 0 ? v.lm[e] : 0)];
     const [f0, f1] = [prep.span[f][0] + (prep.parent[f] >= 0 ? v.lf[f] : 0), prep.span[f][1] - (prep.target[f] >= 0 ? v.lm[f] : 0)];
     if (Math.min(e1, f1) >= Math.max(e0, f0)) together.push([e, f]);
   }
-  const share = WEIGHTS.separation / Math.max(1, together.length);
+  const share = WEIGHTS.separation;
   for (const [e, f] of together) {
-    const dy = v.c[e][0] - v.c[f][0], dz = v.c[e][1] - v.c[f][1], d = Math.hypot(dy, dz) || 1e-9, need = v.a[e] + v.a[f] + S;
+    const dy = v.c[e][0] - v.c[f][0], dz = v.c[e][1] - v.c[f][1], d = Math.hypot(dy, dz) || 1e-9, need = v.a[e] + v.a[f] + S + SPIRAL.clearance;
     if (d >= need) continue;
-    regular += (share * (need - d) ** 2) / (S * S);
+    regular += (share * (need - d) ** 2) / (D * D);
     if (!gradient) continue;
-    const g = (-2 * share * (need - d)) / (S * S);
+    const g = (-2 * share * (need - d)) / (D * D);
     gc[e][0] += (g * dy) / d; gc[e][1] += (g * dz) / d; gc[f][0] -= (g * dy) / d; gc[f][1] -= (g * dz) / d;
-    ga[e] += (-g); ga[f] += (-g);
   }
-  return { objective: visibility + regular, visibility, gc, ga, gp, placed };
+  // Busy strands sink low and to the middle, so strands spread over the floor before they stack up.
+  for (let run = 0; run < n; run++) {
+    const [y, z] = v.c[run], w = prep.weight[run], half = prep.width / 2;
+    regular += WEIGHTS.low * w * (y / prep.height) + WEIGHTS.central * w * (z / half) ** 2;
+    if (gradient) { gc[run][0] += (WEIGHTS.low * w) / prep.height; gc[run][1] += (2 * WEIGHTS.central * w * z) / (half * half); }
+  }
+  return { objective: visibility + regular, visibility, gc, gp, placed };
 }
 
-/** Share of knots in a physical overlap (projected distance < 2r), averaged over evenly spaced half-turn angles. */
+/** Share of knots in a physical overlap with another strand's knot (projected distance < 2r), averaged over evenly spaced half-turn angles. */
 function overlapShare(prep: Prepared, v: Params, angles = 90): number {
   const placed = prep.knots.map((knot) => place(prep, v, knot.run, knot.x).q);
   if (!placed.length) return 0;
@@ -195,6 +239,7 @@ function overlapShare(prep: Prepared, v: Params, angles = 90): number {
   for (let k = 0; k < angles; k++) {
     const theta = ((k + 0.5) * Math.PI) / angles, cos = Math.cos(theta), sin = Math.sin(theta), hit = new Set<number>();
     for (const [i, j] of prep.pairs) {
+      if (prep.knots[i].run === prep.knots[j].run) continue;
       const dx = prep.knots[j].x - prep.knots[i].x, dv = (placed[i][0] - placed[j][0]) * cos + (placed[i][1] - placed[j][1]) * sin;
       if (dx * dx + dv * dv < (2 * SPIRAL.knot) ** 2) { hit.add(i); hit.add(j); }
     }
@@ -203,12 +248,11 @@ function overlapShare(prep: Prepared, v: Params, angles = 90): number {
   return total / angles;
 }
 
-/** Keep every knot in the frame at every rotation (‖c‖ + a + r ≤ R) and the coils within bounds. */
-function project(v: Params) {
-  v.a.forEach((a, run) => { v.a[run] = Math.min(SPIRAL.coil[1], Math.max(SPIRAL.coil[0], a)); });
+/** Keep every knot inside the floor box at every rotation (a + r ≤ y ≤ H − a − r, |z| ≤ W − a − r). */
+function project(prep: Prepared, v: Params) {
   v.c.forEach((c, run) => {
-    const room = SPIRAL.radial - v.a[run] - SPIRAL.knot, length = Math.hypot(c[0], c[1]);
-    if (length > room) v.c[run] = [(c[0] / length) * room, (c[1] / length) * room];
+    const edge = v.a[run] + SPIRAL.knot, side = prep.width / 2 - edge;
+    v.c[run] = [Math.min(prep.height - edge, Math.max(edge, c[0])), Math.min(side, Math.max(-side, c[1]))];
   });
 }
 
@@ -216,7 +260,7 @@ function project(v: Params) {
 function transitions(prep: Prepared, v: Params) {
   const [low, high] = SPIRAL.transitionLayers.map((layers) => layers * SPIRAL.dx);
   const best = (run: number, other: number) => {
-    const b2 = ((v.c[run][0] - v.c[other][0]) ** 2 + (v.c[run][1] - v.c[other][1]) ** 2) / SPIRAL.radial ** 2;
+    const b2 = ((v.c[run][0] - v.c[other][0]) ** 2 + (v.c[run][1] - v.c[other][1]) ** 2) / D ** 2;
     return Math.min(high, Math.max(low, L0 * ((360 * WEIGHTS.bend * b2) / (7 * WEIGHTS.length)) ** 0.25));
   };
   prep.runs.forEach((run, at) => {
@@ -226,14 +270,36 @@ function transitions(prep: Prepared, v: Params) {
   });
 }
 
-/** Deterministic starts: runs on a sunflower inside the frame, rotated per start; phases spread by the golden angle. */
-function start(prep: Prepared, rotation: number): Params {
-  const n = prep.runs.length, golden = Math.PI * (3 - Math.sqrt(5));
-  const c = prep.runs.map((_, at): [number, number] => {
-    const radius = 0.5 * SPIRAL.radial * Math.sqrt((at + 0.5) / Math.max(1, n)), angle = rotation + at * golden;
-    return [radius * Math.cos(angle), radius * Math.sin(angle)];
+/**
+ * A packed start: busiest runs first, each in the cheapest free slot of a
+ * grid on the floor box (low and central first, by the same weights as the
+ * objective), free meaning no run alive with it took it. Gradient steps alone
+ * cannot swap two strands through each other, so this sets the order.
+ */
+function packed(prep: Prepared, mirror: boolean): [number, number][] {
+  const edge = SPIRAL.coil[1] + SPIRAL.knot, half = prep.width / 2;
+  const slots: [number, number][] = [];
+  for (let y = edge; y <= prep.height - edge + 1e-9; y += D) for (let k = 0; k * D <= half - edge; k++) for (const z of k ? [k * D, -k * D] : [0]) slots.push([y, mirror ? -z : z]);
+  const cost = ([y, z]: [number, number]) => WEIGHTS.low * (y / prep.height) + WEIGHTS.central * (z / half) ** 2;
+  slots.sort((first, second) => cost(first) - cost(second));
+  const together = (e: number, f: number) => Math.min(prep.span[e][1], prep.span[f][1]) > Math.max(prep.span[e][0], prep.span[f][0]);
+  const taken = slots.map(() => [] as number[]), at = prep.runs.map((): [number, number] => [edge, 0]);
+  for (const run of prep.runs.map((_, index) => index).sort((first, second) => prep.weight[second] - prep.weight[first] || first - second)) {
+    const slot = Math.max(0, taken.findIndex((runs) => !runs.some((other) => together(run, other))));
+    taken[slot].push(run);
+    at[run] = [...slots[slot]];
+  }
+  return at;
+}
+
+/** Deterministic starts: the packed grid and its mirror, then runs on a sunflower stretched over the floor box; phases spread by the golden angle. */
+function start(prep: Prepared, attempt: number, starts: number): Params {
+  const n = prep.runs.length, golden = Math.PI * (3 - Math.sqrt(5)), rotation = (2 * Math.PI * attempt) / Math.max(1, starts);
+  const c = attempt < 2 ? packed(prep, attempt === 1) : prep.runs.map((_, at): [number, number] => {
+    const radius = 0.8 * Math.sqrt((at + 0.5) / Math.max(1, n)), angle = rotation + at * golden;
+    return [prep.height * (0.5 + 0.5 * radius * Math.sin(angle)), (prep.width / 2) * radius * Math.cos(angle)];
   });
-  return { c, a: prep.runs.map(() => 16), p: prep.runs.map((_, at) => at * golden), lf: prep.runs.map(() => 5 * SPIRAL.dx), lm: prep.runs.map(() => 5 * SPIRAL.dx) };
+  return { c, a: [...prep.coil], p: prep.runs.map((_, at) => at * golden), lf: prep.runs.map(() => 5 * SPIRAL.dx), lm: prep.runs.map(() => 5 * SPIRAL.dx) };
 }
 
 const clone = (v: Params): Params => ({ c: v.c.map((c) => [...c] as [number, number]), a: [...v.a], p: [...v.p], lf: [...v.lf], lm: [...v.lm] });
@@ -245,23 +311,22 @@ export function solveSpiral(input: SpiralRun[], options: { iterations?: number; 
   let best: { v: Params; objective: number } | null = null;
   let initial: { objective: number; visibility: number; overlap: number } | null = null;
   for (let s = 0; s < starts; s++) {
-    const v = start(prep, (2 * Math.PI * s) / Math.max(1, starts));
-    project(v); transitions(prep, v);
+    const v = start(prep, s, starts);
+    project(prep, v); transitions(prep, v);
     if (!initial) { const first = evaluate(prep, v, false); initial = { objective: first.objective, visibility: first.visibility, overlap: overlapShare(prep, v) }; }
-    const rates = { c: 1.5, a: 0.4, p: 0.04 }, beta = [0.9, 0.999];
-    const m = { c: v.c.map(() => [0, 0]), a: v.a.map(() => 0), p: v.p.map(() => 0) }, s2 = { c: v.c.map(() => [0, 0]), a: v.a.map(() => 0), p: v.p.map(() => 0) };
+    const rates = { c: 4, p: 0.04 }, beta = [0.9, 0.999];
+    const m = { c: v.c.map(() => [0, 0]), p: v.p.map(() => 0) }, s2 = { c: v.c.map(() => [0, 0]), p: v.p.map(() => 0) };
     let kept = { v: clone(v), objective: evaluate(prep, v, false).objective };
     for (let t = 1; t <= iterations; t++) {
-      const { gc, ga, gp } = evaluate(prep, v);
+      const { gc, gp } = evaluate(prep, v);
       const correct = (moment: number, power: number) => moment / (1 - beta[power] ** t);
       v.c.forEach((c, run) => { for (const axis of [0, 1]) {
         m.c[run][axis] = beta[0] * m.c[run][axis] + (1 - beta[0]) * gc[run][axis];
         s2.c[run][axis] = beta[1] * s2.c[run][axis] + (1 - beta[1]) * gc[run][axis] ** 2;
         c[axis] -= (rates.c * correct(m.c[run][axis], 0)) / (Math.sqrt(correct(s2.c[run][axis], 1)) + 1e-12);
       } });
-      v.a.forEach((_, run) => { m.a[run] = beta[0] * m.a[run] + (1 - beta[0]) * ga[run]; s2.a[run] = beta[1] * s2.a[run] + (1 - beta[1]) * ga[run] ** 2; v.a[run] -= (rates.a * correct(m.a[run], 0)) / (Math.sqrt(correct(s2.a[run], 1)) + 1e-12); });
       v.p.forEach((_, run) => { m.p[run] = beta[0] * m.p[run] + (1 - beta[0]) * gp[run]; s2.p[run] = beta[1] * s2.p[run] + (1 - beta[1]) * gp[run] ** 2; v.p[run] -= (rates.p * correct(m.p[run], 0)) / (Math.sqrt(correct(s2.p[run], 1)) + 1e-12); });
-      project(v);
+      project(prep, v);
       if (t % 20 === 0) transitions(prep, v);
       const now = evaluate(prep, v, false).objective;
       if (now < kept.objective) kept = { v: clone(v), objective: now };
@@ -275,6 +340,7 @@ export function solveSpiral(input: SpiralRun[], options: { iterations?: number; 
     forks: new Map(prep.runs.flatMap((run, at) => prep.parent[at] >= 0 ? [[run.id, v.lf[at]] as [string, number]] : [])),
     merges: new Map(prep.runs.flatMap((run, at) => prep.target[at] >= 0 ? [[run.id, v.lm[at]] as [string, number]] : [])),
     objective: final.objective, visibility: final.visibility, overlap: overlapShare(prep, v), initial: initial ?? { objective: 0, visibility: 0, overlap: 0 }, pairs: prep.pairs.length,
+    frame: { width: Math.round(prep.width), height: Math.round(prep.height) },
   };
 }
 
