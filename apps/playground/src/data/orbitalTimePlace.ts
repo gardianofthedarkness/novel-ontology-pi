@@ -4,6 +4,7 @@ import type { Position3 } from "./spatialLayout.js";
 import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
 import { storyStrands, type StrandCheck, type StrandEdge } from "./storyStrands.js";
 import { dateLine, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
+import { ARCHITECTURE_LABEL, architectureOf, type ArchitectureKind } from "./placeArchitecture.js";
 
 /**
  * Orbital Story time and Places (time-place phase 1, view only). Each is the
@@ -72,7 +73,11 @@ export interface OrbitalArrangement {
   morphDelays?: (draws: OrbitalDraw[]) => Map<string, number>;
 }
 /** A place's disc on the floor; a region (a place containing others) is a wider, fainter disc under its children. */
-export interface FloorMark { id: string; x: number; z: number; radius: number; active: boolean; depth?: number; region?: boolean; proposed?: boolean }
+export interface FloorMark {
+  id: string; x: number; z: number; radius: number; active: boolean; depth?: number; region?: boolean; proposed?: boolean;
+  /** The building the place's name names (a hologram on its disc), and where its own scenes attach. */
+  architecture?: ArchitectureKind; spotX?: number; spotZ?: number;
+}
 
 
 /** A scene with everything around it in its chapter: records it covers and
@@ -531,11 +536,12 @@ export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter,
     const point = layout.get(place.id);
     // In a universe, the reader's book's places stay bright; the others' recede.
     const inBook = !universe || focusBook === null || focusBook === undefined || !!place.books?.includes(focusBook) || data.scenes.some((scene) => scene.book === focusBook && scene.placeIds.some((id) => (placePaths.get(id) ?? [id]).includes(place.id)));
-    return point ? [{ id: place.id, x: (point.x - 300) * SCALE, z: (point.y - 300) * SCALE, radius: Math.max(40, point.r * SCALE), active: shown.has(place.id) && inBook, depth: point.depth, region: point.region, proposed: !!place.parentProposed }] : [];
+    const architecture = architectureOf(place.label, place.architecture) ?? undefined;
+    return point ? [{ id: place.id, x: (point.x - 300) * SCALE, z: (point.y - 300) * SCALE, radius: Math.max(40, point.r * SCALE), active: shown.has(place.id) && inBook, depth: point.depth, region: point.region, proposed: !!place.parentProposed, architecture, spotX: (point.spotX - 300) * SCALE, spotZ: (point.spotY - 300) * SCALE }] : [];
   }).sort((first, second) => (first.depth ?? 0) - (second.depth ?? 0));
   const pins: OrbitalDraw[] = data.places.flatMap((place): OrbitalDraw[] => {
     const spot = map.get(place.id);
-    return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: place.proposed ? "proposed" : "canon", parent: null, lane: "canon", chrono: 0, summary: `${(place.path?.length ?? 1) > 1 ? `${placePathLabel(place, data.names)} · ` : ""}${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it)${(place.totalScenes ?? 0) > place.sceneIds.length ? ` · ${place.totalScenes} inside` : ""}${place.parentProposed ? " · inside-link proposed" : ""} · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
+    return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: place.proposed ? "proposed" : "canon", parent: null, lane: "canon", chrono: 0, summary: `${architectureOf(place.label, place.architecture) ? `${ARCHITECTURE_LABEL[architectureOf(place.label, place.architecture)!]} · ` : ""}${(place.path?.length ?? 1) > 1 ? `${placePathLabel(place, data.names)} · ` : ""}${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it)${(place.totalScenes ?? 0) > place.sceneIds.length ? ` · ${place.totalScenes} inside` : ""}${place.parentProposed ? " · inside-link proposed" : ""} · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
   });
   const withRecords = levels.event || levels.dialogue;
   /** Records sit inside their scene, whose sphere (scaled like the main

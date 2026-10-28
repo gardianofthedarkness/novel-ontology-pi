@@ -42,6 +42,8 @@ export interface StoryScene {
   book?: number;
   continuityId?: string | null;
 }
+import type { ArchitectureKind } from "./placeArchitecture.js";
+
 export interface StoryPlace {
   id: string; label: string; sceneIds: string[]; statedScenes: number; characterIds: string[];
   /** Proposed, awaiting review. */ proposed?: boolean;
@@ -50,6 +52,7 @@ export interface StoryPlace {
   /** Scenes here or anywhere inside this place. */ totalScenes?: number;
   /** A generic place ("车站前") that exists only inside its named parent. */ generic?: boolean;
   /** Universe views: the books it appears in, and its book places (`<volume>:<id>`). */ books?: number[]; members?: string[];
+  /** The building a decision model picked from the name's shortlist ("none": not a building). */ architecture?: ArchitectureKind | "none";
 }
 export interface UniverseBook { volume: number; sourceId: string; title: string; continuityId: string | null; readingOrder: number | null }
 export interface TimePlaceProjection {
