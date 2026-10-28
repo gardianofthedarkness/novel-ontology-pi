@@ -25,7 +25,7 @@ test("the checklist lists each faculty in dependency order with its next command
   const { directory, packet } = await workspace(context);
   const statusOf = async () => Object.fromEntries((await bookChecklist(directory)).items.map((item) => [item.id, item.status]));
   // Nothing applied yet: extraction is the gap; everything after it waits.
-  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", causality: "blocked", "time-place": "blocked", "place-tree": "blocked", graph: "blocked" });
+  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", causality: "blocked", "time-place": "blocked", "place-tree": "blocked", strands: "blocked", graph: "blocked" });
   await saveChangeSet(directory, packet("cs_b0001", "b0001", "approved"));
   await markCausalitySweepPending(directory);
   const after = await bookChecklist(directory);
@@ -49,4 +49,8 @@ test("the checklist lists each faculty in dependency order with its next command
   const settled = (await bookChecklist(directory)).items.find((item) => item.id === "time-place")!;
   assert.deepEqual([settled.status, settled.counts.processedWithoutPeriod], ["done", 2]);
   assert.match(settled.note!, /not re-asked/);
+  // Strands follow story time; with no periods there is nothing to ask.
+  const strands = (await bookChecklist(directory)).items.find((item) => item.id === "strands")!;
+  assert.deepEqual([strands.status, strands.next], ["done", []]);
+  assert.match(strands.note!, /No story periods/);
 });

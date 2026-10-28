@@ -224,13 +224,15 @@ export interface TimeplaceStrandsOptions { ask?: boolean; maxQuestions?: number;
  * cast creates a strand link; asks them (work model, within --max-questions)
  * only with --ask. Writes a report; nothing is written to canon.
  */
-export async function timeplaceStrands(novelDir: string, options: TimeplaceStrandsOptions = {}): Promise<Record<string, unknown>> {
-  const env = options.env ?? process.env;
+/**
+ * What the strands step works from (no model calls): the story-time view of a
+ * workspace, its strands before any question, every scene's cast candidates
+ * and the planned "who is present?" questions. Shared with `novel checklist`.
+ */
+export async function strandInputs(novelDir: string, limits: { maxQuestions?: number; minImpact?: number } = {}) {
   const { scenes, entities, relations } = await loadBundle(novelDir);
   const pending = (await listChangeSets(novelDir)).filter((changeset) => changeset.status === "pending_review" && changeset.id.startsWith("cs_timeplace")).flatMap((changeset) => changeset.proposals as unknown as { kind: string; payload: Record<string, unknown> }[]);
   const data = strandProjection({ scenes, entities, relations, pending });
-  if (!data.available) throw new Error("No story time yet: run `novel timeplace run` first (strands build on its periods).");
-  const limits = { maxQuestions: options.maxQuestions ?? STRAND_QUESTION_DEFAULTS.maxQuestions, minImpact: options.minImpact ?? STRAND_QUESTION_DEFAULTS.minImpact };
   const before = storyStrands(data);
   // Cast candidates for every scene: names found in its text, its record, its neighbours, chapter and volume.
   const sentences = await loadWorkspaceSentences(novelDir);
@@ -239,7 +241,15 @@ export async function timeplaceStrands(novelDir: string, options: TimeplaceStran
   const characters = entities.filter((entity) => entity.kind === "Character").map((entity) => ({ id: entity.id, forms: [...new Set((entity.names ?? []).map((name) => name.text).filter(Boolean))] }));
   const candidates = castCandidates(data.scenes.map((scene) => ({ id: scene.id, chapterIndex: scene.chapterIndex, index: scene.index, text: lines(scene.id).join("\n"), present: byScene.get(scene.id)?.charactersPresent ?? [], mentioned: byScene.get(scene.id)?.charactersMentioned ?? [] })), characters);
   const names = { ...Object.fromEntries(entities.filter((entity) => entity.kind === "Character").map((entity) => [entity.id, entity.names?.find((name) => name.kind === "canonical")?.text ?? entity.names?.[0]?.text ?? entity.id])), ...data.names };
-  const plan = planStrandQuestions(data, before, { ...limits, candidates });
+  const plan = data.available ? planStrandQuestions(data, before, { ...limits, candidates }) : { questions: [], belowThreshold: 0, overBudget: 0, estimate: { questions: 0, calls: 0 } };
+  return { data, before, plan, lines, characters, names };
+}
+
+export async function timeplaceStrands(novelDir: string, options: TimeplaceStrandsOptions = {}): Promise<Record<string, unknown>> {
+  const env = options.env ?? process.env;
+  const limits = { maxQuestions: options.maxQuestions ?? STRAND_QUESTION_DEFAULTS.maxQuestions, minImpact: options.minImpact ?? STRAND_QUESTION_DEFAULTS.minImpact };
+  const { data, before, plan, lines, characters, names } = await strandInputs(novelDir, limits);
+  if (!data.available) throw new Error("No story time yet: run `novel timeplace run` first (strands build on its periods).");
   let asked: Awaited<ReturnType<typeof askStrandQuestions>>["asked"] = [];
   let answers: StrandAnswers = {};
   let strands = before;

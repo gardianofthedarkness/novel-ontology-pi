@@ -36,6 +36,8 @@ export interface StoryScene {
   placeIds: string[];
   placeCarried: boolean;
   characterIds: string[];
+  /** Answered "nobody known is here, someone else is": strands never borrow a cast for it. */
+  alone?: boolean;
   /** Universe views: the book (volume) and continuity of this scene. */
   book?: number;
   continuityId?: string | null;

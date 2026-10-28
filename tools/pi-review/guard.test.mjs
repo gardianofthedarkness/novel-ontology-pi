@@ -186,6 +186,10 @@ test('time-place runs only propose for the assigned book, and their packets revi
     `novel timeplace run /elsewhere --propose`,
   ]) assert.throws(() => authorize(command, scope), /Time-place/);
   assert.throws(() => authorize(`novel review show ${novel} cs_timeplace_time-place_9 --scope book`, scope), /outside the assigned scope/);
+  // Strands: a report for the story view; --ask spends a bounded number of questions.
+  assert.equal(authorize(`novel timeplace strands ${novel}`, scope).label, 'novel timeplace strands');
+  assert.equal(authorize(`novel timeplace strands ${novel} --ask --max-questions 30 --min-impact 8`, scope).label, 'novel timeplace strands');
+  for (const command of [`novel timeplace strands ${novel} --ask --max-questions 500`, `novel timeplace strands ${novel} --propose`, `novel timeplace strands ${novel} --out /tmp/x.json`, `novel timeplace strands /elsewhere --ask`, `novel timeplace run ${novel} --propose --ask`]) assert.throws(() => authorize(command, scope), command);
 });
 
 test('error explanations are available to Pi', () => {

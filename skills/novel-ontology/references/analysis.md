@@ -9,7 +9,8 @@ item's status, counts and the exact next command.
 
 ```
 book:      source ─▶ blocks ─┬─▶ causality   (cross-scene, in this book)
-           (album, optional) ├─▶ time-place ─▶ place-tree
+           (album, optional) ├─▶ time-place ─┬─▶ place-tree
+                             │               └─▶ strands     (who is in each scene; report for the story view)
                              └─▶ graph       (rebuilt after canon changes)
 
 universe:  organization ─▶ books (each complete) ─┬─▶ atlas              (same place / inside, across books)
@@ -29,6 +30,7 @@ the earliest unblocked item; for a library, finish books in reading order.
 | causality | the sweep is not pending and no causal packet waits | `novel causality sweep <dir>` | `cs_causality_*`, after reading `causality.md` |
 | time-place | every scene was processed (a period, or processed without one) | `novel timeplace run <dir> --propose` | `cs_timeplace_*` |
 | place-tree | no unasked place pair remains | `novel timeplace tree <dir> --propose` | `cs_timeplace_place-tree_*` |
+| strands | nothing is worth asking, or the latest asked report is newer than the casts and story time it read | `novel timeplace strands <dir> --ask` | — (a report the story view draws; no packet) |
 | graph | `graph.lbug` is newer than the bundle | `novel graph build <dir>/ontology` | — |
 | organization | no unresolved library assignment | novel-library skill | `--scope library` |
 | atlas | no unasked cross-book place pair remains | `novel atlas sweep <library> <universe> --propose` | `ua_*` with `--scope universe` |
@@ -50,7 +52,7 @@ the earliest unblocked item; for a library, finish books in reading order.
   not on every sweep.
 - **Re-run the checklist after each step.** If a step leaves its item
   unchanged, stop and report it as stuck with the reason. Do not loop.
-- **Paid steps** (ingest, the sweeps, time-place runs) spend model and Jev
+- **Paid steps** (ingest, the sweeps, time-place runs, strands with `--ask`) spend model and Jev
   calls. Respect the job's limits and the user's budget. Report what each
   step spent.
 - **When done**, report each item's status and counts. Separate verified,

@@ -82,6 +82,9 @@ test("nobody listed but someone else there: the scene stands alone instead of bo
   const before = storyStrands(data), after = storyStrands(data, { alone: new Set(["l2"]) });
   assert.ok(before.carried.has("l2") && before.before("l1", "l2"));
   assert.ok(!after.carried.has("l2") && !after.before("l1", "l2") && !after.before("l2", "l1"));
+  // The viewer marks the scene itself (from the latest report): the same effect.
+  const marked = storyStrands({ ...data, scenes: data.scenes.map((entry) => entry.id === "l2" ? { ...entry, alone: true } : entry) });
+  assert.ok(!marked.carried.has("l2"));
 });
 
 test("a long scene keeps its opening, its close, and the middle sentences that name a listed character", () => {

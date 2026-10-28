@@ -10,7 +10,7 @@ import { readCausalityMemory } from "../../../solidifier/causality/faculty.js";
 import { loadUniverseContext, universeBindings, universeCandidates } from "../../../solidifier/causality/universe.js";
 import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/atlas/universeAtlas.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
-import { loadWorkspaceSentences } from "./timeplaceCommands.js";
+import { loadWorkspaceSentences, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
 
 /**
@@ -19,7 +19,8 @@ import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
  * complete when every faculty below is "done":
  *
  *   source ─▶ blocks ─┬─▶ causality (in-book, cross-scene sweep)
- *   (album, optional) ├─▶ time-place ─▶ place-tree
+ *   (album, optional) ├─▶ time-place ─┬─▶ place-tree
+ *                     │               └─▶ strands (who is in each scene; report for the story view)
  *                     └─▶ graph (rebuilt after canon changes)
  *
  * and a universe's when every member book is complete and its cross-book
@@ -117,9 +118,28 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
     next: treeReview.length ? treeReview.map((changeset) => reviewCommand(changeset.id)) : unsettled ? [`novel timeplace tree ${dir} --propose`] : [],
     note: unsettled && swept ? "New pairs, or asked pairs with more evidence since, are waiting." : undefined });
 
+  const newest = Math.max(0, ...await Promise.all(["entities", "relations", "events", "scenes"].map((name) => stat(join(novelDir, "ontology", `${name}.jsonl`)).then((info) => info.mtimeMs, () => 0))));
+
+  // Strands: who is in each scene where a borrowed cast would decide the story order ("who is present?",
+  // work model). Done when nothing is worth asking, or the latest asked report is newer than the casts and
+  // story time it read. Report only: it feeds the story-strands view; no review packet.
+  const timeplaceFiles = (await readdir(join(novelDir, "changesets")).catch(() => [] as string[])).filter((name) => name.startsWith("cs_timeplace"));
+  const inputsAt = Math.max(newest, ...await Promise.all(timeplaceFiles.map((name) => stat(join(novelDir, "changesets", name)).then((info) => info.mtimeMs, () => 0))));
+  let askedAt = 0;
+  for (const name of (await readdir(join(novelDir, "timeplace")).catch(() => [] as string[])).filter((entry) => /^strands-.+\.json$/.test(entry)).sort().reverse()) {
+    const report = JSON.parse(await readFile(join(novelDir, "timeplace", name), "utf8").catch(() => "null")) as { after?: unknown } | null;
+    if (report?.after) { askedAt = (await stat(join(novelDir, "timeplace", name))).mtimeMs; break; }
+  }
+  const strandPlan = timed.size ? (await strandInputs(novelDir)).plan : null;
+  const toAsk = strandPlan?.questions.length ?? 0, current = !!askedAt && askedAt >= inputsAt;
+  items.push({ id: "strands", title: "Story strands (who is in each scene, what runs in parallel)", dependsOn: ["time-place"],
+    status: !timed.size || !toAsk || current ? "done" : "todo",
+    counts: { questions: toAsk, calls: strandPlan?.estimate.calls ?? 0, asked: !!askedAt, current },
+    next: timed.size && toAsk && !current ? [`novel timeplace strands ${dir} --ask`] : [],
+    note: !timed.size ? "No story periods to build strands on." : toAsk && !current ? `About ${strandPlan!.estimate.calls} work-model call(s); writes a report the story view uses, nothing to canon.` : undefined });
+
   // Graph: the queryable graph rebuilt after canon changed.
   const graph = await stat(join(novelDir, "ontology", "graph.lbug")).catch(() => null);
-  const newest = Math.max(0, ...await Promise.all(["entities", "relations", "events", "scenes"].map((name) => stat(join(novelDir, "ontology", `${name}.jsonl`)).then((info) => info.mtimeMs, () => 0))));
   items.push({ id: "graph", title: "Query graph up to date", dependsOn: ["blocks"], status: !graph || graph.mtimeMs < newest ? "todo" : "done",
     counts: { built: !!graph }, next: !graph || graph.mtimeMs < newest ? [`novel graph build ${quote(join(novelDir, "ontology"))}`] : [] });
 

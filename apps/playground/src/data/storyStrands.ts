@@ -87,7 +87,7 @@ export function storyStrands(data: TimePlaceProjection, answers: StrandAnswers =
   const appearances = new Map<string, number>();
   for (const ids of cast) for (const id of ids) appearances.set(id, (appearances.get(id) ?? 0) + 1);
   scenes.forEach((scene, index) => {
-    if (cast[index].length || scene.flashback || answers.alone?.has(scene.id)) return;
+    if (cast[index].length || scene.flashback || scene.alone || answers.alone?.has(scene.id)) return;
     const window = scenes.slice(0, index).map((other, at) => ({ other, at })).filter(({ other, at }) => cast[at].length && !other.flashback && other.chapterIndex === scene.chapterIndex && sameRegion(region(other), region(scene))).slice(-4);
     if (!window.length) return;
     // A shared place wins; otherwise the thread the book follows most (cast weighted by their scene counts), then the nearest.

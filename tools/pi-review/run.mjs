@@ -148,7 +148,7 @@ try {
     causality: { prefix: 'novel causality universe', operations: ['candidates', 'sweep', 'evidence', 'propose', 'show', 'decide', 'list'], scope: 'reviewed universe, same continuity, canonical data only', maxPairsPerBatch: 20 },
     atlas: { prefix: 'novel atlas', operations: ['sweep (--propose)', 'show'], review: 'novel review ... --scope universe --universe <id> (ua_ packets)' },
     checklist: 'novel checklist <library> --universe <id>' };
-  manifest.analysis = { checklist: 'novel checklist <workspace>', reference: `${repo}/skills/novel-ontology/references/analysis.md`, rule: 'Run the checklist first when asked to inspect, continue or find missing pieces; follow its next list in order.' };
+  manifest.analysis = { checklist: 'novel checklist <workspace>', reference: `${repo}/skills/novel-ontology/references/analysis.md`, rule: 'Run the checklist first when asked to inspect, continue or find missing pieces; follow its next list in order.', review: `${repo}/skills/novel-ontology/references/review.md` };
   const serializedManifest = JSON.stringify({ version: manifest.version, ...(manifest.library ? { library: manifest.library } : {}), ...manifest }, null, 2);
   await writeFile(manifestPath, serializedManifest, { mode: 0o600 });
   await writeFile(`${jobRoot}/job.json`, serializedManifest, { mode: 0o600 });
@@ -166,7 +166,7 @@ try {
     interactiveDeadline = Math.min(deadline, Date.parse(control.expiresAt));
     consoleChannel = createPiConsole({ directory: `${cwd}/pi-console`, agentEvents, controlToken: control.token, expiresAt: interactiveDeadline });
   }
-  const sourcePaths = [skill, causalityReference, `${repo}/skills/novel-ontology/references/repair.md`, `${repo}/skills/novel-ontology/references/semantic-review.md`, `${repo}/skills/novel-ontology/references/analysis.md`, manifestPath, 'NOVEL_JOB.json', ...volumes.flatMap((volume) => volume.blocks.map((block) => block.evidence)),
+  const sourcePaths = [skill, causalityReference, `${repo}/skills/novel-ontology/references/repair.md`, `${repo}/skills/novel-ontology/references/semantic-review.md`, `${repo}/skills/novel-ontology/references/analysis.md`, `${repo}/skills/novel-ontology/references/review.md`, manifestPath, 'NOVEL_JOB.json', ...volumes.flatMap((volume) => volume.blocks.map((block) => block.evidence)),
     // Each book's stored original (read-only; evidence pages still come from the block files).
     ...volumes.map((volume) => `${volume.workspace}/source/${volume.input.split('/').at(-1)}`)];
   sourcePaths.push(portraitSkill);
