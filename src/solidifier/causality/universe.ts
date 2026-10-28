@@ -11,6 +11,8 @@ import { causalSource } from "./evidence.js";
 import { checkCausalLinks } from "./checklist.js";
 import type { CausalCandidate } from "./candidates.js";
 import { loadCausalityUniverse, unitDossier, type CausalUnit, type CausalityUniverse } from "./units.js";
+import { calendarEntry, compareOnCalendar, describeEntry, loadCalendar, type CalendarEntry } from "../calendar/calendar.js";
+import { BundleStore } from "../../ground/connectors/bundle.js";
 
 export interface UniverseBinding { sourceId: string; workspace: string; inputSha256: string }
 export interface UniverseBindingConfig { directory: string; bindings: UniverseBinding[] }
@@ -52,6 +54,8 @@ export interface UniverseContext {
   originals: Map<string, OriginalUnit>;
   hints: Map<string, string[]>;
   coverage: { sourceId: string; title: string; units: number; status: "available" | "unprocessed" }[];
+  /** Each book's workspace, for reading its story time against the universe calendar. */
+  workspaces?: Map<string, string>;
 }
 
 const identifier = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/;
@@ -108,10 +112,12 @@ export async function loadUniverseContext(directory: string, universeId: string,
   const relations: CausalityUniverse["relations"] = [];
   const coverage: UniverseContext["coverage"] = [];
   const fingerprints: unknown[] = [];
+  const workspaces = new Map<string, string>();
   for (const source of catalog.sources) {
     const binding = config?.bindings.find(entry => entry.sourceId === source.id);
     if (config && !binding) throw new Error("Reviewed source is not assigned to this host.");
     const workspace = resolve(binding?.workspace ?? source.workspace);
+    workspaces.set(source.id, workspace);
     try {
       if (!(await lstat(workspace)).isDirectory() || await realpath(workspace) !== workspace) throw new Error("Causal workspace must be a canonical regular directory.");
     } catch (error) {
@@ -161,7 +167,7 @@ export async function loadUniverseContext(directory: string, universeId: string,
     fingerprints.push([source.id, original.hash, graphHashes]);
   }
   const universe: CausalityUniverse = { units, byId: new Map(units.map(unit => [unit.id, unit])), scenes: [], events: [], relations, stateChanges: [], sceneIndexInChapter: new Map(), sceneEvents: new Map(), eventScene: new Map() };
-  return { directory, universeId, bindings: config, revision: digest({ catalog: catalog.revision, fingerprints, ledgerGeneration: (await ledger(directory)).generation }), catalogRevision: catalog.revision, universe, originals, hints, coverage };
+  return { directory, universeId, bindings: config, revision: digest({ catalog: catalog.revision, fingerprints, ledgerGeneration: (await ledger(directory)).generation }), catalogRevision: catalog.revision, universe, originals, hints, coverage, workspaces };
 }
 
 async function requireFresh(context: UniverseContext) {
@@ -182,8 +188,36 @@ function pair(context: UniverseContext, fromId: string, toId: string) {
 function latestDecisions(state: UniverseLedger) {
   return [...new Map(state.decisions.map(entry => [`${entry.packetId}:${entry.proposalId}`, entry])).values()];
 }
+/**
+ * Where each causal unit sits on the universe calendar (the one clock): its
+ * scene's period, the narrowest when it has several. Null when the calendar
+ * has not been built or the scene has no placed period.
+ */
+async function calendarPositions(context: UniverseContext): Promise<(unitId: string) => CalendarEntry | null> {
+  const calendar = await loadCalendar({ root: context.directory, universeId: context.universeId }).catch(() => null);
+  if (!calendar) return () => null;
+  const periodsOf = new Map<string, Map<string, string[]>>();
+  for (const [sourceId, workspace] of context.workspaces ?? []) {
+    const relations = await new BundleStore(join(workspace, "ontology")).loadFile<{ fromId: string; toId: string; type: string }>("relations.jsonl").catch(() => []);
+    const scenes = new Map<string, string[]>();
+    for (const relation of relations) if (relation.type === "OCCURS_DURING") scenes.set(relation.fromId, [...scenes.get(relation.fromId) ?? [], relation.toId]);
+    periodsOf.set(sourceId, scenes);
+  }
+  return (unitId) => {
+    const unit = context.universe.byId.get(unitId);
+    const sourceId = unit?.origin?.sourceId;
+    if (!unit?.sceneId || !sourceId) return null;
+    // Universe units carry qualified scene ids (`<source>::<scene>`).
+    const sceneId = unit.sceneId.startsWith(`${sourceId}::`) ? unit.sceneId.slice(sourceId.length + 2) : unit.sceneId;
+    const placed = (periodsOf.get(sourceId)?.get(sceneId) ?? []).map((timeId) => calendarEntry(calendar, sourceId, timeId)).filter((entry): entry is CalendarEntry => !!entry);
+    return placed.sort((first, second) => (first.span.end - first.span.start) - (second.span.end - second.span.start))[0] ?? null;
+  };
+}
+
 async function candidates(context: UniverseContext) {
   const state = await ledger(context.directory);
+  // The universe calendar orders units across books: a cause never comes after its effect on it.
+  const onCalendar = await calendarPositions(context);
   const linked = new Set<string>();
   for (const decision of latestDecisions(state).filter(entry => entry.universeId === context.universeId && entry.verdict === "accept")) {
     try {
@@ -208,11 +242,15 @@ async function candidates(context: UniverseContext) {
       const endpoints = [firstId, secondId].sort();
       const from = context.universe.byId.get(endpoints[0])!, to = context.universe.byId.get(endpoints[1])!;
       if (from.origin!.continuityId !== to.origin!.continuityId || linked.has(endpoints.join("|"))) continue;
+      const [first, second] = [onCalendar(endpoints[0]), onCalendar(endpoints[1])];
+      const order = first && second ? compareOnCalendar(first, second) : null;
       for (const [fromId, toId] of [endpoints, [...endpoints].reverse()]) {
+        // Against the calendar: the cause would come after its effect.
+        if (order !== null && (fromId === endpoints[0] ? order : -order) === 1) continue;
         const key = `${fromId}|${toId}`;
         const previous = nominated.get(key);
         if (previous) previous.codeScore++;
-        else if (nominated.size < 5000) nominated.set(key, { fromId, toId, legs: ["cross-file-name-hint-not-identity"], codeScore: 1, orderAmbiguous: true });
+        else if (nominated.size < 5000) nominated.set(key, { fromId, toId, legs: ["cross-file-name-hint-not-identity", ...(order !== null ? ["calendar-order"] : [])], codeScore: 1, orderAmbiguous: order === null });
         else truncated = true;
       }
     }
@@ -227,12 +265,14 @@ function pageOptions(offset = 0, limit = 10) {
 export async function universeCandidates(context: UniverseContext, offset = 0, limit = 10) {
   pageOptions(offset, limit);
   const nominated = await candidates(context);
-  const items = nominated.items.slice(offset, offset + limit).map(candidate => ({ ...candidate,
+  const onCalendar = await calendarPositions(context);
+  const when = (unitId: string) => { const entry = onCalendar(unitId); return entry ? describeEntry(entry) : "not on the calendar"; };
+  const items = nominated.items.slice(offset, offset + limit).map(candidate => ({ ...candidate, calendar: { from: when(candidate.fromId), to: when(candidate.toId), order: candidate.orderAmbiguous ? "unordered" : "cause first" },
     from: { ...causalEndpoint(candidate.fromId), title: context.universe.byId.get(candidate.fromId)!.origin!.title, summary: context.universe.byId.get(candidate.fromId)!.summary.slice(0, 240) },
     to: { ...causalEndpoint(candidate.toId), title: context.universe.byId.get(candidate.toId)!.origin!.title, summary: context.universe.byId.get(candidate.toId)!.summary.slice(0, 240) } }));
   return { universeId: context.universeId, revision: context.revision, coverage: context.coverage, candidates: items, exhaustive: false, candidateCap: 500, truncated: nominated.truncated,
     page: { offset, limit, total: nominated.items.length, nextOffset: offset + limit < nominated.items.length ? offset + limit : null },
-    policy: "Cross-file name overlap nominates only; identities are NOT merged. Both directions are tested; reading order is NOT story time. Same continuity required." };
+    policy: "Cross-file name overlap nominates only; identities are NOT merged. The universe calendar orders units across books (a direction against it is not nominated); where it cannot, both directions are tested. Reading order is NOT story time. Same continuity required." };
 }
 export async function universeEvidence(context: UniverseContext, fromId: string, toId: string, options: { packetId?: string; offset?: number; limit?: number } = {}) {
   const { offset, limit } = pageOptions(options.offset, options.limit);

@@ -86,6 +86,7 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
       id: time.id, label: nameOf(time), gloss: properties.gloss ?? '', family: properties.family ?? 'date', role: properties.role ?? 'ADVANCE',
       flashback: properties.flashback === true, flashbackProbability: Number(properties.flashbackProbability ?? 0), decidedBy: properties.decidedBy ?? null,
       toldFromId: properties.toldFromId ?? null, date: properties.date ?? null, partOfDay: properties.partOfDay ?? null,
+      ...(typeof properties.value?.hour === 'number' ? { clock: { hour: properties.value.hour, minute: typeof properties.value.minute === 'number' ? properties.value.minute : 0 } } : {}),
       chapterIndex: Number(properties.chapterIndex ?? 0), storyIndex: Number(properties.storyIndex ?? 0), narrativeIndex: Number(properties.narrativeIndex ?? 0), proposed: proposedIds.has(time.id),
       anchorSceneId: properties.sceneId ?? null, sceneIds: sceneRows.filter((scene) => scene.times.some((entry) => entry.id === time.id)).map((scene) => scene.id),
     };

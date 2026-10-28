@@ -5,7 +5,9 @@ import { jevFromEnv } from "../../ground/connectors/jev.js";
 import { EventLog } from "../../ground/events/log.js";
 import { observeDecisions } from "../../ground/events/observe.js";
 import { markCausalitySweepPending } from "../causality/faculty.js";
-import { runEmPassAfterApply } from "../matching/emFaculty.js";
+import { runIdentityAfterApply } from "../identity/afterApply.js";
+import { castScope } from "../identity/cast.js";
+import { buildCalendar } from "../calendar/calendar.js";
 import { treeViolation } from "../../ground/ontology/placeTree.js";
 import type { Relation } from "../../ground/ontology/types.js";
 import { applyChangeSet } from "./apply.js";
@@ -36,9 +38,15 @@ export async function approveBook(directory: string, id: string, env: NodeJS.Pro
   const packet = await setChangeSetStatus(directory, id, "approved");
   const emit = new EventLog(directory).emit;
   const application = await applyChangeSet(new BundleStore(ontology), packet, emit, context);
-  let entityMatching: Awaited<ReturnType<typeof runEmPassAfterApply>> = null;
-  try { entityMatching = await runEmPassAfterApply({ novelDir: directory, decisions: observeDecisions(jevFromEnv(env), emit, { blockId: packet.blockId }), changeset: packet, events: emit }); } catch {}
+  // Universal EM: the book joins the shared character list; its new characters are checked against the book and the universe.
+  let identity: Awaited<ReturnType<typeof runIdentityAfterApply>> | { error: string } | null = null;
+  try { identity = await runIdentityAfterApply({ novelDir: directory, decisions: observeDecisions(jevFromEnv(env), emit, { blockId: packet.blockId }), changeset: packet, events: emit, env }); } catch (error) { identity = { error: error instanceof Error ? error.message : String(error) }; }
   try { await markCausalitySweepPending(directory); } catch {}
+  // Story time changed: the universe calendar (the one clock) is rebuilt. No model calls.
+  let calendar: { entries: number; questions: number } | { error: string } | null = null;
+  if (packet.proposals.some((proposal) => proposal.kind === "upsert_entity" && (proposal.payload as { kind?: string }).kind === "TimePoint" || proposal.kind === "add_relation" && (proposal.payload as Relation).type === "OCCURS_DURING")) {
+    try { const built = await buildCalendar(await castScope(directory, env)); calendar = { entries: built.entries.length, questions: built.questions.length }; } catch (error) { calendar = { error: error instanceof Error ? error.message : String(error) }; }
+  }
   const graph = await buildGraphFromBundle(ontology, join(ontology, "graph.lbug"), emit);
-  return { id, status: packet.status, ...application, ...(verifiedFacts !== undefined ? { verifiedFacts } : {}), graph, ...(entityMatching ? { entityMatching: { nominated: entityMatching.nominated, merged: entityMatching.merged.length, distinct: entityMatching.distinct.length, uncertain: entityMatching.uncertain.length } } : {}) };
+  return { id, status: packet.status, ...application, ...(verifiedFacts !== undefined ? { verifiedFacts } : {}), graph, ...(identity ? { identity } : {}), ...(calendar ? { calendar } : {}) };
 }

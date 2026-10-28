@@ -11,10 +11,15 @@ import { join } from "node:path";
 import { BundleStore } from "../../ground/connectors/bundle.js";
 import { treeViolation } from "../../ground/ontology/placeTree.js";
 import { approveBook } from "./approve.js";
+import { identityAdapter } from "../identity/review.js";
+import { calendarAdapter } from "../calendar/review.js";
+import { STANDALONE } from "../identity/cast.js";
 import type { OntEvent, Relation, Scene } from "../../ground/ontology/types.js";
 import type { ReviewAdapter, ReviewEvidence, ReviewFact, ReviewTarget } from "./reviewTypes.js";
 
 async function book(target: ReviewTarget, env: NodeJS.ProcessEnv): Promise<ReviewAdapter> {
+  // A standalone book's identity packets (universal EM): its own shared character list.
+  if (target.packetId.startsWith("um_")) return identityAdapter(target.directory, STANDALONE, target.packetId, env);
   const packet = await reviewBook(target.directory, target.packetId);
   validateStructure(packet);
   const context = await semanticContext(target.directory);
@@ -134,6 +139,8 @@ async function atlas(target: ReviewTarget, env: NodeJS.ProcessEnv): Promise<Revi
 async function universe(target: ReviewTarget, env: NodeJS.ProcessEnv): Promise<ReviewAdapter> {
   if (!target.universeId) throw new Error("Universe review requires --universe <reviewed-universe-id>.");
   if (target.packetId.startsWith("ua_")) return atlas(target, env);
+  if (target.packetId.startsWith("um_")) return identityAdapter(target.directory, target.universeId, target.packetId, env);
+  if (target.packetId.startsWith("ut_")) return calendarAdapter(target.directory, target.universeId, target.packetId, env);
   const context = await loadUniverseContext(target.directory, target.universeId, await universeBindings(env));
   const data = await universePacket(context, target.packetId);
   const facts: ReviewFact[] = [];

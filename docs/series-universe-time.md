@@ -147,7 +147,8 @@ Add a **time faculty** to the dependency-aware extraction graph. **Phase 1 of
 it is implemented** at scene granularity — TimePoint entities, OCCURS_DURING,
 Jev flashback marks, periods and an estimated story order within one book;
 see [story time and places](time-place.md). Global temporal alignment across
-books is still open. Existing narrative timeline/PRECEDES handling is not
+books is now the [universe calendar](universe-calendar.md): one clock per
+universe that every book's periods are placed on. Existing narrative timeline/PRECEDES handling is not
 proof of this capability.
 
 Proposed temporal model, subject to schema design:

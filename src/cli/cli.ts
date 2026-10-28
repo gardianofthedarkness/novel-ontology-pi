@@ -27,7 +27,8 @@ import {
 import { llmPing, llmProbe } from "./commands/shared/llmCommands.js";
 import { ingestNovel } from "./commands/extract/ingestCommands.js";
 import { libraryCommand } from "./commands/extract/libraryCommands.js";
-import { runMatch } from "./commands/extract/matchCommands.js";
+import { emShow, emSweep } from "./commands/extract/emCommands.js";
+import { calendarCommand } from "./commands/extract/calendarCommands.js";
 import {
   listCausalityCandidates,
   proposeCausalityLink,
@@ -110,8 +111,10 @@ const COMMANDS: Record<string, string> = {
     "Applied time periods in story order, places as paths through the place tree, and the tree's links.",
   "novel causality sweep <novel-dir> [--limit N]":
     "On-demand systematic sweep: Jev-determined CAUSES pass over the whole universe (same machinery as the ingest chapter-close sweep).",
-  "novel match <novel-dir> [--changeset <id>]":
-    "Entity-matching review packet: code nominates duplicate pairs, System 1 (Jev) reviews the batch with a checklist, only unsettled pairs are raised to the agent",
+  "novel calendar show|build <novel-dir> | <library-dir> --universe <id>":
+    "The universe calendar: one clock for every book of a universe. Each story period on its day (clock time or part of the day; undated ones as a range between dated neighbours); books as marks on it; years nobody states are relative (Year 1 = first dated book) and a book whose dates go back is raised for review (ut_ packet). Rebuilt after every story-time apply; no model calls.",
+  "novel em show|sweep <novel-dir> [--limit N]":
+    "Universal EM: one shared character list per universe (the library's, or the book's own when standalone). show: this book's people and identity matches awaiting review; sweep: check every character of the book against the book and the universe (full proper names join automatically, confident Jev matches merge, less confident ones become a um_ review packet).",
   "novel fix merge|rename|add-form|relate|unrelate|remove-entity|remove-event <novel-dir> ...":
     "Pointwise maintenance over the bundle (audited in maintenance.jsonl, graph rebuilt): merge two entities, rename, add a name form, relate/unrelate, remove a record",
   "novel fix correct <novel-dir> --block <id> --key <decision-key> --value <v>":
@@ -593,15 +596,17 @@ async function main(): Promise<void> {
     throw new Error(`Unknown causality subcommand ${sub} (candidates | propose | sweep)`);
   }
 
-  if (cmd === "match") {
-    const novelDir = positional[1];
-    if (!novelDir || novelDir.startsWith("--")) {
-      throw new Error("Usage: novel match <novel-dir> [--changeset <id>]");
-    }
-    out(
-      await runMatch(novelDir, { changesetId: flag(positional, "--changeset") }),
-      pretty,
-    );
+  if (cmd === "calendar") {
+    out(await calendarCommand(positional.slice(1)), pretty);
+    return;
+  }
+
+  if (cmd === "em") {
+    const [sub, novelDir] = [positional[1], positional[2]];
+    if (!novelDir || novelDir.startsWith("--") || !["show", "sweep"].includes(sub ?? "")) throw new Error("Usage: novel em show|sweep <novel-dir> [--limit N]");
+    const limit = flag(positional, "--limit");
+    if (limit !== undefined && !(Number.isInteger(Number(limit)) && Number(limit) > 0)) throw new Error("--limit must be a positive integer");
+    out(sub === "show" ? await emShow(novelDir) : await emSweep(novelDir, { limit: limit === undefined ? undefined : Number(limit) }), pretty);
     return;
   }
 

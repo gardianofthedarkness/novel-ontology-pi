@@ -8,6 +8,10 @@ import { readStrandAnswers } from './strand-answers.mjs';
 import { sessionReviewProgress } from './review-progress.mjs';
 import { albumProjection } from './album.mjs';
 import { castProjection } from './cast.mjs';
+import { calendarView } from './calendar-view.mjs';
+
+/** The book's own calendar for its story view (a universe view gets the universe's). */
+const withCalendar = async (projection, title) => projection.available ? { ...projection, calendar: await calendarView({ books: [{ sourceId: 'book', title: title ?? 'This book', readingOrder: null, continuityId: null, volume: null, times: projection.times }] }).catch(() => null) } : projection;
 
 async function json(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return fallback; throw error; }
@@ -240,7 +244,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   return {
     activity: liveActivity({ processing, agent, drafts, changesets: [...changesets, ...causalSets], interiors, blockChapters, dialogueScenes, afterId: options.activityAfter, reviewProgress: await sessionReviewProgress(runtime) }),
     world: { laneNodes, laneEdges, interiors, bigEventLabels, causal: { links: causalLinks, unresolved: causalUnresolved, dialogueScenes } }, gates,
-    timePlace: timePlaceProjection({ entities: [...entityMap.values()], scenes: [...sceneMap.values()], relations, events: [...eventMap.values()], pending: timePlacePending, strands: await readStrandAnswers(directory) }), feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
+    timePlace: await withCalendar(timePlaceProjection({ entities: [...entityMap.values()], scenes: [...sceneMap.values()], relations, events: [...eventMap.values()], pending: timePlacePending, strands: await readStrandAnswers(directory) }), (await json(`${directory}/ontology/manifest.json`, null))?.title), feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
     status, stage, label: causalSets.length ? `${causalSets.length} causal packet${causalSets.length === 1 ? '' : 's'} awaiting review · not canon` : finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
     workSite: `chapter_${blockChapters.get(lastBlock) ?? chapters[0]?.index ?? 0}`,
     volume: options.volume ?? 1,
