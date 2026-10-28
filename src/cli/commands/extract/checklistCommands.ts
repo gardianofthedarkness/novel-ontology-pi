@@ -1,5 +1,6 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { bookUsage, type BookUsage } from "../../../ground/workspace/usage.js";
+import { loadSpiral } from "../../../solidifier/calendar/spiralBuild.js";
 import { join, resolve } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
@@ -128,13 +129,15 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   // The universe calendar: every book's story time on one clock; years it had to infer are reviewed.
   const calendarAt = await loadCalendar(castAt);
   const calendarPacket = calendarAt ? calendarPacketId(calendarAt) : null;
-  const calendarBehind = await calendarStale(castAt).catch(() => true);
+  // The spiral timeline is solved with `novel calendar build`; one missing or older than the calendar is out of date.
+  const spiralAt = await loadSpiral(castAt).catch(() => null);
+  const calendarBehind = await calendarStale(castAt).catch(() => true) || !spiralAt || (!!calendarAt && spiralAt.builtAt < calendarAt.builtAt);
   const calendarCommand = `novel calendar build ${dir}`;
   items.push({ id: "calendar", title: "Universe calendar (one clock for every book)", dependsOn: ["time-place"],
     status: calendarBehind ? "todo" : calendarPacket ? "review" : "done",
-    counts: { entries: calendarAt?.entries.filter((entry) => entry.sourceId === castAt.sourceId).length ?? 0, books: calendarAt?.books.length ?? 0, conflicts: calendarAt?.conflicts.length ?? 0, yearQuestions: calendarAt?.questions.length ?? 0 },
+    counts: { entries: calendarAt?.entries.filter((entry) => entry.sourceId === castAt.sourceId).length ?? 0, books: calendarAt?.books.length ?? 0, conflicts: calendarAt?.conflicts.length ?? 0, yearQuestions: calendarAt?.questions.length ?? 0, spiralStrands: spiralAt?.continuities.reduce((sum, entry) => sum + entry.runs.length, 0) ?? 0 },
     next: calendarBehind ? [calendarCommand] : calendarPacket ? [castAt.standalone ? `novel calendar show ${dir}` : `novel review show ${quote(castAt.root)} ${calendarPacket} --scope universe --universe ${castAt.universeId} --offset 0 --limit 20`] : [],
-    note: "Rebuilt after every story-time apply; a book whose dates go back from the previous book's is asked: same year, or a later one?" });
+    note: "Rebuilt after every story-time apply; a book whose dates go back from the previous book's is asked: same year, or a later one? `novel calendar build` also solves the spiral timeline the story view draws." });
 
   items.push({ id: "place-tree", title: "Place tree (which place is inside which)", dependsOn: ["time-place"],
     status: treeReview.length ? "review" : unsettled ? "todo" : "done",

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { timePlaceProjection } from './time-place.mjs';
 import { readStrandAnswers } from './strand-answers.mjs';
 import { calendarView, storedYearDecisions } from './calendar-view.mjs';
+import { readSpiral } from './spiral-view.mjs';
 
 /**
  * Universe story time and places for the viewer (time-place phase 3).
@@ -139,5 +140,8 @@ export async function readUniverseTimePlace(directory, bindings, resolveWorkspac
   // The universe calendar (one clock): every hosted book's periods placed together, with the reviewed year decisions.
   const decisions = await storedYearDecisions(directory, universeId);
   merged.calendar = await calendarView({ universeId, decisions, books: merged.books.map(book => ({ ...book, times: merged.times.filter(time => time.book === book.volume) })) }).catch(() => null);
+  // The spiral timeline, precomputed with the calendar: the view only draws it.
+  const volumeOf = new Map(hosted.map(book => [book.sourceId, book.volume]));
+  merged.spiral = await readSpiral(directory, universeId, (sourceId, sceneId) => volumeOf.has(sourceId) ? `${volumeOf.get(sourceId)}:${sceneId}` : null).catch(() => null);
   return merged;
 }

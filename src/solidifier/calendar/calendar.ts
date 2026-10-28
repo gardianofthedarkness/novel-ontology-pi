@@ -256,7 +256,7 @@ async function saveCalendar(scope: Pick<CastScope, "root" | "universeId">, calen
 }
 
 /** The universe's books in reading order, each with its continuity. */
-async function calendarBooks(scope: CastScope): Promise<(CastBook & { continuityId: string | null })[]> {
+export async function calendarBooks(scope: CastScope): Promise<(CastBook & { continuityId: string | null })[]> {
   if (scope.standalone) return scope.books.map((book) => ({ ...book, continuityId: null }));
   const { libraryShow } = await import("../../ground/workspace/library.js");
   const catalog = await libraryShow(scope.root, { kind: "universe", id: scope.universeId });

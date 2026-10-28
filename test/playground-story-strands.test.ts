@@ -44,22 +44,16 @@ test("a flashback is placed before the scene it is told at, not after its teller
   assert.ok(!strands.before("s6", "fb"));
 });
 
-test("Story time strands are one braid: parallel scenes share a cross-section, apart, each strand its own coloured axis; tapping one lights its period", () => {
+test("Story time strands put parallel strands on separate coils, one moment at one angle", () => {
   const arrangement = spiralArrangement(data, undefined, null, "strands");
   const strands = storyStrands(data);
   const at = (id: string) => arrangement.anchors!.get(spiralNodeId(id))!;
-  if (strands.layer.get("m1") === strands.layer.get("l1")) assert.equal(at("m1")[0], at("l1")[0], "one moment: one place along the axis");
-  assert.ok(Math.hypot(at("m1")[1] - at("l1")[1], at("m1")[2] - at("l1")[2]) >= 100, "parallel strands sit apart in the tube");
+  if (strands.layer.get("m1") === strands.layer.get("l1")) {
+    assert.equal(at("m1")[0], at("l1")[0]);
+    assert.equal(at("m1")[2], at("l1")[2]);
+  }
+  assert.ok(Math.abs(at("m1")[1] - at("l1")[1]) > 400);
   assert.equal(arrangement.timeKey.label, "STORY STRANDS →");
-  assert.ok(arrangement.tubes?.length, "an envelope tube");
-  const draws = [...arrangement.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never);
-  const axes = arrangement.paths!(draws, null).filter((path) => path.strand);
-  assert.ok(axes.length >= 2, "an axis per strand");
-  assert.ok(axes.every((axis) => /^#[0-9a-f]{6}$/.test(axis.color ?? "")), "each axis has a colour");
-  assert.ok(new Set(axes.map((axis) => axis.color)).size >= 2, "parallel strands look different");
-  const ming = axes.find((axis) => arrangement.strandPeriod!(axis.id, 0)?.ids.includes(spiralNodeId("m1")));
-  assert.ok(ming, "tapping Ming's strand lights his scenes");
-  assert.ok(!arrangement.strandPeriod!(ming!.id, 0)!.ids.includes(spiralNodeId("l1")), "and not Lan's");
   const line = spiralArrangement(data, undefined, null, "line");
   assert.equal(line.timeKey.label, "STORY TIME →");
 });
@@ -129,4 +123,23 @@ test("the calendar, not a file, focuses Story time: a chosen day frames every sc
   assert.equal(second.bookKey, "story:day:1-6-2");
   assert.equal(spiralArrangement(dated, undefined, null, "strands", "1-6-9").bookFrame!(draws(second)), null, "a day with no scenes frames nothing");
   assert.equal(spiralArrangement(dated, undefined, null, "strands").bookFrame, undefined, "a single book with no day chosen keeps its own arrival frame");
+});
+
+test("a precomputed spiral is drawn as stored: knots, coloured tracks, tube guides; newer scenes wait below it", () => {
+  const knot = (id: string, k: number, lane = 0) => ({ id, x: k * 9, q: [lane * 50, 10] as [number, number] });
+  const stored: TimePlaceProjection = { ...data, spiral: { builtAt: "2026-10-28T20:00:00Z", scale: { dx: 9, radial: 120, knot: 5.5 }, links: [], days: [],
+    runs: [
+      { id: "ming", lane: 0, color: "#ff8899", tube: 35, knots: [knot("s1", 0), knot("m1", 1), knot("m2", 3), knot("s6", 5), knot("s7", 7)], track: [[0, 0, 10], [9, 3, 12], [27, 1, 9]], axis: [[0, 0, 0], [27, 0, 0]] },
+      { id: "lan", lane: 0, color: "#88ccff", tube: 35, knots: [knot("l1", 2, 1), knot("l2", 4, 1)], track: [[18, 50, 10], [36, 50, 10]], axis: [[18, 50, 0], [36, 50, 0]] },
+    ] } };
+  const arrangement = spiralArrangement(stored, undefined, null, "strands");
+  assert.equal(arrangement.timeKey.label, "STORY SPIRAL →");
+  const at = (id: string) => arrangement.anchors!.get(spiralNodeId(id))!;
+  assert.ok(at("l1")[1] > at("m1")[1], "the cross-section as solved");
+  assert.ok(at("fb")[1] < at("s1")[1] - 100, "a scene not in the stored spiral waits below it");
+  assert.equal(arrangement.guides?.length, 2);
+  assert.ok(Math.abs(arrangement.guides![0].radius - 35 * (260 / 120) * 3) < 1e-6, "tube guides at the solved radius");
+  const draws = [...arrangement.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never);
+  const tracks = arrangement.paths!(draws, null).filter((path) => path.id.startsWith("spiral-track:"));
+  assert.deepEqual(tracks.map((track) => track.color), ["#ff8899", "#88ccff"]);
 });

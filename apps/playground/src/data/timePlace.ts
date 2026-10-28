@@ -69,6 +69,8 @@ export interface TimePlaceProjection {
   continuities?: { id: string; title: string }[];
   /** The universe calendar (one clock): every period on its day; books are marks on it. */
   calendar?: CalendarView | null;
+  /** The spiral timeline precomputed by `novel calendar build`: drawn as stored, never optimised here. */
+  spiral?: SpiralView | null;
 }
 
 /** Calendar minutes: ordering keys from the backend (`novel calendar`), not real date arithmetic. */
@@ -87,6 +89,9 @@ export interface CalendarViewEntry {
   flashback: boolean;
   scenes: number;
 }
+/** One strand of the precomputed spiral: its knots (scenes, view ids) and its coil track and axis as solved (x along time, q across). */
+export interface SpiralViewRun { id: string; lane: number; color: string; tube: number; knots: { id: string; x: number; q: [number, number] }[]; track: [number, number, number][]; axis: [number, number, number][] }
+export interface SpiralView { builtAt: string; scale: { dx: number; radial: number; knot: number }; runs: SpiralViewRun[]; links: { from: string; to: string; lane: number }[]; days: { key: string; label: string; from: number; to: number; lane: number }[] }
 export interface CalendarView {
   books: { sourceId: string; volume: number | null; title: string; readingOrder: number | null; year: number | null; yearBy: string | null; span: CalendarSpan | null }[];
   entries: CalendarViewEntry[];

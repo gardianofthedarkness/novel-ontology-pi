@@ -26,10 +26,8 @@ export interface OrbitalDraw {
 /** tone: "thread" (amber, flashback → told during), "route" (a character's
  * path through places), "link" (faint move between places); default the time string. */
 export interface OrbitalPath { id: string; points: Position3[]; preview?: boolean; fromPoints?: Position3[]; tone?: "thread" | "route" | "link";
-  /** A story strand's axis: drawn as a tube in its own colour, and tapping it lights up its period. */
-  strand?: boolean; color?: string;
-  /** Faded while another strand's period is lit. */
-  dim?: boolean }
+  /** Drawn in this colour instead of its tone's (a strand's coil track). */
+  color?: string }
 export interface OrbitalPose { position: Position3; radius: number }
 /** A transition from `from` poses to the current layout. The opening
  * sequence uses a longer `durationMs` and per-record start `delays` (ms). */
