@@ -33,8 +33,9 @@ function storeys(floors: number, name: string): NavGrid {
     spots.push(spot(`stairs-${floor}`, `Stairs ${floor}F`, `the stairwell on floor ${floor}`, -0.3, v, -0.25), spot(`floor-${floor}`, `${floor}F`, top ? `the top floor (${floor}F)` : `an upper floor (${floor}F)`, 0.12, v, 0.05));
     links.push([`stairs-${floor - 1}`, `stairs-${floor}`], [`stairs-${floor}`, `floor-${floor}`]);
   }
-  spots.push(spot("roof", "Roof", "the rooftop", 0, 1, 0), spot("back-door", "Back door", "a rear exit", -0.1, 0, -0.5), spot("alley", "Back alley", `outside, behind the ${name}`, 0, 0, -0.5, [0, -120]));
-  links.push([`stairs-${floors}`, "roof"], ["floor-1", "back-door"], ["back-door", "alley"], ["alley", "street"]);
+  spots.push(spot("roof", "Roof", "the rooftop", 0, 1, 0), spot("back-door", "Back door", "a rear exit", -0.1, 0, -0.5), spot("alley", "Back alley", `outside, behind the ${name}`, 0, 0, -0.5, [0, -120]),
+    spot("basement", "Basement", "underground, below the ground floor", -0.3, -0.12, -0.25));
+  links.push([`stairs-${floors}`, "roof"], ["floor-1", "back-door"], ["back-door", "alley"], ["alley", "street"], ["stairs-1", "basement"]);
   return { spots, links };
 }
 
@@ -109,7 +110,108 @@ export function navPath(grid: NavGrid, from: string, to: string): string[] {
 export interface MovePlan {
   place: string; kind: ArchitectureKind;
   starts: Record<string, Record<string, string>>;
-  moves: Record<string, { actor: string; to: string; how: Manner; p: number }[]>;
+  /** A move's spot is the chain's; `jev` is Jev's own pick when the chain overruled it. */
+  moves: Record<string, { actor: string; to: string; how: Manner; p: number; jev?: string; revised?: boolean }[]>;
+  /** Per scene and person: did the scene say where they start, was the start assumed (the centre), revised by the chain, and why. */
+  notes?: Record<string, Record<string, StartNote>>;
+}
+export interface StartNote { stated: number; assumed: boolean; revised: boolean; why?: string }
+
+export const DIRECTIONS = ["up", "down", "same level", "out of the building", "into the building"] as const;
+export type Direction = typeof DIRECTIONS[number];
+/** Which way a mover goes, as asked of the decision model. */
+export const DIRECTION_HINT: Record<Direction, string> = {
+  up: "goes up: stairs up, climbing, to an upper floor or the roof", down: "goes down: stairs down, dropping, falling, to a lower floor or underground",
+  "same level": "moves on the same floor or level", "out of the building": "leaves the building for the outside", "into the building": "comes in from outside",
+};
+
+const isInside = (entry: NavSpot) => !entry.out;
+const destinations = (grid: NavGrid) => grid.spots.filter((entry) => !entry.id.startsWith("stairs-"));
+
+/** "Somewhere in the building" when a scene does not say: the middle inside — halfway up its inside spots, nearest the centre of the floor plan. */
+export function centreSpot(grid: NavGrid): string {
+  const inside = destinations(grid).filter((entry) => isInside(entry) && entry.v >= 0 && entry.v < 1);
+  const heights = inside.map((entry) => entry.v), middle = (Math.min(...heights) + Math.max(...heights)) / 2;
+  const off = (entry: NavSpot) => entry.u ** 2 + entry.w ** 2 + 4 * (entry.v - middle) ** 2;
+  return inside.sort((a, b) => off(a) - off(b))[0]?.id ?? grid.spots[0].id;
+}
+
+/** One person's moves in one scene, as the decision model saw them: probabilities over spots and directions. */
+export interface ChainStep {
+  to: Record<string, number>; how: Manner; direction?: Partial<Record<Direction, number>>;
+  /** How sure the model is that the person moves at all (a move that cannot physically happen is dropped instead). */
+  p?: number;
+}
+export interface ChainInput { start: Record<string, number>; stated: number; steps: ChainStep[] }
+export interface ChainResult { start: string; assumed: boolean; revised: boolean; spots: string[]; overruled: boolean[]; dropped: boolean[]; why?: string }
+
+const top = (probabilities: Record<string, number>) => Object.entries(probabilities).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+/** How well going from one spot to another fits a step's direction and manner (1: fits; small: physically unlikely), and why not. */
+function fits(grid: NavGrid, from: string, to: string, step: ChainStep): { score: number; why?: string } {
+  if (from === to) return { score: 0.03, why: "a mover ends somewhere else" };
+  const a = grid.spots.find((entry) => entry.id === from)!, b = grid.spots.find((entry) => entry.id === to)!;
+  const rise = b.v - a.v, way = rise > 0.03 ? "up" : rise < -0.03 ? "down" : "level";
+  const out = isInside(a) && !isInside(b), into = !isInside(a) && isInside(b);
+  const match: Record<Direction, number> = { up: way === "up" ? 1 : 0.04, down: way === "down" ? 1 : 0.04, "same level": way === "level" ? 1 : 0.15, "out of the building": out ? 1 : 0.1, "into the building": into ? 1 : 0.1 };
+  const weights = Object.entries(step.direction ?? {}) as [Direction, number][], total = weights.reduce((sum, [, value]) => sum + value, 0);
+  const direction = total > 0 ? weights.reduce((sum, [key, value]) => sum + (value / total) * match[key], 0) : 1;
+  const manner = step.how === "climb up" ? (way === "up" ? 1 : 0.05) : step.how === "go down" || step.how === "fall" ? (way === "down" ? 1 : 0.05) : 1;
+  const score = direction * manner;
+  if (score >= 0.5) return { score };
+  const said = step.how === "climb up" || step.how === "go down" || step.how === "fall" ? step.how : total > 0 ? top(Object.fromEntries(weights)) : step.how;
+  const needs = said === "climb up" || said === "up" ? "lower" : said === "into the building" ? "outside" : said === "out of the building" ? "inside" : said === "same level" ? `on ${b.label}'s level` : "higher";
+  return { score, why: `${said} to ${b.label} needs a start ${needs}` };
+}
+
+/**
+ * The likeliest chain of spots for one person in one scene (Viterbi over the
+ * nav grid). The start is the centre of the building unless the scene says
+ * where they are; each move's spot comes from the decision model, weighed by
+ * whether it physically follows from the spot before: going down or falling
+ * needs height, climbing needs to start lower, leaving needs to start inside.
+ * When later moves cannot follow from the assumed start, the start is revised
+ * backwards. Underground is unlikely unless a step says so outright. A move
+ * that cannot physically follow from anywhere likely is dropped (they did not
+ * move), weighed by how sure the model was that they moved at all.
+ */
+export function solveChain(grid: NavGrid, input: ChainInput): ChainResult {
+  const ids = destinations(grid).map((entry) => entry.id), centre = centreSpot(grid);
+  const spotOf = (id: string) => grid.spots.find((entry) => entry.id === id)!;
+  const distance = new Map(ids.map((id) => [id, navPath(grid, centre, id).length - 1]));
+  // A soft default: likeliest at the centre, then fading with distance through the grid; evidence overturns it.
+  const near = (id: string) => Math.exp(-0.35 * (distance.get(id) ?? 9)) * (spotOf(id).out ? 0.3 : 1);
+  const spread = ids.filter((id) => id !== centre).reduce((sum, id) => sum + near(id), 0);
+  const centred = (id: string) => (id === centre ? 0.35 : (0.65 * near(id)) / spread);
+  const prior = (id: string) => input.stated * Math.max(0.01, input.start[id] ?? 0) + (1 - input.stated) * centred(id);
+  const underground = (id: string, said: Record<string, number>) => (spotOf(id).v < 0 && (said[id] ?? 0) < 0.5 ? 0.15 : 1);
+  let score = new Map(ids.map((id) => [id, Math.log(prior(id) * underground(id, input.start))]));
+  const back: Map<string, string>[] = [];
+  for (const step of input.steps) {
+    const next = new Map<string, number>(), from = new Map<string, string>();
+    for (const to of ids) {
+      let best = -Infinity, arg = ids[0];
+      // Moving here from elsewhere (how sure they move × how physically it follows × where the model says), or not having moved at all.
+      const moving = Math.log((step.p ?? 0.9) * Math.max(0.002, step.to[to] ?? 0) * underground(to, step.to));
+      for (const at of ids) {
+        const value = score.get(at)! + (at === to ? Math.log(Math.max(0.02, 1 - (step.p ?? 0.9)) * 0.5) : moving + Math.log(fits(grid, at, to, step).score));
+        if (value > best) { best = value; arg = at; }
+      }
+      next.set(to, best);
+      from.set(to, arg);
+    }
+    back.push(from);
+    score = next;
+  }
+  let last = [...score].sort((a, b) => b[1] - a[1])[0][0];
+  const spots = [last];
+  for (let index = back.length - 1; index >= 0; index--) { last = back[index].get(last)!; spots.unshift(last); }
+  const expected = input.stated >= 0.5 ? top(input.start) ?? centre : centre;
+  let why: string | undefined;
+  // Why the start moved: the first step that could not follow had they started where expected.
+  if (spots[0] !== expected) for (const [index, step] of input.steps.entries()) { const reason = fits(grid, index === 0 ? expected : spots[index], spots[index + 1], step).why; if (reason) { why = reason; break; } }
+  const dropped = input.steps.map((_, index) => spots[index + 1] === spots[index]);
+  return { start: spots[0], assumed: input.stated < 0.5, revised: spots[0] !== expected, spots, overruled: input.steps.map((step, index) => !dropped[index] && spots[index + 1] !== top(step.to)), dropped, why };
 }
 
 /** Where everyone stands after a beat: scene start spots, then each move up to and including it. */

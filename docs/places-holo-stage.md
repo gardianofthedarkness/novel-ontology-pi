@@ -71,6 +71,35 @@ What is still rough:
 - Starting spots default to 1F or the street too often; 滨面 starts on 1F though he is on the TV floor.
 - Dialogue-only beats rarely move anyone.
 
+### Checking the chain physically (exploration)
+
+The rule: **if a scene does not say where someone starts, they start at the
+centre of the building** (`centreSpot`: a middle floor of a tower, the nave of
+a church, the plaza of a district). Then the chain of their moves is checked
+backwards (`solveChain`, Viterbi over the nav grid):
+
+- **Questions per mover:** Jev also answers which way they go: up, down, same level, out of the building, into the building.
+- **What a move needs:**
+  - Going down or falling needs a start higher than where it ends.
+  - Climbing needs a start lower.
+  - Leaving needs a start inside.
+  - Going underground is unlikely unless a step says so outright.
+- **Revising the start:** when a later move cannot follow from the assumed start, the start is revised, with the reason (for example "climb up to 3F needs a start lower").
+- **Dropping a move:** each step may also mean "did not move", weighted by Jev's who-moves probability. A move that cannot physically happen from anywhere likely is dropped instead of bending the whole chain.
+- **On the stage:** "? 4 people at the centre — the scene does not say where", "↶ starts 2F: climb up to 3F needs a start lower", and "➝ 6F · teleport (Jev: 3F)" when the chain overrules Jev's pick.
+
+Findings on 废弃大楼:
+
+- **Tell Jev only known spots.** Putting the assumed centre ("滨面 — 4F") into the question anchored Jev: nearly every destination became 3F/4F, including "碧海 falls … to 4F (1.0)". Unknown starts are now worded "somewhere in the building (not stated)", and the centre is used only for drawing and for the solver's prior.
+- **Revision works on clear cases.** Before moves could be dropped, it revised 白井's start down to 2F ("climb up to 3F needs a start lower") and lifted 碧海's start to the roof because Jev said she fell to 6F. The second shows the risk: Jev's "fall" was wrong (she crashed into an acrylic tank), and the physics then faithfully put her on the roof.
+- **"Did not move" makes it conservative.** With that option the chain keeps the centre unless a confident move contradicts it, and drops impossible low-confidence moves (乐丘 "falling" from the street up to 6F).
+- **Answers vary between runs.** The per-event answers move between runs and sit near decision boundaries, so the prior and penalty weights (hand-set in `holoNav.ts`) matter.
+- **Possible next steps:**
+  - Ask with the whole scene as context instead of one event.
+  - Use Jev's own confidence.
+  - Treat recurring manners per person as evidence (teleport for 白井, falls for the 大叔).
+  - Re-ask only the steps the solver overrules.
+
 Plans are served per place at `api/holo-moves?place=<id>`. In this exploration
 that endpoint is the design preview's snapshot host; the CLI would project and
 serve it next to the time-place data.

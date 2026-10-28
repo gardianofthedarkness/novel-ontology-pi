@@ -11,13 +11,15 @@
 
 /* Pinned labels */
 .holo-anchors { position: absolute; inset: 0; pointer-events: none; }
-.holo-anchor { position: absolute; left: 0; top: 0; will-change: transform; transition: opacity .25s; }
+.holo-anchor { position: absolute; left: 0; top: 0; will-change: transform; transition: opacity .25s; opacity: 0; }
 .holo-anchor > * { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; }
 .holo-anchor-below > * { transform: translate(-50%, 0); }
 .holo-nameplate { font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 3px; background: #031019cc; border: 1px solid color-mix(in srgb, var(--actor) 60%, transparent); color: var(--actor); text-shadow: 0 0 8px color-mix(in srgb, var(--actor) 70%, transparent); }
 .holo-nameplate.is-active { background: color-mix(in srgb, var(--actor) 22%, #031019); color: #fff; box-shadow: 0 0 14px color-mix(in srgb, var(--actor) 55%, transparent); }
 .holo-navlabel { font-size: 10px; font-weight: 700; letter-spacing: .08em; color: #7ce6ff; padding: 0 5px; background: #031019b3; border: 1px solid #2b6f9b; text-transform: uppercase; }
 .holo-movechip { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 3px; color: #031019; background: var(--actor); box-shadow: 0 0 12px var(--actor); margin-top: 26px; display: inline-block; }
+.holo-notechip { font-size: 10.5px; font-weight: 650; padding: 1px 7px; border-radius: 3px; color: #cfe9f7; background: #031019d9; border: 1px dashed #5a8fb0; margin-top: 26px; display: inline-block; }
+.holo-notechip.is-revised { color: #ffe6a8; border: 1px solid #ffd36b; box-shadow: 0 0 12px #ffd36b55; }
 .holo-placelabel { pointer-events: auto; cursor: pointer; font-size: 12px; font-weight: 650; letter-spacing: .02em; padding: 2px 8px; color: var(--holo-dim); background: #031019b3; border-bottom: 1px solid var(--holo-line); }
 .holo-placelabel.is-here { color: #fff; border-color: var(--holo-cyan); box-shadow: 0 6px 16px -6px var(--holo-cyan); }
 .holo-bubble { width: max-content; max-width: 320px; white-space: normal; padding: 8px 12px 10px; border-radius: 10px; background: #f4fbffef; color: #07131d; box-shadow: 0 0 0 2px var(--actor), 0 8px 28px #000a; }

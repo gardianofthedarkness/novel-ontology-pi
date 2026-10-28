@@ -282,9 +282,10 @@ function Anchors({ bus }: { bus: Bus }) {
       const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
       const at = kind === "actor" || kind === "bubble" || kind === "move" ? bus.positions.get(id) : kind === "place" ? bus.places.get(id) : kind === "nav" ? bus.nav.get(id) : kind === "spot" ? bus.pulse.position : undefined;
       if (!at) { element.style.opacity = "0"; continue; }
+      // Hidden until first placed (a new label would otherwise flash at the corner).
       point.copy(at); point.y += Number(element.dataset.lift ?? 0); point.project(camera);
       const hidden = point.z > 1 || (kind === "actor" && (bus.targets.get(id)?.visible === false));
-      element.style.opacity = hidden ? "0" : "";
+      element.style.opacity = hidden ? "0" : "1";
       // Cards and bubbles stay on screen; name plates may follow their pawn off the edge.
       const half = kind === "actor" || kind === "nav" || kind === "move" ? 0 : ((element.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0) / 2 + 8;
       const x = Math.min(size.width - half, Math.max(half, ((point.x + 1) / 2) * size.width));
@@ -356,6 +357,7 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
     const grid = navGrid(plan.kind);
     setMovement({ plan, grid, at: new Map([...navPositions(grid, box, FLOOR)].map(([id, point]) => [id, new Vector3(...point)])) });
   }, [plan, box, journey]);
+  const spotName = (id: string) => movement?.grid.spots.find((entry) => entry.id === id)?.label ?? id;
   bus.speed = speed;
   bus.nav = movement?.at ?? new Map();
   // What this beat asks of the stage.
@@ -423,7 +425,14 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
     <div className="holo-anchors" aria-hidden="true">
       {cast.map((actor) => <div key={actor.id} ref={anchor(`actor:${actor.id}`, 58)} className="holo-anchor"><span className={`holo-nameplate${beat.actors.includes(actor.id) && beat.kind !== "scene" ? " is-active" : ""}`} style={{ "--actor": actor.color } as CSSProperties}>{actor.label}</span></div>)}
       {movement && !journey && [...new Set(spotsAfter(movement.plan, script.beats, index).values())].map((spot) => <div key={`nav:${spot}`} ref={anchor(`nav:${spot}`, -4)} className="holo-anchor holo-anchor-below"><span className="holo-navlabel">{movement.grid.spots.find((entry) => entry.id === spot)?.label ?? spot}</span></div>)}
-      {movement && !journey && (movement.plan.moves[beat.id] ?? []).map((move) => <div key={`move:${beat.id}:${move.actor}`} ref={anchor(`move:${move.actor}`, -8)} className="holo-anchor holo-anchor-below"><span className="holo-movechip" style={{ "--actor": colors.get(move.actor) } as CSSProperties}>➝ {movement.grid.spots.find((entry) => entry.id === move.to)?.label ?? move.to} · {move.how}</span></div>)}
+      {movement && !journey && (movement.plan.moves[beat.id] ?? []).map((move) => <div key={`move:${beat.id}:${move.actor}`} ref={anchor(`move:${move.actor}`, -8)} className="holo-anchor holo-anchor-below"><span className="holo-movechip" style={{ "--actor": colors.get(move.actor) } as CSSProperties}>➝ {spotName(move.to)} · {move.how}{move.revised && move.jev ? ` (Jev: ${spotName(move.jev)})` : ""}</span></div>)}
+      {movement && !journey && beat.kind === "scene" && Object.entries(movement.plan.notes?.[beat.sceneId] ?? {}).filter(([actor, note]) => cast.some((entry) => entry.id === actor) && note.revised).map(([actor, note]) => <div key={`note:${beat.id}:${actor}`} ref={anchor(`move:${actor}`, -8)} className="holo-anchor holo-anchor-below"><span className="holo-notechip is-revised">↶ starts {spotName(movement.plan.starts[beat.sceneId]?.[actor] ?? "")}: {note.why ?? "the moves need it"}</span></div>)}
+      {movement && !journey && beat.kind === "scene" && (() => {
+        // One note for everyone whose start the scene does not say: they stand at the centre until the chain says otherwise.
+        const assumed = Object.entries(movement.plan.notes?.[beat.sceneId] ?? {}).filter(([actor, note]) => cast.some((entry) => entry.id === actor) && note.assumed && !note.revised).map(([actor]) => actor);
+        const spot = assumed.length ? movement.plan.starts[beat.sceneId]?.[assumed[0]] : undefined;
+        return spot ? <div key={`assumed:${beat.id}`} ref={anchor(`nav:${spot}`, -30)} className="holo-anchor holo-anchor-below"><span className="holo-notechip">? {assumed.length === 1 ? label(assumed[0]) : `${assumed.length} people`} at the centre — the scene does not say where</span></div> : null;
+      })()}
       {journey && script.places.map((entry) => <div key={entry.id} ref={anchor(`place:${entry.id}`, -6)} className="holo-anchor holo-anchor-below"><span className={`holo-placelabel${entry.id === beat.placeId ? " is-here" : ""}`} onClick={() => onEnterPlace?.(entry.id)}>{entry.label}</span></div>)}
       {mode === "diorama" && beat.kind === "dialogue" && beat.actors[0] && <div ref={anchor(`bubble:${beat.actors[0]}`, 74)} className="holo-anchor" key={`bubble:${beat.id}`}><div className="holo-bubble" style={{ "--actor": colors.get(beat.actors[0]) } as CSSProperties}><b>{label(beat.actors[0])}</b><p>{typed}<i className="holo-caret" /></p></div></div>}
       {mode === "diorama" && beat.kind === "event" && <div ref={anchor("spot:", 120)} className="holo-anchor" key={`event:${beat.id}`}><div className={`holo-eventcard${beat.conflict ? " is-conflict" : ""}`}><span>{beat.conflict ? <><Clash />CONFLICT</> : "◆ EVENT"}</span><p>{beat.text}</p></div></div>}
