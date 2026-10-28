@@ -48,6 +48,14 @@ test("the same person's nearby scenes nominate pairs in story order; parallel pa
   assert.ok(across.codeScore < ordered.codeScore);
 });
 
+test("with embedding vectors, pairs of the same person in nearby scenes are kept even when their texts read differently", () => {
+  // Orthogonal vectors: no pair is similar enough for the embedding leg.
+  const vectors = new Map(units.map((entry, index) => [entry.id, [0, 1, 2, 3].map((axis) => (axis === index ? 1 : 0))]));
+  const candidates = nominateCausalCandidates(universe, { vectors });
+  assert.ok(candidates.some((candidate) => candidate.fromId === "e3" && candidate.toId === "e1" && candidate.legs.includes("same-person-nearby")));
+  assert.ok(candidates.every((candidate) => candidate.legs.some((leg) => leg === "same-person-nearby" || leg.startsWith("embedding:"))));
+});
+
 test("Jev is told when a pair runs in parallel strands", async () => {
   let state = "";
   const decisions: DecisionModel = { modelId: "fake", decide: async (snapshot, questions) => { state = snapshot; return questions.map((question) => ({ key: question.key, value: 0.1 })); } };

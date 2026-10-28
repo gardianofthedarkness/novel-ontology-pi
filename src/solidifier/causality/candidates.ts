@@ -222,7 +222,9 @@ export function nominateCausalCandidates(
   }
 
   return [...pairs.values()]
-    .filter(candidate => !vectors.size || embeddingPairs.has(`${candidate.fromId}|${candidate.toId}`))
+    // With vectors, a pair needs the embedding leg — or the same person in nearby scenes of their strand: a cause
+    // rarely reads like its effect (a stabbing, then drawing the knife out), so similarity alone misses them.
+    .filter(candidate => !vectors.size || embeddingPairs.has(`${candidate.fromId}|${candidate.toId}`) || candidate.legs.includes("same-person-nearby"))
     .sort((a, b) => b.codeScore - a.codeScore || a.fromId.localeCompare(b.fromId) || a.toId.localeCompare(b.toId))
     .slice(0, maxPairs);
 }
