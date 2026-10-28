@@ -49,8 +49,6 @@ export interface OrbitalArrangement {
   floor?: FloorMark[];
   /** Giant calendar pins behind the story (world units): where each calendar day starts. */
   pins?: CalendarPin[];
-  /** Pale tubes around the strands of a precomputed spiral (world units). */
-  guides?: StrandGuide[];
   /** A tap on a strand's axis (path id, sample index): the scenes it lights (that strand on the tapped calendar day, or all
    * of it when that stretch has no date), with a line saying what is lit, in the strand's colour. */
   strandPeriod?: (pathId: string, index: number) => { ids: string[]; strandId: string; label: string; book?: number } | null;
@@ -353,15 +351,12 @@ export function calendarPins(data: TimePlaceProjection, anchors: Map<string, Pos
   return pins;
 }
 
-/** A pale tube around a strand's axis (world units): the stored spiral's tube guide. */
-export interface StrandGuide { id: string; points: Position3[]; radius: number }
 /**
  * The stored spiral (precomputed offline by `novel calendar build`): scene
  * spheres on the knots, all in the design's cyan: each strand's axis (its
  * skeleton, tappable) and coil glow by how much the strand matters (the
  * square root of its share of the busiest strand's scenes), so main strands
- * stand out and minor ones stay dim; a dim tube around each axis; all on the
- * floor box it was solved in. Drawn as solved at one uniform scale (a quiet
+ * stand out and minor ones stay dim; all on the floor box it was solved in. Drawn as solved at one uniform scale (a quiet
  * story layer is one step); no optimisation happens here.
  */
 function storedSpiral(spiral: SpiralView) {
@@ -374,8 +369,7 @@ function storedSpiral(spiral: SpiralView) {
   const busiest = Math.max(1, ...spiral.runs.map((run) => run.knots.length)), weight = (run: SpiralView["runs"][number]) => Math.sqrt(run.knots.length / busiest);
   const tracks = spiral.runs.filter((run) => run.track.length > 1).map((run): OrbitalPath => ({ id: `spiral-track:${run.id}`, tone: "coil", strandId: run.id, weight: weight(run), points: run.track.map(([x, y, z]) => world(layout(x, y, z, run.lane))) }));
   const axes = spiral.runs.filter((run) => run.axis.length > 1).map((run): OrbitalPath => ({ id: `spiral-axis:${run.id}`, strand: true, strandId: run.id, weight: weight(run), points: run.axis.map(([x, y, z]) => world(layout(x, y, z, run.lane))) }));
-  const guides = spiral.runs.filter((run) => run.axis.length > 1).map((run): StrandGuide => ({ id: `spiral-guide:${run.id}`, radius: run.tube * across * 3, points: run.axis.map(([x, y, z]) => world(layout(x, y, z, run.lane))) }));
-  return { anchors, layer, tracks, axes, guides, links: spiral.links, built: spiral.builtAt, bottom: -120, layout, depth: world([0, 0, spiral.scale.width * across])[2] };
+  return { anchors, layer, tracks, axes, links: spiral.links, built: spiral.builtAt, bottom: -120, layout, depth: world([0, 0, spiral.scale.width * across])[2] };
 }
 
 const spiralPoint = (rank: number, total: number): Position3 => {
@@ -578,7 +572,7 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     anchors, radiusScale: stored ? 0.34 : 0.42, causal: true,
     // Strands: seen from the side, coils stacked like the rows of a braid.
     // The stored spiral spreads over the floor, so the camera looks down on it; stacked strands are seen from the front.
-    ...(stored ? { direction: [0, 1.1, 1] as Position3 } : strands ? { direction: [0, 0.22, 1] as Position3 } : {}), ...(stored ? { guides: stored.guides, strandPeriod: (pathId: string, index: number) => {
+    ...(stored ? { direction: [0, 1.1, 1] as Position3 } : strands ? { direction: [0, 0.22, 1] as Position3 } : {}), ...(stored ? { strandPeriod: (pathId: string, index: number) => {
       const run = data.spiral!.runs.find((entry) => `spiral-axis:${entry.id}` === pathId);
       if (!run?.knots.length) return null;
       const x = run.axis[Math.max(0, Math.min(index, run.axis.length - 1))][0];
@@ -593,7 +587,7 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     // Shredding: in story order, each scene peels off the one line onto its strand.
     morphDelays: (draws) => { const last = Math.max(1, ...position.values()); return new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / last) * SHRED_MS)])); },
     timeKey: stored
-      ? { label: "STORY SPIRAL →", detail: `Story time as a precomputed spiral (built ${stored.built.slice(0, 16).replace("T", " ")}): each strand a glowing cyan axis, brighter the more scenes it holds (tap one to light it for that day and gather its characters), with a coil that winds once per few scenes, tight where scenes are dense and almost straight where there are none, inside a dim tube; forks and merges joined smoothly; busy strands low in the middle and the rest spread over the floor before they stack up${anchors.size > stored.anchors.size ? ` · ${anchors.size - stored.anchors.size} newer scene${anchors.size - stored.anchors.size === 1 ? "" : "s"} wait under it until \`novel calendar build\`` : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
+      ? { label: "STORY SPIRAL →", detail: `Story time as a precomputed spiral (built ${stored.built.slice(0, 16).replace("T", " ")}): each strand a glowing cyan axis, brighter the more scenes it holds (tap one to light it for that day and gather its characters), with a coil that winds once per few scenes, tight where scenes are dense and almost straight where there are none,; forks and merges joined smoothly; busy strands low in the middle and the rest spread over the floor before they stack up${anchors.size > stored.anchors.size ? ` · ${anchors.size - stored.anchors.size} newer scene${anchors.size - stored.anchors.size === 1 ? "" : "s"} wait under it until \`novel calendar build\`` : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
       : strands
       ? { label: "STORY STRANDS →", detail: `Story time as strands, estimated from who is in each scene (a guess where a scene names no one): each coil follows the same characters · S-curves: strands splitting and meeting · a faint rung: scenes nothing orders, side by side at one moment · amber: a flashback, threaded to where it is told · orange arcs: causes between the records inside the bubbles, judged in this order · place check: ${strandSummary(strands.checks)}${pinNote}` }
       : data.available
