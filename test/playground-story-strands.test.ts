@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { storyStrands } from "../apps/playground/src/data/storyStrands.js";
-import { spiralArrangement, spiralNodeId, strandSummary } from "../apps/playground/src/data/orbitalTimePlace.js";
+import { shapeChange, spiralArrangement, spiralNodeId, strandSummary } from "../apps/playground/src/data/orbitalTimePlace.js";
 import type { StoryScene, TimePlaceProjection } from "../apps/playground/src/data/timePlace.js";
 
 // Invented: Ming and Lan leave the station together (s1), then the story cuts
@@ -81,4 +81,33 @@ test("the arrangement changes shape with a signature and shreds in story order",
   const draws = ["s1", "s6"].map((id) => ({ node: { id: spiralNodeId(id) }, position: [0, 0, 0], radius: 1, role: "main" })) as never;
   const delays = strands.morphDelays!(draws);
   assert.ok(delays.get(spiralNodeId("s1"))! < delays.get(spiralNodeId("s6"))!);
+});
+
+test("coils stack above the line, never under the floor", () => {
+  const strands = spiralArrangement(data, undefined, null, "strands"), line = spiralArrangement(data, undefined, null, "line");
+  const lowest = (anchors: Map<string, number[]>) => Math.min(...[...anchors.values()].map((point) => point[1]));
+  assert.ok(lowest(strands.anchors!) >= lowest(line.anchors!) - 1);
+});
+
+test("only the user's switch reframes; new evidence glides with the caption of the shape shown", () => {
+  assert.equal(shapeChange(undefined, "line:a"), null);
+  assert.equal(shapeChange("line:a", "line:a"), null);
+  assert.deepEqual(shapeChange("line:a", "strands:b"), { caption: "Shredding the story line into strands…", reframe: true });
+  assert.deepEqual(shapeChange("strands:b", "line:a"), { caption: "Weaving the strands back into one line…", reframe: true });
+  assert.deepEqual(shapeChange("line:a", "line:c"), { caption: "Story line moving to new evidence…", reframe: false });
+  assert.equal(shapeChange("strands:b", "strands:c")?.reframe, false);
+});
+
+test("a universe lays its books' strands in reading order", () => {
+  // Book 2 is read first; book 1 opens with a scene before any time word, so it leads story order.
+  const book = (volume: number) => data.scenes.map((entry) => ({ ...entry, id: `${volume}:${entry.id}`, index: entry.index + (volume === 2 ? 0 : 100), book: volume, times: volume === 1 && entry.index === 0 ? [] : entry.times }));
+  const universe: TimePlaceProjection = { ...data, scope: "universe", scenes: [...book(1), ...book(2)], books: [1, 2].map((volume) => ({ volume, sourceId: `s${volume}`, title: `Book ${volume}`, continuityId: null, readingOrder: volume === 2 ? 1 : 2 })) };
+  const anchors = spiralArrangement(universe, undefined, null, "strands").anchors!;
+  const x = (volume: number) => Math.max(...data.scenes.map((entry) => anchors.get(spiralNodeId(`${volume}:${entry.id}`))![0]));
+  assert.ok(x(2) < x(1));
+});
+
+test("the place check names only what happened", () => {
+  assert.equal(strandSummary([]), "no splits · no meetings");
+  assert.equal(strandSummary([{ kind: "split", sceneId: "a", status: "same place" }, { kind: "apart", sceneId: "b", status: "chapter ends apart", count: 2 }]), "splits: 1 at one place (doubtful) · no meetings · 1 chapter ends with strands apart");
 });
