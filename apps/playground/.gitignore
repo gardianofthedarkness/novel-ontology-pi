@@ -2,3 +2,4 @@ node_modules
 dist
 *.local
 playground-live.html
+dist-clips-demo

@@ -154,6 +154,12 @@ A **Clips** link in the top bar (shown on phones as well) opens `?clips&book=N`:
 - **Playing:** each clip replays once in about 12 seconds, with the event (and who speaks) and its original sentences under the stage; then the next clip follows unless the reel is paused. Prev/next, a sideways swipe on the caption, or the clip strip jump around; after a replay the stage can be turned and scrubbed.
 - **On a phone** the stage's own heading, event cards and speech bubbles stay hidden: the caption carries them, so they don't cover the people.
 
+**A page to share.** `node playground/export-clips-demo.mjs <live-volumes.json> <out.html> [--catalog catalog.json] [--fragment]` (after `npm run build`) writes the same player and clips as one self-contained file (`apps/playground/clips-demo.html`, about 1.6 MB for books 1–3).
+- Each clip keeps only its scene's beats (summaries and names), its place and the prepared moves.
+- Quotes, sentence ids, the book's text, the archive and Pi are left out, and nothing on the page calls a host.
+- Clips of one place share one stage script.
+- `--fragment` drops the document wrapper for hosts that add their own (a claude.ai Artifact).
+
 ### Pi prepares it
 
 Pi has a fourth skill, `skills/novel-stage/SKILL.md`: finish the book's checklist, then buildings, movement (budget about 1.2× the stage estimate) and prep. The runner lists it in `NOVEL_JOB.json` (`animation`) and asks Pi to read it before any Jev stage request. Refusals for running a step too early are `STEP_WAITING`, not `INTERNAL`.

@@ -7,8 +7,8 @@
 .clips-title span { font-size: 9px; letter-spacing: .22em; color: var(--clips-cyan); font-weight: 750; }
 .clips-title strong { font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clips-books { display: flex; gap: 4px; }
-.clips-books a { color: var(--clips-dim); text-decoration: none; font-size: 11px; font-weight: 700; padding: 5px 8px; border: 1px solid var(--clips-line); border-radius: 999px; white-space: nowrap; }
-.clips-books a.is-on { color: #06121f; background: var(--clips-cyan); border-color: var(--clips-cyan); }
+.clips-books a, .clips-books button { font: inherit; cursor: pointer; background: transparent; color: var(--clips-dim); text-decoration: none; font-size: 11px; font-weight: 700; padding: 5px 8px; border: 1px solid var(--clips-line); border-radius: 999px; white-space: nowrap; }
+.clips-books .is-on { color: #06121f; background: var(--clips-cyan); border-color: var(--clips-cyan); }
 
 .clips-stage { position: relative; min-height: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 60%, #0a2036 0%, #040a13 65%); }
 .clips-idle { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 16px; color: var(--clips-dim); font-size: 13px; padding: 0 24px; text-align: center; }
@@ -39,6 +39,8 @@
 .clips-list button small { grid-column: 2; font-size: 10px; color: var(--clips-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clips-list button.is-on { border-color: var(--clips-cyan); background: #0e2233; }
 .clips-list button.is-on b { color: var(--clips-cyan); }
+/* A side gutter that clears a phone's side bars. */
+.clips-top, .clips-caption, .clips-controls, .clips-list { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 
 /* The clip's caption carries its title: the stage's own heading and replay bar stay out of a phone's way. */
 @media (max-width: 760px) {

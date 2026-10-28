@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HoloStage, replayMs, type HoloMode } from "./HoloStage";
 import { preloadArchitecture } from "./ArchitectureHolograms";
-import { placeScript, sentenceKey, type HoloScript } from "../data/holoScript";
+import { placeScript, sentenceKey, type HoloBeat, type HoloScript } from "../data/holoScript";
 import type { MovePlan } from "../data/holoNav";
 import { keyedPlan, placePlan, type ReadSentence, type StagePlan } from "../data/readMode";
 import { pickClips, sceneClips, type StageClip } from "../data/stageClips";
@@ -31,11 +31,10 @@ interface Props {
   clipsHref: (book: number) => string;
 }
 
-const CLIP_MS = 12_000;
-/** The pause on a clip's last moment before the reel moves on. */
-const HOLD_MS = 2_200;
-const KIND_LABEL: Record<string, string> = { scene: "Scene", event: "Event", dialogue: "Dialogue", travel: "On the move" };
+/** A clip with the stage it plays on. Clips of one `stage` share one hologram (their place's whole script). */
+export interface ReelEntry { clip: StageClip; stage: string; script: HoloScript; plan: MovePlan }
 
+/** The host's clips: the book's prepared plan (api/stage) cut into clips, with the original sentences (api/book-text) under each beat. */
 export function StageClips({ timePlace, world, volume, requested, title, books, reducedMotion, bookQuery, exitHref, clipsHref }: Props) {
   const [stage, setStage] = useState<StagePlan | null | "loading">("loading");
   useEffect(() => {
@@ -47,9 +46,9 @@ export function StageClips({ timePlace, world, volume, requested, title, books, 
 
   // The book's stages (one per prepared place) and the clips cut from them.
   const ready = !!timePlace && stage !== "loading" && (requested === null || requested === volume);
-  const { clips, stages } = useMemo(() => {
+  const entries = useMemo(() => {
+    if (!ready || !stage || !timePlace) return [];
     const stages = new Map<string, { script: HoloScript; plan: MovePlan }>();
-    if (!ready || !stage || !timePlace) return { clips: [] as StageClip[], stages };
     for (const key of Object.keys(stage.places)) {
       const placeId = timePlace.places.find((place) => place.id === key || place.id === `${volume}:${key}`)?.id;
       if (!placeId || stages.has(placeId)) continue;
@@ -57,9 +56,52 @@ export function StageClips({ timePlace, world, volume, requested, title, books, 
       const plan = placePlan(stage, placeId, volume);
       if (plan && script.beats.length) stages.set(placeId, { script, plan: keyedPlan(plan, script) });
     }
-    return { clips: pickClips([...stages.values()].flatMap(({ script, plan }) => sceneClips(script, plan))), stages };
+    return pickClips([...stages.values()].flatMap(({ script, plan }) => sceneClips(script, plan))).map((clip): ReelEntry => ({ clip, stage: clip.placeId, ...stages.get(clip.placeId)! }));
   }, [ready, stage, timePlace, world, volume]);
 
+  // The text a beat tells, fetched by block (b0003_s0012 is in block 3) as clips need it.
+  const blocks = useRef(new Map<number, ReadSentence[] | null>());
+  const [, setLoaded] = useState(0);
+  useEffect(() => { blocks.current.clear(); }, [bookQuery]);
+  const onShow = useCallback((entry: ReelEntry) => {
+    const glue = bookQuery ? `${bookQuery}&` : "?";
+    const wanted = new Set(entry.script.beats.slice(entry.clip.from, entry.clip.to + 1).flatMap((beat) => beat.source ? [Math.floor(beat.source.from / 1_000_000), Math.floor(beat.source.to / 1_000_000)] : []));
+    for (const number of wanted) {
+      if (blocks.current.has(number)) continue;
+      blocks.current.set(number, null);
+      fetch(`api/book-text${glue}block=${number}`, { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ sentences: ReadSentence[] }> : null)
+        .then((text) => { if (text) { blocks.current.set(number, text.sentences); setLoaded((count) => count + 1); } }).catch(() => undefined);
+    }
+  }, [bookQuery]);
+  const linesOf = (beat: HoloBeat) => beat.source ? [...new Set([Math.floor(beat.source.from / 1_000_000), Math.floor(beat.source.to / 1_000_000)])].flatMap((number) => blocks.current.get(number) ?? [])
+    .filter((sentence) => { const key = sentenceKey(sentence.id); return key >= beat.source!.from && key <= beat.source!.to; }).map((sentence) => sentence.text) : [];
+
+  return <ClipReel entries={entries} eyebrow="STAGE CLIPS" title={title} books={books} book={requested ?? volume} bookHref={clipsHref} exit={{ href: exitHref, label: "← Archive" }} reducedMotion={reducedMotion}
+    status={!ready ? "Opening the book…" : stage ? "No scene of this book has anyone moving yet." : "This book's animation is not prepared yet."} linesOf={linesOf} onShow={onShow} />;
+}
+
+const CLIP_MS = 12_000;
+/** The pause on a clip's last moment before the reel moves on. */
+const HOLD_MS = 2_200;
+const KIND_LABEL: Record<string, string> = { scene: "Scene", event: "Event", dialogue: "Dialogue", travel: "On the move" };
+
+interface ReelProps {
+  entries: ReelEntry[];
+  eyebrow: string; title: string;
+  books: { id: number; label: string }[]; book: number | null;
+  /** Books open as links (the host's pages) or, without bookHref, switch in place. */
+  bookHref?: (book: number) => string; onBook?: (book: number) => void;
+  exit?: { href: string; label: string };
+  /** Shown on the stage when there is no clip. */
+  status: string;
+  reducedMotion: boolean;
+  /** The original sentences a beat tells, when the host serves the text; onShow asks for a clip's. */
+  linesOf?: (beat: HoloBeat) => string[];
+  onShow?: (entry: ReelEntry) => void;
+}
+
+/** The clip player: one hologram, the caption under it, controls and the clip strip. */
+export function ClipReel({ entries, eyebrow, title, books, book, bookHref, onBook, exit, status, reducedMotion, linesOf, onShow }: ReelProps) {
   // The first replay waits for the building models, or it would play on an empty stage.
   const [models, setModels] = useState(false);
   useEffect(() => { let live = true; preloadArchitecture().catch(() => undefined).then(() => { if (live) setModels(true); }); return () => { live = false; }; }, []);
@@ -69,45 +111,32 @@ export function StageClips({ timePlace, world, volume, requested, title, books, 
   const [ended, setEnded] = useState(false);
   const [beat, setBeat] = useState<number | null>(null);
   const [mode, setMode] = useState<HoloMode>("diorama");
-  useEffect(() => { setIndex(0); }, [clips]);
-  const clip = clips[Math.min(index, clips.length - 1)] as StageClip | undefined;
-  const shown = clip ? stages.get(clip.placeId) : undefined;
+  useEffect(() => { setIndex(0); setEnded(false); setBeat(null); }, [entries]);
+  const entry = entries[Math.min(index, entries.length - 1)] as ReelEntry | undefined;
+  const clip = entry?.clip;
+  useEffect(() => { if (entry) onShow?.(entry); }, [entry, onShow]);
   // The clip strip keeps the clip on show in view.
   const strip = useRef<HTMLElement>(null);
-  useEffect(() => { strip.current?.querySelector(".is-on")?.scrollIntoView({ block: "nearest", inline: "center", behavior: reducedMotion ? "auto" : "smooth" }); }, [index, clips, reducedMotion]);
-  const go = useCallback((next: number) => { if (!clips.length) return; setIndex(Math.max(0, Math.min(clips.length - 1, next))); setRun((count) => count + 1); setEnded(false); setBeat(null); }, [clips.length]);
+  useEffect(() => { strip.current?.querySelector(".is-on")?.scrollIntoView({ block: "nearest", inline: "center", behavior: reducedMotion ? "auto" : "smooth" }); }, [index, entries, reducedMotion]);
+  const go = useCallback((next: number) => { if (!entries.length) return; setIndex(Math.max(0, Math.min(entries.length - 1, next))); setRun((count) => count + 1); setEnded(false); setBeat(null); }, [entries.length]);
 
   // After a clip's replay: hold its last moment, then the next clip (while the reel runs).
   useEffect(() => {
-    if (!ended || !auto || index >= clips.length - 1) return;
+    if (!ended || !auto || index >= entries.length - 1) return;
     const timer = window.setTimeout(() => go(index + 1), HOLD_MS);
     return () => clearTimeout(timer);
-  }, [ended, auto, index, clips.length, go]);
+  }, [ended, auto, index, entries.length, go]);
 
-  // The text a beat tells, fetched by block (b0003_s0012 is in block 3) as clips need it.
-  const blocks = useRef(new Map<number, ReadSentence[] | null>());
-  const [, setLoaded] = useState(0);
-  useEffect(() => { blocks.current.clear(); }, [bookQuery]);
-  useEffect(() => {
-    if (!clip || !shown) return;
-    const glue = bookQuery ? `${bookQuery}&` : "?";
-    const wanted = new Set(shown.script.beats.slice(clip.from, clip.to + 1).flatMap((entry) => entry.source ? [Math.floor(entry.source.from / 1_000_000), Math.floor(entry.source.to / 1_000_000)] : []));
-    for (const number of wanted) {
-      if (blocks.current.has(number)) continue;
-      blocks.current.set(number, null);
-      fetch(`api/book-text${glue}block=${number}`, { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ sentences: ReadSentence[] }> : null)
-        .then((text) => { if (text) { blocks.current.set(number, text.sentences); setLoaded((count) => count + 1); } }).catch(() => undefined);
-    }
-  }, [clip, shown, bookQuery]);
-
-  const current = shown && beat !== null ? shown.script.beats[beat] : shown && clip ? shown.script.beats[clip.from] : undefined;
-  const lines = current?.source ? [...new Set([Math.floor(current.source.from / 1_000_000), Math.floor(current.source.to / 1_000_000)])].flatMap((number) => blocks.current.get(number) ?? [])
-    .filter((sentence) => { const key = sentenceKey(sentence.id); return key >= current.source!.from && key <= current.source!.to; }) : [];
-  const speaker = current?.actors[0] ? shown?.script.actors.find((actor) => actor.id === current.actors[0])?.label : undefined;
-  const reel = clip && shown && !reducedMotion ? { key: `${clip.id}:${run}`, from: clip.from, to: clip.to, ms: CLIP_MS } : null;
+  const current = entry && beat !== null ? entry.script.beats[beat] : entry && clip ? entry.script.beats[clip.from] : undefined;
+  const lines = current && linesOf ? linesOf(current) : [];
+  const speaker = current?.actors[0] ? entry?.script.actors.find((actor) => actor.id === current.actors[0])?.label : undefined;
+  const reel = clip && !reducedMotion ? { key: `${clip.id}:${run}`, from: clip.from, to: clip.to, ms: CLIP_MS } : null;
   const playing = !!reel && !ended;
-  const at = books.findIndex((book) => book.id === (requested ?? volume));
+  const at = books.findIndex((entry) => entry.id === book);
   const nextBook = at >= 0 ? books[at + 1] : undefined;
+  const bookLink = (target: { id: number; label: string }, className: string | undefined, label: string) => bookHref
+    ? <a key={target.id} href={bookHref(target.id)} className={className} title={target.label}>{label}</a>
+    : <button key={target.id} onClick={() => onBook?.(target.id)} className={className} title={target.label}>{label}</button>;
 
   // A sideways swipe on the caption flips clips (the stage itself turns on drag).
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -121,29 +150,29 @@ export function StageClips({ timePlace, world, volume, requested, title, books, 
 
   return <div className="clips">
     <header className="clips-top">
-      <a className="clips-back" href={exitHref}>← Archive</a>
-      <div className="clips-title"><span>STAGE CLIPS</span><strong>{title}</strong></div>
-      <nav className="clips-books" aria-label="Books">{books.map((book) => <a key={book.id} href={clipsHref(book.id)} className={book.id === (requested ?? volume) ? "is-on" : undefined} title={book.label}>Vol {book.id}</a>)}</nav>
+      {exit && <a className="clips-back" href={exit.href}>{exit.label}</a>}
+      <div className="clips-title"><span>{eyebrow}</span><strong>{title}</strong></div>
+      <nav className="clips-books" aria-label="Books">{books.map((entry) => bookLink(entry, entry.id === book ? "is-on" : undefined, `Vol ${entry.id}`))}</nav>
     </header>
     <section className="clips-stage" aria-label="Clip">
-      {clip && shown && models ? <HoloStage key={clip.placeId} script={shown.script} mode={mode} onMode={setMode} onClose={() => undefined} reducedMotion={reducedMotion} embedded
-        plan={shown.plan} reel={reel} onReelEnd={() => setEnded(true)} onBeat={setBeat} initialBeat={reducedMotion ? clip.to : clip.from} autoplay={false} />
-        : <div className="clips-idle"><div className="clips-ring" /><p>{!ready || (clip && !models) ? "Opening the book…" : stage ? "No scene of this book has anyone moving yet." : "This book's animation is not prepared yet."}</p></div>}
+      {entry && clip && models ? <HoloStage key={entry.stage} script={entry.script} mode={mode} onMode={setMode} onClose={() => undefined} reducedMotion={reducedMotion} embedded
+        plan={entry.plan} reel={reel} onReelEnd={() => setEnded(true)} onBeat={setBeat} initialBeat={reducedMotion ? clip.to : clip.from} autoplay={false} />
+        : <div className="clips-idle"><div className="clips-ring" /><p>{clip && !models ? "Opening the book…" : status}</p></div>}
     </section>
-    {clip && <section className="clips-caption" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} aria-live="polite">
-      <div className="clips-meta"><b>{index + 1} / {clips.length}</b><span>{clip.scene}</span><span>{clip.place}{clip.kind ? ` · ${ARCHITECTURE_LABEL[clip.kind]}` : ""}</span>{clip.when && <span>{clip.when}</span>}<span>{clip.movers} moving · {clip.moves} moves</span></div>
+    {entry && clip && <section className="clips-caption" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} aria-live="polite">
+      <div className="clips-meta"><b>{index + 1} / {entries.length}</b><span>{clip.scene}</span><span>{clip.place}{clip.kind ? ` · ${ARCHITECTURE_LABEL[clip.kind]}` : ""}</span>{clip.when && <span>{clip.when}</span>}<span>{clip.movers} moving · {clip.moves} moves</span></div>
       <h2>{clip.title}</h2>
       {current && current.kind !== "scene" && <p className="clips-beat"><i>{KIND_LABEL[current.kind] ?? current.kind}</i>{current.kind === "dialogue" && speaker && <b>{speaker}: </b>}{current.text}</p>}
-      {lines.length > 0 && <blockquote lang="zh">{lines.map((sentence) => sentence.text).join("")}</blockquote>}
-      {playing && shown && <i className="clips-reel" key={reel!.key} style={{ animationDuration: `${replayMs(shown.script, reel!.from, reel!.to, reel!.ms)}ms` }} />}
+      {lines.length > 0 && <blockquote lang="zh">{lines.join("")}</blockquote>}
+      {playing && <i className="clips-reel" key={reel!.key} style={{ animationDuration: `${replayMs(entry.script, reel!.from, reel!.to, reel!.ms)}ms` }} />}
     </section>}
     <footer className="clips-controls">
       <button onClick={() => go(index - 1)} disabled={!clip || index === 0} aria-label="Previous clip">‹</button>
       <button onClick={() => go(index)} disabled={!clip} className="clips-replay">↺ Replay</button>
       <button onClick={() => setAuto((on) => !on)} disabled={!clip} className={auto ? "is-on" : undefined} aria-pressed={auto}>{auto ? "Auto ▶" : "Auto ❚❚"}</button>
-      {clip && index === clips.length - 1 && ended && nextBook ? <a className="clips-nextbook" href={clipsHref(nextBook.id)}>Vol {nextBook.id} →</a>
-        : <button onClick={() => go(index + 1)} disabled={!clip || index >= clips.length - 1} aria-label="Next clip">›</button>}
+      {clip && index === entries.length - 1 && ended && nextBook ? bookLink(nextBook, "clips-nextbook", `Vol ${nextBook.id} →`)
+        : <button onClick={() => go(index + 1)} disabled={!clip || index >= entries.length - 1} aria-label="Next clip">›</button>}
     </footer>
-    {clips.length > 0 && <nav className="clips-list" aria-label="Clips" ref={strip}>{clips.map((entry, at) => <button key={entry.id} className={at === index ? "is-on" : undefined} onClick={() => go(at)}><b>{at + 1}</b><span>{entry.title}</span><small>{entry.place}</small></button>)}</nav>}
+    {entries.length > 0 && <nav className="clips-list" aria-label="Clips" ref={strip}>{entries.map((item, at) => <button key={item.clip.id} className={at === index ? "is-on" : undefined} onClick={() => go(at)}><b>{at + 1}</b><span>{item.clip.title}</span><small>{item.clip.place}</small></button>)}</nav>}
   </div>;
 }
