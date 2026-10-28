@@ -10,4 +10,3 @@ novels/*/ontology/graph.lbug*
 .env.*
 !.env.example
 __pycache__/
-apps/playground/dist-character-web/

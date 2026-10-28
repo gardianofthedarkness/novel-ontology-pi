@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BREAKDOWN_HELP, BREAKDOWN_LABEL, TIERS, TIER_LABEL, WEIGHTS, characterArc, type Breakdown, type CharacterWeb, type PairHistory, type WebData, type WebNode } from "../model/web";
+import { BREAKDOWN_HELP, BREAKDOWN_LABEL, TIERS, TIER_LABEL, WEIGHTS, characterArc, type Breakdown, type CharacterWeb, type PairHistory, type WebData, type WebNode } from "../../data/castWeb";
 
 const PARTS = Object.keys(WEIGHTS) as (keyof Breakdown)[];
 
@@ -60,7 +60,7 @@ export function HallOfFame({ web, onPick }: { web: CharacterWeb; onPick: (id: st
   return (
     <div className="hall">
       <p className="hint">Ranked by storyline connection. Click a character to open them; to follow two, use Compare above (or shift-click a second).</p>
-      <ul className="legend">{PARTS.map((part) => <li key={part}><i className={`part-${part}`} />{BREAKDOWN_LABEL[part]}</li>)}</ul>
+      <ul className="cast-legend">{PARTS.map((part) => <li key={part}><i className={`part-${part}`} />{BREAKDOWN_LABEL[part]}</li>)}</ul>
       {TIERS.map((tier) => {
         const members = web.nodes.filter((node) => node.tier === tier);
         if (!members.length) return null;
@@ -99,7 +99,7 @@ export function CharacterCard({ data, web, id, onPick, onPair, onCompare, scope 
       <header>
         <Avatar node={node} size={64} />
         <div>
-          <span className={`badge tier-${node.tier}`}>{TIER_LABEL[node.tier].replace(/s$/, "")} · #{node.rank}</span>
+          <span className={`cast-badge tier-${node.tier}`}>{TIER_LABEL[node.tier].replace(/s$/, "")} · #{node.rank}</span>
           <h2>{node.name}</h2>
           {character.names.length > 1 && <p className="aliases">{character.names.filter((name) => name !== node.name).join(" · ")}</p>}
         </div>

@@ -1,41 +1,46 @@
-# Cast web: relation web, hall of fame, two-character history
+# Characters: relation web, hall of fame, two-character history
 
-A design demo on its own host, beside the playground, reading the volumes we
-have already extracted. One model drives three views: the **relation web**, the
-**hall of fame** it ranks, and the **history** of any two characters.
+The playground's fourth view, after Narrative, Story time and Places. One model
+drives three things:
 
-## Run it
+- the **relation web**;
+- the **hall of fame** it ranks;
+- the **history** of any two characters.
 
-```bash
-cd apps/playground
-NOVEL_REVIEW_HOME=<pi review home> npm run character-web
-```
+**Orbital** mode shows the web as a 3D amphitheater, with protagonists on the
+top step; **Traditional** mode shows it flat. Both follow the book picker and
+the shared Motion switch. Open it with `?view=cast`.
 
-It opens on <http://127.0.0.1:5181>, on loopback only, because it serves a
-private book's records. `NOVEL_REVIEW_HOME` is the same home `tools/pi-review`
-uses. The host reads the workspaces its `runtime/live-volumes.json` lists, and
-shows each volume with extracted scenes. The path stays in your environment,
-never in the repo. `npm run character-web:build` builds it apart from the
-playground, into `dist-character-web/`.
+## Where the data comes from
 
-The host sends the page names, casts, event summaries and actors, relationship
-deltas, CAUSES links and the portrait images that `portraits.jsonl` lists. It
-never sends evidence quotes or source text.
+The live snapshot carries a `cast` projection (`tools/pi-review/cast.mjs`) for
+the loaded book:
 
-## The model (`character-web/src/model`)
+- character and place names;
+- each scene's recorded present and mentioned casts, and its dialogue-card
+  members;
+- event summaries (capped at 280 characters), importance, actors and the people
+  they affect, each event with the scene it cites;
+- the `relationships` part of state changes;
+- CAUSES links.
 
-`bundle.ts` turns ontology bundles into the web's input:
+Evidence quotes, source text and sentence ids stay in the workspace. Portraits
+come from the album projection.
+
+`apps/playground/src/data/castBundle.ts` turns that into the web's input:
 
 - **Ids:** namespaced per volume, because each workspace numbers its own
   `char_000001`.
 - **Scene cast:** the recorded cast, plus whoever acts in or is affected by the
   scene's events. Recorded casts are sparse today (43 of 77 scenes in volume 1),
   and events are not.
-- **Series · by name:** joins characters across volumes when they share a
-  recorded name form. That is a provisional join for the view, not reviewed
-  identity; cross-book identity does not exist yet.
 
-`web.ts` computes view metrics, never ontology facts:
+It can also join volumes by a shared recorded name (`series-by-name`). That is a
+provisional join, not reviewed identity, and the view does not use it yet.
+
+## The model (`apps/playground/src/data/castWeb.ts`)
+
+It computes view metrics, never ontology facts.
 
 - **Ties** say what they are made of: shared scenes, shared exchanges (dialogue
   cards), co-action (one acts on, or alongside, the other), mentions, and the
@@ -67,19 +72,31 @@ never sends evidence quotes or source text.
   - Connectors: characters whose bridging outweighs their presence.
   - Pillars: anyone else with a score of at least 0.25.
   - Cameos: everyone else.
-- **Layout:** tiers are rings, with protagonists at the heart. Groups are
-  sectors, so a group stays on one side as its members change rings.
+- **Layout:** tiers are rings, and groups are sectors. In 3D each tier stands on
+  its own step, with the stronger a little higher.
 - **Pair history:** every scene the two share, every mention of one by the
   other, and every affinity shift, in order. It carries a running affinity and
   marks the largest shift as the turning point.
 
-The scrubber replays the story scene by scene. Story time is not recorded for
-these volumes yet, so it follows reading order. Once time-place facts exist, a
-scene's `story` position can take its story-time rank instead.
+## Using it
+
+- **Scrubber:** replays the book scene by scene; the web and the ranks follow.
+- **Two characters:**
+  - type any recorded name form in the Compare slots;
+  - or open a character and press *Compare with…*, then pick the second on the
+    web (this works on touch);
+  - or shift-click.
+- **Watch their story:** steps through every moment the pair shares. The web
+  grows to that point, their tie carries a light (3D) or flows (2D), and the log
+  follows, with later entries dimmed.
+
+The order is reading order, because story time is not recorded for these
+volumes yet. Once time-place facts exist, a scene's `story` position can take
+its story-time rank instead.
 
 ## Next
 
 - Read story time from time-place, so flashbacks fall in their place.
-- Move the model into the live snapshot, so the playground can host the web
-  with live updates.
-- Reviewed cross-book identity, to replace the series join by name.
+- A series scope across the library's books, once reviewed cross-book identity
+  replaces the join by name.
+- *Show in Narrative* from a character card.

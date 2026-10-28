@@ -34,6 +34,8 @@ import { freshIdentityEvents, type PendingJoin } from "./data/joinAnimation";
 import { liveAlbum, sameAlbumEntries, type LiveAlbum } from "./data/liveAlbum";
 import { acceptsSnapshot, bookName, bookOptionLabel, bookQuery, libraryBooks, parseBookParam, sameBooks, viewedBook, type BookEntry } from "./data/bookCatalog";
 import { withOverviewActivity } from "./data/timelineLayout";
+import { CastView } from "./components/cast/CastView";
+import type { VolumeBundle } from "./data/castBundle";
 import type {
   AlbumPortrait,
   ChangeSet,
@@ -49,8 +51,8 @@ const DB = "db/novel";
 let feedSeq = 0;
 const EMPTY_TIME_PLACE: TimePlaceProjection = { available: false, times: [], scenes: [], places: [], characters: [], names: {} };
 /** Two modes (3D orbital, flat), each with the same three views. */
-type StageView = "narrative" | "story" | "places";
-const STAGE_VIEWS: [StageView, string][] = [["narrative", "Narrative"], ["story", "Story time"], ["places", "Places"]];
+type StageView = "narrative" | "story" | "places" | "cast";
+const STAGE_VIEWS: [StageView, string][] = [["narrative", "Narrative"], ["story", "Story time"], ["places", "Places"], ["cast", "Characters"]];
 const MODES: [boolean, string][] = [[true, "3D"], [false, "Flat"]];
 const NO_NODES: WorldNode[] = [];
 const NO_EDGES: WorldEdge[] = [];
@@ -74,10 +76,15 @@ interface LiveSnapshot {
   availableVolumes?: number[];
   books?: BookEntry[];
   album?: LiveAlbum;
+  /** The Characters view's records for this book; absent on older viewers. */
+  cast?: VolumeBundle | null;
   jobLabel?: string;
   counts: { entities: number; events: number; repairs: number; ghosts: number };
   workSite?: string;
 }
+
+/** Volume, size and latest records of a cast: equal signatures mean nothing the web reads has changed. */
+const castSignature = (cast: VolumeBundle | null) => cast ? `${cast.volume}:${cast.scenes.length}:${cast.events.length}:${cast.stateChanges.length}:${cast.entities.length}:${cast.events.at(-1)?.id ?? ""}:${cast.stateChanges.at(-1)?.id ?? ""}` : "";
 
 /** Follow a merge chain (a keeper can itself be merged away later). */
 function resolveKept(id: string, merges: Map<string, string>): string {
@@ -117,10 +124,10 @@ export default function App() {
   const [showRelations, setShowRelations] = useState(true);
   // Deep links: ?mode=orbital|traditional and ?view=narrative|story|places.
   const [orbitalMode, setOrbitalMode] = useState(() => new URLSearchParams(window.location.search).get("mode") !== "traditional");
-  /** Narrative (reading order), Story time (when it happens) or Places (where). */
+  /** Narrative (reading order), Story time (when it happens), Places (where) or Characters (who, with whom). */
   const [stageView, setStageView] = useState<StageView>(() => {
     const requested = new URLSearchParams(window.location.search).get("view");
-    return requested === "story" || requested === "places" ? requested : "narrative";
+    return requested === "story" || requested === "places" || requested === "cast" ? requested : "narrative";
   });
   const [timePlace, setTimePlace] = useState<TimePlaceProjection | null>(null);
   /** Story time and places of the whole universe the reader's book belongs to (every hosted book). */
@@ -162,6 +169,7 @@ export default function App() {
   const [dynEdges, setDynEdges] = useState<WorldEdge[]>([]);
   const [albumPictures, setAlbumPictures] = useState<OrbitIllustration[]>([]);
   const [albumPortraits, setAlbumPortraits] = useState<AlbumPortrait[]>([]);
+  const [castBundle, setCastBundle] = useState<VolumeBundle | null>(null);
   const [proposalsByCs, setProposalsByCs] = useState<Record<string, string[]>>({});
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [stage, setStage] = useState(0);
@@ -404,6 +412,7 @@ export default function App() {
     setDynEdges([]);
     setAlbumPictures([]);
     setAlbumPortraits([]);
+    setCastBundle(null);
     setAlbumInfo([]);
     setProposalsByCs({});
     setHeldMap({});
@@ -421,6 +430,7 @@ export default function App() {
     setDynEdges([]);
     setAlbumPictures([]);
     setAlbumPortraits([]);
+    setCastBundle(null);
     setAlbumInfo([]);
     setProposalsByCs({});
     setFeed([]);
@@ -500,6 +510,8 @@ export default function App() {
         setLiveCollection(`Volume ${data.volume ?? 1} / ${data.jobLabel ?? "Live processing"}`);
         setLiveCounts(data.counts);
         setTimePlace((previous) => data.timePlace && JSON.stringify(previous) === JSON.stringify(data.timePlace) ? previous : data.timePlace ?? null);
+        // A cast only changes when the book grows, so a cheap signature keeps the web from re-laying out on every snapshot.
+        setCastBundle((previous) => castSignature(previous) === castSignature(data.cast ?? null) ? previous : data.cast ?? null);
         setUniverseTimePlace((previous) => data.universeTimePlace && JSON.stringify(previous) === JSON.stringify(data.universeTimePlace) ? previous : data.universeTimePlace ?? null);
         setWorkSite(data.workSite ?? "chapter_0");
         setBlockLabel(data.label);
@@ -806,7 +818,7 @@ export default function App() {
 
   /** Orbital Story time / Places: the world regrouped by period or by place (view only). */
   const regroupedOrbit = useMemo(() => {
-    if (!orbitalMode || stageView === "narrative" || !displayWorld) return null;
+    if (!orbitalMode || stageView === "narrative" || stageView === "cast" || !displayWorld) return null;
     if (stageView === "story") {
       // Without time facts yet, the spiral runs in reading order (its causal arrows still show);
       // a universe stays a universe: every book in reading order, not just the book being read.
@@ -859,7 +871,8 @@ export default function App() {
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
           </div>
           {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
-          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} albumPictures={stageView === "story" ? albumPictures : []} albumPortraits={albumPortraits} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          {stageView === "cast" ? <CastView bundle={castBundle} portraits={albumPortraits} orbital={orbitalMode} reducedMotion={reducedMotion} />
+          : regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} albumPictures={stageView === "story" ? albumPictures : []} albumPortraits={albumPortraits} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
           : stageView === "story" ? <StoryTimeline pictures={albumPictures} album={storyAlbum} onPicture={selectStoryPicture} data={viewTimePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(viewTimePlace?.names ?? {}))} bookBar={bookBar} focusBook={focusBook} emerging={shownEmerging?.times} touched={emerging && Date.now() - emerging.at < 9000 ? undefined : shownTouched} following={followingActivity} onShowInOrbit={(sceneId) => {
             // Universe ids are "<volume>:<scene>": another book opens first.
             const scene = viewTimePlace?.scenes.find((entry) => entry.id === sceneId);

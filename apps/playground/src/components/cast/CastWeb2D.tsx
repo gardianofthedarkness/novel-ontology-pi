@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RING_RADIUS, TIERS, TIER_LABEL, webLayout, type CharacterWeb, type Placed, type WebEdge } from "../model/web";
+import { RING_RADIUS, TIERS, TIER_LABEL, webLayout, type CharacterWeb, type Placed, type WebEdge } from "../../data/castWeb";
 
 const SIZE = 1000, HALF = SIZE / 2, SCALE = HALF * 0.78, LABEL_ANGLE = (-125 * Math.PI) / 180;
 
@@ -39,7 +39,7 @@ interface Props {
   onPick: (id: string, additive: boolean) => void;
 }
 
-export function RelationWeb({ web, selected, reducedMotion, pulse, onPick }: Props) {
+export function CastWeb2D({ web, selected, reducedMotion, pulse, onPick }: Props) {
   const layout = useMemo(() => webLayout(web), [web]);
   const shown = useTweened(layout, reducedMotion);
   const [hover, setHover] = useState<string | null>(null);

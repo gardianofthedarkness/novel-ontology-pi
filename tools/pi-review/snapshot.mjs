@@ -6,6 +6,7 @@ import { liveActivity } from './live-activity.mjs';
 import { timePlaceProjection } from './time-place.mjs';
 import { sessionReviewProgress } from './review-progress.mjs';
 import { albumProjection } from './album.mjs';
+import { castProjection } from './cast.mjs';
 
 async function json(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return fallback; throw error; }
@@ -248,6 +249,8 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
     reasonCodes: outcome?.held.includes(publicStatus?.changesetId) ? publicStatus.reasonCodes : [],
     counts: { entities: entityMap.size, events: eventMap.size, scenes: sceneMap.size, relations: relations.length, repairs: maintenance.length, ghosts: Object.values(interiors).flatMap((interior) => interior.nodes).filter((node) => node.state !== 'canon').length },
     chapters: chapters.map((chapter) => ({ index: chapter.index, title: chapter.title, characters: chapter.characters })),
+    // The Characters view: casts, actors, exchanges and relationship deltas (no evidence text).
+    cast: await castProjection(directory, { entities: [...entityMap.values()], scenes: [...sceneMap.values()], events: [...eventMap.values()], relations, volume: options.volume ?? 1 }),
     album: await albumProjection(directory, new Map([...entityMap.values()].map((entity) => [entity.id, entity.names?.find((form) => form.kind === 'canonical')?.text ?? entity.names?.[0]?.text ?? entity.id])), albumScenes),
     updatedAt: new Date().toISOString(),
   };

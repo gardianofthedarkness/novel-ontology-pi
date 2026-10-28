@@ -1,17 +1,16 @@
-import type { WebCard, WebCharacter, WebData, WebDelta, WebEvent, WebScene } from "./web.js";
+import type { WebCard, WebCharacter, WebData, WebDelta, WebEvent, WebScene } from "./castWeb.js";
 
 /**
- * What the character host sends for one extracted volume: the bundle's own
- * records, trimmed to what the web reads (no evidence quotes, no source text).
+ * What the live snapshot sends for one extracted volume (tools/pi-review/cast.mjs):
+ * the bundle's own records, trimmed to what the web reads. No evidence quotes,
+ * source text or sentence ids: each event arrives with the scene it cites.
  */
 export interface VolumeBundle {
   volume: number;
   label: string;
   entities: { id: string; kind: string; names: { text: string; kind: string }[] }[];
   scenes: { id: string; chapterIndex: number; charactersPresent: string[]; charactersMentioned: string[]; locationId: string | null; summary?: string; dialogues?: { id: string; participantIds: string[]; summary?: string }[] }[];
-  events: { id: string; chapterIndex: number; summary: string; importance: number; primaryActors: string[]; affectedCharacters: string[]; sentenceIds: string[] }[];
-  /** Which scene holds each sentence, so events (cited by sentence) land in their scene. */
-  sceneOfSentence: Record<string, string>;
+  events: { id: string; chapterIndex: number; summary: string; importance: number; primaryActors: string[]; affectedCharacters: string[]; sceneId: string | null }[];
   stateChanges: { id: string; characterId: string; afterEventId: string; relationships: Record<string, number> }[];
   causes: { fromId: string; toId: string }[];
   portraits: { entityId: string }[];
@@ -61,10 +60,7 @@ export function fromBundles(bundles: VolumeBundle[], joining: Joining = "volume"
     const ids = (list: string[]) => [...new Set(list.map(who).filter((id): id is string => !!id))];
     const place = new Map(bundle.entities.map((entity) => [entity.id, entity.names[0]?.text ?? ""]));
     const sceneEvents = new Map<string, VolumeBundle["events"]>();
-    for (const event of bundle.events) {
-      const sceneId = event.sentenceIds.map((sentence) => bundle.sceneOfSentence[sentence]).find(Boolean);
-      if (sceneId) sceneEvents.set(sceneId, [...sceneEvents.get(sceneId) ?? [], event]);
-    }
+    for (const event of bundle.events) if (event.sceneId) sceneEvents.set(event.sceneId, [...sceneEvents.get(event.sceneId) ?? [], event]);
     for (const scene of bundle.scenes) {
       reading++;
       const id = local(bundle.volume, scene.id);

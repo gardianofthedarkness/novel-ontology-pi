@@ -2,7 +2,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BufferGeometry, CanvasTexture, Float32BufferAttribute, Fog, Line, LineBasicMaterial, QuadraticBezierCurve3, SRGBColorSpace, Sprite, Vector3 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { RING_RADIUS, TIERS, TIER_HEIGHT, webLayout3d, type CharacterWeb, type Tier, type WebEdge, type WebNode } from "../model/web";
+import { RING_RADIUS, TIERS, TIER_HEIGHT, webLayout3d, type CharacterWeb, type Tier, type WebEdge, type WebNode } from "../../data/castWeb";
 
 const SPREAD = 1.6;
 const TIER_COLOR: Record<Tier, string> = { protagonist: "#f2c46d", pillar: "#7fd1c7", connector: "#b9a3ff", cameo: "#8ea3b5" };
@@ -66,7 +66,7 @@ interface Props {
   onPick: (id: string, additive: boolean) => void;
 }
 
-export function RelationWeb3D(props: Props) {
+export function CastWeb3D(props: Props) {
   const labels = useRef(new Map<string, HTMLSpanElement>());
   const [hover, setHover] = useState<string | null>(null);
   return (
