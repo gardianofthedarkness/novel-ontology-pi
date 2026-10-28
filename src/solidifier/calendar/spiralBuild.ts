@@ -30,7 +30,7 @@ export interface SpiralFile {
     /** The floor box this continuity's strands were laid out in (y from 0 to height, z within ±width/2). */
     frame: { width: number; height: number };
     books: { sourceId: string; title: string; from: number; to: number }[];
-    runs: (SpiralTrack & { color: string; from?: string; into?: string })[];
+    runs: (SpiralTrack & { from?: string; into?: string })[];
     /** A character crossing between strands mid-way (scene to scene). */
     links: { from: string; to: string }[];
     /** Calendar days on this axis: where each starts and ends. */
@@ -47,33 +47,6 @@ export async function loadSpiral(scope: Pick<CastScope, "root" | "universeId">):
 }
 
 const fold = <T extends { id: string }>(records: T[]) => [...new Map(records.map((record) => [record.id, record])).values()];
-
-/** Colours: 12 OKLCH hues; runs alive together or forking from each other get the most different ones. */
-function oklch(hue: number): string {
-  const lightness = 0.72, chroma = 0.14, a = chroma * Math.cos((hue * Math.PI) / 180), b = chroma * Math.sin((hue * Math.PI) / 180);
-  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3, s = (lightness - 0.0894841775 * a - 1.2914855480 * b) ** 3;
-  return `#${[4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s]
-    .map((value) => { const v = Math.min(1, Math.max(0, value)); return Math.round((v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055) * 255).toString(16).padStart(2, "0"); }).join("")}`;
-}
-function colours(runs: SpiralRun[]): Map<string, string> {
-  const hues = Array.from({ length: 12 }, (_, index) => 25 + index * 30);
-  const near = new Map<string, Set<string>>(runs.map((run) => [run.id, new Set()]));
-  const tie = (a: string, b: string) => { near.get(a)?.add(b); near.get(b)?.add(a); };
-  for (const run of runs) for (const other of [run.from?.run, run.into?.run]) if (other) tie(run.id, other);
-  for (let a = 0; a < runs.length; a++) for (let b = a + 1; b < runs.length; b++) {
-    const [x0, x1] = [runs[a].knots[0].x, runs[a].knots.at(-1)!.x], [y0, y1] = [runs[b].knots[0].x, runs[b].knots.at(-1)!.x];
-    if (Math.min(x1, y1) >= Math.max(x0, y0)) tie(runs[a].id, runs[b].id);
-  }
-  const chosen = new Map<string, number>(), used = new Array(hues.length).fill(0);
-  const distance = (a: number, b: number) => { const d = Math.abs(hues[a] - hues[b]) % 360; return Math.min(d, 360 - d); };
-  for (const run of [...runs].sort((first, second) => near.get(second.id)!.size - near.get(first.id)!.size || first.id.localeCompare(second.id))) {
-    const taken = [...near.get(run.id)!].flatMap((other) => chosen.has(other) ? [chosen.get(other)!] : []);
-    let best = 0, score = -Infinity;
-    hues.forEach((_, index) => { const value = (taken.length ? Math.min(...taken.map((other) => distance(index, other))) : 180) * 100 - used[index]; if (value > score) { score = value; best = index; } });
-    chosen.set(run.id, best); used[best]++;
-  }
-  return new Map(runs.map((run) => [run.id, oklch(hues[chosen.get(run.id) ?? 0])]));
-}
 
 /** One book's strands as the view draws them: stored story time and places, pending time-place proposals, answered casts. */
 async function bookStrands(workspace: string) {
@@ -138,10 +111,9 @@ export async function buildSpiral(scope: CastScope, options: { iterations?: numb
     for (const day of days.values()) { day.from = at(day.from); day.to = at(day.to); }
     hashed.push(continuity, list.map((run) => [run.id, run.knots.map((knot) => [knot.id, knot.x]), run.from ?? null, run.into ?? null]));
     const solution = solveSpiral(list, { iterations: options.iterations });
-    const colour = colours(list);
     continuities.push({
       id: continuity || null, frame: solution.frame, books: placed,
-      runs: spiralTracks(list, solution).map((track) => ({ ...track, color: colour.get(track.id)!, ...(runs.get(track.id)!.from ? { from: runs.get(track.id)!.from!.run } : {}), ...(runs.get(track.id)!.into ? { into: runs.get(track.id)!.into!.run } : {}) })),
+      runs: spiralTracks(list, solution).map((track) => ({ ...track, ...(runs.get(track.id)!.from ? { from: runs.get(track.id)!.from!.run } : {}), ...(runs.get(track.id)!.into ? { into: runs.get(track.id)!.into!.run } : {}) })),
       links, days: [...days.values()].sort((first, second) => first.from - second.from),
       metrics: { knots: list.reduce((sum, run) => sum + run.knots.length, 0), pairs: solution.pairs, crowding: [solution.initial.visibility, solution.visibility], overlap: [solution.initial.overlap, solution.overlap] },
     });

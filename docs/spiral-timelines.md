@@ -59,13 +59,17 @@ they stack up.
 ## Drawing
 
 One uniform scale across and along (a quiet story layer is one step), so the
-view is exactly the solved shape. The camera looks down on the floor. Every
-coil is drawn in the design's cyan and every tube dim and neutral; colour is
-kept for each strand's axis, its skeleton, drawn as a thin tube. A tap within
-16 px of an axis lights that strand's scenes for the calendar day tapped
-(the whole strand where that stretch has no date) and fades the other
-strands; a chip names what is lit, and × or a tap elsewhere shows every
-strand again.
+view is exactly the solved shape. The camera looks down on the floor.
+Everything is in the design's cyan; how much a strand matters (the square
+root of its share of the busiest strand's scenes) sets how strongly its axis
+(its skeleton, a bright core inside a soft additive glow) and its coil show,
+so main strands stand out and minor ones stay dim; tubes are dim and
+neutral. A tap within 16 px of an axis lights that strand's scenes for the
+calendar day tapped (the whole strand where that stretch has no date) at
+full glow and fades the other strands; a chip says what is lit, and × or a
+tap elsewhere shows every strand again. A strand from another book loads
+that book (its records hold the strand's events, dialogues and characters)
+and the camera stays on the strand.
 
 A lit strand also shows its cast (`strandCast`): the events and dialogues
 inside its lit scenes that someone takes part in (`PARTICIPATES_IN`, or a
@@ -103,7 +107,7 @@ spacing.
    older than the calendar, or from an older layout version.
 3. The feed (`tools/pi-review/spiral-view.mjs`) renames scene ids for the view
    and passes the floor box.
-4. Story time (3D) draws scenes on the knots, cyan coils, coloured axes and
-   dim tubes; scenes newer than the last build wait
+4. Story time (3D) draws scenes on the knots, cyan coils and glowing axes,
+   and dim tubes; scenes newer than the last build wait
    on a line under it until the next build. Without a stored spiral the view
    lays strands out as before.
