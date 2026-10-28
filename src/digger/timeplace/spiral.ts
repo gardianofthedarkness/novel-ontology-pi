@@ -5,12 +5,14 @@
  *
  * Time runs along x (a scene's story position, widened where many strands
  * are alive: stretchTime); only the transverse position q = (height, depth)
- * is laid out. A strand run e has a constant axis centre c_e, a coil radius
- * a_e and a phase φ_e. The coil radius is the run's importance, not a free
- * variable: the denser its scenes, the thicker its cylinder
- * (a_e = a_min + (a_max − a_min)·ρ_e/max ρ, ρ_e = scenes / max(layers spanned, one turn)).
+ * is laid out. A strand run e has a constant axis centre c_e, one coil
+ * radius a for every run and a phase φ_e. The coil winds with the run's own
+ * scenes, not with time: each scene turns it by Δθ, spread over a short
+ * window around the scene, so a dense strand winds tightly and a strand with
+ * almost no scenes runs almost straight:
  *
- *   q(x) = c(x) + a_e·f(x)·(cos(ωx + φ_e), sin(ωx + φ_e))
+ *   q(x) = c(x) + a·f(x)·(cos θ_e(x), sin θ_e(x)),
+ *   θ_e(x) = φ_e + Δθ·Σ_k s((x − x_k)/h + ½)      (winding)
  *
  * c(x) leaves the parent's centre after a fork and joins the merge target's
  * centre with the quintic s(u) = 10u³ − 15u⁴ + 6u⁵ (C²); the coil amplitude
@@ -60,12 +62,11 @@ export interface SpiralSolution {
 }
 
 /** x units per quiet story layer; scene radius and gap; clearance between tubes; floor box width : height. */
-export const SPIRAL = { dx: 9, knot: 14, gap: 4, clearance: 90, aspect: 3, turnLayers: 12, fadeLayers: 1.5, coil: [18, 58] as [number, number], transitionLayers: [3, 14] as [number, number] };
+export const SPIRAL = { dx: 9, knot: 14, gap: 4, clearance: 90, aspect: 3, coil: 40, turnScenes: 10, twistLayers: 2, fadeLayers: 1.5, transitionLayers: [3, 14] as [number, number] };
 const S = 2 * SPIRAL.knot + SPIRAL.gap;
-const OMEGA = (2 * Math.PI) / (SPIRAL.turnLayers * SPIRAL.dx);
 const L0 = 10 * SPIRAL.dx;
 /** Nominal spacing of two strands alive together (largest coils): normalises spacing and bending. */
-const D = 2 * SPIRAL.coil[1] + S + SPIRAL.clearance;
+const D = 2 * SPIRAL.coil + S + SPIRAL.clearance;
 const WEIGHTS = { bend: 8e-5, length: 0.01, separation: 0.05, low: 0.02, central: 0.05 };
 
 /**
@@ -83,6 +84,12 @@ export function stretchTime(spans: [number, number][], layers: number): number[]
 
 /** C² ease and its derivative. */
 export const ease = (u: number) => { const t = Math.min(1, Math.max(0, u)); return t * t * t * (10 + t * (-15 + 6 * t)); };
+
+/** How far a run's coil has turned at x (radians, before its phase): Δθ per scene, eased over a short window around each one. */
+export function winding(scenes: number[], x: number): number {
+  const turn = (2 * Math.PI) / SPIRAL.turnScenes, width = SPIRAL.twistLayers * SPIRAL.dx;
+  return scenes.reduce((sum, at) => sum + turn * ease((x - at) / width + 0.5), 0);
+}
 
 /** Exact half-turn mean of [A − B cos²θ]₊ (the handout's Φ_A(B)) and its derivative in B. */
 export function phi(A: number, B: number): number {
@@ -112,8 +119,9 @@ interface Prepared {
   events: number[][];
   /** Scenes per run over all scenes (how strongly it sinks to the floor's middle); the floor box. */
   weight: number[];
-  /** Each run's coil radius: thicker the denser its scenes. */
-  coil: number[];
+  /** Each run's scene positions (its coil winds with them) and each knot's winding. */
+  scenes: number[][];
+  turn: number[];
   height: number;
   width: number;
 }
@@ -146,17 +154,15 @@ function prepare(input: SpiralRun[]): Prepared {
   for (const [, change] of ends) { alive += change; most = Math.max(most, alive); }
   const height = D * Math.max(1.5, Math.sqrt(most / SPIRAL.aspect));
   const weight = runs.map((run) => run.knots.length / Math.max(1, knots.length));
-  // Importance: scenes per layer spanned, over at least one coil turn (a lone scene is not "dense"); the densest run gets the thickest coil.
-  const density = runs.map((run) => run.knots.length / Math.max(SPIRAL.turnLayers, (run.knots.at(-1)!.x - run.knots[0].x) / SPIRAL.dx + 1));
-  const densest = Math.max(...density, 1e-9);
-  const coil = density.map((value) => SPIRAL.coil[0] + (SPIRAL.coil[1] - SPIRAL.coil[0]) * (value / densest));
-  return { runs, index, knots, pairs, span, forkX, mergeX, parent, target, related, events: events.map((xs) => [...new Set(xs)]), weight, coil, height, width: SPIRAL.aspect * height };
+  const scenes = runs.map((run) => run.knots.map((knot) => knot.x));
+  const turn = knots.map((knot) => winding(scenes[knot.run], knot.x));
+  return { runs, index, knots, pairs, span, forkX, mergeX, parent, target, related, events: events.map((xs) => [...new Set(xs)]), weight, scenes, turn, height, width: SPIRAL.aspect * height };
 }
 
 interface Params { c: [number, number][]; a: number[]; p: number[]; lf: number[]; lm: number[] }
 
-/** A knot's position and its sensitivities: centre weights (own, parent, target), coil direction terms. */
-function place(prep: Prepared, v: Params, run: number, x: number) {
+/** A point's position and its sensitivities: centre weights (own, parent, target), phase term. A knot passes its precomputed winding. */
+function place(prep: Prepared, v: Params, run: number, x: number, turn = winding(prep.scenes[run], x)) {
   const fx = prep.forkX[run], mx = prep.mergeX[run];
   const sf = fx === null ? 1 : ease((x - fx) / v.lf[run]);
   const sm = mx === null ? 0 : ease((x - (mx - v.lm[run])) / v.lm[run]);
@@ -166,14 +172,14 @@ function place(prep: Prepared, v: Params, run: number, x: number) {
   const own = (1 - sm) * sf, fromParent = (1 - sm) * (1 - sf), toTarget = sm;
   const c = v.c[run], cp = prep.parent[run] >= 0 ? v.c[prep.parent[run]] : c, ct = prep.target[run] >= 0 ? v.c[prep.target[run]] : c;
   const center: [number, number] = [own * c[0] + fromParent * cp[0] + toTarget * ct[0], own * c[1] + fromParent * cp[1] + toTarget * ct[1]];
-  const amp = v.a[run] * shrink, angle = OMEGA * x + v.p[run];
+  const amp = v.a[run] * shrink, angle = turn + v.p[run];
   const cos = Math.cos(angle), sin = Math.sin(angle);
   return { q: [center[0] + amp * cos, center[1] + amp * sin] as [number, number], center, amp, own, fromParent, toTarget, dP: [-amp * sin, amp * cos] };
 }
 
 function evaluate(prep: Prepared, v: Params, gradient = true) {
   const n = prep.runs.length;
-  const placed = prep.knots.map((knot) => place(prep, v, knot.run, knot.x));
+  const placed = prep.knots.map((knot, at) => place(prep, v, knot.run, knot.x, prep.turn[at]));
   const gq = placed.map(() => [0, 0]);
   let visibility = 0;
   const P = Math.max(1, prep.pairs.length);
@@ -233,7 +239,7 @@ function evaluate(prep: Prepared, v: Params, gradient = true) {
 
 /** Share of knots in a physical overlap with another strand's knot (projected distance < 2r), averaged over evenly spaced half-turn angles. */
 function overlapShare(prep: Prepared, v: Params, angles = 90): number {
-  const placed = prep.knots.map((knot) => place(prep, v, knot.run, knot.x).q);
+  const placed = prep.knots.map((knot, at) => place(prep, v, knot.run, knot.x, prep.turn[at]).q);
   if (!placed.length) return 0;
   let total = 0;
   for (let k = 0; k < angles; k++) {
@@ -277,7 +283,7 @@ function transitions(prep: Prepared, v: Params) {
  * cannot swap two strands through each other, so this sets the order.
  */
 function packed(prep: Prepared, mirror: boolean): [number, number][] {
-  const edge = SPIRAL.coil[1] + SPIRAL.knot, half = prep.width / 2;
+  const edge = SPIRAL.coil + SPIRAL.knot, half = prep.width / 2;
   const slots: [number, number][] = [];
   for (let y = edge; y <= prep.height - edge + 1e-9; y += D) for (let k = 0; k * D <= half - edge; k++) for (const z of k ? [k * D, -k * D] : [0]) slots.push([y, mirror ? -z : z]);
   const cost = ([y, z]: [number, number]) => WEIGHTS.low * (y / prep.height) + WEIGHTS.central * (z / half) ** 2;
@@ -299,7 +305,7 @@ function start(prep: Prepared, attempt: number, starts: number): Params {
     const radius = 0.8 * Math.sqrt((at + 0.5) / Math.max(1, n)), angle = rotation + at * golden;
     return [prep.height * (0.5 + 0.5 * radius * Math.sin(angle)), (prep.width / 2) * radius * Math.cos(angle)];
   });
-  return { c, a: [...prep.coil], p: prep.runs.map((_, at) => at * golden), lf: prep.runs.map(() => 5 * SPIRAL.dx), lm: prep.runs.map(() => 5 * SPIRAL.dx) };
+  return { c, a: prep.runs.map(() => SPIRAL.coil), p: prep.runs.map((_, at) => at * golden), lf: prep.runs.map(() => 5 * SPIRAL.dx), lm: prep.runs.map(() => 5 * SPIRAL.dx) };
 }
 
 const clone = (v: Params): Params => ({ c: v.c.map((c) => [...c] as [number, number]), a: [...v.a], p: [...v.p], lf: [...v.lf], lm: [...v.lm] });

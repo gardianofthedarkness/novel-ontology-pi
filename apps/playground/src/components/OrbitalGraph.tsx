@@ -323,15 +323,15 @@ function FloorMap({ marks }: { marks: FloorMark[] }) {
   })}</>;
 }
 
-/** Pale tubes around the strands of a precomputed spiral, built once from the stored axes. Never raycast. */
+/** Dim neutral tubes around the strands of a precomputed spiral, built once from the stored axes. Never raycast. */
 function GuideTubes({ guides }: { guides: StrandGuide[] }) {
   const built = useMemo(() => guides.map((guide) => {
     const curve = new CurvePath<Vector3>();
     for (let index = 1; index < guide.points.length; index++) curve.add(new LineCurve3(new Vector3(...guide.points[index - 1]), new Vector3(...guide.points[index])));
-    return { id: guide.id, color: guide.color, geometry: new TubeGeometry(curve, Math.min(600, guide.points.length - 1), guide.radius, 10, false) };
+    return { id: guide.id, geometry: new TubeGeometry(curve, Math.min(600, guide.points.length - 1), guide.radius, 10, false) };
   }), [guides]);
   useEffect(() => () => { for (const entry of built) entry.geometry.dispose(); }, [built]);
-  return <>{built.map((entry) => <mesh key={entry.id} geometry={entry.geometry} raycast={noRaycast} renderOrder={-1}><meshBasicMaterial color={entry.color} transparent opacity={0.07} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>)}</>;
+  return <>{built.map((entry) => <mesh key={entry.id} geometry={entry.geometry} raycast={noRaycast} renderOrder={-1}><meshBasicMaterial color="#8aa6bc" transparent opacity={0.035} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>)}</>;
 }
 
 /** A calendar pin's date: large soft lettering (no card), the year and book small beneath. */
@@ -420,24 +420,25 @@ function ArrowHead({ color, opacity = 1 }: { color: string; opacity?: number }) 
   return <mesh raycast={noRaycast} position={[0, -0.5, 0]}><coneGeometry args={[0.34, 1, 10]} /><meshBasicMaterial color={color} transparent={opacity < 1} opacity={opacity} toneMapped={false} /></mesh>;
 }
 
-/** Path tones: the blue time string, an amber flashback thread, a character route, a faint move. */
-const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 }, thread: { color: "#ffc46b", arrow: "#ffc46b", opacity: 0.75 }, route: { color: "#ff9a6b", arrow: "#ffb48c", opacity: 0.95 }, link: { color: "#7cc8ff", arrow: "#7cc8ff", opacity: 0.16 } };
+/** Path tones: the blue time string, an amber flashback thread, a character route, a faint move, a spiral's coil (the design's cyan). */
+const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 }, thread: { color: "#ffc46b", arrow: "#ffc46b", opacity: 0.75 }, route: { color: "#ff9a6b", arrow: "#ffb48c", opacity: 0.95 }, link: { color: "#7cc8ff", arrow: "#7cc8ff", opacity: 0.16 }, coil: { color: "#9fd8ff", arrow: "#9fd8ff", opacity: 0.5 } };
 
 function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors, radii }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean; motion: MotionBus; anchors: (string | undefined)[]; radii: Map<string, number> }) {
   const { camera, size } = useThree();
   const tone = PATH_TONES[path.tone ?? "time"];
-  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: path.color ?? tone.color, transparent: true, opacity: path.preview ? 0.85 : path.color ? 0.9 : tone.opacity, depthWrite: false })), [path, tone]);
+  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: path.color ?? tone.color, transparent: true, opacity: (path.preview ? 0.85 : path.color ? 0.9 : tone.opacity) * (path.dim ? 0.15 : 1), depthWrite: false })), [path, tone]);
   const arrowGroups = useRef<(Group | null)[]>([]);
-  const arrowCount = path.tone === "link" ? 0 : path.tone === "thread" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
+  const arrowCount = path.tone === "link" || path.tone === "coil" || path.strand ? 0 : path.tone === "thread" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
   const arrowIndices = useMemo(() => Array.from({ length: arrowCount }, (_, index) => Math.max(1, Math.round((index + 1) * (path.points.length - 1) / arrowCount))), [path, arrowCount]);
   /** A character's route: a bead travels it in story order (resting at the start under reduced motion). */
   const bead = useRef<Mesh>(null);
-  // WebGL lines are one pixel wide; a route also gets a thin tube so it reads at a glance.
+  // WebGL lines are one pixel wide; a route, and a strand's axis, also get a thin tube so they read at a glance.
   const tube = useMemo(() => {
-    if (path.tone !== "route" || path.points.length < 2) return null;
+    if ((path.tone !== "route" && !path.strand) || path.points.length < 2) return null;
     const curve = new CurvePath<Vector3>();
     for (let index = 1; index < path.points.length; index++) curve.add(new LineCurve3(new Vector3(...path.points[index - 1]), new Vector3(...path.points[index])));
-    return new TubeGeometry(curve, Math.min(400, 24 * (path.points.length - 1)), 7, 6, false);
+    // A strand axis is already finely sampled: one tube segment per sample keeps its bends.
+    return path.strand ? new TubeGeometry(curve, Math.min(1200, path.points.length - 1), 30, 8, false) : new TubeGeometry(curve, Math.min(400, 24 * (path.points.length - 1)), 7, 6, false);
   }, [path]);
   useEffect(() => () => tube?.dispose(), [tube]);
   useEffect(() => () => { line.geometry.dispose(); line.material.dispose(); }, [line]);
@@ -477,7 +478,7 @@ function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors, radii }
   });
   return <>
     <primitive object={line} raycast={noRaycast} />
-    {tube && <mesh geometry={tube} raycast={noRaycast}><meshBasicMaterial color={tone.color} transparent opacity={0.8} depthWrite={false} toneMapped={false} /></mesh>}
+    {tube && <mesh geometry={tube} raycast={noRaycast}><meshBasicMaterial color={path.color ?? tone.color} transparent opacity={path.dim ? 0.15 : path.strand ? 0.95 : 0.8} depthWrite={false} toneMapped={false} /></mesh>}
     {path.tone === "route" && <mesh ref={bead} raycast={noRaycast}><sphereGeometry args={[34, 16, 12]} /><meshBasicMaterial color={tone.arrow} toneMapped={false} /></mesh>}
     {arrowIndices.map((pointIndex, index) => <group key={`${index}:${pointIndex}`} ref={(element) => { arrowGroups.current[index] = element; }}>
       <ArrowHead color={tone.arrow} />

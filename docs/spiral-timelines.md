@@ -21,18 +21,19 @@ they stack up.
   (dx·(1 + ½(n − 1))), so busy stretches get room and quiet ones stay
   compact. Only the transverse position q = (height y, depth z) is laid out.
 - **Strands.** Each strand run (a `continues` chain of the story strands, with
-  answered casts) has a constant axis centre c, a coil radius a and a phase φ:
-  q(x) = c(x) + a·f(x)·(cos(ωx + φ), sin(ωx + φ)). After a fork c(x) leaves
+  answered casts) has a constant axis centre c, one coil radius a shared by
+  every run, and a phase φ:
+  q(x) = c(x) + a·f(x)·(cos θ(x), sin θ(x)). After a fork c(x) leaves
   the parent's centre, before a merge it joins the target's, both with the
   quintic s(u) = 10u³ − 15u⁴ + 6u⁵ (C²). The coil shrinks to zero at every
   event on a run (its own fork or merge, and wherever another run leaves it
   or joins it), so all tracks of an event meet on one point with matching
   derivatives.
-- **Importance is thickness.** The coil radius is fixed by how dense a
-  strand's scenes are, not optimised: ρ = scenes / max(layers spanned, one
-  turn) and a = a_min + (a_max − a_min)·ρ/max ρ. The densest strand gets the
-  thickest cylinder; a lone side scene or a strand that appears now and then
-  stays thin.
+- **The coil winds with its scenes.** The winding follows the strand's own
+  scenes, not time: θ(x) = φ + Δθ·Σ_k s((x − x_k)/h + ½), one step Δθ (a
+  tenth of a turn) per scene, eased over a window h of two layers around it.
+  A dense strand winds tightly; between far-apart scenes the coil runs
+  straight, so a strand with almost no scenes is almost a straight line.
 - **Objective.**
   J = mean over pairs |Δx| < S of Φ_A(B) (projected crowding averaged exactly
   over a half-turn, A = 1 − Δx²/S², B = ‖Δq‖²/S²)
@@ -51,14 +52,20 @@ they stack up.
 - **Transitions.** ℓ* = L₀·[360λ_b‖b/D‖²/(7λ_ℓ)]^¼, clipped and refreshed
   between steps (the closed-form optimum of bending + length).
 - **Solver.** Analytic gradients of the crowding term (through centres and
-  phases), Adam steps with projection. Three fixed starts: a packed grid
+  phases), Adam steps with projection; each knot's winding is computed once. Three fixed starts: a packed grid
   (busiest strands first, each in the lowest, most central free slot), its
   mirror, and a sunflower; best kept. Deterministic.
 
 ## Drawing
 
 One uniform scale across and along (a quiet story layer is one step), so the
-view is exactly the solved shape. The camera looks down on the floor. A book,
+view is exactly the solved shape. The camera looks down on the floor. Every
+coil is drawn in the design's cyan and every tube dim and neutral; colour is
+kept for each strand's axis, its skeleton, drawn as a thin tube. A tap within
+16 px of an axis lights that strand's scenes for the calendar day tapped
+(the whole strand where that stretch has no date) and fades the other
+strands; a chip names what is lit, and × or a tap elsewhere shows every
+strand again. A book,
 or the view as it opens, shows a stretch of time from its first scene about
 as long as the floor box is deep, longer on a wide screen: the whole book
 across a phone would squeeze the cross-section to a thread. A chosen calendar
@@ -68,8 +75,7 @@ day frames that day's scenes.
 
 | Case | Crowding | Scenes overlapping another strand's | Time |
 |---|---|---|---|
-| Handout shape (parent → A, B, C; A + B merge), 125 knots | 0.111 → 0.101 | 37% → 33% | 0.1 s |
-| Four volumes of one universe, 440 scenes, 94 strand runs | 0.109 → 0.072 (−34%) | 24% → 11% | 1 s |
+| Four volumes of one universe, 440 scenes, 94 strand runs | 0.133 → 0.100 (−25%) | 23% → 10% | 1 s |
 
 Overlap is averaged over every viewing angle around the time axis. Every
 pair of strands that runs side by side for more than a few layers keeps its
@@ -83,7 +89,7 @@ spacing.
    older than the calendar, or from an older layout version.
 3. The feed (`tools/pi-review/spiral-view.mjs`) renames scene ids for the view
    and passes the floor box.
-4. Story time (3D) draws scenes on the knots, each strand's coil track in its
-   colour and its axis as a pale tube; scenes newer than the last build wait
+4. Story time (3D) draws scenes on the knots, cyan coils, coloured axes and
+   dim tubes; scenes newer than the last build wait
    on a line under it until the next build. Without a stored spiral the view
    lays strands out as before.
