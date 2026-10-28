@@ -14,6 +14,8 @@ import { loadWorkspaceSentences, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
 import { castScope, loadCast } from "../../../solidifier/identity/cast.js";
 import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js";
+import { calendarStale, loadCalendar } from "../../../solidifier/calendar/calendar.js";
+import { calendarPacketId } from "../../../solidifier/calendar/review.js";
 
 /**
  * `novel checklist` — what a completed analysis still lacks, in dependency
@@ -21,7 +23,8 @@ import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js"
  * complete when every faculty below is "done":
  *
  *   source ─▶ blocks ─┬─▶ identities (universal EM: the universe's shared character list)
- *   (album, optional) ├─▶ time-place ─┬─▶ place-tree
+ *   (album, optional) ├─▶ time-place ─┬─▶ calendar (the universe's one clock)
+ *                     │               ├─▶ place-tree
  *                     │               └─▶ strands (who is in each scene) ─▶ causality (in-book, cross-scene sweep,
  *                     │                                                    ordered by story time and strands)
  *                     └─▶ graph (rebuilt after canon changes)
@@ -119,6 +122,17 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
     unsettled = nominatePlacePairs({ places: places.filter((place) => !place.properties?.generic), relations, scenes, sentences: await loadWorkspaceSentences(novelDir), memory }).length;
   }
   const swept = await exists(join(novelDir, "timeplace", "place-tree.json"));
+  // The universe calendar: every book's story time on one clock; years it had to infer are reviewed.
+  const calendarAt = await loadCalendar(castAt);
+  const calendarPacket = calendarAt ? calendarPacketId(calendarAt) : null;
+  const calendarBehind = await calendarStale(castAt).catch(() => true);
+  const calendarCommand = `novel calendar build ${dir}`;
+  items.push({ id: "calendar", title: "Universe calendar (one clock for every book)", dependsOn: ["time-place"],
+    status: calendarBehind ? "todo" : calendarPacket ? "review" : "done",
+    counts: { entries: calendarAt?.entries.filter((entry) => entry.sourceId === castAt.sourceId).length ?? 0, books: calendarAt?.books.length ?? 0, conflicts: calendarAt?.conflicts.length ?? 0, yearQuestions: calendarAt?.questions.length ?? 0 },
+    next: calendarBehind ? [calendarCommand] : calendarPacket ? [castAt.standalone ? `novel calendar show ${dir}` : `novel review show ${quote(castAt.root)} ${calendarPacket} --scope universe --universe ${castAt.universeId} --offset 0 --limit 20`] : [],
+    note: "Rebuilt after every story-time apply; a book whose dates go back from the previous book's is asked: same year, or a later one?" });
+
   items.push({ id: "place-tree", title: "Place tree (which place is inside which)", dependsOn: ["time-place"],
     status: treeReview.length ? "review" : unsettled ? "todo" : "done",
     counts: { places: places.length, withParent: parents.size, candidatePairs: unsettled, swept, awaitingReview: treeReview.length },

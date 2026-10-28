@@ -217,6 +217,19 @@ Act on the aspect; do not retry variants blindly:
   the parent — never from outside knowledge; neighbours, routes and two
   names for one place are not containment. The gate refuses a second parent
   or a loop: hold the weaker link instead.
+- Time has ONE clock per universe: the universe calendar. Every book's story
+  periods sit on it (its day; its stated time or part of the day; an undated
+  period as a range between its dated neighbours); books are marks on it, and
+  a flashback sits at its own date. Answer "when", "what happened on that day",
+  "what came first across books" from `novel calendar show <dir>` (or
+  `<library> --universe <id>`), never from volume or reading order. It is
+  rebuilt after every story-time apply; `novel calendar build <dir>` refreshes
+  it by hand. Years nobody states are relative (Year 1 = the first dated book);
+  when a book's dates go back from the previous book's, a `ut_` packet asks
+  "same year, or a later one?" — accept for the same year (another side of
+  the same days), reject for a later year, after reading both books' lines.
+  A stated date that contradicts the story order is listed as a conflict:
+  check the time word and the scene order in the text.
 - Story time and places belong to a universe. Book databases stay
   separate; the universe atlas (a reviewed ledger in the library) says which
   places in different books are the SAME place and which lie inside places

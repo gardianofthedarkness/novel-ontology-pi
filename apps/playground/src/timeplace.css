@@ -126,3 +126,22 @@
 .tp-book-marker.is-focus { border-left-color: #7cc8ff; color: #d8efff; }
 .tp-book-marker b { color: inherit; }
 .tp-row.is-other-book { opacity: .45; transition: opacity .4s ease; }
+
+/* The universe calendar: days head the spine; books are marks across the days. */
+.tp-cal { max-width: 760px; margin: 0 auto 16px; display: grid; gap: 4px; }
+.tp-cal-axis { position: relative; height: 20px; border-bottom: 1px solid var(--tp-edge); }
+.tp-cal-day { position: absolute; top: 0; height: 20px; background: none; border: 0; border-left: 1px solid var(--tp-edge); color: var(--tp-muted); font-size: 10px; text-align: left; padding: 0 4px; cursor: pointer; white-space: nowrap; overflow: hidden; }
+.tp-cal-day:hover { color: var(--tp-text); }
+.tp-cal-marks { display: grid; gap: 3px; }
+.tp-cal-mark { position: relative; display: block; height: 18px; border: 0; border-radius: 9px; color: #04121e; font-size: 10px; font-weight: 600; text-align: left; padding: 0 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; opacity: .82; }
+.tp-cal-mark.is-focus, .tp-cal-mark:hover { opacity: 1; box-shadow: 0 0 0 2px #ffffff66; }
+.tp-cal-mark span { pointer-events: none; }
+.tp-day-marker { list-style: none; margin: 16px 0 6px; padding: 4px 10px; border-left: 3px solid #7cc8ff88; display: flex; gap: 10px; align-items: baseline; font-size: 12px; color: var(--tp-muted); scroll-margin-top: 90px; }
+.tp-day-marker b { color: var(--tp-text); font-size: 13px; }
+.tp-day-marker span { font-size: 10px; }
+.tp-clock { min-width: 64px; font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--tp-row, var(--tp-muted)); white-space: nowrap; }
+.tp-book-chip { font-size: 10px; color: #04121e; border-radius: 8px; padding: 1px 7px; white-space: nowrap; font-weight: 600; }
+.tp-spine.is-calendar .tp-row { border-left: 3px solid var(--tp-row, var(--tp-edge)); }
+.tp-row.is-between { border-style: dashed; opacity: .85; }
+@media (max-width: 520px) { .tp-clock { min-width: 48px; font-size: 10px; } .tp-book-chip { display: none; } }
+.tp-cal-question { font-style: normal; color: var(--tp-flashback); }

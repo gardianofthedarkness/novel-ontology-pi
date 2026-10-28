@@ -26,7 +26,7 @@ test("the checklist lists each faculty in dependency order with its next command
   const { directory, packet } = await workspace(context);
   const statusOf = async () => Object.fromEntries((await bookChecklist(directory)).items.map((item) => [item.id, item.status]));
   // Nothing applied yet: extraction is the gap; everything after it waits.
-  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", identities: "blocked", causality: "blocked", "time-place": "blocked", "place-tree": "blocked", strands: "blocked", graph: "blocked" });
+  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", identities: "blocked", causality: "blocked", "time-place": "blocked", calendar: "blocked", "place-tree": "blocked", strands: "blocked", graph: "blocked" });
   await saveChangeSet(directory, packet("cs_b0001", "b0001", "approved"));
   await markCausalitySweepPending(directory);
   const after = await bookChecklist(directory);
