@@ -10,7 +10,8 @@
 export type ArchitectureKind = "church" | "hospital" | "station" | "market" | "castle" | "park" | "village" | "skyscraper" | "school" | "city" | "home" | "office";
 
 const word = (english: string) => new RegExp(`\\b(?:${english})\\b`, "i");
-/** Names that say outright what they are. Earlier rules rank first ("伦敦市场" is a market before a city). */
+/** Names that say outright what they are. When several do, the word nearest the end ranks first: the head
+ * noun comes last in Chinese and English alike ("伦敦市场" is a market, "Harbour Market" too). */
 const STRONG: [ArchitectureKind, RegExp, RegExp][] = [
   ["church", /教会|教堂|圣堂|聖堂|礼拜堂|禮拜堂|修道院|神殿|寺院|神社|寺$|庙|廟/, word("church|cathedral|chapel|abbey|basilica|temple|monastery|shrine")],
   ["hospital", /医院|醫院|病院|诊所|診所|医务室|医務室|保健室|病房/, word("hospital|clinic|infirmary|ward \\d+")],
@@ -53,8 +54,9 @@ export const SHORTLIST_SIZE = 4;
 /** The kinds a place name could be, most likely first; empty when the name hints at no building. */
 export function architectureCandidates(label: string): ArchitectureKind[] {
   const name = label.replace(/[_·・]/g, " ").trim();
-  const found: ArchitectureKind[] = [];
-  for (const [kind, chinese, english] of STRONG) if (chinese.test(name) || english.test(name)) found.push(kind);
+  const lastEnd = (pattern: RegExp) => Math.max(-1, ...[...name.matchAll(new RegExp(pattern.source, `${pattern.flags}g`))].map((match) => match.index + match[0].length));
+  const strong = STRONG.map(([kind, chinese, english], rank) => ({ kind, rank, end: Math.max(lastEnd(chinese), lastEnd(english)) })).filter((entry) => entry.end >= 0);
+  const found = strong.sort((first, second) => second.end - first.end || first.rank - second.rank).map((entry) => entry.kind);
   for (const [pattern, kinds] of LOOSE) if (pattern.test(name)) found.push(...kinds);
   return [...new Set(found)].slice(0, SHORTLIST_SIZE);
 }

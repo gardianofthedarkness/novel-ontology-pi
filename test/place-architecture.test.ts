@@ -14,6 +14,8 @@ test("a name says outright what it is: the strong kind comes first", () => {
   assert.equal(architectureOf("第七学区"), "city", "a district gets a skyline");
   assert.equal(architectureOf("废弃大楼"), "skyscraper");
   assert.equal(architectureOf("Windsor Castle"), "castle");
+  assert.equal(architectureOf("Harbour Market"), "market", "the head noun (last) decides between two strong kinds");
+  assert.equal(architectureOf("Station Square Hospital"), "hospital");
 });
 
 test("hints keep several kinds in play, at most one shortlist's worth", () => {
