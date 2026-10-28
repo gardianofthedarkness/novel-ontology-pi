@@ -72,3 +72,17 @@ test("identities: characters outside the universe's shared list are a gap until 
   const after = (await bookChecklist(directory, { env: {} })).items.find((item) => item.id === "identities")!;
   assert.deepEqual([after.status, after.counts.outsideTheList], ["done", 0]);
 });
+
+test("a book the library prepared but never set up is told to run init first", async (context) => {
+  const parent = await mkdtemp(join(tmpdir(), "checklist-prepared-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const dir = join(parent, "novel");
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(join(dir, "ontology"), { recursive: true });
+  await writeFile(join(dir, "ontology", "manifest.json"), JSON.stringify({ novelId: "novel_prepared", title: "星落之城 4", schemaVersion: 1, blocksProcessed: 0 }));
+  const before = await bookChecklist(dir, { input: "/inputs/book-4.txt" });
+  assert.deepEqual(before.items.find((item) => item.id === "source")!.next, [`novel init ${dir}`, `novel ingest ${dir} /inputs/book-4.txt`]);
+  await initWorkspace(dir);
+  const after = await bookChecklist(dir, { input: "/inputs/book-4.txt" });
+  assert.deepEqual(after.items.find((item) => item.id === "source")!.next, [`novel ingest ${dir} /inputs/book-4.txt`]);
+});

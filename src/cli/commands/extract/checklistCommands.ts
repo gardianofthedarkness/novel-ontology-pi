@@ -71,8 +71,10 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   const bound = await storedSource(novelDir);
   const sourceFiles = await readdir(join(novelDir, "source")).catch(() => [] as string[]);
   const sourceFile = bound?.file ?? (sourceFiles.length === 1 ? sourceFiles[0] : null);
+  // A book the library prepared but nobody set up has no source folder yet: `novel init` adopts it first.
+  const setUp = await exists(join(novelDir, "source"));
   items.push({ id: "source", title: "Stored original source", status: sourceFile ? "done" : "todo", dependsOn: [], counts: { file: sourceFile ?? "none" },
-    next: sourceFile ? [] : [options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>`] });
+    next: sourceFile ? [] : [...(setUp ? [] : [`novel init ${dir}`]), options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>`] });
 
   // Album (EPUB pictures): optional, imported before ingestion when the host allows it.
   const album = await exists(join(novelDir, "assets"));

@@ -150,3 +150,27 @@ test("concurrent initialization allows only one writer and generates distinct no
   const second = await initWorkspace(join(root, "other"));
   assert.notEqual(first.novelId, second.manifest.novelId);
 });
+
+test("init adopts a book the library prepared but never set up, and still refuses anything with records", async (t) => {
+  const root = await tempRoot(t);
+  const prepare = async (name: string, extra: Record<string, string> = {}, manifest: Partial<BundleManifest> = {}) => {
+    const dir = join(root, name, "novel");
+    await mkdir(join(dir, "ontology"), { recursive: true });
+    await writeFile(join(dir, "ontology", "manifest.json"), JSON.stringify({ novelId: "novel_prepared", title: "星落之城 4", schemaVersion: 1, sourceLanguages: [], embeddingModel: null, embeddingDimension: null, decisionModel: "jev-1.13.0", blocksProcessed: 0, ...manifest }));
+    for (const file of ["entities.jsonl", "relations.jsonl", "events.jsonl", "branches.jsonl"]) await writeFile(join(dir, "ontology", file), "");
+    await writeFile(join(dir, "ontology", "causality.json"), JSON.stringify({ sweepPending: true }));
+    await writeFile(join(dir, "ontology", "graph.lbug"), "");
+    for (const [file, text] of Object.entries(extra)) { await mkdir(join(dir, file, ".."), { recursive: true }); await writeFile(join(dir, file), text); }
+    return dir;
+  };
+  const prepared = await prepare("book-4");
+  const adopted = await initWorkspace(prepared);
+  assert.equal(adopted.adopted, true);
+  assert.equal(adopted.manifest.title, "星落之城 4", "the prepared manifest (and its title) is kept");
+  assert.deepEqual((await readdir(prepared)).sort(), ["branches", "changesets", "ontology", "source"]);
+  assert.ok((await readdir(join(prepared, "ontology"))).includes("scenes.jsonl"));
+  await assert.rejects(initWorkspace(prepared), /EEXIST/, "set up once, a second init is refused");
+  await assert.rejects(initWorkspace(await prepare("with-records", { "ontology/entities.jsonl": "{\"id\":\"char_1\"}\n" })), /EEXIST/);
+  await assert.rejects(initWorkspace(await prepare("with-files", { "notes.txt": "x" })), /EEXIST/);
+  await assert.rejects(initWorkspace(await prepare("processed", {}, { blocksProcessed: 2 })), /EEXIST/);
+});
