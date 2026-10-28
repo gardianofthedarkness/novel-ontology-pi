@@ -36,6 +36,8 @@ export interface StoryScene {
   placeIds: string[];
   placeCarried: boolean;
   characterIds: string[];
+  /** Answered "nobody known is here, someone else is": strands never borrow a cast for it. */
+  alone?: boolean;
   /** Universe views: the book (volume) and continuity of this scene. */
   book?: number;
   continuityId?: string | null;
@@ -342,11 +344,16 @@ export type FollowView = "narrative" | "story" | "places";
 /**
  * Which view following Pi should show. Time-place facts that just emerged
  * win (periods before places); Pi running the time-place faculty points to
- * Story time; any other new work points to Narrative.
+ * Story time. Causal work does too: causes are judged on story time and the
+ * strands, and its arcs run across them — the sweep, a proposal, the
+ * causality faculty's calls and the review of a causal packet. Any other new
+ * work points to Narrative.
  */
-export function followTarget(change: { times: string[]; places: string[] }, command: { label: string; status: string } | null | undefined, otherWork: boolean): FollowView | null {
+export function followTarget(change: { times: string[]; places: string[] }, command: { label: string; status: string } | null | undefined, otherWork: boolean, work: { faculty?: string; changesetId?: string } = {}): FollowView | null {
   if (change.times.length) return "story";
   if (change.places.length) return "places";
   if (command && /\btimeplace\b/.test(command.label) && command.status === "working") return "story";
+  const causal = (command && /\bcausality\b/.test(command.label) && command.status === "working") || /causal/i.test(work.faculty ?? "") || /^cs_causality_/.test(work.changesetId ?? "");
+  if (causal) return "story";
   return otherWork ? "narrative" : null;
 }

@@ -44,9 +44,11 @@ export async function checkCausalLinks(
     .map((candidate, index) => {
       const from = universe.byId.get(candidate.fromId);
       const to = universe.byId.get(candidate.toId);
-      const orderNote = candidate.orderAmbiguous
+      const orderNote = candidate.parallel
+        ? "Story time: these two scenes run in parallel strands (different people and places; neither is known to happen first). A direct cause across strands needs something in the text that carries it from one to the other — a message, a call, news, a person arriving; without that, it is not a direct cause."
+        : candidate.orderAmbiguous
         ? "Order on the novel sequence is ambiguous for this pair; judge direction from the text."
-        : "Novel-sequence order: the first unit precedes the second.";
+        : "Story order: the first unit happens before the second.";
       return (
         `Pair ${index} (${candidate.fromId} -> ${candidate.toId}) [legs: ${candidate.legs.join(", ")}]\n` +
         `${orderNote}\n` +

@@ -14,7 +14,9 @@ import type { StoryScene, TimePlaceProjection } from "./timePlace.js";
  *
  * A scene with no recorded cast carries the cast of a recent scene in the
  * same chapter and place, preferring one that shares a place; carried links
- * are marked. Measured against hand-read gold (docs/story-strands.md), this
+ * are marked. A scene answered as "none of the known characters, but someone
+ * else is there" stands alone instead: borrowing would put it on another
+ * person's strand. Measured against hand-read gold (docs/story-strands.md), this
  * reaches about 0.85 of scene pairs; it is a view, not a stored fact.
  */
 export type StrandEdgeKind = "worldline" | "carried" | "flashback" | "time";
@@ -54,7 +56,15 @@ export interface StoryStrands {
 
 const SLOTS: Record<string, number> = { "late-night": 0, dawn: 1, "early-morning": 1, morning: 2, noon: 3, afternoon: 4, evening: 5, night: 6 };
 
-export function storyStrands(data: TimePlaceProjection): StoryStrands {
+/** Answers that override estimates (second tier, `novel timeplace strands --ask`). */
+export interface StrandAnswers {
+  /** Who is present in a scene. */
+  presence?: Map<string, string[]>;
+  /** Scenes where none of the known characters is present but someone else is: they carry no cast. */
+  alone?: Set<string>;
+}
+
+export function storyStrands(data: TimePlaceProjection, answers: StrandAnswers = {}): StoryStrands {
   const scenes = [...data.scenes].sort((first, second) => first.index - second.index);
   const n = scenes.length;
   const at = new Map(scenes.map((scene, index) => [scene.id, index]));
@@ -72,12 +82,12 @@ export function storyStrands(data: TimePlaceProjection): StoryStrands {
   };
 
   // Casts: recorded, or carried from a recent scene of the same chapter and region.
-  const cast = scenes.map((scene) => [...new Set(scene.characterIds)]);
+  const cast = scenes.map((scene) => [...new Set(answers.presence?.get(scene.id) ?? scene.characterIds)]);
   const carried = new Set<string>();
   const appearances = new Map<string, number>();
   for (const ids of cast) for (const id of ids) appearances.set(id, (appearances.get(id) ?? 0) + 1);
   scenes.forEach((scene, index) => {
-    if (cast[index].length || scene.flashback) return;
+    if (cast[index].length || scene.flashback || scene.alone || answers.alone?.has(scene.id)) return;
     const window = scenes.slice(0, index).map((other, at) => ({ other, at })).filter(({ other, at }) => cast[at].length && !other.flashback && other.chapterIndex === scene.chapterIndex && sameRegion(region(other), region(scene))).slice(-4);
     if (!window.length) return;
     // A shared place wins; otherwise the thread the book follows most (cast weighted by their scene counts), then the nearest.

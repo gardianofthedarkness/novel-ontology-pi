@@ -152,10 +152,19 @@ export async function proposeCausalityLink(
   return { changesetId: changeset.id, proposalId: proposal.id, fromId, toId };
 }
 
+/**
+ * A sweep judges pairs from the highest-ranked down. It is done when the pool
+ * is exhausted, or when this many judged pairs in a row (in rank order) held
+ * no causal link: the pairs left rank lower still, so asking them all costs
+ * a Jev call per 10 pairs for little return. They stay counted in `remaining`
+ * and listed by `novel causality candidates` for the agent to adjudicate.
+ */
+export const SWEEP_STOP_AFTER_MISSES = 100;
+
 /** On-demand systematic sweep: the Jev-determined pass, outside ingest. */
 export async function runCausalitySweep(
   novelDir: string,
-  opts: { limit?: number; env?: NodeJS.ProcessEnv; decisions?: import("../../../ground/connectors/jev.js").DecisionModel } = {},
+  opts: { limit?: number; env?: NodeJS.ProcessEnv; decisions?: import("../../../ground/connectors/jev.js").DecisionModel; stopAfterMisses?: number } = {},
 ): Promise<{
   changesetId: string | null;
   nominated: number;
@@ -170,6 +179,9 @@ export async function runCausalitySweep(
   remaining: number;
   truncated: boolean;
   timeline: string;
+  /** Judged pairs in a row, in rank order, since the last causal link. */
+  missesInARow: number;
+  note?: string;
 }> {
   const env = opts.env ?? process.env;
   const universe = await loadCausalityUniverse(novelDir);
@@ -178,10 +190,10 @@ export async function runCausalitySweep(
     stateChanges: universe.stateChanges, relations: universe.relations.filter(relation => !["CAUSES", "CAUSED_BY"].includes(relation.type)),
     embedding: loadConfig(env).embeddings });
   const path = join(novelDir, "ontology", "causality-scan.json");
-  let scan = { revision, evaluated: [] as string[], deferred: 0 };
+  let scan = { revision, evaluated: [] as string[], deferred: 0, misses: 0 };
   try {
     const previous = JSON.parse(await readFile(path, "utf8")) as typeof scan;
-    if (previous.revision === revision) scan = previous;
+    if (previous.revision === revision) scan = { ...previous, misses: previous.misses ?? 0 };
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   const log = new EventLog(novelDir);
   const changeset = { id: `cs_causality_sweep_${Date.now()}`, blockId: "causality-sweep", proposals: [] as ChangeProposal[], status: "accumulating" as "accumulating" | "pending_review", reviewNotes: {} as Record<string, string>, createdAt: new Date().toISOString() };
@@ -216,11 +228,16 @@ export async function runCausalitySweep(
   }
   scan.evaluated = [...new Set([...scan.evaluated, ...pass.attemptedPairs])];
   scan.deferred += pass.summary.deferred;
+  const lastLink = pass.verdicts.map((verdict) => verdict.verdict).lastIndexOf("confident");
+  scan.misses = lastLink >= 0 ? pass.verdicts.length - lastLink - 1 : scan.misses + pass.verdicts.length;
   await writeFile(`${path}.tmp`, JSON.stringify(scan), { mode: 0o600 });
   await rename(`${path}.tmp`, path);
-  const complete = !pass.summary.truncated && pass.summary.remaining === 0 && scan.deferred === 0;
+  const stopAfter = opts.stopAfterMisses ?? SWEEP_STOP_AFTER_MISSES;
+  const settled = pass.summary.remaining > 0 && scan.misses >= stopAfter;
+  const complete = scan.deferred === 0 && (pass.summary.remaining === 0 || settled);
   if (complete) await clearCausalitySweepPending(novelDir);
-  return { changesetId, ...pass.summary, complete, evaluatedTotal: scan.evaluated.length, deferredTotal: scan.deferred };
+  return { changesetId, ...pass.summary, complete, evaluatedTotal: scan.evaluated.length, deferredTotal: scan.deferred, missesInARow: scan.misses,
+    ...(settled && complete ? { note: `Sweep done: the last ${scan.misses} highest-ranked pairs held no causal link; ${pass.summary.remaining} lower-ranked pair(s) were not asked (novel causality candidates lists them).` } : {}) };
 }
 
 export function causalityCommandsHelp(): Record<string, string> {

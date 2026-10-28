@@ -8,8 +8,9 @@ item's status, counts and the exact next command.
 ## Dependency order
 
 ```
-book:      source ─▶ blocks ─┬─▶ causality   (cross-scene, in this book)
-           (album, optional) ├─▶ time-place ─▶ place-tree
+book:      source ─▶ blocks ─┬─▶ time-place ─┬─▶ place-tree
+           (album, optional) │               └─▶ strands     (who is in each scene) ─▶ causality (cross-scene, in this book,
+                             │                                                              ordered by story time and strands)
                              └─▶ graph       (rebuilt after canon changes)
 
 universe:  organization ─▶ books (each complete) ─┬─▶ atlas              (same place / inside, across books)
@@ -26,9 +27,10 @@ the earliest unblocked item; for a library, finish books in reading order.
 | source | the original text is stored and bound | `novel ingest` (or the host's prepared input) | — |
 | album | optional: EPUB pictures imported before ingestion | `novel album import` (only when the job allows) | — |
 | blocks | every block of the source is applied | `novel ingest <dir> <input>` (continues at the first unapplied block) | `novel review … --scope book` per `cs_bNNNN` |
-| causality | the sweep is not pending and no causal packet waits | `novel causality sweep <dir>` | `cs_causality_*`, after reading `causality.md` |
+| causality | after story time and strands: the sweep is not pending and no causal packet waits | `novel causality sweep <dir>` | `cs_causality_*`, after reading `causality.md` |
 | time-place | every scene was processed (a period, or processed without one) | `novel timeplace run <dir> --propose` | `cs_timeplace_*` |
 | place-tree | no unasked place pair remains | `novel timeplace tree <dir> --propose` | `cs_timeplace_place-tree_*` |
+| strands | nothing is worth asking, or the latest asked report is newer than the casts and story time it read | `novel timeplace strands <dir> --ask` | — (a report the story view draws; no packet) |
 | graph | `graph.lbug` is newer than the bundle | `novel graph build <dir>/ontology` | — |
 | organization | no unresolved library assignment | novel-library skill | `--scope library` |
 | atlas | no unasked cross-book place pair remains | `novel atlas sweep <library> <universe> --propose` | `ua_*` with `--scope universe` |
@@ -50,7 +52,7 @@ the earliest unblocked item; for a library, finish books in reading order.
   not on every sweep.
 - **Re-run the checklist after each step.** If a step leaves its item
   unchanged, stop and report it as stuck with the reason. Do not loop.
-- **Paid steps** (ingest, the sweeps, time-place runs) spend model and Jev
+- **Paid steps** (ingest, the sweeps, time-place runs, strands with `--ask`) spend model and Jev
   calls. Respect the job's limits and the user's budget. Report what each
   step spent.
 - **When done**, report each item's status and counts. Separate verified,

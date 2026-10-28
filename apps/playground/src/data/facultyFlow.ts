@@ -31,7 +31,7 @@ export const FLOW_NODES: FlowNode[] = [
   node("gate", "Review gate · Pi", "solidifier", "step", ["Pi review"], 1.25, 7),
   node("recall", "Recall pins", "solidifier", "step", [], 2.6, 7),
   node("apply", "Apply to canon", "solidifier", "step", [], 1.25, 8),
-  node("timeplace", "Time + place", "solidifier", "mixed", ["timeplace", "in", "entity", "time_role", "place_tree"], 2.6, 8.4),
+  node("timeplace", "Time + place", "solidifier", "mixed", ["timeplace", "in", "entity", "time_role", "place_tree", "strand_presence"], 2.6, 8.4),
   node("matching", "Entity matching", "solidifier", "jev", ["matching", "same", "distinct", "variant"], -0.1, 9),
   node("atlas", "Universe atlas", "solidifier", "jev", ["atlas"], 1.25, 9.6),
   node("universe", "Universe causality", "solidifier", "jev", ["universe-causality"], 2.6, 9.6),
