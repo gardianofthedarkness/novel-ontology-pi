@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fromBundles, type VolumeBundle } from "../apps/playground/character-web/src/model/bundle.js";
-import { characterWeb, communities, pairHistory, webLayout, type WebEdge } from "../apps/playground/character-web/src/model/web.js";
+import { TIER_HEIGHT, characterWeb, communities, pairHistory, webLayout, webLayout3d, type WebEdge } from "../apps/playground/character-web/src/model/web.js";
 
 // Two invented volumes in bundle shape. Each workspace numbers its own ids, so
 // "c1" is a different person in each volume unless a name joins them.
@@ -70,6 +70,16 @@ test("the web: ties say what they are made of, scores show their parts, layout p
   const layout = webLayout(web);
   assert.equal(layout.size, web.nodes.length);
   assert.ok([...layout.values()].every((point) => Math.hypot(point.x, point.y) <= 0.9));
+  // 3D keeps the flat plan and lifts each tier to its step, the stronger a little higher.
+  const lifted = webLayout3d(web);
+  for (const node of web.nodes) {
+    const flat = layout.get(node.id)!, raised = lifted.get(node.id)!;
+    assert.deepEqual([raised.x, raised.z, raised.r], [flat.x, flat.y, flat.r]);
+    assert.ok(raised.y >= TIER_HEIGHT[node.tier] && raised.y <= TIER_HEIGHT[node.tier] + 0.08);
+  }
+  const top = web.nodes.filter((node) => node.tier === "protagonist").map((node) => lifted.get(node.id)!.y);
+  const rest = web.nodes.filter((node) => node.tier !== "protagonist").map((node) => lifted.get(node.id)!.y);
+  if (top.length && rest.length) assert.ok(Math.min(...top) > Math.max(...rest), "protagonists stand on the top step");
 });
 
 test("the web grows with the story: scope cuts scenes, and a pair's log keeps its running affinity", () => {
@@ -81,6 +91,7 @@ test("the web grows with the story: scope cuts scenes, and a pair's log keeps it
   assert.deepEqual(history.entries.map((entry) => [entry.scene.id, entry.kind, entry.affinity]), [["v1:s1", "met", -0.4], ["v1:s2", "shift", 0.5]]);
   assert.equal(history.together, 2);
   assert.equal(history.turning?.scene.id, "v1:s2");
+  assert.deepEqual(history.names, { "v1:c1": "Aya", "v1:c2": "Bo" }, "a pair is named even before either is in the web");
   const mention = pairHistory(data, "v1:c1", "v1:c3").entries[0];
   assert.deepEqual([mention.kind, mention.speaker], ["mentioned", "v1:c1"]);
 });

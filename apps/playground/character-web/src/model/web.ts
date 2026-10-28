@@ -216,7 +216,8 @@ export function webLayout(web: CharacterWeb): Map<string, Placed> {
     // The few protagonists share the heart evenly; grouping them by community would stack them.
     if (tier === "protagonist") {
       ring.forEach((node, index) => {
-        const angle = -Math.PI / 2 + (2 * Math.PI * index) / ring.length;
+        // Side by side, starting from the left: never one behind another from the front.
+        const angle = Math.PI + (2 * Math.PI * index) / ring.length;
         const r = ring.length === 1 ? 0 : radius.protagonist;
         placed.set(node.id, { x: round(Math.cos(angle) * r), y: round(Math.sin(angle) * r), r: round(0.035 + 0.05 * node.score) });
       });
@@ -235,7 +236,23 @@ export function webLayout(web: CharacterWeb): Map<string, Placed> {
   return placed;
 }
 
-export type LogKind = "met" | "together" | "mentioned" | "shift";
+export interface Placed3 { x: number; y: number; z: number; r: number }
+/** How high each tier stands: protagonists on the top step of the amphitheater. */
+export const TIER_HEIGHT: Record<Tier, number> = { protagonist: 0.62, pillar: 0.36, connector: 0.14, cameo: -0.06 };
+/**
+ * The same rings and sectors, lifted into an amphitheater: a tier's height
+ * says how central it is, so the hall of fame reads from any angle. y is up.
+ */
+export function webLayout3d(web: CharacterWeb): Map<string, Placed3> {
+  const flat = webLayout(web);
+  return new Map(web.nodes.map((node) => {
+    const point = flat.get(node.id)!;
+    // Within a tier, the stronger stand a little higher.
+    return [node.id, { x: point.x, y: round(TIER_HEIGHT[node.tier] + 0.08 * node.score), z: point.y, r: point.r }];
+  }));
+}
+
+export type LogKind ="met" | "together" | "mentioned" | "shift";
 export interface LogEntry {
   scene: WebScene; kind: LogKind;
   /** Who mentioned whom, for a "mentioned" entry. */
@@ -244,7 +261,7 @@ export interface LogEntry {
   shifts: (WebDelta & { running: number })[];
   affinity: number;
 }
-export interface PairHistory { a: string; b: string; entries: LogEntry[]; together: number; affinity: number; first?: WebScene; turning?: LogEntry }
+export interface PairHistory { a: string; b: string; names: Record<string, string>; entries: LogEntry[]; together: number; affinity: number; first?: WebScene; turning?: LogEntry }
 
 /** Everything two characters share, in story order, with their running affinity. */
 export function pairHistory(data: WebData, a: string, b: string, scope: WebScope = {}): PairHistory {
@@ -266,7 +283,8 @@ export function pairHistory(data: WebData, a: string, b: string, scope: WebScope
     if (both) met = true;
   }
   const turning = entries.filter((entry) => entry.shifts.length).sort((x, y) => Math.abs(y.shifts.reduce((s, d) => s + d.delta, 0)) - Math.abs(x.shifts.reduce((s, d) => s + d.delta, 0)))[0];
-  return { a, b, entries, together: entries.filter((entry) => entry.kind !== "mentioned" && (entry.scene.present.includes(a) && entry.scene.present.includes(b))).length, affinity: round(running), first: entries.find((entry) => entry.kind === "met")?.scene, ...(turning ? { turning } : {}) };
+  const names = Object.fromEntries(data.characters.filter((character) => character.id === a || character.id === b).map((character) => [character.id, character.name]));
+  return { a, b, names, entries, together: entries.filter((entry) => entry.kind !== "mentioned" && (entry.scene.present.includes(a) && entry.scene.present.includes(b))).length, affinity: round(running), first: entries.find((entry) => entry.kind === "met")?.scene, ...(turning ? { turning } : {}) };
 }
 
 /** A character's own line through the story: where they are, and what they do. */

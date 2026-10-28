@@ -13,7 +13,8 @@ function useTweened(target: Map<string, Placed>, still: boolean, duration = 650)
     let frame = 0;
     const ease = (t: number) => 1 - Math.pow(1 - t, 3);
     const step = (now: number) => {
-      const t = ease(Math.min(1, (now - start) / duration));
+      // A frame timestamp can precede the effect's clock reading; clamp so the ease never runs backwards.
+      const t = ease(Math.min(1, Math.max(0, (now - start) / duration)));
       const next = new Map<string, Placed>();
       for (const [id, to] of target) {
         const was = origin.get(id) ?? { x: to.x * 1.15, y: to.y * 1.15, r: 0 };
@@ -33,10 +34,12 @@ interface Props {
   web: CharacterWeb;
   selected: string[];
   reducedMotion: boolean;
+  /** The watched pair's tie: it flows while their story plays. */
+  pulse?: string;
   onPick: (id: string, additive: boolean) => void;
 }
 
-export function RelationWeb({ web, selected, reducedMotion, onPick }: Props) {
+export function RelationWeb({ web, selected, reducedMotion, pulse, onPick }: Props) {
   const layout = useMemo(() => webLayout(web), [web]);
   const shown = useTweened(layout, reducedMotion);
   const [hover, setHover] = useState<string | null>(null);
@@ -82,7 +85,7 @@ export function RelationWeb({ web, selected, reducedMotion, onPick }: Props) {
           const cx = mx + (HALF - mx) * 0.35, cy = my + (HALF - my) * 0.35;
           const width = 0.6 + 5.4 * (Math.log1p(edge.weight) / Math.log1p(strongest));
           const on = lit(edge);
-          return <path key={edge.id} className={`tie tone-${edge.tone}${on ? " is-lit" : ""}${focus || pairEdge ? (on ? " is-focus" : " is-dim") : ""}`}
+          return <path key={edge.id} className={`tie tone-${edge.tone}${edge.id === pulse ? " is-pulse" : ""}${on ? " is-lit" : ""}${focus || pairEdge ? (on ? " is-focus" : " is-dim") : ""}`}
             d={`M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`} strokeWidth={width}
             style={{ opacity: focus || pairEdge ? (on ? 0.95 : 0.04) : 0.12 + 0.6 * (edge.weight / strongest) ** 0.5 }} />;
         })}

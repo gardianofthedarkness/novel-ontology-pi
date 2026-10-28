@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { BREAKDOWN_HELP, BREAKDOWN_LABEL, TIERS, TIER_LABEL, WEIGHTS, characterArc, type Breakdown, type CharacterWeb, type PairHistory, type WebData, type WebNode } from "../model/web";
 
 const PARTS = Object.keys(WEIGHTS) as (keyof Breakdown)[];
@@ -17,10 +18,48 @@ function ScoreBar({ node }: { node: WebNode }) {
   );
 }
 
+/**
+ * Two slots for a pair: each holds a character or a search over every recorded
+ * name form, so a pair can be chosen without the web (or a shift key).
+ */
+export function CompareBar({ data, web, selected, picking, onChoose, onPickSecond }: { data: WebData; web: CharacterWeb; selected: string[]; picking: boolean; onChoose: (ids: string[]) => void; onPickSecond: () => void }) {
+  const [query, setQuery] = useState("");
+  const forms = data.characters.filter((character) => web.byId.has(character.id)).flatMap((character) => character.names.map((name) => ({ name, id: character.id })));
+  const choose = (text: string) => {
+    setQuery(text);
+    const match = forms.find((form) => form.name === text.trim());
+    if (!match) return;
+    setQuery("");
+    onChoose(selected.length ? [...selected.filter((id) => id !== match.id).slice(-1), match.id] : [match.id]);
+  };
+  const slot = (index: number) => {
+    const node = web.byId.get(selected[index] ?? "") ?? (selected[index] ? { name: data.characters.find((entry) => entry.id === selected[index])?.name ?? "?", tier: "cameo" as const } : null);
+    if (node) return (
+      <span className="slot is-filled">
+        <Avatar node={node as WebNode} size={24} /><strong>{node.name}</strong>
+        <button type="button" onClick={() => onChoose(selected.filter((_, at) => at !== index))} aria-label={`Remove ${node.name}`}>×</button>
+      </span>
+    );
+    const first = index === selected.length;
+    return first
+      ? <input className="slot" list="cast-names" value={query} placeholder={index ? "Second character…" : "Find a character…"} aria-label={index ? "Second character" : "First character"}
+          onChange={(event) => choose(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") choose(query); }} />
+      : <span className="slot is-empty">{index ? "Second" : "First"}</span>;
+  };
+  return (
+    <div className={`compare${picking ? " is-picking" : ""}`}>
+      <span className="compare-label">Compare</span>
+      {slot(0)}<span className="link">⟷</span>{slot(1)}
+      {selected.length === 1 && <button type="button" className={`ghost${picking ? " is-on" : ""}`} onClick={onPickSecond}>{picking ? "Picking…" : "Pick on web"}</button>}
+      <datalist id="cast-names">{forms.map((form) => <option key={`${form.id}:${form.name}`} value={form.name} />)}</datalist>
+    </div>
+  );
+}
+
 export function HallOfFame({ web, onPick }: { web: CharacterWeb; onPick: (id: string) => void }) {
   return (
     <div className="hall">
-      <p className="hint">Ranked by storyline connection. Click a character to open them; shift-click a second to compare two.</p>
+      <p className="hint">Ranked by storyline connection. Click a character to open them; to follow two, use Compare above (or shift-click a second).</p>
       <ul className="legend">{PARTS.map((part) => <li key={part}><i className={`part-${part}`} />{BREAKDOWN_LABEL[part]}</li>)}</ul>
       {TIERS.map((tier) => {
         const members = web.nodes.filter((node) => node.tier === tier);
@@ -48,7 +87,7 @@ export function HallOfFame({ web, onPick }: { web: CharacterWeb; onPick: (id: st
   );
 }
 
-export function CharacterCard({ data, web, id, onPick, onPair, scope }: { data: WebData; web: CharacterWeb; id: string; onPick: (id: string) => void; onPair: (other: string) => void; scope: { book?: number; until?: number } }) {
+export function CharacterCard({ data, web, id, onPick, onPair, onCompare, scope }: { data: WebData; web: CharacterWeb; id: string; onPick: (id: string) => void; onPair: (other: string) => void; onCompare: () => void; scope: { book?: number; until?: number } }) {
   const node = web.byId.get(id);
   const character = data.characters.find((entry) => entry.id === id);
   if (!node || !character) return <p className="hint">Not in this scope.</p>;
@@ -108,7 +147,10 @@ export function CharacterCard({ data, web, id, onPick, onPair, scope }: { data: 
             );
           })}
         </ul>
-        <button type="button" className="ghost" onClick={() => onPick(id)}>Back to the hall</button>
+        <div className="actions">
+          <button type="button" className="primary" onClick={onCompare}>Compare with…</button>
+          <button type="button" className="ghost" onClick={() => onPick(id)}>Back to the hall</button>
+        </div>
       </section>
     </div>
   );
@@ -116,13 +158,16 @@ export function CharacterCard({ data, web, id, onPick, onPair, scope }: { data: 
 
 const KIND_LABEL = { met: "First together", together: "Together", mentioned: "Mentioned", shift: "Shift" } as const;
 
-export function PairLog({ web, history, onClose, onSwap }: { web: CharacterWeb; history: PairHistory; onClose: () => void; onSwap: (id: string) => void }) {
-  const a = web.byId.get(history.a), b = web.byId.get(history.b);
-  if (!a || !b) return null;
+export function PairLog({ web, history, until, watching, onWatch, onClose, onSwap }: { web: CharacterWeb; history: PairHistory; until?: number; watching: number | null; onWatch: () => void; onClose: () => void; onSwap: (id: string) => void }) {
+  const active = useRef<HTMLLIElement>(null);
+  useEffect(() => { active.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [watching]);
+  // Someone not yet in the story at the scrubber still has a history: name them from the log.
+  const stand = (id: string) => web.byId.get(id) ?? { id, name: history.names[id] ?? id, tier: "cameo" as const };
+  const a = stand(history.a), b = stand(history.b);
   const points = history.entries.map((entry, index) => ({ x: history.entries.length > 1 ? (index / (history.entries.length - 1)) * 300 : 150, y: entry.affinity }));
   const span = Math.max(0.5, ...points.map((point) => Math.abs(point.y)));
   const y = (value: number) => 40 - (value / span) * 34;
-  const name = (id: string) => web.byId.get(id)?.name ?? id;
+  const name = (id: string) => stand(id).name;
   return (
     <div className="pair">
       <header>
@@ -131,6 +176,11 @@ export function PairLog({ web, history, onClose, onSwap }: { web: CharacterWeb; 
         <button type="button" className="who" onClick={() => onSwap(b.id)}><Avatar node={b} size={44} /><strong>{b.name}</strong></button>
         <button type="button" className="close" onClick={onClose} aria-label="Close the comparison">×</button>
       </header>
+      {history.entries.length > 0 && (
+        <button type="button" className={`watch${watching !== null ? " is-on" : ""}`} onClick={onWatch}>
+          {watching !== null ? `❚❚ Watching · ${watching + 1} of ${history.entries.length}` : "▶ Watch their story"}
+        </button>
+      )}
       <dl className="pair-stats">
         <div><dt>Scenes together</dt><dd>{history.together}</dd></div>
         <div><dt>Affinity now</dt><dd className={history.affinity > 0.15 ? "bond" : history.affinity < -0.15 ? "tension" : ""}>{history.affinity > 0 ? "+" : ""}{history.affinity.toFixed(2)}</dd></div>
@@ -140,12 +190,13 @@ export function PairLog({ web, history, onClose, onSwap }: { web: CharacterWeb; 
         <svg className="affinity" viewBox="0 0 300 80" preserveAspectRatio="none" aria-label="Affinity over their shared scenes">
           <line className="zero" x1="0" x2="300" y1={y(0)} y2={y(0)} />
           <polyline points={points.map((point) => `${point.x},${y(point.y)}`).join(" ")} />
-          {points.map((point, index) => <circle key={index} cx={point.x} cy={y(point.y)} r={history.entries[index].shifts.length ? 3.2 : 1.6} />)}
+          {points.map((point, index) => <circle key={index} cx={point.x} cy={y(point.y)} r={index === watching ? 5 : history.entries[index].shifts.length ? 3.2 : 1.6} className={index === watching ? "is-now" : ""} />)}
         </svg>
       )}
       <ol className="log">
-        {history.entries.map((entry) => (
-          <li key={entry.scene.id} className={`entry kind-${entry.kind}${history.turning?.scene.id === entry.scene.id ? " is-turning" : ""}`}>
+        {history.entries.map((entry, index) => (
+          <li key={entry.scene.id} ref={index === watching ? active : undefined}
+            className={`entry kind-${entry.kind}${history.turning?.scene.id === entry.scene.id ? " is-turning" : ""}${index === watching ? " is-now" : ""}${until !== undefined && entry.scene.story > until ? " is-later" : ""}`}>
             <div className="when">Vol {entry.scene.book} · ch {entry.scene.chapter + 1}</div>
             <div className="what">
               <span className="kind">{KIND_LABEL[entry.kind]}{entry.speaker ? ` by ${name(entry.speaker)}` : ""}{history.turning?.scene.id === entry.scene.id ? " · turning point" : ""}</span>
