@@ -36,6 +36,11 @@ after-apply rebuild and the view feed all call it):
   time is when a period starts: it runs until the book's next period starts,
   at most to the end of its part of the day (15:00 → 17:00 when the next
   period is at 17:00; 18:30 → 21:00 when nothing follows that evening).
+- **Its part of the day** is the one the book states, even with a clock
+  time ("晚上五点" is evening at 17:00, and runs into the evening rather than
+  ending with the afternoon at 17:30), else the one its clock time falls in:
+  late night 0–5, dawn 5–7, morning 7–11:30, noon 11:30–13:30, afternoon
+  13:30–17:30, evening 17:30–21, night 21–24. Only the day known: none.
 - **An undated period** is a range between its dated neighbours in the book's
   story order — never a made-up time.
 - **Story time is the reference.** A flashback sits at its own date. The

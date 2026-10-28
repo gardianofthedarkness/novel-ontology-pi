@@ -40,6 +40,8 @@ export interface CalendarEntry {
   day: number | null;
   /** Clock time or part of the day when stated ("15:00", "evening"). */
   time: string | null;
+  /** The part of the day it is in: the stated one (晚上五点 is evening), else the one its clock time falls in; null when only the day is known. */
+  part: string | null;
   /** Where it can be, in calendar minutes (start = end for a stated clock time). */
   span: CalendarSpan;
   /** stated: the book states its date; derived: from stated words ("the next day"); between: a range between dated neighbours. */
@@ -104,8 +106,9 @@ export const PARTS: Record<string, [number, number]> = {
 };
 const LATE_NIGHT_AFTER_EVENING: [number, number] = [DAY, DAY + 300];
 /** The parts a clock time falls in, in order: a clock time runs to the end of its part unless the next period starts sooner. */
-const SEQUENCE = ["late-night", "dawn", "morning", "noon", "afternoon", "evening", "night"].map((part) => PARTS[part]);
-const partEnd = (minute: number) => SEQUENCE.find(([start, end]) => minute >= start && minute < end)?.[1] ?? DAY;
+const SEQUENCE = ["late-night", "dawn", "morning", "noon", "afternoon", "evening", "night"];
+const partAt = (minute: number) => SEQUENCE.find((part) => minute >= PARTS[part][0] && minute < PARTS[part][1]) ?? null;
+const partEnd = (minute: number) => PARTS[partAt(minute) ?? ""]?.[1] ?? DAY;
 const pad = (value: number) => String(value).padStart(2, "0");
 
 /** a before b, b before a, or null when their spans overlap (the calendar cannot order them). */
@@ -185,6 +188,7 @@ export function placeOnCalendar(universeId: string, books: BookTimes[], decision
       const sameDayEarlier = lastPartOnDay.get(start);
       const afterEvening = sameDayEarlier !== undefined && sameDayEarlier > PARTS["late-night"][1];
       let range: [number, number] = [0, DAY], time: string | null = null, month = period.date!.month!, day = period.date!.day!;
+      const stated = period.partOfDay && PARTS[period.partOfDay] ? period.partOfDay : null;
       if (period.hour !== undefined) {
         const minute = period.hour * 60 + (period.minute ?? 0);
         // A derived date's small hours told after that date's evening are past midnight: the next day.
@@ -195,14 +199,16 @@ export function placeOnCalendar(universeId: string, books: BookTimes[], decision
       }
       else if (period.partOfDay && PARTS[period.partOfDay]) { range = period.partOfDay === "late-night" && afterEvening ? LATE_NIGHT_AFTER_EVENING : PARTS[period.partOfDay]; time = period.partOfDay; }
       lastPartOnDay.set(start, Math.max(sameDayEarlier ?? 0, range[0]));
-      own.push({ ref: `${book.sourceId}::${period.id}`, sourceId: book.sourceId, timeId: period.id, label: period.label, year, month, day, time, span: { start: start + range[0], end: start + range[1] }, placed: period.date!.derived ? "derived" : "stated", storyIndex: period.storyIndex, flashback: period.flashback, scenes: period.scenes });
+      const part = stated ?? (period.hour !== undefined ? partAt(period.hour * 60 + (period.minute ?? 0)) : null);
+      own.push({ ref: `${book.sourceId}::${period.id}`, sourceId: book.sourceId, timeId: period.id, label: period.label, year, month, day, time, part, span: { start: start + range[0], end: start + range[1] }, placed: period.date!.derived ? "derived" : "stated", storyIndex: period.storyIndex, flashback: period.flashback, scenes: period.scenes });
     }
-    // A clock time is when a period starts: it runs until the next period starts, at most to the end of its part of the day.
+    // A clock time is when a period starts: it runs until the next period starts, at most to the end of its part of the day
+    // (the stated part when that ends later: 晚上五点 runs into the evening, not just to the end of the afternoon).
     for (const [index, entry] of own.entries()) {
       if (!/^\d\d:\d\d$/.test(entry.time ?? "")) continue;
       const midnight = Math.floor(entry.span.start / DAY) * DAY;
       const next = own.slice(index + 1).find((other) => !other.flashback && other.span.start > entry.span.start)?.span.start ?? Infinity;
-      entry.span = { start: entry.span.start, end: Math.min(midnight + partEnd(entry.span.start - midnight), next) };
+      entry.span = { start: entry.span.start, end: Math.min(midnight + Math.max(partEnd(entry.span.start - midnight), PARTS[entry.part ?? ""]?.[1] ?? 0), next) };
     }
     // Story order is the reference: a later (non-flashback) period dated earlier than the one before it is a conflict, reported, not reordered.
     let latest: CalendarEntry | null = null;
@@ -218,7 +224,7 @@ export function placeOnCalendar(universeId: string, books: BookTimes[], decision
       const after = periods.slice(index + 1).map((entry) => placed.get(entry.id)).find((entry) => entry && !entry.flashback);
       const start = before?.span.start ?? Math.min(...own.map((entry) => entry.span.start));
       const end = after?.span.end ?? Math.max(...own.map((entry) => entry.span.end));
-      own.push({ ref: `${book.sourceId}::${period.id}`, sourceId: book.sourceId, timeId: period.id, label: period.label, year: null, month: null, day: null, time: null, span: { start, end: Math.max(start, end) }, placed: "between", storyIndex: period.storyIndex, flashback: period.flashback, scenes: period.scenes });
+      own.push({ ref: `${book.sourceId}::${period.id}`, sourceId: book.sourceId, timeId: period.id, label: period.label, year: null, month: null, day: null, time: null, part: null, span: { start, end: Math.max(start, end) }, placed: "between", storyIndex: period.storyIndex, flashback: period.flashback, scenes: period.scenes });
     }
     entries.push(...own);
     const span = own.length ? { start: Math.min(...own.map((entry) => entry.span.start)), end: Math.max(...own.map((entry) => entry.span.end)) } : null;
