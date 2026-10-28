@@ -209,15 +209,23 @@ const renderReach = (order: StoryScene[]) => {
   return Math.max(4500, typical * SPIRAL.step * 3 * 1.6);
 };
 export type StoryShape = "line" | "strands";
-/** Strands as parallel coils: each strand its own spiral around its own axis, the busiest in the
- * middle and the others stacked above and below it, far enough apart to tell at a glance. One story
- * position is one angle on every coil (a vertical rung joins the scenes of one moment); where strands
- * split or meet, an S-curve crosses between coils. */
+/** Strands as parallel coils: each strand its own spiral around its own axis, the busiest where the
+ * line was and the others stacked above it (all above the floor), far enough apart to tell at a
+ * glance. One story position is one angle on every coil (a vertical rung joins the scenes of one
+ * moment); where strands split or meet, an S-curve crosses between coils. */
 const COILS = { gap: 1100 };
 function coilHeights(strands: { lane: Map<string, number> }): Map<number, number> {
   const counts = new Map<number, number>();
   for (const lane of strands.lane.values()) counts.set(lane, (counts.get(lane) ?? 0) + 1);
-  return new Map([...counts].sort((first, second) => second[1] - first[1] || first[0] - second[0]).map(([lane], rank) => [lane, (rank === 0 ? 0 : rank % 2 ? (rank + 1) / 2 : -rank / 2) * COILS.gap]));
+  return new Map([...counts].sort((first, second) => second[1] - first[1] || first[0] - second[0]).map(([lane], rank) => [lane, rank * COILS.gap]));
+}
+/** A change of the Story time shape: the user's switch (shredding or weaving, framed like the view
+ * opens) or new evidence moving scenes within one shape. Null: nothing moved. */
+export function shapeChange(previous: string | undefined, next: string | undefined): { caption: string; reframe: boolean } | null {
+  if (!previous || !next || previous === next) return null;
+  const shape = (key: string) => key.slice(0, key.indexOf(":"));
+  if (shape(previous) !== shape(next)) return { caption: shape(next) === "strands" ? "Shredding the story line into strands…" : "Weaving the strands back into one line…", reframe: true };
+  return { caption: shape(next) === "strands" ? "Strands moving to new evidence…" : "Story line moving to new evidence…", reframe: false };
 }
 /** A point on a strand's coil (layout units): story position along the axis, the coil's height above the middle one. */
 const coilPoint = (layer: number, total: number, height: number, continuity: number): Position3 => {
@@ -230,12 +238,16 @@ const SHRED_MS = 1600;
 /** The place checks in one line: splits and merges with and without place evidence, open ends, conflicts. */
 export function strandSummary(checks: StrandCheck[]): string {
   const count = (kind: StrandCheck["kind"], status?: string) => checks.filter((check) => check.kind === kind && (!status || check.status === status)).length;
+  const list = (entries: [number, string][]) => entries.filter(([value]) => value).map(([value, text]) => `${value} ${text}`).join(", ");
+  const splits = list([[count("split", "places differ"), "at different places"], [count("split", "same place"), "at one place (doubtful)"], [count("split", "unplaced"), "with no place"]]);
+  const meetings = list([[count("merge", "joins"), "at one strand's place"], [count("merge", "meets"), "at a new place"], [count("merge", "unplaced"), "with no place"]]);
+  const apart = count("apart"), conflicts = count("conflict");
   const parts = [
-    `splits: ${count("split", "places differ")} at different places, ${count("split", "same place")} at one place, ${count("split", "unplaced")} unplaced`,
-    `meetings: ${count("merge", "joins")} joining a strand's place, ${count("merge", "meets")} at a new place, ${count("merge", "unplaced")} unplaced`,
-    `${count("apart")} chapter ends with strands apart`,
+    splits ? `splits: ${splits}` : "no splits",
+    meetings ? `meetings: ${meetings}` : "no meetings",
+    ...(apart ? [`${apart} chapter${apart === 1 ? " ends" : "s end"} with strands apart`] : []),
+    ...(conflicts ? [`${conflicts} conflict${conflicts === 1 ? "" : "s"}: one person at two places at one stated moment`] : []),
   ];
-  if (count("conflict")) parts.push(`${count("conflict")} one-person-two-places conflicts`);
   return parts.join(" · ");
 }
 /** Strands per book (a universe stacks its books in reading order along each continuity's axis). */
@@ -245,8 +257,10 @@ function strandLayout(data: TimePlaceProjection, lanes: Map<number, StoryScene[]
   const place = new Map<string, { height: number; total: number; continuity: number }>();
   const edges: StrandEdge[] = [];
   const checks: StrandCheck[] = [];
+  // Books in reading order (scenes before a book's first time word would otherwise put a later book first).
+  const reading = new Map((data.books ?? []).map((book) => [book.volume, book.readingOrder ?? Infinity]));
   for (const [lane, scenes] of lanes) {
-    const books = [...new Set(scenes.map((scene) => scene.book ?? 0))];
+    const books = [...new Set(scenes.map((scene) => scene.book ?? 0))].sort((first, second) => (reading.get(first) ?? Infinity) - (reading.get(second) ?? Infinity) || first - second);
     const sets = books.map((book) => storyStrands({ ...data, scope: "book", scenes: scenes.filter((scene) => (scene.book ?? 0) === book) }));
     const total = sets.reduce((sum, set) => sum + set.layers, 0);
     let offset = 0;
@@ -380,9 +394,9 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     ...(strands ? { direction: [0, 0.22, 1] as Position3 } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
     morphKey: `${strands ? "strands" : "line"}:${[...anchors].map(([id, point]) => `${id}@${point.map(Math.round).join("/")}`).join(",")}`,
     // Shredding: in story order, each scene peels off the one line onto its strand.
-    morphDelays: (draws) => new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / Math.max(1, Math.max(0, ...position.values()))) * SHRED_MS)])),
+    morphDelays: (draws) => { const last = Math.max(1, ...position.values()); return new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / last) * SHRED_MS)])); },
     timeKey: strands
-      ? { label: "STORY STRANDS →", detail: `Story time as strands (estimated from who is in each scene): each coil follows the same characters · a faint rung joins scenes at one moment that nothing orders · S-curves: strands splitting and meeting · amber: a flashback, threaded to where it is told · ${strandSummary(strands.checks)}` }
+      ? { label: "STORY STRANDS →", detail: `Story time as strands, estimated from who is in each scene (a guess where a scene names no one): each coil follows the same characters · S-curves: strands splitting and meeting · a faint rung: scenes nothing orders, side by side at one moment · amber: a flashback, threaded to where it is told · place check: ${strandSummary(strands.checks)}` }
       : data.available
       ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told` }
       : { label: "READING ORDER →", detail: `Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""}` },

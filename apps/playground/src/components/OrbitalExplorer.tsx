@@ -23,7 +23,7 @@ import type { AlbumPanelPicture } from "./AlbumPanel";
 import { libraryActivityPath, libraryReadingPrefix, libraryScope } from "../data/libraryModel";
 import { RollingText } from "./RollingText";
 import { facultyAnchors, facultyChipText } from "../data/facultyEffects";
-import type { OrbitalArrangement } from "../data/orbitalTimePlace";
+import { shapeChange, type OrbitalArrangement } from "../data/orbitalTimePlace";
 import { portraitDraws as buildPortraitDraws } from "../data/liveAlbum";
 import { pictureDraws as buildPictureDraws } from "../data/pictureDraws";
 
@@ -185,12 +185,14 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     });
   }, [baseDraws, connections.draws, pictureDraws, portraitDraws, joinView]);
   const levelPaths = useMemo(() => arranged?.paths ? arranged.paths(layout.draws, selectedId) : layout.paths, [arranged, layout.draws, layout.paths, selectedId]);
+  /** Main spheres by position, to tell which path points sit on a sphere (strand curves sample many points between them). */
+  const mainAt = useMemo(() => new Map(layout.draws.filter((draw) => draw.role === "main").map((draw) => [draw.position.join(), draw])), [layout.draws]);
   const paths = useMemo(() => [...levelPaths.map((track) => {
     if (!morph) return track;
     // Points on a sphere move with it; points between spheres (a sampled curve) move with the
     // spheres on either side, blended by how far along they are, so curves bend smoothly as they go.
     const moves = track.points.map((point): Position3 | null => {
-      const draw = layout.draws.find((entry) => entry.role === "main" && entry.position.every((value, axis) => value === point[axis]));
+      const draw = mainAt.get(point.join());
       const from = draw ? morph.from.get(draw.node.id)?.position : undefined;
       return from ? from.map((value, axis) => value - point[axis]) as Position3 : draw ? [0, 0, 0] : null;
     });
@@ -210,7 +212,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       fromPoints[fromPoints.length - 1] = fromPoints[fromPoints.length - 2];
     }
     return { ...track, fromPoints };
-  }), ...preview.paths], [levelPaths, layout.draws, preview.paths, morph]);
+  }), ...preview.paths], [levelPaths, mainAt, preview.paths, morph]);
   const edges = connections.edges;
   const visibleConnections = useMemo(() => scope.kind === "library" || scope.kind === "series"
     ? connections.edges.filter(edge => edge.relationType !== "CAUSES")
@@ -291,15 +293,17 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     const next = arranged?.morphKey;
     const previous = shapeKey.current;
     shapeKey.current = next;
-    if (!previous || !next || previous === next || reducedMotion) return;
+    const change = shapeChange(previous, next);
+    if (!change) return;
+    // A switch the user made is framed the way the view opens; new evidence moves the camera only
+    // while following Pi (activity never reframes the scene on its own).
+    const span = change.reframe || followingActivity ? arranged?.initialFrame?.(layout.draws) : null;
+    if (span?.length) framePositions(graphRef, span, 1.15, !reducedMotion, { direction: arranged?.direction });
+    if (reducedMotion) return;
     const from = new Map(lastPoses.current.key === scope.key ? [...lastPoses.current.poses].map(([id, pose]): [string, OrbitalPose] => [id, { position: pose.position, radius: pose.radius }]) : []);
     if (!from.size) return;
-    const shredding = next.startsWith("strands") && !previous.startsWith("strands");
-    setShapeCaption(shredding ? "Shredding the story line into strands…" : next.startsWith("line") && previous.startsWith("strands") ? "Weaving the strands back into one line…" : "Strands moving to new evidence…");
+    setShapeCaption(change.caption);
     setMorph({ startedAt: performance.now(), from, durationMs: SHAPE_MORPH_MS, delays: arranged?.morphDelays?.(draws) });
-    // The new shape is framed the way the view opens.
-    const span = arranged?.initialFrame?.(layout.draws);
-    if (span?.length) framePositions(graphRef, span, 1.15, true, { direction: arranged?.direction });
   }, [arranged?.morphKey]);
   const [shapeCaption, setShapeCaption] = useState<string | null>(null);
   useEffect(() => { if (!morph) setShapeCaption(null); }, [morph]);
