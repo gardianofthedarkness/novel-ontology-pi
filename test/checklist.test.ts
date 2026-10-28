@@ -31,13 +31,14 @@ test("the checklist lists each faculty in dependency order with its next command
   const after = await bookChecklist(directory);
   const byId = new Map(after.items.map((item) => [item.id, item]));
   assert.equal(byId.get("blocks")!.status, "done");
-  assert.equal(byId.get("causality")!.status, "todo");
-  assert.match(byId.get("causality")!.next[0], /^novel causality sweep /);
+  // Causality waits for story time and strands: causes are ordered by them.
+  assert.equal(byId.get("causality")!.status, "blocked");
+  assert.match(byId.get("causality")!.note!, /Waits for time-place, strands/);
   assert.equal(byId.get("time-place")!.status, "todo");
   assert.equal(byId.get("time-place")!.counts.scenesWithoutPeriod, 2);
   assert.equal(byId.get("place-tree")!.status, "blocked", "the place tree waits for story time and places");
   assert.equal(after.complete, false);
-  assert.ok(after.next[0].startsWith("[causality]") && after.next.some((entry) => entry.startsWith("[time-place] novel timeplace run")));
+  assert.ok(after.next[0].startsWith("[time-place] novel timeplace run") && !after.next.some((entry) => entry.startsWith("[causality]")));
   // A waiting packet is reviewed before producing more of the same faculty.
   await saveChangeSet(directory, packet("cs_timeplace_time-place_1", "time-place", "pending_review"));
   const waiting = (await bookChecklist(directory)).items.find((item) => item.id === "time-place")!;
@@ -53,4 +54,8 @@ test("the checklist lists each faculty in dependency order with its next command
   const strands = (await bookChecklist(directory)).items.find((item) => item.id === "strands")!;
   assert.deepEqual([strands.status, strands.next], ["done", []]);
   assert.match(strands.note!, /No story periods/);
+  // With story time and strands settled, the pending causality sweep is next.
+  const causality = (await bookChecklist(directory)).items.find((item) => item.id === "causality")!;
+  assert.equal(causality.status, "todo");
+  assert.match(causality.next[0], /^novel causality sweep /);
 });

@@ -715,11 +715,13 @@ export default function App() {
     const change = timePlace ? timePlaceEmergence(previousTimePlace.current, timePlace) : { times: [], places: [] };
     if (timePlace) previousTimePlace.current = timePlace;
     if (change.times.length || change.places.length) setEmerging({ times: new Set(change.times), places: new Set(change.places), at: Date.now() });
-    const work = activityFocus(liveActivity).id ?? null;
+    const focus = activityFocus(liveActivity);
+    const work = focus.id ?? null;
     const otherWork = lastWork.current !== undefined && !!work && work !== lastWork.current;
     lastWork.current = work;
     if (!followingActivity) return;
-    const target = followTarget(change, liveActivity?.command, otherWork);
+    const reviewing = focus.kind === "review" ? liveActivity?.review?.changesetId : undefined;
+    const target = followTarget(change, liveActivity?.command, otherWork, { faculty: focus.kind === "edit" ? focus.faculty : undefined, changesetId: reviewing });
     const emerged = change.times.length + change.places.length > 0;
     if (target && target !== stageView && (emerged || Date.now() - lastAutoSwitch.current > 5000)) { setStageView(target); lastAutoSwitch.current = Date.now(); }
     if (change.times.length && change.places.length) {

@@ -18,9 +18,9 @@ import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
  * order, with the exact next command for each gap. A book's analysis is
  * complete when every faculty below is "done":
  *
- *   source ─▶ blocks ─┬─▶ causality (in-book, cross-scene sweep)
- *   (album, optional) ├─▶ time-place ─┬─▶ place-tree
- *                     │               └─▶ strands (who is in each scene; report for the story view)
+ *   source ─▶ blocks ─┬─▶ time-place ─┬─▶ place-tree
+ *   (album, optional) │               └─▶ strands (who is in each scene) ─▶ causality (in-book, cross-scene sweep,
+ *                     │                                                    ordered by story time and strands)
  *                     └─▶ graph (rebuilt after canon changes)
  *
  * and a universe's when every member book is complete and its cross-book
@@ -81,15 +81,6 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
     counts: { blocks: blocks.length, applied: blocks.length - missingBlocks.length, awaitingReview: blockReview.length, scenes: scenes.length, entities: entities.length },
     next: blockReview.length ? blockReview.map((changeset) => reviewCommand(changeset.id)) : missingBlocks.length ? [options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>  (continues at ${missingBlocks[0]})`] : [] });
 
-  // In-book causality: the cross-scene sweep after extraction, and its packets reviewed.
-  const causalReview = pending((id) => id.startsWith("cs_causality_"));
-  const sweepPending = (await readCausalityMemory(novelDir)).sweepPending;
-  items.push({ id: "causality", title: "Cross-scene causality (in this book)", dependsOn: ["blocks"],
-    status: causalReview.length ? "review" : sweepPending ? "todo" : "done",
-    counts: { causalLinks: relations.filter((relation) => relation.type === "CAUSES" || relation.type === "CAUSED_BY").length, awaitingReview: causalReview.length, sweepPending },
-    next: causalReview.length ? causalReview.map((changeset) => reviewCommand(changeset.id)) : sweepPending ? [`novel causality sweep ${dir}`] : [],
-    note: "Read references/causality.md before reviewing causal packets." });
-
   // Story time and places: every scene in a period, packets reviewed.
   const timed = new Set(relations.filter((relation) => relation.type === "OCCURS_DURING").map((relation) => relation.fromId));
   const attempted = await timePlaceAttempted(novelDir);
@@ -141,6 +132,16 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
     counts: { questions: toAsk, calls: strandPlan?.estimate.calls ?? 0, asked: !!asked, current },
     next: timed.size && toAsk && !current ? [`novel timeplace strands ${dir} --ask`] : [],
     note: !timed.size ? "No story periods to build strands on." : toAsk && !current ? `About ${strandPlan!.estimate.calls} work-model call(s); writes a report the story view uses, nothing to canon.` : undefined });
+
+  // In-book causality: the cross-scene sweep, after story time and strands, and its packets reviewed.
+  const causalReview = pending((id) => id.startsWith("cs_causality_"));
+  const sweepPending = (await readCausalityMemory(novelDir)).sweepPending;
+  // Causality after story time and strands: a cause comes first in story time, and parallel strands need a link carried across.
+  items.push({ id: "causality", title: "Cross-scene causality (in this book)", dependsOn: ["blocks", "time-place", "strands"],
+    status: causalReview.length ? "review" : sweepPending ? "todo" : "done",
+    counts: { causalLinks: relations.filter((relation) => relation.type === "CAUSES" || relation.type === "CAUSED_BY").length, awaitingReview: causalReview.length, sweepPending },
+    next: causalReview.length ? causalReview.map((changeset) => reviewCommand(changeset.id)) : sweepPending ? [`novel causality sweep ${dir}`] : [],
+    note: "Read references/causality.md before reviewing causal packets." });
 
   // Graph: the queryable graph rebuilt after canon changed.
   const graph = await stat(join(novelDir, "ontology", "graph.lbug")).catch(() => null);

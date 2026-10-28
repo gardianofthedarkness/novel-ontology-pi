@@ -150,10 +150,16 @@ Act on the aspect; do not retry variants blindly:
   Complete both endpoint evidence pages for causal acceptance. Never invent
   a faculty-specific review/approval command. See references/semantic-review.md.
 
-- CAUSES links are cross-scene by design: extraction emits none. The
-  systematic path (per-block + chapter-close sweep, Jev checklist at
-  0.85 over hybrid graph-pattern + embedding candidates) proposes them
-  through the gate automatically during `novel ingest`.
+- CAUSES links are cross-scene by design: extraction emits none, and
+  causality waits for story time and strands (the checklist blocks it
+  until both are done). A cause must come first in story time — the
+  strands order scenes through flashbacks and parallel lines — and a direct
+  cause across parallel strands needs something in the text carrying it
+  over (a message, a call, news, someone arriving). `novel causality sweep
+  <dir>` (Jev checklist at 0.85 over pairs nominated by shared actors, the
+  same person in nearby scenes of their strand, state changes and
+  embeddings) proposes links through the gate; it is done when its pairs run
+  out or the last 100 it judged, best first, held no link.
 - After a full run, adjudicate yourself: `novel causality candidates
   <dir>` lists nominated pairs with legs and summaries;
   `novel causality propose <dir> <from> <to> [--reason "..."]` proposes

@@ -21,7 +21,7 @@
  */
 
 import { cosineSimilarity } from "../../ground/connectors/embeddings.js";
-import { alreadyLinked, compareOrder, type CausalityUniverse } from "./units.js";
+import { alreadyLinked, compareOrder, inParallelStrands, tellingOrder, type CausalityUniverse } from "./units.js";
 
 export interface CausalCandidate {
   fromId: string;
@@ -32,6 +32,8 @@ export interface CausalCandidate {
   codeScore: number;
   /** True when the novel sequence could not order this pair. */
   orderAmbiguous: boolean;
+  /** The two scenes run in parallel strands: oriented in telling order, and a direct cause needs something carrying it across. */
+  parallel?: boolean;
 }
 
 /** Embedding similarity floor for candidacy. */
@@ -117,8 +119,11 @@ export function nominateCausalCandidates(
     const b = universe.byId.get(toId);
     if (!a || !b) return;
     if (!a.sceneId || !b.sceneId || a.sceneId === b.sceneId) return;
-    const order = compareOrder(a, b, universe);
+    // Story order first; parallel strands fall back to telling order, flagged and ranked lower.
+    const parallel = inParallelStrands(a, b, universe);
+    const order = parallel ? tellingOrder(a, b, universe) : compareOrder(a, b, universe);
     if (order === null) return;
+    if (parallel) scoreBoost /= 2;
     const from = order === 1 ? toId : fromId;
     const to = order === 1 ? fromId : toId;
     const key = `${from}|${to}`;
@@ -132,7 +137,7 @@ export function nominateCausalCandidates(
         existing.codeScore += scoreBoost;
       }
     } else {
-      pairs.set(key, { fromId: from, toId: to, legs: [leg], codeScore: scoreBoost, orderAmbiguous: false });
+      pairs.set(key, { fromId: from, toId: to, legs: [leg], codeScore: scoreBoost, orderAmbiguous: parallel, ...(parallel ? { parallel: true } : {}) });
     }
   };
 
@@ -170,6 +175,24 @@ export function nominateCausalCandidates(
         const later = universe.byId.get(laterId);
         if (!later) continue;
         if (compareOrder(anchor, later, universe) === -1) addLeg(afterId, laterId, "state-chain", 1);
+      }
+    }
+  }
+  // Leg 1d: the same person in nearby scenes of their strand (who is present, from the strands, including
+  // casts a "who is present?" answer corrected): a cause often leads straight to what happens to the people it
+  // touched next. Up to three scenes ahead on that person's worldline.
+  if (universe.strands) {
+    const strands = universe.strands;
+    const unitsByScene = new Map<string, string[]>();
+    for (const unit of universe.units) if (unit.sceneId && strands.has(unit.sceneId)) unitsByScene.set(unit.sceneId, [...(unitsByScene.get(unit.sceneId) ?? []), unit.id]);
+    const scenesByPerson = new Map<string, string[]>();
+    for (const sceneId of unitsByScene.keys()) for (const person of strands.cast(sceneId)) scenesByPerson.set(person, [...(scenesByPerson.get(person) ?? []), sceneId]);
+    const chapterOf = new Map(universe.scenes.map((scene) => [scene.id, scene.chapterIndex]));
+    const telling = (x: string, y: string) => (chapterOf.get(x) ?? 0) - (chapterOf.get(y) ?? 0) || (universe.sceneIndexInChapter.get(x) ?? 0) - (universe.sceneIndexInChapter.get(y) ?? 0);
+    for (const scenes of scenesByPerson.values()) {
+      const ordered = [...scenes].sort((x, y) => strands.before(x, y) ? -1 : strands.before(y, x) ? 1 : telling(x, y));
+      for (let i = 0; i < ordered.length; i++) for (let j = i + 1; j <= i + 3 && j < ordered.length; j++) {
+        for (const fromId of unitsByScene.get(ordered[i])!) for (const toId of unitsByScene.get(ordered[j])!) addLeg(fromId, toId, "same-person-nearby", 0.75);
       }
     }
   }

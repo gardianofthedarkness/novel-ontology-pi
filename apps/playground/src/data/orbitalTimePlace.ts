@@ -382,7 +382,7 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     // Shredding: in story order, each scene peels off the one line onto its strand.
     morphDelays: (draws) => new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / Math.max(1, Math.max(0, ...position.values()))) * SHRED_MS)])),
     timeKey: strands
-      ? { label: "STORY STRANDS →", detail: `Story time as strands (estimated from who is in each scene): each coil follows the same characters · a faint rung joins scenes at one moment that nothing orders · S-curves: strands splitting and meeting · amber: a flashback, threaded to where it is told · ${strandSummary(strands.checks)}` }
+      ? { label: "STORY STRANDS →", detail: `Story time as strands (estimated from who is in each scene): each coil follows the same characters · a faint rung joins scenes at one moment that nothing orders · S-curves: strands splitting and meeting · amber: a flashback, threaded to where it is told · orange arcs: causes between the records inside the bubbles, judged in this order · ${strandSummary(strands.checks)}` }
       : data.available
       ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told` }
       : { label: "READING ORDER →", detail: `Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""}` },

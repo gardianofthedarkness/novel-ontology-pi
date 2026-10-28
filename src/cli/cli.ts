@@ -84,7 +84,7 @@ const COMMANDS: Record<string, string> = {
   "novel section <file>": "Deterministic sentence sectioning only (free, testable)",
   "novel blocks <file> [--size N]": "Chapter detection + block cutting map (no models)",
   "novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]":
-    "Full loop: blocks -> miniloop (live Jev) -> extraction (work LLM, when configured) -> ChangeSets -> merge gate -> graph. Default stops at the first gate; --auto-approve applies every ChangeSet. Per-block causality faculty + chapter-close sweep run unless --no-causality",
+    "Full loop: blocks -> miniloop (live Jev) -> extraction (work LLM, when configured) -> ChangeSets -> merge gate -> graph. Default stops at the first gate; --auto-approve applies every ChangeSet. Causality waits for story time and strands: ingest only marks the causality sweep pending (novel checklist runs it after them); --no-causality skips even that",
   "novel causality candidates <novel-dir> [--unit ID] [--chapter N] [--limit N]":
     "List hybrid-nominated CAUSES candidates (graph patterns + embedding top-K) for agent adjudication. No proposals are created.",
   "novel causality propose <novel-dir> <from> <to> [--reason \"...\"]":
