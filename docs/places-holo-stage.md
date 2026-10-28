@@ -152,8 +152,23 @@ Jev 1.14 can answer a `box` question: one target in an image, as top/bottom/left
 - **Landmarks:** it found the whole tower (0.48), the rooftop (0.60) and the front door (0.78) well.
 - **Floors:** "the third floor" landed on 1F–2F (0.27). Counting floors is a job for code, not the box.
 
-Possible next step:
+**Moves as boxes on two views (probe).** `stage-views.html?kind=…&view=front|side` draws a building straight from the front and from the side with a flat camera, floors labelled, and publishes the exact pixel ↔ world frame. A box's centre in the front view gives across and height; in the side view, depth and height. The two heights cross-check each other.
 
+On the 11 moves of 废弃大楼 (`jev-1.14.0`, 10–11 requests, 134–166 ms each with two pictures):
+
+- **Start and end boxes:**
+  - **Paths, not spots:** for a climb or a run, Jev boxes the whole path, a tall strip over the stairwell from the ground to the roof. The strip's centre lands on a middle floor, so "滨面 runs down the stairs" read as 3F → 5F.
+  - **Starts:** these sit on the ground floor or the door (the same 1F habit as text).
+  - **Disagreeing views:** in "falls out of the back door" the front view puts him outside and the side view inside.
+  - **Where it helped:** it caught "did not really move" well. Start = end in 7 of 11, including 4 of the 5 moves the physics check dropped.
+  - **Height check works:** the two views' heights agreed 0.7–1.0 on most moves and 0.4–0.6 on the shaky ones.
+- **The current spot ringed, end box only (≤ one floor):** Jev boxed the ring itself in 10 of 11 moves. A drawn marker anchors it just as "滨面 — 4F" did in the text.
+
+Verdict for now: boxes do not replace the typed spot choices for movement. Height (counting floors, up or down) is their weak axis, and that is the axis movement needs most.
+
+Possible next steps:
+
+- **Find on a floor, not a floor:** a box on a top-down plan of one floor (which side, by the window, at the TV), where the typed choice has only one spot per floor and a 2D layout is natural for a box.
 - **Calibrate spots once per model:** fix each model's spots to its drawing (the building's edges, its doors, its roof; floors spaced evenly between them in code) from front and side renders.
 - **Leave movement as typed choices:** movement keeps its spot choices, which give the probabilities the physics check needs.
 - **Caveats:**
