@@ -65,7 +65,21 @@ kept for each strand's axis, its skeleton, drawn as a thin tube. A tap within
 16 px of an axis lights that strand's scenes for the calendar day tapped
 (the whole strand where that stretch has no date) and fades the other
 strands; a chip names what is lit, and × or a tap elsewhere shows every
-strand again. A book,
+strand again.
+
+A lit strand also shows its cast (`strandCast`): the events and dialogues
+inside its lit scenes that someone takes part in (`PARTICIPATES_IN`, or a
+dialogue's participants and speaker), as small records in a ring inside each
+scene, nearest the tap first, at most 120. Their characters, at most 24 (the
+ones in most records), move from wherever the universe view had them to two
+staggered rows just above and behind the lit stretch, each over the middle of
+the records it is in and spread so none overlap; one not drawn yet joins
+there. Each character is joined to each of its records by a dim arc with no
+head, routed the way the causal arcs are: bent outward from the time axis,
+and a character's arcs placed in lanes by how far apart their ends lie along
+time (interval colouring, shortest lowest) so overlapping arcs do not run
+together. The camera flies to the lit stretch and its cast, and the lit
+characters' names take precedence over scene labels. A book,
 or the view as it opens, shows a stretch of time from its first scene about
 as long as the floor box is deep, longer on a wide screen: the whole book
 across a phone would squeeze the cross-section to a thread. A chosen calendar

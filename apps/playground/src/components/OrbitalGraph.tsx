@@ -506,6 +506,8 @@ function VisibleConnections({ edges, bus, color = "#d8bdff", opacity = 0.8 }: { 
 }
 
 const CROSS_VOLUME_COLOR = "#c9a7ff";
+/** A character's part in an event or dialogue (a lit strand's cast): no direction, so no head or bead. */
+const PARTICIPATION_COLOR = "#cfe7f7";
 const CAUSAL_COLOR = { canon: "#ff8f5a", proposed: "#ffc777", held: "#91c3e0" } as const;
 const CAUSAL_SAMPLES = 24;
 
@@ -513,18 +515,18 @@ const CAUSAL_SAMPLES = 24;
  * Dashed = projected onto containing spheres; solid = event to event. */
 function CausalArc({ arrow, bus, radii, reducedMotion }: { arrow: CausalArrow; bus: LabelBus; radii: Map<string, number>; reducedMotion: boolean }) {
   const { camera, size } = useThree();
-  // Cross-volume causes (universe ledger) in violet, book causes in orange.
+  // Cross-volume causes (universe ledger) in violet, book causes in orange; a character's part in a lit strand's records, dim.
   const crossVolume = arrow.links.some((link) => link.universeId);
   const line = useMemo(() => {
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(new Float32Array((CAUSAL_SAMPLES + 1) * 3), 3));
-    const color = crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state];
-    const opacity = arrow.state === "canon" ? 0.9 : 0.6;
+    const color = arrow.participation ? PARTICIPATION_COLOR : crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state];
+    const opacity = arrow.participation ? 0.24 : arrow.state === "canon" ? 0.9 : 0.6;
     const material = arrow.projected
       ? new LineDashedMaterial({ color, dashSize: 26, gapSize: 18, transparent: true, opacity, depthWrite: false, toneMapped: false })
       : new LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false, toneMapped: false });
     return new Line(geometry, material);
-  }, [arrow.state, arrow.projected, crossVolume]);
+  }, [arrow.state, arrow.projected, arrow.participation, crossVolume]);
   useEffect(() => () => { line.geometry.dispose(); (line.material as LineBasicMaterial).dispose(); }, [line]);
   const head = useRef<Group>(null);
   /** A bead flowing cause → effect, so direction reads without the arrowhead. */
@@ -563,8 +565,8 @@ function CausalArc({ arrow, bus, radii, reducedMotion }: { arrow: CausalArrow; b
   });
   return <>
     <primitive object={line} raycast={noRaycast} />
-    <group ref={bead}><mesh raycast={noRaycast}><sphereGeometry args={[1, 10, 8]} /><meshBasicMaterial color="#ffd9c2" transparent opacity={arrow.state === "canon" ? 0.95 : 0.6} toneMapped={false} /></mesh></group>
-    <group ref={head}><ArrowHead color={crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state]} opacity={arrow.state === "canon" ? 0.95 : 0.65} /></group>
+    {!arrow.participation && <group ref={bead}><mesh raycast={noRaycast}><sphereGeometry args={[1, 10, 8]} /><meshBasicMaterial color="#ffd9c2" transparent opacity={arrow.state === "canon" ? 0.95 : 0.6} toneMapped={false} /></mesh></group>}
+    {!arrow.participation && <group ref={head}><ArrowHead color={crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state]} opacity={arrow.state === "canon" ? 0.95 : 0.65} /></group>}
   </>;
 }
 
@@ -812,7 +814,7 @@ function ActivityBounds({ draws, bus }: { draws: OrbitalDraw[]; bus: LabelBus })
   return <group ref={bounds} userData={{ orbitalActivityBounds: true }}><mesh raycast={noRaycast}><boxGeometry args={[1, 1, 1]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.5} toneMapped={false} depthTest={false} depthWrite={false} /></mesh></group>;
 }
 
-function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, opening = false, enclosure, hoverCard, motion, onReveal, onExtremeBack, onCenter }: { onCenter?: (ids: string[]) => void; draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; /** Opening sequence: labels wait until records have arrived. */ opening?: boolean; enclosure?: Enclosure; hoverCard?: { current: HTMLDivElement | null }; motion?: MotionBus; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
+function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, opening = false, enclosure, hoverCard, motion, onReveal, onExtremeBack, onCenter, focusIds }: { onCenter?: (ids: string[]) => void; /** With a focus (a lit strand), its characters' names come before scene labels and dimmed labels come last. */ focusIds?: ReadonlySet<string> | null; draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; /** Opening sequence: labels wait until records have arrived. */ opening?: boolean; enclosure?: Enclosure; hoverCard?: { current: HTMLDivElement | null }; motion?: MotionBus; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
   const { camera, scene, size, gl } = useThree();
   const byId = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw])), [draws]);
   const revealed = useRef(revealedId); revealed.current = revealedId;
@@ -860,7 +862,7 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
         if (pixels >= (revealed.current === draw.node.id ? 46 : 64) && (!closest || score > closest.score)) closest = { id: draw.node.id, pixels, score };
       }
       if (opening || (draw.role === "connection" || draw.role === "preview" && pixels < 3) && selectedId !== draw.node.id) return;
-      candidates.push({ draw, position: point, pixels, priority: selectedId === draw.node.id ? 0 : draw.role === "preview" ? 1 : draw.role === "main" ? 2 : 3 });
+      candidates.push({ draw, position: point, pixels, priority: selectedId === draw.node.id ? 0 : focusIds && !focusIds.has(draw.node.id) ? 4 : draw.role === "preview" || focusIds && draw.role === "nebula" ? 1 : draw.role === "main" ? 2 : 3 });
     });
     if (sampleCentre) {
       centre.current.at = performance.now();
@@ -1021,7 +1023,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <PointerParallax graphRef={ref as { current: GraphCanvasRef | null }} enabled={!reducedMotion} />
     {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} reducedMotion={reducedMotion} />)}
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
-    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} opening={!!morph?.delays} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} onCenter={onCenter} />
+    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} focusIds={focusIds} revealedId={revealedId} transitioning={!!morph} opening={!!morph?.delays} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} onCenter={onCenter} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
     <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} direction={frameDirection} span={frameSpan} resetToken={viewToken} />
   </GraphCanvas>;

@@ -24,6 +24,8 @@ export interface CausalArrow {
   /** Where the curve's middle bends, from the chord's midpoint (world units);
    * absent: straight up. Set by collision-free routing (orbital Story time). */
   bend?: [number, number, number];
+  /** A character taking part in an event or dialogue (a lit story strand's cast), drawn dim, not a cause. */
+  participation?: boolean;
 }
 export interface CausalProjection {
   arrows: CausalArrow[];

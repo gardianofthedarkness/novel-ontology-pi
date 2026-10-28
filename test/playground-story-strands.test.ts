@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { storyStrands } from "../apps/playground/src/data/storyStrands.js";
-import { shapeChange, spiralArrangement, spiralNodeId, strandSummary } from "../apps/playground/src/data/orbitalTimePlace.js";
+import { shapeChange, spiralArrangement, spiralNodeId, strandCast, strandSummary } from "../apps/playground/src/data/orbitalTimePlace.js";
+import type { OrbitalDraw } from "../apps/playground/src/data/orbitalLayout.js";
+import type { WorldNode } from "../apps/playground/src/types.js";
 import type { StoryScene, TimePlaceProjection } from "../apps/playground/src/data/timePlace.js";
 
 // Invented: Ming and Lan leave the station together (s1), then the story cuts
@@ -153,4 +155,29 @@ test("a precomputed spiral is drawn as stored: knots, coloured tracks, tube guid
   const framed = (aspect: number) => { const arranged = spiralArrangement(later, undefined, null, "strands", null, aspect); return arranged.initialFrame!([...arranged.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never)).length; };
   assert.equal(framed(0.46), 7, "the late scene (and the newer one waiting after it) is left for the reader to fly to");
   assert.equal(framed(6), 9, "a very wide screen opens on more time");
+});
+
+test("a lit strand's cast: its records, its characters gathered above it, dim arcs routed in lanes", () => {
+  // Invented: Ming and Lan take part in the bridge scene's events; Ming alone speaks at the port; Ren (not drawn yet) joins the bridge.
+  const node = (id: string, kind: WorldNode["kind"], chrono = 0, extra: Partial<WorldNode> = {}) => ({ id, kind, label: id, chrono, state: "canon", ...extra }) as WorldNode;
+  const world = { interiors: {
+    "spiral:bridge": { nodes: [node("ev_meet", "event", 1), node("ev_cross", "event", 2), node("ming", "character"), node("lan", "character"), node("ren", "character"), node("loc_bridge", "location")],
+      edges: [{ id: "e1", from: "ming", to: "ev_meet", relationType: "PARTICIPATES_IN" }, { id: "e2", from: "lan", to: "ev_meet", relationType: "PARTICIPATES_IN" }, { id: "e3", from: "ren", to: "ev_cross", relationType: "PARTICIPATES_IN" }] },
+    "spiral:port": { nodes: [node("dl_call", "dialogue", 1, { dialogue: { participantIds: ["ming"], speakerId: "ming" } }), node("ev_idle", "event", 2), node("ming", "character")], edges: [] },
+  } } as never;
+  const draw = (id: string, role: OrbitalDraw["role"], position: [number, number, number]): OrbitalDraw => ({ node: node(id, role === "main" ? "scene" : "character"), position, radius: 30, role });
+  const draws = [draw("spiral:bridge", "main", [0, 100, 0]), draw("spiral:port", "main", [4000, 100, 0]), draw("ming", "nebula", [90000, 0, 0]), draw("lan", "nebula", [-90000, 0, 0])];
+  const cast = strandCast(world, ["spiral:bridge", "spiral:port"], draws);
+  assert.deepEqual(cast.draws.filter((entry) => entry.role === "connection").map((entry) => entry.node.id).sort(), ["dl_call", "ev_cross", "ev_meet"], "events and dialogues someone takes part in; not an event nobody is in");
+  assert.ok(cast.draws.some((entry) => entry.node.id === "ren" && entry.role === "nebula"), "a character not drawn yet joins beside the strand");
+  for (const id of ["ming", "lan"]) {
+    const [x, y] = cast.moves.get(id)!;
+    assert.ok(y > 1000 && x > -2000 && x < 6000, `${id} moves from far away to just above the lit stretch`);
+  }
+  assert.ok(cast.moves.get("ming")![0] > cast.moves.get("lan")![0], "Ming sits over the middle of the scenes she is in (both), Lan over the bridge");
+  assert.deepEqual(cast.arcs.map((arc) => `${arc.from}>${arc.to}`).sort(), ["lan>ev_meet", "ming>dl_call", "ming>ev_meet", "ren>ev_cross"]);
+  assert.ok(cast.arcs.every((arc) => arc.participation && arc.bend), "dim participation arcs, bent like the causal arcs");
+  const ming = cast.arcs.filter((arc) => arc.from === "ming").map((arc) => Math.hypot(...arc.bend!));
+  assert.notEqual(Math.round(ming[0]), Math.round(ming[1]), "one character's overlapping arcs take different lanes");
+  assert.deepEqual(new Set(cast.ids), new Set(["ev_meet", "ev_cross", "dl_call", "ming", "lan", "ren"]));
 });
