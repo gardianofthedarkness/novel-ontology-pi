@@ -92,3 +92,10 @@
 .journey-chip button { padding: 0 8px; }
 .cast-panel .cast-journey { padding: 3px 10px; border-color: #ffc46b88; color: var(--tp-flashback); }
 .cast-panel .cast-journey:hover { background: #ffc46b1f; }
+
+/* The Journey button beside the view switch once a character is chosen. */
+.journey-go button { color: var(--tp-flashback); white-space: nowrap; }
+.journey-go b { font-weight: 600; }
+/* Traditional Journey: Story time's spine, coloured by place. */
+.journey-flat .journey-event { margin: 6px 0 0; color: #c3d6e4; font-size: 12px; line-height: 1.55; }
+.journey-flat .journey-with { margin: 6px 0 0; white-space: normal; }

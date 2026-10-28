@@ -152,7 +152,7 @@ test("orbital Characters: one sphere per character holding their scenes, on the 
   const draws = web.nodes.map((node) => ({ node: { id: castNodeId(node.id) }, position: arrangement.anchors!.get(castNodeId(node.id))!.map((value) => value * 3) as [number, number, number] })) as never[];
   assert.ok(arrangement.paths!(draws, null).every((path) => path.tone === "link"), "at rest, the strongest ties are faint links");
   const mine = arrangement.paths!(draws, castNodeId("v1:c1"));
-  assert.ok(mine.length > 0 && mine.every((path) => path.tone === "route" && path.id.includes("v1:c1")), "a selected character's ties are its routes");
+  assert.ok(mine.length > 0 && mine.every((path) => path.tone === "link" && path.id.includes("v1:c1")), "a selected character shows only its own ties, still thin");
   const watched = castArrangement(web, { pair: ["v1:c1", "v1:c2"], watching: true }).paths!(draws, null);
   assert.equal(watched.find((path) => path.id === "pair:v1:c1|v1:c2")?.tone, "route", "a watched pair's tie carries the moving bead");
   assert.equal(castArrangement(web, { pair: ["v1:c1", "v1:c2"] }).paths!(draws, null).find((path) => path.id.startsWith("pair:"))?.tone, "thread");
@@ -170,4 +170,29 @@ test("a journey narrows Story time and Places to one character's scenes, in a bo
   assert.deepEqual(journeyProjection(universe, journey).scenes.map((entry) => entry.id), ["2:s1"]);
   assert.equal(journeyCharacter(universe, journey), "2:c1");
   assert.equal(journeyCharacter({ ...book, characters: [] }, journey), null);
+});
+
+test("a journey tunnel: their scenes along the axis in story order, each place on its own side, chapter rings and one route", async () => {
+  const { journeyArrangement, journeyNodeId, journeyScenes, journeyWorld, placeBearings } = await import("../apps/playground/src/data/orbitalJourney.js");
+  const data = fromBundles([volumeOne]);
+  const steps = journeyScenes(data, "v1:c1");
+  assert.deepEqual(steps.map((step) => step.id), ["v1:s1", "v1:s2"], "every scene she is in, in reading order without story time");
+  assert.equal(steps[0].place, "Harbor");
+  assert.deepEqual(steps[0].others, ["Bo"]);
+  assert.ok(steps[0].events.length === 2 && steps[1].events.length === 1);
+  // Story order, when known, outranks reading order.
+  assert.deepEqual(journeyScenes(data, "v1:c1", (id) => (id === "s2" ? 0 : 1)).map((step) => step.id), ["v1:s2", "v1:s1"]);
+  const world = journeyWorld({ interiors: { ch: { nodes: [{ id: "s1", kind: "scene" }, { id: "e1", kind: "event" }], edges: [{ id: "x", from: "s1", to: "e1", kind: "contains" }] } } } as never, steps, "Aya");
+  assert.deepEqual(world.laneNodes.map((node) => node.id), steps.map((step) => journeyNodeId(step.id)));
+  assert.deepEqual(world.interiors[journeyNodeId("v1:s1")].nodes.map((node) => node.id), ["e1"], "inside a scene sphere: its records");
+  const tunnel = [{ ...steps[0], place: "Harbor", chapter: 0 }, { ...steps[1], id: "b", place: "Hill", chapter: 0 }, { ...steps[1], id: "c", place: "Harbor", chapter: 1 }];
+  const arrangement = journeyArrangement(tunnel, "Aya");
+  const [a, b, c] = tunnel.map((step) => arrangement.anchors!.get(journeyNodeId(step.id))!);
+  assert.ok(a[2] > b[2] && b[2] > c[2], "time runs down the axis");
+  const side = (point: number[]) => Math.atan2(point[1], point[0]);
+  assert.ok(Math.abs(side(a) - side(c)) < 0.4 && Math.abs(side(a) - side(b)) > 1, "a return to a place comes back on its side");
+  assert.equal(placeBearings(tunnel).size, 2);
+  const paths = arrangement.paths!(tunnel.map((step) => ({ node: { id: journeyNodeId(step.id) }, position: arrangement.anchors!.get(journeyNodeId(step.id))!.map((value) => value * 3) })) as never[], null);
+  assert.deepEqual(paths.filter((path) => path.id.startsWith("journey-ring")).length, 2, "a ring where each chapter begins");
+  assert.equal(paths.find((path) => path.id === "journey-route")?.points.length, 3);
 });

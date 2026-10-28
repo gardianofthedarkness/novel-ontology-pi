@@ -115,24 +115,30 @@ The order is reading order, because story time is not recorded for these
 volumes yet. Once time-place facts exist, a scene's `story` position can take
 its story-time rank instead.
 
-## A character's journey
+## A character's journey: the time-space tunnel
 
-*Follow their journey* (the panel, once a character is chosen) or a
-double-click on the flat web narrows Story time and Places to the scenes that
-character is in (`apps/playground/src/data/journey.ts`):
+Choose a character and press **Journey · name →** beside the view switch (or
+*Follow their journey* in the panel, or double-click on the flat web). The
+**Journey** view opens; its tab stays beside the others while the journey lasts.
 
-- **Orbital Story time:** their own spiral, in story order (reading order until
-  time-place facts exist). It is a tunnel through their part of the book.
-- **Places:** only their scenes above the map, with their path traced through
-  them.
+- **Orbital** (`apps/playground/src/data/orbitalJourney.ts`): a tunnel.
+  - Along its axis is time: their scenes in story order, or reading order until
+    time-place facts exist.
+  - Around it is space: each place keeps one bearing, so a return to a place
+    comes back on the same side. Unplaced scenes wind slowly around the axis.
+  - Rings mark where each chapter begins, and one route threads the scenes in
+    order, with the orbit's moving bead travelling it.
+  - Each sphere is a scene holding its records; select one for the glass
+    inspector, enter it to see the records.
+- **Traditional:** the same steps as a Story time spine, each with its chapter,
+  place (one colour per place), what they do and who else is there.
 
-A *Journey · name* chip beside the view switch shows who the views are narrowed
-to; its × ends the journey, and so does leaving for Narrative or Characters. On
-the orbit, double-click keeps its usual meaning: entering a character's sphere
-walks their scenes in reading order.
+While a journey is active, Story time and Places are narrowed to its scenes
+too, and the orbit traces the character there. The chip's × ends the journey,
+and so does leaving for Narrative or Characters.
 
-Flat Story time and Places need time-place facts, so for a book without them
-the journey shows only in orbital Story time.
+These two volumes record few places, so their tunnels mostly wind by order;
+`novel timeplace run` would give them their places and story order.
 
 ## Next
 

@@ -92,12 +92,13 @@ export function castArrangement(web: CharacterWeb, focus: CastFocus = {}): Orbit
     paths: (draws: OrbitalDraw[], selectedId: string | null) => {
       const at = new Map(draws.map((draw) => [draw.node.id, draw.position]));
       const selected = selectedId && castCharacterId(selectedId);
-      const shown = selected ? web.edges.filter((edge) => edge.a === selected || edge.b === selected) : strongest;
+      // A selected character's ties stay thin links: as routes, a hub's ties became tubes that buried the stage.
+      const shown = selected ? web.edges.filter((edge) => edge.a === selected || edge.b === selected).slice(0, 12) : strongest;
       const paths: OrbitalPath[] = [];
       for (const edge of shown) {
         const [a, b] = tieOf(edge).map((id) => at.get(id));
         if (!a || !b || edge.id === pairKey) continue;
-        paths.push({ id: `tie:${edge.id}`, points: arc(a, b), tone: selected ? "route" : "link" });
+        paths.push({ id: `tie:${edge.id}`, points: arc(a, b), tone: "link" });
       }
       const pair = pairKey ? web.edges.find((edge) => edge.id === pairKey) : undefined;
       const [a, b] = pair ? tieOf(pair).map((id) => at.get(id)) : [];
