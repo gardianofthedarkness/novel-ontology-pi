@@ -30,7 +30,8 @@ import { previewFacultyStates } from "./facultyContinuity.js";
 import { join } from "node:path";
 import { BundleStore } from "../../ground/connectors/bundle.js";
 import type { OntEvent, Relation, Scene } from "../../ground/ontology/types.js";
-import { runEmPassAfterApply, loadMatchMemory, saveMatchMemory, type EmSummary } from "../../solidifier/matching/emFaculty.js";
+import { runIdentityAfterApply, type IdentitySummary } from "../../solidifier/identity/afterApply.js";
+import { castScope, loadCast } from "../../solidifier/identity/cast.js";
 import { runCausalityPass } from "../../solidifier/causality/faculty.js";
 import type { StateChange } from "../../ground/ontology/types.js";
 
@@ -83,15 +84,15 @@ export class BlockProcessor {
       workModel?: WorkModel;
       facultyGraph?: false | FacultyGraphOptions;
       /**
-       * The EM faculty (sector 04): after each block is applied, run
-       * the strict structural entity-matching pass over pairs that
-       * touch the block's entities (new x registry, new x new).
-       * Confident Jev verdicts merge through the audited maintenance
-       * path; distinct verdicts are remembered per novel. Only the
-       * ingest CLI enables this; EM failures never block ingestion.
+       * Universal EM after each block is applied in-process (the gate
+       * path runs it from approveBook): the book joins the universe's
+       * shared character list and its new characters are checked
+       * against the book and the universe. Confident matches merge;
+       * less confident ones are raised for review. Only the ingest CLI
+       * enables this; EM failures never block ingestion.
        */
       entityMatching?: boolean;
-      onEntityMatching?: (blockId: string, summary: EmSummary) => void;
+      onEntityMatching?: (blockId: string, summary: IdentitySummary) => void;
       /**
        * The causality faculty (systematic path): after extraction, run
        * the hybrid candidate + Jev checklist pass over pairs touching
@@ -197,19 +198,9 @@ export class BlockProcessor {
           ...sentences,
           ...(blockIndex + 1 < blocks.length ? sectionBlock(blocks[blockIndex + 1].text, blocks[blockIndex + 1].sectionIndex ?? blockIndex + 1).sentences.slice(0, margin) : []),
         ] : sentences;
-        const faculty = await graph?.run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, contextSentences, knownEntities, pins, constraints, fragmentDeclines: graph && this.observation.novelDir ? (await loadMatchMemory(this.observation.novelDir)).fragmentDeclines : [], onProgress: async progress => publish(progress, true) });
-        if (faculty && faculty.fragmentDeclines.length && this.observation.novelDir) {
-          // Remember fragment-at-birth declines per novel so later
-          // blocks do not re-ask the same pair (matching.json).
-          const memory = await loadMatchMemory(this.observation.novelDir);
-          const known = new Set(memory.fragmentDeclines.map((fd) => `${fd.form}|${fd.entityId}`));
-          for (const fd of faculty.fragmentDeclines) {
-            if (!known.has(`${fd.form}|${fd.entityId}`)) {
-              memory.fragmentDeclines.push({ ...fd, ts: new Date().toISOString() });
-            }
-          }
-          await saveMatchMemory(this.observation.novelDir, memory);
-        }
+        // Universal EM at birth sees the universe's shared character list.
+        const universe = graph && this.observation.novelDir ? await castScope(this.observation.novelDir).then(async (scope) => ({ cast: await loadCast(scope), sourceId: scope.sourceId, books: scope.books })).catch(() => undefined) : undefined;
+        const faculty = await graph?.run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, contextSentences, knownEntities, pins, constraints, universe, onProgress: async progress => publish(progress, true) });
         const result = faculty?.miniloop ?? await miniloop.runBlock({
           blockId: block.blockId,
           sentences,
@@ -327,16 +318,17 @@ export class BlockProcessor {
             }
           }
           if (this.observation.entityMatching && this.observation.novelDir) {
-            const summary = await runEmPassAfterApply({
-              novelDir: this.observation.novelDir,
-              decisions: observedDecisions,
-              changeset: result.changeset,
-              events: this.observation.emit ?? new EventLog(this.observation.novelDir).emit,
-            });
-            if (summary && summary.nominated > 0) {
-              result.changeset.reviewNotes["em-faculty"] =
-                `EM pass after apply: ${summary.nominated} nominated, ${summary.merged.length} merged, ${summary.distinct.length} distinct (remembered), ${summary.uncertain.length} uncertain.`;
+            try {
+              const summary = await runIdentityAfterApply({
+                novelDir: this.observation.novelDir,
+                decisions: observedDecisions,
+                changeset: result.changeset,
+                events: this.observation.emit ?? new EventLog(this.observation.novelDir).emit,
+              });
+              result.changeset.reviewNotes["identity"] = `Universal EM after apply: ${summary.joined} joined known people, ${summary.created} new, ${summary.checked} checked, ${summary.merged.length} merged${summary.review ? `, ${summary.review.proposals} raised for review (${summary.review.packetId})` : ""}.`;
               this.observation.onEntityMatching?.(block.blockId, summary);
+            } catch (error) {
+              result.changeset.reviewNotes["identity"] = `Universal EM after apply failed (${error instanceof Error ? error.message : String(error)}); \`novel em sweep\` retries.`;
             }
           }
           break;

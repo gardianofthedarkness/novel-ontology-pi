@@ -20,7 +20,7 @@ flowchart LR
     scenes -.->|uncertain boundary| adjudicate[Scene adjudication · work]
     scenes -->|closed scene| identity[Entities and presence · work]
     scenes -->|closed scene| understanding[Scene understanding · work]
-    identity -->|descriptions, fragments| birth[Birth checks · Jev]
+    identity -->|new names, the universe| birth[Universal EM · Jev]
     exchanges -->|exchange spans| members[Dialogue members · Jev + work]
     identity -->|block identities| members
     birth -->|identities| assembly[Grounding assembly]
@@ -38,7 +38,7 @@ flowchart LR
     gate -.->|revision, at most 2| scenes
     apply -->|new scenes| timeplace[Time and place · Jev + work]
     timeplace -->|time-place ChangeSet| gate
-    apply -->|touched entities| matching[Entity matching · Jev]
+    apply -->|touched entities| matching[EM after apply · Jev]
     matching -.->|audited merge| apply
     apply -->|canon| atlas[Universe atlas · Jev]
     apply -->|canon| universe[Universe causality]
@@ -52,7 +52,7 @@ block, then entity matching after each applied block; causality is on unless
 `--no-causality` and also sweeps old × old pairs when a chapter closes;
 time and place runs after apply only with `--time-place`. Without a work model
 the miniloop replaces the scene faculties. The other faculties are their own
-commands: `novel review` (gate), `novel match`, `novel causality [universe]`,
+commands: `novel review` (gate), `novel em`, `novel causality [universe]`,
 `novel timeplace run|tree`, `novel atlas`, `novel album`, `novel recall`.
 
 ## What each faculty reports
@@ -67,14 +67,14 @@ first question's key prefix, work-model calls by their pool faculty.
 | Scene adjudication | `scene-adjudication` |
 | Dialogue exchanges | `dlg_start`, `dlg_end`, `dialogue-boundaries`, `dialogue-structure` |
 | Entities and presence | `entities-participants` |
-| Birth checks | `birth`, `fragment` |
+| Universal EM | `who` (older logs: `birth`, `fragment`) |
 | Scene understanding | `scene-understanding` |
 | Dialogue members | `dialogue-member`, `dialogue-participants`; legacy scopes: `speaker`, `dialogue-attribution`, `dialogue-adjudication` |
 | Miniloop | `newname`, `nick`, `present` |
 | Extraction | `extraction` |
 | Causality | `causality`, `causal`, `succession` |
-| Time and place | `timeplace`, `in`, `entity`, `time_role`, `place_tree` |
-| Entity matching | `matching`, `same`, `distinct`, `variant` |
+| Time and place | `timeplace`, `in`, `entity`, `time_role`, `place_tree`, `strand_presence` |
+| EM after apply | `matching`, `same`, `distinct`, `variant` |
 | Universe atlas | `atlas` |
 | Universe causality | `universe-causality` |
 

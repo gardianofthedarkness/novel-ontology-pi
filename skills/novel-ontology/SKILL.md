@@ -136,8 +136,15 @@ Act on the aspect; do not retry variants blindly:
   not invented Cypher properties.
   Scenes expose `dialogue_cards_json` after rebuilding the graph; legacy turns
   remain readable, not verified card memberships.
-- `novel match <dir> --changeset <id>` suggests duplicate identities;
-  source evidence decides whether to merge.
+- Identities (universal EM): one shared character list per universe (the
+  library's; a standalone book has its own). Applying a block runs EM: a full
+  proper name already in the list IS that person, automatically; short forms,
+  titles and descriptions are judged by Jev over the passage — confident
+  matches merge, less confident ones become a `um_` identity packet. `novel em
+  show <dir>` shows the book's people and open packets; `novel em sweep <dir>`
+  checks every character again (also how an older book joins the list).
+  Review `um_` packets like any other ("are these the same character?" — read
+  both sides' lines; accept merges, reject is remembered).
 - `novel fix ...` changes existing canonical records, not pending-only
   entities. Use source-grounded audited repairs; preserve checkpoints.
 - `novel bundle export <dir> <out>` / `import <bundle> <new-dir>` share
@@ -173,7 +180,8 @@ Act on the aspect; do not retry variants blindly:
   propose|show|decide|list <library-dir> <universe-id> ...`. Use source-qualified
   IDs, the same continuity, original evidence from both books, and an explicit
   temporal reason. Cross-book links live in a reviewed universe ledger; do not
-  fuse book databases or infer story time/identity from volume order/names.
+  fuse book databases or infer story time from volume order. Identity is the
+  exception by design: the universe's shared character list (universal EM).
 - Direct textual support + novel-sequence order decide. Succession,
   correlation, or shared topic alone is never causation, and order or
   adjacency alone never implies a link.

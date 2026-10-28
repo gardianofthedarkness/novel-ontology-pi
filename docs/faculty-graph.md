@@ -288,6 +288,11 @@ policy's system-wide cost, latency, escalation rates and negative first result.
 
 ## Alias-at-birth and the EM faculty
 
+> Superseded (2026-10-28) by [universal EM](universal-em.md): the per-scene birth
+> checks and the structural pass are gone; the block's new names are resolved
+> together against the universal recommender before extraction mints.
+
+
 Descriptive candidates ("honey-colored girl") are an identity
 problem at birth, not a cleanup problem afterwards. The identity
 faculty flags them (`descriptive: true`); before any entity is

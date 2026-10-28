@@ -241,3 +241,15 @@ test('refusals say what to change; long pages are clamped; help and status forms
   assert.throws(() => authorize(`cat ${novel}/timeplace/../ontology/entities.jsonl`));
   assert.throws(() => authorize('cat /private/other/timeplace/run.json'));
 });
+
+test('universal EM: Pi may show and sweep its own book; identity packets review through the shared gate', () => {
+  assert.equal(authorize(`novel em show ${novel}`).label, 'novel em show');
+  assert.equal(authorize(`novel em sweep ${novel} --limit 50`).label, 'novel em sweep');
+  for (const command of [`novel em sweep ${novel} --limit 500`, `novel em sweep /elsewhere`, `novel em merge ${novel}`, `novel match ${novel} --changeset cs_b0001`]) assert.throws(() => authorize(command), command);
+  const packet = `um_${'a'.repeat(24)}`;
+  // A standalone book reviews its own identity packets; a book in a library reviews them at the universe.
+  assert.equal(authorize(`novel review show ${novel} ${packet} --scope book`, { ...defaultScope, reviewProtocol: 'review-v1' }).label, 'novel review show');
+  const library = { directory: '/private/library', bindings: [] };
+  assert.equal(authorize(`novel review show /private/library ${packet} --scope universe --universe toaru`, { ...defaultScope, library, reviewProtocol: 'review-v1' }).label, 'novel review show');
+  assert.throws(() => authorize(`novel review show ${novel} ${packet} --scope book`, { ...defaultScope, library, reviewProtocol: 'review-v1' }));
+});
