@@ -49,6 +49,8 @@ export interface OrbitalArrangement {
   floor?: FloorMark[];
   /** Giant calendar pins behind the story (world units): where each calendar day starts. */
   pins?: CalendarPin[];
+  /** Rulers on the same backdrop showing how story time is compressed (a stored spiral). */
+  meters?: TimeMeter[];
   /** A tap on a strand's axis (path id, sample index): the scenes it lights (that strand on the tapped calendar day, or all
    * of it when that stretch has no date), with a line saying what is lit, in the strand's colour. */
   strandPeriod?: (pathId: string, index: number) => { ids: string[]; strandId: string; label: string; book?: number } | null;
@@ -80,6 +82,9 @@ export interface OrbitalArrangement {
 }
 /** A calendar day behind the story like a backdrop: a big date high up and far back where the day's first scene sits, a faint pole down to the floor. */
 export interface CalendarPin { id: string; x: number; z: number; top: number; card: number; label: string; detail: string }
+/** A ruler on the date backdrop over one book's stretch (world units): a tick per story moment, bunching where quiet time
+ * is compressed, and where the pace changes, how much ("time ×0.4"). */
+export interface TimeMeter { id: string; y: number; z: number; ticks: number[]; zones: { x: number; label: string }[] }
 /** A place's disc on the floor; a region (a place containing others) is a wider, fainter disc under its children. */
 export interface FloorMark { id: string; x: number; z: number; radius: number; active: boolean; depth?: number; region?: boolean; proposed?: boolean }
 
@@ -378,6 +383,50 @@ const spiralPoint = (rank: number, total: number): Position3 => {
 };
 
 /**
+ * The time meter of a stored spiral. The build compresses quiet story time
+ * (spiral.ts compressTime), so each book's stretch gets a ruler on the date
+ * backdrop, just under the dates: a tick per story moment (every fifth
+ * taller), packed closer where time is compressed, and a note where the pace
+ * changes. A step's pace is its length over a full step (scale.dx), averaged
+ * over five moments; a note appears where that moves by 0.2 or more and has
+ * settled (the next six moments within 0.2, noted at their middle value), well
+ * clear of the last note.
+ */
+function timeMeters(data: TimePlaceProjection, spiral: SpiralView, layout: (x: number, y: number, z: number, lane: number) => Position3): TimeMeter[] {
+  const bookOf = new Map(data.scenes.map((scene) => [scene.id, scene.book ?? null]));
+  const stretches = new Map<string, { lane: number; book: number | null; xs: Set<number>; top: number }>();
+  for (const run of spiral.runs) for (const knot of run.knots) {
+    const book = bookOf.get(knot.id) ?? null, key = `${run.lane}|${book ?? ""}`;
+    const stretch = stretches.get(key) ?? { lane: run.lane, book, xs: new Set<number>(), top: -Infinity };
+    stretch.xs.add(knot.x);
+    stretch.top = Math.max(stretch.top, layout(knot.x, knot.q[0], knot.q[1], run.lane)[1]);
+    stretches.set(key, stretch);
+  }
+  return [...stretches.values()].flatMap((stretch): TimeMeter[] => {
+    const xs = [...stretch.xs].sort((first, second) => first - second);
+    if (xs.length < 2) return [];
+    const ticks = xs.map((x) => layout(x, 0, 0, stretch.lane)[0] * 3);
+    const pace = xs.slice(1).map((x, index) => (x - xs[index]) / spiral.scale.dx);
+    const smooth = pace.map((_, index) => { const window = pace.slice(Math.max(0, index - 2), index + 3); return Math.round(10 * window.reduce((sum, value) => sum + value, 0) / window.length) / 10; });
+    const zones: TimeMeter["zones"] = [];
+    let current = Infinity, last = -Infinity;
+    smooth.forEach((value, index) => {
+      if (Math.abs(value - current) < 0.2 || ticks[index] - last < METER.gap) return;
+      // Noted once it has settled: the next six moments within 0.2 of each other, at their middle value.
+      const ahead = smooth.slice(index, index + 6).sort((first, second) => first - second);
+      if (ahead.at(-1)! - ahead[0] >= 0.2) return;
+      const level = ahead[Math.floor(ahead.length / 2)];
+      zones.push({ x: ticks[index], label: level >= 0.95 ? "time ×1" : `time ×${level.toFixed(1)}` });
+      current = level; last = ticks[index];
+    });
+    // Just under the dates (pin cards rise 520 above the stretch's top; their lettering hangs about 615 below the card centre).
+    return [{ id: `meter:${stretch.lane}:${stretch.book ?? ""}`, y: (stretch.top + 520) * 3 - 615 - METER.under, z: (stretch.lane * SPIRAL.laneGap - SPIRAL.radius - PIN_BACK) * 3, ticks, zones }];
+  });
+}
+/** The meter's notes keep this far apart; the ruler sits this far under the dates (world units). */
+const METER = { gap: 3200, under: 560 };
+
+/**
  * Curved causal arcs that do not collide. Every arc bends outward, away from
  * the spiral's axis. Arcs whose story spans overlap take different lanes
  * (interval colouring, shortest spans lowest), so two arcs share a lane only
@@ -566,6 +615,7 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     position: [portal.before ? -reach : reach, 0, 0], radius: 70, role: "preview", order: portal.before ? -1 : order.length + 1,
   });
   const pins = calendarPins(data, anchors, laneOf);
+  const meters = stored ? timeMeters(data, data.spiral!, stored.layout) : [];
   const pinNote = pins.length ? " · tall pins behind: where each calendar day starts (the universe calendar)" : "";
   return {
     // On a stored spiral the scenes are beads on the coils: a little smaller so the coils read.
@@ -583,11 +633,11 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     }, ...(world ? { strandCast: (scenes: string[], draws: OrbitalDraw[]) => strandCast(world, scenes, draws) } : {}) } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
     morphKey: `${stored ? "spiral" : strands ? "strands" : "line"}:${[...anchors].map(([id, point]) => `${id}@${point.map(Math.round).join("/")}`).join(",")}`,
     // The calendar behind the story: a giant pin where each day starts.
-    pins,
+    pins, meters,
     // Shredding: in story order, each scene peels off the one line onto its strand.
     morphDelays: (draws) => { const last = Math.max(1, ...position.values()); return new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / last) * SHRED_MS)])); },
     timeKey: stored
-      ? { label: "STORY SPIRAL →", detail: `Story time as a precomputed spiral (built ${stored.built.slice(0, 16).replace("T", " ")}): each strand a glowing cyan axis, brighter the more scenes it holds (tap one to light it for that day and gather its characters), with a coil that winds once per few scenes, tight where scenes are dense and almost straight where there are none,; forks and merges joined smoothly; busy strands low in the middle and the rest spread over the floor before they stack up${anchors.size > stored.anchors.size ? ` · ${anchors.size - stored.anchors.size} newer scene${anchors.size - stored.anchors.size === 1 ? "" : "s"} wait under it until \`novel calendar build\`` : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
+      ? { label: "STORY SPIRAL →", detail: `Story time as a precomputed spiral (built ${stored.built.slice(0, 16).replace("T", " ")}): each strand a glowing cyan axis, brighter the more scenes it holds (tap one to light it for that day and gather its characters), with a coil that winds once per few scenes, tight where scenes are dense and almost straight where there are none,; forks and merges joined smoothly; busy strands low in the middle and the rest spread over the floor before they stack up; quiet time is compressed (the ruler under the dates: a tick per story moment, packed closer where time is squeezed, its notes the pace)${anchors.size > stored.anchors.size ? ` · ${anchors.size - stored.anchors.size} newer scene${anchors.size - stored.anchors.size === 1 ? "" : "s"} wait under it until \`novel calendar build\`` : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
       : strands
       ? { label: "STORY STRANDS →", detail: `Story time as strands, estimated from who is in each scene (a guess where a scene names no one): each coil follows the same characters · S-curves: strands splitting and meeting · a faint rung: scenes nothing orders, side by side at one moment · amber: a flashback, threaded to where it is told · orange arcs: causes between the records inside the bubbles, judged in this order · place check: ${strandSummary(strands.checks)}${pinNote}` }
       : data.available

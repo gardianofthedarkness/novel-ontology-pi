@@ -7,7 +7,7 @@ import { listChangeSets } from "../merge/changesetStore.js";
 import type { CastScope } from "../identity/cast.js";
 import { storyStrands, strandProjection } from "../../digger/timeplace/strandQuestions.js";
 import { latestStrandAnswers } from "../../digger/timeplace/strandView.js";
-import { solveSpiral, spiralTracks, stretchTime, SPIRAL, type SpiralRun, type SpiralTrack } from "../../digger/timeplace/spiral.js";
+import { compressTime, solveSpiral, spiralTracks, SPIRAL, type SpiralRun, type SpiralTrack } from "../../digger/timeplace/spiral.js";
 import { calendarBooks, loadCalendar } from "./calendar.js";
 
 /**
@@ -18,7 +18,7 @@ import { calendarBooks, loadCalendar } from "./calendar.js";
  * nothing is optimised at render time. Scene and run ids are `<sourceId>::<id>`.
  */
 export interface SpiralFile {
-  version: 3;
+  version: 4;
   universeId: string;
   builtAt: string;
   /** Hash of the runs and the calendar it was solved from: a different hash means it is out of date. */
@@ -42,7 +42,7 @@ export interface SpiralFile {
 export const spiralPath = (scope: Pick<CastScope, "root" | "universeId">) => join(scope.root, "calendar", `${scope.universeId}.spiral.json`);
 export async function loadSpiral(scope: Pick<CastScope, "root" | "universeId">): Promise<SpiralFile | null> {
   // An older layout (another version) counts as missing: the next build replaces it.
-  try { const file = JSON.parse(await readFile(spiralPath(scope), "utf8")) as SpiralFile; return file?.version === 3 ? file : null; }
+  try { const file = JSON.parse(await readFile(spiralPath(scope), "utf8")) as SpiralFile; return file?.version === 4 ? file : null; }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
 }
 
@@ -68,7 +68,7 @@ export async function buildSpiral(scope: CastScope, options: { iterations?: numb
   const continuities: SpiralFile["continuities"] = [];
   const hashed: unknown[] = [calendar?.inputs ?? null];
   for (const [continuity, members] of lanes) {
-    // Positions are global layers until every book is in; then time is stretched where strands crowd.
+    // Positions are global layers until every book is in; then quiet time is compressed.
     type Layered = { id: string; knots: { id: string; x: number }[]; from?: { run: string; x: number }; into?: { run: string; x: number } };
     const runs = new Map<string, Layered>(), runOf = new Map<string, string>(), links: { from: string; to: string }[] = [];
     const placed: SpiralFile["continuities"][number]["books"] = [];
@@ -104,7 +104,9 @@ export async function buildSpiral(scope: CastScope, options: { iterations?: numb
     }
     if (!runs.size) continue;
     const layered = [...runs.values()];
-    const time = stretchTime(layered.map((run) => [run.from?.x ?? run.knots[0].x, run.into?.x ?? run.knots.at(-1)!.x]), offset);
+    const scenes = new Array<number>(offset).fill(0);
+    for (const run of layered) for (const knot of run.knots) scenes[knot.x]++;
+    const time = compressTime(scenes, offset);
     const at = (layer: number) => time[layer];
     const list: SpiralRun[] = layered.map((run) => ({ id: run.id, knots: run.knots.map((knot) => ({ id: knot.id, x: at(knot.x) })), ...(run.from ? { from: { run: run.from.run, x: at(run.from.x) } } : {}), ...(run.into ? { into: { run: run.into.run, x: at(run.into.x) } } : {}) }));
     for (const book of placed) { book.from = at(book.from); book.to = at(book.to); }
@@ -118,7 +120,7 @@ export async function buildSpiral(scope: CastScope, options: { iterations?: numb
       metrics: { knots: list.reduce((sum, run) => sum + run.knots.length, 0), pairs: solution.pairs, crowding: [solution.initial.visibility, solution.visibility], overlap: [solution.initial.overlap, solution.overlap] },
     });
   }
-  const file: SpiralFile = { version: 3, universeId: scope.universeId, builtAt: new Date().toISOString(), inputs: createHash("sha256").update(JSON.stringify(hashed)).digest("hex").slice(0, 16), scale: { dx: SPIRAL.dx, knot: SPIRAL.knot }, continuities };
+  const file: SpiralFile = { version: 4, universeId: scope.universeId, builtAt: new Date().toISOString(), inputs: createHash("sha256").update(JSON.stringify(hashed)).digest("hex").slice(0, 16), scale: { dx: SPIRAL.dx, knot: SPIRAL.knot }, continuities };
   const path = spiralPath(scope), temporary = `${path}.${randomUUID()}.tmp`;
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await writeFile(temporary, JSON.stringify(file), { mode: 0o600 });

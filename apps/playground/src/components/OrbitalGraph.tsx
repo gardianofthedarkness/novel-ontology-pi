@@ -12,7 +12,7 @@ import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";
-import type { CalendarPin, FloorMark } from "../data/orbitalTimePlace";
+import type { CalendarPin, FloorMark, TimeMeter } from "../data/orbitalTimePlace";
 import { useAlbumTexture } from "./useAlbumTexture";
 import { containedImageSize } from "../data/albumImage";
 
@@ -341,6 +341,46 @@ function pinTexture(label: string, detail: string) {
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
   return texture;
+}
+
+/** A time meter's note ("time ×0.4"): small soft lettering under the ruler, left-aligned at its tick. */
+function meterTexture(label: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512; canvas.height = 120;
+  const context = canvas.getContext("2d")!;
+  context.shadowColor = "rgba(54, 173, 255, 0.6)";
+  context.shadowBlur = 16;
+  context.fillStyle = "rgba(159, 216, 255, 0.85)";
+  context.font = "500 64px sans-serif";
+  context.fillText(label, 8, 84);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+/** Tick heights (every fifth story moment taller), a note's width and how far under the ruler it hangs (world units). */
+const METER_DRAW = { tick: 140, fifth: 300, note: 2200, below: 300 };
+/** The time meters on the date backdrop: a ruler per book with a tick per story moment (packed where quiet time is
+ * compressed) and the pace where it changes. Outside the fog like the dates, never raycast. */
+function TimeMeters({ meters }: { meters: TimeMeter[] }) {
+  const rulers = useMemo(() => meters.map((meter) => {
+    const positions = [meter.ticks[0], meter.y, meter.z, meter.ticks.at(-1)!, meter.y, meter.z];
+    meter.ticks.forEach((x, index) => positions.push(x, meter.y, meter.z, x, meter.y + (index % 5 ? METER_DRAW.tick : METER_DRAW.fifth), meter.z));
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    const ruler = new LineSegments(geometry, new LineBasicMaterial({ color: "#9fd8ff", transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false, fog: false }));
+    ruler.renderOrder = -1;
+    return { id: meter.id, ruler };
+  }), [meters]);
+  useEffect(() => () => { for (const entry of rulers) { entry.ruler.geometry.dispose(); entry.ruler.material.dispose(); } }, [rulers]);
+  return <>
+    {rulers.map((entry) => <primitive key={entry.id} object={entry.ruler} raycast={noRaycast} />)}
+    {meters.flatMap((meter) => meter.zones.map((zone) => <MeterNote key={`${meter.id}:${zone.x}`} label={zone.label} position={[zone.x + METER_DRAW.note / 2, meter.y - METER_DRAW.below, meter.z]} />))}
+  </>;
+}
+function MeterNote({ label, position }: { label: string; position: Position3 }) {
+  const texture = useMemo(() => meterTexture(label), [label]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return <sprite raycast={noRaycast} renderOrder={-1} position={position} scale={[METER_DRAW.note, METER_DRAW.note * 120 / 512, 1]}><spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} fog={false} /></sprite>;
 }
 
 /** Giant calendar pins behind the story: a big date high up and far back
@@ -951,6 +991,8 @@ interface Props {
   floor?: FloorMark[];
   /** Giant calendar pins behind the story (orbital Story time); world units. */
   pins?: CalendarPin[];
+  /** Rulers on the same backdrop: how story time is compressed. */
+  meters?: TimeMeter[];
   /** Minecraft-style render distance (world units) around where the camera looks. */
   renderDistance?: number;
   /** Camera direction for automatic framing (default: a slight side view). */
@@ -987,7 +1029,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], meters = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), dimmed: !!focusIds && !focusIds.has(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion, focusIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -1003,6 +1045,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
     {pins.length > 0 && <CalendarPins pins={pins} />}
+    {meters.length > 0 && <TimeMeters meters={meters} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} radii={radii} />)}
     <VisibleConnections edges={edges} bus={bus} />

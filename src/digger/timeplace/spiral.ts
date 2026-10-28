@@ -3,8 +3,8 @@
  * strands as coils around their own axes along one time axis, laid out
  * offline so the view only draws stored geometry.
  *
- * Time runs along x (a scene's story position, widened where many strands
- * are alive: stretchTime); only the transverse position q = (height, depth)
+ * Time runs along x (a scene's story position, compressed where little
+ * happens: compressTime); only the transverse position q = (height, depth)
  * is laid out. A strand run e has a constant axis centre c_e, one coil
  * radius a for every run and a phase φ_e. The coil winds with the run's own
  * scenes, not with time: each scene turns it by Δθ, spread over a short
@@ -62,23 +62,27 @@ export interface SpiralSolution {
 }
 
 /** x units per quiet story layer; scene radius and gap; clearance between tubes; floor box width : height. */
-export const SPIRAL = { dx: 9, knot: 14, gap: 4, clearance: 90, aspect: 3, coil: 40, turnScenes: 10, twistLayers: 2, fadeLayers: 1.5, transitionLayers: [3, 14] as [number, number] };
+export const SPIRAL = { dx: 9, quiet: 0.4, knot: 14, gap: 4, clearance: 90, aspect: 3, coil: 40, turnScenes: 10, twistLayers: 2, fadeLayers: 1.5, transitionLayers: [2, 10] as [number, number] };
 const S = 2 * SPIRAL.knot + SPIRAL.gap;
-const L0 = 10 * SPIRAL.dx;
+const L0 = 6 * SPIRAL.dx;
 /** Nominal spacing of two strands alive together (largest coils): normalises spacing and bending. */
 const D = 2 * SPIRAL.coil + S + SPIRAL.clearance;
 const WEIGHTS = { bend: 8e-5, length: 0.01, separation: 0.05, low: 0.02, central: 0.05 };
 
 /**
- * Story positions along time for layers 0…layers−1 given each run's layer
- * span: a step widens by half a layer for every extra strand alive at it,
- * so busy stretches get room and quiet ones stay compact.
+ * Story positions along time for layers 0…layers−1 given how many scenes
+ * each holds: time is compressed where little happens. The step between two
+ * story moments is a full step when either holds three scenes or more,
+ * shorter the fewer they hold, down to a `quiet` share of a step when both
+ * hold one (or none, between books):
+ *   x_k − x_{k−1} = dx·(q + (1 − q)·min(1, (max(s_{k−1}, s_k) − 1)/2)).
  */
-export function stretchTime(spans: [number, number][], layers: number): number[] {
-  const alive = new Array<number>(Math.max(1, layers)).fill(0);
-  for (const [from, to] of spans) for (let layer = Math.max(0, from); layer <= Math.min(layers - 1, to); layer++) alive[layer]++;
+export function compressTime(scenes: number[], layers: number): number[] {
   const x = [0];
-  for (let layer = 1; layer < layers; layer++) x.push(x[layer - 1] + SPIRAL.dx * (1 + 0.5 * (Math.max(1, alive[layer - 1], alive[layer]) - 1)));
+  for (let layer = 1; layer < layers; layer++) {
+    const busiest = Math.max(1, scenes[layer - 1] ?? 0, scenes[layer] ?? 0);
+    x.push(x[layer - 1] + SPIRAL.dx * (SPIRAL.quiet + (1 - SPIRAL.quiet) * Math.min(1, (busiest - 1) / 2)));
+  }
   return x;
 }
 

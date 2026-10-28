@@ -13,7 +13,7 @@ export async function readSpiral(root, universeId, rename) {
   let file;
   try { file = JSON.parse(await readFile(join(resolve(root), 'calendar', `${universeId}.spiral.json`), 'utf8')); }
   catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
-  if (file?.version !== 3 || !Array.isArray(file.continuities)) return null;
+  if (file?.version !== 4 || !Array.isArray(file.continuities)) return null;
   const view = (qualified) => { const at = String(qualified).indexOf('::'); return at < 0 ? null : rename(qualified.slice(0, at), qualified.slice(at + 2)); };
   const runs = [], links = [], days = [];
   file.continuities.forEach((continuity, lane) => {

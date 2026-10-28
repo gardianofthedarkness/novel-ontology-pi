@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dphi, ease, phi, solveSpiral, spiralTracks, stretchTime, winding, SPIRAL, type SpiralRun } from "../src/digger/timeplace/spiral.js";
+import { compressTime, dphi, ease, phi, solveSpiral, spiralTracks, winding, SPIRAL, type SpiralRun } from "../src/digger/timeplace/spiral.js";
 
 const knots = (id: string, from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => ({ id: `${id}${from + k}`, x: (from + k) * SPIRAL.dx }));
 /** The handout's shape: a parent forks into A, B, C; A and B later merge into A+B; C runs on. */
@@ -66,9 +66,10 @@ test("a coil winds with its own scenes: tight where they are dense, almost strai
   assert.ok(Math.max(...middle.map(([, y]) => y)) - Math.min(...middle.map(([, y]) => y)) < 0.2, "between two far-apart scenes the coil line runs straight");
 });
 
-test("time widens where more strands are alive", () => {
-  assert.deepEqual(stretchTime([[0, 4], [2, 3]], 6), [0, 9, 22.5, 36, 49.5, 58.5]);
-  assert.deepEqual(stretchTime([], 3), [0, 9, 18], "a quiet stretch keeps one step per layer");
+test("quiet time is compressed: full steps where three or more scenes happen at once, short ones where one does", () => {
+  const steps = (x: number[]) => x.slice(1).map((value, index) => Number((value - x[index]).toFixed(6)));
+  assert.deepEqual(steps(compressTime([1, 1, 2, 3, 1, 0], 6)), [0.4, 0.7, 1, 1, 0.4].map((share) => Number((share * SPIRAL.dx).toFixed(6))));
+  assert.deepEqual(compressTime([], 1), [0]);
 });
 
 test("tracks pass through their knots and carry a tube radius", () => {
