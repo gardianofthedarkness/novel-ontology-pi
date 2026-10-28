@@ -101,8 +101,64 @@ Findings on 废弃大楼:
   - Re-ask only the steps the solver overrules.
 
 Plans are served per place at `api/holo-moves?place=<id>`. In this exploration
-that endpoint is the design preview's snapshot host; the CLI would project and
-serve it next to the time-place data.
+that endpoint is the design preview's snapshot host. Read mode (below) moves
+the same work into the CLI and serves the prepared plan with `api/stage`.
+
+## Read mode (desktop)
+
+A **Read mode** link in the top bar opens the same page with `?read`.
+
+- **Layout:** the book's text sits in a reading panel, and the hologram of the page's place fills the rest.
+- **Waking a page:** a page wakes when the text has rested on it for about ¾ second, so fast scrolling wakes nothing.
+- **The replay:** the page's records play once in its place, squeezed into about 10 seconds.
+  - The sentences being played light up in the text.
+  - The stage can't be touched during the replay; afterwards the reader can turn it, scrub it and click it.
+- **Coming back:** a page already played opens at its last moment.
+- **Frame budget:** the hologram draws frames only while something moves. On book 3 that was about 5,500 draw calls a second during a replay, and none while idle or while the text scrolls.
+
+### Where the data comes from
+
+Two Jev faculties and a last step, each a report under `<book>/stage/`. These are view inputs: no review packet, never canon. The steps are `novel stage architecture|movement|prep`, run in the order `novel checklist` gives.
+
+- **architecture:** each place's building, a sub-kind of place.
+  - Runs after story time and the place tree, beside strands and causality.
+  - The name shortlists up to four kinds; Jev then picks among pictures of them (`assets/architecture/<kind>.png`) under neutral option names.
+  - A place that contains a district is a city, whatever its name suggests (学园都市).
+- **movement:** who moves where, how and which way, per event.
+  - Needs the whole file extracted, so each scene's cast comes from the cast-candidate scorer over the full character list.
+  - Needs the buildings picked, so Jev chooses among real spots.
+- **stage (the animation prep):** no model calls, and only once every other step is done and reviewed.
+  - Every chain is checked physically, and the result is one plan per place.
+  - Served at `api/stage`, with the text at `api/book-text?block=N`.
+
+Answers are kept per place and per scene and reused while their inputs stay the same, so a later run asks only about what changed.
+
+On a copy of book 3 (144 scenes, 9 places with scenes):
+
+- **architecture:** 9 picture choices.
+- **movement:** 121 scenes, 1,064 Jev requests in 17 s.
+- **prep:** 0.4 s, giving:
+  - 89 moves.
+  - 32 moves where Jev picked the spot the person already stood on, so they moved within it.
+  - 31 moves that could not physically follow, which were dropped.
+  - 53 starts revised.
+
+Places now carry an indoor/outdoor flag per spot: in a district, falling off a rooftop into the street counts as going "out".
+
+### Jev's native box (explored)
+
+Jev 1.14 can answer a `box` question: one target in an image, as top/bottom/left/right fractions. On the tower picture:
+
+- **Landmarks:** it found the whole tower (0.48), the rooftop (0.60) and the front door (0.78) well.
+- **Floors:** "the third floor" landed on 1F–2F (0.27). Counting floors is a job for code, not the box.
+
+Possible next step:
+
+- **Calibrate spots once per model:** fix each model's spots to its drawing (the building's edges, its doors, its roof; floors spaced evenly between them in code) from front and side renders.
+- **Leave movement as typed choices:** movement keeps its spot choices, which give the probabilities the physics check needs.
+- **Caveats:**
+  - Box needs `jev-1.14.0` (the CLI is pinned to 1.13), and TypeSafe calls it experimental.
+  - It always returns a box, so pair it with a yes/no question.
 
 ## Open questions
 

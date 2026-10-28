@@ -141,3 +141,9 @@
   .holo-legend { display: none; }
   .holo-bubble { max-width: 220px; } .holo-eventcard { width: 220px; }
 }
+
+/* Embedded in read mode: inside its panel, not over the app; untouchable while a page replays. */
+.holo.holo-embedded { position: absolute; z-index: auto; }
+.holo.is-replaying .holo-canvas, .holo.is-replaying .holo-timeline, .holo.is-replaying .holo-log, .holo.is-replaying .holo-modes, .holo.is-replaying .holo-party { pointer-events: none; }
+.holo.is-replaying .holo-controls, .holo.is-replaying .holo-modes { opacity: .45; }
+.holo-window { position: absolute; top: 0; bottom: 0; background: #7ce6ff1f; border-left: 1px solid #7ce6ff80; border-right: 1px solid #7ce6ff80; pointer-events: none; }

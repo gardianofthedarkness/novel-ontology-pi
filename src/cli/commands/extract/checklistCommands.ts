@@ -12,6 +12,7 @@ import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/a
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { loadWorkspaceSentences, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
+import { stageInputs } from "./stageCommands.js";
 
 /**
  * `novel checklist` — what a completed analysis still lacks, in dependency
@@ -22,6 +23,12 @@ import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
  *   (album, optional) │               └─▶ strands (who is in each scene) ─▶ causality (in-book, cross-scene sweep,
  *                     │                                                    ordered by story time and strands)
  *                     └─▶ graph (rebuilt after canon changes)
+ *
+ * and read mode's stage (view inputs, no review packet):
+ *   time-place + place-tree ─▶ architecture (each place's building) ─┐
+ *   blocks (the full character list) + strands ──────────────────────┴─▶ movement (who goes where, how)
+ *   every step above, all reviewed ─▶ stage (the animation prep, last of all)
+ * Architecture and movement run beside causality; the prep waits for everything.
  *
  * and a universe's when every member book is complete and its cross-book
  * faculties are too:  organization ─▶ books ─┬─▶ atlas (same place / inside, across books)
@@ -147,6 +154,18 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
   const graph = await stat(join(novelDir, "ontology", "graph.lbug")).catch(() => null);
   items.push({ id: "graph", title: "Query graph up to date", dependsOn: ["blocks"], status: !graph || graph.mtimeMs < newest ? "todo" : "done",
     counts: { built: !!graph }, next: !graph || graph.mtimeMs < newest ? [`novel graph build ${quote(join(novelDir, "ontology"))}`] : [] });
+
+  // Read mode's stage: each place's building, then who moves where in its scenes (Jev, view inputs, no review), then the animation prep, last.
+  const stage = await stageInputs(novelDir);
+  items.push({ id: "architecture", title: "Buildings of places (a sub-kind of place, for read mode)", dependsOn: ["time-place", "place-tree"],
+    status: stage.architectureCurrent ? "done" : "todo", counts: { places: stage.places.length, picked: Object.keys(stage.architecture?.places ?? {}).length, current: stage.architectureCurrent },
+    next: stage.architectureCurrent ? [] : [`novel stage architecture ${dir}`], note: stage.architectureCurrent ? undefined : `About ${stage.places.length} Jev picture choice(s), one per place; a view input, no review.` });
+  items.push({ id: "movement", title: "Movement in scenes (who goes where, how, for read mode)", dependsOn: ["blocks", "strands", "architecture"],
+    status: stage.movementCurrent ? "done" : "todo", counts: { scenes: stage.movementScenes.length, asked: Object.keys(stage.movement?.scenes ?? {}).length, estimatedRequests: stage.estimate, current: stage.movementCurrent },
+    next: stage.movementCurrent ? [] : [`novel stage movement ${dir}`], note: stage.movementCurrent ? undefined : `About ${stage.estimate} Jev request(s); answers are kept and reused, so a stopped run continues. A view input, no review.` });
+  items.push({ id: "stage", title: "Animation prep (read mode)", dependsOn: items.map((item) => item.id),
+    status: stage.planCurrent ? "done" : "todo", counts: { prepared: !!stage.plan, current: stage.planCurrent, moves: stage.plan?.counts.moves ?? 0 },
+    next: stage.planCurrent ? [] : [`novel stage prep ${dir}`], note: "Last of all: waits for every other step and review. No model calls." });
 
   settle(items);
   const complete = items.every((item) => item.status === "done" || item.status === "optional");

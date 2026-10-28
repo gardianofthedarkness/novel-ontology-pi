@@ -6,9 +6,12 @@ import type { ArchitectureKind } from "./placeArchitecture.js";
  * "who goes where, how" (a decision model picks from these spots) and drawn as
  * a walk through the hologram. Spots sit in the building's own box: u and w
  * across its width and depth (−0.5 … 0.5), v up its height (0 … 1); `out`
- * reaches past the walls (stage units) for the street, an alley, a garden.
+ * reaches past the walls (stage units) for the street, an alley, a garden —
+ * the ways in and out of the place. `outdoor` marks open-air spots inside the
+ * place (a district's plaza and streets): leaving a building for one of them
+ * is going out too.
  */
-export interface NavSpot { id: string; label: string; hint: string; u: number; v: number; w: number; out?: [number, number] }
+export interface NavSpot { id: string; label: string; hint: string; u: number; v: number; w: number; out?: [number, number]; outdoor?: boolean }
 export interface NavGrid { spots: NavSpot[]; links: [string, string][] }
 export interface NavBox { x: number; z: number; width: number; depth: number; height: number }
 export const MANNERS = ["walk", "run", "sneak", "climb up", "go down", "fall", "teleport", "dragged"] as const;
@@ -17,6 +20,7 @@ export type Manner = typeof MANNERS[number];
 export const MANNER_SPEED: Record<Manner, number> = { walk: 120, run: 260, sneak: 60, "climb up": 80, "go down": 120, fall: 420, teleport: 1e6, dragged: 90 };
 
 const spot = (id: string, label: string, hint: string, u: number, v: number, w: number, out?: [number, number]): NavSpot => ({ id, label, hint, u, v, w, out });
+const open = (entry: NavSpot): NavSpot => ({ ...entry, outdoor: true });
 
 /** A building of storeys: street, doors, a stairwell up through each floor, the roof. */
 function storeys(floors: number, name: string): NavGrid {
@@ -76,8 +80,8 @@ const GRIDS: Record<ArchitectureKind, () => NavGrid> = {
     links: [["gate", "courtyard"], ["courtyard", "keep"], ["keep", "keep-top"], ["courtyard", "tower-top"], ["courtyard", "wall"], ["wall", "tower-top"]],
   }),
   city: () => ({
-    spots: [spot("avenue", "Avenue", "the avenue into the district", 0, 0, 0.5, [0, 120]), spot("plaza", "Plaza", "the open plaza in the middle", 0, 0, 0), spot("west", "West towers", "among the towers on the west side", -0.42, 0, 0),
-      spot("east", "East towers", "among the towers on the east side", 0.42, 0, 0), spot("north", "North street", "the street at the back", 0, 0, -0.42), spot("rooftop", "Rooftop", "on a rooftop above the streets", 0.3, 0.75, -0.25)],
+    spots: [spot("avenue", "Avenue", "the avenue into the district", 0, 0, 0.5, [0, 120]), open(spot("plaza", "Plaza", "the open plaza in the middle", 0, 0, 0)), spot("west", "West towers", "among the towers on the west side", -0.42, 0, 0),
+      spot("east", "East towers", "among the towers on the east side", 0.42, 0, 0), open(spot("north", "North street", "the street at the back", 0, 0, -0.42)), spot("rooftop", "Rooftop", "on a rooftop above the streets", 0.3, 0.75, -0.25)],
     links: [["avenue", "plaza"], ["plaza", "west"], ["plaza", "east"], ["plaza", "north"], ["east", "rooftop"], ["west", "north"], ["east", "north"]],
   }),
 };
@@ -126,6 +130,8 @@ export const DIRECTION_HINT: Record<Direction, string> = {
 };
 
 const isInside = (entry: NavSpot) => !entry.out;
+/** Under a roof: neither a way out of the place nor open air inside it. */
+const isIndoor = (entry: NavSpot) => !entry.out && !entry.outdoor;
 const destinations = (grid: NavGrid) => grid.spots.filter((entry) => !entry.id.startsWith("stairs-"));
 
 /** "Somewhere in the building" when a scene does not say: the middle inside — halfway up its inside spots, nearest the centre of the floor plan. */
@@ -152,7 +158,8 @@ function fits(grid: NavGrid, from: string, to: string, step: ChainStep): { score
   if (from === to) return { score: 0.03, why: "a mover ends somewhere else" };
   const a = grid.spots.find((entry) => entry.id === from)!, b = grid.spots.find((entry) => entry.id === to)!;
   const rise = b.v - a.v, way = rise > 0.03 ? "up" : rise < -0.03 ? "down" : "level";
-  const out = isInside(a) && !isInside(b), into = !isInside(a) && isInside(b);
+  // Out: from under a roof into the open, or out of the place by its way out; in: the reverse.
+  const out = isIndoor(a) && !isIndoor(b) || !a.out && !!b.out, into = !isIndoor(a) && isIndoor(b) || !!a.out && !b.out;
   const match: Record<Direction, number> = { up: way === "up" ? 1 : 0.04, down: way === "down" ? 1 : 0.04, "same level": way === "level" ? 1 : 0.15, "out of the building": out ? 1 : 0.1, "into the building": into ? 1 : 0.1 };
   const weights = Object.entries(step.direction ?? {}) as [Direction, number][], total = weights.reduce((sum, [, value]) => sum + value, 0);
   const direction = total > 0 ? weights.reduce((sum, [key, value]) => sum + (value / total) * match[key], 0) : 1;

@@ -3,6 +3,8 @@
    and a processing dock that folds away to a single line. Loaded last. */
 .app .topbar { padding: 12px 24px; }
 .topbar .sample-badge { margin-left: auto; }
+.topbar .read-link { margin-left: 4px; pointer-events: auto; color: #cfe3ee; text-decoration: none; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 6px 12px; border: 1px solid #2b6f9b; border-radius: 999px; background: #06121fb3; }
+.topbar .read-link:hover { color: #7ce6ff; border-color: #7ce6ff; }
 .app .brand svg { width: 30px; height: 30px; }
 .app .brand { font-size: 13px; }
 
@@ -77,7 +79,7 @@
   .dock-open .view-controls { bottom: 236px; }
   .view-help-card { right: 0; bottom: 44px; }
   .design-switch.stage-switch { left: 12px; right: 12px; transform: none; justify-content: center; font-size: 9px; }
-  .app .topbar .sample-badge { display: none; }
+  .app .topbar .sample-badge, .app .topbar .read-link { display: none; }
   .view-help-card { width: min(300px, calc(100vw - 80px)); }
   .dock-toggle { left: 12px; max-width: calc(100vw - 150px); }
   .app .inspector { top: 160px; }

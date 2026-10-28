@@ -26,6 +26,8 @@ export interface DecisionQuestion {
   criteria?: string;
   /** choice only: the fixed candidate set (max 255). */
   options?: string[];
+  /** choice only: what an option means, when its label does not say it (sent as that option's criterion). */
+  optionHints?: Record<string, string>;
   /** score only: ordered level labels, 2..10 of them. */
   levels?: string[];
 }
@@ -40,13 +42,18 @@ export interface DecisionAnswer {
   confidence?: number;
 }
 
+/** Pictures a question looks at (PNG, base64), each named in the state by its key. */
+export type DecisionImages = Record<string, string>;
+
 export interface DecisionModel {
   readonly modelId: string;
   /**
    * Evaluate a BATCH of questions against one shared state snapshot.
    * One API call per window — never one call per question.
+   * `images` (experimental at TypeSafe, "danger zone"): the state becomes
+   * { state, <name>: "<name>_image" } with one image asset per name.
    */
-  decide(state: string, questions: DecisionQuestion[], options?: { signal?: AbortSignal }): Promise<DecisionAnswer[]>;
+  decide(state: string, questions: DecisionQuestion[], options?: { signal?: AbortSignal; images?: DecisionImages }): Promise<DecisionAnswer[]>;
 }
 
 export interface JevConfig {
@@ -62,15 +69,17 @@ export class JevClient implements DecisionModel {
     this.modelId = cfg.model;
   }
 
-  async decide(state: string, questions: DecisionQuestion[], options: { signal?: AbortSignal } = {}): Promise<DecisionAnswer[]> {
+  async decide(state: string, questions: DecisionQuestion[], options: { signal?: AbortSignal; images?: DecisionImages } = {}): Promise<DecisionAnswer[]> {
     if (!this.cfg.apiKey) {
       throw new Error(
         "Jev API key missing. Run `novel jev login`, or set TYPESAFE_API_KEY (never hard-code the key).",
       );
     }
+    const images = Object.entries(options.images ?? {});
     const body = JSON.stringify({
       model: this.cfg.model,
-      state,
+      state: images.length ? { state, ...Object.fromEntries(images.map(([name]) => [name, `${name}_image`])) } : state,
+      ...(images.length ? { assets: Object.fromEntries(images.map(([name, png]) => [`${name}_image`, { type: "image", format: "png", data_base64: png }])) } : {}),
       questions: toWireQuestions(questions),
     });
     // Retry policy mirrors the work-LLM client: transient failures only
@@ -84,6 +93,7 @@ export class JevClient implements DecisionModel {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${this.cfg.apiKey}`,
+            ...(images.length ? { "TypeSafe-Danger-Zone-Images": "true" } : {}),
           },
           body,
           signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
@@ -141,7 +151,7 @@ function toWireQuestions(
       wire[q.key] = {
         type: "choice",
         instructions: withRubric(q),
-        criteria: Object.fromEntries((q.options ?? []).map((o) => [o, o])),
+        criteria: Object.fromEntries((q.options ?? []).map((o) => [o, q.optionHints?.[o] ?? o])),
       };
     } else {
       wire[q.key] = {

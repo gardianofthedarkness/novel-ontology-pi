@@ -29,6 +29,15 @@ interface Props {
   initialBeat?: number;
   /** Start playing on open (off for still frames). */
   autoplay?: boolean;
+  /** Inside a page (read mode) rather than over the app: no exit, no journey, no keys, and no frames drawn while nothing moves. */
+  embedded?: boolean;
+  /** A prepared movement plan (read mode); undefined asks the backend for one. */
+  plan?: MovePlan | null;
+  /** Replay beats from…to once, squeezed into about `ms`, untouchable meanwhile; a new key starts a new replay. */
+  reel?: { key: string; from: number; to: number; ms: number } | null;
+  onReelEnd?: () => void;
+  /** The beat on show, as it changes. */
+  onBeat?: (index: number) => void;
 }
 
 const FLOOR = -944;
@@ -61,6 +70,8 @@ interface Bus {
 }
 
 const duration = (beat: HoloBeat) => beat.kind === "scene" ? 2600 : beat.kind === "travel" ? 2400 : Math.min(7000, Math.max(2400, 1600 + [...(beat.quote ?? beat.text)].length * 45));
+/** How long a replay of beats from…to lasts when squeezed into `ms` (never stretched). */
+export const replayMs = (script: HoloScript, from: number, to: number, ms: number) => Math.min(ms, script.beats.slice(from, to + 1).reduce((sum, beat) => sum + duration(beat), 0));
 
 /** Where everyone stands for a beat. */
 function stagePositions(script: HoloScript, beat: HoloBeat, mode: HoloMode, cast: HoloActor[], movement?: Movement | null): Map<string, Target> {
@@ -311,10 +322,29 @@ function useTypewriter(text: string, key: string, instant: boolean) {
   return [...text].slice(0, shown).join("");
 }
 
-export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnterPlace, initialBeat = 0, autoplay = true }: Props) {
-  const [index, setIndex] = useState(() => Math.min(Math.max(0, initialBeat), Math.max(0, script.beats.length - 1)));
-  const [playing, setPlaying] = useState(autoplay && !reducedMotion);
+export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnterPlace, initialBeat = 0, autoplay = true, embedded = false, plan: preparedPlan, reel = null, onReelEnd, onBeat }: Props) {
+  const [index, setIndex] = useState(() => Math.min(Math.max(0, reel?.from ?? initialBeat), Math.max(0, script.beats.length - 1)));
+  const [playing, setPlaying] = useState((autoplay || !!reel) && !reducedMotion);
   const [speed, setSpeed] = useState(1);
+  // A replay (read mode): once through its window, then the stage is the reader's.
+  const [replaying, setReplaying] = useState(!!reel);
+  const reelScale = useMemo(() => reel ? Math.min(1, reel.ms / Math.max(1, script.beats.slice(reel.from, reel.to + 1).reduce((sum, entry) => sum + duration(entry), 0))) : 1, [reel, script]);
+  const reelKey = reel?.key;
+  useEffect(() => {
+    if (!reel) { setReplaying(false); return; }
+    setIndex(reel.from);
+    setReplaying(true);
+    setPlaying(true);
+  }, [reelKey]); // eslint-disable-line react-hooks/exhaustive-deps -- a new replay only when its key changes
+  useEffect(() => { onBeat?.(index); }, [index, onBeat]);
+  // Embedded: draw frames only while something moves (a replay, a walk, a drag), so scrolling the text never competes with the hologram.
+  const [warm, setWarm] = useState(true);
+  useEffect(() => {
+    if (!embedded) return;
+    setWarm(true);
+    const timer = setTimeout(() => setWarm(false), 4000);
+    return () => clearTimeout(timer);
+  }, [embedded, index, playing, mode]);
   const beat = script.beats[index];
   const cast = useMemo(() => script.actors.slice(0, MAX_TOKENS), [script]);
   const colors = useMemo(() => new Map(script.actors.map((actor) => [actor.id, actor.color])), [script]);
@@ -325,16 +355,17 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
 
   useEffect(() => { setIndex((current) => Math.min(current, Math.max(0, script.beats.length - 1))); }, [script]);
   // A movement plan for this place, if the backend has one, and the building's nav grid on the stage.
-  const [plan, setPlan] = useState<MovePlan | null>(null);
+  const [plan, setPlan] = useState<MovePlan | null>(preparedPlan ?? null);
   const [movement, setMovement] = useState<Movement | null>(null);
   const placeId = journey ? null : script.places[0]?.id ?? null;
   useEffect(() => {
+    if (preparedPlan !== undefined) { setPlan(preparedPlan); return; }
     setPlan(null);
     if (!placeId) return;
     let live = true;
     fetch(`api/holo-moves?place=${encodeURIComponent(placeId)}`, { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((loaded: MovePlan | null) => { if (live && loaded?.moves) setPlan(loaded); }).catch(() => undefined);
     return () => { live = false; };
-  }, [placeId]);
+  }, [placeId, preparedPlan]);
   // The stage building's box (scaled up from the map), what the camera frames and the nav grid fills.
   const kind = script.places[0]?.kind ?? undefined;
   const stageMarks = useMemo(() => placeId ? [stageMark(placeId, kind)] : [], [placeId, kind]);
@@ -358,7 +389,8 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
     setMovement({ plan, grid, at: new Map([...navPositions(grid, box, FLOOR)].map(([id, point]) => [id, new Vector3(...point)])) });
   }, [plan, box, journey]);
   const spotName = (id: string) => movement?.grid.spots.find((entry) => entry.id === id)?.label ?? id;
-  bus.speed = speed;
+  // A squeezed replay walks faster too.
+  bus.speed = speed / (replaying ? reelScale : 1);
   bus.nav = movement?.at ?? new Map();
   // What this beat asks of the stage.
   useEffect(() => {
@@ -377,12 +409,19 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
 
   useEffect(() => {
     if (!playing || !beat) return;
+    const pace = (replaying ? reelScale : 1) / speed;
+    if (replaying && reel && index >= reel.to) {
+      // The replay's last beat holds for its time, then the stage is handed over.
+      const timer = setTimeout(() => { setPlaying(false); setReplaying(false); onReelEnd?.(); }, duration(beat) * pace);
+      return () => clearTimeout(timer);
+    }
     if (index >= script.beats.length - 1) { setPlaying(false); return; }
-    const timer = setTimeout(() => setIndex((current) => current + 1), duration(beat) / speed);
+    const timer = setTimeout(() => setIndex((current) => current + 1), duration(beat) * pace);
     return () => clearTimeout(timer);
-  }, [playing, index, beat, speed, script.beats.length]);
+  }, [playing, index, beat, speed, script.beats.length, replaying, reel, reelScale, onReelEnd]);
 
   useEffect(() => {
+    if (embedded) return;
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
       else if (event.key === " ") { event.preventDefault(); setPlaying((value) => !value); }
@@ -391,10 +430,10 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [onClose, script.beats.length]);
+  }, [onClose, script.beats.length, embedded]);
 
   const speech = beat?.kind === "dialogue" ? beat.quote ?? beat.text : "";
-  const typed = useTypewriter(mode === "cutscene" ? (beat?.quote ?? beat?.text ?? "") : speech, beat?.id ?? "", reducedMotion);
+  const typed = useTypewriter(mode === "cutscene" ? (beat?.quote ?? beat?.text ?? "") : speech, beat?.id ?? "", reducedMotion || (replaying && reelScale < 0.7));
   const anchor = (key: string, lift: number) => (element: HTMLElement | null) => { if (element) { element.dataset.lift = String(lift); bus.anchors.set(key, element); } else bus.anchors.delete(key); };
   const sceneBeats = script.beats.filter((entry) => entry.kind === "scene").length;
   const place = journey ? script.places.find((entry) => entry.id === beat?.placeId) : script.places[0];
@@ -403,9 +442,9 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
 
   if (!beat) return <div className="holo" role="dialog" aria-label="Holo stage"><div className="holo-empty"><p>No scene here has records loaded yet.</p><button onClick={onClose}>Close</button></div></div>;
   const kindLabel = place?.kind ? ARCHITECTURE_LABEL[place.kind] : "Place";
-  return <div className={`holo holo-${mode}`} role="dialog" aria-label={`Holo stage: ${script.title}`}>
-    <div className="holo-canvas" onPointerDown={(event) => { dragFrom.current = event.clientX; }} onPointerMove={(event) => { if (dragFrom.current !== null && mode !== "cutscene") { bus.drag += (event.clientX - dragFrom.current) * -0.004; dragFrom.current = event.clientX; } }} onPointerUp={() => { dragFrom.current = null; }} onPointerLeave={() => { dragFrom.current = null; }}>
-      <Canvas camera={{ position: [0, FLOOR + 900, 1400], fov: mode === "cutscene" ? 46 : 42, near: 1, far: 20000 }} dpr={[1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }}>
+  return <div className={`holo holo-${mode}${embedded ? " holo-embedded" : ""}${replaying ? " is-replaying" : ""}`} role={embedded ? "region" : "dialog"} aria-label={`Holo stage: ${script.title}`}>
+    <div className="holo-canvas" onPointerDown={(event) => { dragFrom.current = event.clientX; setWarm(true); }} onPointerMove={(event) => { if (dragFrom.current !== null && mode !== "cutscene") { bus.drag += (event.clientX - dragFrom.current) * -0.004; dragFrom.current = event.clientX; } }} onPointerUp={() => { dragFrom.current = null; }} onPointerLeave={() => { dragFrom.current = null; }}>
+      <Canvas frameloop={!embedded || playing || warm ? "always" : "demand"} camera={{ position: [0, FLOOR + 900, 1400], fov: mode === "cutscene" ? 46 : 42, near: 1, far: 20000 }} dpr={[1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }}>
         <color attach="background" args={["#040a13"]} />
         <fog attach="fog" args={["#040a13", journey ? extent * 1.4 : 900, journey ? extent * 3.2 : 2600]} />
         <Table radius={journey ? extent : 470} />
@@ -445,9 +484,9 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
         <small>{journey ? `${script.places.length} places · ${sceneBeats} scenes · ${script.beats.filter((entry) => entry.kind === "travel").length} trips` : `${sceneBeats} scenes · ${script.actors.length} characters`}{movement ? ` · ${Object.values(movement.plan.moves).flat().length} moves (Jev)` : ""}{beat.when ? ` · ${beat.when}` : ""}</small>
       </div>
       <nav className="holo-modes" aria-label="Stage mode">
-        {(["diorama", "cutscene", "journey"] as const).map((value) => <button key={value} aria-pressed={mode === value} onClick={() => onMode(value)}>{value === "diorama" ? "Diorama" : value === "cutscene" ? "Cutscene" : "Journey"}</button>)}
+        {(embedded ? ["diorama", "cutscene"] as const : ["diorama", "cutscene", "journey"] as const).map((value) => <button key={value} aria-pressed={mode === value} onClick={() => onMode(value)}>{value === "diorama" ? "Diorama" : value === "cutscene" ? "Cutscene" : "Journey"}</button>)}
       </nav>
-      <button className="holo-exit" onClick={onClose} aria-label="Leave the hologram">✕ <span>Exit</span></button>
+      {!embedded && <button className="holo-exit" onClick={onClose} aria-label="Leave the hologram">✕ <span>Exit</span></button>}
     </header>
 
     {mode !== "cutscene" && <aside className="holo-party" aria-label="Party">
@@ -492,6 +531,7 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
         <button onClick={() => setSpeed(speed >= 4 ? 1 : speed * 2)} aria-label="Speed" className="holo-speed">{speed}×</button>
       </div>
       <div className="holo-track" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); setIndex(Math.min(script.beats.length - 1, Math.max(0, Math.floor(((event.clientX - box.left) / box.width) * script.beats.length)))); }}>
+        {reel && <span className="holo-window" style={{ left: `${(reel.from / Math.max(1, script.beats.length - 1)) * 100}%`, width: `${(Math.max(0.6, reel.to - reel.from) / Math.max(1, script.beats.length - 1)) * 100}%` }} title="This page" />}
         {script.beats.map((entry, at) => <i key={entry.id} className={`kind-${entry.kind}${entry.conflict ? " is-conflict" : ""}${at <= index ? " is-done" : ""}`} style={{ left: `${(at / Math.max(1, script.beats.length - 1)) * 100}%` }} />)}
         <span className="holo-playhead" style={{ left: `${(index / Math.max(1, script.beats.length - 1)) * 100}%` }} />
       </div>

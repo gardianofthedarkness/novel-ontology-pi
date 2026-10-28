@@ -241,3 +241,11 @@ test('refusals say what to change; long pages are clamped; help and status forms
   assert.throws(() => authorize(`cat ${novel}/timeplace/../ontology/entities.jsonl`));
   assert.throws(() => authorize('cat /private/other/timeplace/run.json'));
 });
+
+test('read mode stage commands run on the assigned book, bounded, and the prep takes no options', () => {
+  assert.equal(authorize(`novel stage show ${novel}`, defaultScope).label, 'novel stage show');
+  assert.equal(authorize(`novel stage architecture ${novel}`, defaultScope).label, 'novel stage architecture');
+  assert.equal(authorize(`novel stage movement ${novel} --max-calls 2000`, defaultScope).label, 'novel stage movement');
+  assert.equal(authorize(`novel stage prep ${novel}`, defaultScope).label, 'novel stage prep');
+  for (const command of [`novel stage movement /tmp/other`, `novel stage movement ${novel} --max-calls 99999`, `novel stage prep ${novel} --force`, `novel stage architecture ${novel} --max-calls 5`, `novel stage movement ${novel} --cache /tmp/x`, `novel stage delete ${novel}`]) assert.throws(() => authorize(command, defaultScope), command);
+});

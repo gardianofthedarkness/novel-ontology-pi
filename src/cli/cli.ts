@@ -61,6 +61,7 @@ import { reviewCommand } from "./commands/extract/reviewCommands.js";
 import { approveBook } from "../solidifier/merge/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
+import { STAGE_USAGE, stageArchitecture, stageMovement, stagePrep, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
   listChangeSets,
@@ -105,6 +106,8 @@ const COMMANDS: Record<string, string> = {
     "The universe's places: one per cluster of book places, with its path through the universe place tree.",
   "novel timeplace strands <novel-dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]":
     "Story strands from stored story time: parallel scenes, splits and meetings checked against places; plans \"who is present?\" questions only where a borrowed cast creates a strand link (free), and asks them with --ask (work model, 4 scenes per call), at most --max-questions (default 30), only in chapters of at least --min-impact scenes (default 8); report only, no canon writes",
+  "novel stage show|architecture|movement|prep <novel-dir> [--no-jev] [--max-calls N] [--cache dir] [--force]":
+    "Read mode's stage (view inputs, never canon, no review): `architecture` picks each place's building, a sub-kind of place (name shortlist, then Jev picks among pictures); `movement` asks Jev who moves where inside each scene's building and how (needs the whole file extracted and the buildings picked; --max-calls bounds a run, answers are kept and later runs continue); `prep` is the animation prep, last of all once every other checklist step is done: each chain checked physically, one movement plan per place (no model calls). Answers are reused while their inputs stay the same.",
   "novel timeplace show <novel-dir>":
     "Applied time periods in story order, places as paths through the place tree, and the tree's links.",
   "novel causality sweep <novel-dir> [--limit N]":
@@ -523,6 +526,24 @@ async function main(): Promise<void> {
       maxCalls: number("--max-calls"), maxQuestions: number("--max-questions"), out: flag(positional, "--out"), cache: flag(positional, "--cache"),
       propose: positional.includes("--propose"), force: positional.includes("--force"),
     }), pretty);
+    return;
+  }
+
+  if (cmd === "stage") {
+    const novelDir = positional[2];
+    if (!["show", "architecture", "movement", "prep"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${STAGE_USAGE}`);
+    const valued = sub === "movement" ? ["--max-calls", "--cache"] : sub === "architecture" ? ["--cache"] : [], switches = sub === "prep" ? ["--force"] : sub === "show" ? [] : ["--no-jev"];
+    const seen = new Set<string>();
+    for (let index = 3; index < positional.length; index++) {
+      const name = positional[index];
+      if (seen.has(name) || ![...valued, ...switches].includes(name)) throw new Error(`Usage: ${STAGE_USAGE}`);
+      seen.add(name);
+      if (valued.includes(name)) { const value = positional[++index]; if (!value || value.startsWith("--")) throw new Error(`${name} needs a value.`); }
+    }
+    const maxCalls = flag(positional, "--max-calls");
+    if (maxCalls !== undefined && (!/^\d+$/.test(maxCalls) || Number(maxCalls) < 1)) throw new Error("--max-calls must be a positive integer.");
+    const options = { jev: !positional.includes("--no-jev"), cache: flag(positional, "--cache"), maxCalls: maxCalls === undefined ? undefined : Number(maxCalls), force: positional.includes("--force") };
+    out(await (sub === "show" ? stageShow(novelDir) : sub === "architecture" ? stageArchitecture(novelDir, options) : sub === "movement" ? stageMovement(novelDir, options) : stagePrep(novelDir, options)), pretty);
     return;
   }
 

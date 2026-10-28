@@ -24,6 +24,7 @@ import { followTarget, timePlaceEmergence, universeIds, type TimePlaceProjection
 import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProjection, sceneOfSpiral, spiralNodeId, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels, type StoryShape } from "./data/orbitalTimePlace";
 import { AtlasPanel } from "./components/AtlasPanel";
 import { HoloStage, type HoloMode } from "./components/HoloStage";
+import { ReadMode } from "./components/ReadMode";
 import { journeyScript, placeScript } from "./data/holoScript";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
@@ -165,6 +166,8 @@ export default function App() {
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   /** Holo stage (places phase 2): a place replayed like a game, or the journey across places.
    * Deep link: ?holo=<place id or name | journey>&holoMode=diorama|cutscene|journey&holoBeat=<n>[&holoPause]. */
+  /** Read mode: the book's text with its places replayed beside it (?read; desktop). */
+  const [readMode] = useState(() => new URLSearchParams(location.search).has("read"));
   const [holo, setHolo] = useState<{ target: string; mode: HoloMode; beat: number; paused?: boolean } | null>(() => {
     const params = new URLSearchParams(location.search), target = params.get("holo");
     return target ? { target, mode: (params.get("holoMode") as HoloMode | null) ?? (target === "journey" ? "journey" : "diorama"), beat: Number(params.get("holoBeat") ?? 0), paused: params.has("holoPause") } : null;
@@ -865,16 +868,21 @@ export default function App() {
   const libraryAtTop = !!shownWorld?.library && ["library", "series"].includes(orbitalPage?.kind ?? "");
   const libraryCaption = shownWorld?.library?.events.at(-1)?.type.replaceAll(".", " / ") ?? "Waiting for organization";
 
+  // The same page with ?read toggled (other parameters and the fragment kept), so read mode opens as its own link.
+  const withRead = (on: boolean) => { const params = new URLSearchParams(location.search); if (on) params.set("read", "1"); else params.delete("read"); return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
   if (!world) {
     return (
       <main className="loading-screen"><span className="eyebrow">NOVEL / ONTOLOGY PI</span><h1>Narrative archive.</h1><p role={loadError ? "alert" : "status"}>{loadError ? `Could not open the archive: ${loadError}` : "Opening local records…"}</p></main>
     );
   }
 
+  if (readMode) return <ReadMode timePlace={timePlace} world={shownWorld} volume={loadedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withRead(false)} />;
+
   return (
     <div className={`app orbital-active ${orbitalMode ? "mode-orbital" : "mode-traditional"}${stageView !== "narrative" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}${dockOpen ? " dock-open" : " dock-closed"}`}>
       <header className="topbar">
         <button className="brand" onClick={overview} aria-label="Return to archive overview"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 32V8h7l18 24h7V8M4 32h7V18l18 14M19 8h17" fill="none" stroke="currentColor" strokeWidth="3" /></svg><span>NOVEL<span>ONTOLOGY / PI</span></span></button>
+        <a className="read-link" href={withRead(true)} title="Read the book with its places replayed beside the text (desktop)">Read mode</a>
         <span className="sample-badge"><i />{phoneLive || liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">
