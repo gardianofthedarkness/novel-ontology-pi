@@ -7,6 +7,8 @@ import { canEnterOrbitalScope, orbitalContents, mainProminence, orbitalLevel, re
 import { layoutOrbitalLevel, layoutOrbitalPreview, layoutParentBackdrop, morphSpan, nestedEntityConnections, openingMorph, type OrbitalDraw, type OrbitalMorph, type OrbitalPose } from "../data/orbitalLayout";
 import { framePositions, revealPositions, type LabelBus } from "./graphCamera";
 import { OrbitalGraph, ORBITAL_TRANSITION_MS } from "./OrbitalGraph";
+/** Each sphere's glide when the arrangement changes shape (its start is staggered by the arrangement). */
+const SHAPE_MORPH_MS = 1100;
 import { copyOrbitalBookmark, orbitalActivityBatchPath, orbitalTouchAncestors, type OrbitalReadingBookmark } from "../data/orbitalActivity";
 import { activityFocus, piBusy, type LiveActivity } from "../data/liveActivity";
 import { type OrbitIllustration } from "../data/pictureNodes";
@@ -21,7 +23,7 @@ import type { AlbumPanelPicture } from "./AlbumPanel";
 import { libraryActivityPath, libraryReadingPrefix, libraryScope } from "../data/libraryModel";
 import { RollingText } from "./RollingText";
 import { facultyAnchors, facultyChipText } from "../data/facultyEffects";
-import type { OrbitalArrangement } from "../data/orbitalTimePlace";
+import { shapeChange, type OrbitalArrangement } from "../data/orbitalTimePlace";
 import { portraitDraws as buildPortraitDraws } from "../data/liveAlbum";
 import { pictureDraws as buildPictureDraws } from "../data/pictureDraws";
 
@@ -183,18 +185,34 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     });
   }, [baseDraws, connections.draws, pictureDraws, portraitDraws, joinView]);
   const levelPaths = useMemo(() => arranged?.paths ? arranged.paths(layout.draws, selectedId) : layout.paths, [arranged, layout.draws, layout.paths, selectedId]);
+  /** Main spheres by position, to tell which path points sit on a sphere (strand curves sample many points between them). */
+  const mainAt = useMemo(() => new Map(layout.draws.filter((draw) => draw.role === "main").map((draw) => [draw.position.join(), draw])), [layout.draws]);
   const paths = useMemo(() => [...levelPaths.map((track) => {
     if (!morph) return track;
-    const fromPoints = track.points.map((point) => {
-      const draw = layout.draws.find((entry) => entry.role === "main" && entry.position.every((value, axis) => value === point[axis]));
-      return draw ? morph.from.get(draw.node.id)?.position ?? point : point;
+    // Points on a sphere move with it; points between spheres (a sampled curve) move with the
+    // spheres on either side, blended by how far along they are, so curves bend smoothly as they go.
+    const moves = track.points.map((point): Position3 | null => {
+      const draw = mainAt.get(point.join());
+      const from = draw ? morph.from.get(draw.node.id)?.position : undefined;
+      return from ? from.map((value, axis) => value - point[axis]) as Position3 : draw ? [0, 0, 0] : null;
+    });
+    const fromPoints = track.points.map((point, index) => {
+      const move = moves[index];
+      if (move) return point.map((value, axis) => value + move[axis]) as Position3;
+      let before = index - 1, after = index + 1;
+      while (before >= 0 && !moves[before]) before--;
+      while (after < moves.length && !moves[after]) after++;
+      const a = before >= 0 ? moves[before]! : null, b = after < moves.length ? moves[after]! : null;
+      const t = a && b ? (index - before) / (after - before) : 0;
+      const blend = a && b ? a.map((value, axis) => value + (b[axis] - value) * t) : a ?? b ?? [0, 0, 0];
+      return point.map((value, axis) => value + blend[axis]) as Position3;
     });
     if (fromPoints.length > 2) {
       fromPoints[0] = fromPoints[1];
       fromPoints[fromPoints.length - 1] = fromPoints[fromPoints.length - 2];
     }
     return { ...track, fromPoints };
-  }), ...preview.paths], [levelPaths, layout.draws, preview.paths, morph]);
+  }), ...preview.paths], [levelPaths, mainAt, preview.paths, morph]);
   const edges = connections.edges;
   const visibleConnections = useMemo(() => scope.kind === "library" || scope.kind === "series"
     ? connections.edges.filter(edge => edge.relationType !== "CAUSES")
@@ -268,6 +286,27 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     setMorph(null);
   }, [scope.kind, scope.sceneId]);
   useEffect(() => { onChapter(scope.chapterId ?? null); }, [scope.chapterId, onChapter]);
+  /** The arrangement changed shape on this level (one line shredding into strands, or a strand
+   * detection that moved scenes): spheres glide from where they were, staggered in story order. */
+  const shapeKey = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const next = arranged?.morphKey;
+    const previous = shapeKey.current;
+    shapeKey.current = next;
+    const change = shapeChange(previous, next);
+    if (!change) return;
+    // A switch the user made is framed the way the view opens; new evidence moves the camera only
+    // while following Pi (activity never reframes the scene on its own).
+    const span = change.reframe || followingActivity ? arranged?.initialFrame?.(layout.draws) : null;
+    if (span?.length) framePositions(graphRef, span, 1.15, !reducedMotion, { direction: arranged?.direction });
+    if (reducedMotion) return;
+    const from = new Map(lastPoses.current.key === scope.key ? [...lastPoses.current.poses].map(([id, pose]): [string, OrbitalPose] => [id, { position: pose.position, radius: pose.radius }]) : []);
+    if (!from.size) return;
+    setShapeCaption(change.caption);
+    setMorph({ startedAt: performance.now(), from, durationMs: SHAPE_MORPH_MS, delays: arranged?.morphDelays?.(draws) });
+  }, [arranged?.morphKey]);
+  const [shapeCaption, setShapeCaption] = useState<string | null>(null);
+  useEffect(() => { if (!morph) setShapeCaption(null); }, [morph]);
   useEffect(() => { onPage?.({ key: scope.key, label: pageLabel, kind: scope.kind, chapterId: scope.chapterId }); }, [scope.key, scope.kind, scope.chapterId, pageLabel, onPage]);
   useEffect(() => () => { if (singleClick.current) clearTimeout(singleClick.current); }, []);
   useEffect(() => {
@@ -609,7 +648,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
           <button aria-pressed={reducedMotion} onClick={onMotion}>{reducedMotion ? "Motion reduced" : "Motion on"}</button>
         </div></details>
       </div>
-      {morph && <div className="orbital-transition-status" role="status">Uncoiling into the local timeline…</div>}
+      {morph && <div className="orbital-transition-status" role="status">{shapeCaption ?? "Uncoiling into the local timeline…"}</div>}
     </div>
   </div>;
 }

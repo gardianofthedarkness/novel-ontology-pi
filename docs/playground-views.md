@@ -82,6 +82,26 @@ usual spheres, motion, inspector and entering:
   - **Hand-off to Places:** the view keeps track of which stretch of the
     spiral sits at its centre. Switching to Places then shows just those
     scenes ("From Story time: N scenes · Show all").
+- **Story time · Strands** (orbital switch `Line | Strands`, remembered per
+  browser): each strand is its own coil, the busiest where the line was and
+  the others stacked above it (all above the floor); S-curves cross between coils where strands split and meet, and a faint
+  rung joins the scenes of one moment. A scene comes after another only with
+  evidence (a shared character, a flashback, stated times), so scenes the
+  story cuts between at different places sit on one rung, unordered.
+  Estimated from who is in each scene (scenes without a recorded cast borrow
+  a nearby scene's); about 0.87 of scene pairs agree with a hand-read gold on
+  two volumes. A universe gives each book its own strands, books in reading
+  order along the axis.
+  - **Shredding**: switching to Strands, or new evidence that moves scenes,
+    glides every sphere from where it was to its coil, staggered in story
+    order, with the curves bending along. A switch frames the new shape (at
+    once with reduced motion); new evidence moves the camera only while
+    following Pi. Back to Line weaves them together the same way.
+  - **Time and place check each other** (time key): each split is at
+    different places, at one place (doubtful) or unplaced; each meeting joins
+    a strand's place, meets at a new place, or is unplaced; chapters that end
+    with strands apart are counted; and one person at two places at one
+    stated moment is a conflict (time, place or cast is wrong).
 - **Places**: the schematic map (not geography) lies flat on the floor, one
   disc per named place, with faint lines for moves between places. Each placed
   scene floats above its place, and higher means later in story time. A thread
