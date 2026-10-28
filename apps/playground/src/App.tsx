@@ -25,6 +25,7 @@ import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProje
 import { AtlasPanel } from "./components/AtlasPanel";
 import { HoloStage, type HoloMode } from "./components/HoloStage";
 import { ReadMode } from "./components/ReadMode";
+import { keyedPlan, placePlan, type StagePlan } from "./data/readMode";
 import { journeyScript, placeScript } from "./data/holoScript";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
@@ -849,6 +850,22 @@ export default function App() {
     return place ? placeScript(viewTimePlace, shownWorld, place.id, loadedBook) : null;
   }, [holo?.target, holoJourney, viewTimePlace, shownWorld, loadedBook]);
   /** Leaving the journey for one place's stage: the busiest place this book can replay. */
+  // The book's prepared animation (novel stage prep), for the place stage's moves; undefined until asked, null when there is none.
+  const [stagePlan, setStagePlan] = useState<StagePlan | null | undefined>(undefined);
+  const holoOpen = !!holo && !holoJourney;
+  useEffect(() => {
+    if (!holoOpen) return;
+    let live = true;
+    fetch(`api/stage${bookQuery(phoneLive ? loadedBook : null)}`, { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((plan: StagePlan | null) => { if (live) setStagePlan(plan?.places ? plan : null); }).catch(() => { if (live) setStagePlan(null); });
+    return () => { live = false; };
+  }, [holoOpen, phoneLive, loadedBook]);
+  const holoPlan = useMemo(() => {
+    const placeId = holoScript && !holoJourney ? holoScript.places[0]?.id : undefined;
+    // Without a prepared plan from this host, the stage asks api/holo-moves (the design preview's snapshot host).
+    if (!placeId || stagePlan === undefined || stagePlan === null) return undefined;
+    const plan = placePlan(stagePlan, placeId, loadedBook);
+    return plan ? keyedPlan(plan, holoScript!) : null;
+  }, [holoScript, holoJourney, stagePlan, loadedBook]);
   const busiestPlace = () => [...(viewTimePlace?.places ?? [])].sort((first, second) => placeScript(viewTimePlace!, shownWorld, second.id, loadedBook).beats.length - placeScript(viewTimePlace!, shownWorld, first.id, loadedBook).beats.length)[0]?.id ?? "journey";
   const closeHolo = () => {
     setHolo(null);
@@ -934,7 +951,7 @@ export default function App() {
         </aside>
         <div className="activity-dock"><ActivityTab count={activity.count} shine={activity.shine} caughtUp={activity.caughtUp} active={followingActivity} onClick={flyToSite} /></div>
       </main>
-      {holo && holoScript && <HoloStage key={`${holo.target}:${holoJourney}`} script={holoScript} mode={holo.mode} initialBeat={holo.beat} autoplay={!holo.paused} reducedMotion={reducedMotion} onClose={closeHolo}
+      {holo && holoScript && <HoloStage key={`${holo.target}:${holoJourney}`} script={holoScript} mode={holo.mode} initialBeat={holo.beat} autoplay={!holo.paused} reducedMotion={reducedMotion} onClose={closeHolo} plan={holoPlan}
         onMode={(mode) => setHolo({ mode, beat: 0, target: mode !== "journey" && holo.target === "journey" ? busiestPlace() : holo.target })}
         onEnterPlace={(placeId) => setHolo({ target: placeId, mode: "diorama", beat: 0 })} />}
       <button className="dock-toggle" aria-expanded={dockOpen} onClick={toggleDock} title={dockOpen ? "Fold the processing dock" : "Show the processing dock"}><i className={piBusy(liveActivity) ? "is-busy" : ""} /><span className="dock-label">{dockOpen ? "Hide processing" : phoneLive ? liveLabel : `Processing · ${processingStatus}`}</span><span aria-hidden="true">{dockOpen ? "▾" : "▴"}</span></button>

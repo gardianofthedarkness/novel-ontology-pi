@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { keyedPlan, pageScene, paginate, reelWindow, type ReadSentence } from "../apps/playground/src/data/readMode.js";
+import { keyedPlan, pageScene, paginate, placePlan, reelWindow, type ReadSentence } from "../apps/playground/src/data/readMode.js";
 import { sentenceKey, type HoloScript } from "../apps/playground/src/data/holoScript.js";
 
 const sentence = (index: number, text: string, paragraph = false): ReadSentence => ({ id: `b0001_s${String(index).padStart(4, "0")}`, text, ...(paragraph ? { paragraph } : {}) });
@@ -37,4 +37,14 @@ test("the prepared plan's moves are keyed by event id; the stage's beats by scen
   const plan = keyedPlan({ place: "tower", kind: "skyscraper", starts: { s1: { a: "floor-3" } }, moves: { e2: [{ actor: "a", to: "roof", how: "climb up", p: 0.9 }] } }, script);
   assert.deepEqual(Object.keys(plan.moves), ["s1:e2"]);
   assert.equal(plan.starts.s1.a, "floor-3");
+});
+
+test("a universe stage finds the loaded book's prepared plan under its book prefix", () => {
+  const plan = { place: "loc_1", kind: "skyscraper" as const, starts: { s1: { a: "floor-3" } }, moves: { e1: [{ actor: "a", to: "roof", how: "climb up" as const, p: 0.9 }] } };
+  const stage = { inputs: "", preparedAt: "", architecture: {}, places: { loc_1: plan }, counts: {} };
+  assert.equal(placePlan(stage, "3:loc_1", 3), plan);
+  assert.equal(placePlan(stage, "4:loc_1", 3), null, "another book's place is not this plan");
+  const universe: HoloScript = { ...script, beats: [{ ...script.beats[0], id: "scene:3:s1", sceneId: "3:s1" }, { ...script.beats[1], id: "3:s1:e1", sceneId: "3:s1" }] };
+  const keyed = keyedPlan(plan, universe);
+  assert.deepEqual([Object.keys(keyed.moves), keyed.starts["3:s1"]], [["3:s1:e1"], { a: "floor-3" }]);
 });

@@ -78,14 +78,26 @@ export function reelWindow(script: HoloScript, page: Pick<ReadPage, "from" | "to
   return card >= 0 ? { from: card, to: card } : null;
 }
 
-/** The prepared plan keys moves by stored event id; the stage's beats are `<scene>:<record>`. */
+/** A book's own id under a universe's book prefix ("3:scene_000008" → "scene_000008"). */
+export const localId = (id: string) => id.slice(id.lastIndexOf(":") + 1);
+
+/** The prepared plan keys moves by stored event id and starts by the book's scene id; the stage's beats are `<scene>:<record>`, scenes maybe book-prefixed. */
 export function keyedPlan(plan: MovePlan, script: HoloScript): MovePlan {
-  const moves: MovePlan["moves"] = {};
+  const moves: MovePlan["moves"] = {}, starts: MovePlan["starts"] = {}, notes: NonNullable<MovePlan["notes"]> = {};
   for (const beat of script.beats) {
-    const record = beat.id.slice(beat.sceneId.length + 1);
+    const record = beat.id.slice(beat.sceneId.length + 1), scene = localId(beat.sceneId);
     if (beat.kind !== "scene" && plan.moves[record]) moves[beat.id] = plan.moves[record];
+    if (plan.starts[scene]) starts[beat.sceneId] = plan.starts[scene];
+    if (plan.notes?.[scene]) notes[beat.sceneId] = plan.notes[scene];
   }
-  return { ...plan, moves };
+  return { ...plan, moves, starts, notes };
+}
+
+/** The prepared plan of a stage's place: by its id, or by its book id when the stage shows the loaded book's place under a universe prefix. */
+export function placePlan(stage: StagePlan, placeId: string, volume: number | null): MovePlan | null {
+  if (stage.places[placeId]) return stage.places[placeId];
+  const [book] = placeId.split(":");
+  return volume !== null && book === String(volume) ? stage.places[localId(placeId)] ?? null : null;
 }
 
 /** Read mode's prepared animation as served (novel stage prep). */

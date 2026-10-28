@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HoloStage, replayMs, type HoloMode } from "./HoloStage";
 import { placeScript, sentenceKey, type HoloScript } from "../data/holoScript";
-import { keyedPlan, pageScene, paginate, reelWindow, sceneSpans, type ReadPage, type ReadSentence, type StagePlan } from "../data/readMode";
+import { keyedPlan, pageScene, paginate, placePlan, reelWindow, sceneSpans, type ReadPage, type ReadSentence, type StagePlan } from "../data/readMode";
 import { ARCHITECTURE_LABEL } from "../data/placeArchitecture";
 import type { TimePlaceProjection } from "../data/timePlace";
 import type { WorldEdge, WorldNode } from "../types";
@@ -125,7 +125,7 @@ export function ReadMode({ timePlace, world, volume, title, reducedMotion, bookQ
   }, [settled, pages, spans, scriptFor, stage, reducedMotion]);
 
   const script = show?.placeId ? scriptFor(show.placeId) : null;
-  const plan = useMemo(() => show?.placeId && script && stage && stage !== "loading" && stage.places[show.placeId] ? keyedPlan(stage.places[show.placeId], script) : null, [show?.placeId, script, stage]);
+  const plan = useMemo(() => { const prepared = show?.placeId && stage && stage !== "loading" ? placePlan(stage, show.placeId, volume) : null; return prepared && script ? keyedPlan(prepared, script) : null; }, [show?.placeId, script, stage, volume]);
   const [mode, setMode] = useState<HoloMode>("diorama");
   const [beat, setBeat] = useState<number | null>(null);
   const reelDone = useCallback(() => { setShow((current) => { if (current) played.current.add(current.page); return current ? { ...current, reel: null } : current; }); }, []);
