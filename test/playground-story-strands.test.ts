@@ -111,3 +111,16 @@ test("the place check names only what happened", () => {
   assert.equal(strandSummary([]), "no splits · no meetings");
   assert.equal(strandSummary([{ kind: "split", sceneId: "a", status: "same place" }, { kind: "apart", sceneId: "b", status: "chapter ends apart", count: 2 }]), "splits: 1 at one place (doubtful) · no meetings · 1 chapter ends with strands apart");
 });
+
+test("the calendar, not a file, focuses Story time: a chosen day frames every scene that day", () => {
+  const day = (id: string, date: number) => ({ id, book: null, label: id, year: 1, month: 6, day: date, time: null, span: { start: 0, end: 0 }, placed: "stated" as const, flashback: false, scenes: 1 });
+  const dated: TimePlaceProjection = { ...data,
+    scenes: data.scenes.map((entry) => ({ ...entry, times: [{ id: entry.index < 4 ? "t_first" : "t_second", via: "anchor" as const }] })),
+    calendar: { books: [], conflicts: [], questions: 0, entries: [day("t_first", 1), day("t_second", 2)] } };
+  const draws = (arrangement: ReturnType<typeof spiralArrangement>) => [...arrangement.anchors!].map(([id, point]) => ({ node: { id }, position: point, role: "main" }) as never);
+  const second = spiralArrangement(dated, undefined, null, "strands", "1-6-2");
+  assert.equal(second.bookFrame!(draws(second))!.length, 4, "the four scenes on 6月2日");
+  assert.equal(second.bookKey, "story:day:1-6-2");
+  assert.equal(spiralArrangement(dated, undefined, null, "strands", "1-6-9").bookFrame!(draws(second)), null, "a day with no scenes frames nothing");
+  assert.equal(spiralArrangement(dated, undefined, null, "strands").bookFrame, undefined, "a single book with no day chosen keeps its own arrival frame");
+});

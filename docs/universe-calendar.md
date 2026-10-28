@@ -74,10 +74,14 @@ spans overlap (the calendar cannot order them).
   stays. Periods still awaiting review are placed too, so the calendar fills in
   live as story time is extracted. A book with no dates falls back to its story
   order.
-- **3D story line and strands**: giant pins stand behind the story, one where
-  each calendar day's first scene sits in each book's stretch, with the date at
-  the pole's foot (a calendar ruler along the floor). Rough marks: strands are
-  ordered by who is in each scene, so a pin says "this day starts about here".
+- **3D strands**: giant dates stand high up and far behind the story like a
+  backdrop, one where each calendar day's first scene sits in each book's
+  stretch, a faint pole down to the floor; days that start closer than one
+  date's width share a label ("12月24–25日"). Rough marks: strands are ordered
+  by who is in each scene, so a date says "this day starts about here".
+- **Focus is a calendar day, not a file**: Story time's picker lists the
+  calendar's days (with the books on each); choosing one flies the 3D view to
+  every book's scenes that day and glides the flat list to it.
 - **Cross-book causality**: a pair the calendar orders is nominated only cause
   first (`calendar-order`); each candidate shows both calendar positions for
   the reviewer's temporal reason. Pairs it cannot order stay open both ways.
