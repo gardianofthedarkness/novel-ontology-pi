@@ -142,7 +142,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
   const albumInfo = useMemo(() => albumEntries(level.sourceNodes, albumPictures), [albumPictures, level.sourceNodes]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
   /** A tapped story strand: its scenes for that day (and the records inside them) stay bright; everything else recedes. */
-  const [strandFocus, setStrandFocus] = useState<{ ids: ReadonlySet<string>; label: string; color: string; strandId: string } | null>(null);
+  const [strandFocus, setStrandFocus] = useState<{ ids: ReadonlySet<string>; scenes: string[]; label: string; color: string; strandId: string } | null>(null);
   useEffect(() => setStrandFocus(null), [scope.key]);
   const strandTap = useCallback((pathId: string, index: number) => {
     const found = arranged?.strandPeriod?.(pathId, index);
@@ -150,17 +150,27 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     const ids = new Set(found.ids);
     for (const draw of baseDraws) if (draw.previewParentId && ids.has(draw.previewParentId)) ids.add(draw.node.id);
     setSelectedId(null);
-    setStrandFocus({ ids, label: found.label, color: found.color, strandId: found.strandId });
+    setStrandFocus({ ids, scenes: found.ids, label: found.label, color: found.color, strandId: found.strandId });
   }, [arranged, baseDraws]);
+  /** The lit strand's cast: its scenes' events and dialogues, its characters moved beside it, dim arcs between them. */
+  const cast = useMemo(() => strandFocus && arranged?.strandCast ? arranged.strandCast(strandFocus.scenes, baseDraws) : null, [strandFocus, arranged, baseDraws]);
+  // A newly lit strand: fly to its lit scenes and the characters gathered over them.
+  useEffect(() => {
+    if (!cast?.ids.length) return;
+    const ids = new Set(cast.ids), at = new Map(baseDraws.map((draw) => [draw.node.id, draw.position]));
+    const span = [...ids].flatMap((id) => { const point = cast.moves.get(id) ?? cast.draws.find((draw) => draw.node.id === id)?.position ?? at.get(id); return point ? [point] : []; });
+    if (span.length) framePositions(graphRef, span, 1.15, !reducedMotion, { direction: arranged?.direction });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cast]);
   /** A selection with links keeps itself and what it links to bright; everything else recedes. */
   const focusIds = useMemo(() => {
-    if (strandFocus) return strandFocus.ids;
+    if (strandFocus) return new Set([...strandFocus.ids, ...(cast?.ids ?? [])]);
     if (!selectedId || followingActivity || !connections.edges.length) return null;
     const linked = new Set([selectedId, ...connections.edges.flatMap((edge) => [edge.from, edge.to])]);
     // Spheres that hold a linked record (a scene inside an event group) stay bright too.
     for (const draw of baseDraws) if (draw.entry?.members.some((id) => linked.has(id))) linked.add(draw.node.id);
     return linked;
-  }, [strandFocus, selectedId, followingActivity, connections.edges, baseDraws]);
+  }, [strandFocus, cast, selectedId, followingActivity, connections.edges, baseDraws]);
   const causalLinks = useMemo(() => scope.kind === "library" || scope.kind === "series" || !showCausal ? [] : worldCausalLinks(world), [world, scope.kind, showCausal]);
   const causal = useMemo(() => {
     if (scope.kind === "library" || scope.kind === "series") return libraryCausalProjection(level, baseDraws, world.library);
@@ -189,13 +199,13 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
    * and the morph glides both in from their last drawn poses. */
   const [joinView, setJoinView] = useState<{ moves: Map<string, Position3>; preimages: OrbitalDraw[] } | null>(null);
   const draws = useMemo(() => {
-    const all = [...baseDraws, ...connections.draws, ...pictureDraws, ...portraitDraws, ...(joinView?.preimages ?? [])];
-    if (!joinView?.moves.size) return all;
+    const all = [...baseDraws, ...connections.draws, ...pictureDraws, ...portraitDraws, ...(joinView?.preimages ?? []), ...(cast?.draws ?? [])];
+    if (!joinView?.moves.size && !cast?.moves.size) return all;
     return all.map((draw) => {
-      const target = joinView.moves.get(draw.node.id);
+      const target = joinView?.moves.get(draw.node.id) ?? cast?.moves.get(draw.node.id);
       return target ? { ...draw, position: target } : draw;
     });
-  }, [baseDraws, connections.draws, pictureDraws, portraitDraws, joinView]);
+  }, [baseDraws, connections.draws, pictureDraws, portraitDraws, joinView, cast]);
   const levelPaths = useMemo(() => arranged?.paths ? arranged.paths(layout.draws, selectedId) : layout.paths, [arranged, layout.draws, layout.paths, selectedId]);
   /** Main spheres by position, to tell which path points sit on a sphere (strand curves sample many points between them). */
   const mainAt = useMemo(() => new Map(layout.draws.filter((draw) => draw.role === "main").map((draw) => [draw.position.join(), draw])), [layout.draws]);
@@ -653,7 +663,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       if (!event.metaKey && !event.ctrlKey && ["+", "=", "-", "_"].includes(event.key)) { event.preventDefault(); zoomBy(event.key === "+" || event.key === "=" ? -80 : 80); }
       if (event.key === "Enter" && selected) { event.preventDefault(); if (event.shiftKey) enter(selected); else inspect(selected); }
     }}>
-      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={shownPaths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} viewToken={viewToken} focusIds={focusIds} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} pins={arranged?.pins} guides={arranged?.guides} renderDistance={arranged?.renderDistance} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
+      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={shownPaths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={[...(showRelations ? causal.arrows : []), ...(cast?.arcs ?? [])]} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} viewToken={viewToken} focusIds={focusIds} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} pins={arranged?.pins} guides={arranged?.guides} renderDistance={arranged?.renderDistance} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
       {intro && <div className="orbital-intro-skip" aria-hidden="true">Tap anywhere to skip</div>}
       {strandFocus && <div className="strand-focus" role="status" style={{ borderColor: strandFocus.color }}><i style={{ background: strandFocus.color }} aria-hidden="true" />{strandFocus.label}<button type="button" onClick={() => setStrandFocus(null)} aria-label="Show every strand again">×</button></div>}
       <div className="labels-layer faculty-chips">{working.map((anchor) => <button key={anchor.id} type="button" className="faculty-chip" data-faculty-anchor={anchor.id} onClick={openFacultyStrip} aria-label={`Working here: ${anchor.faculties.join(", ")}. Open faculty activity`}>{facultyChipText(anchor)}</button>)}</div>

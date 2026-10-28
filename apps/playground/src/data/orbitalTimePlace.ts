@@ -1,7 +1,7 @@
 import type { CausalLink, CausalSummary, WorldEdge, WorldNode } from "../types.js";
 import type { CausalArrow } from "./causalProjection.js";
 import type { Position3 } from "./spatialLayout.js";
-import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
+import { helixPoint, nebulaRadius, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
 import { storyStrands, type StrandCheck, type StrandEdge } from "./storyStrands.js";
 import { calendarDay, calendarDayKey, dateLine, sceneDays, type SpiralView, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
 
@@ -54,6 +54,8 @@ export interface OrbitalArrangement {
   /** A tap on a strand's axis (path id, sample index): the scenes it lights (that strand on the tapped calendar day, or all
    * of it when that stretch has no date), with a line saying what is lit, in the strand's colour. */
   strandPeriod?: (pathId: string, index: number) => { ids: string[]; strandId: string; label: string; color: string } | null;
+  /** A lit strand's cast (strandCast) for its scene ids, nearest the tap first. */
+  strandCast?: (scenes: string[], draws: OrbitalDraw[]) => StrandCast;
   /** Main sphere size factor and camera direction for this arrangement. */
   radiusScale?: number;
   direction?: Position3;
@@ -386,6 +388,21 @@ const spiralPoint = (rank: number, total: number): Position3 => {
  * Links inside one scene stay small, inside its bubble; links between scenes
  * arc out past the spiral.
  */
+/** The lowest lane whose spans this one stays a gap apart from (interval colouring); taken lanes grow as needed. */
+function takeLane(taken: { low: number; high: number }[][], low: number, high: number, gap: number): number {
+  let lane = taken.findIndex((spans) => spans.every((other) => high + gap < other.low || low - gap > other.high));
+  if (lane < 0) { lane = taken.length; taken.push([]); }
+  taken[lane].push({ low, high });
+  return lane;
+}
+/** The direction an arc between two points bends: outward, away from the time axis (perpendicular when they face each other across it). */
+function outward(from: Position3, to: Position3): Position3 {
+  const radial = (point: Position3) => { const length = Math.hypot(point[1], point[2]) || 1; return [0, point[1] / length, point[2] / length]; };
+  const sum = radial(from).map((value, axis) => value + radial(to)[axis]);
+  const length = Math.hypot(...sum);
+  return (length > 0.2 ? sum.map((value) => value / length) : [0, -radial(from)[2], radial(from)[1]]) as Position3;
+}
+
 export function routeCausalArcs(arrows: CausalArrow[], draws: OrbitalDraw[]): CausalArrow[] {
   const at = new Map(draws.filter((draw) => draw.role === "main" || draw.role === "preview").map((draw) => [draw.node.id, draw]));
   const key = (draw: OrbitalDraw) => draw.order ?? draw.node.chrono;
@@ -397,23 +414,83 @@ export function routeCausalArcs(arrows: CausalArrow[], draws: OrbitalDraw[]): Ca
   }).sort((first, second) => (first.high - first.low) - (second.high - second.low) || first.low - second.low);
   const lanes = new Map<string, { low: number; high: number }[][]>();
   const routed = new Map<string, CausalArrow>();
-  const radial = (point: Position3) => { const length = Math.hypot(point[1], point[2]) || 1; return [0, point[1] / length, point[2] / length]; };
   for (const span of spans) {
     const taken = lanes.get(span.group) ?? [];
     lanes.set(span.group, taken);
-    const gap = span.local ? 0.002 : 0.5;
-    let lane = taken.findIndex((spans) => spans.every((other) => span.high + gap < other.low || span.low - gap > other.high));
-    if (lane < 0) { lane = taken.length; taken.push([]); }
-    taken[lane].push({ low: span.low, high: span.high });
-    const sum = radial(span.from.position).map((value, axis) => value + radial(span.to.position)[axis]);
-    const length = Math.hypot(...sum);
-    // Endpoints on opposite sides of the spiral: bend perpendicular to them.
-    const out = length > 0.2 ? sum.map((value) => value / length) : [0, -radial(span.from.position)[2], radial(span.from.position)[1]];
+    const lane = takeLane(taken, span.low, span.high, span.local ? 0.002 : 0.5);
+    const out = outward(span.from.position, span.to.position);
     const chord = Math.hypot(...span.to.position.map((value, axis) => value - span.from.position[axis]));
     const reach = span.local ? 16 + 0.5 * chord + 7 * lane : SPIRAL.radius * 3 * 0.55 + 110 * lane + 0.08 * Math.abs(span.to.position[0] - span.from.position[0]);
     routed.set(span.arrow.id, { ...span.arrow, bend: out.map((value) => value * reach) as Position3 });
   }
   return arrows.map((arrow) => routed.get(arrow.id) ?? arrow);
+}
+
+/** A lit strand's cast: records to add, characters to move (or add) next to it, and their participation arcs. */
+export interface StrandCast { draws: OrbitalDraw[]; moves: Map<string, Position3>; arcs: CausalArrow[]; ids: string[] }
+/** At most this many records and characters (the scenes nearest the tap first); the characters' rows above and behind the lit
+ * stretch (world units, the lift a share of the stretch's length), so a camera looking down sees them clear of the strand. */
+const CAST = { records: 120, characters: 24, lift: [1500, 0.3, 6000], spacing: 340, row: 260, forward: -500 };
+/**
+ * A lit strand's cast, drawn next to it: the events and dialogues inside its
+ * lit scenes (a small ring inside each scene), and the characters taking part
+ * in them, gathered in two staggered rows just above the lit stretch, each
+ * near the scenes it is in (a universe-wide view would otherwise leave them
+ * far away). Each character joins each record it takes part in by a dim arc
+ * routed like the causal arcs: bent outward, a character's arcs in lanes so
+ * overlapping ones do not run together. `scenes` are spiral node ids,
+ * nearest the tap first.
+ */
+export function strandCast(world: Pick<RegroupedWorld, "interiors">, scenes: string[], draws: OrbitalDraw[]): StrandCast {
+  const drawn = new Map(draws.map((draw) => [draw.node.id, draw]));
+  const added: OrbitalDraw[] = [], at = new Map<string, OrbitalDraw>(), cast = new Map<string, { node: WorldNode; records: Set<string> }>();
+  for (const sceneId of scenes) {
+    const scene = drawn.get(sceneId), interior = world.interiors[sceneId];
+    if (!scene || !interior) continue;
+    const nodes = new Map(interior.nodes.map((node) => [node.id, node]));
+    const takers = new Map<string, Set<string>>();
+    const join = (record: string, character: string) => { if (nodes.get(character)?.kind === "character") takers.set(record, (takers.get(record) ?? new Set()).add(character)); };
+    for (const edge of interior.edges) if (edge.relationType === "PARTICIPATES_IN") join(edge.to, edge.from);
+    for (const node of interior.nodes) if (node.kind === "dialogue") for (const id of [...(node.dialogue?.participantIds ?? []), ...(node.dialogue?.speakerId ? [node.dialogue.speakerId] : [])]) join(node.id, id);
+    const inside = interior.nodes.filter((node) => (node.kind === "event" || node.kind === "dialogue") && takers.has(node.id)).sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id));
+    if (!inside.length) continue;
+    if (at.size && at.size + inside.length > CAST.records) break;
+    inside.forEach((node, index) => {
+      const local = helixPoint(inside.length > 1 ? index / (inside.length - 1) : 0.5, 0, 1, scene.radius * 2.4);
+      const record = drawn.get(node.id) ?? { node, position: scene.position.map((value, axis) => value + local[axis]) as Position3, radius: node.kind === "dialogue" ? 4 : 5, role: "connection" as const, previewParentId: sceneId, order: (scene.order ?? scene.node.chrono) + (index + 1) / (inside.length + 1) };
+      if (!drawn.has(node.id)) added.push(record);
+      at.set(node.id, record);
+      for (const character of takers.get(node.id)!) { const entry = cast.get(character) ?? { node: nodes.get(character)!, records: new Set<string>() }; entry.records.add(node.id); cast.set(character, entry); }
+    });
+  }
+  if (!at.size) return { draws: [], moves: new Map(), arcs: [], ids: [] };
+  // The characters in most of these records, each placed over the middle of its records, spread so none overlap.
+  const chosen = [...cast.entries()].sort((first, second) => second[1].records.size - first[1].records.size || first[0].localeCompare(second[0])).slice(0, CAST.characters);
+  const lit = [...at.values()].map((record) => record.position);
+  const stretch = Math.max(...lit.map((point) => point[0])) - Math.min(...lit.map((point) => point[0]));
+  const top = Math.max(...lit.map((point) => point[1])) + Math.min(CAST.lift[2], Math.max(CAST.lift[0], CAST.lift[1] * stretch)), depth = lit.reduce((sum, point) => sum + point[2], 0) / lit.length + CAST.forward;
+  const wanted = chosen.map(([id, entry]) => ({ id, entry, x: [...entry.records].reduce((sum, record) => sum + at.get(record)!.position[0], 0) / entry.records.size })).sort((first, second) => first.x - second.x || first.id.localeCompare(second.id));
+  const xs: number[] = [];
+  wanted.forEach((entry, index) => xs.push(index < 2 ? entry.x : Math.max(entry.x, xs[index - 2] + CAST.spacing)));
+  const shift = wanted.reduce((sum, entry, index) => sum + entry.x - xs[index], 0) / Math.max(1, wanted.length);
+  const moves = new Map<string, Position3>();
+  wanted.forEach((entry, index) => {
+    const position: Position3 = [xs[index] + shift, top + (index % 2) * CAST.row, depth];
+    if (drawn.has(entry.id)) moves.set(entry.id, position);
+    else added.push({ node: entry.entry.node, position, radius: nebulaRadius(entry.entry.node, 0.5), prominence: 0.5, role: "nebula" });
+  });
+  // Arcs: a character's arcs nest in lanes by how far apart their ends are along time (shortest lowest), all bent outward.
+  const arcs: CausalArrow[] = [];
+  wanted.forEach((entry, index) => {
+    const from: Position3 = [xs[index] + shift, top + (index % 2) * CAST.row, depth], taken: { low: number; high: number }[][] = [];
+    const ends = [...entry.entry.records].map((record) => ({ record, to: at.get(record)!.position })).sort((first, second) => Math.abs(first.to[0] - from[0]) - Math.abs(second.to[0] - from[0]) || first.record.localeCompare(second.record));
+    for (const end of ends) {
+      const lane = takeLane(taken, Math.min(from[0], end.to[0]), Math.max(from[0], end.to[0]), CAST.spacing / 4);
+      const reach = 120 + 70 * lane + 0.06 * Math.abs(end.to[0] - from[0]);
+      arcs.push({ id: `cast:${entry.id}:${end.record}`, from: entry.id, to: end.record, links: [], projected: false, state: "canon", participation: true, bend: outward(from, end.to).map((value) => value * reach) as Position3 });
+    }
+  });
+  return { draws: added, moves, arcs, ids: [...at.keys(), ...wanted.map((entry) => entry.id)] };
 }
 
 /** A scene's records that some stored causal link starts or ends at, in order. */
@@ -503,10 +580,10 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
       if (!run?.knots.length) return null;
       const x = run.axis[Math.max(0, Math.min(index, run.axis.length - 1))][0];
       const nearest = run.knots.reduce((best, knot) => Math.abs(knot.x - x) < Math.abs(best.x - x) ? knot : best);
-      const day = dayOf.get(nearest.id), knots = day ? run.knots.filter((knot) => dayOf.get(knot.id) === day) : run.knots;
+      const day = dayOf.get(nearest.id), knots = (day ? run.knots.filter((knot) => dayOf.get(knot.id) === day) : run.knots).slice().sort((first, second) => Math.abs(first.x - x) - Math.abs(second.x - x));
       const [, month, date] = day ? day.split("-") : [];
       return { ids: knots.map((knot) => spiralNodeId(knot.id)), strandId: run.id, color: run.color, label: `${day ? `${month}月${date}日 · ` : ""}${knots.length} scene${knots.length === 1 ? "" : "s"} on this strand` };
-    } } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
+    }, ...(world ? { strandCast: (scenes: string[], draws: OrbitalDraw[]) => strandCast(world, scenes, draws) } : {}) } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
     morphKey: `${stored ? "spiral" : strands ? "strands" : "line"}:${[...anchors].map(([id, point]) => `${id}@${point.map(Math.round).join("/")}`).join(",")}`,
     // The calendar behind the story: a giant pin where each day starts.
     pins,
