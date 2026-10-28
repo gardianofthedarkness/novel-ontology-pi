@@ -192,3 +192,6 @@ these scores as tuned, not blind.
 
 These are two volumes of one series with few explicit dates; other genres,
 languages and time styles are untested.
+
+One story line cannot show strands that run in parallel; see
+[story strands](story-strands.md) for the partial-order benchmark and plan.

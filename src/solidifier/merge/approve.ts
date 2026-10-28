@@ -3,6 +3,7 @@ import { BundleStore } from "../../ground/connectors/bundle.js";
 import { buildGraphFromBundle } from "../../ground/connectors/ladybug.js";
 import { jevFromEnv } from "../../ground/connectors/jev.js";
 import { EventLog } from "../../ground/events/log.js";
+import { observeDecisions } from "../../ground/events/observe.js";
 import { markCausalitySweepPending } from "../causality/faculty.js";
 import { runIdentityAfterApply } from "../identity/afterApply.js";
 import { castScope } from "../identity/cast.js";
@@ -39,7 +40,7 @@ export async function approveBook(directory: string, id: string, env: NodeJS.Pro
   const application = await applyChangeSet(new BundleStore(ontology), packet, emit, context);
   // Universal EM: the book joins the shared character list; its new characters are checked against the book and the universe.
   let identity: Awaited<ReturnType<typeof runIdentityAfterApply>> | { error: string } | null = null;
-  try { identity = await runIdentityAfterApply({ novelDir: directory, decisions: jevFromEnv(env), changeset: packet, events: emit, env }); } catch (error) { identity = { error: error instanceof Error ? error.message : String(error) }; }
+  try { identity = await runIdentityAfterApply({ novelDir: directory, decisions: observeDecisions(jevFromEnv(env), emit, { blockId: packet.blockId }), changeset: packet, events: emit, env }); } catch (error) { identity = { error: error instanceof Error ? error.message : String(error) }; }
   try { await markCausalitySweepPending(directory); } catch {}
   // Story time changed: the universe calendar (the one clock) is rebuilt. No model calls.
   let calendar: { entries: number; questions: number } | { error: string } | null = null;

@@ -129,7 +129,13 @@ test("failed model/reviewer and a partially written bundle never produce a merge
   }, async () => "approved", { novelDir: root });
   await assert.rejects(processor.processNovel([{ blockId: "b1", text: "A sentence." }]));
   const log = new EventLog(root);
-  assert.deepEqual((await readEventBatch(log.path, 0)).map((r) => r.event.type), ["block.started", "sectioned"]);
+  // The failing model's calls are reported as failed faculty calls: never a merge, never the error text.
+  const failed = await readEventBatch(log.path, 0);
+  assert.deepEqual(failed.slice(0, 2).map((r) => r.event.type), ["block.started", "sectioned"]);
+  const calls = failed.slice(2).map((r) => r.event.type === "faculty.activity" ? r.event.status : r.event.type);
+  assert.ok(calls.length > 0 && calls.every((status) => status === "started" || status === "failed"), calls.join(", "));
+  assert.equal(calls.at(-1), "failed");
+  assert.ok(!JSON.stringify(failed).includes(secret));
   const reviewFailure = new BlockProcessor(new BundleStore(join(root, "ontology")), new MockDecisionModel(), async () => { throw new Error(secret); }, { novelDir: root });
   await assert.rejects(reviewFailure.processNovel([{ blockId: "b2", text: "A sentence." }]));
   assert.equal((await loadChangeSet(root, "cs_b2")).status, "pending_review");

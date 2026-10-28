@@ -10,6 +10,7 @@ import { loadCorrections } from "../../../solidifier/maintenance/corrections.js"
 import { loadConfig } from "../../config.js";
 import { resolveJevKey } from "../../../ground/connectors/secrets.js";
 import { EventLog } from "../../../ground/events/log.js";
+import { observeDecisions } from "../../../ground/events/observe.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import type { Entity } from "../../../ground/ontology/types.js";
 import { loadExtractionCounts } from "../../../digger/processing/counts.js";
