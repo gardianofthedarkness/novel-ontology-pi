@@ -18,7 +18,7 @@ import { calendarBooks, loadCalendar } from "./calendar.js";
  * nothing is optimised at render time. Scene and run ids are `<sourceId>::<id>`.
  */
 export interface SpiralFile {
-  version: 2;
+  version: 3;
   universeId: string;
   builtAt: string;
   /** Hash of the runs and the calendar it was solved from: a different hash means it is out of date. */
@@ -42,7 +42,7 @@ export interface SpiralFile {
 export const spiralPath = (scope: Pick<CastScope, "root" | "universeId">) => join(scope.root, "calendar", `${scope.universeId}.spiral.json`);
 export async function loadSpiral(scope: Pick<CastScope, "root" | "universeId">): Promise<SpiralFile | null> {
   // An older layout (another version) counts as missing: the next build replaces it.
-  try { const file = JSON.parse(await readFile(spiralPath(scope), "utf8")) as SpiralFile; return file?.version === 2 ? file : null; }
+  try { const file = JSON.parse(await readFile(spiralPath(scope), "utf8")) as SpiralFile; return file?.version === 3 ? file : null; }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
 }
 
@@ -146,7 +146,7 @@ export async function buildSpiral(scope: CastScope, options: { iterations?: numb
       metrics: { knots: list.reduce((sum, run) => sum + run.knots.length, 0), pairs: solution.pairs, crowding: [solution.initial.visibility, solution.visibility], overlap: [solution.initial.overlap, solution.overlap] },
     });
   }
-  const file: SpiralFile = { version: 2, universeId: scope.universeId, builtAt: new Date().toISOString(), inputs: createHash("sha256").update(JSON.stringify(hashed)).digest("hex").slice(0, 16), scale: { dx: SPIRAL.dx, knot: SPIRAL.knot }, continuities };
+  const file: SpiralFile = { version: 3, universeId: scope.universeId, builtAt: new Date().toISOString(), inputs: createHash("sha256").update(JSON.stringify(hashed)).digest("hex").slice(0, 16), scale: { dx: SPIRAL.dx, knot: SPIRAL.knot }, continuities };
   const path = spiralPath(scope), temporary = `${path}.${randomUUID()}.tmp`;
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await writeFile(temporary, JSON.stringify(file), { mode: 0o600 });

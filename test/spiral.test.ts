@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dphi, ease, phi, solveSpiral, spiralTracks, stretchTime, SPIRAL, type SpiralRun } from "../src/digger/timeplace/spiral.js";
+import { dphi, ease, phi, solveSpiral, spiralTracks, stretchTime, winding, SPIRAL, type SpiralRun } from "../src/digger/timeplace/spiral.js";
 
 const knots = (id: string, from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => ({ id: `${id}${from + k}`, x: (from + k) * SPIRAL.dx }));
 /** The handout's shape: a parent forks into A, B, C; A and B later merge into A+B; C runs on. */
@@ -48,16 +48,22 @@ test("strands spread over the floor before they stack up: three equal strands si
   const heights = c.map(([y]) => y), depths = c.map(([, z]) => z);
   assert.ok(Math.max(...heights) - Math.min(...heights) < 0.25 * solution.frame.height, `heights ${heights.map((value) => value.toFixed(0)).join(", ")}`);
   assert.ok(Math.max(...heights) < 0.5 * solution.frame.height, "low in the box");
-  for (let k = 1; k < 3; k++) { const [a, b] = [c[k - 1], c[k]], need = 2 * solution.coils.get("x")! + 2 * SPIRAL.knot + SPIRAL.gap + SPIRAL.clearance; assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1]) >= 0.9 * need, `neighbours ${depths.map((value) => value.toFixed(0)).join(", ")} apart`); }
+  for (let k = 1; k < 3; k++) { const [a, b] = [c[k - 1], c[k]], need = 2 * SPIRAL.coil + 2 * SPIRAL.knot + SPIRAL.gap + SPIRAL.clearance; assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1]) >= 0.9 * need, `neighbours ${depths.map((value) => value.toFixed(0)).join(", ")} apart`); }
 });
 
-test("the denser a strand's scenes, the thicker its coil", () => {
-  const every = knots("d", 0, 30), sparse = knots("s", 0, 30).filter((_, k) => k % 5 === 0);
-  const solution = solveSpiral([{ id: "dense", knots: every }, { id: "sparse", knots: sparse }], { iterations: 50, starts: 1 });
-  assert.equal(solution.coils.get("dense"), SPIRAL.coil[1], "the densest strand is the thickest");
-  assert.ok(solution.coils.get("sparse")! < SPIRAL.coil[0] + 0.3 * (SPIRAL.coil[1] - SPIRAL.coil[0]), `sparse coil ${solution.coils.get("sparse")!.toFixed(1)}`);
-  const tubes = new Map(spiralTracks([{ id: "dense", knots: every }, { id: "sparse", knots: sparse }], solution).map((track) => [track.id, track.tube]));
-  assert.ok(tubes.get("dense")! > tubes.get("sparse")!, "and its tube guide is wider");
+test("a coil winds with its own scenes: tight where they are dense, almost straight where there are none", () => {
+  const turn = (2 * Math.PI) / SPIRAL.turnScenes, dense = knots("d", 0, 30).map((knot) => knot.x), sparse = [0, 30 * SPIRAL.dx];
+  // Dense: one turn step per scene, steady between them.
+  assert.ok(Math.abs(winding(dense, 20 * SPIRAL.dx) - winding(dense, 10 * SPIRAL.dx) - 10 * turn) < 1e-9);
+  // Sparse: a short twist at each scene, nothing in between.
+  assert.equal(winding(sparse, 5 * SPIRAL.dx), turn);
+  assert.equal(winding(sparse, 25 * SPIRAL.dx), turn);
+  assert.equal(winding(sparse, 40 * SPIRAL.dx), 2 * turn);
+  const solution = solveSpiral([{ id: "dense", knots: knots("d", 0, 30) }, { id: "sparse", knots: [{ id: "s0", x: 0 }, { id: "s30", x: 30 * SPIRAL.dx }] }], { iterations: 50, starts: 1 });
+  assert.equal(solution.coils.get("dense"), solution.coils.get("sparse"), "one radius for every strand");
+  const track = spiralTracks([{ id: "sparse", knots: [{ id: "s0", x: 0 }, { id: "s30", x: 30 * SPIRAL.dx }] }], solution).find((entry) => entry.id === "sparse")!;
+  const middle = track.track.filter(([x]) => x >= 5 * SPIRAL.dx && x <= 25 * SPIRAL.dx);
+  assert.ok(Math.max(...middle.map(([, y]) => y)) - Math.min(...middle.map(([, y]) => y)) < 0.2, "between two far-apart scenes the coil line runs straight");
 });
 
 test("time widens where more strands are alive", () => {
