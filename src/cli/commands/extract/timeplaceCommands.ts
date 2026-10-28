@@ -16,6 +16,8 @@ import { timePlaceAttempted, timePlaceForNewScenes, timePlaceReviewSource } from
 import type { ChangeSet } from "../../../solidifier/merge/changeset.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { askStrandQuestions, planStrandQuestions, scenePassage, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "../../../digger/timeplace/strandQuestions.js";
+import { castCandidates } from "../../../digger/processing/castCandidates.js";
+import type { StrandAnswers } from "../../../../apps/playground/src/data/storyStrands.js";
 
 /**
  * `novel timeplace run|tree|show` — the time-place faculty over a
@@ -230,20 +232,27 @@ export async function timeplaceStrands(novelDir: string, options: TimeplaceStran
   if (!data.available) throw new Error("No story time yet: run `novel timeplace run` first (strands build on its periods).");
   const limits = { maxQuestions: options.maxQuestions ?? STRAND_QUESTION_DEFAULTS.maxQuestions, minImpact: options.minImpact ?? STRAND_QUESTION_DEFAULTS.minImpact };
   const before = storyStrands(data);
-  const plan = planStrandQuestions(data, before, limits);
+  // Cast candidates for every scene: names found in its text, its record, its neighbours, chapter and volume.
+  const sentences = await loadWorkspaceSentences(novelDir);
+  const byScene = new Map(scenes.map((scene) => [scene.id, scene]));
+  const lines = (sceneId: string) => (byScene.get(sceneId)?.sentenceIds ?? []).map((id) => sentences.get(id)?.text ?? "").filter(Boolean);
+  const characters = entities.filter((entity) => entity.kind === "Character").map((entity) => ({ id: entity.id, forms: [...new Set((entity.names ?? []).map((name) => name.text).filter(Boolean))] }));
+  const candidates = castCandidates(data.scenes.map((scene) => ({ id: scene.id, chapterIndex: scene.chapterIndex, index: scene.index, text: lines(scene.id).join("\n"), present: byScene.get(scene.id)?.charactersPresent ?? [], mentioned: byScene.get(scene.id)?.charactersMentioned ?? [] })), characters);
+  const names = { ...Object.fromEntries(entities.filter((entity) => entity.kind === "Character").map((entity) => [entity.id, entity.names?.find((name) => name.kind === "canonical")?.text ?? entity.names?.[0]?.text ?? entity.id])), ...data.names };
+  const plan = planStrandQuestions(data, before, { ...limits, candidates });
   let asked: Awaited<ReturnType<typeof askStrandQuestions>>["asked"] = [];
+  let answers: StrandAnswers = {};
   let strands = before;
   const usage = { workCalls: 0 };
   if (options.ask && plan.questions.length) {
-    const sentences = await loadWorkspaceSentences(novelDir);
-    const byScene = new Map(scenes.map((scene) => [scene.id, scene]));
-    const passage = (sceneId: string, nameForms: string[]) => scenePassage((byScene.get(sceneId)?.sentenceIds ?? []).map((id) => sentences.get(id)?.text ?? "").filter(Boolean), nameForms);
-    const forms = Object.fromEntries(entities.filter((entity) => entity.kind === "Character").map((entity) => [entity.id, [...new Set((entity.names ?? []).map((name) => name.text).filter(Boolean))]]));
+    const passage = (sceneId: string, nameForms: string[]) => scenePassage(lines(sceneId), nameForms);
+    const forms = Object.fromEntries(characters.map((character) => [character.id, character.forms]));
     const work = options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env);
     const metered = { modelId: work.modelId, generate: async (request: Parameters<typeof work.generate>[0]) => { usage.workCalls++; return work.generate(request); } };
-    const result = await askStrandQuestions({ work: metered, plan, names: data.names, forms, passage, options: limits });
+    const result = await askStrandQuestions({ work: metered, plan, names, forms, passage, options: limits });
     asked = result.asked;
-    strands = storyStrands(data, result.answers);
+    answers = result.answers;
+    strands = storyStrands(data, answers);
   }
   const summary = (value: typeof strands) => ({ lanes: value.lanes, layers: value.layers, parallelPairs: value.parallelPairs, splits: value.forks.size, meetings: value.merges.size, guessedCasts: value.carried.size,     checks: Object.fromEntries([...new Set(value.checks.map((check) => `${check.kind}:${check.status}`))].map((label) => [label, value.checks.filter((check) => `${check.kind}:${check.status}` === label).length])) });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -253,6 +262,8 @@ export async function timeplaceStrands(novelDir: string, options: TimeplaceStran
     novelDir, before: summary(before), after: options.ask ? summary(strands) : null,
     plan: { limits, estimate: plan.estimate, belowThreshold: plan.belowThreshold, overBudget: plan.overBudget, questions: plan.questions.map((question) => ({ key: question.key, impact: question.impact, characters: question.characterIds.length })) },
     asked, usage,
+    // The casts the answers set (character ids), for scoring against a presence key.
+    casts: Object.fromEntries(answers.presence ?? []),
     // For `novel eval story-order`: the happens-before graph.
     prediction: { kind: "dag", edges: strands.edges.map((edge) => [edge.from, edge.to]) },
   };

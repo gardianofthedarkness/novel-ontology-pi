@@ -60,6 +60,17 @@ test("only characters on stage count; the mentioned ones are set aside", async (
   assert.match(prompt, /Ming \(also: Little Ming\)/);
 });
 
+test("the list to choose from is the scenes' cast candidates, so someone never recorded can be named", async () => {
+  // Kai is in no recorded cast, but the text of l2 names him.
+  const candidates = new Map([["m2", [{ id: "ming", score: 1, evidence: "named" as const }]], ["l2", [{ id: "kai", score: 1, evidence: "named" as const }, { id: "lan", score: 0.7, evidence: "neighbour" as const }]]]);
+  const plan = planStrandQuestions(data, storyStrands(data), { candidates });
+  assert.deepEqual(plan.questions.find((question) => question.sceneId === "l2")!.characterIds, ["kai", "lan"]);
+  let prompt = "";
+  const work = { modelId: "fake", generate: async (request: { prompt: string }) => { prompt = request.prompt; return "{}"; } };
+  await askStrandQuestions({ work, plan, names: { ...data.names, kai: "Kai" }, passage: (id) => `passage ${id}` });
+  assert.match(prompt, /1\. (Ming|Kai)\n2\. (Ming|Kai)\n3\. Lan/);
+});
+
 test("a long scene keeps its opening, its close, and the middle sentences that name a listed character", () => {
   const lines = Array.from({ length: 40 }, (_, index) => `${"x".repeat(100)} ${index}`);
   lines[20] = "Lan walks in.";

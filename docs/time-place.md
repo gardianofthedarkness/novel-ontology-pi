@@ -101,8 +101,18 @@ to canon.
 
 A scene with no recorded cast borrows a nearby scene's, and the borrowed cast
 links it into a strand. That is the only trigger for a question: "who is
-present?", the chapter's characters to choose from (work model, multi-select,
-four scenes per call; a name not on the list is ignored). The reply sorts the
+present?" (work model, multi-select, four scenes per call; a name not on the
+list is ignored). The list to choose from is the scene's cast candidates
+(`src/digger/processing/castCandidates.ts`), at most 32, scored per scene:
+1 for a character named in the scene's text by a form only they have
+(matched longest form first) or recorded there as present or mentioned;
+0.7 / 0.5 / 0.35 for one named or recorded one, two or three scenes away in
+the chapter; 0.5 for a name two characters share or a generic one; less for
+the rest of the chapter and the volume. Extraction files a name it finds
+under "mentioned" unless it confirms the person is there, so a list built
+from recorded casts alone left out characters who were on stage (on the two
+hand-read volumes, 11 of 39 present characters in the asked scenes of
+volume 2; the candidates list misses 1). The reply sorts the
 listed characters a passage names into "present" (on stage) and "mentioned"
 (remembered, talked about, on the phone); only "present" counts. Each
 character is listed with the other name forms the text uses, and the passage
