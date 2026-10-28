@@ -1,0 +1,101 @@
+/* Characters (cast web): the Places atlas panel's form and the Story time / Places tokens. */
+:root { --cast-character: #bba7ff; --cast-bond: #7fe0b0; --cast-tension: #ff8a7a; --cast-contact: #8fc7d4; }
+
+/* Side panel: an atlas panel with the hall of fame, the scrubber and a pair's history. */
+.app .cast-panel { width: 262px; }
+.cast-panel b { font-weight: 600; }
+.cast-panel button { font: inherit; color: var(--tp-text); cursor: pointer; }
+.cast-scrub { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px; margin: 8px 0 6px; }
+.cast-scrub button { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--tp-edge); background: transparent; font-size: 8px; }
+.cast-scrub button[aria-pressed="true"] { background: #9fd8ff; color: #06141f; border-color: #9fd8ff; }
+.cast-scrub input { width: 100%; accent-color: #9fd8ff; }
+.cast-scrub small { color: var(--tp-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.cast-compare { display: grid; grid-template-columns: auto 1fr 1fr; align-items: center; gap: 4px; margin-bottom: 6px; color: var(--tp-muted); }
+.cast-compare select { min-width: 0; padding: 3px 4px; border-radius: 6px; border: 1px solid var(--tp-edge); background: #0b1826; color: var(--tp-text); font: inherit; }
+.cast-compare button { grid-column: 2 / 4; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--tp-edge); background: transparent; font-size: 10px; }
+.cast-compare button[aria-pressed="true"] { background: #9fd8ff; color: #06141f; border-color: #9fd8ff; }
+
+.cast-legend { display: flex; flex-wrap: wrap; gap: 2px 8px; margin: 10px 0 2px; color: var(--tp-muted); font-size: 9.5px; }
+.cast-legend i { display: inline-block; width: 7px; height: 7px; margin-right: 3px; border-radius: 2px; }
+.part-presence { background: #63ddd3; } .part-agency { background: #ffc777; } .part-reach { background: #75caff; }
+.part-influence { background: #ff9a6b; } .part-bridging { background: #bba7ff; }
+
+.cast-tier h4 { margin: 10px 0 2px; color: var(--tp-muted); font-size: 9.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+.cast-tier.tier-protagonist h4 { color: var(--tp-flashback); }
+.cast-tier h4 small { margin-left: 2px; opacity: .7; }
+.cast-tier ol, .cast-one ol, .cast-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.cast-tier li button { display: grid; grid-template-columns: 16px minmax(0, 1fr) 54px 18px; align-items: center; gap: 6px; width: 100%; padding: 3px 2px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+.cast-tier li button:hover, .cast-one li button:hover { background: #ffffff0a; }
+.cast-tier li.is-selected button { background: #9fd8ff14; box-shadow: inset 2px 0 0 #9fd8ff; }
+.cast-tier b { overflow: hidden; font-size: 11.5px; white-space: nowrap; text-overflow: ellipsis; }
+.cast-rank, .cast-tier small { color: var(--tp-muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
+.cast-parts { display: flex; height: 4px; overflow: hidden; border-radius: 2px; background: #ffffff0f; }
+.cast-parts i { height: 100%; transition: width .5s ease; }
+
+.cast-one { margin-top: 4px; }
+.cast-part { display: grid; grid-template-columns: 78px 1fr; align-items: center; gap: 6px; margin: 2px 0; color: var(--tp-muted); }
+.cast-meter { height: 5px; overflow: hidden; border-radius: 3px; background: #ffffff0f; }
+.cast-meter i { display: block; height: 100%; transition: width .5s ease; }
+.cast-one ol { margin-top: 6px; }
+.cast-one li button { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 6px; width: 100%; padding: 3px 2px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+.cast-one li small { color: var(--tp-muted); font-size: 10px; }
+.cast-tone { width: 10px; height: 2px; border-radius: 1px; background: var(--cast-contact); }
+.cast-tone.tone-bond { background: var(--cast-bond); } .cast-tone.tone-tension { background: var(--cast-tension); }
+.is-bond { color: var(--cast-bond); } .is-tension { color: var(--cast-tension); }
+
+.cast-pair { margin-top: 4px; }
+.cast-affinity { width: 100%; height: 40px; }
+.cast-affinity line { stroke: var(--tp-edge); stroke-dasharray: 2 3; }
+.cast-affinity polyline { fill: none; stroke: #9fd8ff; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.cast-log { gap: 4px; margin-top: 6px; }
+.cast-log li { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; border: 1px solid #ffffff10; background: #ffffff06; transition: opacity .4s ease, border-color .4s ease, background .4s ease; }
+.cast-log li small { color: var(--tp-muted); font-size: 9.5px; }
+.cast-log li.kind-met small { color: var(--tp-flashback); }
+.cast-log li p { margin: 0; color: #c3d6e4; font-size: 10.5px; line-height: 1.5; }
+.cast-log li.is-turning { border-color: #ffc46b55; }
+.cast-log li.is-later { opacity: .4; }
+.cast-log li.is-now { border-color: #9fd8ff88; background: #9fd8ff14; opacity: 1; }
+
+/* Flat relation web, in the Story time and Places frame. */
+.cast-flat { display: flex; flex-direction: column; }
+.cast-flat .web { flex: 1; min-height: 360px; width: 100%; max-width: 980px; margin: 0 auto; }
+.cast-flat .ring circle { fill: none; stroke: #9fd8ff24; stroke-dasharray: 2 6; }
+.cast-flat .ring-protagonist circle { stroke: #ffc46b44; }
+.cast-flat .ring text { fill: var(--tp-muted); font-size: 11px; letter-spacing: .12em; text-anchor: middle; text-transform: uppercase; opacity: .7; }
+.cast-flat .tie { fill: none; stroke: var(--cast-contact); stroke-linecap: round; transition: opacity .35s ease; }
+.cast-flat .tie.tone-bond { stroke: var(--cast-bond); } .cast-flat .tie.tone-tension { stroke: var(--cast-tension); }
+.cast-flat .tie.is-pulse { stroke-dasharray: 10 8; animation: cast-flow 1s linear infinite; }
+@keyframes cast-flow { to { stroke-dashoffset: -18; } }
+.cast-flat .node { cursor: pointer; transition: opacity .35s ease; }
+.cast-flat.is-picking .node { cursor: copy; }
+.cast-flat .node.is-far { opacity: .22; }
+.cast-flat .node .disc { fill: #0b1826; stroke: var(--cast-character); stroke-width: 1.5; }
+.cast-flat .node.tier-protagonist .disc { stroke: var(--tp-flashback); stroke-width: 3; }
+.cast-flat .node.tier-pillar .disc { stroke-width: 2.4; }
+.cast-flat .node.tier-cameo .disc { stroke-opacity: .6; }
+.cast-flat .node .halo { fill: none; stroke: transparent; stroke-width: 3; transition: stroke .3s ease; }
+.cast-flat .node:hover .halo, .cast-flat .node:focus .halo { stroke: #9fd8ff66; }
+.cast-flat .node.is-chosen .halo { stroke: #9fd8ff; }
+.cast-flat .node:focus { outline: none; }
+.cast-flat .node .glyph { fill: var(--tp-text); font-weight: 600; text-anchor: middle; pointer-events: none; }
+.cast-flat .node .name { fill: var(--tp-text); font-size: 14px; paint-order: stroke; stroke: #050b15; stroke-width: 4px; pointer-events: none; }
+.cast-flat .node .name.is-outer { fill: var(--tp-muted); font-size: 12px; }
+
+.reduce-motion .cast-flat .tie.is-pulse { animation: none; }
+@media (prefers-reduced-motion: reduce) { .cast-flat .tie.is-pulse { animation: none; } .cast-parts i, .cast-meter i { transition: none; } }
+/* Room for the panel on the left, as Story time makes room for the open inspector. */
+@media (min-width: 900px) { .cast-flat { padding-left: 300px; } }
+
+/* The journey chip beside the view switch: who the Story time and Places views are narrowed to. */
+.journey-chip { display: inline-flex; align-items: center; gap: 6px; padding-left: 10px; color: var(--tp-text); font-size: 11px; white-space: nowrap; }
+.journey-chip b { color: var(--tp-flashback); font-weight: 600; }
+.journey-chip button { padding: 0 8px; }
+.cast-panel .cast-journey { padding: 3px 10px; border-color: #ffc46b88; color: var(--tp-flashback); }
+.cast-panel .cast-journey:hover { background: #ffc46b1f; }
+
+/* The Journey button beside the view switch once a character is chosen. */
+.journey-go button { color: var(--tp-flashback); white-space: nowrap; }
+.journey-go b { font-weight: 600; }
+/* Traditional Journey: Story time's spine, coloured by place. */
+.journey-flat .journey-event { margin: 6px 0 0; color: #c3d6e4; font-size: 12px; line-height: 1.55; }
+.journey-flat .journey-with { margin: 6px 0 0; white-space: normal; }
