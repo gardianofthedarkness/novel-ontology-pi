@@ -18,6 +18,8 @@ import type { WorkModel } from "./llm.js";
 
 export interface WorkModelUsage {
   promptTokens: number | null;
+  /** Prompt tokens served from the provider's prompt cache (DeepSeek: prompt_cache_hit_tokens). */
+  cachedTokens: number | null;
   completionTokens: number | null;
   totalTokens: number | null;
 }
@@ -70,6 +72,8 @@ interface ChatCompletionResponse {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    prompt_cache_hit_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
   };
 }
 
@@ -146,6 +150,7 @@ export class HttpWorkModel implements WorkModel {
             model: data.model ?? this.opts.model,
             usage: {
               promptTokens: data.usage?.prompt_tokens ?? null,
+              cachedTokens: data.usage?.prompt_cache_hit_tokens ?? data.usage?.prompt_tokens_details?.cached_tokens ?? null,
               completionTokens: data.usage?.completion_tokens ?? null,
               totalTokens: data.usage?.total_tokens ?? null,
             },

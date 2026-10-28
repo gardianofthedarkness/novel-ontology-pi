@@ -31,7 +31,11 @@ after-apply rebuild and the view feed all call it):
 - **A dated period** (stated, or derived from stated words such as "the next
   day") sits on its day, at its clock time ("下午三点" → 15:00) or part of the
   day (morning, evening, …), else across the whole day. A late night told
-  after an evening of the same date is that night past midnight.
+  after an evening of the same date is that night past midnight; so are a
+  derived date's small hours ("凌晨0点" after "平安夜" is the next day). A clock
+  time is when a period starts: it runs until the book's next period starts,
+  at most to the end of its part of the day (15:00 → 17:00 when the next
+  period is at 17:00; 18:30 → 21:00 when nothing follows that evening).
 - **An undated period** is a range between its dated neighbours in the book's
   story order — never a made-up time.
 - **Story time is the reference.** A flashback sits at its own date. The
@@ -70,6 +74,10 @@ spans overlap (the calendar cannot order them).
   stays. Periods still awaiting review are placed too, so the calendar fills in
   live as story time is extracted. A book with no dates falls back to its story
   order.
+- **3D story line and strands**: giant pins stand behind the story, one where
+  each calendar day's first scene sits in each book's stretch, with the date at
+  the pole's foot (a calendar ruler along the floor). Rough marks: strands are
+  ordered by who is in each scene, so a pin says "this day starts about here".
 - **Cross-book causality**: a pair the calendar orders is nominated only cause
   first (`calendar-order`); each candidate shows both calendar positions for
   the reviewer's temporal reason. Pairs it cannot order stay open both ways.
@@ -84,3 +92,9 @@ the third sits inside the second's span. One year question was raised (the
 second volume's dates go back from the first's: the same Christmas told from
 another side) and one real conflict surfaced (a period dated midnight told
 after the evening it precedes).
+
+Live, Pi built the universe calendar and reviewed the year question: same
+year, from the second volume opening on the first one's Christmas Eve and
+picking up its aftermath. Review of that run fixed the one conflict (the
+midnight period was a derived date's small hours, now the next day) and gave
+clock-time periods their length.

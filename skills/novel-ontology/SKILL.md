@@ -195,7 +195,9 @@ Act on the aspect; do not retry variants blindly:
   timeline.
 - Review it like every other faculty, through the shared gate:
   `novel review show <dir> <packet> --scope book`, then `evidence` for any
-  fact whose evidence page continues, then `decide`, then `apply`. Each
+  fact whose evidence page continues, then `decide` (name holds and rejects,
+  accept the rest of the page with `{"rest":"accept","offset":N,"reason":…}`),
+  then `apply`. Each
   period (TimePoint), place (Location), scene→period (OCCURS_DURING) and
   scene→place (LOCATED_AT) is one typed fact with its original sentences:
   accept a period only if its time word is in the cited sentence; a scene

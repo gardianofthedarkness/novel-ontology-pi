@@ -103,6 +103,9 @@ export const PARTS: Record<string, [number, number]> = {
   afternoon: [810, 1050], "after-school": [930, 1080], evening: [1050, 1260], night: [1260, 1440],
 };
 const LATE_NIGHT_AFTER_EVENING: [number, number] = [DAY, DAY + 300];
+/** The parts a clock time falls in, in order: a clock time runs to the end of its part unless the next period starts sooner. */
+const SEQUENCE = ["late-night", "dawn", "morning", "noon", "afternoon", "evening", "night"].map((part) => PARTS[part]);
+const partEnd = (minute: number) => SEQUENCE.find(([start, end]) => minute >= start && minute < end)?.[1] ?? DAY;
 const pad = (value: number) => String(value).padStart(2, "0");
 
 /** a before b, b before a, or null when their spans overlap (the calendar cannot order them). */
@@ -180,11 +183,26 @@ export function placeOnCalendar(universeId: string, books: BookTimes[], decision
       if (!dated(period) || year === null) continue;
       const start = dayStart(year, period.date!.month!, period.date!.day!);
       const sameDayEarlier = lastPartOnDay.get(start);
-      let range: [number, number] = [0, DAY], time: string | null = null;
-      if (period.hour !== undefined) { const minute = period.hour * 60 + (period.minute ?? 0); range = [minute, minute]; time = `${pad(period.hour)}:${pad(period.minute ?? 0)}`; }
-      else if (period.partOfDay && PARTS[period.partOfDay]) { range = period.partOfDay === "late-night" && sameDayEarlier !== undefined && sameDayEarlier > PARTS["late-night"][1] ? LATE_NIGHT_AFTER_EVENING : PARTS[period.partOfDay]; time = period.partOfDay; }
+      const afterEvening = sameDayEarlier !== undefined && sameDayEarlier > PARTS["late-night"][1];
+      let range: [number, number] = [0, DAY], time: string | null = null, month = period.date!.month!, day = period.date!.day!;
+      if (period.hour !== undefined) {
+        const minute = period.hour * 60 + (period.minute ?? 0);
+        // A derived date's small hours told after that date's evening are past midnight: the next day.
+        const nextDay = !!period.date!.derived && minute < PARTS["late-night"][1] && afterEvening;
+        range = nextDay ? [DAY + minute, DAY + minute] : [minute, minute];
+        time = `${pad(period.hour)}:${pad(period.minute ?? 0)}`;
+        if (nextDay) ({ month, day } = dayOf(start + DAY));
+      }
+      else if (period.partOfDay && PARTS[period.partOfDay]) { range = period.partOfDay === "late-night" && afterEvening ? LATE_NIGHT_AFTER_EVENING : PARTS[period.partOfDay]; time = period.partOfDay; }
       lastPartOnDay.set(start, Math.max(sameDayEarlier ?? 0, range[0]));
-      own.push({ ref: `${book.sourceId}::${period.id}`, sourceId: book.sourceId, timeId: period.id, label: period.label, year, month: period.date!.month!, day: period.date!.day!, time, span: { start: start + range[0], end: start + range[1] }, placed: period.date!.derived ? "derived" : "stated", storyIndex: period.storyIndex, flashback: period.flashback, scenes: period.scenes });
+      own.push({ ref: `${book.sourceId}::${period.id}`, sourceId: book.sourceId, timeId: period.id, label: period.label, year, month, day, time, span: { start: start + range[0], end: start + range[1] }, placed: period.date!.derived ? "derived" : "stated", storyIndex: period.storyIndex, flashback: period.flashback, scenes: period.scenes });
+    }
+    // A clock time is when a period starts: it runs until the next period starts, at most to the end of its part of the day.
+    for (const [index, entry] of own.entries()) {
+      if (!/^\d\d:\d\d$/.test(entry.time ?? "")) continue;
+      const midnight = Math.floor(entry.span.start / DAY) * DAY;
+      const next = own.slice(index + 1).find((other) => !other.flashback && other.span.start > entry.span.start)?.span.start ?? Infinity;
+      entry.span = { start: entry.span.start, end: Math.min(midnight + partEnd(entry.span.start - midnight), next) };
     }
     // Story order is the reference: a later (non-flashback) period dated earlier than the one before it is a conflict, reported, not reordered.
     let latest: CalendarEntry | null = null;

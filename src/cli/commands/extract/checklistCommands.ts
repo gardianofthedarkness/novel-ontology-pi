@@ -1,4 +1,5 @@
 import { readFile, readdir, stat } from "node:fs/promises";
+import { bookUsage, type BookUsage } from "../../../ground/workspace/usage.js";
 import { join, resolve } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
@@ -39,7 +40,7 @@ import { calendarPacketId } from "../../../solidifier/calendar/review.js";
  */
 export type ChecklistStatus = "done" | "todo" | "review" | "blocked" | "optional";
 export interface ChecklistItem { id: string; title: string; status: ChecklistStatus; dependsOn: string[]; counts: Record<string, number | string | boolean>; next: string[]; note?: string }
-export interface BookChecklist { novelDir: string; title: string; complete: boolean; items: ChecklistItem[]; next: string[] }
+export interface BookChecklist { novelDir: string; title: string; complete: boolean; items: ChecklistItem[]; next: string[]; usage: BookUsage }
 
 const fold = <T extends { id: string }>(records: T[]) => [...new Map(records.map((record) => [record.id, record])).values()];
 const exists = (path: string) => stat(path).then(() => true, () => false);
@@ -180,7 +181,9 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
 
   settle(items);
   const complete = items.every((item) => item.status === "done" || item.status === "optional");
-  return { novelDir, title: manifest.title ?? novelDir, complete, items, next: items.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) };
+  return { novelDir, title: manifest.title ?? novelDir, complete, items, next: items.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)),
+    // Work-model (DeepSeek) tokens this book has spent so far.
+    usage: await bookUsage(novelDir) };
 }
 
 export interface UniverseChecklist { library: string; universeId: string; title: string; complete: boolean; books: { sourceId: string; title: string; continuityId: string | null; readingOrder: number | null; workspace: string | null; extracted: boolean; complete: boolean; firstGap: string | null }[]; items: ChecklistItem[]; next: string[] }

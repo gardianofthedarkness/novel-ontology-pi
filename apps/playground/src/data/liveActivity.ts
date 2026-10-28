@@ -1,6 +1,8 @@
 export interface LiveActivity {
   review?: {
-    id: string; timestamp: string; active: boolean; volume: number; chapterIndex: number; blockId: string; changesetId: string;
+    id: string; timestamp: string; active: boolean; volume: number | null; chapterIndex: number | null; blockId: string | null; changesetId: string;
+    /** What the packet reviews: block, time-place, causality, book, identity, calendar, places, universe-causality or library. */
+    kind?: string; universeId?: string;
     phase: string; status: string; nodeIds: string[]; factIds?: string[]; factPositions?: number[]; fields?: string[]; revision?: string | null;
     sourceStart?: number; sourceEnd?: number; offset?: number | null; pageCount?: number; total?: number | null;
     totalFacts?: number | null; inspectedFacts?: number; accepted?: number | null; rejected?: number | null; held?: number | null; unreviewed?: number | null;

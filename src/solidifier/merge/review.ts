@@ -13,6 +13,8 @@ interface ReviewState {
   seen: string[];
   evidence: Record<string, string[]>;
   decisions: ReviewDecision[];
+  /** The facts each page showed in this revision, by offset: what "the rest of this page" means. */
+  pages?: Record<string, string[]>;
   staged?: boolean;
   applied?: boolean;
   application?: { verified: number; held: number; rejected: number; deferredProposals: number };
@@ -32,17 +34,48 @@ function pageOptions(options: ReviewOptions) {
   return { offset, limit };
 }
 
+/** Why a fact cannot be accepted yet (null: it can). */
+function acceptProblem(state: ReviewState, fact: ReviewFact, decision?: ReviewDecision): string | null {
+  if (!state.seen.includes(fact.id)) return `Read the complete current assertion ${fact.id} with review show before accepting.`;
+  const seen = state.evidence[fact.id] ?? [];
+  if (!fact.requiredEvidence.length || (fact.requireAllEvidence ? fact.requiredEvidence.some(id => !seen.includes(id)) : !fact.requiredEvidence.some(id => seen.includes(id)))) {
+    return `Incomplete original evidence for ${fact.id}; use review evidence --fact '${fact.id}' and follow page.nextOffset. Previous revisions do not count.`;
+  }
+  if (fact.temporalReasonRequired && (!decision?.temporalReason?.trim() || decision.temporalReason.length > 2000)) return "Cross-file acceptance requires an evidence-grounded temporalReason, not reading order.";
+  return null;
+}
+
 function requireEvidence(adapter: ReviewAdapter, state: ReviewState, decisions: ReviewDecision[]) {
   if (adapter.requireFullReview && adapter.facts.some(fact => !state.seen.includes(fact.id))) throw new Error("Read every current assertion page with review show before deciding or applying this packet.");
   for (const decision of decisions.filter(decision => decision.verdict === "accept")) {
-    const fact = adapter.facts.find(fact => fact.id === decision.factId)!;
-    if (!state.seen.includes(fact.id)) throw new Error(`Read the complete current assertion ${fact.id} with review show before accepting.`);
-    const seen = state.evidence[fact.id] ?? [];
-    if (!fact.requiredEvidence.length || (fact.requireAllEvidence ? fact.requiredEvidence.some(id => !seen.includes(id)) : !fact.requiredEvidence.some(id => seen.includes(id)))) {
-      throw new Error(`Incomplete original evidence for ${fact.id}; use review evidence --fact '${fact.id}' and follow page.nextOffset. Previous revisions do not count.`);
-    }
-    if (fact.temporalReasonRequired && (!decision.temporalReason?.trim() || decision.temporalReason.length > 2000)) throw new Error("Cross-file acceptance requires an evidence-grounded temporalReason, not reading order.");
+    const problem = acceptProblem(state, adapter.facts.find(fact => fact.id === decision.factId)!, decision);
+    if (problem) throw new Error(problem);
   }
+}
+
+/**
+ * {rest: "accept", offset, reason}: accept the facts of the page read at that
+ * offset that this batch does not name and nothing decided before. A page
+ * never read accepts nothing, so leaving a fact out never accepts it.
+ */
+function restOfPage(value: unknown): { rests: { offset: number; reason: string }[]; explicit: unknown } {
+  if (!Array.isArray(value) || value.length > 50) return { rests: [], explicit: value };
+  const rests: { offset: number; reason: string }[] = [];
+  const explicit = value.filter((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item) || !("rest" in item)) return true;
+    const entry = item as Record<string, unknown>;
+    const unknown = Object.keys(entry).find(key => !["rest", "offset", "reason"].includes(key));
+    const problem = unknown ? `has an unknown field ${JSON.stringify(unknown)} (a page entry is {rest: "accept", offset, reason})`
+      : entry.rest !== "accept" ? `has rest ${JSON.stringify(entry.rest)}; only "accept" is allowed (facts left out already stay on hold)`
+      : !Number.isSafeInteger(entry.offset) || (entry.offset as number) < 0 ? "needs the offset of the page it accepts"
+      : typeof entry.reason !== "string" || !entry.reason.trim() ? "needs a non-empty reason"
+      : entry.reason.length > 2000 ? "has a reason over 2000 characters"
+      : rests.some(rest => rest.offset === entry.offset) ? `repeats page ${entry.offset}` : null;
+    if (problem) throw new NovelError(`Decision #${index + 1} ${problem}.`, { aspect: "review", code: "DECISION_INVALID", hint: 'Accept the rest of a page you read with {"rest":"accept","offset":<that page\'s offset>,"reason":"..."}.' });
+    rests.push({ offset: entry.offset as number, reason: entry.reason as string });
+    return false;
+  });
+  return { rests, explicit };
 }
 
 function decisionsFrom(value: unknown, adapter: ReviewAdapter): ReviewDecision[] {
@@ -57,7 +90,7 @@ function decisionsFrom(value: unknown, adapter: ReviewAdapter): ReviewDecision[]
       : typeof entry.reason !== "string" || !entry.reason.trim() ? `(${entry.factId}) needs a non-empty reason`
       : entry.reason.length > 2000 ? `(${entry.factId}) has a reason over 2000 characters`
       : entry.temporalReason !== undefined && typeof entry.temporalReason !== "string" ? `(${entry.factId}) has a temporalReason that is not text` : null;
-    if (problem) throw new NovelError(`Decision #${index + 1} ${problem}.`, { aspect: "review", code: "DECISION_INVALID", hint: "Each decision is {factId, verdict: accept|hold|reject, reason}; fix this one and resend the batch.", details: { index, factId: entry && typeof entry === "object" ? (entry as { factId?: unknown }).factId ?? null : null } });
+    if (problem) throw new NovelError(`Decision #${index + 1} ${problem}.`, { aspect: "review", code: "DECISION_INVALID", hint: "Each decision is {factId, verdict: accept|hold|reject, reason}, or {rest: \"accept\", offset, reason} for the rest of a page you read; fix this one and resend the batch.", details: { index, factId: entry && typeof entry === "object" ? (entry as { factId?: unknown }).factId ?? null : null } });
     if (entry.verdict !== "accept" && ("replacement" in entry || "semanticReplacement" in entry)) throw new Error("Only accepted assertions can have semantic corrections.");
   }
   const factIds = value.map(entry => entry.factId);
@@ -118,6 +151,7 @@ export async function review(operation: string, target: ReviewTarget, options: R
         state.evidence[fact.id] = [...new Set([...(state.evidence[fact.id] ?? []), ...row.evidence.map(entry => entry.id)])];
       }
       if (!facts.length && adapter.facts.length > offset) throw new Error("One assertion exceeds the review budget; hold it, never truncate its value.");
+      state.pages = { ...state.pages, [String(offset)]: facts.map(fact => fact.id) };
       await save();
       return { ...base, facts, page: { offset, limit: facts.length, total: adapter.facts.length, nextOffset: offset + facts.length < adapter.facts.length ? offset + facts.length : null } };
     }
@@ -139,17 +173,47 @@ export async function review(operation: string, target: ReviewTarget, options: R
     if (adapter.applied || state.applied) throw new Error("Packet already applied; do not apply or decide twice.");
     if (adapter.stale || options.revision !== adapter.revision) throw new Error("Stale review revision or canonical context; read current review show/evidence again.");
     if (operation === "decide") {
-      const updates = decisionsFrom(options.decisions, adapter);
+      const { rests, explicit } = restOfPage(options.decisions);
+      const updates = decisionsFrom(explicit, adapter);
+      const restAccepted: string[] = [], restLeft: { factId: string; problem: string }[] = [];
+      for (const rest of rests) {
+        const page = state.pages?.[String(rest.offset)];
+        if (!page) throw new NovelError(`No page at offset ${rest.offset} was read in this revision; its rest cannot be accepted.`, { aspect: "review", code: "DECISION_INVALID", hint: `Read it with review show --offset ${rest.offset}, then accept its rest.` });
+        for (const factId of page) {
+          const fact = adapter.facts.find(entry => entry.id === factId);
+          if (!fact || updates.some(decision => decision.factId === factId) || state.decisions.some(decision => decision.factId === factId)) continue;
+          // A fact that still needs more evidence or its own temporal reason stays on hold and is named.
+          const problem = acceptProblem(state, fact);
+          if (problem) { restLeft.push({ factId, problem }); continue; }
+          updates.push({ factId, verdict: "accept", reason: rest.reason });
+          restAccepted.push(factId);
+        }
+      }
       const merged = new Map(state.decisions.map(decision => [decision.factId, decision]));
       updates.forEach(decision => {
         const previous = merged.get(decision.factId);
         merged.set(decision.factId, decision.verdict === "accept" && !("replacement" in decision) && !("semanticReplacement" in decision) && previous && "replacement" in previous ? { ...decision, replacement: previous.replacement } : decision);
       });
-      requireEvidence(adapter, state, [...merged.values()]);
-      state.decisions = await adapter.validate([...merged.values()]);
+      const all = [...merged.values()];
+      requireEvidence(adapter, state, all);
+      let validated: ReviewDecision[];
+      try { validated = await adapter.validate(all); }
+      catch (error) {
+        if (!restAccepted.length) throw error;
+        // The named decisions must stand on their own; a rest fact the faculty refuses stays on hold and is named.
+        let kept = all.filter(decision => !restAccepted.includes(decision.factId));
+        validated = await adapter.validate(kept);
+        for (const factId of [...restAccepted]) {
+          const trial = [...kept, all.find(decision => decision.factId === factId)!];
+          try { validated = await adapter.validate(trial); kept = trial; }
+          catch (refusal) { restAccepted.splice(restAccepted.indexOf(factId), 1); restLeft.push({ factId, problem: (refusal as Error).message }); }
+        }
+      }
+      state.decisions = validated;
       state.staged = true;
       await save();
-      return { ...base, accepted: state.decisions.filter(decision => decision.verdict === "accept").length, held: adapter.facts.length - state.decisions.filter(decision => decision.verdict !== "hold").length, rejected: state.decisions.filter(decision => decision.verdict === "reject").length, staged: true, applied: false };
+      return { ...base, accepted: state.decisions.filter(decision => decision.verdict === "accept").length, held: adapter.facts.length - state.decisions.filter(decision => decision.verdict !== "hold").length, rejected: state.decisions.filter(decision => decision.verdict === "reject").length, staged: true, applied: false,
+        ...(rests.length ? { restAccepted: restAccepted.length, ...(restLeft.length ? { restLeftOnHold: restLeft.slice(0, 20), restLeftOnHoldTotal: restLeft.length } : {}) } : {}) };
     }
     if (!state.staged) throw new Error("Record explicit decisions with review decide before applying; no auto-approval.");
     requireEvidence(adapter, state, state.decisions);

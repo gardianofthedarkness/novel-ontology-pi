@@ -14,6 +14,8 @@ import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import type { Entity } from "../../../ground/ontology/types.js";
 import { loadExtractionCounts } from "../../../digger/processing/counts.js";
 import { facultyOptionsFromEnv } from "../../../digger/processing/facultyOptions.js";
+import { usageTotal, type UsageLedger } from "../../../digger/processing/facultyPool.js";
+import { recordUsage } from "../../../ground/workspace/usage.js";
 import { loadEmbedder } from "../../../ground/connectors/embeddings.js";
 import { markCausalitySweepPending } from "../../../solidifier/causality/faculty.js";
 import { albumPortraits, emitAlbumAnchors } from "./albumCommands.js";
@@ -59,7 +61,9 @@ export async function ingestNovel(
   opts: IngestOptions = {},
 ) {
   const env = opts.env ?? process.env;
-  const facultyGraph = facultyOptionsFromEnv(env);
+  // DeepSeek tokens per extraction faculty, across every block of this run.
+  const usage: UsageLedger = {};
+  const facultyGraph = { ...facultyOptionsFromEnv(env), usage };
   const ontologyDir = join(novelDir, "ontology");
   try {
     await stat(join(ontologyDir, "manifest.json"));
@@ -207,6 +211,8 @@ export async function ingestNovel(
     album = null;
   }
 
+  if (workModel) await recordUsage(novelDir, { at: new Date().toISOString(), kind: "extraction", model: workModel.modelId, ...usageTotal(usage), byFaculty: usage });
+
   return {
     status: "ok",
     novelDir,
@@ -221,6 +227,7 @@ export async function ingestNovel(
     mergedBlocks: result.mergedBlocks,
     stoppedAt: result.stoppedAt,
     stopReason: result.stopReason,
+    usage: { work: workModel ? { model: workModel.modelId, ...usageTotal(usage), byFaculty: usage } : null },
     identity: { perBlock: emPerBlock },
     causality: { perBlock: causalityPerBlock, chapterSweep: causalityChapterSweep },
     graph,

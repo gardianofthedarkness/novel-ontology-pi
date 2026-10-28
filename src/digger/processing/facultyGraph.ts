@@ -8,7 +8,7 @@ import { newChangeSet } from "../../solidifier/merge/changeset.js";
 import { buildScenePrompt, EXTRACTION_SYSTEM, type LlmScene, type NamedTurn, type SceneFacultyResult } from "../extraction/extraction.js";
 import type { ExtractionConstraints } from "../extraction/constraints.js";
 import type { WorkingDraft } from "./draft.js";
-import { FacultyPool, type FacultyCall } from "./facultyPool.js";
+import { FacultyPool, type FacultyCall, type UsageLedger } from "./facultyPool.js";
 import { expandDecisionContext, jsonObject, renderSentences, sourceChunks, type SourceChunk } from "./facultyContext.js";
 import { DecisionRouter, type DecisionRouterOptions } from "./decisionRouter.js";
 import { readSpeakerGuesses, speakerQuestions } from "./dialogueDecisions.js";
@@ -31,6 +31,8 @@ export interface FacultyGraphOptions {
   maxCalls?: number;
   maxInFlightScenes?: number;
   onCall?: (call: FacultyCall) => void;
+  /** Work-model tokens per faculty, shared across the run's blocks. */
+  usage?: UsageLedger;
   decisionRouting?: DecisionRouterOptions;
 }
 
