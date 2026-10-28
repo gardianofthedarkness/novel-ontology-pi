@@ -83,6 +83,8 @@ export interface CalendarViewEntry {
   year: number | null; month: number | null; day: number | null;
   /** "15:00" or a part of the day ("evening"). */
   time: string | null;
+  /** The part of the day it is in (the stated one, else its clock time's); null when only the day is known. */
+  part?: string | null;
   span: CalendarSpan;
   /** stated / derived (from stated words) / between (a range between dated neighbours). */
   placed: "stated" | "derived" | "between";

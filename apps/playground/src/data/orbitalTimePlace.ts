@@ -51,6 +51,8 @@ export interface OrbitalArrangement {
   pins?: CalendarPin[];
   /** Rulers on the same backdrop showing how story time is compressed (a stored spiral). */
   meters?: TimeMeter[];
+  /** Smaller marks on the same backdrop where each part of a calendar day starts. */
+  parts?: DayPartMark[];
   /** A tap on a strand's axis (path id, sample index): the scenes it lights (that strand on the tapped calendar day, or all
    * of it when that stretch has no date), with a line saying what is lit, in the strand's colour. */
   strandPeriod?: (pathId: string, index: number) => { ids: string[]; strandId: string; label: string; book?: number } | null;
@@ -82,6 +84,9 @@ export interface OrbitalArrangement {
 }
 /** A calendar day behind the story like a backdrop: a big date high up and far back where the day's first scene sits, a faint pole down to the floor. */
 export interface CalendarPin { id: string; x: number; z: number; top: number; card: number; label: string; detail: string }
+/** A small mark under the dates where a part of a calendar day starts in a book's stretch (world units): its label sits at
+ * y, a thin line runs down to the time meter's ruler at foot. */
+export interface DayPartMark { id: string; x: number; y: number; foot: number; z: number; label: string }
 /** A ruler on the date backdrop over one book's stretch (world units): a tick per story moment, bunching where quiet time
  * is compressed, and where the pace changes, how much ("time ×0.4"). */
 export interface TimeMeter { id: string; y: number; z: number; ticks: number[]; zones: { x: number; label: string }[] }
@@ -356,6 +361,57 @@ export function calendarPins(data: TimePlaceProjection, anchors: Map<string, Pos
   return pins;
 }
 
+/** How a part of the day reads on the backdrop. */
+const PART_LABEL: Record<string, string> = { "late-night": "late night", dawn: "dawn", morning: "morning", noon: "noon", daytime: "daytime", afternoon: "afternoon", "after-school": "after school", evening: "evening", night: "night" };
+/** Part labels: their height, the first row's drop under the dates' lettering, the second row's further drop, the gap kept
+ * between labels in a row and the width a letter takes (world units). */
+export const PART = { height: 600, drop: 380, row: 640, gap: 160, letter: 180 };
+/**
+ * The parts of the day on the date backdrop: in each book's stretch, a small
+ * mark where each part of each calendar day starts (its first non-flashback
+ * scene), under the dates and above the time meter, the same depth as the
+ * dates. Small hours at 00:00 read "midnight". Every part keeps its own mark:
+ * one too close to the last in its row drops to a second row, and only when
+ * both rows are taken does it join the last label ("evening–night").
+ */
+export function dayPartMarks(data: TimePlaceProjection, anchors: Map<string, Position3>, laneOf: (scene: StoryScene) => number): DayPartMark[] {
+  const entries = new Map((data.calendar?.entries ?? []).filter((entry) => entry.placed !== "between" && entry.year !== null && entry.part).map((entry) => [entry.id, entry]));
+  if (!entries.size) return [];
+  const tops = new Map<string, number>(), firsts = new Map<string, { stretch: string; lane: number; x: number; label: string }>();
+  for (const scene of data.scenes) {
+    const anchor = anchors.get(spiralNodeId(scene.id));
+    if (!anchor) continue;
+    const stretch = `${laneOf(scene)}|${scene.book ?? ""}`;
+    tops.set(stretch, Math.max(tops.get(stretch) ?? -Infinity, anchor[1]));
+    const entry = scene.flashback ? undefined : scene.times.map((time) => entries.get(time.id)).find(Boolean);
+    if (!entry) continue;
+    const key = `${stretch}|${entry.year}-${entry.month}-${entry.day}|${entry.part}`, known = firsts.get(key);
+    if (!known || anchor[0] < known.x) firsts.set(key, { stretch, lane: laneOf(scene), x: anchor[0], label: entry.part === "late-night" && entry.time === "00:00" ? "midnight" : PART_LABEL[entry.part!] ?? entry.part! });
+  }
+  const marks: DayPartMark[] = [];
+  const byStretch = new Map<string, { lane: number; x: number; label: string }[]>();
+  for (const first of firsts.values()) byStretch.set(first.stretch, [...(byStretch.get(first.stretch) ?? []), first]);
+  const half = (label: string) => (label.length * PART.letter) / 2 + PART.gap;
+  for (const [stretch, firstsHere] of byStretch) {
+    // Under the dates (pin cards rise 520 above the stretch's top; their lettering hangs about 615 below the card centre).
+    const card = ((tops.get(stretch) ?? 0) + 520) * 3;
+    const rows: ({ mark: DayPartMark; first: string; right: number } | null)[] = [null, null];
+    for (const first of firstsHere.sort((a, b) => a.x - b.x)) {
+      const x = (first.x - SPIRAL.step / 2) * 3;
+      const row = rows.findIndex((last) => !last || last.right < x - half(first.label));
+      if (row < 0) {
+        const last = rows[0]!.right > rows[1]!.right ? rows[1]! : rows[0]!;
+        last.mark.label = last.first === first.label ? last.first : `${last.first}–${first.label}`;
+        continue;
+      }
+      const mark: DayPartMark = { id: `part:${stretch}:${marks.length}`, x, y: card - 615 - PART.drop - row * PART.row, foot: card - 615 - METER.under, z: (first.lane * SPIRAL.laneGap - SPIRAL.radius - PIN_BACK) * 3, label: first.label };
+      marks.push(mark);
+      rows[row] = { mark, first: first.label, right: x + half(first.label) };
+    }
+  }
+  return marks;
+}
+
 /**
  * The stored spiral (precomputed offline by `novel calendar build`): scene
  * spheres on the knots, all in the design's cyan: each strand's axis (its
@@ -423,8 +479,8 @@ function timeMeters(data: TimePlaceProjection, spiral: SpiralView, layout: (x: n
     return [{ id: `meter:${stretch.lane}:${stretch.book ?? ""}`, y: (stretch.top + 520) * 3 - 615 - METER.under, z: (stretch.lane * SPIRAL.laneGap - SPIRAL.radius - PIN_BACK) * 3, ticks, zones }];
   });
 }
-/** The meter's notes keep this far apart; the ruler sits this far under the dates (world units). */
-const METER = { gap: 3200, under: 560 };
+/** The meter's notes keep this far apart; the ruler sits this far under the dates' lettering, below both rows of the parts of the day (world units). */
+const METER = { gap: 3200, under: 1640 };
 
 /**
  * Curved causal arcs that do not collide. Every arc bends outward, away from
@@ -616,7 +672,8 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
   });
   const pins = calendarPins(data, anchors, laneOf);
   const meters = stored ? timeMeters(data, data.spiral!, stored.layout) : [];
-  const pinNote = pins.length ? " · tall pins behind: where each calendar day starts (the universe calendar)" : "";
+  const parts = dayPartMarks(data, anchors, laneOf);
+  const pinNote = pins.length ? ` · tall pins behind: where each calendar day starts (the universe calendar)${parts.length ? ", and under them where each part of the day starts" : ""}` : "";
   return {
     // On a stored spiral the scenes are beads on the coils: a little smaller so the coils read.
     anchors, radiusScale: stored ? 0.34 : 0.42, causal: true,
@@ -633,7 +690,7 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     }, ...(world ? { strandCast: (scenes: string[], draws: OrbitalDraw[]) => strandCast(world, scenes, draws) } : {}) } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
     morphKey: `${stored ? "spiral" : strands ? "strands" : "line"}:${[...anchors].map(([id, point]) => `${id}@${point.map(Math.round).join("/")}`).join(",")}`,
     // The calendar behind the story: a giant pin where each day starts.
-    pins, meters,
+    pins, meters, parts,
     // Shredding: in story order, each scene peels off the one line onto its strand.
     morphDelays: (draws) => { const last = Math.max(1, ...position.values()); return new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / last) * SHRED_MS)])); },
     timeKey: stored
