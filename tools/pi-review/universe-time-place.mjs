@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { timePlaceProjection } from './time-place.mjs';
 import { readStrandAnswers } from './strand-answers.mjs';
+import { calendarView, storedYearDecisions } from './calendar-view.mjs';
 
 /**
  * Universe story time and places for the viewer (time-place phase 3).
@@ -134,5 +135,9 @@ export async function readUniverseTimePlace(directory, bindings, resolveWorkspac
   }
   const books = await Promise.all(hosted.map(async book => ({ ...book, data: await bookProjection(book.workspace) })));
   const continuities = view.organization.continuities.filter(entry => inUniverse.has(entry.id)).map(({ id, title }) => ({ id, title }));
-  return mergeUniverse({ atlas, books, continuities });
+  const merged = mergeUniverse({ atlas, books, continuities });
+  // The universe calendar (one clock): every hosted book's periods placed together, with the reviewed year decisions.
+  const decisions = await storedYearDecisions(directory, universeId);
+  merged.calendar = await calendarView({ universeId, decisions, books: merged.books.map(book => ({ ...book, times: merged.times.filter(time => time.book === book.volume) })) }).catch(() => null);
+  return merged;
 }

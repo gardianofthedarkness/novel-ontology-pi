@@ -3,7 +3,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Entity, NameForm } from "../../ground/ontology/types.js";
 import { libraryShow } from "../../ground/workspace/library.js";
-import { universeBindings, type UniverseBindingConfig } from "../causality/universe.js";
+import type { UniverseBindingConfig } from "../causality/universe.js";
+
+/** The host's library bindings (`NOVEL_CAUSAL_BINDINGS`), read here so identity and the calendar do not import causality. */
+const universeBindings = async (env: NodeJS.ProcessEnv): Promise<UniverseBindingConfig | undefined> => env.NOVEL_CAUSAL_BINDINGS ? JSON.parse(await readFile(env.NOVEL_CAUSAL_BINDINGS, "utf8")) as UniverseBindingConfig : undefined;
 
 /**
  * The universe cast: ONE shared character list for a whole universe.

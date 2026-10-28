@@ -8,6 +8,9 @@ import { compareOrder } from "../src/solidifier/causality/units.js";
 import { libraryDecide, libraryPropose, libraryShow } from "../src/ground/workspace/library.js";
 import type { DecisionModel } from "../src/ground/connectors/jev.js";
 import { loadCausalityUniverse } from "../src/solidifier/causality/units.js";
+import { appendFile } from "node:fs/promises";
+import { buildCalendar } from "../src/solidifier/calendar/calendar.js";
+import { rootCastScope } from "../src/solidifier/identity/cast.js";
 
 test("current scene versions and all dialogue fragments supply source evidence instead of superseded partial cards", async context => {
   const fixture = await universeFixture(context);
@@ -165,4 +168,25 @@ test("opposite directions cannot be accepted as a two-link causal cycle", async 
   const reversed = await universePropose(scope, to, from, "Reverse needs holding.");
   const reversePacket = await universePacket(scope, reversed.packetId);
   await assert.rejects(() => universeDecide(scope, reversed.packetId, reversePacket.revision, [{ proposalId: reversePacket.packet.proposals[0].id, verdict: "accept", reason: "Conflicting.", temporalReason: "Conflicting." }]), /causal cycle/);
+});
+
+test("the universe calendar orders units across books: a direction against it is not nominated", async context => {
+  const fixture = await universeFixture(context);
+  // Book 1's scene on 12-24, book 2's on 12-25 (same continuity).
+  for (const [index, day] of [[0, 24], [1, 25]] as const) {
+    const ontology = join(fixture.workspaces[index], "ontology");
+    await appendFile(join(ontology, "entities.jsonl"), JSON.stringify({ id: "time_1", kind: "TimePoint", names: [{ text: `12月${day}日`, lang: "zh", kind: "canonical" }], properties: { storyIndex: 0, date: { month: 12, day, derived: false } }, confidence: 1 }) + "\n");
+    await writeFile(join(ontology, "relations.jsonl"), JSON.stringify({ fromId: "sc_1", toId: "time_1", type: "OCCURS_DURING", properties: { via: "anchor" }, confidence: 1 }) + "\n");
+  }
+  await buildCalendar(await rootCastScope(fixture.directory, "world", {}));
+  const scope = await loadUniverseContext(fixture.directory, "world");
+  const result = await universeCandidates(scope, 0, 20);
+  const [first, second] = [fixture.sources[0].id, fixture.sources[1].id];
+  const between = result.candidates.filter(candidate => [candidate.from.sourceId, candidate.to.sourceId].sort().join() === [first, second].sort().join());
+  assert.ok(between.length > 0);
+  assert.ok(between.every(candidate => candidate.from.sourceId === first && !candidate.orderAmbiguous && candidate.legs.includes("calendar-order")), "only book 1 → book 2, as the calendar orders them");
+  assert.match(between[0].calendar.from, /12-24/);
+  assert.equal(between[0].calendar.order, "cause first");
+  // Pairs the calendar cannot place stay open in both directions.
+  assert.ok(result.candidates.some(candidate => candidate.orderAmbiguous && candidate.calendar.order === "unordered"));
 });

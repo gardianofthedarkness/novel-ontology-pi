@@ -253,3 +253,12 @@ test('universal EM: Pi may show and sweep its own book; identity packets review 
   assert.equal(authorize(`novel review show /private/library ${packet} --scope universe --universe toaru`, { ...defaultScope, library, reviewProtocol: 'review-v1' }).label, 'novel review show');
   assert.throws(() => authorize(`novel review show ${novel} ${packet} --scope book`, { ...defaultScope, library, reviewProtocol: 'review-v1' }));
 });
+
+test('the universe calendar: Pi may show and rebuild the clock of its book or its library universe; year questions review at the universe', () => {
+  const library = { directory: '/private/library', bindings: [] };
+  const scope = { ...defaultScope, library, reviewProtocol: 'review-v1' };
+  assert.equal(authorize(`novel calendar show ${novel}`, scope).label, 'novel calendar show');
+  assert.equal(authorize(`novel calendar build /private/library --universe toaru`, scope).label, 'novel calendar build');
+  for (const command of [`novel calendar build /elsewhere`, `novel calendar show /private/other --universe toaru`, `novel calendar decide ${novel}`]) assert.throws(() => authorize(command, scope), command);
+  assert.equal(authorize(`novel review show /private/library ut_${'b'.repeat(24)} --scope universe --universe toaru`, scope).label, 'novel review show');
+});
