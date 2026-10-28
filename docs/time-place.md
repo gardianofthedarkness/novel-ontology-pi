@@ -102,20 +102,34 @@ to canon.
 A scene with no recorded cast borrows a nearby scene's, and the borrowed cast
 links it into a strand. That is the only trigger for a question: "who is
 present?", the chapter's characters to choose from (work model, multi-select,
-four scenes per call; a name not on the list is ignored). Planning is free;
+four scenes per call; a name not on the list is ignored). The reply sorts the
+listed characters a passage names into "present" (on stage) and "mentioned"
+(remembered, talked about, on the phone); only "present" counts. Each
+character is listed with the other name forms the text uses, and the passage
+is the whole scene up to 2,400 characters, or its opening, its close and the
+middle sentences that name a listed character. Planning is free;
 `--ask` spends calls, at most `--max-questions` (default 30) per run, only in
 chapters of at least `--min-impact` scenes (default 8). Replies are cached
 with `--cache`.
 
-Measured on the two hand-read volumes (2026-10-27), with perfect answers
-standing in for the model, so these are ceilings:
+Measured on the two hand-read volumes (2026-10-27), pair accuracy. The
+perfect-answer rows stand in the answer key's main characters for the model:
 
 | | Vol 1 | Vol 2 |
 | --- | --- | --- |
 | Strands without questions | 0.872 | 0.875 |
-| + 15 questions (5 calls) | 0.873 | 0.885 |
-| + 25 questions (8–10 calls) | 0.889 | 0.896 |
-| + every borrowed link (28–29 questions, 9–10 calls) | 0.895 | 0.915 |
+| + 15 questions, perfect answers (5 calls) | 0.873 | 0.885 |
+| + 25 questions, perfect answers (8–10 calls) | 0.889 | 0.896 |
+| + every borrowed link, perfect answers (28–29 questions, 9–10 calls) | 0.895 | 0.915 |
+| + every borrowed link, work model, first wording ("present", 900-character passage) | 0.879 | 0.904 |
+| + every borrowed link, work model, present/mentioned wording (current) | **0.916** | **0.889** |
+
+- The model's answers beat the perfect-answer row on volume 1 because they
+  also name present characters outside the key's main strands; on volume 2
+  they name more characters than the key places in a scene. With about 28
+  questions a volume, one wording against another moves each volume by a
+  few points either way; the current wording is better on average (0.903
+  against 0.892).
 
 - About 10 work-model calls per volume, against 130–150 for the time-place
   run itself.

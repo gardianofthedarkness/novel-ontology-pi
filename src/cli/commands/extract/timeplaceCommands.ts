@@ -15,7 +15,7 @@ import { cachedDecisions, cachedWork } from "../../../digger/timeplace/cache.js"
 import { timePlaceAttempted, timePlaceForNewScenes, timePlaceReviewSource } from "../../../digger/timeplace/afterApply.js";
 import type { ChangeSet } from "../../../solidifier/merge/changeset.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
-import { askStrandQuestions, planStrandQuestions, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "../../../digger/timeplace/strandQuestions.js";
+import { askStrandQuestions, planStrandQuestions, scenePassage, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "../../../digger/timeplace/strandQuestions.js";
 
 /**
  * `novel timeplace run|tree|show` — the time-place faculty over a
@@ -237,13 +237,11 @@ export async function timeplaceStrands(novelDir: string, options: TimeplaceStran
   if (options.ask && plan.questions.length) {
     const sentences = await loadWorkspaceSentences(novelDir);
     const byScene = new Map(scenes.map((scene) => [scene.id, scene]));
-    const passage = (sceneId: string) => {
-      const lines = (byScene.get(sceneId)?.sentenceIds ?? []).map((id) => sentences.get(id)?.text ?? "").filter(Boolean);
-      return [...lines.slice(0, 8), ...(lines.length > 10 ? ["…", ...lines.slice(-2)] : lines.slice(8))].join("\n").slice(0, 900);
-    };
+    const passage = (sceneId: string, nameForms: string[]) => scenePassage((byScene.get(sceneId)?.sentenceIds ?? []).map((id) => sentences.get(id)?.text ?? "").filter(Boolean), nameForms);
+    const forms = Object.fromEntries(entities.filter((entity) => entity.kind === "Character").map((entity) => [entity.id, [...new Set((entity.names ?? []).map((name) => name.text).filter(Boolean))]]));
     const work = options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env);
     const metered = { modelId: work.modelId, generate: async (request: Parameters<typeof work.generate>[0]) => { usage.workCalls++; return work.generate(request); } };
-    const result = await askStrandQuestions({ work: metered, plan, names: data.names, passage, options: limits });
+    const result = await askStrandQuestions({ work: metered, plan, names: data.names, forms, passage, options: limits });
     asked = result.asked;
     strands = storyStrands(data, result.answers);
   }
