@@ -12,7 +12,7 @@ import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";
-import type { FloorMark } from "../data/orbitalTimePlace";
+import type { CalendarPin, FloorMark } from "../data/orbitalTimePlace";
 import { useAlbumTexture } from "./useAlbumTexture";
 import { containedImageSize } from "../data/albumImage";
 
@@ -321,6 +321,45 @@ function FloorMap({ marks }: { marks: FloorMark[] }) {
       <mesh raycast={noRaycast}><ringGeometry args={[mark.radius * (mark.proposed ? 0.993 : rim), mark.radius, mark.region ? 72 : 48]} /><meshBasicMaterial color={mark.proposed ? "#ffd36b" : "#7cc8ff"} transparent opacity={mark.active ? (mark.region ? 0.6 : 0.85) : 0.22} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>
     </group>;
   })}</>;
+}
+
+/** A calendar pin's date: large soft lettering (no card), the year and book small beneath. */
+function pinTexture(label: string, detail: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024; canvas.height = 300;
+  const context = canvas.getContext("2d")!;
+  context.textAlign = "center";
+  context.shadowColor = "rgba(120, 170, 255, 0.55)";
+  context.shadowBlur = 28;
+  context.fillStyle = "rgba(214, 228, 255, 0.82)";
+  context.font = "700 170px sans-serif";
+  context.fillText(label, 512, 180);
+  context.shadowBlur = 0;
+  context.fillStyle = "rgba(160, 186, 232, 0.75)";
+  context.font = "400 58px sans-serif";
+  context.fillText(detail, 512, 270);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
+/** Giant calendar pins behind the story: a big date high up and far back
+ * where a calendar day starts, a faint pole down to the floor. Never raycast,
+ * labelled or framed: a backdrop, not records. */
+function CalendarPins({ pins }: { pins: CalendarPin[] }) {
+  return <>{pins.map((pin) => <CalendarPinMesh key={pin.id} pin={pin} />)}</>;
+}
+function CalendarPinMesh({ pin }: { pin: CalendarPin }) {
+  const texture = useMemo(() => pinTexture(pin.label, pin.detail), [pin.label, pin.detail]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  // World-sized lettering far back: it reads as distant scenery and scales with the view like the strands do.
+  // Outside the render-distance fog, which would hide anything this far behind the story.
+  const floor = -944, width = 4200, tall = width * 300 / 1024, base = pin.card - tall * 0.45, height = Math.max(200, base - floor);
+  return <group position={[pin.x, 0, pin.z]}>
+    <mesh raycast={noRaycast} renderOrder={-1} position={[0, floor + height / 2, 0]}><cylinderGeometry args={[22, 22, height, 10]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.18} depthWrite={false} toneMapped={false} fog={false} /></mesh>
+    <mesh raycast={noRaycast} renderOrder={-1} position={[0, floor + 1, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[90, 140, 40]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.25} depthWrite={false} toneMapped={false} fog={false} /></mesh>
+    <sprite raycast={noRaycast} renderOrder={-1} position={[0, pin.card, 0]} scale={[width, tall, 1]}><spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} fog={false} /></sprite>
+  </group>;
 }
 
 /**
@@ -899,6 +938,8 @@ interface Props {
   faculties?: FacultyAnchor[];
   /** A flat map on the floor (orbital Places); world units. */
   floor?: FloorMark[];
+  /** Giant calendar pins behind the story (orbital Story time); world units. */
+  pins?: CalendarPin[];
   /** Minecraft-style render distance (world units) around where the camera looks. */
   renderDistance?: number;
   /** Camera direction for automatic framing (default: a slight side view). */
@@ -935,7 +976,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), dimmed: !!focusIds && !focusIds.has(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion, focusIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -950,6 +991,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <ambientLight intensity={0.85} /><directionalLight position={[800, 1200, 1800]} intensity={1.5} color="#c4eaff" />
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
+    {pins.length > 0 && <CalendarPins pins={pins} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} radii={radii} />)}
     <VisibleConnections edges={edges} bus={bus} />

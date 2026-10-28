@@ -3,7 +3,7 @@ import type { CausalArrow } from "./causalProjection.js";
 import type { Position3 } from "./spatialLayout.js";
 import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
 import { storyStrands, type StrandCheck, type StrandEdge } from "./storyStrands.js";
-import { dateLine, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
+import { calendarDay, calendarDayKey, dateLine, sceneDays, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
 
 /**
  * Orbital Story time and Places (time-place phase 1, view only). Each is the
@@ -47,6 +47,8 @@ export interface OrbitalArrangement {
   extraDraws?: OrbitalDraw[];
   /** Flat marks on the floor (world units): the 2D map. */
   floor?: FloorMark[];
+  /** Giant calendar pins behind the story (world units): where each calendar day starts. */
+  pins?: CalendarPin[];
   /** Main sphere size factor and camera direction for this arrangement. */
   radiusScale?: number;
   direction?: Position3;
@@ -71,6 +73,8 @@ export interface OrbitalArrangement {
   /** Per-sphere start delays (ms) for that glide, e.g. the line shredding into strands in story order. */
   morphDelays?: (draws: OrbitalDraw[]) => Map<string, number>;
 }
+/** A calendar day behind the story like a backdrop: a big date high up and far back where the day's first scene sits, a faint pole down to the floor. */
+export interface CalendarPin { id: string; x: number; z: number; top: number; card: number; label: string; detail: string }
 /** A place's disc on the floor; a region (a place containing others) is a wider, fainter disc under its children. */
 export interface FloorMark { id: string; x: number; z: number; radius: number; active: boolean; depth?: number; region?: boolean; proposed?: boolean }
 
@@ -289,6 +293,59 @@ function strandLayout(data: TimePlaceProjection, lanes: Map<number, StoryScene[]
   };
   return { anchors, layer, continues, edges, checks, curve };
 }
+/**
+ * Rough calendar marks for the story axis: in each book's stretch of a
+ * continuity, a pin where each calendar day's first (non-flashback) scene
+ * sits. Days that would stand behind an earlier day's pin (a day only seen
+ * out of order) get none. Layout anchors in, world units out (the orbit draws
+ * anchors ×3).
+ */
+/** How far behind the story the calendar stands, and how far apart two dates must start to keep their own labels (layout units). */
+const PIN_BACK = 2000, PIN_SPACING = 1400;
+export function calendarPins(data: TimePlaceProjection, anchors: Map<string, Position3>, laneOf: (scene: StoryScene) => number): CalendarPin[] {
+  const entries = new Map((data.calendar?.entries ?? []).filter((entry) => entry.placed !== "between" && entry.year !== null).map((entry) => [entry.id, entry]));
+  if (!entries.size) return [];
+  type First = { lane: number; book: number | null; day: { year: number; month: number; day: number }; start: number; x: number };
+  const firsts = new Map<string, First>();
+  /** How high each book's stretch of strands reaches: its pins rise that far. */
+  const tops = new Map<string, number>();
+  for (const scene of data.scenes) {
+    const anchor = anchors.get(spiralNodeId(scene.id));
+    if (!anchor) continue;
+    const stretch = `${laneOf(scene)}|${scene.book ?? ""}`;
+    tops.set(stretch, Math.max(tops.get(stretch) ?? -Infinity, anchor[1]));
+    const entry = scene.flashback ? undefined : scene.times.map((time) => entries.get(time.id)).find(Boolean);
+    if (!entry) continue;
+    const day = { year: entry.year!, month: entry.month!, day: entry.day! };
+    const key = `${laneOf(scene)}|${scene.book ?? ""}|${calendarDayKey(day)}`;
+    const known = firsts.get(key);
+    if (!known || anchor[0] < known.x) firsts.set(key, { lane: laneOf(scene), book: scene.book ?? null, day, start: Math.floor(entry.span.start / 1440), x: anchor[0] });
+  }
+  const pins: CalendarPin[] = [];
+  const stretches = new Map<string, First[]>();
+  for (const first of firsts.values()) stretches.set(`${first.lane}|${first.book ?? ""}`, [...(stretches.get(`${first.lane}|${first.book ?? ""}`) ?? []), first]);
+  for (const [stretch, days] of stretches) {
+    let last = -Infinity, kept: { pin: CalendarPin; first: First } | null = null;
+    for (const first of days.sort((a, b) => a.start - b.start)) {
+      if (first.x <= last) continue;
+      last = first.x;
+      // Days that start closer than one date's width share a label ("12月24–25日").
+      if (kept && first.x - kept.first.x < PIN_SPACING) {
+        kept.pin.label = `${kept.first.day.month}月${kept.first.day.day}–${first.day.month === kept.first.day.month ? "" : `${first.day.month}月`}${first.day.day}日`;
+        continue;
+      }
+      const date = calendarDay(first.start * 1440);
+      const pin: CalendarPin = { id: `calendar:${first.lane}:${first.book ?? ""}:${calendarDayKey(date)}`, x: (first.x - SPIRAL.step / 2) * 3, z: (first.lane * SPIRAL.laneGap - SPIRAL.radius - PIN_BACK) * 3, top: ((tops.get(stretch) ?? 0) + 220) * 3,
+        // The date floats above the book's strands, far behind the scenes: a backdrop, not a record.
+        card: ((tops.get(stretch) ?? 0) + 520) * 3,
+        label: `${first.day.month}月${first.day.day}日`, detail: `Year ${first.day.year}${first.book !== null ? ` · Book ${first.book}` : ""}` };
+      pins.push(pin);
+      kept = { pin, first };
+    }
+  }
+  return pins;
+}
+
 const spiralPoint = (rank: number, total: number): Position3 => {
   const angle = rank / SPIRAL.perTurn * Math.PI * 2;
   return [(rank - (total - 1) / 2) * SPIRAL.step, Math.cos(angle) * SPIRAL.radius, Math.sin(angle) * SPIRAL.radius];
@@ -341,7 +398,7 @@ const causalRecords = (nodes: WorldNode[], ends: ReadonlySet<string>) => nodes
  * bubble around the events and dialogue its causal arrows start or end at
  * (entering the scene shows all its records); an amber thread from each
  * flashback scene to the scene it was told after. */
-export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWorld, focusBook?: number | null, shape: StoryShape = "line"): OrbitalArrangement {
+export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWorld, focusBook?: number | null, shape: StoryShape = "line", focusDay?: string | null): OrbitalArrangement {
   const order = storyOrderScenes(data);
   // A universe: one spiral per continuity, side by side (alternate lines do not share a clock).
   const laneOf = continuityLanes(data);
@@ -358,6 +415,10 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
   const sceneById = new Map(data.scenes.map((scene) => [scene.id, scene]));
   /** A book's scenes on the spiral (universe ids carry the book). */
   const bookPositions = (volume: number, draws: OrbitalDraw[]) => { const points = draws.filter((draw) => draw.role === "main" && sceneById.get(sceneOfSpiral(draw.node.id) ?? "")?.book === volume).map((draw) => draw.position); return points.length ? points : null; };
+  /** The scenes of the chosen calendar day, in every book (the calendar, not a file, is what the view focuses). */
+  const dayOf = sceneDays(data);
+  const dayPositions = (draws: OrbitalDraw[]) => { if (!focusDay) return null; const points = draws.filter((draw) => draw.role === "main" && dayOf.get(sceneOfSpiral(draw.node.id) ?? "") === focusDay).map((draw) => draw.position); return points.length ? points : null; };
+  const focusFrame = (draws: OrbitalDraw[]) => dayPositions(draws) ?? (universe && focusBook !== null && focusBook !== undefined ? bookPositions(focusBook, draws) : null);
   const toldAfter = new Map<string, string>();
   for (let index = 1; index < reading.length; index++) {
     const scene = reading[index], previous = reading[index - 1];
@@ -388,20 +449,26 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     node: { id: portal.id, label: portal.label, viewKind: "Other volume", kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono: 0, summary: `${portal.links} cross-volume causal link${portal.links === 1 ? "" : "s"} with this book (universe ledger) · ${portal.before ? "read before" : "read after"} this volume`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] },
     position: [portal.before ? -reach : reach, 0, 0], radius: 70, role: "preview", order: portal.before ? -1 : order.length + 1,
   });
+  const pins = calendarPins(data, anchors, laneOf);
+  const pinNote = pins.length ? " · tall pins behind: where each calendar day starts (the universe calendar)" : "";
   return {
     anchors, radiusScale: 0.42, causal: true,
     // Strands: seen from the side, coils stacked like the rows of a braid.
     ...(strands ? { direction: [0, 0.22, 1] as Position3 } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
     morphKey: `${strands ? "strands" : "line"}:${[...anchors].map(([id, point]) => `${id}@${point.map(Math.round).join("/")}`).join(",")}`,
+    // The calendar behind the story: a giant pin where each day starts.
+    pins,
     // Shredding: in story order, each scene peels off the one line onto its strand.
     morphDelays: (draws) => { const last = Math.max(1, ...position.values()); return new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / last) * SHRED_MS)])); },
     timeKey: strands
-      ? { label: "STORY STRANDS →", detail: `Story time as strands, estimated from who is in each scene (a guess where a scene names no one): each coil follows the same characters · S-curves: strands splitting and meeting · a faint rung: scenes nothing orders, side by side at one moment · amber: a flashback, threaded to where it is told · orange arcs: causes between the records inside the bubbles, judged in this order · place check: ${strandSummary(strands.checks)}` }
+      ? { label: "STORY STRANDS →", detail: `Story time as strands, estimated from who is in each scene (a guess where a scene names no one): each coil follows the same characters · S-curves: strands splitting and meeting · a faint rung: scenes nothing orders, side by side at one moment · amber: a flashback, threaded to where it is told · orange arcs: causes between the records inside the bubbles, judged in this order · place check: ${strandSummary(strands.checks)}${pinNote}` }
       : data.available
-      ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told` }
+      ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
       : { label: "READING ORDER →", detail: `Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""}` },
-    initialFrame: (draws) => (universe && focusBook !== null && focusBook !== undefined ? bookPositions(focusBook, draws) : null) ?? draws.filter((draw) => draw.role === "main" && (position.get(draw.node.id) ?? draw.node.chrono) < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
-    ...(universe ? { bookFrame: (draws: OrbitalDraw[]) => focusBook === null || focusBook === undefined ? null : bookPositions(focusBook, draws), bookKey: `story:${focusBook ?? ""}`, renderDistance: renderReach(order) } : {}),
+    initialFrame: (draws) => focusFrame(draws) ?? draws.filter((draw) => draw.role === "main" && (position.get(draw.node.id) ?? draw.node.chrono) < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
+    // The camera flies to the chosen day (or, with none, the book being read) whenever the choice changes.
+    ...(universe || focusDay ? { bookFrame: focusFrame, bookKey: focusDay ? `story:day:${focusDay}` : `story:${focusBook ?? ""}` } : {}),
+    ...(universe ? { renderDistance: renderReach(order) } : {}),
     // A selected scene is framed with its neighbours on the spiral (about half a turn); a book marker frames its book.
     focusFor: (selectedId, draws) => {
       if (selectedId.startsWith("book:")) return bookPositions(Number(selectedId.slice(5)), draws);

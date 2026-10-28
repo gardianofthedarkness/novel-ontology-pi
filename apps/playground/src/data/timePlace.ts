@@ -112,6 +112,17 @@ export const calendarTimeLabel = (entry: Pick<CalendarViewEntry, "time" | "span"
  * An undated period (a range between dated neighbours) is listed under the
  * day its range starts, marked as undated.
  */
+/** The calendar day each scene starts on (its first placed, dated period), by day key. */
+export function sceneDays(data: Pick<TimePlaceProjection, "scenes" | "calendar">): Map<string, string> {
+  const entries = new Map((data.calendar?.entries ?? []).filter((entry) => entry.placed !== "between" && entry.year !== null).map((entry) => [entry.id, entry]));
+  const days = new Map<string, string>();
+  for (const scene of data.scenes) {
+    const entry = scene.times.map((time) => entries.get(time.id)).find(Boolean);
+    if (entry) days.set(scene.id, calendarDayKey({ year: entry.year!, month: entry.month!, day: entry.day! }));
+  }
+  return days;
+}
+
 export function calendarDays(view: CalendarView): { key: string; label: string; entries: CalendarViewEntry[] }[] {
   const days = new Map<string, { key: string; label: string; start: number; entries: CalendarViewEntry[] }>();
   for (const entry of view.entries) {

@@ -30,11 +30,13 @@ interface Props {
   bookBar?: ReactNode;
   /** Universe views: the book being read; the list glides to it and the other books recede. */
   focusBook?: number | null;
+  /** The calendar day chosen in the picker (a day key): the list glides to it. */
+  focusDay?: string | null;
 }
 
 const hue = (index: number, total: number) => `hsl(${200 - Math.round(150 * index / Math.max(1, total - 1))} 70% 62%)`;
 
-export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, following = false, pictures = [], album = [], onPicture, bookBar, focusBook = null }: Props) {
+export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, following = false, pictures = [], album = [], onPicture, bookBar, focusBook = null, focusDay = null }: Props) {
   const universe = data.scope === "universe";
   const rows = useMemo(() => universe ? universeStoryRows(data) : storyRows(data).map((row) => ({ ...row, book: null, continuityId: null })), [data, universe]);
   // The calendar is the axis whenever any period is on it.
@@ -45,9 +47,11 @@ export function StoryTimeline({ data, names, onShowInOrbit, emerging, touched, f
   const dayRefs = useRef(new Map<string, HTMLElement>());
   const rowKey = (scene: StoryScene) => scenePeriod(scene) ?? (universe ? `unplaced:${scene.book}` : "unplaced");
   const bookRefs = useRef(new Map<number, HTMLElement>());
+  // Choosing a calendar day glides the list to it.
+  useEffect(() => { if (focusDay) dayRefs.current.get(focusDay)?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [focusDay]);
   // Universe: choosing a book glides the list to it.
   useEffect(() => {
-    if (!universe || focusBook === null) return;
+    if (!universe || focusBook === null || focusDay) return;
     const first = calendar?.entries.find((entry) => entry.book === focusBook);
     (first ? rowRefs.current.get(first.id) : bookRefs.current.get(focusBook))?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [focusBook, universe]); // eslint-disable-line react-hooks/exhaustive-deps
