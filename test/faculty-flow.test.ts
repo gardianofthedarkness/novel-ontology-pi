@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { FLOW_EDGES, FLOW_NODES, commandScope, flowNodeOf, flowState } from "../apps/playground/src/data/facultyFlow.js";
 import type { LiveActivity } from "../apps/playground/src/data/liveActivity.js";
-import { observeDecisions, observeWork } from "../src/ground/events/observe.js";
+import { libraryCallSink, observeDecisions, observeWork } from "../src/ground/events/observe.js";
 import type { ProcessingEvent } from "../src/ground/events/types.js";
 
 async function sources(directory: string): Promise<string[]> {
@@ -97,4 +99,19 @@ test("observed clients report each call once, with or without a block, and never
   ]);
   const broken = observeDecisions({ modelId: "jev", decide: async () => [] }, async () => { throw new Error("log locked"); });
   assert.deepEqual(await broken.decide("state", []), []);
+});
+
+test("library faculties log calls apart from the library and join the live faculties", async (t) => {
+  const library = await mkdtemp(join(tmpdir(), "novel-library-calls-"));
+  t.after(() => rm(library, { recursive: true, force: true }));
+  const atlas = observeDecisions({ modelId: "jev", decide: async () => [] }, await libraryCallSink(library), { faculty: "atlas" });
+  await atlas.decide("state", [{ key: "atlas:p1|p2", instructions: "?", options: ["same"] }] as never);
+  const { readLibraryLive, withLibraryLive } = await import(pathToFileURL(join(process.cwd(), "tools/pi-review/library-live.mjs")).href);
+  const view = async () => ({ sources: [], events: [], totalEvents: 0 });
+  const live = await readLibraryLive(library, [], view);
+  const data = withLibraryLive({ volume: 1, world: {}, feed: [], activity: { faculties: [{ id: "book", faculty: "scene_start" }] } }, live);
+  assert.deepEqual(data.activity.faculties.map((entry: { faculty: string }) => entry.faculty), ["scene_start", "atlas"]);
+  assert.equal(data.activity.faculties[1].status, "ok");
+  assert.equal(flowNodeOf(data.activity.faculties[1].faculty), "atlas");
+  assert.ok(!("faculties" in data.world.library), "call telemetry stays out of the public library view");
 });

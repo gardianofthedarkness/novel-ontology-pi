@@ -94,6 +94,8 @@ reported calls. Everything else ran dark:
   extraction and the miniloop's name refiner called the work model directly.
 - `novel changeset approve` ran entity matching after an approval unobserved.
 - `novel timeplace run|tree` and `novel match` wrote no activity at all.
+- `novel atlas` and `novel causality universe` work on a library, which had no
+  log the viewer reads.
 
 `observeDecisions` and `observeWork` (`src/ground/events/observe.ts`) now wrap
 those clients, so every model call made for a novel is one started/finished
@@ -101,13 +103,15 @@ pair in its event log. Commands that work across the whole novel report no
 `blockId`: the console still shows them, and the orbit plays no block effect
 for them.
 
-Three limits stay. `novel atlas` and `novel causality universe` work on a
-library, which has no event log the viewer reads; they show only as Pi's
-current command. Events say which faculty fired, not which upstream output it
-read, so the console draws context edges from this graph and animates an edge
-when its target fires after its source in the same block; it never claims a
-record moved along it. And the reviewer's own reasoning is not a faculty: the
-gate shows as busy only through the review status. Events say which faculty fired, not which upstream output it
+Library faculties report to `<library>/telemetry/events.jsonl`
+(`libraryCallSink`). It holds call telemetry only: the library's own activity
+stays derived from committed state ([library-live.md](library-live.md)), and a
+lost telemetry line can never hide a decision. `tools/pi-review/library-live.mjs`
+reads the newest 1 MiB of it and adds `Library · atlas` and
+`Library · universe-causality` to the live faculties, where they light the graph
+like a book's faculties.
+
+Two limits stay. Events say which faculty fired, not which upstream output it
 read, so the console draws context edges from this graph and animates an edge
 when its target fires after its source in the same block; it never claims a
 record moved along it. And the reviewer's own reasoning is not a faculty: the

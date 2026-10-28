@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { DecisionModel } from "../connectors/jev.js";
 import type { WorkModel } from "../connectors/llm.js";
+import { EventLog } from "./log.js";
 import type { EventSink } from "./types.js";
 
 /** Where an observed call belongs: a block, or (omitted) the whole novel. */
@@ -57,4 +60,20 @@ export function observeWork(work: WorkModel, emit: EventSink, scope: ObservedSco
       }
     },
   };
+}
+
+/**
+ * Library-wide faculties (the atlas, universe causality) report their calls
+ * to `<library>/telemetry/events.jsonl`. It is call telemetry only: library
+ * activity itself stays derived from committed state (docs/library-live.md).
+ * A library that cannot take the folder runs unobserved, never fails.
+ */
+export async function libraryCallSink(library: string): Promise<EventSink> {
+  const directory = join(library, "telemetry");
+  try {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    return new EventLog(directory).emit;
+  } catch {
+    return async () => {};
+  }
 }
