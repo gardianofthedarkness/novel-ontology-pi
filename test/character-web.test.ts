@@ -157,3 +157,17 @@ test("orbital Characters: one sphere per character holding their scenes, on the 
   assert.equal(watched.find((path) => path.id === "pair:v1:c1|v1:c2")?.tone, "route", "a watched pair's tie carries the moving bead");
   assert.equal(castArrangement(web, { pair: ["v1:c1", "v1:c2"] }).paths!(draws, null).find((path) => path.id.startsWith("pair:"))?.tone, "thread");
 });
+
+test("a journey narrows Story time and Places to one character's scenes, in a book or a universe", async () => {
+  const { journeyCharacter, journeyProjection } = await import("../apps/playground/src/data/journey.js");
+  const scene = (id: string) => ({ id, index: 0, chapterIndex: 0, label: id, times: [], flashback: false, placeIds: [], placeCarried: false, characterIds: [] });
+  const book = { available: true, times: [], scenes: ["s1", "s2", "s3"].map(scene), places: [], characters: [{ id: "c1", label: "Aya", scenes: 2 }], names: {} };
+  const journey = { volume: 2, characterId: "c1", label: "Aya", sceneIds: ["s1", "s3"] };
+  assert.deepEqual(journeyProjection(book, journey).scenes.map((entry) => entry.id), ["s1", "s3"]);
+  assert.equal(journeyCharacter(book, journey), "c1");
+  // A universe prefixes the book's ids with its volume; another book's scenes never join.
+  const universe = { ...book, scope: "universe" as const, scenes: ["2:s1", "2:s2", "3:s1"].map(scene), characters: [{ id: "2:c1", label: "Aya", scenes: 1 }] };
+  assert.deepEqual(journeyProjection(universe, journey).scenes.map((entry) => entry.id), ["2:s1"]);
+  assert.equal(journeyCharacter(universe, journey), "2:c1");
+  assert.equal(journeyCharacter({ ...book, characters: [] }, journey), null);
+});

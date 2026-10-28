@@ -37,9 +37,11 @@ interface Props {
   /** The watched pair's tie: it flows while their story plays. */
   pulse?: string;
   onPick: (id: string, additive: boolean) => void;
+  /** Double-click: follow this character's journey. */
+  onOpen?: (id: string) => void;
 }
 
-export function CastWeb2D({ web, selected, reducedMotion, pulse, onPick }: Props) {
+export function CastWeb2D({ web, selected, reducedMotion, pulse, onPick, onOpen }: Props) {
   const layout = useMemo(() => webLayout(web), [web]);
   const shown = useTweened(layout, reducedMotion);
   const [hover, setHover] = useState<string | null>(null);
@@ -107,6 +109,7 @@ export function CastWeb2D({ web, selected, reducedMotion, pulse, onPick }: Props
               tabIndex={0} role="button" aria-label={`${node.name}, ${TIER_LABEL[node.tier]}, rank ${node.rank}`}
               onMouseEnter={() => setHover(node.id)} onFocus={() => setHover(node.id)} onBlur={() => setHover(null)}
               onClick={(event) => onPick(node.id, event.shiftKey || event.metaKey)}
+              onDoubleClick={() => onOpen?.(node.id)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onPick(node.id, event.shiftKey); } }}>
               <circle className="halo" r={p.r + 7} />
               <circle className="disc" r={p.r} style={node.portrait ? { fill: `url(#p-${cssId(node.id)})` } : undefined} />

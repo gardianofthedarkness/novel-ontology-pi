@@ -21,7 +21,7 @@ function Parts({ node }: { node: WebNode }) {
  * shows a character in the view (the orbit centres it and opens the glass
  * inspector; the flat web selects it).
  */
-export function CastPanel({ cast, onFocus }: { cast: CastState; onFocus: (id: string) => void }) {
+export function CastPanel({ cast, onFocus, onJourney }: { cast: CastState; onFocus: (id: string) => void; onJourney: (id: string) => void }) {
   const { web, pair, selected } = cast;
   const now = useRef<HTMLLIElement>(null);
   useEffect(() => { now.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [cast.watching]);
@@ -86,6 +86,7 @@ export function CastPanel({ cast, onFocus }: { cast: CastState; onFocus: (id: st
       ) : one ? (
         <section className="cast-one" aria-label={`${one.name}: why this rank`}>
           <p className="atlas-note"><b lang="zh">{one.name}</b> · {TIER_LABEL[one.tier].replace(/s$/, "")} #{one.rank} · {Math.round(one.score * 100)}</p>
+          <div className="atlas-actions"><button className="cast-journey" onClick={() => onJourney(one.id)} title="Story time and Places, narrowed to their scenes">Follow their journey →</button></div>
           {PARTS.map((part) => (
             <div className="cast-part" key={part} title={BREAKDOWN_HELP[part]}>
               <span>{BREAKDOWN_LABEL[part]}</span><span className="cast-meter"><i className={`part-${part}`} style={{ width: `${one.breakdown[part] * 100}%` }} /></span>

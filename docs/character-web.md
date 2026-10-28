@@ -115,6 +115,25 @@ The order is reading order, because story time is not recorded for these
 volumes yet. Once time-place facts exist, a scene's `story` position can take
 its story-time rank instead.
 
+## A character's journey
+
+*Follow their journey* (the panel, once a character is chosen) or a
+double-click on the flat web narrows Story time and Places to the scenes that
+character is in (`apps/playground/src/data/journey.ts`):
+
+- **Orbital Story time:** their own spiral, in story order (reading order until
+  time-place facts exist). It is a tunnel through their part of the book.
+- **Places:** only their scenes above the map, with their path traced through
+  them.
+
+A *Journey · name* chip beside the view switch shows who the views are narrowed
+to; its × ends the journey, and so does leaving for Narrative or Characters. On
+the orbit, double-click keeps its usual meaning: entering a character's sphere
+walks their scenes in reading order.
+
+Flat Story time and Places need time-place facts, so for a book without them
+the journey shows only in orbital Story time.
+
 ## Next
 
 - Read story time from time-place, so flashbacks fall in their place.

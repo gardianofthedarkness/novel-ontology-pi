@@ -85,3 +85,10 @@
 @media (prefers-reduced-motion: reduce) { .cast-flat .tie.is-pulse { animation: none; } .cast-parts i, .cast-meter i { transition: none; } }
 /* Room for the panel on the left, as Story time makes room for the open inspector. */
 @media (min-width: 900px) { .cast-flat { padding-left: 300px; } }
+
+/* The journey chip beside the view switch: who the Story time and Places views are narrowed to. */
+.journey-chip { display: inline-flex; align-items: center; gap: 6px; padding-left: 10px; color: var(--tp-text); font-size: 11px; white-space: nowrap; }
+.journey-chip b { color: var(--tp-flashback); font-weight: 600; }
+.journey-chip button { padding: 0 8px; }
+.cast-panel .cast-journey { padding: 3px 10px; border-color: #ffc46b88; color: var(--tp-flashback); }
+.cast-panel .cast-journey:hover { background: #ffc46b1f; }

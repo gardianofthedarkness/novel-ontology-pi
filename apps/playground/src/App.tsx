@@ -38,6 +38,7 @@ import { CastView } from "./components/cast/CastView";
 import { CastPanel } from "./components/cast/CastPanel";
 import { useCast } from "./components/cast/useCast";
 import { castArrangement, castCharacterId, castNodeId, castWorld } from "./data/orbitalCast";
+import { journeyCharacter, journeyProjection, type Journey } from "./data/journey";
 import type { VolumeBundle } from "./data/castBundle";
 import type {
   AlbumPortrait,
@@ -139,6 +140,8 @@ export default function App() {
   const [atlasPeriods, setAtlasPeriods] = useState<Set<string> | null>(null);
   /** Orbital Places: only the scenes that were at the centre of the Story time spiral (null: no limit). */
   const [atlasFocus, setAtlasFocus] = useState<Set<string> | null>(null);
+  /** A character's journey: Story time and Places narrowed to their scenes, with them traced. */
+  const [journey, setJourney] = useState<Journey | null>(null);
   const [atlasLevels, setAtlasLevels] = useState<AtlasLevels>(SCENE_LEVEL);
   /** Orbital Story time: one spiral line, or strands on a ribbon (remembered per browser). */
   const [storyShape, setStoryShape] = useState<StoryShape>(() => { try { return localStorage.getItem("story-shape") === "strands" ? "strands" : "line"; } catch { return "line"; } });
@@ -154,6 +157,8 @@ export default function App() {
       const focus = storyCentre.current.filter((id) => placed.has(id));
       setAtlasFocus(focus.length ? new Set(focus) : null);
     }
+    // A journey lives in Story time and Places; leaving them ends it.
+    if (next === "narrative" || next === "cast") setJourney(null);
     setStageView(next);
   };
   const [orbitalReset, setOrbitalReset] = useState(0);
@@ -691,6 +696,8 @@ export default function App() {
   /** Scene that holds each record (for following Pi in the scene-based views). */
   /** What Story time and Places show: the universe when the book is in one with other hosted books, else the book. */
   const viewTimePlace = universeTimePlace?.scope === "universe" ? universeTimePlace : timePlace;
+  /** What Story time and Places show: everything, or only the journey's scenes. */
+  const journeyTimePlace = useMemo(() => journey && viewTimePlace ? journeyProjection(viewTimePlace, journey) : viewTimePlace, [journey, viewTimePlace]);
   const universeId = useMemo(() => universeIds(viewTimePlace, loadedBook), [viewTimePlace, loadedBook]);
   /** The book the universe views fly to: the one chosen in the picker, or the one loaded. */
   const focusBook = requestedBook ?? loadedBook;
@@ -828,15 +835,17 @@ export default function App() {
     if (stageView === "story") {
       // Without time facts yet, the spiral runs in reading order (its causal arrows still show);
       // a universe stays a universe: every book in reading order, not just the book being read.
-      const order = viewTimePlace?.available || viewTimePlace?.scope === "universe" ? viewTimePlace : readingOrderProjection(displayWorld);
+      const base = viewTimePlace?.available || viewTimePlace?.scope === "universe" ? viewTimePlace : readingOrderProjection(displayWorld);
+      // A journey's spiral holds only their scenes: a tunnel through their part of the story.
+      const order = journey ? journeyProjection(base, journey) : base;
       const spiral = spiralWorld(displayWorld, order, loadedBook);
       return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook, storyShape) };
     }
-    if (!viewTimePlace?.places.length) return null;
+    if (!journeyTimePlace?.places.length) return null;
     const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels };
-    const regrouped = atlasWorld(displayWorld, viewTimePlace, filter, loadedBook);
-    return { world: regrouped, arrangement: atlasArrangement(viewTimePlace, filter, regrouped, focusBook) };
-  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, loadedBook, focusBook, storyShape]);
+    const regrouped = atlasWorld(displayWorld, journeyTimePlace, filter, loadedBook);
+    return { world: regrouped, arrangement: atlasArrangement(journeyTimePlace, filter, regrouped, focusBook) };
+  }, [orbitalMode, stageView, displayWorld, viewTimePlace, journeyTimePlace, journey, atlasPeriods, atlasFocus, atlasLevels, loadedBook, focusBook, storyShape]);
   /** Characters: one state for the orbit, the flat web and the panel. */
   const cast = useCast(castBundle, albumPortraits, reducedMotion);
   const castPair = cast.selected.length === 2 ? cast.selected.join("|") : "";
@@ -850,6 +859,27 @@ export default function App() {
   // A character chosen on the orbit is the cast's choice too (or the second of a pair being picked).
   const castInspected = stageView === "cast" && orbitalInspection ? castCharacterId(orbitalInspection.node.id) : null;
   useEffect(() => { if (castInspected && !cast.selected.includes(castInspected)) cast.pick(castInspected); }, [castInspected]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Follow a character's journey: their scenes in Story time (then Places), with them traced. */
+  const enterJourney = (id: string) => {
+    const character = cast.data?.characters.find((entry) => entry.id === id);
+    const local = (value: string) => value.slice(value.indexOf(":") + 1);
+    const sceneIds = (cast.data?.scenes ?? []).filter((scene) => scene.present.includes(id)).map((scene) => local(scene.id));
+    if (!sceneIds.length) return;
+    setJourney({ volume: castBundle?.volume ?? loadedBook ?? 1, characterId: local(id), label: character?.name ?? id, sceneIds });
+    setAtlasFocus(null);
+    setStageView("story");
+  };
+  // Arriving in a journey's view, the orbit traces the character (as Places' "Trace a character" does).
+  const traced = useRef("");
+  useEffect(() => {
+    if (!journey || !orbitalMode || (stageView !== "story" && stageView !== "places") || !regroupedOrbit || !viewTimePlace) return;
+    const key = `${journey.characterId}:${stageView}`;
+    const id = journeyCharacter(viewTimePlace, journey);
+    if (!id || traced.current === key) return;
+    traced.current = key;
+    requestOrbitalFocus({ id, label: journey.label, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] });
+  }, [journey, stageView, orbitalMode, regroupedOrbit, viewTimePlace]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!journey) traced.current = ""; }, [journey]);
   /** Show a character from the panel: the orbit centres its sphere (and opens the glass inspector). */
   const focusCastCharacter = (id: string) => {
     const node = castOrbit?.world.laneNodes.find((entry) => entry.id === castNodeId(id));
@@ -894,18 +924,19 @@ export default function App() {
             <div className="stage-group" role="group" aria-label="Mode">{MODES.map(([orbital, label]) => <button key={label} aria-pressed={orbitalMode === orbital} onClick={() => switchMode(orbital)} title={orbital ? "3D orbital views" : "Flat traditional views"}>{label}</button>)}</div>
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
             {orbitalMode && stageView === "story" && viewTimePlace?.available && <div className="stage-group" role="group" aria-label="Story shape">{([["line", "Line"], ["strands", "Strands"]] as const).map(([value, label]) => <button key={value} aria-pressed={storyShape === value} title={value === "strands" ? "Scenes that run in parallel side by side (estimated from who is in each scene)" : "Every scene on one line in story order"} onClick={() => chooseStoryShape(value)}>{label}</button>)}</div>}
+            {journey && (stageView === "story" || stageView === "places") && <div className="stage-group journey-chip" role="group" aria-label="Journey"><span>Journey · <b lang="zh">{journey.label}</b> · {journey.sceneIds.length} scenes</span><button onClick={() => setJourney(null)} aria-label={`End ${journey.label}'s journey`}>×</button></div>}
           </div>
-          {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
-          {stageView === "cast" && cast.web?.nodes.length ? <CastPanel cast={cast} onFocus={focusCastCharacter} /> : null}
-          {stageView === "cast" && !castOrbit ? <CastView cast={cast} hasSource={!!castBundle} reducedMotion={reducedMotion} />
+          {regroupedOrbit && stageView === "places" && journeyTimePlace && <AtlasPanel data={journeyTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: journeyTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
+          {stageView === "cast" && cast.web?.nodes.length ? <CastPanel cast={cast} onFocus={focusCastCharacter} onJourney={enterJourney} /> : null}
+          {stageView === "cast" && !castOrbit ? <CastView cast={cast} hasSource={!!castBundle} reducedMotion={reducedMotion} onJourney={enterJourney} />
           : orbitView ? <OrbitalExplorer key={stageView} world={orbitView.world} arrangement={orbitView.arrangement} albumPictures={stageView === "story" ? albumPictures : []} albumPortraits={albumPortraits} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
-          : stageView === "story" ? <StoryTimeline pictures={albumPictures} album={storyAlbum} onPicture={selectStoryPicture} data={viewTimePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(viewTimePlace?.names ?? {}))} bookBar={bookBar} focusBook={focusBook} emerging={shownEmerging?.times} touched={emerging && Date.now() - emerging.at < 9000 ? undefined : shownTouched} following={followingActivity} onShowInOrbit={(sceneId) => {
+          : stageView === "story" ? <StoryTimeline pictures={albumPictures} album={storyAlbum} onPicture={selectStoryPicture} data={journeyTimePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(viewTimePlace?.names ?? {}))} bookBar={bookBar} focusBook={focusBook} emerging={shownEmerging?.times} touched={emerging && Date.now() - emerging.at < 9000 ? undefined : shownTouched} following={followingActivity} onShowInOrbit={(sceneId) => {
             // Universe ids are "<volume>:<scene>": another book opens first.
             const scene = viewTimePlace?.scenes.find((entry) => entry.id === sceneId);
             if (scene?.book !== undefined && scene.book !== loadedBook) { chooseBook(scene.book); setStageView("narrative"); return; }
             const local = scene?.book !== undefined ? sceneId.slice(sceneId.indexOf(":") + 1) : sceneId;
             const node = Object.values(shownWorld.interiors).flatMap((graph) => graph.nodes).find((entry) => entry.id === local); setStageView("narrative"); if (node) requestOrbitalFocus(node); }} />
-          : stageView === "places" ? <PlaceMap data={viewTimePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(viewTimePlace?.names ?? {}))} emerging={shownEmerging?.places} bookBar={bookBar} focusBook={focusBook} />
+          : stageView === "places" ? <PlaceMap data={journeyTimePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(viewTimePlace?.names ?? {}))} emerging={shownEmerging?.places} bookBar={bookBar} focusBook={focusBook} />
           : orbitalMode ? <OrbitalExplorer key="narrative" world={shownWorld} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} albumPictures={albumPictures} albumPortraits={albumPortraits} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} joins={joins} onJoinSettled={settleJoin} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus} onSelect={inspectOrbital} onChapter={chapterOrbital} onPage={reportOrbitalPage} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />          : <NarrativeList world={shownWorld} activityNodes={visibleDyn.nodes} activityEdges={visibleDyn.edges} activity={liveActivity} followingActivity={followingActivity} timePlace={timePlace} bookBar={bookBar} selectedId={selected?.id ?? null} focusRequest={orbitalFocus} onSelect={inspectOrbital} />}
         </section>
         <aside className={`inspector${inspectorOpen ? " is-open" : ""}${panel === "album" ? " album-open" : ""}`} aria-label="Record and processing details">

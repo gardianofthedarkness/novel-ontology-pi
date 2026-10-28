@@ -7,7 +7,7 @@ import "./cast.css";
  * Places views' frame. Orbital Characters is the orbit itself (orbitalCast.ts);
  * both share the side panel and state (useCast).
  */
-export function CastView({ cast, hasSource, reducedMotion }: { cast: CastState; hasSource: boolean; reducedMotion: boolean }) {
+export function CastView({ cast, hasSource, reducedMotion, onJourney }: { cast: CastState; hasSource: boolean; reducedMotion: boolean; onJourney: (id: string) => void }) {
   const { web } = cast;
   if (!web || !web.nodes.length) return (
     <div className="tp-empty">
@@ -21,9 +21,9 @@ export function CastView({ cast, hasSource, reducedMotion }: { cast: CastState; 
       <header className="tp-head">
         <span className="eyebrow">Characters · relation web</span>
         <b>{web.nodes.length} characters on four rings</b>
-        <p>Protagonists at the heart, then pillars, connectors and cameos; ties are shared scenes, exchanges and actions, green for bonds and red for tension. Choose two to follow their history.</p>
+        <p>Protagonists at the heart, then pillars, connectors and cameos; ties are shared scenes, exchanges and actions, green for bonds and red for tension. Choose two to follow their history; double-click one to follow their journey.</p>
       </header>
-      <CastWeb2D web={web} selected={cast.selected} reducedMotion={reducedMotion} pulse={cast.watching !== null ? pairEdge : undefined} onPick={cast.pick} />
+      <CastWeb2D web={web} selected={cast.selected} reducedMotion={reducedMotion} pulse={cast.watching !== null ? pairEdge : undefined} onPick={cast.pick} onOpen={onJourney} />
     </section>
   );
 }
