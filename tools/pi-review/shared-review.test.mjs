@@ -62,4 +62,7 @@ test('shared gate requires only relevant loaded skills, with extra causal and li
   assert.throws(() => requireSharedReviewSkills(book, { ontology: true }, { proposals: [{ kind: 'add_relation', payload: { type: 'CAUSES' } }] }), /relevant source/);
   assert.equal(requireSharedReviewSkills(['review', 'show', '/lib', 'plan', '--scope', 'library'], { library: true, schema: true }), 'library');
   assert.throws(() => requireSharedReviewSkills(['review', 'show', '/lib', 'packet', '--scope', 'universe'], { ontology: true, library: true }), /relevant source/);
+  // Identity matches (universal EM) are the universe's shared character list: the ontology skill is enough.
+  assert.equal(requireSharedReviewSkills(['review', 'show', '/lib', `um_${'a'.repeat(24)}`, '--scope', 'universe', '--universe', 'toaru'], { ontology: true }), 'universe');
+  assert.throws(() => requireSharedReviewSkills(['review', 'show', '/lib', `um_${'a'.repeat(24)}`, '--scope', 'universe', '--universe', 'toaru'], {}), /relevant source/);
 });
