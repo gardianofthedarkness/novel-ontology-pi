@@ -114,7 +114,10 @@ from recorded casts alone left out characters who were on stage (on the two
 hand-read volumes, 11 of 39 present characters in the asked scenes of
 volume 2; the candidates list misses 1). The reply sorts the
 listed characters a passage names into "present" (on stage) and "mentioned"
-(remembered, talked about, on the phone); only "present" counts. Each
+(remembered, talked about, on the phone); only "present" counts. It also says
+whether someone not on the list is on stage: a scene with nobody listed but
+someone else there stands alone instead of borrowing a nearby cast (which
+would put it on another person's strand). Each
 character is listed with the other name forms the text uses, and the passage
 is the whole scene up to 2,400 characters, or its opening, its close and the
 middle sentences that name a listed character. Planning is free;

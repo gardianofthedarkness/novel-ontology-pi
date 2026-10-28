@@ -264,6 +264,8 @@ export async function timeplaceStrands(novelDir: string, options: TimeplaceStran
     asked, usage,
     // The casts the answers set (character ids), for scoring against a presence key.
     casts: Object.fromEntries(answers.presence ?? []),
+    // Scenes answered as "none of the listed characters, someone else": they stand alone.
+    alone: [...(answers.alone ?? [])],
     // For `novel eval story-order`: the happens-before graph.
     prediction: { kind: "dag", edges: strands.edges.map((edge) => [edge.from, edge.to]) },
   };

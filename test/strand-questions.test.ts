@@ -71,6 +71,19 @@ test("the list to choose from is the scenes' cast candidates, so someone never r
   assert.match(prompt, /1\. (Ming|Kai)\n2\. (Ming|Kai)\n3\. Lan/);
 });
 
+test("nobody listed but someone else there: the scene stands alone instead of borrowing a cast", async () => {
+  const plan = planStrandQuestions(data, storyStrands(data));
+  const order = plan.questions.map((question) => question.sceneId);
+  const work = { modelId: "fake", generate: async () => `{"P1": {"present": [], "mentioned": [], "unlisted": true}, "P2": {"present": [1], "unlisted": true}}` };
+  const { answers, asked } = await askStrandQuestions({ work, plan, names: data.names, passage: (id) => `passage ${id}` });
+  assert.deepEqual([...answers.alone!], [order[0]]);
+  assert.ok(answers.presence!.has(order[1]) && !answers.alone!.has(order[1]));
+  assert.deepEqual(asked.map((entry) => [entry.unlisted, entry.applied]), [[true, true], [true, true]]);
+  const before = storyStrands(data), after = storyStrands(data, { alone: new Set(["l2"]) });
+  assert.ok(before.carried.has("l2") && before.before("l1", "l2"));
+  assert.ok(!after.carried.has("l2") && !after.before("l1", "l2") && !after.before("l2", "l1"));
+});
+
 test("a long scene keeps its opening, its close, and the middle sentences that name a listed character", () => {
   const lines = Array.from({ length: 40 }, (_, index) => `${"x".repeat(100)} ${index}`);
   lines[20] = "Lan walks in.";
