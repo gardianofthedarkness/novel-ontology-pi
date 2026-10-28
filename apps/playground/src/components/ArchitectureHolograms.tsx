@@ -98,6 +98,9 @@ function loadShapes(): Promise<Shapes> {
   });
 }
 
+/** Load the building models ahead (they are their own chunk), so a replay does not start on an empty stage. */
+export const preloadArchitecture = () => loadShapes().then(() => undefined);
+
 const VARIANTS: Record<ArchitectureKind, string[]> = {
   church: ["church"], hospital: ["hospital"], station: ["station"], market: ["market"], castle: ["keep"], park: ["fountain"], village: ["village"],
   skyscraper: ["skyscraper-a", "skyscraper-b", "skyscraper-e"], school: ["office-h"], home: ["office-c"], office: ["block-wide-b"],

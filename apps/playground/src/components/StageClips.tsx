@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HoloStage, replayMs, type HoloMode } from "./HoloStage";
+import { preloadArchitecture } from "./ArchitectureHolograms";
 import { placeScript, sentenceKey, type HoloScript } from "../data/holoScript";
 import type { MovePlan } from "../data/holoNav";
 import { keyedPlan, placePlan, type ReadSentence, type StagePlan } from "../data/readMode";
@@ -59,6 +60,9 @@ export function StageClips({ timePlace, world, volume, requested, title, books, 
     return { clips: pickClips([...stages.values()].flatMap(({ script, plan }) => sceneClips(script, plan))), stages };
   }, [ready, stage, timePlace, world, volume]);
 
+  // The first replay waits for the building models, or it would play on an empty stage.
+  const [models, setModels] = useState(false);
+  useEffect(() => { let live = true; preloadArchitecture().catch(() => undefined).then(() => { if (live) setModels(true); }); return () => { live = false; }; }, []);
   const [index, setIndex] = useState(0);
   const [run, setRun] = useState(0);
   const [auto, setAuto] = useState(true);
@@ -122,9 +126,9 @@ export function StageClips({ timePlace, world, volume, requested, title, books, 
       <nav className="clips-books" aria-label="Books">{books.map((book) => <a key={book.id} href={clipsHref(book.id)} className={book.id === (requested ?? volume) ? "is-on" : undefined} title={book.label}>Vol {book.id}</a>)}</nav>
     </header>
     <section className="clips-stage" aria-label="Clip">
-      {clip && shown ? <HoloStage key={clip.placeId} script={shown.script} mode={mode} onMode={setMode} onClose={() => undefined} reducedMotion={reducedMotion} embedded
+      {clip && shown && models ? <HoloStage key={clip.placeId} script={shown.script} mode={mode} onMode={setMode} onClose={() => undefined} reducedMotion={reducedMotion} embedded
         plan={shown.plan} reel={reel} onReelEnd={() => setEnded(true)} onBeat={setBeat} initialBeat={reducedMotion ? clip.to : clip.from} autoplay={false} />
-        : <div className="clips-idle"><div className="clips-ring" /><p>{!ready ? "Opening the book…" : stage ? "No scene of this book has anyone moving yet." : "This book's animation is not prepared yet."}</p></div>}
+        : <div className="clips-idle"><div className="clips-ring" /><p>{!ready || (clip && !models) ? "Opening the book…" : stage ? "No scene of this book has anyone moving yet." : "This book's animation is not prepared yet."}</p></div>}
     </section>
     {clip && <section className="clips-caption" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} aria-live="polite">
       <div className="clips-meta"><b>{index + 1} / {clips.length}</b><span>{clip.scene}</span><span>{clip.place}{clip.kind ? ` · ${ARCHITECTURE_LABEL[clip.kind]}` : ""}</span>{clip.when && <span>{clip.when}</span>}<span>{clip.movers} moving · {clip.moves} moves</span></div>
