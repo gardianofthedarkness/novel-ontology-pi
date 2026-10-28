@@ -47,6 +47,7 @@ import { albumImport, albumList, albumPortraits } from "./commands/extract/album
 import { albumAssign } from "./commands/extract/portraitCommands.js";
 import { evalExtract, evalRun } from "./commands/extract/evalCommands.js";
 import { evalDialogueCards } from "./commands/extract/dialogueEval.js";
+import { evalStoryOrder } from "./commands/extract/storyOrderEval.js";
 import { sectionBlock } from "../digger/intake/sectioning.js";
 import { cutBlocks } from "../digger/intake/blocks.js";
 import { initWorkspace } from "../ground/workspace/init.js";
@@ -164,6 +165,8 @@ const COMMANDS: Record<string, string> = {
     "Score prediction files against a golden-chapter dataset (precision/recall; metrics only, no thresholds)",
   "novel eval dialogues <gold-cards.json> <predicted-cards.json>":
     "Score exchange-level participants: correct/wrong/missing, unknown cards and source-span matching; no model calls",
+  "novel eval story-order <gold.json> <predicted.json> [--timeplace] [--ties]":
+    "Score story order pair by pair (before / after / parallel) against a strand gold; --timeplace reads a time-place run report as the prediction (--ties leaves scenes of one period unordered); no model calls",
   "novel eval extract <novel-dir> <predictions-dir>":
     "Project an ingested bundle's ontology into a per-chapter predictions dir for eval run (records as stored; no model calls)",
   "novel config": "Show model routing config (keys via env / secure store only)",
@@ -308,6 +311,10 @@ async function main(): Promise<void> {
       out(await evalDialogueCards(positional[2], positional[3]), pretty);
       return;
     }
+    if (sub === "story-order" && positional[2] && positional[3]) {
+      out(await evalStoryOrder(positional[2], positional[3], { timeplace: positional.includes("--timeplace"), ties: positional.includes("--ties") }), pretty);
+      return;
+    }
     if (sub === "run" && positional[2] && positional[3]) {
       out(await evalRun(positional[2], positional[3]), pretty);
       return;
@@ -316,7 +323,7 @@ async function main(): Promise<void> {
       out(await evalExtract(positional[2], positional[3]), pretty);
       return;
     }
-    throw new Error("Usage: novel eval run <dataset-dir> <predictions-dir> | novel eval extract <novel-dir> <predictions-dir> | novel eval dialogues <gold-cards.json> <predicted-cards.json>");
+    throw new Error("Usage: novel eval run <dataset-dir> <predictions-dir> | novel eval extract <novel-dir> <predictions-dir> | novel eval dialogues <gold-cards.json> <predicted-cards.json> | novel eval story-order <gold.json> <predicted.json> [--timeplace] [--ties]");
   }
 
   if (cmd === "watch") {
