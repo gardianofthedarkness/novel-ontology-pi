@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fromBundles, type VolumeBundle } from "../apps/playground/src/data/castBundle.js";
+import { castArrangement, castCharacterId, castNodeId, castWorld } from "../apps/playground/src/data/orbitalCast.js";
 import { TIER_HEIGHT, characterWeb, communities, pairHistory, webLayout, webLayout3d, type WebEdge } from "../apps/playground/src/data/castWeb.js";
 
 // Two invented volumes in bundle shape. Each workspace numbers its own ids, so
@@ -130,4 +131,29 @@ test("the live snapshot's cast keeps provenance at home: events carry their scen
   assert.deepEqual(cast.stateChanges.map((change: { id: string }) => change.id), ["x1"], "only relationship deltas travel");
   assert.deepEqual(cast.causes, [{ fromId: "e0", toId: "e1" }]);
   assert.equal(fromBundles([cast]).events[0].sceneId, "v3:s1");
+});
+
+test("orbital Characters: one sphere per character holding their scenes, on the steps, with ties as orbit paths", () => {
+  const data = fromBundles([volumeOne]);
+  const web = characterWeb(data);
+  // The book's world as the snapshot has it: chapter interiors with scenes and the records they contain.
+  const scene = (id: string) => ({ id, label: id, kind: "scene" as const, state: "canon" as const, parent: "ch", lane: "canon" as const, chrono: 0, lanePos: [0, 0, 0] as [number, number, number], interiorPos: [0, 0, 0] as [number, number, number] });
+  const world = { interiors: { ch: { nodes: [scene("s1"), scene("s2"), scene("s4"), { ...scene("e1"), kind: "event" as const }], edges: [{ id: "c1", from: "s1", to: "e1", kind: "contains" as const, state: "canon" as const, parent: "ch" }] } } };
+  const regrouped = castWorld(world as never, web);
+  assert.deepEqual(regrouped.laneNodes.map((node) => node.id), web.nodes.map((node) => castNodeId(node.id)));
+  const aya = regrouped.interiors[castNodeId("v1:c1")];
+  assert.deepEqual(aya.nodes.map((node) => node.id).sort(), ["e1", "s1", "s2"], "her scenes and what they hold, nothing else");
+  assert.ok(aya.nodes.every((node) => node.parent === castNodeId("v1:c1")));
+  assert.equal(castCharacterId(castNodeId("v1:c1")), "v1:c1");
+  const arrangement = castArrangement(web);
+  const heights = web.nodes.map((node) => [node.tier, arrangement.anchors!.get(castNodeId(node.id))![1]] as const);
+  const top = Math.min(...heights.filter(([tier]) => tier === "protagonist").map(([, y]) => y));
+  assert.ok(heights.filter(([tier]) => tier !== "protagonist").every(([, y]) => y < top), "protagonists on the top step");
+  const draws = web.nodes.map((node) => ({ node: { id: castNodeId(node.id) }, position: arrangement.anchors!.get(castNodeId(node.id))!.map((value) => value * 3) as [number, number, number] })) as never[];
+  assert.ok(arrangement.paths!(draws, null).every((path) => path.tone === "link"), "at rest, the strongest ties are faint links");
+  const mine = arrangement.paths!(draws, castNodeId("v1:c1"));
+  assert.ok(mine.length > 0 && mine.every((path) => path.tone === "route" && path.id.includes("v1:c1")), "a selected character's ties are its routes");
+  const watched = castArrangement(web, { pair: ["v1:c1", "v1:c2"], watching: true }).paths!(draws, null);
+  assert.equal(watched.find((path) => path.id === "pair:v1:c1|v1:c2")?.tone, "route", "a watched pair's tie carries the moving bead");
+  assert.equal(castArrangement(web, { pair: ["v1:c1", "v1:c2"] }).paths!(draws, null).find((path) => path.id.startsWith("pair:"))?.tone, "thread");
 });

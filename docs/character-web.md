@@ -7,9 +7,29 @@ drives three things:
 - the **hall of fame** it ranks;
 - the **history** of any two characters.
 
-**Orbital** mode shows the web as a 3D amphitheater, with protagonists on the
-top step; **Traditional** mode shows it flat. Both follow the book picker and
-the shared Motion switch. Open it with `?view=cast`.
+Open it with `?view=cast`.
+
+**Orbital** is the orbit itself, like Story time and Places: the book
+regrouped, with one glass sphere per character (`apps/playground/src/data/orbitalCast.ts`).
+
+- **Inside a sphere:** that character's scenes and their records. Entering a
+  character walks their own line through the book in reading order, just as
+  entering a chapter does.
+- **The arrangement:**
+  - stands the spheres on an amphitheater, protagonists on the top step and
+    groups on one side;
+  - lays the tier rings on the floor, as Places lays its map;
+  - draws ties as orbit paths: the strongest as faint links at rest, a selected
+    character's as routes, and the pair being compared as a thread, which
+    becomes a moving route while their story is watched.
+- **Selecting a character** opens the shared glass inspector, which carries its
+  tier, rank and score parts.
+
+**Traditional** draws the web flat inside the `tp-view` frame.
+
+Both modes share one state (`components/cast/useCast.ts`) and one side panel
+(`CastPanel`, in the Places atlas panel's form): the hall of fame, a scrubber,
+a pair to compare and its history.
 
 ## Where the data comes from
 
@@ -80,15 +100,16 @@ It computes view metrics, never ontology facts.
 
 ## Using it
 
-- **Scrubber:** replays the book scene by scene; the web and the ranks follow.
+- **Scrubber:** in the panel, replays the book scene by scene; the web and the
+  ranks follow.
 - **Two characters:**
-  - type any recorded name form in the Compare slots;
-  - or open a character and press *Compare with…*, then pick the second on the
-    web (this works on touch);
-  - or shift-click.
+  - choose them in the panel's Compare selects;
+  - or select one and press *Pick in view*, then pick the second on the orbit
+    or the flat web (this works on touch);
+  - or, in the flat web, shift-click.
 - **Watch their story:** steps through every moment the pair shares. The web
-  grows to that point, their tie carries a light (3D) or flows (2D), and the log
-  follows, with later entries dimmed.
+  grows to that point, their tie carries the route's moving bead (orbit) or
+  flows (flat), and the log follows, with later entries dimmed.
 
 The order is reading order, because story time is not recorded for these
 volumes yet. Once time-place facts exist, a scene's `story` position can take

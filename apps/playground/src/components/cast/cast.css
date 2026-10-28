@@ -1,192 +1,87 @@
-/* Characters view. Everything is scoped to .cast-view so the playground's own styles stay untouched. */
-.cast-view {
-  --line: rgb(164 213 242 / 16%);
-  --text: #e7f2f8;
-  --muted: #9fb5c5;
-  --panel: rgb(14 30 42 / 78%);
-  --protagonist: #f2c46d;
-  --pillar: #7fd1c7;
-  --connector: #b9a3ff;
-  --cameo: #8ea3b5;
-  --bond: #6fd39b;
-  --tension: #ff7a6b;
-  --neutral: #7f93a6;
-  --presence: #7fd1c7;
-  --agency: #f2c46d;
-  --reach: #91d7ff;
-  --influence: #ff9f6b;
-  --bridging: #b9a3ff;
-  /* Placed by .tp-view, like Story time and Places; here it lays out without its own scroll. */
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 0;
-  overflow: hidden;
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
-}
-/* A web wants the room the orbital views get: from under the top bar to above the status line. */
-.tp-view.cast-view { top: 64px; bottom: 64px; padding-top: 8px; }
-.cast-view *, .cast-view *::before, .cast-view *::after { box-sizing: border-box; }
-.cast-view button { font: inherit; color: inherit; cursor: pointer; }
-.cast-view button:focus-visible, .cast-view [tabindex]:focus-visible, .cast-view input:focus-visible { outline: 2px solid #91d7ff; outline-offset: 2px; }
-.cast-empty { justify-content: center; max-width: 520px; margin: 0 auto; padding: 24px; }
-.cast-empty h2 { margin: 4px 0; }
-.cast-empty p { color: var(--muted); }
-.cast-view .ghost { padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); font-size: 12px; transition: background .25s ease, color .25s ease, border-color .25s ease; }
-.cast-view .ghost:hover { color: var(--text); }
-.cast-view .cast-timeline { display: flex; align-items: center; gap: 12px; padding: 0 4px; }
-.cast-view .cast-timeline input { flex: 1; accent-color: var(--protagonist); }
-.cast-view .play { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 50%; background: rgb(242 196 109 / 12%); font-size: 11px; }
-.cast-view .reached { min-width: 150px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
+/* Characters (cast web): the Places atlas panel's form and the Story time / Places tokens. */
+:root { --cast-character: #bba7ff; --cast-bond: #7fe0b0; --cast-tension: #ff8a7a; --cast-contact: #8fc7d4; }
 
-.cast-view .cast-stage { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 12px; min-height: 0; }
-.cast-view .web-wrap { position: relative; display: flex; flex-direction: column; min-height: 0; }
-.cast-view .web { flex: 1; width: 100%; min-height: 0; max-height: 100%; }
-.cast-view .key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 4px 8px; color: var(--muted); font-size: 11px; list-style: none; }
-.cast-view .key .note { flex-basis: 100%; }
-.cast-view .tone { display: inline-block; width: 14px; height: 3px; margin-right: 6px; border-radius: 2px; vertical-align: middle; background: var(--neutral); }
-.cast-view .tone-bond { background: var(--bond); } .cast-view .tone-tension { background: var(--tension); }
+/* Side panel: an atlas panel with the hall of fame, the scrubber and a pair's history. */
+.app .cast-panel { width: 262px; }
+.cast-panel b { font-weight: 600; }
+.cast-panel button { font: inherit; color: var(--tp-text); cursor: pointer; }
+.cast-scrub { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px; margin: 8px 0 6px; }
+.cast-scrub button { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--tp-edge); background: transparent; font-size: 8px; }
+.cast-scrub button[aria-pressed="true"] { background: #9fd8ff; color: #06141f; border-color: #9fd8ff; }
+.cast-scrub input { width: 100%; accent-color: #9fd8ff; }
+.cast-scrub small { color: var(--tp-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.cast-compare { display: grid; grid-template-columns: auto 1fr 1fr; align-items: center; gap: 4px; margin-bottom: 6px; color: var(--tp-muted); }
+.cast-compare select { min-width: 0; padding: 3px 4px; border-radius: 6px; border: 1px solid var(--tp-edge); background: #0b1826; color: var(--tp-text); font: inherit; }
+.cast-compare button { grid-column: 2 / 4; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--tp-edge); background: transparent; font-size: 10px; }
+.cast-compare button[aria-pressed="true"] { background: #9fd8ff; color: #06141f; border-color: #9fd8ff; }
 
-.cast-view .ring circle { fill: none; stroke: var(--line); stroke-dasharray: 2 6; }
-.cast-view .ring text { fill: rgb(159 181 197 / 50%); font-size: 12px; letter-spacing: .16em; text-anchor: middle; text-transform: uppercase; }
-.cast-view .ring-protagonist circle { stroke: rgb(242 196 109 / 22%); }
-.cast-view .tie { fill: none; stroke: var(--neutral); stroke-linecap: round; transition: opacity .35s ease; }
-.cast-view .tie.tone-bond { stroke: var(--bond); } .cast-view .tie.tone-tension { stroke: var(--tension); }
-.cast-view .node { cursor: pointer; transition: opacity .35s ease; }
-.cast-view .node.is-far { opacity: .22; }
-.cast-view .node .disc { fill: #15293a; stroke: var(--cameo); stroke-width: 2; }
-.cast-view .node .halo { fill: none; stroke: transparent; stroke-width: 3; transition: stroke .3s ease; }
-.cast-view .node:hover .halo, .cast-view .node:focus .halo { stroke: rgb(231 242 248 / 35%); }
-.cast-view .node.is-chosen .halo { stroke: var(--text); }
-.cast-view .node.tier-protagonist .disc { stroke: var(--protagonist); stroke-width: 3; }
-.cast-view .node.tier-pillar .disc { stroke: var(--pillar); }
-.cast-view .node.tier-connector .disc { stroke: var(--connector); }
-.cast-view .node .glyph { fill: var(--text); font-weight: 600; text-anchor: middle; pointer-events: none; }
-.cast-view .node .name { fill: var(--text); font-size: 15px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; pointer-events: none; }
-.cast-view .node .name.is-outer { fill: #c9dbe6; font-size: 13px; }
-.cast-view .node:focus { outline: none; }
+.cast-legend { display: flex; flex-wrap: wrap; gap: 2px 8px; margin: 10px 0 2px; color: var(--tp-muted); font-size: 9.5px; }
+.cast-legend i { display: inline-block; width: 7px; height: 7px; margin-right: 3px; border-radius: 2px; }
+.part-presence { background: #63ddd3; } .part-agency { background: #ffc777; } .part-reach { background: #75caff; }
+.part-influence { background: #ff9a6b; } .part-bridging { background: #bba7ff; }
 
-.cast-view .panel-column { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-.cast-view .cast-panel { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); backdrop-filter: blur(14px); }
-.cast-view .hint { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
-.cast-view .cast-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 10px; padding: 0; color: var(--muted); font-size: 11px; list-style: none; }
-.cast-view .cast-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px; }
-.cast-view .part-presence { background: var(--presence); } .cast-view .part-agency { background: var(--agency); } .cast-view .part-reach { background: var(--reach); }
-.cast-view .part-influence { background: var(--influence); } .cast-view .part-bridging { background: var(--bridging); }
+.cast-tier h4 { margin: 10px 0 2px; color: var(--tp-muted); font-size: 9.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+.cast-tier.tier-protagonist h4 { color: var(--tp-flashback); }
+.cast-tier h4 small { margin-left: 2px; opacity: .7; }
+.cast-tier ol, .cast-one ol, .cast-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.cast-tier li button { display: grid; grid-template-columns: 16px minmax(0, 1fr) 54px 18px; align-items: center; gap: 6px; width: 100%; padding: 3px 2px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+.cast-tier li button:hover, .cast-one li button:hover { background: #ffffff0a; }
+.cast-tier li.is-selected button { background: #9fd8ff14; box-shadow: inset 2px 0 0 #9fd8ff; }
+.cast-tier b { overflow: hidden; font-size: 11.5px; white-space: nowrap; text-overflow: ellipsis; }
+.cast-rank, .cast-tier small { color: var(--tp-muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
+.cast-parts { display: flex; height: 4px; overflow: hidden; border-radius: 2px; background: #ffffff0f; }
+.cast-parts i { height: 100%; transition: width .5s ease; }
 
-.cast-view .tier-block h3 { margin: 14px 0 6px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
-.cast-view .tier-block h3 small { color: var(--muted); }
-.cast-view .tier-protagonist h3 { color: var(--protagonist); } .cast-view .tier-pillar h3 { color: var(--pillar); } .cast-view .tier-connector h3 { color: var(--connector); } .cast-view .tier-cameo h3 { color: var(--cameo); }
-.cast-view .tier-block ol { margin: 0; padding: 0; list-style: none; }
-.cast-view .tier-block li button {
-  display: grid; grid-template-columns: 22px 34px minmax(0, 1fr) 96px; align-items: center; gap: 10px; width: 100%;
-  padding: 6px 6px; border: 0; border-radius: 10px; background: none; text-align: left; transition: background .2s ease;
-}
-.cast-view .tier-block li button:hover { background: rgb(145 215 255 / 7%); }
-.cast-view .rank { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
-.cast-view .who { display: flex; flex-direction: column; min-width: 0; }
-.cast-view .who strong { overflow: hidden; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
-.cast-view .who small { color: var(--muted); font-size: 11px; }
-.cast-view .score { display: flex; align-items: center; gap: 6px; }
-.cast-view .score b { width: 24px; font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
-.cast-view .scorebar { display: flex; flex: 1; height: 6px; overflow: hidden; border-radius: 3px; background: rgb(255 255 255 / 6%); }
-.cast-view .scorebar i { height: 100%; transition: width .5s ease; }
+.cast-one { margin-top: 4px; }
+.cast-part { display: grid; grid-template-columns: 78px 1fr; align-items: center; gap: 6px; margin: 2px 0; color: var(--tp-muted); }
+.cast-meter { height: 5px; overflow: hidden; border-radius: 3px; background: #ffffff0f; }
+.cast-meter i { display: block; height: 100%; transition: width .5s ease; }
+.cast-one ol { margin-top: 6px; }
+.cast-one li button { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 6px; width: 100%; padding: 3px 2px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+.cast-one li small { color: var(--tp-muted); font-size: 10px; }
+.cast-tone { width: 10px; height: 2px; border-radius: 1px; background: var(--cast-contact); }
+.cast-tone.tone-bond { background: var(--cast-bond); } .cast-tone.tone-tension { background: var(--cast-tension); }
+.is-bond { color: var(--cast-bond); } .is-tension { color: var(--cast-tension); }
 
-.cast-view .avatar { display: inline-grid; flex-shrink: 0; place-items: center; border: 2px solid var(--cameo); border-radius: 50%; background: #15293a; object-fit: cover; font-weight: 600; }
-.cast-view .avatar.tier-protagonist { border-color: var(--protagonist); } .cast-view .avatar.tier-pillar { border-color: var(--pillar); } .cast-view .avatar.tier-connector { border-color: var(--connector); }
+.cast-pair { margin-top: 4px; }
+.cast-affinity { width: 100%; height: 40px; }
+.cast-affinity line { stroke: var(--tp-edge); stroke-dasharray: 2 3; }
+.cast-affinity polyline { fill: none; stroke: #9fd8ff; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.cast-log { gap: 4px; margin-top: 6px; }
+.cast-log li { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; border: 1px solid #ffffff10; background: #ffffff06; transition: opacity .4s ease, border-color .4s ease, background .4s ease; }
+.cast-log li small { color: var(--tp-muted); font-size: 9.5px; }
+.cast-log li.kind-met small { color: var(--tp-flashback); }
+.cast-log li p { margin: 0; color: #c3d6e4; font-size: 10.5px; line-height: 1.5; }
+.cast-log li.is-turning { border-color: #ffc46b55; }
+.cast-log li.is-later { opacity: .4; }
+.cast-log li.is-now { border-color: #9fd8ff88; background: #9fd8ff14; opacity: 1; }
 
-.cast-view .card header { display: flex; align-items: center; gap: 12px; }
-.cast-view .card header > div { flex: 1; min-width: 0; }
-.cast-view .card h2 { margin: 2px 0 0; font-size: 22px; }
-.cast-view .aliases { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
-.cast-view .big-score { font-size: 30px; font-weight: 300; font-variant-numeric: tabular-nums; }
-.cast-view .cast-badge { padding: 1px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
-.cast-view .cast-badge.tier-protagonist { color: var(--protagonist); } .cast-view .cast-badge.tier-pillar { color: var(--pillar); } .cast-view .cast-badge.tier-connector { color: var(--connector); } .cast-view .cast-badge.tier-cameo { color: var(--cameo); }
-.cast-view .card section { margin-top: 16px; }
-.cast-view .card h4, .cast-view .pair h4 { margin: 0 0 6px; color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
-.cast-view .part-row { display: grid; grid-template-columns: 96px 1fr 76px; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
-.cast-view .part-row small { color: var(--muted); text-align: right; }
-.cast-view .meter { height: 7px; overflow: hidden; border-radius: 4px; background: rgb(255 255 255 / 6%); }
-.cast-view .meter i { display: block; height: 100%; transition: width .5s ease; }
-.cast-view .arc { width: 100%; height: 34px; }
-.cast-view .arc line { stroke: var(--line); }
-.cast-view .arc .on { stroke: var(--protagonist); stroke-width: 2.4; vector-effect: non-scaling-stroke; } .cast-view .arc .mention { stroke: var(--muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.cast-view .arc-axis { display: flex; justify-content: space-between; margin: 2px 0 0; color: var(--muted); font-size: 10.5px; }
-.cast-view .ties { margin: 0 0 10px; padding: 0; list-style: none; }
-.cast-view .ties button { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto 18px; align-items: center; gap: 8px; width: 100%; padding: 6px; border: 0; border-radius: 8px; background: none; text-align: left; }
-.cast-view .ties button:hover { background: rgb(145 215 255 / 7%); }
-.cast-view .ties small { color: var(--muted); font-size: 11px; }
-.cast-view .ties .go { color: var(--muted); }
-
-.cast-view .pair header { display: flex; align-items: center; gap: 8px; }
-.cast-view .pair .who { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 4px; min-width: 0; padding: 4px; border: 0; background: none; }
-.cast-view .pair .who strong { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.cast-view .pair .link { color: var(--muted); font-size: 20px; }
-.cast-view .pair .close { align-self: flex-start; padding: 0 6px; border: 0; background: none; font-size: 20px; }
-.cast-view .pair-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
-.cast-view .pair-stats div { padding: 8px; border: 1px solid var(--line); border-radius: 10px; }
-.cast-view .pair-stats dt { color: var(--muted); font-size: 10.5px; }
-.cast-view .pair-stats dd { margin: 2px 0 0; font-size: 18px; font-variant-numeric: tabular-nums; }
-.cast-view .bond { color: var(--bond); } .cast-view .tension { color: var(--tension); }
-.cast-view .affinity { width: 100%; height: 80px; margin-bottom: 8px; }
-.cast-view .affinity .zero { stroke: var(--line); stroke-dasharray: 3 4; }
-.cast-view .affinity polyline { fill: none; stroke: var(--protagonist); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
-.cast-view .affinity circle { fill: var(--protagonist); }
-.cast-view .log { margin: 0; padding: 0; list-style: none; }
-.cast-view .entry { display: grid; grid-template-columns: 76px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
-.cast-view .entry .when { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.cast-view .entry .kind { display: block; color: var(--muted); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; }
-.cast-view .entry.kind-met .kind { color: var(--protagonist); }
-.cast-view .entry.is-turning { margin: 0 -8px; padding: 10px 8px; border-radius: 10px; background: rgb(242 196 109 / 8%); }
-.cast-view .entry strong { font-weight: 600; }
-.cast-view .entry p { margin: 3px 0 0; color: #c9dbe6; font-size: 12.5px; }
-.cast-view .entry .exchange { color: var(--reach); }
-.cast-view .entry .shift { font-variant-numeric: tabular-nums; }
-
-
-.cast-view .compare { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); transition: border-color .3s ease, box-shadow .3s ease; }
-.cast-view .compare.is-picking { border-color: rgb(242 196 109 / 60%); box-shadow: 0 0 0 3px rgb(242 196 109 / 12%); }
-.cast-view .compare-label { color: var(--muted); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; }
-.cast-view .compare .link { color: var(--muted); }
-.cast-view .slot { display: inline-flex; flex: 1 1 110px; align-items: center; gap: 6px; min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; background: rgb(3 12 21 / 35%); color: var(--text); font: inherit; font-size: 13px; }
-.cast-view .slot::placeholder { color: var(--muted); }
-.cast-view .slot.is-empty { color: var(--muted); border-style: dashed; }
-.cast-view .slot.is-filled strong { overflow: hidden; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
-.cast-view .slot.is-filled button { margin-left: auto; padding: 0 2px; border: 0; background: none; color: var(--muted); font-size: 16px; }
-.cast-view .ghost.is-on { border-color: rgb(242 196 109 / 55%); color: var(--text); }
-.cast-view .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.cast-view .primary { padding: 6px 14px; border: 1px solid rgb(242 196 109 / 55%); border-radius: 999px; background: rgb(242 196 109 / 16%); font-size: 12px; font-weight: 600; transition: background .25s ease; }
-.cast-view .primary:hover { background: rgb(242 196 109 / 26%); }
-.cast-view .picking { position: absolute; z-index: 2; top: 8px; left: 50%; margin: 0; padding: 6px 14px; border: 1px solid rgb(242 196 109 / 50%); border-radius: 999px; background: rgb(10 20 28 / 88%); font-size: 12px; transform: translateX(-50%); animation: cast-rise .35s ease; }
-@keyframes cast-rise { from { opacity: 0; transform: translate(-50%, 6px); } }
-.cast-view.is-picking .node { cursor: copy; }
-
-/* Stays in reach while the log scrolls under it. */
-.cast-view .watch { position: sticky; z-index: 1; top: -14px; width: 100%; margin: 10px 0 4px; padding: 8px; border: 1px solid rgb(242 196 109 / 45%); border-radius: 10px; background: #2a2a20; font-weight: 600; transition: background .25s ease; }
-.cast-view .watch.is-on { background: #3a3424; }
-.cast-view .entry { transition: opacity .4s ease, background .4s ease; }
-.cast-view .entry.is-later { opacity: .38; }
-.cast-view .entry.is-now { margin: 0 -8px; padding: 10px 8px; border-radius: 10px; background: rgb(145 215 255 / 10%); box-shadow: inset 3px 0 0 var(--reach); opacity: 1; }
-.cast-view .affinity .is-now { fill: var(--reach); }
-.cast-view .tie.is-pulse { stroke-dasharray: 10 8; animation: cast-flow 1s linear infinite; }
+/* Flat relation web, in the Story time and Places frame. */
+.cast-flat { display: flex; flex-direction: column; }
+.cast-flat .web { flex: 1; min-height: 360px; width: 100%; max-width: 980px; margin: 0 auto; }
+.cast-flat .ring circle { fill: none; stroke: #9fd8ff24; stroke-dasharray: 2 6; }
+.cast-flat .ring-protagonist circle { stroke: #ffc46b44; }
+.cast-flat .ring text { fill: var(--tp-muted); font-size: 11px; letter-spacing: .12em; text-anchor: middle; text-transform: uppercase; opacity: .7; }
+.cast-flat .tie { fill: none; stroke: var(--cast-contact); stroke-linecap: round; transition: opacity .35s ease; }
+.cast-flat .tie.tone-bond { stroke: var(--cast-bond); } .cast-flat .tie.tone-tension { stroke: var(--cast-tension); }
+.cast-flat .tie.is-pulse { stroke-dasharray: 10 8; animation: cast-flow 1s linear infinite; }
 @keyframes cast-flow { to { stroke-dashoffset: -18; } }
+.cast-flat .node { cursor: pointer; transition: opacity .35s ease; }
+.cast-flat.is-picking .node { cursor: copy; }
+.cast-flat .node.is-far { opacity: .22; }
+.cast-flat .node .disc { fill: #0b1826; stroke: var(--cast-character); stroke-width: 1.5; }
+.cast-flat .node.tier-protagonist .disc { stroke: var(--tp-flashback); stroke-width: 3; }
+.cast-flat .node.tier-pillar .disc { stroke-width: 2.4; }
+.cast-flat .node.tier-cameo .disc { stroke-opacity: .6; }
+.cast-flat .node .halo { fill: none; stroke: transparent; stroke-width: 3; transition: stroke .3s ease; }
+.cast-flat .node:hover .halo, .cast-flat .node:focus .halo { stroke: #9fd8ff66; }
+.cast-flat .node.is-chosen .halo { stroke: #9fd8ff; }
+.cast-flat .node:focus { outline: none; }
+.cast-flat .node .glyph { fill: var(--tp-text); font-weight: 600; text-anchor: middle; pointer-events: none; }
+.cast-flat .node .name { fill: var(--tp-text); font-size: 14px; paint-order: stroke; stroke: #050b15; stroke-width: 4px; pointer-events: none; }
+.cast-flat .node .name.is-outer { fill: var(--tp-muted); font-size: 12px; }
 
-.cast-view .web3d { position: relative; flex: 1; min-height: 0; overflow: hidden; border-radius: 16px; }
-.cast-view .web3d canvas { display: block; touch-action: none; }
-.cast-view .labels3d { position: absolute; inset: 0; pointer-events: none; }
-.cast-view .label3d { position: absolute; top: 0; left: 0; padding: 1px 6px; border-radius: 6px; background: rgb(10 20 28 / 62%); color: #dbe9f2; font-size: 12px; white-space: nowrap; transition: opacity .3s ease; will-change: transform; }
-.cast-view .label3d.tier-protagonist { color: var(--protagonist); font-size: 14px; font-weight: 600; }
-.cast-view .label3d.tier-pillar { color: #c6eee9; }
-
-@media (max-width: 900px) {
-  .tp-view.cast-view { overflow-y: auto; }
-  .cast-view .cast-stage { grid-template-columns: 1fr; }
-  .cast-view .web { flex: none; max-height: none; aspect-ratio: 1; }
-  .cast-view .web3d { flex: none; height: 92vw; max-height: none; }
-  .cast-view .reached { min-width: 0; }
-  .cast-view .cast-panel { overflow: visible; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cast-view *, .cast-view *::before, .cast-view *::after { transition: none !important; }
-}
+.reduce-motion .cast-flat .tie.is-pulse { animation: none; }
+@media (prefers-reduced-motion: reduce) { .cast-flat .tie.is-pulse { animation: none; } .cast-parts i, .cast-meter i { transition: none; } }
+/* Room for the panel on the left, as Story time makes room for the open inspector. */
+@media (min-width: 900px) { .cast-flat { padding-left: 300px; } }
