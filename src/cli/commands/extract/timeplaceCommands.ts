@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
 import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
+import { EventLog } from "../../../ground/events/log.js";
+import { observeDecisions, observeWork } from "../../../ground/events/observe.js";
 import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
 import { storedSource } from "../../../ground/workspace/source.js";
 import { cutBlocks } from "../../../digger/intake/blocks.js";
@@ -70,9 +72,10 @@ export async function timeplaceRun(novelDir: string, options: TimeplaceRunOption
   const env = options.env ?? process.env;
   const mode = options.mode ?? "hybrid";
   if (!["programmatic", "llm", "hybrid"].includes(mode)) throw new Error("--mode must be programmatic, llm or hybrid.");
+  const emit = new EventLog(novelDir).emit;
   const models = () => ({
-    work: mode === "programmatic" ? undefined : options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env),
-    decisions: options.jev === false ? undefined : options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env),
+    work: mode === "programmatic" ? undefined : observeWork(options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env), emit, { faculty: "timeplace" }),
+    decisions: options.jev === false ? undefined : observeDecisions(options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env), emit),
   });
   if (!options.force) return timeplaceIncremental(novelDir, { ...options, mode }, models());
   const { scenes, entities, relations } = await loadBundle(novelDir);
@@ -135,8 +138,9 @@ async function timeplaceIncremental(novelDir: string, options: TimeplaceRunOptio
 export async function timeplaceAfterApprove(novelDir: string, approved: ChangeSet, env: NodeJS.ProcessEnv = process.env): Promise<Record<string, unknown> | null> {
   const sceneIds = approved.proposals.filter((proposal) => proposal.kind === "create_scene").map((proposal) => (proposal.payload as Scene).id);
   if (!sceneIds.length) return null;
-  const work = env.WORK_LLM_API_KEY?.trim() ? workModelFromEnv(env) : undefined;
-  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: work ? "hybrid" : "programmatic", work, decisions: jevFromEnv(env), sceneIds, provenanceBlockId: approved.blockId, remember: true });
+  const emit = new EventLog(novelDir).emit;
+  const work = env.WORK_LLM_API_KEY?.trim() ? observeWork(workModelFromEnv(env), emit, { blockId: approved.blockId, faculty: "timeplace" }) : undefined;
+  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: work ? "hybrid" : "programmatic", work, decisions: observeDecisions(jevFromEnv(env), emit, { blockId: approved.blockId }), sceneIds, provenanceBlockId: approved.blockId, remember: true });
   if (output.changeset) await saveChangeSet(novelDir, output.changeset);
   return { changesetId: output.changeset?.id ?? null, scenes: output.scenes, periods: output.result.periods.length, flashbacks: output.result.periods.filter((period) => period.flashback).length, usage: output.result.usage };
 }
@@ -191,7 +195,7 @@ export async function timeplaceTree(novelDir: string, options: TimeplaceTreeOpti
   const sentences = await loadWorkspaceSentences(novelDir);
   const memoryPath = join(novelDir, "timeplace", "place-tree.json");
   const memory = JSON.parse(await readFile(memoryPath, "utf8").catch(() => '{"distinct":[]}')) as PlaceTreeMemory;
-  const decisions = options.jev === false ? undefined : options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env);
+  const decisions = options.jev === false ? undefined : observeDecisions(options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env), new EventLog(novelDir).emit);
   const started = Date.now();
   const result = await sweepPlaceTree({ entities, relations, scenes, sentences, decisions, maxQuestions: options.maxQuestions, memory });
   await mkdir(join(novelDir, "timeplace"), { recursive: true, mode: 0o700 });
