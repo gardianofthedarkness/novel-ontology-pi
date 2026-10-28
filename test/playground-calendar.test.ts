@@ -30,9 +30,12 @@ test("calendar pins: in each book's stretch, a pin before each day's first scene
       entry("1:eve", 1, { time: "night" }), entry("1:next", 1, { day: 25, span: { start: day(12, 25) + 1050, end: day(12, 25) + 1260 } }),
       entry("1:old", 1, { month: 3, day: 1, span: { start: day(3, 1), end: day(3, 2) } }), entry("2:three", 2, { day: 25, span: { start: day(12, 25) + 900, end: day(12, 25) + 1020 } }),
     ] } } as unknown as TimePlaceProjection;
-  const x: Record<string, number> = { "1:a": 0, "1:b": 40, "1:c": 80, "1:memory": 20, "2:a": 160 };
+  const x: Record<string, number> = { "1:a": 0, "1:b": 40, "1:c": 1600, "1:memory": 20, "2:a": 3200 };
   const anchors = new Map(Object.entries(x).map(([id, at]): [string, Position3] => [spiralNodeId(id), [at, 100, 0]]));
   const pins = calendarPins(data, anchors, () => 0);
-  assert.deepEqual(pins.map((pin) => [pin.label, pin.detail, pin.x]), [["12月24日", "Year 1 · Book 1", -60], ["12月25日", "Year 1 · Book 1", 180], ["12月25日", "Year 1 · Book 2", 420]]);
-  assert.ok(pins.every((pin) => pin.top > 300 && pin.card > -945 && pin.card < 0 && pin.z < 0), "rising above the story, behind it, the date at the pole's foot above the floor");
+  assert.deepEqual(pins.map((pin) => [pin.label, pin.detail, pin.x]), [["12月24日", "Year 1 · Book 1", -60], ["12月25日", "Year 1 · Book 1", 4740], ["12月25日", "Year 1 · Book 2", 9540]]);
+  assert.ok(pins.every((pin) => pin.card > pin.top && pin.z < -3000), "the date above the book's strands, far behind them");
+  // Two days starting closer than one date's width share a label.
+  const close = calendarPins(data, new Map([...anchors].map(([id, at]): [string, Position3] => [id, [id === spiralNodeId("1:c") ? 300 : at[0], at[1], at[2]]])), () => 0);
+  assert.deepEqual(close.filter((pin) => pin.detail.endsWith("Book 1")).map((pin) => pin.label), ["12月24–25日"]);
 });

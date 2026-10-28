@@ -323,44 +323,42 @@ function FloorMap({ marks }: { marks: FloorMark[] }) {
   })}</>;
 }
 
-/** A calendar pin's card: the date large, the year and book small. */
+/** A calendar pin's date: large soft lettering (no card), the year and book small beneath. */
 function pinTexture(label: string, detail: string) {
   const canvas = document.createElement("canvas");
   canvas.width = 1024; canvas.height = 300;
   const context = canvas.getContext("2d")!;
-  context.fillStyle = "rgba(10, 22, 40, 0.5)";
-  context.fillRect(0, 0, 1024, 300);
-  context.strokeStyle = "rgba(170, 200, 255, 0.55)";
-  context.lineWidth = 4;
-  context.strokeRect(6, 6, 1012, 288);
   context.textAlign = "center";
-  context.fillStyle = "#e4edff";
-  context.font = "700 150px sans-serif";
-  context.fillText(label, 512, 170);
-  context.fillStyle = "#9fb8e6";
+  context.shadowColor = "rgba(120, 170, 255, 0.55)";
+  context.shadowBlur = 28;
+  context.fillStyle = "rgba(214, 228, 255, 0.82)";
+  context.font = "700 170px sans-serif";
+  context.fillText(label, 512, 180);
+  context.shadowBlur = 0;
+  context.fillStyle = "rgba(160, 186, 232, 0.75)";
   context.font = "400 58px sans-serif";
-  context.fillText(detail, 512, 262);
+  context.fillText(detail, 512, 270);
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
   return texture;
 }
 
-/** Giant calendar pins behind the story: a faint pole from the floor where a
- * calendar day starts, its date on a card facing the camera. Never raycast,
- * labelled or framed: background marks, not records. */
+/** Giant calendar pins behind the story: a big date high up and far back
+ * where a calendar day starts, a faint pole down to the floor. Never raycast,
+ * labelled or framed: a backdrop, not records. */
 function CalendarPins({ pins }: { pins: CalendarPin[] }) {
   return <>{pins.map((pin) => <CalendarPinMesh key={pin.id} pin={pin} />)}</>;
 }
 function CalendarPinMesh({ pin }: { pin: CalendarPin }) {
   const texture = useMemo(() => pinTexture(pin.label, pin.detail), [pin.label, pin.detail]);
   useEffect(() => () => texture.dispose(), [texture]);
-  const floor = -944, top = Math.max(pin.top, pin.card), height = top - floor;
+  // World-sized lettering far back: it reads as distant scenery and scales with the view like the strands do.
+  // Outside the render-distance fog, which would hide anything this far behind the story.
+  const floor = -944, width = 4200, tall = width * 300 / 1024, base = pin.card - tall * 0.45, height = Math.max(200, base - floor);
   return <group position={[pin.x, 0, pin.z]}>
-    <mesh raycast={noRaycast} position={[0, floor + height / 2, 0]}><cylinderGeometry args={[16, 16, height, 10]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.3} depthWrite={false} toneMapped={false} /></mesh>
-    <mesh raycast={noRaycast} position={[0, top, 0]}><sphereGeometry args={[60, 20, 14]} /><meshBasicMaterial color="#d6e2ff" transparent opacity={0.6} depthWrite={false} toneMapped={false} /></mesh>
-    <mesh raycast={noRaycast} position={[0, floor + 1, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[70, 110, 40]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.35} depthWrite={false} toneMapped={false} /></mesh>
-    {/* The date keeps one size on screen (a share of the view's height), readable at any zoom. */}
-    <sprite raycast={noRaycast} renderOrder={-1} position={[0, pin.card, 0]} scale={[0.15, 0.044, 1]}><spriteMaterial map={texture} sizeAttenuation={false} transparent opacity={0.9} depthWrite={false} toneMapped={false} /></sprite>
+    <mesh raycast={noRaycast} renderOrder={-1} position={[0, floor + height / 2, 0]}><cylinderGeometry args={[22, 22, height, 10]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.18} depthWrite={false} toneMapped={false} fog={false} /></mesh>
+    <mesh raycast={noRaycast} renderOrder={-1} position={[0, floor + 1, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[90, 140, 40]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.25} depthWrite={false} toneMapped={false} fog={false} /></mesh>
+    <sprite raycast={noRaycast} renderOrder={-1} position={[0, pin.card, 0]} scale={[width, tall, 1]}><spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} fog={false} /></sprite>
   </group>;
 }
 

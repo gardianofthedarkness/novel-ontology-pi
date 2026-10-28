@@ -73,7 +73,7 @@ export interface OrbitalArrangement {
   /** Per-sphere start delays (ms) for that glide, e.g. the line shredding into strands in story order. */
   morphDelays?: (draws: OrbitalDraw[]) => Map<string, number>;
 }
-/** A calendar day standing behind the story: a tall pole from the floor at the day's first scene, its date at its foot (a ruler along the floor). */
+/** A calendar day behind the story like a backdrop: a big date high up and far back where the day's first scene sits, a faint pole down to the floor. */
 export interface CalendarPin { id: string; x: number; z: number; top: number; card: number; label: string; detail: string }
 /** A place's disc on the floor; a region (a place containing others) is a wider, fainter disc under its children. */
 export interface FloorMark { id: string; x: number; z: number; radius: number; active: boolean; depth?: number; region?: boolean; proposed?: boolean }
@@ -300,6 +300,8 @@ function strandLayout(data: TimePlaceProjection, lanes: Map<number, StoryScene[]
  * out of order) get none. Layout anchors in, world units out (the orbit draws
  * anchors ×3).
  */
+/** How far behind the story the calendar stands, and how far apart two dates must start to keep their own labels (layout units). */
+const PIN_BACK = 2000, PIN_SPACING = 1400;
 export function calendarPins(data: TimePlaceProjection, anchors: Map<string, Position3>, laneOf: (scene: StoryScene) => number): CalendarPin[] {
   const entries = new Map((data.calendar?.entries ?? []).filter((entry) => entry.placed !== "between" && entry.year !== null).map((entry) => [entry.id, entry]));
   if (!entries.size) return [];
@@ -323,15 +325,22 @@ export function calendarPins(data: TimePlaceProjection, anchors: Map<string, Pos
   const stretches = new Map<string, First[]>();
   for (const first of firsts.values()) stretches.set(`${first.lane}|${first.book ?? ""}`, [...(stretches.get(`${first.lane}|${first.book ?? ""}`) ?? []), first]);
   for (const [stretch, days] of stretches) {
-    let last = -Infinity;
+    let last = -Infinity, kept: { pin: CalendarPin; first: First } | null = null;
     for (const first of days.sort((a, b) => a.start - b.start)) {
       if (first.x <= last) continue;
       last = first.x;
+      // Days that start closer than one date's width share a label ("12月24–25日").
+      if (kept && first.x - kept.first.x < PIN_SPACING) {
+        kept.pin.label = `${kept.first.day.month}月${kept.first.day.day}–${first.day.month === kept.first.day.month ? "" : `${first.day.month}月`}${first.day.day}日`;
+        continue;
+      }
       const date = calendarDay(first.start * 1440);
-      pins.push({ id: `calendar:${first.lane}:${first.book ?? ""}:${calendarDayKey(date)}`, x: (first.x - SPIRAL.step / 2) * 3, z: (first.lane * SPIRAL.laneGap - SPIRAL.radius - 220) * 3, top: ((tops.get(stretch) ?? 0) + 220) * 3,
-        // The date card sits at the pole's foot, just above the floor: a calendar ruler under the strands.
-        card: FLOOR_Y + 170,
-        label: `${first.day.month}月${first.day.day}日`, detail: `Year ${first.day.year}${first.book !== null ? ` · Book ${first.book}` : ""}` });
+      const pin: CalendarPin = { id: `calendar:${first.lane}:${first.book ?? ""}:${calendarDayKey(date)}`, x: (first.x - SPIRAL.step / 2) * 3, z: (first.lane * SPIRAL.laneGap - SPIRAL.radius - PIN_BACK) * 3, top: ((tops.get(stretch) ?? 0) + 220) * 3,
+        // The date floats above the book's strands, far behind the scenes: a backdrop, not a record.
+        card: ((tops.get(stretch) ?? 0) + 520) * 3,
+        label: `${first.day.month}月${first.day.day}日`, detail: `Year ${first.day.year}${first.book !== null ? ` · Book ${first.book}` : ""}` };
+      pins.push(pin);
+      kept = { pin, first };
     }
   }
   return pins;
