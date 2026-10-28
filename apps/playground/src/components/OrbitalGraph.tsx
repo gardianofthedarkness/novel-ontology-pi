@@ -12,7 +12,7 @@ import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";
-import type { CalendarPin, FloorMark, StrandTube } from "../data/orbitalTimePlace";
+import type { CalendarPin, FloorMark } from "../data/orbitalTimePlace";
 import { useAlbumTexture } from "./useAlbumTexture";
 import { containedImageSize } from "../data/albumImage";
 
@@ -323,36 +323,6 @@ function FloorMap({ marks }: { marks: FloorMark[] }) {
   })}</>;
 }
 
-/** The braid's envelope: a translucent tube around a continuity's strands, swelling where more run in parallel, with faint rings every layer. Never raycast. */
-function StrandTubes({ tubes }: { tubes: StrandTube[] }) {
-  const built = useMemo(() => tubes.map((tube) => {
-    const segments = 24, positions: number[] = [], index: number[] = [], rings: number[] = [];
-    tube.rings.forEach((ring, at) => {
-      for (let side = 0; side <= segments; side++) {
-        const angle = (side / segments) * Math.PI * 2, c = Math.cos(angle), sn = Math.sin(angle);
-        positions.push(...[0, 1, 2].map((axis) => ring.center[axis] + ring.radius * (ring.normal[axis] * c + ring.binormal[axis] * sn)));
-      }
-      if (at > 0) for (let side = 0; side < segments; side++) {
-        const a = (at - 1) * (segments + 1) + side, b = at * (segments + 1) + side;
-        index.push(a, b, a + 1, a + 1, b, b + 1);
-      }
-      // A ring line every other ring (every layer).
-      if (at % 2 === 0) for (let side = 0; side < segments; side++) rings.push(...positions.slice((at * (segments + 1) + side) * 3, (at * (segments + 1) + side) * 3 + 6));
-    });
-    const surface = new BufferGeometry();
-    surface.setAttribute("position", new Float32BufferAttribute(positions, 3));
-    surface.setIndex(index);
-    const lines = new BufferGeometry();
-    lines.setAttribute("position", new Float32BufferAttribute(rings, 3));
-    return { id: tube.id, surface, lines };
-  }), [tubes]);
-  useEffect(() => () => { for (const entry of built) { entry.surface.dispose(); entry.lines.dispose(); } }, [built]);
-  return <>{built.map((entry) => <group key={entry.id}>
-    <mesh geometry={entry.surface} raycast={noRaycast} renderOrder={-1}><meshBasicMaterial color="#9db4d8" transparent opacity={0.05} side={DoubleSide} depthWrite={false} toneMapped={false} /></mesh>
-    <lineSegments geometry={entry.lines} raycast={noRaycast} renderOrder={-1}><lineBasicMaterial color="#9db4d8" transparent opacity={0.14} depthWrite={false} toneMapped={false} /></lineSegments>
-  </group>)}</>;
-}
-
 /** A calendar pin's date: large soft lettering (no card), the year and book small beneath. */
 function pinTexture(label: string, detail: string) {
   const canvas = document.createElement("canvas");
@@ -384,7 +354,7 @@ function CalendarPinMesh({ pin }: { pin: CalendarPin }) {
   useEffect(() => () => texture.dispose(), [texture]);
   // World-sized lettering far back: it reads as distant scenery and scales with the view like the strands do.
   // Outside the render-distance fog, which would hide anything this far behind the story.
-  const floor = pin.floor ?? -944, width = 4200, tall = width * 300 / 1024, base = pin.card - tall * 0.45, height = Math.max(200, base - floor);
+  const floor = -944, width = 4200, tall = width * 300 / 1024, base = pin.card - tall * 0.45, height = Math.max(200, base - floor);
   return <group position={[pin.x, 0, pin.z]}>
     <mesh raycast={noRaycast} renderOrder={-1} position={[0, floor + height / 2, 0]}><cylinderGeometry args={[22, 22, height, 10]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.18} depthWrite={false} toneMapped={false} fog={false} /></mesh>
     <mesh raycast={noRaycast} renderOrder={-1} position={[0, floor + 1, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[90, 140, 40]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.25} depthWrite={false} toneMapped={false} fog={false} /></mesh>
@@ -445,19 +415,18 @@ const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 },
 function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors, radii }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean; motion: MotionBus; anchors: (string | undefined)[]; radii: Map<string, number> }) {
   const { camera, size } = useThree();
   const tone = PATH_TONES[path.tone ?? "time"];
-  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: path.color ?? tone.color, transparent: true, opacity: (path.preview ? 0.85 : path.strand ? 0.9 : tone.opacity) * (path.dim ? 0.15 : 1), depthWrite: false })), [path, tone]);
+  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: tone.color, transparent: true, opacity: path.preview ? 0.85 : tone.opacity, depthWrite: false })), [path, tone]);
   const arrowGroups = useRef<(Group | null)[]>([]);
-  const arrowCount = path.strand || path.tone === "link" ? 0 : path.tone === "thread" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
+  const arrowCount = path.tone === "link" ? 0 : path.tone === "thread" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
   const arrowIndices = useMemo(() => Array.from({ length: arrowCount }, (_, index) => Math.max(1, Math.round((index + 1) * (path.points.length - 1) / arrowCount))), [path, arrowCount]);
   /** A character's route: a bead travels it in story order (resting at the start under reduced motion). */
   const bead = useRef<Mesh>(null);
   // WebGL lines are one pixel wide; a route also gets a thin tube so it reads at a glance.
   const tube = useMemo(() => {
-    if ((path.tone !== "route" && !path.strand) || path.points.length < 2) return null;
+    if (path.tone !== "route" || path.points.length < 2) return null;
     const curve = new CurvePath<Vector3>();
     for (let index = 1; index < path.points.length; index++) curve.add(new LineCurve3(new Vector3(...path.points[index - 1]), new Vector3(...path.points[index])));
-    // A strand axis is already finely sampled: one tube segment per sample keeps its bends.
-    return path.strand ? new TubeGeometry(curve, Math.min(1600, path.points.length - 1), 11, 8, false) : new TubeGeometry(curve, Math.min(400, 24 * (path.points.length - 1)), 7, 6, false);
+    return new TubeGeometry(curve, Math.min(400, 24 * (path.points.length - 1)), 7, 6, false);
   }, [path]);
   useEffect(() => () => tube?.dispose(), [tube]);
   useEffect(() => () => { line.geometry.dispose(); line.material.dispose(); }, [line]);
@@ -497,8 +466,7 @@ function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors, radii }
   });
   return <>
     <primitive object={line} raycast={noRaycast} />
-    {tube && !path.strand && <mesh geometry={tube} raycast={noRaycast}><meshBasicMaterial color={tone.color} transparent opacity={0.8} depthWrite={false} toneMapped={false} /></mesh>}
-    {tube && path.strand && !morph && <mesh geometry={tube} raycast={noRaycast}><meshBasicMaterial color={path.color ?? tone.color} transparent opacity={path.dim ? 0.12 : 0.9} depthWrite={!path.dim} toneMapped={false} /></mesh>}
+    {tube && <mesh geometry={tube} raycast={noRaycast}><meshBasicMaterial color={tone.color} transparent opacity={0.8} depthWrite={false} toneMapped={false} /></mesh>}
     {path.tone === "route" && <mesh ref={bead} raycast={noRaycast}><sphereGeometry args={[34, 16, 12]} /><meshBasicMaterial color={tone.arrow} toneMapped={false} /></mesh>}
     {arrowIndices.map((pointIndex, index) => <group key={`${index}:${pointIndex}`} ref={(element) => { arrowGroups.current[index] = element; }}>
       <ArrowHead color={tone.arrow} />
@@ -972,8 +940,6 @@ interface Props {
   floor?: FloorMark[];
   /** Giant calendar pins behind the story (orbital Story time); world units. */
   pins?: CalendarPin[];
-  /** Story strands: the braid's envelope tubes; world units. */
-  tubes?: StrandTube[];
   /** Minecraft-style render distance (world units) around where the camera looks. */
   renderDistance?: number;
   /** Camera direction for automatic framing (default: a slight side view). */
@@ -1010,7 +976,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], tubes = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), dimmed: !!focusIds && !focusIds.has(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion, focusIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -1026,7 +992,6 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
     {pins.length > 0 && <CalendarPins pins={pins} />}
-    {tubes.length > 0 && <StrandTubes tubes={tubes} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} radii={radii} />)}
     <VisibleConnections edges={edges} bus={bus} />

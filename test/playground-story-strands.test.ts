@@ -44,22 +44,16 @@ test("a flashback is placed before the scene it is told at, not after its teller
   assert.ok(!strands.before("s6", "fb"));
 });
 
-test("Story time strands are one braid: parallel scenes share a cross-section, apart, each strand its own coloured axis; tapping one lights its period", () => {
+test("Story time strands put parallel strands on separate coils, one moment at one angle", () => {
   const arrangement = spiralArrangement(data, undefined, null, "strands");
   const strands = storyStrands(data);
   const at = (id: string) => arrangement.anchors!.get(spiralNodeId(id))!;
-  if (strands.layer.get("m1") === strands.layer.get("l1")) assert.equal(at("m1")[0], at("l1")[0], "one moment: one place along the axis");
-  assert.ok(Math.hypot(at("m1")[1] - at("l1")[1], at("m1")[2] - at("l1")[2]) >= 100, "parallel strands sit apart in the tube");
+  if (strands.layer.get("m1") === strands.layer.get("l1")) {
+    assert.equal(at("m1")[0], at("l1")[0]);
+    assert.equal(at("m1")[2], at("l1")[2]);
+  }
+  assert.ok(Math.abs(at("m1")[1] - at("l1")[1]) > 400);
   assert.equal(arrangement.timeKey.label, "STORY STRANDS →");
-  assert.ok(arrangement.tubes?.length, "an envelope tube");
-  const draws = [...arrangement.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never);
-  const axes = arrangement.paths!(draws, null).filter((path) => path.strand);
-  assert.ok(axes.length >= 2, "an axis per strand");
-  assert.ok(axes.every((axis) => /^#[0-9a-f]{6}$/.test(axis.color ?? "")), "each axis has a colour");
-  assert.ok(new Set(axes.map((axis) => axis.color)).size >= 2, "parallel strands look different");
-  const ming = axes.find((axis) => arrangement.strandPeriod!(axis.id, 0)?.ids.includes(spiralNodeId("m1")));
-  assert.ok(ming, "tapping Ming's strand lights his scenes");
-  assert.ok(!arrangement.strandPeriod!(ming!.id, 0)!.ids.includes(spiralNodeId("l1")), "and not Lan's");
   const line = spiralArrangement(data, undefined, null, "line");
   assert.equal(line.timeKey.label, "STORY TIME →");
 });

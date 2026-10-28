@@ -86,11 +86,9 @@ usual spheres, motion, inspector and entering:
     spiral sits at its centre. Switching to Places then shows just those
     scenes ("From Story time: N scenes · Show all").
 - **Story time · Strands** (the only shape once story time exists; before it,
-  scenes stand on one line in reading order): one braided tube per
-  continuity, folded into rows that fill the screen (docs/story-strands.md,
-  "Braid layout"); each strand a coloured axis with its scenes as beads, the
-  tube swelling where strands run in parallel, smooth S-curves where they
-  split and merge. Tap a strand to light up its stretch for that day. A scene comes after another only with
+  scenes stand on one line in reading order): each strand is its own coil, the busiest where the line was and
+  the others stacked above it (all above the floor); S-curves cross between coils where strands split and meet, and a faint
+  rung joins the scenes of one moment. A scene comes after another only with
   evidence (a shared character, a flashback, stated times), so scenes the
   story cuts between at different places sit on one rung, unordered.
   Estimated from who is in each scene (scenes without a recorded cast borrow
