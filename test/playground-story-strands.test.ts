@@ -155,6 +155,21 @@ test("a precomputed spiral is drawn as stored: knots, cyan coils, glowing axes; 
   assert.equal(framed(6), 9, "a very wide screen opens on more time");
 });
 
+test("the time meter: a tick per story moment on the date backdrop, packed where quiet time is compressed, with the pace noted", () => {
+  // 80 quiet moments (0.4 of a step each), then 80 busy ones (full steps).
+  const xs = Array.from({ length: 160 }, (_, k) => k < 80 ? k * 0.4 * 9 : 79 * 0.4 * 9 + (k - 79) * 9);
+  const projection: TimePlaceProjection = { ...data, spiral: { builtAt: "2026-10-28T23:00:00Z", scale: { dx: 9, knot: 14, width: 900, height: 300 }, links: [], days: [],
+    runs: [{ id: "one", lane: 0, knots: xs.map((x, k) => ({ id: `k${k}`, x, q: [60, 0] as [number, number] })), track: xs.map((x) => [x, 60, 0] as [number, number, number]), axis: xs.map((x) => [x, 60, 0] as [number, number, number]) }] } };
+  const meters = spiralArrangement(projection, undefined, null, "strands").meters!;
+  assert.equal(meters.length, 1);
+  const [meter] = meters, gaps = meter.ticks.slice(1).map((x, k) => x - meter.ticks[k]);
+  assert.equal(meter.ticks.length, 160, "a tick per story moment");
+  assert.ok(Math.abs(gaps[10] / gaps[150] - 0.4) < 1e-9, "ticks bunch where time is compressed");
+  assert.deepEqual(meter.zones.map((zone) => zone.label), ["time ×0.4", "time ×1"], "the pace, noted where it changes");
+  const pins = spiralArrangement(projection, undefined, null, "strands").pins ?? [];
+  for (const pin of pins) assert.ok(meter.y < pin.card && Math.abs(meter.z - pin.z) < 1e-6, "on the date backdrop, under the dates");
+});
+
 test("a lit strand's cast: its records, its characters gathered above it, dim arcs routed in lanes", () => {
   // Invented: Ming and Lan take part in the bridge scene's events; Ming alone speaks at the port; Ren (not drawn yet) joins the bridge.
   const node = (id: string, kind: WorldNode["kind"], chrono = 0, extra: Partial<WorldNode> = {}) => ({ id, kind, label: id, chrono, state: "canon", ...extra }) as WorldNode;

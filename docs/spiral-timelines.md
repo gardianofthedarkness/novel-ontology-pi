@@ -16,10 +16,12 @@ they stack up.
 ## Model
 
 - **Time along x.** A scene's x is its story position; a continuity's books
-  follow each other in reading order. A step between story layers widens by
-  half a layer for every extra strand alive there
-  (dx·(1 + ½(n − 1))), so busy stretches get room and quiet ones stay
-  compact. Only the transverse position q = (height y, depth z) is laid out.
+  follow each other in reading order. Quiet time is compressed: the step
+  between two story moments is a full step when either holds three scenes
+  or more and shorter the fewer they hold, down to 0.4 of a step when both
+  hold one, dx·(0.4 + 0.6·min(1, (max(s, s′) − 1)/2)). On the four volumes
+  this made the time axis about four times shorter. Only the transverse
+  position q = (height y, depth z) is laid out.
 - **Strands.** Each strand run (a `continues` chain of the story strands, with
   answered casts) has a constant axis centre c, one coil radius a shared by
   every run, and a phase φ:
@@ -49,8 +51,10 @@ they stack up.
   |z| ≤ W/2 − a − r, three times as wide as tall, sized so the most strands
   alive at once fit side by side (W·H ≥ n·D²). Enforced by projection after
   each step.
-- **Transitions.** ℓ* = L₀·[360λ_b‖b/D‖²/(7λ_ℓ)]^¼, clipped and refreshed
-  between steps (the closed-form optimum of bending + length).
+- **Transitions.** ℓ* = L₀·[360λ_b‖b/D‖²/(7λ_ℓ)]^¼ with L₀ = 6 full steps,
+  clipped to 2–10 full steps and refreshed between steps (the closed-form
+  optimum of bending + length); short enough on the compressed axis that a
+  side strand reaches its own lane.
 - **Solver.** Analytic gradients of the crowding term (through centres and
   phases), Adam steps with projection; each knot's winding is computed once. Three fixed starts: a packed grid
   (busiest strands first, each in the lowest, most central free slot), its
@@ -89,15 +93,24 @@ as long as the floor box is deep, longer on a wide screen: the whole book
 across a phone would squeeze the cross-section to a thread. A chosen calendar
 day frames that day's scenes.
 
+Because time is compressed, a time meter sits on the date backdrop, just
+under the dates, one ruler per book: a tick per story moment (every fifth
+taller), packed closer where time is squeezed, and a note such as
+"time ×0.4" where the pace (a step's length over a full step, averaged over
+five moments) changes by 0.2 or more and has settled, noted at the level it
+settles to.
+
 ## Measured (2026-10-28)
 
 | Case | Crowding | Scenes overlapping another strand's | Time |
 |---|---|---|---|
-| Four volumes of one universe, 440 scenes, 94 strand runs | 0.133 → 0.100 (−25%) | 23% → 10% | 1 s |
+| Four volumes of one universe, 440 scenes, 94 strand runs, compressed time | 0.165 → 0.139 (−16%) | 58% → 36% | 1 s |
 
-Overlap is averaged over every viewing angle around the time axis. Every
-pair of strands that runs side by side for more than a few layers keeps its
-spacing.
+Overlap is averaged over every viewing angle around the time axis, so on a
+compressed axis more scenes line up from some angle than before (23% → 10%
+uncompressed). No unrelated strands that run side by side sit closer than
+their spacing; the three closest pairs are side strands still curving off
+their parent.
 
 ## Pipeline
 
