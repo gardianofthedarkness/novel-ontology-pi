@@ -4,6 +4,7 @@ import { AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Cylinde
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { FloorMark } from "../data/orbitalTimePlace";
 import type { ArchitectureKind } from "../data/placeArchitecture";
+import type { NavBox } from "../data/holoNav";
 
 /**
  * Orbital Places: a hologram of the building a place's name names, standing
@@ -149,6 +150,18 @@ function arrange(mark: FloorMark, kind: ArchitectureKind, shapes: Shapes): { ite
   const footprint = mark.region ? Math.min(220, mark.radius * 0.34) : Math.min(260, mark.radius * 1.15);
   const scale = Math.min(footprint / Math.max(shape.width, shape.depth), CEILING / shape.height);
   return { items: [{ shape, x: spot[0], z: spot[1], scale, turn: 0 }], height: shape.height * scale, scan: (Math.hypot(shape.width, shape.depth) * scale) / 2 * 1.08, centre: spot };
+}
+
+/** The box a place's hologram fills (stage units): what its nav grid's spots are laid out in. */
+export async function buildingBox(mark: FloorMark, kind: ArchitectureKind): Promise<NavBox> {
+  const { items } = arrange(mark, kind, await loadShapes());
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, height = 0;
+  for (const item of items) {
+    const across = (item.turn ? Math.max(item.shape.width, item.shape.depth) : item.shape.width) * item.scale / 2, deep = (item.turn ? Math.max(item.shape.width, item.shape.depth) : item.shape.depth) * item.scale / 2;
+    minX = Math.min(minX, item.x - across); maxX = Math.max(maxX, item.x + across); minZ = Math.min(minZ, item.z - deep); maxZ = Math.max(maxZ, item.z + deep);
+    height = Math.max(height, item.shape.height * item.scale);
+  }
+  return { x: mark.x + (minX + maxX) / 2, z: mark.z + (minZ + maxZ) / 2, width: maxX - minX, depth: maxZ - minZ, height };
 }
 
 const circle = (() => { const points: number[] = []; for (let index = 0; index < 64; index++) { const angle = (index / 64) * Math.PI * 2; points.push(Math.cos(angle), 0, Math.sin(angle)); } return new BufferGeometry().setAttribute("position", new Float32BufferAttribute(points, 3)); })();

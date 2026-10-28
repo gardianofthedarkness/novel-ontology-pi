@@ -158,7 +158,9 @@ function context(data: TimePlaceProjection, world: WorldLike, volume: number | n
 export function placeScript(data: TimePlaceProjection, world: WorldLike, placeId: string, volume: number | null = null): HoloScript {
   const { index, local, when, names, scenes } = context(data, world, volume);
   const place = data.places.find((entry) => entry.id === placeId);
-  const inside = (scene: StoryScene) => (data.places.find((entry) => entry.id === scene.placeIds[0])?.path ?? scene.placeIds).includes(placeId);
+  // Places of one name (book places a universe has not merged yet) are one stage, as on the journey.
+  const same = new Set(data.places.filter((entry) => entry.id === placeId || (!!place && entry.label === place.label)).map((entry) => entry.id));
+  const inside = (scene: StoryScene) => (data.places.find((entry) => entry.id === scene.placeIds[0])?.path ?? scene.placeIds).some((id) => same.has(id));
   const here = scenes.filter(inside);
   const beats = here.flatMap((scene, number) => sceneBeats(scene, local(scene)!, placeId, number + 1, when(scene), index));
   const label = place?.label ?? data.names[placeId] ?? placeId;

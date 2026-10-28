@@ -70,3 +70,8 @@ test("the speaker is whoever the text names just before the speech verb, not the
   assert.equal(speakerOf("白井黑子回应碧海，叫她别动。", ["karei", "kuroko"], (id) => labels[id]), "kuroko");
   assert.equal(speakerOf("两人沉默不语。", ["kuroko"], (id) => labels[id]), undefined, "no speech verb, no guess");
 });
+
+test("places of one name are one stage", () => {
+  const twin: TimePlaceProjection = { ...data, places: [...data.places, place("tower-2", "Old Tower", [])], scenes: data.scenes };
+  assert.equal(placeScript(twin, world, "tower-2").beats.filter((beat) => beat.kind === "scene").length, 1, "the twin's stage replays the scene recorded under the other id");
+});
