@@ -163,8 +163,19 @@ On the 11 moves of 废弃大楼 (`jev-1.14.0`, 10–11 requests, 134–166 ms ea
   - **Where it helped:** it caught "did not really move" well. Start = end in 7 of 11, including 4 of the 5 moves the physics check dropped.
   - **Height check works:** the two views' heights agreed 0.7–1.0 on most moves and 0.4–0.6 on the shaky ones.
 - **The current spot ringed, end box only (≤ one floor):** Jev boxed the ring itself in 10 of 11 moves. A drawn marker anchors it just as "滨面 — 4F" did in the text.
+- **Everyone in the scene drawn as a named dot:**
+  - **Labels are read:** asked for the dot labelled with the mover's name, Jev boxed it in 8 of 11 front and 9 of 11 side views.
+  - **The end stays on the own dot:** its end box stayed on the mover's own dot in 9 of 11 moves.
+- **Everyone but the mover drawn:**
+  - **Pulled to the others:** the end box went to the other people (白井's moves all landed on the 4F group).
+  - **Paths, view by view:** single views sometimes traced the path, e.g. 4F down the stairwell to the door for "runs down the stairs", or down the back for "falls out of the iron door".
+  - **Read as paths:** reading tall boxes by their end in the direction of travel put that fall on the back door. Still, only 1 of 11 matched the typed choice.
+  - **Views pull apart:** the two views snap to different things, so their 3D average mixes unrelated answers.
 
-Verdict for now: boxes do not replace the typed spot choices for movement. Height (counting floors, up or down) is their weak axis, and that is the axis movement needs most.
+Verdict for now: boxes do not replace the typed spot choices for movement.
+
+- **A locator, not a planner:** the box locates what is drawn (people by name, landmarks), and an end box snaps to the nearest drawn referent.
+- **Height is the weak axis:** counting floors and telling up from down is what movement needs most.
 
 Possible next steps:
 
