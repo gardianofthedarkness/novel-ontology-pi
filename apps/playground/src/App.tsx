@@ -133,6 +133,13 @@ export default function App() {
   /** Orbital Story time: one spiral line, or strands on a ribbon (remembered per browser). */
   /** Story time focuses a calendar day (every book's scenes that day), not a file. */
   const [focusDay, setFocusDay] = useState<string | null>(null);
+  /** The screen's width / height: the story braid folds into as many rows as fill it. Rounded so small resizes keep the layout. */
+  const [aspect, setAspect] = useState(() => typeof window === "undefined" ? 16 / 9 : Math.round((window.innerWidth / Math.max(1, window.innerHeight)) * 10) / 10);
+  useEffect(() => {
+    const update = () => setAspect(Math.round((window.innerWidth / Math.max(1, window.innerHeight)) * 10) / 10);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
   /** Scenes at the centre of the Story time spiral, kept for the switch to Places. */
   const storyCentre = useRef<string[]>([]);
   const noteStoryCentre = useCallback((ids: string[]) => { storyCentre.current = ids.map(sceneOfSpiral).filter((id): id is string => !!id); }, []);
@@ -817,13 +824,13 @@ export default function App() {
       // a universe stays a universe: every book in reading order, not just the book being read.
       const order = viewTimePlace?.available || viewTimePlace?.scope === "universe" ? viewTimePlace : readingOrderProjection(displayWorld);
       const spiral = spiralWorld(displayWorld, order, loadedBook);
-      return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook, "strands", focusDay) };
+      return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook, "strands", focusDay, aspect) };
     }
     if (!viewTimePlace?.places.length) return null;
     const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels };
     const regrouped = atlasWorld(displayWorld, viewTimePlace, filter, loadedBook);
     return { world: regrouped, arrangement: atlasArrangement(viewTimePlace, filter, regrouped, focusBook) };
-  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, loadedBook, focusBook, focusDay]);
+  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, loadedBook, focusBook, focusDay, aspect]);
   /** Live highlights and Pi's touches, in the ids the shown projection uses. */
   const shownEmerging = useMemo(() => emerging ? { times: new Set([...emerging.times].map(universeId.time)), places: new Set([...emerging.places].map(universeId.place)) } : null, [emerging, universeId]);
   const shownTouched = useMemo(() => new Set([...touchedScenes].map(universeId.scene)), [touchedScenes, universeId]);

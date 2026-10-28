@@ -141,14 +141,26 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
    * as not yet on the orbit. */
   const albumInfo = useMemo(() => albumEntries(level.sourceNodes, albumPictures), [albumPictures, level.sourceNodes]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
+  /** A tapped story strand: its scenes for that period (and the records inside them) stay bright; everything else recedes. */
+  const [periodFocus, setPeriodFocus] = useState<{ ids: ReadonlySet<string>; label: string; color: string; pathId: string } | null>(null);
+  useEffect(() => setPeriodFocus(null), [scope.key]);
+  const strandTap = useCallback((pathId: string, index: number) => {
+    const found = arranged?.strandPeriod?.(pathId, index);
+    if (!found) return;
+    const ids = new Set(found.ids);
+    for (const draw of baseDraws) if (draw.previewParentId && ids.has(draw.previewParentId)) ids.add(draw.node.id);
+    setSelectedId(null);
+    setPeriodFocus({ ids, label: found.label, color: found.color, pathId });
+  }, [arranged, baseDraws]);
   /** A selection with links keeps itself and what it links to bright; everything else recedes. */
   const focusIds = useMemo(() => {
+    if (periodFocus) return periodFocus.ids;
     if (!selectedId || followingActivity || !connections.edges.length) return null;
     const linked = new Set([selectedId, ...connections.edges.flatMap((edge) => [edge.from, edge.to])]);
     // Spheres that hold a linked record (a scene inside an event group) stay bright too.
     for (const draw of baseDraws) if (draw.entry?.members.some((id) => linked.has(id))) linked.add(draw.node.id);
     return linked;
-  }, [selectedId, followingActivity, connections.edges, baseDraws]);
+  }, [periodFocus, selectedId, followingActivity, connections.edges, baseDraws]);
   const causalLinks = useMemo(() => scope.kind === "library" || scope.kind === "series" || !showCausal ? [] : worldCausalLinks(world), [world, scope.kind, showCausal]);
   const causal = useMemo(() => {
     if (scope.kind === "library" || scope.kind === "series") return libraryCausalProjection(level, baseDraws, world.library);
@@ -213,6 +225,8 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     }
     return { ...track, fromPoints };
   }), ...preview.paths], [levelPaths, mainAt, preview.paths, morph]);
+  /** With a strand period lit, the other strand axes fade so the lit one stands out. */
+  const shownPaths = useMemo(() => periodFocus ? paths.map((path) => path.strand && path.id !== periodFocus.pathId ? { ...path, dim: true } : path) : paths, [paths, periodFocus]);
   const edges = connections.edges;
   const visibleConnections = useMemo(() => scope.kind === "library" || scope.kind === "series"
     ? connections.edges.filter(edge => edge.relationType !== "CAUSES")
@@ -482,6 +496,19 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       addRipple(motion, { kind: "blank", origin, start: now() });
     }
     setHover(null);
+    // A tap near a strand axis (16 px on screen, at any zoom) lights that strand's period; elsewhere it clears.
+    if (controls && surface) {
+      const camera = controls.camera, x = event.clientX - surface.left, y = event.clientY - surface.top;
+      let best: { id: string; index: number; distance: number } | null = null;
+      for (const path of paths) if (path.strand) path.points.forEach((point, index) => {
+        const at = new Vector3(...point).project(camera);
+        if (at.z > 1) return;
+        const distance = Math.hypot(((at.x + 1) / 2) * surface.width - x, ((1 - at.y) / 2) * surface.height - y);
+        if (distance < 16 && (!best || distance < best.distance)) best = { id: path.id, index, distance };
+      });
+      if (best) { strandTap((best as { id: string }).id, (best as { index: number }).index); return; }
+    }
+    setPeriodFocus(null);
     if (!followingActivity && selectedId) setSelectedId(null);
   };
   useEffect(() => {
@@ -626,8 +653,9 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       if (!event.metaKey && !event.ctrlKey && ["+", "=", "-", "_"].includes(event.key)) { event.preventDefault(); zoomBy(event.key === "+" || event.key === "=" ? -80 : 80); }
       if (event.key === "Enter" && selected) { event.preventDefault(); if (event.shiftKey) enter(selected); else inspect(selected); }
     }}>
-      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} viewToken={viewToken} focusIds={focusIds} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} pins={arranged?.pins} renderDistance={arranged?.renderDistance} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
+      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={shownPaths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} viewToken={viewToken} focusIds={focusIds} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} pins={arranged?.pins} tubes={arranged?.tubes} renderDistance={arranged?.renderDistance} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
       {intro && <div className="orbital-intro-skip" aria-hidden="true">Tap anywhere to skip</div>}
+      {periodFocus && <div className="strand-focus" role="status" style={{ borderColor: periodFocus.color }}><i style={{ background: periodFocus.color }} aria-hidden="true" />{periodFocus.label}<button type="button" onClick={() => setPeriodFocus(null)} aria-label="Show every strand again">×</button></div>}
       <div className="labels-layer faculty-chips">{working.map((anchor) => <button key={anchor.id} type="button" className="faculty-chip" data-faculty-anchor={anchor.id} onClick={openFacultyStrip} aria-label={`Working here: ${anchor.faculties.join(", ")}. Open faculty activity`}>{facultyChipText(anchor)}</button>)}</div>
       <div className="labels-layer orbital-labels">{draws.filter((draw) => draw.role !== "preimage" && draw.envelope !== "hidden").map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}${draw.role === "nebula" && (draw.prominence ?? 1) < 0.35 && selectedId !== draw.node.id ? " is-faint" : ""}${hoveredId === draw.node.id ? " is-hovered" : ""}${focusIds && !focusIds.has(draw.node.id) ? " is-dim" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onPointerEnter={() => setHover(draw.node.id)} onPointerLeave={() => { if (motion.hoveredId === draw.node.id) setHover(null); }} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
         <span className="node-code">{draw.role === "preview" && !arranged?.envelope ? "REVEALED / " : ""}{(draw.node.viewKind ?? draw.node.library?.type ?? draw.node.kind).toUpperCase()}{draw.node.state !== "canon" ? ` · ${draw.node.state}` : ""}</span><b>{draw.node.label}</b>{draw.node.cluster && <span>{draw.node.cluster.ids.length} records · orbital group</span>}{showRelations && !!causal.insideBy.get(draw.node.id) && <span className="causal-inside">{causal.insideBy.get(draw.node.id)} causal inside</span>}

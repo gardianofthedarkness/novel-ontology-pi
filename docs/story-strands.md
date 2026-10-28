@@ -84,6 +84,42 @@ by the same person: treat as a first, not a blind, standard.
   - a back-reference to an earlier date inside a present scene was marked
     as a flashback (35 reversed pairs in volume 2).
 
+## Braid layout (the view)
+
+`apps/playground/src/data/braidLayout.ts` draws the strands as one braided
+tube per continuity (pure: the same strands give the same picture).
+
+- **Objects.** Story layers k (the partial order's positions), strand runs s
+  (`continues` chains) alive on [a_s, b_s], splits and merges from the
+  worldline/carried edges. Unknowns: each run's cross-section position
+  q_{s,k} = (height, depth) and the envelope radius R_k.
+- **Packing.** The n_k live runs take slots of the densest packing of n equal
+  circles (centre, polygon, centre + hexagon, then a sunflower
+  r_j = R·√((j−½)/n), φ_j = j·137.508°), rotated by a slow twist ω·k. Each run
+  keeps the slot nearest where it was (Hungarian assignment). R_k from the
+  packing, dilated ±3 layers and Gaussian-smoothed, so the tube swells
+  before strands arrive.
+- **Energy.** E = Σ w_f‖q − σ‖² + w_c‖Δ²q‖² + w_v‖Δq‖² + overlap and
+  envelope hinges: per run a pentadiagonal solve (banded Cholesky), then the
+  overlaps (spacing 0.9·d) and the envelope projected; 14 rounds.
+- **Splits and merges.** The child starts on the parent (pinned) and eases to
+  its own slot with S(u) = 6u⁵ − 15u⁴ + 10u³ (C²) over W ≥ (15/8)·Δ /
+  (tan 30°·step) layers, so no branch is steeper than 30° (a strand that
+  splits off and merges back gives each move at most half its span, so it
+  always parts visibly).
+- **Fold.** Rows of a serpentine with semicircle turns; k* maximises
+  min(W/W_b, H/H_b) for the screen's aspect (W_b = L/k + band,
+  H_b = k·band), breaks snapped to calendar day starts within ±15%.
+- **Colour.** 12 OKLCH hues (L 0.72, C 0.14); runs that come within two
+  spacings (or split from each other) get the most different hues (greedy
+  over the conflict graph).
+- **Tap.** A tap within 16 px of an axis (at any zoom) lights that strand's
+  scenes between its splits and merges, within the calendar day tapped; the
+  other strands fade.
+
+Measured on three volumes (355 scenes, 40 strand runs): 37 ms; a phone screen
+(aspect 0.46) gets a bundle of aspect 0.48, a landscape one (1.8) 1.68.
+
 ## Verdict and plan
 
 Keep the time-place faculty for anchors, dates and flashbacks; it is not
