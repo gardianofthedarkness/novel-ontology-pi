@@ -10,6 +10,7 @@ import { loadCorrections } from "../../../solidifier/maintenance/corrections.js"
 import { loadConfig } from "../../config.js";
 import { resolveJevKey } from "../../../ground/connectors/secrets.js";
 import { EventLog } from "../../../ground/events/log.js";
+import { observeDecisions } from "../../../ground/events/observe.js";
 import { listChangeSets, saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
 import type { Entity, OntEvent, Relation, Scene } from "../../../ground/ontology/types.js";
 import { loadExtractionCounts } from "../../../digger/processing/counts.js";
@@ -197,7 +198,7 @@ export async function ingestNovel(
       try {
         const summary = await runEntityMatching({
           novelDir,
-          decisions: jevFromEnv(env),
+          decisions: observeDecisions(jevFromEnv(env), log.emit),
           events: log.emit,
           data: {
             entities: await loadKnownEntities(),
@@ -233,7 +234,7 @@ export async function ingestNovel(
       try {
         const pass = await runCausalityPass({
           novelDir,
-          decisions: jevFromEnv(env),
+          decisions: observeDecisions(jevFromEnv(env), log.emit),
           embedder: loadEmbedder({
             provider: cfg.embeddings.provider,
             model: cfg.embeddings.model,
