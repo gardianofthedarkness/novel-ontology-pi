@@ -145,6 +145,31 @@ On a copy of book 3 (144 scenes, 9 places with scenes):
 
 Places now carry an indoor/outdoor flag per spot: in a district, falling off a rooftop into the street counts as going "out".
 
+### Stage clips (phones too)
+
+A **Clips** link in the top bar (shown on phones as well) opens `?clips&book=N`: the book's prepared animation as a reel of short pieces, to see quickly what a book's animation looks like.
+
+- **A clip** is one scene of one place, cut to its run of at most 9 beats with the most moves.
+- **The picks:** the busiest scene of each building kind first, then the busiest overall, up to 10 per book, with a fair share per place; they play in reading order.
+- **Playing:** each clip replays once in about 12 seconds, with the event (and who speaks) and its original sentences under the stage; then the next clip follows unless the reel is paused. Prev/next, a sideways swipe on the caption, or the clip strip jump around; after a replay the stage can be turned and scrubbed.
+- **On a phone** the stage's own heading, event cards and speech bubbles stay hidden: the caption carries them, so they don't cover the people.
+
+### Pi prepares it
+
+Pi has a fourth skill, `skills/novel-stage/SKILL.md`: finish the book's checklist, then buildings, movement (budget about 1.2× the stage estimate) and prep. The runner lists it in `NOVEL_JOB.json` (`animation`) and asks Pi to read it before any Jev stage request. Refusals for running a step too early are `STEP_WAITING`, not `INTERNAL`.
+
+Run by Pi on copies of books 1–3 (2026-10-28):
+
+| Book | Buildings (by kind) | Scenes asked | Jev requests | Moves kept | Dropped / revised starts |
+|---|---|---|---|---|---|
+| 1 | city 1, none 1 | 69 | 678 | 40 | 17 / 31 |
+| 2 | city 4, hospital 2, station 2, home 1 | 46 | 479 | 32 | 22 / 22 |
+| 3 | city 5, tower 1, home 1, office 1, none 1 | 121 | 1,177 | 93 | 30 / 51 |
+
+- Book 1's causality sweep still has about 40,000 pairs to examine, beyond any job's limits, so its prep refuses. Its plan on the demo copy was prepared with `--force`.
+- Jev answered in about 85 ms (median), so a whole book's movement took 10–20 s.
+- The first run hit a host bug: Pi's call observer rebuilt Jev's request headers and dropped the image opt-in, so every picture choice failed with a 400. The observer now passes that one header on.
+
 ### Jev's native box (explored)
 
 Jev 1.14 can answer a `box` question: one target in an image, as top/bottom/left/right fractions. On the tower picture:

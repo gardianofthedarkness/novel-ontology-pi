@@ -5,6 +5,7 @@ import { pickArchitecture, type ArchitecturePlace } from "../src/digger/stage/ar
 import { askMovement, type MovementScene } from "../src/digger/stage/movement.js";
 import { prepareStage } from "../src/digger/stage/prep.js";
 import { navGrid } from "../apps/playground/src/data/holoNav.js";
+import { describeError } from "../src/ground/errors.js";
 
 /** A decision model that records what it was asked and answers from a function. */
 function recording(answer: (state: string, question: DecisionQuestion) => DecisionAnswer["value"]) {
@@ -67,4 +68,10 @@ test("movement: who moves (named people on an even chance, others only when sure
   assert.equal((await askMovement([scene], { decisions: quiet, names: { a: "白井", b: "大叔" }, previous: report })).usage.reused, 1);
   const short = await askMovement([scene], { decisions: quiet, names: { a: "白井", b: "大叔" }, maxCalls: 1 });
   assert.deepEqual([short.complete, short.usage.skipped, Object.keys(short.scenes).length], [false, 1, 0]);
+});
+
+test("a stage step run too early is reported as waiting on the checklist, not as a bug", () => {
+  const report = describeError(new Error("Animation prep waits for every other step: causality (todo). See novel checklist."), ["stage", "prep", "/books/vol-1/novel"]);
+  assert.deepEqual([report.aspect, report.code, report.next], ["usage", "STEP_WAITING", ["novel checklist /books/vol-1/novel"]]);
+  assert.equal(describeError(new Error("Movement needs each place's building first: run `novel stage architecture /b`."), ["stage", "movement", "/b"]).code, "STEP_WAITING");
 });

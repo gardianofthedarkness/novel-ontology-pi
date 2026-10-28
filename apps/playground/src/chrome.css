@@ -79,7 +79,7 @@
   .dock-open .view-controls { bottom: 236px; }
   .view-help-card { right: 0; bottom: 44px; }
   .design-switch.stage-switch { left: 12px; right: 12px; transform: none; justify-content: center; font-size: 9px; }
-  .app .topbar .sample-badge, .app .topbar .read-link { display: none; }
+  .app .topbar .sample-badge, .app .topbar .read-link:not(.clips-link) { display: none; }
   .view-help-card { width: min(300px, calc(100vw - 80px)); }
   .dock-toggle { left: 12px; max-width: calc(100vw - 150px); }
   .app .inspector { top: 160px; }

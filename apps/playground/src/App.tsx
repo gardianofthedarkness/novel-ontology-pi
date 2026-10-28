@@ -25,6 +25,7 @@ import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProje
 import { AtlasPanel } from "./components/AtlasPanel";
 import { HoloStage, type HoloMode } from "./components/HoloStage";
 import { ReadMode } from "./components/ReadMode";
+import { StageClips } from "./components/StageClips";
 import { keyedPlan, placePlan, type StagePlan } from "./data/readMode";
 import { journeyScript, placeScript } from "./data/holoScript";
 import { RollingText } from "./components/RollingText";
@@ -169,6 +170,8 @@ export default function App() {
    * Deep link: ?holo=<place id or name | journey>&holoMode=diorama|cutscene|journey&holoBeat=<n>[&holoPause]. */
   /** Read mode: the book's text with its places replayed beside it (?read; desktop). */
   const [readMode] = useState(() => new URLSearchParams(location.search).has("read"));
+  /** Stage clips: the prepared animation as a reel of short pieces (?clips; phones too). */
+  const [clipsMode] = useState(() => new URLSearchParams(location.search).has("clips"));
   const [holo, setHolo] = useState<{ target: string; mode: HoloMode; beat: number; paused?: boolean } | null>(() => {
     const params = new URLSearchParams(location.search), target = params.get("holo");
     return target ? { target, mode: (params.get("holoMode") as HoloMode | null) ?? (target === "journey" ? "journey" : "diorama"), beat: Number(params.get("holoBeat") ?? 0), paused: params.has("holoPause") } : null;
@@ -887,12 +890,15 @@ export default function App() {
 
   // The same page with ?read toggled (other parameters and the fragment kept), so read mode opens as its own link.
   const withRead = (on: boolean) => { const params = new URLSearchParams(location.search); if (on) params.set("read", "1"); else params.delete("read"); return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
+  const withClips = (book: number | null) => { const params = new URLSearchParams(location.search); params.delete("read"); if (book === null) params.delete("clips"); else { params.set("clips", "1"); params.set("book", String(book)); } return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
   if (!world) {
     return (
       <main className="loading-screen"><span className="eyebrow">NOVEL / ONTOLOGY PI</span><h1>Narrative archive.</h1><p role={loadError ? "alert" : "status"}>{loadError ? `Could not open the archive: ${loadError}` : "Opening local records…"}</p></main>
     );
   }
 
+  if (clipsMode) return <StageClips timePlace={timePlace} world={shownWorld} volume={loadedBook} requested={requestedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion}
+    books={books.length ? books.map((book) => ({ id: book.id, label: bookName(book) })) : loadedBook !== null ? [{ id: loadedBook, label: liveCollection }] : []} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withClips(null)} clipsHref={withClips} />;
   if (readMode) return <ReadMode timePlace={timePlace} world={shownWorld} volume={loadedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withRead(false)} />;
 
   return (
@@ -900,6 +906,7 @@ export default function App() {
       <header className="topbar">
         <button className="brand" onClick={overview} aria-label="Return to archive overview"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 32V8h7l18 24h7V8M4 32h7V18l18 14M19 8h17" fill="none" stroke="currentColor" strokeWidth="3" /></svg><span>NOVEL<span>ONTOLOGY / PI</span></span></button>
         <a className="read-link" href={withRead(true)} title="Read the book with its places replayed beside the text (desktop)">Read mode</a>
+        <a className="read-link clips-link" href={withClips(loadedBook ?? 1)} title="Flip through short clips of the book's prepared animation">Clips</a>
         <span className="sample-badge"><i />{phoneLive || liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">

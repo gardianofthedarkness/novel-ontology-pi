@@ -1,0 +1,63 @@
+/* Stage clips (?clips): a book's prepared animation as a reel of short pieces; phone first. */
+.clips { --clips-ink: #d9e3ea; --clips-dim: #7d93a5; --clips-line: #1f3a50; --clips-cyan: #7ce6ff;
+  position: fixed; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto auto; background: #060c12; color: var(--clips-ink); overflow: hidden; }
+.clips-top { display: flex; align-items: center; gap: 12px; padding: 8px 14px; padding-top: max(8px, env(safe-area-inset-top)); border-bottom: 1px solid var(--clips-line); background: #08111a; min-width: 0; }
+.clips-back { color: var(--clips-dim); text-decoration: none; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.clips-title { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; flex: 1; }
+.clips-title span { font-size: 9px; letter-spacing: .22em; color: var(--clips-cyan); font-weight: 750; }
+.clips-title strong { font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clips-books { display: flex; gap: 4px; }
+.clips-books a { color: var(--clips-dim); text-decoration: none; font-size: 11px; font-weight: 700; padding: 5px 8px; border: 1px solid var(--clips-line); border-radius: 999px; white-space: nowrap; }
+.clips-books a.is-on { color: #06121f; background: var(--clips-cyan); border-color: var(--clips-cyan); }
+
+.clips-stage { position: relative; min-height: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 60%, #0a2036 0%, #040a13 65%); }
+.clips-idle { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 16px; color: var(--clips-dim); font-size: 13px; padding: 0 24px; text-align: center; }
+.clips-ring { width: 130px; height: 130px; border-radius: 50%; border: 1px solid #2b6f9b; box-shadow: 0 0 40px #1d6fa533 inset, 0 0 30px #1d6fa522; }
+
+.clips-caption { position: relative; padding: 10px 16px 12px; border-top: 1px solid var(--clips-line); background: #08111a; max-height: 34dvh; overflow-y: auto; touch-action: pan-y; }
+.clips-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--clips-dim); }
+.clips-meta b { color: var(--clips-cyan); font-variant-numeric: tabular-nums; }
+.clips-caption h2 { margin: 4px 0 6px; font-size: 16px; font-weight: 650; line-height: 1.35; }
+.clips-beat { margin: 0 0 6px; font-size: 13px; line-height: 1.55; color: #c3d4df; }
+.clips-beat b { color: #fff; font-weight: 650; }
+.clips-beat i { font-style: normal; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--clips-cyan); border: 1px solid #2b6f9b; border-radius: 3px; padding: 1px 5px; margin-right: 7px; vertical-align: 1px; }
+.clips-caption blockquote { margin: 0; padding: 6px 0 0 10px; border-left: 2px solid #2b6f9b; font: 15px/1.85 "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif; color: #eef6fb; }
+.clips-reel { position: absolute; left: 0; top: -1px; height: 2px; width: 100%; background: var(--clips-cyan); transform-origin: left; animation: clips-reel linear forwards; box-shadow: 0 0 8px var(--clips-cyan); }
+@keyframes clips-reel { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.clips-controls { display: grid; grid-template-columns: 52px 1fr 1fr 52px; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--clips-line); background: #060c12; }
+.clips-controls button, .clips-controls a { min-height: 42px; border: 1px solid #2b6f9b; border-radius: 10px; background: #0b1a27; color: var(--clips-ink); font-size: 14px; font-weight: 650; display: grid; place-items: center; text-decoration: none; }
+.clips-controls button:first-child, .clips-controls button:last-child { font-size: 24px; line-height: 1; }
+.clips-controls button.is-on { color: var(--clips-cyan); border-color: var(--clips-cyan); }
+.clips-controls button:disabled { opacity: .35; }
+.clips-controls .clips-nextbook { color: #06121f; background: var(--clips-cyan); border-color: var(--clips-cyan); font-size: 12px; }
+
+.clips-list { display: flex; gap: 8px; overflow-x: auto; padding: 0 14px 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); scrollbar-width: none; }
+.clips-list button { flex: 0 0 auto; display: grid; grid-template-columns: auto 1fr; gap: 0 6px; align-items: baseline; max-width: 210px; padding: 6px 10px; border: 1px solid var(--clips-line); border-radius: 8px; background: #08111a; color: var(--clips-ink); text-align: left; }
+.clips-list button b { color: var(--clips-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+.clips-list button span { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clips-list button small { grid-column: 2; font-size: 10px; color: var(--clips-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clips-list button.is-on { border-color: var(--clips-cyan); background: #0e2233; }
+.clips-list button.is-on b { color: var(--clips-cyan); }
+
+/* The clip's caption carries its title: the stage's own heading and replay bar stay out of a phone's way. */
+@media (max-width: 760px) {
+  .clips .holo-top { display: none; }
+  .clips .holo-timeline { padding-bottom: 4px; }
+  .clips .holo-chapter strong { font-size: 22px; }
+  /* The caption under the stage tells the event and who speaks; cards and bubbles would cover the people. */
+  .clips .holo-eventcard, .clips .holo-bubble { display: none; }
+}
+
+/* Wide screens: the stage beside the caption and the clip list. */
+@media (min-width: 900px) {
+  .clips { grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto minmax(0, 1fr) auto auto; }
+  .clips-top { grid-column: 1 / -1; }
+  .clips-stage { grid-row: 2 / 5; }
+  .clips-caption { grid-column: 2; grid-row: 2; max-height: none; border-left: 1px solid var(--clips-line); }
+  .clips-controls { grid-column: 2; grid-row: 3; border-left: 1px solid var(--clips-line); }
+  .clips-list { grid-column: 2; grid-row: 4; flex-direction: column; overflow-x: hidden; overflow-y: auto; max-height: 38vh; border-left: 1px solid var(--clips-line); }
+  .clips-list button { max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) { .clips-reel { animation: none; } }
+.clips-caption h2 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
