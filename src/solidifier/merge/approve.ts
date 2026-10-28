@@ -3,6 +3,7 @@ import { BundleStore } from "../../ground/connectors/bundle.js";
 import { buildGraphFromBundle } from "../../ground/connectors/ladybug.js";
 import { jevFromEnv } from "../../ground/connectors/jev.js";
 import { EventLog } from "../../ground/events/log.js";
+import { observeDecisions } from "../../ground/events/observe.js";
 import { markCausalitySweepPending } from "../causality/faculty.js";
 import { runEmPassAfterApply } from "../matching/emFaculty.js";
 import { treeViolation } from "../../ground/ontology/placeTree.js";
@@ -36,7 +37,7 @@ export async function approveBook(directory: string, id: string, env: NodeJS.Pro
   const emit = new EventLog(directory).emit;
   const application = await applyChangeSet(new BundleStore(ontology), packet, emit, context);
   let entityMatching: Awaited<ReturnType<typeof runEmPassAfterApply>> = null;
-  try { entityMatching = await runEmPassAfterApply({ novelDir: directory, decisions: jevFromEnv(env), changeset: packet, events: emit }); } catch {}
+  try { entityMatching = await runEmPassAfterApply({ novelDir: directory, decisions: observeDecisions(jevFromEnv(env), emit, { blockId: packet.blockId }), changeset: packet, events: emit }); } catch {}
   try { await markCausalitySweepPending(directory); } catch {}
   const graph = await buildGraphFromBundle(ontology, join(ontology, "graph.lbug"), emit);
   return { id, status: packet.status, ...application, ...(verifiedFacts !== undefined ? { verifiedFacts } : {}), graph, ...(entityMatching ? { entityMatching: { nominated: entityMatching.nominated, merged: entityMatching.merged.length, distinct: entityMatching.distinct.length, uncertain: entityMatching.uncertain.length } } : {}) };

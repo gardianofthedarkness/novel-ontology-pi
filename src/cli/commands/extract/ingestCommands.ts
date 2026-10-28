@@ -10,18 +10,14 @@ import { loadCorrections } from "../../../solidifier/maintenance/corrections.js"
 import { loadConfig } from "../../config.js";
 import { resolveJevKey } from "../../../ground/connectors/secrets.js";
 import { EventLog } from "../../../ground/events/log.js";
-import { listChangeSets, saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
+import { observeDecisions } from "../../../ground/events/observe.js";
+import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import type { Entity, OntEvent, Relation, Scene } from "../../../ground/ontology/types.js";
 import { loadExtractionCounts } from "../../../digger/processing/counts.js";
 import { facultyOptionsFromEnv } from "../../../digger/processing/facultyOptions.js";
 import { runEntityMatching, loadMatchMemory, saveMatchMemory } from "../../../solidifier/matching/emFaculty.js";
 import { loadEmbedder } from "../../../ground/connectors/embeddings.js";
-import {
-  clearCausalitySweepPending,
-  markCausalitySweepPending,
-  readCausalityMemory,
-  runCausalityPass,
-} from "../../../solidifier/causality/faculty.js";
+import { markCausalitySweepPending } from "../../../solidifier/causality/faculty.js";
 import { albumPortraits, emitAlbumAnchors } from "./albumCommands.js";
 import { bindWorkspaceSource, sourceHash } from "../../../ground/workspace/source.js";
 
@@ -166,7 +162,8 @@ export async function ingestNovel(
       distinct: summary.distinct.length,
       uncertain: summary.uncertain.length,
     }),
-    causality: !opts.noCausality,
+    // Per-block causality waits for story time and strands (see the sweep below).
+    causality: false,
     ...(opts.timePlace ? { timePlace: { mode: workModel ? "hybrid" as const : "programmatic" as const } } : {}),
     embedder: loadEmbedder({
       provider: cfg.embeddings.provider,
@@ -197,7 +194,7 @@ export async function ingestNovel(
       try {
         const summary = await runEntityMatching({
           novelDir,
-          decisions: jevFromEnv(env),
+          decisions: observeDecisions(jevFromEnv(env), log.emit),
           events: log.emit,
           data: {
             entities: await loadKnownEntities(),
@@ -220,50 +217,12 @@ export async function ingestNovel(
     }
   }
 
-  // Chapter-close causality sweep (same cadence as EM): old x old pairs
-  // are judged only when a whole first-level node completes, or when
-  // canon changed since the last sweep (gate-mode applies between runs
-  // mark causality.json sweepPending via `novel changeset approve`).
-  // Confident links land in a pending_review changeset for the gate —
-  // the sweep never writes canon directly.
-  let causalityChapterSweep: { changesetId: string | null; nominated: number; proposed: number; uncertain: number; rejected: number; embedded: number; embeddingLeg: boolean } | null = null;
-  if (!opts.noCausality && selectedBlocks.length > 0 && selectedBlocks.every((b) => coveredBlocks.has(b.id))) {
-    const causalityMemory = await readCausalityMemory(novelDir);
-    if (result.mergedBlocks.length > 0 || causalityMemory.sweepPending) {
-      try {
-        const pass = await runCausalityPass({
-          novelDir,
-          decisions: jevFromEnv(env),
-          embedder: loadEmbedder({
-            provider: cfg.embeddings.provider,
-            model: cfg.embeddings.model,
-            dimension: cfg.embeddings.dimension,
-            baseUrl: cfg.embeddings.baseUrl,
-            apiKey: env.EMBEDDING_API_KEY?.trim() ? env.EMBEDDING_API_KEY.trim() : null,
-          }),
-        });
-        let changesetId: string | null = null;
-        if (pass.proposals.length > 0) {
-          const changeset = {
-            id: `cs_causality_sweep_${Date.now()}`,
-            blockId: "causality-sweep",
-            proposals: pass.proposals,
-            status: "pending_review" as const,
-            reviewNotes: {
-              "causality-faculty": `Chapter-close sweep: ${pass.summary.nominated} nominated, ${pass.summary.proposed} proposed, ${pass.summary.uncertain} uncertain, ${pass.summary.rejected} rejected${pass.summary.embeddingLeg ? " (embedding leg on)" : " (graph patterns only)"}.`,
-            },
-            createdAt: new Date().toISOString(),
-          };
-          await saveChangeSet(novelDir, changeset);
-          changesetId = changeset.id;
-        }
-        causalityChapterSweep = { changesetId, ...pass.summary };
-        await clearCausalitySweepPending(novelDir);
-      } catch {
-        causalityChapterSweep = null;
-      }
-    }
-  }
+  // Causality waits for story time and strands: a cause must come first in story time, and a direct cause
+  // across parallel strands needs something carrying it over, so causes are judged by the on-demand sweep
+  // (`novel causality sweep`) once the checklist's time-place and strands items are done. Extraction only
+  // marks the sweep pending (an approval through the gate does too); nothing is judged in reading order here.
+  const causalityChapterSweep: { changesetId: string | null; nominated: number; proposed: number; uncertain: number; rejected: number; embedded: number; embeddingLeg: boolean } | null = null;
+  if (!opts.noCausality && result.mergedBlocks.length > 0) await markCausalitySweepPending(novelDir);
 
   let graph: Awaited<ReturnType<typeof buildGraphFromBundle>> | null = null;
   if (result.mergedBlocks.length > 0) {

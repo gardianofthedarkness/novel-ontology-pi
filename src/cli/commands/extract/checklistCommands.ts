@@ -10,7 +10,7 @@ import { readCausalityMemory } from "../../../solidifier/causality/faculty.js";
 import { loadUniverseContext, universeBindings, universeCandidates } from "../../../solidifier/causality/universe.js";
 import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/atlas/universeAtlas.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
-import { loadWorkspaceSentences } from "./timeplaceCommands.js";
+import { loadWorkspaceSentences, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
 
 /**
@@ -18,8 +18,9 @@ import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
  * order, with the exact next command for each gap. A book's analysis is
  * complete when every faculty below is "done":
  *
- *   source ─▶ blocks ─┬─▶ causality (in-book, cross-scene sweep)
- *   (album, optional) ├─▶ time-place ─▶ place-tree
+ *   source ─▶ blocks ─┬─▶ time-place ─┬─▶ place-tree
+ *   (album, optional) │               └─▶ strands (who is in each scene) ─▶ causality (in-book, cross-scene sweep,
+ *                     │                                                    ordered by story time and strands)
  *                     └─▶ graph (rebuilt after canon changes)
  *
  * and a universe's when every member book is complete and its cross-book
@@ -80,15 +81,6 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
     counts: { blocks: blocks.length, applied: blocks.length - missingBlocks.length, awaitingReview: blockReview.length, scenes: scenes.length, entities: entities.length },
     next: blockReview.length ? blockReview.map((changeset) => reviewCommand(changeset.id)) : missingBlocks.length ? [options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>  (continues at ${missingBlocks[0]})`] : [] });
 
-  // In-book causality: the cross-scene sweep after extraction, and its packets reviewed.
-  const causalReview = pending((id) => id.startsWith("cs_causality_"));
-  const sweepPending = (await readCausalityMemory(novelDir)).sweepPending;
-  items.push({ id: "causality", title: "Cross-scene causality (in this book)", dependsOn: ["blocks"],
-    status: causalReview.length ? "review" : sweepPending ? "todo" : "done",
-    counts: { causalLinks: relations.filter((relation) => relation.type === "CAUSES" || relation.type === "CAUSED_BY").length, awaitingReview: causalReview.length, sweepPending },
-    next: causalReview.length ? causalReview.map((changeset) => reviewCommand(changeset.id)) : sweepPending ? [`novel causality sweep ${dir}`] : [],
-    note: "Read references/causality.md before reviewing causal packets." });
-
   // Story time and places: every scene in a period, packets reviewed.
   const timed = new Set(relations.filter((relation) => relation.type === "OCCURS_DURING").map((relation) => relation.fromId));
   const attempted = await timePlaceAttempted(novelDir);
@@ -117,9 +109,42 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
     next: treeReview.length ? treeReview.map((changeset) => reviewCommand(changeset.id)) : unsettled ? [`novel timeplace tree ${dir} --propose`] : [],
     note: unsettled && swept ? "New pairs, or asked pairs with more evidence since, are waiting." : undefined });
 
+  const newest = Math.max(0, ...await Promise.all(["entities", "relations", "events", "scenes"].map((name) => stat(join(novelDir, "ontology", `${name}.jsonl`)).then((info) => info.mtimeMs, () => 0))));
+
+  // Strands: who is in each scene where a borrowed cast would decide the story order ("who is present?",
+  // work model). Done when nothing is worth asking, or the latest asked report read the same casts, story
+  // time, places and cast candidates as now (its `inputs` fingerprint): new causal links or events do not
+  // make it stale. Report only: it feeds the story-strands view; no review packet.
+  const strand = timed.size ? await strandInputs(novelDir) : null;
+  let asked: { inputs?: string; at: number } | null = null;
+  for (const name of (await readdir(join(novelDir, "timeplace")).catch(() => [] as string[])).filter((entry) => /^strands-.+\.json$/.test(entry)).sort().reverse()) {
+    const report = JSON.parse(await readFile(join(novelDir, "timeplace", name), "utf8").catch(() => "null")) as { after?: unknown; inputs?: string } | null;
+    if (report?.after) { asked = { inputs: report.inputs, at: (await stat(join(novelDir, "timeplace", name))).mtimeMs }; break; }
+  }
+  // Reports from before the fingerprint: current when newer than the bundle and time-place packets.
+  const timeplaceFiles = (await readdir(join(novelDir, "changesets")).catch(() => [] as string[])).filter((name) => name.startsWith("cs_timeplace"));
+  const legacyCurrent = async (at: number) => at >= Math.max(newest, ...await Promise.all(timeplaceFiles.map((name) => stat(join(novelDir, "changesets", name)).then((info) => info.mtimeMs, () => 0))));
+  const strandPlan = strand?.plan ?? null;
+  const toAsk = strandPlan?.questions.length ?? 0;
+  const current = !!asked && (asked.inputs ? asked.inputs === strand?.fingerprint : await legacyCurrent(asked.at));
+  items.push({ id: "strands", title: "Story strands (who is in each scene, what runs in parallel)", dependsOn: ["time-place"],
+    status: !timed.size || !toAsk || current ? "done" : "todo",
+    counts: { questions: toAsk, calls: strandPlan?.estimate.calls ?? 0, asked: !!asked, current },
+    next: timed.size && toAsk && !current ? [`novel timeplace strands ${dir} --ask`] : [],
+    note: !timed.size ? "No story periods to build strands on." : toAsk && !current ? `About ${strandPlan!.estimate.calls} work-model call(s); writes a report the story view uses, nothing to canon.` : undefined });
+
+  // In-book causality: the cross-scene sweep, after story time and strands, and its packets reviewed.
+  const causalReview = pending((id) => id.startsWith("cs_causality_"));
+  const sweepPending = (await readCausalityMemory(novelDir)).sweepPending;
+  // Causality after story time and strands: a cause comes first in story time, and parallel strands need a link carried across.
+  items.push({ id: "causality", title: "Cross-scene causality (in this book)", dependsOn: ["blocks", "time-place", "strands"],
+    status: causalReview.length ? "review" : sweepPending ? "todo" : "done",
+    counts: { causalLinks: relations.filter((relation) => relation.type === "CAUSES" || relation.type === "CAUSED_BY").length, awaitingReview: causalReview.length, sweepPending },
+    next: causalReview.length ? causalReview.map((changeset) => reviewCommand(changeset.id)) : sweepPending ? [`novel causality sweep ${dir}`] : [],
+    note: "Read references/causality.md before reviewing causal packets." });
+
   // Graph: the queryable graph rebuilt after canon changed.
   const graph = await stat(join(novelDir, "ontology", "graph.lbug")).catch(() => null);
-  const newest = Math.max(0, ...await Promise.all(["entities", "relations", "events", "scenes"].map((name) => stat(join(novelDir, "ontology", `${name}.jsonl`)).then((info) => info.mtimeMs, () => 0))));
   items.push({ id: "graph", title: "Query graph up to date", dependsOn: ["blocks"], status: !graph || graph.mtimeMs < newest ? "todo" : "done",
     counts: { built: !!graph }, next: !graph || graph.mtimeMs < newest ? [`novel graph build ${quote(join(novelDir, "ontology"))}`] : [] });
 

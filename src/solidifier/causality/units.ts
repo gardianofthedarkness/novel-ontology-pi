@@ -18,6 +18,7 @@
 
 import { join } from "node:path";
 import type { OntEvent, Relation, Scene, StateChange, Entity } from "../../ground/ontology/types.js";
+import { loadStrandView, type StrandView } from "../../digger/timeplace/strandView.js";
 import { BundleStore } from "../../ground/connectors/bundle.js";
 
 export type CausalUnitKind = "event" | "dialogue";
@@ -41,6 +42,13 @@ export interface CausalUnit {
 }
 
 export interface CausalityUniverse {
+  /**
+   * Story strands (time, place and who is present): which scene happens
+   * before which. A cause comes first; scenes in parallel strands are not
+   * ordered. Preferred over `storyIndex`, which only orders scenes in
+   * different story periods.
+   */
+  strands?: StrandView | null;
   storyIndex?: Map<string, number>;
   units: CausalUnit[];
   byId: Map<string, CausalUnit>;
@@ -185,6 +193,7 @@ export async function loadCausalityUniverse(
       sceneId: previous.sceneId === unit.sceneId ? unit.sceneId : null, scenePosition: previous.sceneId === unit.sceneId ? previous.scenePosition : null } : unit);
   }
   return {
+    strands: await loadStrandView(novelDir).catch(() => null),
     storyIndex,
     units: [...byId.values()],
     byId,
@@ -198,14 +207,34 @@ export async function loadCausalityUniverse(
   };
 }
 
+/** Two units in different scenes that run in parallel strands: story time orders neither before the other. */
+export function inParallelStrands(a: CausalUnit, b: CausalUnit, universe: CausalityUniverse): boolean {
+  const strands = universe.strands;
+  return !!strands && !!a.sceneId && !!b.sceneId && a.sceneId !== b.sceneId && strands.has(a.sceneId) && strands.has(b.sceneId)
+    && !strands.before(a.sceneId, b.sceneId) && !strands.before(b.sceneId, a.sceneId);
+}
+
+/** The order the book tells them in (reading order), ignoring story time. */
+export function tellingOrder(a: CausalUnit, b: CausalUnit, universe: CausalityUniverse): -1 | 1 | null {
+  return compareOrder(a, b, { ...universe, strands: null, storyIndex: undefined });
+}
+
 /**
- * Novel-sequence order: -1 when a precedes b, 1 when a follows b, null when
- * the sequence cannot order the pair (cross-scene event vs dialogue in the
- * same chapter with no shared scene anchor, or same-scene ties).
+ * Story order: -1 when a precedes b, 1 when a follows b, null when nothing
+ * orders the pair. With strands, scenes are ordered by story time (null for
+ * scenes in parallel strands); without, by story period, then by the novel
+ * sequence (cross-scene event vs dialogue in the same chapter with no shared
+ * scene anchor, or same-scene ties, stay null).
  */
 export function compareOrder(a: CausalUnit, b: CausalUnit, universe: CausalityUniverse): -1 | 1 | null {
   if (a.id === b.id) return null;
   if (a.origin && b.origin && a.origin.sourceId !== b.origin.sourceId) return null;
+  // Strands order whole scenes: by the same person's continuity, flashbacks and stated times.
+  if (universe.strands && a.sceneId && b.sceneId && a.sceneId !== b.sceneId && universe.strands.has(a.sceneId) && universe.strands.has(b.sceneId)) {
+    if (universe.strands.before(a.sceneId, b.sceneId)) return -1;
+    if (universe.strands.before(b.sceneId, a.sceneId)) return 1;
+    return null;
+  }
   if (universe.storyIndex?.size && a.sceneId !== b.sceneId) {
     const first = a.sceneId ? universe.storyIndex.get(a.sceneId) : undefined;
     const second = b.sceneId ? universe.storyIndex.get(b.sceneId) : undefined;

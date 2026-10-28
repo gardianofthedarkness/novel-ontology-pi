@@ -20,5 +20,10 @@ test("following Pi: periods, then places, then the time-place run, then other wo
   assert.equal(followTarget({ times: [], places: ["p"] }, null, true), "places");
   assert.equal(followTarget({ times: [], places: [] }, { label: "novel timeplace run", status: "working" }, true), "story");
   assert.equal(followTarget({ times: [], places: [] }, { label: "novel timeplace run", status: "ok" }, true), "narrative");
+  // Causal work is followed in Story time: the sweep, the faculty's calls, a causal packet's review.
+  assert.equal(followTarget({ times: [], places: [] }, { label: "novel causality", status: "working" }, true), "story");
+  assert.equal(followTarget({ times: [], places: [] }, null, true, { faculty: "causality" }), "story");
+  assert.equal(followTarget({ times: [], places: [] }, { label: "novel review", status: "working" }, true, { changesetId: "cs_causality_agent_1" }), "story");
+  assert.equal(followTarget({ times: [], places: [] }, { label: "novel review", status: "working" }, true, { changesetId: "cs_b0002" }), "narrative");
   assert.equal(followTarget({ times: [], places: [] }, null, false), null);
 });

@@ -112,6 +112,22 @@ test("bounded sweeps resume past rejected candidates instead of repeating the fi
   assert.equal(finished.evaluatedTotal, result.evaluatedTotal);
 });
 
+test("a sweep reports the whole pool left and stops once the top-ranked pairs keep holding no link", async context => {
+  const parent = await mkdtemp(join(tmpdir(), "causality-settle-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const dir = await writeNovelDir(parent);
+  const reject: DecisionModel = { modelId: "reject", decide: async (_state, questions) => questions.map(question => ({ key: question.key, value: question.key.startsWith("causal:") ? 0.1 : 0.9 })) };
+  const first = await runCausalitySweep(dir, { env: {}, limit: 1, decisions: reject, stopAfterMisses: 2 });
+  assert.equal(first.complete, false);
+  assert.equal(first.missesInARow, 1);
+  assert.ok(first.remaining >= 1, "the true count left, not a capped page");
+  const second = await runCausalitySweep(dir, { env: {}, limit: 1, decisions: reject, stopAfterMisses: 2 });
+  assert.equal(second.remaining, first.remaining - 1);
+  assert.equal(second.complete, second.remaining === 0 || second.missesInARow >= 2);
+  assert.equal(second.complete, true);
+  if (second.remaining > 0) assert.match(second.note!, /held no causal link/);
+});
+
 test("causal checklist fails closed on missing, duplicate, and invalid veto scores", async context => {
   const parent = await mkdtemp(join(tmpdir(), "causality-veto-"));
   context.after(() => rm(parent, { recursive: true, force: true }));

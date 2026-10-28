@@ -457,14 +457,10 @@ test("ingest with a work LLM requires explicit fact decisions before graph appli
     assert.equal(graph.entities, 2);
     assert.equal(graph.events, 4);
     assert.equal(graph.scenes, 2);
-    // PARTICIPATES_IN only: extraction no longer emits CAUSES (the
-    // causality faculty owns all CAUSES now). This fixture's mock Jev
-    // scores every causality noul 0.1, so the faculty rejects every
-    // pair here; confident-link coverage lives in causality.test.ts.
+    // PARTICIPATES_IN only: extraction emits no CAUSES, and causality waits for story time and strands
+    // (the checklist's sweep), so ingest judges no pair; confident-link coverage lives in causality tests.
     assert.ok(graph.relations >= 4, `relations: ${graph.relations}`);
-    assert.ok(result.causality.perBlock.length >= 1);
-    assert.equal(result.causality.perBlock[0].nominated, 0);
-    assert.equal(result.causality.perBlock[0].proposed, 0);
+    assert.deepEqual(result.causality, { perBlock: [], chapterSweep: null });
 
     const changesets = await listChangeSets(dir);
     const cs1 = changesets.find((c) => c.id === "cs_b0001")!;

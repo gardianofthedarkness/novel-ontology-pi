@@ -2,6 +2,8 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
+import { EventLog } from "../../../ground/events/log.js";
+import { observeDecisions } from "../../../ground/events/observe.js";
 import { resolveJevKey } from "../../../ground/connectors/secrets.js";
 import { loadChangeSet } from "../../../solidifier/merge/changesetStore.js";
 import {
@@ -106,7 +108,7 @@ export async function runMatch(
     );
   }
 
-  const verdicts = await checkMatches(jevFromEnv(env), candidates, entities, events);
+  const verdicts = await checkMatches(observeDecisions(jevFromEnv(env), new EventLog(novelDir).emit), candidates, entities, events);
   // Remember structural DISTINCT verdicts so the EM faculty and
   // future sweeps skip the pair until its evidence grows.
   const distinctVerdicts = verdicts.filter((v) => v.verdict === "distinct");

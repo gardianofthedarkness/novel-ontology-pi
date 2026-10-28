@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parentMap, placePath } from "../../../ground/ontology/placeTree.js";
 import { sweepPlaceTree, type PlaceTreeMemory } from "../../../digger/timeplace/placeTreeSweep.js";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -5,6 +6,8 @@ import { join } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
 import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
+import { EventLog } from "../../../ground/events/log.js";
+import { observeDecisions, observeWork } from "../../../ground/events/observe.js";
 import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
 import { storedSource } from "../../../ground/workspace/source.js";
 import { cutBlocks } from "../../../digger/intake/blocks.js";
@@ -14,6 +17,10 @@ import { saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
 import { cachedDecisions, cachedWork } from "../../../digger/timeplace/cache.js";
 import { timePlaceAttempted, timePlaceForNewScenes, timePlaceReviewSource } from "../../../digger/timeplace/afterApply.js";
 import type { ChangeSet } from "../../../solidifier/merge/changeset.js";
+import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
+import { askStrandQuestions, planStrandQuestions, scenePassage, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "../../../digger/timeplace/strandQuestions.js";
+import { castCandidates } from "../../../digger/processing/castCandidates.js";
+import type { StrandAnswers } from "../../../../apps/playground/src/data/storyStrands.js";
 
 /**
  * `novel timeplace run|tree|show` — the time-place faculty over a
@@ -65,9 +72,10 @@ export async function timeplaceRun(novelDir: string, options: TimeplaceRunOption
   const env = options.env ?? process.env;
   const mode = options.mode ?? "hybrid";
   if (!["programmatic", "llm", "hybrid"].includes(mode)) throw new Error("--mode must be programmatic, llm or hybrid.");
+  const emit = new EventLog(novelDir).emit;
   const models = () => ({
-    work: mode === "programmatic" ? undefined : options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env),
-    decisions: options.jev === false ? undefined : options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env),
+    work: mode === "programmatic" ? undefined : observeWork(options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env), emit, { faculty: "timeplace" }),
+    decisions: options.jev === false ? undefined : observeDecisions(options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env), emit),
   });
   if (!options.force) return timeplaceIncremental(novelDir, { ...options, mode }, models());
   const { scenes, entities, relations } = await loadBundle(novelDir);
@@ -130,8 +138,9 @@ async function timeplaceIncremental(novelDir: string, options: TimeplaceRunOptio
 export async function timeplaceAfterApprove(novelDir: string, approved: ChangeSet, env: NodeJS.ProcessEnv = process.env): Promise<Record<string, unknown> | null> {
   const sceneIds = approved.proposals.filter((proposal) => proposal.kind === "create_scene").map((proposal) => (proposal.payload as Scene).id);
   if (!sceneIds.length) return null;
-  const work = env.WORK_LLM_API_KEY?.trim() ? workModelFromEnv(env) : undefined;
-  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: work ? "hybrid" : "programmatic", work, decisions: jevFromEnv(env), sceneIds, provenanceBlockId: approved.blockId, remember: true });
+  const emit = new EventLog(novelDir).emit;
+  const work = env.WORK_LLM_API_KEY?.trim() ? observeWork(workModelFromEnv(env), emit, { blockId: approved.blockId, faculty: "timeplace" }) : undefined;
+  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: work ? "hybrid" : "programmatic", work, decisions: observeDecisions(jevFromEnv(env), emit, { blockId: approved.blockId }), sceneIds, provenanceBlockId: approved.blockId, remember: true });
   if (output.changeset) await saveChangeSet(novelDir, output.changeset);
   return { changesetId: output.changeset?.id ?? null, scenes: output.scenes, periods: output.result.periods.length, flashbacks: output.result.periods.filter((period) => period.flashback).length, usage: output.result.usage };
 }
@@ -186,7 +195,7 @@ export async function timeplaceTree(novelDir: string, options: TimeplaceTreeOpti
   const sentences = await loadWorkspaceSentences(novelDir);
   const memoryPath = join(novelDir, "timeplace", "place-tree.json");
   const memory = JSON.parse(await readFile(memoryPath, "utf8").catch(() => '{"distinct":[]}')) as PlaceTreeMemory;
-  const decisions = options.jev === false ? undefined : options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env);
+  const decisions = options.jev === false ? undefined : observeDecisions(options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env), new EventLog(novelDir).emit);
   const started = Date.now();
   const result = await sweepPlaceTree({ entities, relations, scenes, sentences, decisions, maxQuestions: options.maxQuestions, memory });
   await mkdir(join(novelDir, "timeplace"), { recursive: true, mode: 0o700 });
@@ -211,4 +220,80 @@ export async function timeplaceTree(novelDir: string, options: TimeplaceTreeOpti
   };
 }
 
-export const TIMEPLACE_USAGE = "novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--cache dir] [--out file] [--propose] [--force] | novel timeplace tree <novel-dir> [--no-jev] [--max-questions N] [--cache dir] [--out file] [--propose] | novel timeplace show <novel-dir>";
+export interface TimeplaceStrandsOptions { ask?: boolean; maxQuestions?: number; minImpact?: number; cache?: string; out?: string; env?: NodeJS.ProcessEnv }
+
+/**
+ * Story strands over the stored story time (and time-place proposals awaiting
+ * review): which scenes run in parallel, where strands split and meet, and
+ * the place checks. Plans "who is present?" questions only where a borrowed
+ * cast creates a strand link; asks them (work model, within --max-questions)
+ * only with --ask. Writes a report; nothing is written to canon.
+ */
+/**
+ * What the strands step works from (no model calls): the story-time view of a
+ * workspace, its strands before any question, every scene's cast candidates
+ * and the planned "who is present?" questions. Shared with `novel checklist`.
+ */
+export async function strandInputs(novelDir: string, limits: { maxQuestions?: number; minImpact?: number } = {}) {
+  const { scenes, entities, relations } = await loadBundle(novelDir);
+  const pending = (await listChangeSets(novelDir)).filter((changeset) => changeset.status === "pending_review" && changeset.id.startsWith("cs_timeplace")).flatMap((changeset) => changeset.proposals as unknown as { kind: string; payload: Record<string, unknown> }[]);
+  const data = strandProjection({ scenes, entities, relations, pending });
+  const before = storyStrands(data);
+  // Cast candidates for every scene: names found in its text, its record, its neighbours, chapter and volume.
+  const sentences = await loadWorkspaceSentences(novelDir);
+  const byScene = new Map(scenes.map((scene) => [scene.id, scene]));
+  const lines = (sceneId: string) => (byScene.get(sceneId)?.sentenceIds ?? []).map((id) => sentences.get(id)?.text ?? "").filter(Boolean);
+  const characters = entities.filter((entity) => entity.kind === "Character").map((entity) => ({ id: entity.id, forms: [...new Set((entity.names ?? []).map((name) => name.text).filter(Boolean))] }));
+  const candidates = castCandidates(data.scenes.map((scene) => ({ id: scene.id, chapterIndex: scene.chapterIndex, index: scene.index, text: lines(scene.id).join("\n"), present: byScene.get(scene.id)?.charactersPresent ?? [], mentioned: byScene.get(scene.id)?.charactersMentioned ?? [] })), characters);
+  const names = { ...Object.fromEntries(entities.filter((entity) => entity.kind === "Character").map((entity) => [entity.id, entity.names?.find((name) => name.kind === "canonical")?.text ?? entity.names?.[0]?.text ?? entity.id])), ...data.names };
+  const plan = data.available ? planStrandQuestions(data, before, { ...limits, candidates }) : { questions: [], belowThreshold: 0, overBudget: 0, estimate: { questions: 0, calls: 0 } };
+  // What the strands read, and nothing else (a new causal link or event must not make the report stale).
+  const fingerprint = createHash("sha256").update(JSON.stringify({
+    scenes: data.scenes.map((scene) => [scene.id, scene.chapterIndex, scene.index, scene.times, scene.flashback, scene.placeIds, scene.placeCarried, scene.characterIds]),
+    times: data.times.map((time) => [time.id, time.storyIndex, time.date, time.partOfDay, time.flashback]),
+    places: data.places.map((place) => [place.id, place.parentId]),
+    candidates: [...candidates].map(([sceneId, list]) => [sceneId, list.map((candidate) => [candidate.id, candidate.score])]),
+  })).digest("hex").slice(0, 16);
+  return { data, before, plan, lines, characters, names, fingerprint };
+}
+
+export async function timeplaceStrands(novelDir: string, options: TimeplaceStrandsOptions = {}): Promise<Record<string, unknown>> {
+  const env = options.env ?? process.env;
+  const limits = { maxQuestions: options.maxQuestions ?? STRAND_QUESTION_DEFAULTS.maxQuestions, minImpact: options.minImpact ?? STRAND_QUESTION_DEFAULTS.minImpact };
+  const { data, before, plan, lines, characters, names, fingerprint } = await strandInputs(novelDir, limits);
+  if (!data.available) throw new Error("No story time yet: run `novel timeplace run` first (strands build on its periods).");
+  let asked: Awaited<ReturnType<typeof askStrandQuestions>>["asked"] = [];
+  let answers: StrandAnswers = {};
+  let strands = before;
+  const usage = { workCalls: 0 };
+  if (options.ask && plan.questions.length) {
+    const passage = (sceneId: string, nameForms: string[]) => scenePassage(lines(sceneId), nameForms);
+    const forms = Object.fromEntries(characters.map((character) => [character.id, character.forms]));
+    const work = options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env);
+    const metered = { modelId: work.modelId, generate: async (request: Parameters<typeof work.generate>[0]) => { usage.workCalls++; return work.generate(request); } };
+    const result = await askStrandQuestions({ work: metered, plan, names, forms, passage, options: limits });
+    asked = result.asked;
+    answers = result.answers;
+    strands = storyStrands(data, answers);
+  }
+  const summary = (value: typeof strands) => ({ lanes: value.lanes, layers: value.layers, parallelPairs: value.parallelPairs, splits: value.forks.size, meetings: value.merges.size, guessedCasts: value.carried.size,     checks: Object.fromEntries([...new Set(value.checks.map((check) => `${check.kind}:${check.status}`))].map((label) => [label, value.checks.filter((check) => `${check.kind}:${check.status}` === label).length])) });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const out = options.out ?? join(novelDir, "timeplace", `strands-${stamp}.json`);
+  await mkdir(join(out, ".."), { recursive: true, mode: 0o700 });
+  const report = {
+    novelDir, inputs: fingerprint, before: summary(before), after: options.ask ? summary(strands) : null,
+    plan: { limits, estimate: plan.estimate, belowThreshold: plan.belowThreshold, overBudget: plan.overBudget, questions: plan.questions.map((question) => ({ key: question.key, impact: question.impact, characters: question.characterIds.length })) },
+    asked, usage,
+    // The casts the answers set (character ids), for scoring against a presence key.
+    casts: Object.fromEntries(answers.presence ?? []),
+    // Scenes answered as "none of the listed characters, someone else": they stand alone.
+    alone: [...(answers.alone ?? [])],
+    // For `novel eval story-order`: the happens-before graph.
+    prediction: { kind: "dag", edges: strands.edges.map((edge) => [edge.from, edge.to]) },
+  };
+  await writeFile(out, JSON.stringify(report, null, 1), { mode: 0o600 });
+  return { ...summary(strands), plan: report.plan.estimate, belowThreshold: plan.belowThreshold, overBudget: plan.overBudget, asked: asked.length, applied: asked.filter((entry) => entry.applied).length, usage, report: out,
+    ...(options.ask ? {} : { note: plan.questions.length ? `Planned ${plan.questions.length} "who is present?" question(s) in ${plan.estimate.calls} work-model call(s); add --ask to ask them.` : "Nothing worth asking above the impact threshold." }) };
+}
+
+export const TIMEPLACE_USAGE = "novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--cache dir] [--out file] [--propose] [--force] | novel timeplace tree <novel-dir> [--no-jev] [--max-questions N] [--cache dir] [--out file] [--propose] | novel timeplace show <novel-dir> | novel timeplace strands <novel-dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]";

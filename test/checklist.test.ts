@@ -25,19 +25,20 @@ test("the checklist lists each faculty in dependency order with its next command
   const { directory, packet } = await workspace(context);
   const statusOf = async () => Object.fromEntries((await bookChecklist(directory)).items.map((item) => [item.id, item.status]));
   // Nothing applied yet: extraction is the gap; everything after it waits.
-  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", causality: "blocked", "time-place": "blocked", "place-tree": "blocked", graph: "blocked" });
+  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", causality: "blocked", "time-place": "blocked", "place-tree": "blocked", strands: "blocked", graph: "blocked" });
   await saveChangeSet(directory, packet("cs_b0001", "b0001", "approved"));
   await markCausalitySweepPending(directory);
   const after = await bookChecklist(directory);
   const byId = new Map(after.items.map((item) => [item.id, item]));
   assert.equal(byId.get("blocks")!.status, "done");
-  assert.equal(byId.get("causality")!.status, "todo");
-  assert.match(byId.get("causality")!.next[0], /^novel causality sweep /);
+  // Causality waits for story time and strands: causes are ordered by them.
+  assert.equal(byId.get("causality")!.status, "blocked");
+  assert.match(byId.get("causality")!.note!, /Waits for time-place, strands/);
   assert.equal(byId.get("time-place")!.status, "todo");
   assert.equal(byId.get("time-place")!.counts.scenesWithoutPeriod, 2);
   assert.equal(byId.get("place-tree")!.status, "blocked", "the place tree waits for story time and places");
   assert.equal(after.complete, false);
-  assert.ok(after.next[0].startsWith("[causality]") && after.next.some((entry) => entry.startsWith("[time-place] novel timeplace run")));
+  assert.ok(after.next[0].startsWith("[time-place] novel timeplace run") && !after.next.some((entry) => entry.startsWith("[causality]")));
   // A waiting packet is reviewed before producing more of the same faculty.
   await saveChangeSet(directory, packet("cs_timeplace_time-place_1", "time-place", "pending_review"));
   const waiting = (await bookChecklist(directory)).items.find((item) => item.id === "time-place")!;
@@ -49,4 +50,12 @@ test("the checklist lists each faculty in dependency order with its next command
   const settled = (await bookChecklist(directory)).items.find((item) => item.id === "time-place")!;
   assert.deepEqual([settled.status, settled.counts.processedWithoutPeriod], ["done", 2]);
   assert.match(settled.note!, /not re-asked/);
+  // Strands follow story time; with no periods there is nothing to ask.
+  const strands = (await bookChecklist(directory)).items.find((item) => item.id === "strands")!;
+  assert.deepEqual([strands.status, strands.next], ["done", []]);
+  assert.match(strands.note!, /No story periods/);
+  // With story time and strands settled, the pending causality sweep is next.
+  const causality = (await bookChecklist(directory)).items.find((item) => item.id === "causality")!;
+  assert.equal(causality.status, "todo");
+  assert.match(causality.next[0], /^novel causality sweep /);
 });

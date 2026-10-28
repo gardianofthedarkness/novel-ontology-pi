@@ -90,6 +90,72 @@ Deep links: `?view=story`, `?view=places`. In Orbital mode the same views are
   their place, rising in story time. A story-time window filters what
   floats, or the stretch of the spiral that was in view does.
 
+## Strands and "who is present?" (second tier)
+
+`novel timeplace strands <dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]`
+reads the stored story time (and time-place proposals awaiting review) and
+estimates story strands: which scenes run in parallel, where strands split
+and meet, each split and meeting graded against places. It writes a report
+(including a happens-before graph for `novel eval story-order`) and nothing
+to canon.
+
+A scene with no recorded cast borrows a nearby scene's, and the borrowed cast
+links it into a strand. That is the only trigger for a question: "who is
+present?" (work model, multi-select, four scenes per call; a name not on the
+list is ignored). The list to choose from is the scene's cast candidates
+(`src/digger/processing/castCandidates.ts`), at most 32, scored per scene:
+1 for a character named in the scene's text by a form only they have
+(matched longest form first) or recorded there as present or mentioned;
+0.7 / 0.5 / 0.35 for one named or recorded one, two or three scenes away in
+the chapter; 0.5 for a name two characters share or a generic one; less for
+the rest of the chapter and the volume. Extraction files a name it finds
+under "mentioned" unless it confirms the person is there, so a list built
+from recorded casts alone left out characters who were on stage (on the two
+hand-read volumes, 11 of 39 present characters in the asked scenes of
+volume 2; the candidates list misses 1). The reply sorts the
+listed characters a passage names into "present" (on stage) and "mentioned"
+(remembered, talked about, on the phone); only "present" counts. It also says
+whether someone not on the list is on stage: a scene with nobody listed but
+someone else there stands alone instead of borrowing a nearby cast (which
+would put it on another person's strand). Each
+character is listed with the other name forms the text uses, and the passage
+is the whole scene up to 2,400 characters, or its opening, its close and the
+middle sentences that name a listed character. Planning is free;
+`--ask` spends calls, at most `--max-questions` (default 30) per run, only in
+chapters of at least `--min-impact` scenes (default 8). Replies are cached
+with `--cache`.
+
+Measured on the two hand-read volumes (2026-10-27), pair accuracy. The
+perfect-answer rows stand in the answer key's main characters for the model:
+
+| | Vol 1 | Vol 2 |
+| --- | --- | --- |
+| Strands without questions | 0.872 | 0.875 |
+| + 15 questions, perfect answers (5 calls) | 0.873 | 0.885 |
+| + 25 questions, perfect answers (8–10 calls) | 0.889 | 0.896 |
+| + every borrowed link, perfect answers (28–29 questions, 9–10 calls) | 0.895 | 0.915 |
+| + every borrowed link, work model, first wording ("present", 900-character passage) | 0.879 | 0.904 |
+| + every borrowed link, work model, present/mentioned wording (current) | **0.916** | **0.889** |
+
+- The model's answers beat the perfect-answer row on volume 1 because they
+  also name present characters outside the key's main strands; on volume 2
+  they name more characters than the key places in a scene. With about 28
+  questions a volume, one wording against another moves each volume by a
+  few points either way; the current wording is better on average (0.903
+  against 0.892).
+
+- About 10 work-model calls per volume, against 130–150 for the time-place
+  run itself.
+- Links from recorded casts were almost all right (52 of 56); about half of
+  the borrowed links were wrong (22 of 60). Rejecting a borrowed cast made
+  order worse (0.68 and 0.67 with every one rejected), because the scene then
+  lost the order it had right. Naming who is really present is what helps.
+- Asking where a cast was disputed between nearby scenes, or asking only at
+  strand switches, did not help, even with perfect answers.
+- The rest of the gap is recorded casts that miss a main character (the cast
+  extraction finds about two thirds of the main characters present). With
+  every cast correct, strands reach 0.96 and 0.98.
+
 ## Measured (2026-10-26)
 
 Two already-extracted volumes of one series (Chinese), on disposable copies.

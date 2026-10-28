@@ -16,12 +16,17 @@
  * `pending` are time-place proposals still awaiting review: their new periods
  * and places are included, flagged `proposed`, so the views can show them
  * the moment Pi proposes them (never as canon).
+ *
+ * `strands` are the answers of the latest strands report (strand-answers.mjs):
+ * where "who is present?" was asked, the answered cast replaces the recorded
+ * one, and a scene answered as "nobody known, someone else" is marked `alone`
+ * so the strands never borrow a cast for it.
  */
 const nameOf = (entity) => entity?.names?.find((form) => form.kind === 'canonical')?.text ?? entity?.names?.[0]?.text ?? entity?.id;
 const order = (id) => { const match = /^b(\d+)_s(\d+)$/.exec(id ?? ''); return match ? Number(match[1]) * 1_000_000 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
 const clip = (value, length) => typeof value === 'string' && value.length > length ? `${value.slice(0, length - 1)}…` : value;
 
-export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [] }) {
+export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [], strands = null }) {
   const known = new Set(applied.map((entity) => entity.id));
   const proposedEntities = pending.filter((proposal) => proposal.kind === 'upsert_entity' && ['TimePoint', 'Location'].includes(proposal.payload?.kind) && !known.has(proposal.payload.id)).map((proposal) => proposal.payload);
   const proposedIds = new Set(proposedEntities.map((entity) => entity.id));
@@ -69,7 +74,8 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
       id: scene.id, index, chapterIndex: scene.chapterIndex, label: clip(scene.summary, 90) || clip(firstEvent.get(scene.id), 90) || ((scene.charactersPresent ?? []).filter((id) => byId.get(id)?.kind === 'Character').slice(0, 3).map((id) => nameOf(byId.get(id))).join(' · ') || `Scene ${index + 1}`),
       times: timeIds, flashback: timeIds.some((time) => byId.get(time.id)?.properties?.flashback === true),
       placeIds: own.size ? deepest([...own]) : carried ? [...previous.placeIds] : [], placeCarried: !!carried,
-      characterIds: (scene.charactersPresent ?? []).filter((id) => byId.get(id)?.kind === 'Character'),
+      characterIds: (strands?.casts?.[scene.id] ?? scene.charactersPresent ?? []).filter((id) => byId.get(id)?.kind === 'Character'),
+      ...(strands?.alone?.includes(scene.id) ? { alone: true } : {}),
     };
     sceneRows.push(row);
     previous = row;

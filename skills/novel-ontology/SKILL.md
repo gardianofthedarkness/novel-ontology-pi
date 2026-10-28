@@ -1,6 +1,6 @@
 ---
 name: novel-ontology
-description: Ingest novels, review and repair ontology proposals, complete every analysis faculty (extraction, causality, story time, places, place tree, cross-book atlas), and query characters, events and timelines using the novel CLI.
+description: Use for any request about an assigned novel — analyze it, continue or finish the analysis, check or review a volume's data or errors someone found, or ask about its characters, events, time and places; the user never needs to name faculties or commands. Ingests novels, reviews and repairs ontology proposals, completes every analysis faculty (extraction, causality, story time, places, place tree, story strands, cross-book atlas) and queries the results with the novel CLI.
 ---
 
 # Novel ontology
@@ -8,6 +8,30 @@ description: Ingest novels, review and repair ontology proposals, complete every
 Use `novel` commands, not direct database/file edits or model calls.
 `novel help` lists commands; `novel config` reports model configuration
 without keys. Missing credentials require secure entry, never chat.
+
+## Plain requests — route them yourself
+
+Users talk about their books, not about faculties or commands. Never ask
+which skill, faculty or command to use, and do not explain the machinery
+unless asked: pick the workflow, run it to its stopping point, then report
+the outcome in plain words — what is verified, what is held, what is still
+missing, and what the paid steps spent. Map "vol 1", "the first book" or a
+title to `NOVEL_JOB.json` volumes (`id`, `label`, `workspace`); with no book
+named, take every assigned book in reading order.
+
+| The user says | Do |
+|---|---|
+| "analyze the novel", "process it", "continue", "finish", "what's left?" | the checklist loop below, for each book: every faculty in order, reviews included |
+| "I found errors in vol 1", "review the data in vol 1", "something is wrong with X" | the [review workflow](references/review.md) for that book |
+| "who / where / when …", "is X in this scene?", "what happened between …" | answer from the data (`novel query`, `novel search`, `novel timeline list`, `novel timeplace show`), citing ids and source sentences |
+| new files, or several books | the `novel-library` skill first, then the checklist loop |
+
+Ask the user only what the data cannot settle and what is theirs to
+decide: spending beyond the job's limits, a merge two readings support
+equally, recalling an applied block. Everything else runs behind the scenes.
+Never offer to skip or bulk-pass the review gate (`--auto-approve`, accepting
+facts unread): it is not an option, and the host refuses it. When a review is
+long, say how far it got and how much is left, and keep going in the next turn.
 
 ## Completed analysis — start here
 
@@ -21,6 +45,8 @@ checklist. Stop when complete, when a step changes nothing (report it as
 stuck), or at the job's limits. Dependencies, what "done" means for each
 faculty and the stopping rules: [analysis](references/analysis.md).
 `novel inspect` stays a raw count/integrity report, not a to-do list.
+When the user reports errors or asks to check a volume's data, follow
+[review](references/review.md) instead.
 
 ## Ingest and review
 
@@ -127,10 +153,16 @@ Act on the aspect; do not retry variants blindly:
   Complete both endpoint evidence pages for causal acceptance. Never invent
   a faculty-specific review/approval command. See references/semantic-review.md.
 
-- CAUSES links are cross-scene by design: extraction emits none. The
-  systematic path (per-block + chapter-close sweep, Jev checklist at
-  0.85 over hybrid graph-pattern + embedding candidates) proposes them
-  through the gate automatically during `novel ingest`.
+- CAUSES links are cross-scene by design: extraction emits none, and
+  causality waits for story time and strands (the checklist blocks it
+  until both are done). A cause must come first in story time — the
+  strands order scenes through flashbacks and parallel lines — and a direct
+  cause across parallel strands needs something in the text carrying it
+  over (a message, a call, news, someone arriving). `novel causality sweep
+  <dir>` (Jev checklist at 0.85 over pairs nominated by shared actors, the
+  same person in nearby scenes of their strand, state changes and
+  embeddings) proposes links through the gate; it is done when its pairs run
+  out or the last 100 it judged, best first, held no link.
 - After a full run, adjudicate yourself: `novel causality candidates
   <dir>` lists nominated pairs with legs and summaries;
   `novel causality propose <dir> <from> <to> [--reason "..."]` proposes
@@ -188,6 +220,17 @@ Act on the aspect; do not retry variants blindly:
   universe places as paths. Accept SAME_PLACE only when both books' sentences
   describe one place (not merely a shared common word); joining two places
   that sit inside different places is refused: hold it.
+- Story strands come after story time: `novel timeplace strands <dir> --ask`
+  works out which scenes run in parallel and who is in a scene where a
+  guessed (borrowed) cast would decide the order. It asks the work model
+  "who is present?" only there (about 10 calls a volume, at most
+  `--max-questions`), choosing from each scene's cast candidates (names
+  found in its text first), and lets a scene with only unlisted people stand
+  alone. It writes a report under `<dir>/timeplace/` that the story view
+  draws; nothing goes to canon and there is no packet to review. Without
+  `--ask` it only plans (free). Its checks point at errors to verify against
+  the source: `conflict` (one person at two places at one stated moment),
+  splits or meetings without a place.
 - Do not treat story order as causation, a carried-over place as stated,
   or a derived date as a stated one. Story time is per continuity (books in
   reading order); aligning periods across books and spatial relations

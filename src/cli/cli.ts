@@ -62,7 +62,7 @@ import { reviewCommand } from "./commands/extract/reviewCommands.js";
 import { approveBook } from "../solidifier/merge/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
-import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
+import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
   listChangeSets,
   loadChangeSet,
@@ -85,7 +85,7 @@ const COMMANDS: Record<string, string> = {
   "novel section <file>": "Deterministic sentence sectioning only (free, testable)",
   "novel blocks <file> [--size N]": "Chapter detection + block cutting map (no models)",
   "novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]":
-    "Full loop: blocks -> miniloop (live Jev) -> extraction (work LLM, when configured) -> ChangeSets -> merge gate -> graph. Default stops at the first gate; --auto-approve applies every ChangeSet. Per-block causality faculty + chapter-close sweep run unless --no-causality",
+    "Full loop: blocks -> miniloop (live Jev) -> extraction (work LLM, when configured) -> ChangeSets -> merge gate -> graph. Default stops at the first gate; --auto-approve applies every ChangeSet. Causality waits for story time and strands: ingest only marks the causality sweep pending (novel checklist runs it after them); --no-causality skips even that",
   "novel causality candidates <novel-dir> [--unit ID] [--chapter N] [--limit N]":
     "List hybrid-nominated CAUSES candidates (graph patterns + embedding top-K) for agent adjudication. No proposals are created.",
   "novel causality propose <novel-dir> <from> <to> [--reason \"...\"]":
@@ -104,6 +104,8 @@ const COMMANDS: Record<string, string> = {
     "Universe atlas (phase 3): nominate places across a universe's books (same name, scoped generic places, name prefix), let Jev judge same place / inside / neither, and with --propose save a pending ua_ packet for `novel review ... --scope universe --universe <id>`. Book databases are never fused.",
   "novel atlas show <library-dir> <universe-id>":
     "The universe's places: one per cluster of book places, with its path through the universe place tree.",
+  "novel timeplace strands <novel-dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]":
+    "Story strands from stored story time: parallel scenes, splits and meetings checked against places; plans \"who is present?\" questions only where a borrowed cast creates a strand link (free), and asks them with --ask (work model, 4 scenes per call), at most --max-questions (default 30), only in chapters of at least --min-impact scenes (default 8); report only, no canon writes",
   "novel timeplace show <novel-dir>":
     "Applied time periods in story order, places as paths through the place tree, and the tree's links.",
   "novel causality sweep <novel-dir> [--limit N]":
@@ -509,9 +511,9 @@ async function main(): Promise<void> {
 
   if (cmd === "timeplace") {
     const novelDir = positional[2];
-    if (!["run", "tree", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${TIMEPLACE_USAGE}`);
+    if (!["run", "tree", "show", "strands"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${TIMEPLACE_USAGE}`);
     if (sub === "show") { out(await timeplaceShow(novelDir), pretty); return; }
-    const valued = sub === "tree" ? ["--max-questions", "--out", "--cache"] : ["--mode", "--chapter", "--limit", "--max-calls", "--max-questions", "--out", "--cache"], switches = sub === "tree" ? ["--no-jev", "--propose"] : ["--no-jev", "--propose", "--force"];
+    const valued = sub === "tree" ? ["--max-questions", "--out", "--cache"] : sub === "strands" ? ["--max-questions", "--min-impact", "--out", "--cache"] : ["--mode", "--chapter", "--limit", "--max-calls", "--max-questions", "--out", "--cache"], switches = sub === "tree" ? ["--no-jev", "--propose"] : sub === "strands" ? ["--ask"] : ["--no-jev", "--propose", "--force"];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];
@@ -520,6 +522,7 @@ async function main(): Promise<void> {
       if (valued.includes(name)) { const value = positional[++index]; if (!value || value.startsWith("--")) throw new Error(`${name} needs a value.`); }
     }
     const number = (name: string) => { const value = flag(positional, name); if (value === undefined) return undefined; const parsed = Number(value); if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${name} must be a non-negative integer.`); return parsed; };
+    if (sub === "strands") { out(await timeplaceStrands(novelDir, { ask: positional.includes("--ask"), maxQuestions: number("--max-questions"), minImpact: number("--min-impact"), out: flag(positional, "--out"), cache: flag(positional, "--cache") }), pretty); return; }
     if (sub === "tree") { out(await timeplaceTree(novelDir, { jev: !positional.includes("--no-jev"), maxQuestions: number("--max-questions"), out: flag(positional, "--out"), cache: flag(positional, "--cache"), propose: positional.includes("--propose") }), pretty); return; }
     out(await timeplaceRun(novelDir, {
       mode: flag(positional, "--mode") as "hybrid" | "llm" | "programmatic" | undefined,

@@ -44,7 +44,7 @@ const FORMS = {
   review: 'novel review show|evidence|decide|apply <book|library> <packet> --scope book|universe|library [--universe <id>] [--offset N] [--limit 1-20]',
   changeset: 'novel changeset show <book> <packet> [--offset N] [--limit 1-20] | list <book> | revise …  (decisions and approval: novel review)',
   causality: 'novel causality candidates <book> [--unit ID] [--chapter N] [--limit 1-20] | sweep <book> [--limit 1-20] | evidence <book> <from> <to> | propose <book> <from> <to> --reason "…"',
-  timeplace: 'novel timeplace show <book> | run <book> --propose [--mode M] [--chapter N] [--limit N] | tree <book> --propose [--max-questions N]',
+  timeplace: 'novel timeplace show <book> | run <book> --propose [--mode M] [--chapter N] [--limit N] | tree <book> --propose [--max-questions N] | strands <book> [--ask] [--max-questions N] [--min-impact N]',
   atlas: 'novel atlas show <library> <universe-id> | novel atlas sweep <library> <universe-id> --propose [--max-questions N]',
   match: 'novel match <book> --changeset cs_bNNNN', fix: 'novel fix <operation> <book> … --reason "…"  (references/repair.md)',
   graph: 'novel graph build <book>/ontology', album: 'novel album list|portraits <book>', library: 'novel library … <library>  (novel-library skill)',
@@ -313,16 +313,18 @@ function permit(command, scope) {
     const flags = new Map();
     for (let index = 3; index < tokens.length; index++) {
       const name = tokens[index];
-      if (flags.has(name) || !['--mode', '--chapter', '--limit', '--max-calls', '--max-questions', '--propose', '--no-jev'].includes(name)) throw new Error('Time-place options are bounded: --propose [--mode M] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--no-jev]');
-      if (['--propose', '--no-jev'].includes(name)) { flags.set(name, true); continue; }
+      if (flags.has(name) || !['--mode', '--chapter', '--limit', '--max-calls', '--max-questions', '--min-impact', '--propose', '--no-jev', '--ask'].includes(name)) throw new Error('Time-place options are bounded: --propose [--mode M] [--chapter N] [--limit N] [--max-calls N] [--max-questions N] [--no-jev]; strands: [--ask] [--max-questions N] [--min-impact N]');
+      if (['--propose', '--no-jev', '--ask'].includes(name)) { flags.set(name, true); continue; }
       flags.set(name, tokens[++index]);
     }
     const count = (name, max) => !flags.has(name) || /^\d+$/.test(flags.get(name) ?? '') && Number(flags.get(name)) <= max;
     if (operation === 'show') valid = tokens.length === 3 && tokens[2] === novel;
-    if (operation === 'run') valid = tokens[2] === novel && flags.has('--propose') && (!flags.has('--mode') || ['hybrid', 'llm', 'programmatic'].includes(flags.get('--mode'))) && count('--chapter', 10000) && count('--limit', 10000) && count('--max-calls', 2000) && count('--max-questions', 2000);
+    if (operation === 'run') valid = tokens[2] === novel && flags.has('--propose') && !flags.has('--ask') && !flags.has('--min-impact') && (!flags.has('--mode') || ['hybrid', 'llm', 'programmatic'].includes(flags.get('--mode'))) && count('--chapter', 10000) && count('--limit', 10000) && count('--max-calls', 2000) && count('--max-questions', 2000);
     // Place-tree sweep: proposes PART_OF links for the shared gate; only its question budget and Jev switch are options.
     if (operation === 'tree') valid = tokens[2] === novel && flags.has('--propose') && [...flags.keys()].every(name => ['--propose', '--max-questions', '--no-jev'].includes(name)) && count('--max-questions', 200);
-    if (!valid) throw new Error('Time-place runs must propose for the assigned book: novel timeplace run <book> --propose [options] or novel timeplace tree <book> --propose [--max-questions N] [--no-jev]; review through novel review --scope book');
+    // Strands: a report for the story view (who is in each scene), never canon; --ask spends at most --max-questions work-model questions.
+    if (operation === 'strands') valid = tokens[2] === novel && [...flags.keys()].every(name => ['--ask', '--max-questions', '--min-impact'].includes(name)) && count('--max-questions', 60) && count('--min-impact', 500);
+    if (!valid) throw new Error('Time-place runs must propose for the assigned book: novel timeplace run <book> --propose [options] or novel timeplace tree <book> --propose [--max-questions N] [--no-jev], or report strands with novel timeplace strands <book> [--ask] [--max-questions N≤60] [--min-impact N]; review through novel review --scope book');
     return { kind: 'cli', args: tokens, label: `novel timeplace ${operation}` };
   }
   if (verb === 'recall') valid = operation === novel && tokens.length === 3 && blockIds.includes(tokens[2]);

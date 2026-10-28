@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { timePlaceProjection } from './time-place.mjs';
+import { readStrandAnswers } from './strand-answers.mjs';
 
 /**
  * Universe story time and places for the viewer (time-place phase 3).
@@ -26,13 +27,13 @@ async function stamp(paths) {
 
 async function bookProjection(workspace) {
   const files = ['entities', 'scenes', 'relations', 'events'].map(name => resolve(workspace, `ontology/${name}.jsonl`));
-  const key = await stamp([...files, resolve(workspace, 'changesets')]);
+  const key = await stamp([...files, resolve(workspace, 'changesets'), resolve(workspace, 'timeplace')]);
   if (cache.get(workspace)?.key === key) return cache.get(workspace).value;
   const [entities, scenes, relations, events] = await Promise.all(files.map(rows));
   const names = await readdir(resolve(workspace, 'changesets')).catch(() => []);
   const pending = (await Promise.all(names.filter(name => /^cs_timeplace_[\w-]+\.json$/.test(name)).map(name => json(resolve(workspace, 'changesets', name), null)))).filter(entry => entry?.status === 'pending_review').flatMap(entry => entry.proposals ?? []);
   const fold = (records) => [...new Map(records.map(record => [record.id, record])).values()];
-  const value = { projection: timePlaceProjection({ entities: fold(entities), scenes: fold(scenes), relations, events: fold(events), pending }), entities: fold(entities) };
+  const value = { projection: timePlaceProjection({ entities: fold(entities), scenes: fold(scenes), relations, events: fold(events), pending, strands: await readStrandAnswers(workspace) }), entities: fold(entities) };
   cache.set(workspace, { key, value });
   return value;
 }
