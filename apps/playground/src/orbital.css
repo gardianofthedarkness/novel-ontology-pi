@@ -120,7 +120,7 @@
 .faculty-chips { z-index: 4; }
 .faculty-chip { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: auto; padding: 3px 9px; border-radius: 999px; font-size: 10px; letter-spacing: .04em; white-space: nowrap; color: #d9fff3; background: #06201acc; border: 1px solid #5dcaa566; cursor: pointer; }
 .faculty-chip:hover, .faculty-chip:focus-visible { border-color: #5dcaa5; }
-/* A tapped story strand: what is lit, in the strand's colour; × shows every strand again. */
-.strand-focus { position: absolute; left: 50%; bottom: 150px; z-index: 5; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; width: max-content; max-width: calc(100% - 32px); white-space: nowrap; padding: 6px 6px 6px 12px; border-radius: 999px; font-size: 12px; color: #e4eeff; background: #0b1826e6; border: 1px solid; box-shadow: 0 4px 16px #0006; }
-.strand-focus i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+/* A tapped story strand: what is lit, in the design's cyan; × shows every strand again. */
+.strand-focus { position: absolute; left: 50%; bottom: 150px; z-index: 5; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; width: max-content; max-width: calc(100% - 32px); white-space: nowrap; padding: 6px 6px 6px 12px; border-radius: 999px; font-size: 12px; color: #e4eeff; background: #0b1826e6; border: 1px solid #36adff; box-shadow: 0 4px 16px #0006, 0 0 14px #36adff55; }
+.strand-focus i { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #9fd8ff; box-shadow: 0 0 8px #36adff; }
 .strand-focus button { flex: none; width: 24px; height: 24px; border: 0; border-radius: 50%; color: inherit; background: #ffffff14; font-size: 15px; line-height: 1; cursor: pointer; }

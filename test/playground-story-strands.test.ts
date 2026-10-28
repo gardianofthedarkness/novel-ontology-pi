@@ -131,8 +131,8 @@ test("a precomputed spiral is drawn as stored: knots, coloured tracks, tube guid
   const knot = (id: string, k: number, lane = 0) => ({ id, x: k * 9, q: [lane * 50, 10] as [number, number] });
   const stored: TimePlaceProjection = { ...data, spiral: { builtAt: "2026-10-28T20:00:00Z", scale: { dx: 9, knot: 14, width: 900, height: 300 }, links: [], days: [],
     runs: [
-      { id: "ming", lane: 0, color: "#ff8899", tube: 35, knots: [knot("s1", 0), knot("m1", 1), knot("m2", 3), knot("s6", 5), knot("s7", 7)], track: [[0, 0, 10], [9, 3, 12], [27, 1, 9]], axis: [[0, 0, 0], [27, 0, 0]] },
-      { id: "lan", lane: 0, color: "#88ccff", tube: 35, knots: [knot("l1", 2, 1), knot("l2", 4, 1)], track: [[18, 50, 10], [36, 50, 10]], axis: [[18, 50, 0], [36, 50, 0]] },
+      { id: "ming", lane: 0, tube: 35, knots: [knot("s1", 0), knot("m1", 1), knot("m2", 3), knot("s6", 5), knot("s7", 7)], track: [[0, 0, 10], [9, 3, 12], [27, 1, 9]], axis: [[0, 0, 0], [27, 0, 0]] },
+      { id: "lan", lane: 0, tube: 35, knots: [knot("l1", 2, 1), knot("l2", 4, 1)], track: [[18, 50, 10], [36, 50, 10]], axis: [[18, 50, 0], [36, 50, 0]] },
     ] } };
   const arrangement = spiralArrangement(stored, undefined, null, "strands");
   assert.equal(arrangement.timeKey.label, "STORY SPIRAL →");
@@ -145,13 +145,13 @@ test("a precomputed spiral is drawn as stored: knots, coloured tracks, tube guid
   const draws = [...arrangement.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never);
   const paths = arrangement.paths!(draws, null);
   const tracks = paths.filter((path) => path.id.startsWith("spiral-track:")), axes = paths.filter((path) => path.strand);
-  assert.deepEqual(tracks.map((track) => [track.tone, track.color]), [["coil", undefined], ["coil", undefined]], "every coil in the design's cyan, not the strand's colour");
-  assert.deepEqual(axes.map((axis) => [axis.color, axis.strandId]), [["#ff8899", "ming"], ["#88ccff", "lan"]], "the axis carries the strand's colour");
+  assert.deepEqual(tracks.map((track) => track.tone), ["coil", "coil"], "every coil in the design's cyan");
+  assert.deepEqual(axes.map((axis) => [axis.strandId, Number(axis.weight!.toFixed(3))]), [["ming", 1], ["lan", Number(Math.sqrt(2 / 5).toFixed(3))]], "an axis glows by how much its strand matters: the busiest strand fully, a minor one less");
   const lit = arrangement.strandPeriod!("spiral-axis:lan", 0)!;
   assert.deepEqual(lit.ids, ["l1", "l2"].map(spiralNodeId), "a tap on an axis lights that strand's scenes");
-  assert.equal(lit.color, "#88ccff");
+  assert.equal(lit.strandId, "lan");
   // A phone opens on a stretch of time about as long as the floor box is deep, not the whole book.
-  const later: TimePlaceProjection = { ...stored, spiral: { ...stored.spiral!, runs: [...stored.spiral!.runs, { id: "late", lane: 0, color: "#cccccc", tube: 30, knots: [knot("s8", 600)], track: [], axis: [] }] } };
+  const later: TimePlaceProjection = { ...stored, spiral: { ...stored.spiral!, runs: [...stored.spiral!.runs, { id: "late", lane: 0, tube: 30, knots: [knot("s8", 600)], track: [], axis: [] }] } };
   const framed = (aspect: number) => { const arranged = spiralArrangement(later, undefined, null, "strands", null, aspect); return arranged.initialFrame!([...arranged.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never)).length; };
   assert.equal(framed(0.46), 7, "the late scene (and the newer one waiting after it) is left for the reader to fly to");
   assert.equal(framed(6), 9, "a very wide screen opens on more time");
