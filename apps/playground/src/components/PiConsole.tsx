@@ -1,4 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { FacultyFlowPanel } from "./FacultyFlowPanel";
+import { flowState } from "../data/facultyFlow";
+import type { LiveActivity } from "../data/liveActivity";
 import "./pi-console.css";
 
 interface PiEntry {
@@ -78,8 +81,16 @@ async function responseError(response: Response, fallback: string): Promise<stri
   return fallback;
 }
 
-export function PiConsole() {
+interface PiConsoleProps {
+  /** Live faculty telemetry for the Flow view. */
+  activity?: LiveActivity | null;
+  reducedMotion?: boolean;
+}
+
+export function PiConsole({ activity, reducedMotion = false }: PiConsoleProps = {}) {
   const [expanded, setExpanded] = useState(false);
+  const [view, setView] = useState<"transcript" | "flow">("transcript");
+  const firing = flowState(activity).firing;
   const [control] = useState(() => typeof window === "undefined"
     ? null : new URLSearchParams(window.location.hash.slice(1)).get("pi"));
   const [snapshot, setSnapshot] = useState<PiSnapshot | null>(null);
@@ -199,13 +210,14 @@ export function PiConsole() {
   }
 
   return (
-    <aside className={`pi-console${expanded ? " is-expanded" : ""}`} aria-label="Pi agent console">
+    <aside className={`pi-console${expanded ? " is-expanded" : ""}${view === "flow" ? " is-flow" : ""}`} aria-label="Pi agent console">
       <button ref={toggleRef} type="button" className="pi-console-toggle" aria-expanded={expanded}
         aria-controls={panelId} onClick={() => setExpanded(previous => !previous)}>
         <span className="pi-console-mark" aria-hidden="true">π</span>
         <span className="pi-console-title">Pi console<small>{expanded ? "Novel CLI agent" : "Expand · novel CLI agent"}</small></span>
         <span className="pi-console-badge">{expanded ? pollError ? "Offline" : snapshot?.status ?? "Connecting…" : "Closed"}</span>
         {pending > 0 && <span className="pi-console-badge is-queued">{pending} pending{!expanded ? " · last seen" : ""}</span>}
+        {firing > 0 && <span className="pi-console-badge is-firing">{firing} firing</span>}
         <span aria-hidden="true">{expanded ? "−" : "+"}</span>
       </button>
       <div id={panelId} className="pi-console-panel" hidden={!expanded} onKeyDown={event => {
@@ -221,7 +233,15 @@ export function PiConsole() {
           {snapshot?.queued !== undefined && snapshot.processing !== undefined && <span>{snapshot.queued} queued · {snapshot.processing} processing{snapshot.unknown ? ` · ${snapshot.unknown} unknown` : ""}</span>}
         </div>
         {pollError && <p className="pi-console-error">{pollError}</p>}
-        <div ref={transcriptRef} className="pi-console-transcript" role="region" aria-label="Pi transcript: commands, status, and messages"
+        <div className="pi-console-tabs" role="tablist" aria-label="Console view">
+          {(["transcript", "flow"] as const).map(name => (
+            <button key={name} type="button" role="tab" aria-selected={view === name} className={view === name ? "is-active" : ""} onClick={() => setView(name)}>
+              {name === "transcript" ? "Transcript" : `Faculty flow${firing ? ` · ${firing}` : ""}`}
+            </button>
+          ))}
+        </div>
+        {view === "flow" && <FacultyFlowPanel activity={activity} reducedMotion={reducedMotion} />}
+        <div ref={transcriptRef} className="pi-console-transcript" hidden={view !== "transcript"} role="region" aria-label="Pi transcript: commands, status, and messages"
           tabIndex={0} onScroll={event => {
             const transcript = event.currentTarget;
             scrollTopRef.current = transcript.scrollTop;

@@ -53,7 +53,7 @@ export async function resolveBlockIdentities(input: {
     const existing = names.get(name);
     if (existing) { existing.aliases = [...new Set([...existing.aliases, ...aliases])]; existing.descriptive ||= !!declaration.descriptive; return; }
     const span = input.sceneSpans.find((entry) => entry[0] === sceneKey) ?? [];
-    names.set(name, { key: `n${names.size + 1}`, name, aliases, descriptive: !!declaration.descriptive, sceneId: sceneKey, passage: passageAround(span.map((id) => byId.get(id)!).filter(Boolean), [name, ...aliases]) });
+    names.set(name, { key: "n" + (names.size + 1), name, aliases, descriptive: !!declaration.descriptive, sceneId: sceneKey, passage: passageAround(span.map((id) => byId.get(id)!).filter(Boolean), [name, ...aliases]) });
   };
   for (const [key, result] of settled) for (const declaration of result.scene.newEntities ?? []) if (isCharacter(declaration)) add(declaration, key);
   for (const declaration of input.blockDeclarations ?? []) if (isCharacter(declaration)) add(declaration, spanOf(input.sentences.find((sentence) => sentence.text.includes(declaration.name!))?.id ?? ""));

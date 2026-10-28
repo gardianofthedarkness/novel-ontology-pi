@@ -56,6 +56,12 @@ workspaces, original host paths and credentials stay private. At most 100 recent
 proposal files plus the latest held plan are inspected; omitted older plans are
 explicit. The event count reflects durable facts, not token/API call counts.
 
+Library-wide faculties (`novel atlas`, `novel causality universe sweep`) also
+write call telemetry to `telemetry/events.jsonl`: faculty name, status and time
+only. It feeds the viewer's faculty graph, never this activity count or the
+journal, and losing it hides nothing that was decided
+([faculty-flow.md](faculty-flow.md)).
+
 ## Host configuration
 
 Build CLI/frontend before deploying. Set **`NOVEL_LIBRARY_DIR`** to a trusted
