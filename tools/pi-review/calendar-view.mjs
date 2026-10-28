@@ -26,7 +26,7 @@ export async function calendarView({ universeId = 'book', books, decisions = [] 
   const volumeOf = new Map(books.map(book => [book.sourceId, book.volume ?? null]));
   return {
     books: placed.books.map(book => ({ sourceId: book.sourceId, volume: volumeOf.get(book.sourceId), title: book.title, readingOrder: book.readingOrder, year: book.year, yearBy: book.yearBy, span: book.span })),
-    entries: placed.entries.map(entry => ({ id: entry.timeId, book: volumeOf.get(entry.sourceId), label: entry.label, year: entry.year, month: entry.month, day: entry.day, time: entry.time, span: entry.span, placed: entry.placed, flashback: entry.flashback, scenes: entry.scenes })),
+    entries: placed.entries.map(entry => ({ id: entry.timeId, book: volumeOf.get(entry.sourceId), label: entry.label, year: entry.year, month: entry.month, day: entry.day, time: entry.time, part: entry.part, span: entry.span, placed: entry.placed, flashback: entry.flashback, scenes: entry.scenes })),
     conflicts: placed.conflicts.map(conflict => conflict.note),
     questions: placed.questions.length,
   };

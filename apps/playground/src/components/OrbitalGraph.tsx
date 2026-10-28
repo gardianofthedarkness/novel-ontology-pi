@@ -12,7 +12,7 @@ import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";
-import type { CalendarPin, FloorMark, TimeMeter } from "../data/orbitalTimePlace";
+import { PART, type CalendarPin, type DayPartMark, type FloorMark, type TimeMeter } from "../data/orbitalTimePlace";
 import { useAlbumTexture } from "./useAlbumTexture";
 import { containedImageSize } from "../data/albumImage";
 
@@ -381,6 +381,47 @@ function MeterNote({ label, position }: { label: string; position: Position3 }) 
   const texture = useMemo(() => meterTexture(label), [label]);
   useEffect(() => () => texture.dispose(), [texture]);
   return <sprite raycast={noRaycast} renderOrder={-1} position={position} scale={[METER_DRAW.note, METER_DRAW.note * 120 / 512, 1]}><spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} fog={false} /></sprite>;
+}
+
+/** A part of the day's label ("evening"): smaller than the dates, centred on its mark, as wide as its text. */
+function partTexture(label: string) {
+  const canvas = document.createElement("canvas");
+  const font = "600 76px sans-serif", measure = canvas.getContext("2d")!;
+  measure.font = font;
+  canvas.width = Math.ceil(measure.measureText(label).width) + 48; canvas.height = 140;
+  const context = canvas.getContext("2d")!;
+  context.textAlign = "center";
+  context.shadowColor = "rgba(120, 170, 255, 0.5)";
+  context.shadowBlur = 18;
+  context.fillStyle = "rgba(207, 231, 247, 0.85)";
+  context.font = font;
+  context.fillText(label, canvas.width / 2, 96);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+/** The parts of the day on the date backdrop: a small label where each part starts, a thin line down to the time meter's
+ * ruler. Outside the fog like the dates, never raycast. */
+function DayPartMarks({ marks }: { marks: DayPartMark[] }) {
+  const lines = useMemo(() => {
+    const positions = marks.flatMap((mark) => [mark.x, mark.foot, mark.z, mark.x, mark.y - PART.height / 2, mark.z]);
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    const segments = new LineSegments(geometry, new LineBasicMaterial({ color: "#a9c4ff", transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false, fog: false }));
+    segments.renderOrder = -1;
+    return segments;
+  }, [marks]);
+  useEffect(() => () => { lines.geometry.dispose(); lines.material.dispose(); }, [lines]);
+  return <>
+    <primitive object={lines} raycast={noRaycast} />
+    {marks.map((mark) => <DayPartLabel key={mark.id} label={mark.label} position={[mark.x, mark.y, mark.z]} />)}
+  </>;
+}
+function DayPartLabel({ label, position }: { label: string; position: Position3 }) {
+  const texture = useMemo(() => partTexture(label), [label]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  const image = texture.image as HTMLCanvasElement;
+  return <sprite raycast={noRaycast} renderOrder={-1} position={position} scale={[PART.height * image.width / image.height, PART.height, 1]}><spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} fog={false} /></sprite>;
 }
 
 /** Giant calendar pins behind the story: a big date high up and far back
@@ -993,6 +1034,8 @@ interface Props {
   pins?: CalendarPin[];
   /** Rulers on the same backdrop: how story time is compressed. */
   meters?: TimeMeter[];
+  /** Smaller marks on the same backdrop: where each part of a calendar day starts. */
+  parts?: DayPartMark[];
   /** Minecraft-style render distance (world units) around where the camera looks. */
   renderDistance?: number;
   /** Camera direction for automatic framing (default: a slight side view). */
@@ -1029,7 +1072,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], meters = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], meters = [], parts = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), dimmed: !!focusIds && !focusIds.has(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion, focusIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -1046,6 +1089,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
     {pins.length > 0 && <CalendarPins pins={pins} />}
     {meters.length > 0 && <TimeMeters meters={meters} />}
+    {parts.length > 0 && <DayPartMarks marks={parts} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} radii={radii} />)}
     <VisibleConnections edges={edges} bus={bus} />

@@ -93,8 +93,15 @@ as long as the floor box is deep, longer on a wide screen: the whole book
 across a phone would squeeze the cross-section to a thread. A chosen calendar
 day frames that day's scenes.
 
-Because time is compressed, a time meter sits on the date backdrop, just
-under the dates, one ruler per book: a tick per story moment (every fifth
+Under each date, on the same backdrop, smaller marks show where each part
+of a calendar day starts in the book's stretch (late night, dawn, morning,
+noon, afternoon, evening, night; small hours at 00:00 read "midnight"), each
+with a thin line down to the ruler. Every part keeps its own mark: one too
+close to the last in its row drops to a second row, and only when both rows
+are taken does it join a label ("afternoon–night").
+
+Because time is compressed, a time meter sits on the date backdrop, under
+the dates and the parts of the day, one ruler per book: a tick per story moment (every fifth
 taller), packed closer where time is squeezed, and a note such as
 "time ×0.4" where the pace (a step's length over a full step, averaged over
 five moments) changes by 0.2 or more and has settled, noted at the level it
