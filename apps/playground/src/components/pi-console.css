@@ -20,6 +20,8 @@
 }
 
 .pi-console:not(.is-expanded) { width: fit-content; max-width: calc(100vw - 32px); }
+/* The faculty graph needs room: the console widens while it is shown. */
+.pi-console.is-expanded.is-flow { width: min(780px, calc(100vw - 32px)); }
 .pi-console *, .pi-console *::before, .pi-console *::after { box-sizing: border-box; }
 .pi-console button, .pi-console textarea { font: inherit; color: inherit; }
 .pi-console button { cursor: pointer; }
@@ -57,6 +59,11 @@
   overflow-wrap: anywhere;
 }
 .pi-console-badge.is-queued { color: #f5d9a1; border-color: rgb(245 217 161 / 30%); }
+.pi-console-badge.is-firing { color: #91d7ff; border-color: rgb(145 215 255 / 45%); }
+.pi-console-tabs { display: flex; gap: 4px; padding: 8px 16px; border-top: 1px solid rgb(164 213 242 / 12%); }
+.pi-console .pi-console-tabs button { padding: 4px 11px; border: 1px solid transparent; border-radius: 999px; background: none; color: #b4c8d7; font-size: 11px; }
+.pi-console .pi-console-tabs button.is-active { border-color: rgb(145 215 255 / 38%); background: rgb(73 145 189 / 20%); color: #e7f2f8; }
+.pi-console-transcript[hidden] { display: none; }
 .pi-console-panel { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
 .pi-console-panel[hidden] { display: none; }
 .pi-console-status { display: grid; gap: 3px; padding: 10px 16px; border-top: 1px solid rgb(164 213 242 / 16%); color: #bed9e8; font-size: 11px; overflow-wrap: anywhere; }

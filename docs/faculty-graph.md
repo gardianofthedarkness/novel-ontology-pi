@@ -1,5 +1,9 @@
 # Streaming faculties and bounded adjudication
 
+The whole Digger + Solidifier graph, and what live telemetry shows of it, is in
+[faculty-flow.md](faculty-flow.md). This page covers scheduling inside the
+per-block scene faculties.
+
 ## Current dialogue contract
 
 The default work-model path is `dialogueScope: "card"` (CLI:
