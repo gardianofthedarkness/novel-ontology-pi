@@ -86,7 +86,27 @@ test("oversized exchange context keeps original source and unresolved candidates
   const cards = await attributeDialogueCards({ blockId: "b0001", sentences, selectedSpans: [[0, 0]], identities: {}, knownEntities: cast, decisions, router: new DecisionRouter(), pool: new FacultyPool(unusedWork), note() {} });
   assert.equal(calls, 0);
   assert.deepEqual(cards[0].sentenceIds, [sentences[0].id]);
-  assert.deepEqual(cards[0].unresolvedNames, ["甲", "乙", "丙"]);
+  // Only the candidate the passage names stays undecided; 乙 and 丙 are not named near it.
+  assert.deepEqual(cards[0].unresolvedNames, ["甲"]);
+});
+
+test("only characters named near an exchange are asked about; an unknown about anyone else is not a fact", async () => {
+  const people = [...cast, entity("char_000004", "丁")];
+  const asked: string[][] = [];
+  const decisions: DecisionModel = { modelId: "mock", async decide(_state, questions) {
+    asked.push(questions.map(question => /^Does (\S+) /.exec(question.instructions)![1]));
+    return questions.map(question => ({ key: question.key, value: question.instructions.startsWith("Does 甲 ") ? "participates" : "unknown", confidence: 0.99 }));
+  } };
+  const sentences = sectionBlock("甲问：「走吗？」乙说：「走。」", 0).sentences;
+  const named = await attributeDialogueCards({ blockId: "b0001", sentences, selectedSpans: [[0, sentences.length - 1]], identities: {}, knownEntities: people, decisions, router: new DecisionRouter(), pool: new FacultyPool(unusedWork), note() {} });
+  assert.deepEqual(asked[0], ["甲", "乙"], "丙 and 丁 are not named near the exchange");
+  assert.deepEqual([named[0].participantNames, named[0].unresolvedNames], [["甲"], ["乙"]]);
+  // A passage naming no one: the block's present characters are asked, and an unknown about them is dropped.
+  asked.length = 0;
+  const unnamed = sectionBlock("「走吗？」「走。」", 0).sentences;
+  const pronouns = await attributeDialogueCards({ blockId: "b0001", sentences: unnamed, selectedSpans: [[0, unnamed.length - 1]], identities: { charactersPresent: ["丁"] }, knownEntities: people, decisions, router: new DecisionRouter(), pool: new FacultyPool(unusedWork), note() {} });
+  assert.deepEqual(asked[0], ["丁"]);
+  assert.deepEqual([pronouns[0].participantNames, pronouns[0].unresolvedNames], [[], []]);
 });
 
 test("default faculty graph emits multi-person cards, not speaker/turn adjudication, through extraction", async () => {

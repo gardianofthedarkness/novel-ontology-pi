@@ -6,6 +6,7 @@ import { DecisionRouter } from "./decisionRouter.js";
 import { FacultyPool } from "./facultyPool.js";
 import { expandDecisionContext, jsonObject, renderSentences } from "./facultyContext.js";
 import { turnContext as sourceSpanContext } from "./turnAttribution.js";
+import { CAST_CANDIDATE_LIMIT, namedInText } from "./castCandidates.js";
 
 export interface NamedDialogueCard {
   id: string;
@@ -48,7 +49,29 @@ export async function attributeDialogueCards(input: {
     unique.set(candidate.name, { name: candidate.name, forms: [...new Set([...(previous?.forms ?? []), ...candidate.forms].filter(Boolean))] });
   }
   if (unique.size > 250) throw new Error("Dialogue membership candidate budget exceeded; no candidate was silently truncated");
-  const registry = [...unique.values()];
+  const known = [...unique.values()];
+  const present = new Set(identities.charactersPresent ?? []);
+  /**
+   * Who to ask about for one exchange (the cast-candidate principle): the characters its passage names —
+   * in the exchange and the sentences around it first, then within a wider window — at most 32. Only when
+   * the passage names no one are the block's present characters asked instead (a speaker known only as
+   * "I" or "he"). Asking every known character turned each undecided one into a fact to review: block 3
+   * of a 60-character book held up to 29 "unresolved" members per exchange.
+   */
+  const candidatesFor = (sentenceIds: string[]) => {
+    const own = new Set(sentenceIds);
+    const text = (margin: number) => {
+      try { return sourceSpanContext(source, sentenceIds, margin, 12000).context.map(sentence => sentence.text).join("\n"); }
+      catch { return source.filter(sentence => own.has(sentence.id)).map(sentence => sentence.text).join("\n"); }
+    };
+    // A canonical name counts at any length; other forms need two characters (see namedInText).
+    const forms = known.map(entry => ({ id: entry.name, forms: [entry.name, ...entry.forms.filter(form => form.length >= 2)] }));
+    const named = (margin: number) => { const found = namedInText(text(margin), forms, 1); return new Set([...found.unique, ...found.weak]); };
+    const near = named(5), wide = named(12);
+    const ranked = [...known.filter(entry => near.has(entry.name)), ...known.filter(entry => !near.has(entry.name) && wide.has(entry.name))];
+    const chosen = ranked.length ? ranked : known.filter(entry => present.has(entry.name) || entry.forms.some(form => present.has(form)));
+    return { registry: chosen.slice(0, CAST_CANDIDATE_LIMIT), near };
+  };
   const source = input.contextSentences ?? input.sentences;
   const cards = input.selectedSpans.map(([first, last]) => {
     if (!Number.isInteger(first) || !Number.isInteger(last) || first < 0 || last < first || last >= input.sentences.length) throw new Error("Invalid dialogue card source span");
@@ -59,6 +82,8 @@ export async function attributeDialogueCards(input: {
   await Promise.all(Array.from({ length: Math.min(input.router.options.concurrency ?? 4, cards.length) }, async () => {
     while (next < cards.length) {
       const card = cards[next++];
+      const { registry, near } = candidatesFor(card.sentenceIds);
+      if (!registry.length) { input.note(`dialogue-members:${card.id}`, "No character is named near this exchange or present in the block; no membership was asked or guessed."); continue; }
       try {
         const context = sourceSpanContext(source, card.sentenceIds, 5, 12000);
         const state = `${input.constraintsText ?? ""}CANDIDATE IDENTITIES (not evidence of participation): ${JSON.stringify(registry)}\nTARGET EXCHANGE: ${JSON.stringify(card.sentenceIds)}\n${renderSentences(context.context)}`;
@@ -103,10 +128,11 @@ export async function attributeDialogueCards(input: {
           return { name: candidate.name, value: routed.value };
         }));
         card.participantNames = memberships.filter(member => member.value === true).map(member => member.name);
-        card.unresolvedNames = memberships.filter(member => member.value === null).map(member => member.name);
+        // An undecided member stays a fact to review only when the text names them near the exchange.
+        card.unresolvedNames = memberships.filter(member => member.value === null && near.has(member.name)).map(member => member.name);
         if (card.unresolvedNames.length) input.note(`dialogue-members:${card.id}`, "Some exchange memberships remain unresolved; no speaker map or participant was guessed.");
       } catch {
-        card.unresolvedNames = registry.map(candidate => candidate.name);
+        card.unresolvedNames = registry.filter(candidate => near.has(candidate.name)).map(candidate => candidate.name);
         input.note(`dialogue-members:${card.id}`, "Exchange membership was unavailable or oversized; source and candidate uncertainty retained without truncation.");
       }
     }

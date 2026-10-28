@@ -29,6 +29,9 @@ named, take every assigned book in reading order.
 Ask the user only what the data cannot settle and what is theirs to
 decide: spending beyond the job's limits, a merge two readings support
 equally, recalling an applied block. Everything else runs behind the scenes.
+Never offer to skip or bulk-pass the review gate (`--auto-approve`, accepting
+facts unread): it is not an option, and the host refuses it. When a review is
+long, say how far it got and how much is left, and keep going in the next turn.
 
 ## Completed analysis — start here
 
