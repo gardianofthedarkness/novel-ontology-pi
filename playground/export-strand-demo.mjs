@@ -600,7 +600,7 @@ export async function strandDemo(novelDir, options) {
       chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }),
       lots: world.lots.map(lot => ({ i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, label: lot.label, role: lot.role, source: lot.source, place: lot.place, born: lot.born, cells: [...lot.skeleton.cells].join('') })),
       broken, hits: [...hits.entries()].map(([id, hit]) => ({ event: id, sphere: hit.sphere ?? null, point: hit.point })), earlier: earlier.map(({ lot, strand, scene: from, story: at }) => ({ lot, strand, scene: from, story: at })),
-      landscapes: landscapes.map(entry => ({ place: entry.place, buildings: entry.buildings, ids: entry.source.buildings.map(b => b.id), roads: entry.roads })),
+      landscapes: landscapes.map(entry => ({ place: entry.place, buildings: entry.buildings, ids: entry.source.buildings.map(b => b.id), roads: entry.roads })), dropped: [...world.dropped],
       notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied, build: notes.build } };
   };
   let lastLive = 0;
@@ -678,7 +678,9 @@ export async function strandDemo(novelDir, options) {
       people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
       world: { NX, NZ, K, oi, oj, lots: worldLots, earlier,
-        ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]) },
+        ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]),
+        // Landscape buildings that never stood as lots (under a staged building, or no room on the grid), and when that was settled.
+        dropped: [...world.dropped] },
       places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, theme: anchor.era, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, lots: worldLots }])),
       scenes: shown.map(scene => {
         const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label, kind = staged.get(scene.id)?.kind ?? null;

@@ -56,3 +56,30 @@ test("a building turned in its lot stands as the largest square-on rectangle ins
   assert.ok(Math.abs(a - 7.07) < 0.1 && Math.abs(b - 7.07) < 0.1);
   assert.equal(CHUNK, 16);
 });
+
+test("every source building in the explored ground either stands as a lot or is settled as dropped, so no faint copy is left among the lots", () => {
+  const world = createWorld(source());
+  ensure(world, 0, 0, 120, 0);
+  const span = CHUNK * 2, inChunks = (b: WorldSource["buildings"][number]) => [-1, 1].every((sx) => [-1, 1].every((sz) => world.chunks.has((Math.floor((b.x + sx * b.w / 2) / span) + 32768) * 65536 + (Math.floor((b.z + sz * b.d / 2) / span) + 32768))));
+  const stood = new Set(world.lots.map((lot) => lot.source));
+  const settled = world.source.buildings.filter(inChunks);
+  assert.ok(settled.length > 10);
+  for (const b of settled) assert.ok(stood.has(b.id) || world.dropped.has(b.id), `${b.id} stands or is dropped`);
+  assert.ok(settled.filter((b) => stood.has(b.id)).length >= settled.length * 0.85, `most stand (${settled.filter((b) => stood.has(b.id)).length} of ${settled.length})`);
+});
+
+test("a thin building turned off the grid stands turned to the nearest axis, and one a road crosses stands on the free part; one wholly on a road, or under a staged building, is dropped", () => {
+  const road = { a: [-200, 40] as [number, number], b: [200, 40] as [number, number], width: 12, level: "street" };
+  const world = createWorld({ roads: [road], plazas: [], anchors: [{ place: "inn", label: "Inn", x: 100, z: 0, own: true, role: "office", floors: 6 }], buildings: [
+    { id: "thin", x: 9, z: 9, w: 22, d: 9, angle: 0.35, floors: 6, kind: "office" },
+    { id: "edge", x: 41, z: 31, w: 16, d: 16, angle: 0, floors: 6, kind: "office" },
+    { id: "road", x: 70, z: 40, w: 8, d: 8, angle: 0, floors: 4, kind: "office" },
+    { id: "under", x: 100, z: 2, w: 10, d: 10, angle: 0, floors: 4, kind: "office" },
+  ] });
+  ensure(world, 50, 20, 100, 0);
+  const lot = (id: string) => world.lots.find((entry) => entry.source === id);
+  assert.ok(lot("thin") && lot("thin")!.nx > lot("thin")!.nz, "the thin turned building stands, long along x");
+  assert.ok(lot("edge") && (lot("edge")!.j0 + lot("edge")!.nz) * 2 <= 34, "the crossed one stands short of the road");
+  assert.ok(!lot("road") && world.dropped.has("road"));
+  assert.ok(!lot("under") && world.dropped.has("under"));
+});

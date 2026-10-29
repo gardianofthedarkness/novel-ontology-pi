@@ -44,6 +44,8 @@ export interface World {
   ids: Map<number, number>;
   cells: number[];
   claimed: Set<string>;
+  /** Source buildings that never stand as lots, and the moment that was settled: under a staged building, or with no room left on the grid (a road or another lot where they would stand). Their faint copies go then too. */
+  dropped: Map<string, number | string>;
   buckets: { buildings: Map<number, number[]>; roads: Map<number, number[]> };
 }
 
@@ -54,7 +56,7 @@ const roleOf = (kind: string, floors: number): BuildingRole => (KIND_OF[kind] ==
 const seedOf = (text: string) => [...text].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7);
 
 export function createWorld(source: WorldSource): World {
-  const world: World = { source, chunks: new Map(), lots: [], lotAt: new Map(), ground: new Map(), clutter: new Set(), ids: new Map(), cells: [], claimed: new Set(), buckets: { buildings: new Map(), roads: new Map() } };
+  const world: World = { source, chunks: new Map(), lots: [], lotAt: new Map(), ground: new Map(), clutter: new Set(), ids: new Map(), cells: [], claimed: new Set(), dropped: new Map(), buckets: { buildings: new Map(), roads: new Map() } };
   const span = CHUNK * SKELETON_CELL, add = (map: Map<number, number[]>, key: number, index: number) => { const list = map.get(key); if (list) list.push(index); else map.set(key, [index]); };
   source.buildings.forEach((b, index) => { const r = Math.hypot(b.w, b.d) / 2; for (let ci = Math.floor((b.x - r) / span); ci <= Math.floor((b.x + r) / span); ci++) for (let cj = Math.floor((b.z - r) / span); cj <= Math.floor((b.z + r) / span); cj++) add(world.buckets.buildings, chunkKey(ci, cj), index); });
   source.roads.forEach((road, index) => { const r = road.width / 2 + 1; for (let ci = Math.floor((Math.min(road.a[0], road.b[0]) - r) / span); ci <= Math.floor((Math.max(road.a[0], road.b[0]) + r) / span); ci++) for (let cj = Math.floor((Math.min(road.a[1], road.b[1]) - r) / span); cj <= Math.floor((Math.max(road.a[1], road.b[1]) + r) / span); cj++) add(world.buckets.roads, chunkKey(ci, cj), index); });
@@ -71,6 +73,39 @@ export function inscribed(w: number, d: number, angle: number): [number, number]
   if (turn > Math.PI / 4) { turn = Math.PI / 2 - turn; [W, D] = [d, w]; }
   const c = Math.cos(turn), s = Math.sin(turn), t = Math.min(1, W / (W * c + D * s), D / (W * s + D * c));
   return [(W * t) / 2, (D * t) / 2];
+}
+
+interface Cells { i0: number; j0: number; nx: number; nz: number }
+/**
+ * Where a source building stands on the grid: the largest axis-aligned rectangle inside it. A thin building turned
+ * well off the grid would shrink below a lot that way (under 3 cells across), so it is turned to the nearest axis
+ * instead, at nine tenths of its width and depth.
+ */
+function cellsFor(b: SourceBuilding): Cells {
+  const cells = (hx: number, hz: number) => { const i0 = Math.ceil((b.x - hx) / SKELETON_CELL), j0 = Math.ceil((b.z - hz) / SKELETON_CELL); return { i0, j0, nx: Math.floor((b.x + hx) / SKELETON_CELL) - i0, nz: Math.floor((b.z + hz) / SKELETON_CELL) - j0 }; };
+  const inside = cells(...inscribed(b.w, b.d, b.angle));
+  if (inside.nx >= 3 && inside.nz >= 3) return inside;
+  const across = Math.abs(Math.sin(b.angle)) > Math.SQRT1_2, [w, d] = across ? [b.d, b.w] : [b.w, b.d];
+  return cells(w * 0.45, d * 0.45);
+}
+/** The largest rectangle (3 cells across at least) of cells no lot and no road holds, inside a rectangle of cells; null with none. */
+function largestFree(world: World, { i0, j0, nx, nz }: Cells): Cells | null {
+  const heights = new Array<number>(nx).fill(0);
+  let best: Cells | null = null, area = 0;
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) heights[i] = !world.lotAt.has(cellKey(i0 + i, j0 + j)) && !onRoad(world, (i0 + i + 0.5) * SKELETON_CELL, (j0 + j + 0.5) * SKELETON_CELL) ? heights[i] + 1 : 0;
+    // The largest rectangle standing on this row: for each run of columns, as tall as its shortest.
+    const stack: number[] = [];
+    for (let i = 0; i <= nx; i++) {
+      const height = i < nx ? heights[i] : 0;
+      while (stack.length && heights[stack[stack.length - 1]] >= height) {
+        const top = heights[stack.pop()!], left = stack.length ? stack[stack.length - 1] + 1 : 0, width = i - left;
+        if (top >= 3 && width >= 3 && top * width > area) { area = top * width; best = { i0: i0 + left, j0: j0 + j - top + 1, nx: width, nz: top }; }
+      }
+      stack.push(i);
+    }
+  }
+  return best;
 }
 
 /** A lot standing on cells i0..i0+nx, j0..j0+nz, unless one of them is taken (a lot, or a road). */
@@ -95,7 +130,7 @@ function materialize(world: World, ci: number, cj: number, born: number | string
     if (!anchor.own || world.claimed.has(`anchor:${anchor.place}`) || anchor.x < x0 - 40 || anchor.x > x0 + span + 40 || anchor.z < z0 - 40 || anchor.z > z0 + span + 40) continue;
     world.claimed.add(`anchor:${anchor.place}`);
     const [w, d] = ROLE_SIZE[anchor.role], nx = w, nz = d, ai = Math.round(anchor.x / SKELETON_CELL - nx / 2), aj = Math.round(anchor.z / SKELETON_CELL - nz / 2);
-    for (const b of world.source.buildings) if (Math.abs(b.x - anchor.x) < (nx * SKELETON_CELL + b.w) / 2 + 2 && Math.abs(b.z - anchor.z) < (nz * SKELETON_CELL + b.d) / 2 + 2) world.claimed.add(b.id);
+    for (const b of world.source.buildings) if (Math.abs(b.x - anchor.x) < (nx * SKELETON_CELL + b.w) / 2 + 2 && Math.abs(b.z - anchor.z) < (nz * SKELETON_CELL + b.d) / 2 + 2 && !world.claimed.has(b.id)) { world.claimed.add(b.id); world.dropped.set(b.id, born); }
     for (let j = aj; j < aj + nz; j++) for (let i = ai; i < ai + nx; i++) world.lotAt.delete(cellKey(i, j));
     const lot = { id: `anchor_${anchor.place}`, label: anchor.label, role: anchor.role, i0: ai, j0: aj, nx, nz, floors: Math.min(WALK_FLOORS, anchor.floors), height: anchor.floors, source: `anchor:${anchor.place}`, manifold: "anchor", era: anchor.era ?? "modern", born, place: anchor.place };
     const skeleton = generateSkeleton(ROLE_KIND[anchor.role], seedOf(anchor.place), { width: nx * SKELETON_CELL, depth: nz * SKELETON_CELL, floors: lot.floors, cores: 2 });
@@ -106,11 +141,11 @@ function materialize(world: World, ci: number, cj: number, born: number | string
     const b = world.source.buildings[index];
     if (world.claimed.has(b.id)) continue;
     world.claimed.add(b.id);
-    const [hx, hz] = inscribed(b.w, b.d, b.angle), bi = Math.ceil((b.x - hx) / SKELETON_CELL), bj = Math.ceil((b.z - hz) / SKELETON_CELL);
-    const nx = Math.floor((b.x + hx) / SKELETON_CELL) - bi, nz = Math.floor((b.z + hz) / SKELETON_CELL) - bj;
-    if (nx < 3 || nz < 3) continue;
+    // Where a road or a lot already holds some of its cells, it is trimmed to the free part, as long as half of it is left.
+    const cells = cellsFor(b), spot = cells.nx >= 3 && cells.nz >= 3 ? largestFree(world, cells) : null;
     const floors = Math.max(1, Math.min(WALK_FLOORS, b.floors)), role = roleOf(b.kind, b.floors);
-    standLot(world, { id: b.id, label: null, role, i0: bi, j0: bj, nx, nz, floors, height: b.floors, source: b.id, manifold: b.manifold ?? "", era: b.era ?? "modern", born, place: null }, KIND_OF[b.kind] ?? ROLE_KIND[role], seedOf(b.id));
+    const stood = !!spot && spot.nx * spot.nz * 2 >= cells.nx * cells.nz && standLot(world, { id: b.id, label: null, role, i0: spot.i0, j0: spot.j0, nx: spot.nx, nz: spot.nz, floors, height: b.floors, source: b.id, manifold: b.manifold ?? "", era: b.era ?? "modern", born, place: null }, KIND_OF[b.kind] ?? ROLE_KIND[role], seedOf(b.id));
+    if (!stood) world.dropped.set(b.id, born);
   }
   // Clutter on open ground (one cell in ten), never on a road or in front of a door.
   const draw = skeletonStream("world-clutter", ci, cj);
