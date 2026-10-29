@@ -123,7 +123,12 @@ Buildings are added as the story detects them, not fixed up front.
        1. **Find:** the air above the first person, wide. Box confidence was 0.03–0.06: empty sky gives Jev little to box.
        2. **Lock:** zoomed on what turn 1 found, with the ghost drawn there. Box confidence 0.62–0.74.
      - **First try:** the transport helicopter picked sky (0.27 against "none" ≤ 0.09) and was locked at 21 × 20 × 20 m, 39–59 m up. A building's weak sky pick (0.12) went back to its ground spot.
-     - **Weak point:** turn 1. Sky candidates (lettered ghosts at a few heights over the people, picked by a choice) would follow the pattern that works on the ground.
+     - **Turn 1 is now a choice on sky ghosts** (user decision, 2026-10-29), the pattern that works on the ground.
+       - The ghosts sit 15, 30 and 50 m up (at least 8 m above a roof) over the people (those moving first), over the place's middle and over the buildings the event names, spread to 8.
+       - One choice on both sky pictures, the same letters in each.
+       - Then the lock turn boxes the chosen ghost from both directions.
+     - **The helicopter again:** Jev picked "over 白井黑子, 30 m up" at probability 0.35, with "none" at 0.06; boxing empty sky had given 0.03–0.06. The lock turn was 0.57 / 0.59, locking it at 22 × 17 × 19 m, 24–43 m up.
+     - Only one thing in this strand is in the air, so this is one example, not a measurement.
 6. **Placement rules:**
    - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
    - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.

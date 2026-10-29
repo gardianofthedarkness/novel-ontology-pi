@@ -628,6 +628,27 @@ if (capture) {
       }
       return kept.map((spot, n) => ({ label: "ABCDEFGH"[n], x: spot.x, y0: spot.y0, z: spot.z, w, h, d, from: spot.from }));
     },
+    /**
+     * Where a thing in the air might be (call after a capture of that moment): 15, 30 and 50 m up over the people (those
+     * moving in the event first), over the place's middle and over the buildings the event names (above their roofs).
+     * Then a spread of `count`, the first 30 m over the first person, each next the farthest from those kept.
+     */
+    skySpots({ place, thing, count = 8 }) {
+      const entry = built.get(place), plan = data.places[place], segment = segmentAt(time), text = segment.event?.text ?? "", { w, h, d } = thing, anchors = [];
+      const movers = new Set((segment.moves ?? []).map((move) => move.person));
+      for (const [id, { pawn }] of [...pawns.entries()].filter(([, { pawn }]) => pawn.parent).sort(([a], [b]) => movers.has(b) - movers.has(a))) anchors.push({ x: pawn.position.x + entry.cx, z: pawn.position.z + entry.cz, floor: 0, from: `over ${data.people[id]?.name ?? id}` });
+      anchors.push({ x: plan.NX * CELL / 2, z: plan.NZ * CELL / 2, floor: 0, from: "over the middle" });
+      plan.lots.forEach((lot) => { const name = lot.label ?? lot.detected?.name; if (name && text.includes(name)) anchors.push({ x: (lot.i0 + lot.nx / 2) * CELL, z: (lot.j0 + lot.nz / 2) * CELL, floor: lot.floors * FLOOR, from: `over ${name}` }); });
+      const spots = anchors.flatMap((anchor) => [30, 15, 50].map((up) => ({ x: anchor.x, z: anchor.z, y0: Math.max(up, anchor.floor + 8), from: `${anchor.from}, ${Math.max(up, anchor.floor + 8)} m up` })));
+      const kept = spots.slice(0, 1);
+      while (kept.length < Math.min(count, spots.length)) {
+        let best = null, far = -1;
+        for (const spot of spots) { const gap = Math.min(...kept.map((k) => Math.hypot(spot.x - k.x, (spot.y0 - k.y0) * 1.5, spot.z - k.z))); if (gap > far) { far = gap; best = spot; } }
+        if (far < Math.max(4, Math.max(w, d) / 2)) break;
+        kept.push(best);
+      }
+      return kept.map((spot, n) => ({ label: "ABCDEFGH"[n], x: spot.x, y0: spot.y0, z: spot.z, w, h, d, from: spot.from }));
+    },
     /** A sheet of every model and shape a thing can be drawn as, each labelled with its key (Jev picks one from it). */
     async sheet({ models, entries, columns = 8 }) {
       Object.assign((data.models ??= {}), models);
