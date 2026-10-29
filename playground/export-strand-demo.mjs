@@ -422,10 +422,11 @@ export async function simulationInputs(novelDir) {
  * A strand's record kept as a run of its own (stage/simulation/runs/<strand>/<run>.json), never overwritten: each run says
  * what it was made from (`inputs`), the engine and when; the same outcome again is the same run. A strand's accepted run (its
  * first, or this one with `accept`) is the one readers take: copied to <strand>.json, where they look, and named in
- * index.json, which lists every run. A strand recorded before runs existed keeps that record as its first run.
+ * index.json, which lists every run. A strand recorded before runs existed keeps that record as its first run. With `page`
+ * (the player's data for the run), it is kept beside the record as <run>.page.json, so a host can play the run.
  * Derived view data, never canon (docs/stage-simulation-records.md).
  */
-export async function keepRun(folder, strand, record, { inputs, accept = false }) {
+export async function keepRun(folder, strand, record, { inputs, accept = false, page = null }) {
   const index = JSON.parse(await readFile(`${folder}/index.json`, 'utf8').catch(() => '{"strands":{}}'));
   const before = index.strands[strand.id] ?? null, runs = before?.runs ?? [];
   const contentOf = value => createHash('sha256').update(JSON.stringify({ ...value, exportedAt: null, run: null })).digest('hex').slice(0, 12);
@@ -441,6 +442,7 @@ export async function keepRun(folder, strand, record, { inputs, accept = false }
   let run = runs.find(entry => entry.content === content);
   const fresh = !run;
   if (!run) { run = entryOf(record, `${record.exportedAt.replace(/\D/g, '').slice(0, 14)}-${content.slice(0, 6)}`, { inputs, engine: ENGINE }); await write(run, record); runs.push(run); }
+  if (page && !run.page) { run.page = `runs/${strand.id}/${run.id}.page.json`; await writeFile(`${folder}/${run.page}`, JSON.stringify(page), { mode: 0o644 }); }
   if (accept || !accepted) accepted = run.id;
   const chosen = runs.find(entry => entry.id === accepted);
   await writeFile(`${folder}/${strand.id}.json`, await readFile(`${folder}/${chosen.file}`, 'utf8'), { mode: 0o644 });
@@ -448,6 +450,15 @@ export async function keepRun(folder, strand, record, { inputs, accept = false }
   index.strands[strand.id] = { file: `${strand.id}.json`, from: strand.from, to: strand.to, fork: strand.fork ?? null, title: record.strand.title, accepted, exportedAt: chosen.exportedAt, scenes: chosen.scenes, hits: chosen.hits, things: chosen.things, runs };
   await writeFile(`${folder}/index.json`, JSON.stringify(index, null, 1), { mode: 0o644 });
   return { strand: strand.id, run: run.id, fresh, accepted, ...(accepted !== run.id ? { note: `Kept as a run; ${accepted} stays accepted (--accept to take this one)` } : {}) };
+}
+
+/**
+ * One strand through the engine: the scenes from `from` to `to` on the fork of `fork` (a scene id), walked and simulated;
+ * returns the player's data (what strandDemo makes). The one entry point `novel sim run` uses, so the engine behind it can
+ * change (city filling, say) without the command changing.
+ */
+export async function runStrand(novelDir, { from, to, fork = null, title } = {}) {
+  return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}) });
 }
 
 /** The player page with the strand inlined. */

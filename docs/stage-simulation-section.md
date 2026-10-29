@@ -6,6 +6,17 @@ The user's direction, 2026-10-28: running the animation is the product's game se
 
 This note records where things stand and a checklist for making it a fully automated process through the CLI. Nothing here is built yet. The engine itself is described in [stage-simulation-design.md](stage-simulation-design.md).
 
+## Production, phase 1 (built)
+
+The engine now runs as a product step; the engine itself is unchanged (`runStrand` in the exporter is its one entry point):
+- **`novel sim strands <dir>`** ranks the book's story lines (timeline forks, as the engine walks them) by the scenes it would simulate.
+- **`novel sim run <dir> --auto N | --strand <id> [--accept]`** runs the engine on them, no model calls, and keeps each as a versioned run with the player's data (`runs/<strand>/<run>.page.json`); a line's first run is its accepted one, a later one only with `--accept`.
+- **`novel sim show <dir>`** lists each line's accepted run and whether it was made from the book as it is now.
+- **The player in the app:** the host serves the engine's own page with the book's accepted runs inlined and three.js beside it (`play/?volume=N`, linked as **Simulation** from read mode and clips).
+- **Pi:** `novel sim strands|run|show` are on its allowlist (`--auto` at most 5; never `--accept`, which is the user's), the checklist's stage section has a `simulation` step, and the novel-stage skill has its steps.
+
+Still open from the checklist below: Jev's placement and impact pickers as Pi steps (they need captures), progress and a budget, the simulation as its own section rather than a stage step, and feeding runs back to the timeline and places views.
+
 ## Where it stands: limitations
 
 1. **Tied to the analysis checklist.**

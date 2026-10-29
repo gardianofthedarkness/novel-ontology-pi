@@ -14,6 +14,7 @@ import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { loadWorkspaceSentences, placeScales, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
 import { objectsPacketsOpen, stageInputs } from "./stageCommands.js";
+import { simCurrent } from "./simCommands.js";
 import { castScope, loadCast } from "../../../solidifier/identity/cast.js";
 import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js";
 import { calendarStale, loadCalendar } from "../../../solidifier/calendar/calendar.js";
@@ -221,6 +222,11 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   stageItems.push({ id: "stage", title: "Animation prep (read mode)", dependsOn: [...items.map((item) => item.id), "scale", "architecture", "objects", "movement"],
     status: stage.planCurrent ? "done" : "todo", counts: { prepared: !!stage.plan, current: stage.planCurrent, moves: stage.plan?.counts.moves ?? 0 },
     next: stage.planCurrent ? [] : [`novel stage prep ${dir}`], note: "Last of all: waits for every analysis step and review, the stage objects packet included. No model calls." });
+  // The simulation (the engine: skeleton buildings, the path-integral walk, placed things, damage) on the book's story lines, each run kept.
+  const sim = await simCurrent(novelDir);
+  stageItems.push({ id: "simulation", title: "Simulation of the story lines (the engine, each run kept; view data)", dependsOn: [...items.map((item) => item.id), "scale", "architecture", "objects", "movement"],
+    status: sim.current ? "done" : "todo", counts: { lines: sim.lines, current: sim.current },
+    next: sim.current ? [] : [`novel sim run ${dir} --auto 3`], note: sim.current ? undefined : "No model calls: the engine reads the stage reports. Each run is kept; a line's first run is its accepted one, and only the user accepts a later one." });
   settle(stageItems, items);
   return { ...result, stage: { items: stageItems, next: stageItems.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) } };
 }

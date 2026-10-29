@@ -29,13 +29,15 @@ interface Props {
   bookQuery: string;
   exitHref: string;
   clipsHref: (book: number) => string;
+  /** The book's simulation player (novel sim run), when it has runs. */
+  simulationHref?: string | null;
 }
 
 /** A clip with the stage it plays on. Clips of one `stage` share one hologram (their place's whole script). */
 export interface ReelEntry { clip: StageClip; stage: string; script: HoloScript; plan: MovePlan }
 
 /** The host's clips: the book's prepared plan (api/stage) cut into clips, with the original sentences (api/book-text) under each beat. */
-export function StageClips({ timePlace, world, volume, requested, title, books, reducedMotion, bookQuery, exitHref, clipsHref }: Props) {
+export function StageClips({ timePlace, world, volume, requested, title, books, reducedMotion, bookQuery, exitHref, clipsHref, simulationHref }: Props) {
   const [stage, setStage] = useState<StagePlan | null | "loading">("loading");
   useEffect(() => {
     let live = true;
@@ -76,7 +78,7 @@ export function StageClips({ timePlace, world, volume, requested, title, books, 
   const linesOf = (beat: HoloBeat) => beat.source ? [...new Set([Math.floor(beat.source.from / 1_000_000), Math.floor(beat.source.to / 1_000_000)])].flatMap((number) => blocks.current.get(number) ?? [])
     .filter((sentence) => { const key = sentenceKey(sentence.id); return key >= beat.source!.from && key <= beat.source!.to; }).map((sentence) => sentence.text) : [];
 
-  return <ClipReel entries={entries} eyebrow="STAGE CLIPS" title={title} books={books} book={requested ?? volume} bookHref={clipsHref} exit={{ href: exitHref, label: "← Archive" }} reducedMotion={reducedMotion}
+  return <ClipReel entries={entries} eyebrow="STAGE CLIPS" title={title} books={books} book={requested ?? volume} bookHref={clipsHref} exit={{ href: exitHref, label: "← Archive" }} extra={simulationHref ? { href: simulationHref, label: "Simulation" } : undefined} reducedMotion={reducedMotion}
     status={!ready ? "Opening the book…" : stage ? "No scene of this book has anyone moving yet." : "This book's animation is not prepared yet."} linesOf={linesOf} onShow={onShow} />;
 }
 
@@ -92,6 +94,8 @@ interface ReelProps {
   /** Books open as links (the host's pages) or, without bookHref, switch in place. */
   bookHref?: (book: number) => string; onBook?: (book: number) => void;
   exit?: { href: string; label: string };
+  /** One more link in the header (the book's simulation). */
+  extra?: { href: string; label: string };
   /** Shown on the stage when there is no clip. */
   status: string;
   reducedMotion: boolean;
@@ -101,7 +105,7 @@ interface ReelProps {
 }
 
 /** The clip player: one hologram, the caption under it, controls and the clip strip. */
-export function ClipReel({ entries, eyebrow, title, books, book, bookHref, onBook, exit, status, reducedMotion, linesOf, onShow }: ReelProps) {
+export function ClipReel({ entries, eyebrow, title, books, book, bookHref, onBook, exit, extra, status, reducedMotion, linesOf, onShow }: ReelProps) {
   // The first replay waits for the building models, or it would play on an empty stage.
   const [models, setModels] = useState(false);
   useEffect(() => { let live = true; preloadArchitecture().catch(() => undefined).then(() => { if (live) setModels(true); }); return () => { live = false; }; }, []);
@@ -154,6 +158,7 @@ export function ClipReel({ entries, eyebrow, title, books, book, bookHref, onBoo
     <header className="clips-top">
       {exit && <a className="clips-back" href={exit.href}>{exit.label}</a>}
       <div className="clips-title"><span>{eyebrow}</span><strong>{title}</strong></div>
+      {extra && <a className="clips-extra" href={extra.href}>{extra.label}</a>}
       <nav className="clips-books" aria-label="Books">{books.map((entry) => bookLink(entry, entry.id === book ? "is-on" : undefined, `Vol ${entry.id}`))}</nav>
     </header>
     <section className="clips-stage" aria-label="Clip">

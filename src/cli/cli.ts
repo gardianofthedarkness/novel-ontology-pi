@@ -63,6 +63,7 @@ import { reviewCommand } from "./commands/extract/reviewCommands.js";
 import { approveBook } from "../solidifier/merge/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
+import { SIM_USAGE, simRun, simShow, simStrands } from "./commands/extract/simCommands.js";
 import { STAGE_USAGE, stageArchitecture, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
@@ -108,6 +109,8 @@ const COMMANDS: Record<string, string> = {
     "The universe's places: one per cluster of book places, with its path through the universe place tree.",
   "novel timeplace strands <novel-dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]":
     "Story strands from stored story time: parallel scenes, splits and meetings checked against places; plans \"who is present?\" questions only where a borrowed cast creates a strand link (free), and asks them with --ask (work model, 4 scenes per call), at most --max-questions (default 30), only in chapters of at least --min-impact scenes (default 8); report only, no canon writes",
+  "novel sim strands|run|show <novel-dir> [--auto N] [--strand id] [--accept]":
+    "The stage simulation (view data, never canon; no model calls): `strands` ranks the book's story lines by the scenes the engine would simulate; `run` runs the engine (buildings as skeletons from the place tree, the per-fork walk with the path-integral sampler, placed things, damage) on the first N lines (--auto N) or one (--strand id) and keeps each as a versioned run with the player's data (a line's first run is its accepted one; --accept takes this run instead); `show` lists each line's accepted run and whether it was made from the book as it is now. The viewer plays accepted runs at play/.",
   "novel stage show|lines|objects|scale|architecture|movement|prep <novel-dir> [--no-jev] [--no-work] [--max-calls N] [--cache dir] [--force] [--line scene-id]":
     "Read mode's stage (view inputs, never canon, no review; run on request, apart from the book's analysis, from reviewed canon only: each paid step waits for the analysis steps it builds on unless --force): `scale` sizes each place of the tree, region to room (one Jev choice per place; the stage builds places by it); `objects` lists the buildings and large visible things each staged scene puts in its place, matched to what the stage can draw (work model, a few scenes per call, within --max-calls); `lines` shows the timeline as the simulation walks it, story line by story line (each scene's own cast and where each person comes from; --line lists one line's scenes; no model calls; not `novel fork`, which branches the story); `architecture` picks each place's building, a sub-kind of place (name shortlist, then Jev picks among pictures); `movement` asks Jev who moves where inside each scene's building and how (needs the whole file extracted and the buildings picked; --max-calls bounds a run, never exceeded: `novel stage show` gives maxRequests, enough to finish in one run; answers are kept and later runs continue); `prep` is the animation prep, last of all once every analysis step is done and both reports are current: each chain checked physically, one movement plan per place (no model calls). Answers are reused while their inputs stay the same.",
   "novel timeplace show <novel-dir>":
@@ -536,6 +539,23 @@ async function main(): Promise<void> {
       maxCalls: number("--max-calls"), maxQuestions: number("--max-questions"), out: flag(positional, "--out"), cache: flag(positional, "--cache"),
       propose: positional.includes("--propose"), force: positional.includes("--force"),
     }), pretty);
+    return;
+  }
+
+  if (cmd === "sim") {
+    const novelDir = positional[2];
+    if (!["strands", "run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${SIM_USAGE}`);
+    const valued = sub === "run" ? ["--auto", "--strand"] : [], switches = sub === "run" ? ["--accept"] : [];
+    const seen = new Set<string>();
+    for (let index = 3; index < positional.length; index++) {
+      const name = positional[index];
+      if (seen.has(name) || ![...valued, ...switches].includes(name)) throw new Error(`Usage: ${SIM_USAGE}`);
+      seen.add(name);
+      if (valued.includes(name)) { const value = positional[++index]; if (!value || value.startsWith("--")) throw new Error(`${name} needs a value.`); }
+    }
+    const auto = flag(positional, "--auto");
+    if (auto !== undefined && (!/^\d+$/.test(auto) || Number(auto) < 1 || Number(auto) > 20)) throw new Error("--auto must be a whole number from 1 to 20.");
+    out(await (sub === "strands" ? simStrands(novelDir) : sub === "show" ? simShow(novelDir) : simRun(novelDir, { auto: auto === undefined ? undefined : Number(auto), strand: flag(positional, "--strand"), accept: positional.includes("--accept") })), pretty);
     return;
   }
 

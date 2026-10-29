@@ -54,10 +54,25 @@ novel text and Jev answers as data.
    unfinished, a stage report is out of date or the objects packet awaits
    review; finish those (steps 2–6), never work around it.
 8. `novel stage show <dir>` reports what is ready.
+9. The simulation, once movement and the objects review are done:
+   `novel sim strands <dir>` ranks the book's story lines by the scenes the
+   engine would play (scenes in a place with a building and events), and
+   `novel sim run <dir> --auto N` (take the command from the checklist's
+   `next`; N at most 5) runs the engine on the first N: each place's
+   buildings as skeletons from the place tree, every move sampled from the
+   path integral, things placed, fights damaging the buildings. No model
+   calls: it reads the stage reports above. Each run is kept with the book
+   (`stage/simulation/`); a line's first run is its accepted one. Accepting
+   a later run fixes the book's staged history: that is the user's call,
+   never yours (`--accept` is not available to you). `novel sim show <dir>`
+   lists each line's accepted run and whether it was made from the book as
+   it is now.
 
 Report per book, in plain words: places by scale, buildings by kind, the named buildings and
-things accepted into the ontology (and those held), scenes and moves prepared, moves the physics check dropped or revised, the Jev requests
+things accepted into the ontology (and those held), scenes and moves prepared, moves the physics check dropped or revised, the simulated
+story lines (scenes, moves, hits and things in each), the Jev requests
 spent, and what is still missing. The viewer shows the result in read mode
-(`?read&book=N`, desktop) and as stage clips (`?clips&book=N`, phones too);
+(`?read&book=N`, desktop), as stage clips (`?clips&book=N`, phones too) and,
+for the simulation, in its player (the **Simulation** link, `play/?volume=N`);
 no rebuild is needed. Do not run `--no-jev` unless the user asks for a free
 run; it leaves scales and buildings guessed from names and nobody moving.

@@ -895,6 +895,8 @@ export default function App() {
   const libraryCaption = shownWorld?.library?.events.at(-1)?.type.replaceAll(".", " / ") ?? "Waiting for organization";
 
   // The same page with ?read toggled (other parameters and the fragment kept), so read mode opens as its own link.
+  /** The book's simulation player (novel sim run), served beside the app by the host; only once the book has runs. */
+  const simulationHref = phoneLive && timePlace?.simulation?.strands.length ? `${location.pathname.replace(/[^/]*$/, "")}play/?volume=${loadedBook ?? "active"}` : null;
   const withRead = (on: boolean) => { const params = new URLSearchParams(location.search); if (on) params.set("read", "1"); else params.delete("read"); return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
   const withClips = (book: number | null) => { const params = new URLSearchParams(location.search); params.delete("read"); if (book === null) params.delete("clips"); else { params.set("clips", "1"); params.set("book", String(book)); } return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
   if (!world) {
@@ -904,8 +906,8 @@ export default function App() {
   }
 
   if (clipsMode) return <StageClips timePlace={timePlace} world={shownWorld} volume={loadedBook} requested={requestedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion}
-    books={books.length ? books.map((book) => ({ id: book.id, label: bookName(book) })) : loadedBook !== null ? [{ id: loadedBook, label: liveCollection }] : []} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withClips(null)} clipsHref={withClips} />;
-  if (readMode) return <ReadMode timePlace={timePlace} world={shownWorld} volume={loadedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withRead(false)} />;
+    books={books.length ? books.map((book) => ({ id: book.id, label: bookName(book) })) : loadedBook !== null ? [{ id: loadedBook, label: liveCollection }] : []} bookQuery={bookQuery(phoneLive ? loadedBook : null)} simulationHref={simulationHref} exitHref={withClips(null)} clipsHref={withClips} />;
+  if (readMode) return <ReadMode simulationHref={simulationHref} timePlace={timePlace} world={shownWorld} volume={loadedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withRead(false)} />;
 
   return (
     <div className={`app orbital-active ${orbitalMode ? "mode-orbital" : "mode-traditional"}${stageView !== "narrative" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}${dockOpen ? " dock-open" : " dock-closed"}`}>

@@ -11,6 +11,7 @@ import { bookCatalog } from './book-catalog.mjs';
 import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
+import { simulationPage, simulationVendor } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -196,6 +197,21 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         const asset = await bounded(async () => resolveAlbumAsset(await resolveWorkspace(volume), url.searchParams.get('id')));
         if (!asset) { send(404); return; }
         send(200, await readFile(asset.filename), { 'Content-Type': asset.type });
+        return;
+      }
+      if (scopedPath === '/play/') {
+        // The stage simulation player: the selected book's accepted runs (novel sim run), in the engine's own page.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const page = await bounded(async () => simulationPage(await resolveWorkspace(volume)));
+        if (!page) { send(404, 'No simulation runs for this book yet (novel sim run).', { 'Content-Type': 'text/plain; charset=utf-8' }); return; }
+        send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy });
+        return;
+      }
+      if (scopedPath.startsWith('/play/vendor/')) {
+        const body = await simulationVendor(scopedPath.slice('/play/vendor/'.length));
+        if (!body) { send(404); return; }
+        send(200, body, { 'Content-Type': types['.js'] });
         return;
       }
       if (scopedPath === '/api/book-text' || scopedPath === '/api/stage') {

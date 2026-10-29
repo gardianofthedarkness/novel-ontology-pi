@@ -27,6 +27,8 @@ interface Props {
   /** `?volume=N` for the book on show, or "" for the active one. */
   bookQuery: string;
   exitHref: string;
+  /** The book's simulation player (novel sim run), when it has runs. */
+  simulationHref?: string | null;
 }
 
 const REEL_MS = 10_000;
@@ -44,7 +46,7 @@ const Page = memo(function Page({ page, focused, lit }: { page: ReadPage; focuse
   </article>;
 });
 
-export function ReadMode({ timePlace, world, volume, title, reducedMotion, bookQuery, exitHref }: Props) {
+export function ReadMode({ timePlace, world, volume, title, reducedMotion, bookQuery, exitHref, simulationHref }: Props) {
   // The text, block by block (a block is one source file of the book).
   const [blocks, setBlocks] = useState<ReadSentence[][]>([]);
   const [textState, setTextState] = useState<"loading" | "ready" | "missing">("loading");
@@ -146,6 +148,7 @@ export function ReadMode({ timePlace, world, volume, title, reducedMotion, bookQ
       <span className={`read-status${stage && stage !== "loading" ? " is-ready" : ""}`} role="status">
         {stage === "loading" ? "Looking for the prepared animation…" : stage ? `Animation prepared · ${Object.keys(stage.places).length} places · ${stage.counts.moves ?? 0} moves` : "No animation yet: it is prepared once the book's analysis is complete"}
       </span>
+      {simulationHref && <a className="read-sim" href={simulationHref} title="The simulation: buildings as skeletons, every move sampled from the path integral, things placed, fights damaging the buildings">Simulation</a>}
     </header>
     <div className="read-body">
       <div className="read-panel" ref={panel} aria-label="Book text">

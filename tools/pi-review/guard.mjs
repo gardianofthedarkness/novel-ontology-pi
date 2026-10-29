@@ -46,6 +46,7 @@ const FORMS = {
   causality: 'novel causality candidates <book> [--unit ID] [--chapter N] [--limit 1-20] | sweep <book> [--limit 1-20] | evidence <book> <from> <to> | propose <book> <from> <to> --reason "…"',
   timeplace: 'novel timeplace show <book> | run <book> --propose [--mode M] [--chapter N] [--limit N] | tree <book> --propose [--max-questions N] | strands <book> [--ask] [--max-questions N] [--min-impact N]',
   atlas: 'novel atlas show <library> <universe-id> | novel atlas sweep <library> <universe-id> --propose [--max-questions N]',
+  sim: 'novel sim strands <book> | run <book> [--auto N] [--strand <id>] | show <book>  (the stage simulation: no model calls, each run kept; accepting a run is the user\'s)',
   stage: 'novel stage show <book> | scale <book> [--no-jev] | architecture <book> [--no-jev] | objects <book> [--max-calls N] [--no-jev] | movement <book> [--max-calls N] [--no-jev] | prep <book>  (read mode; objects proposes a review packet; prep only once everything else is done)',
   em: 'novel em show|sweep <book> [--limit 1-200]  (identity matches it raises are reviewed with novel review)', calendar: 'novel calendar show|build <book> | novel calendar show|build <library> --universe <id>  (year questions are reviewed with novel review)', fix: 'novel fix <operation> <book> … --reason "…"  (references/repair.md)',
   graph: 'novel graph build <book>/ontology', album: 'novel album list|portraits <book>', library: 'novel library … <library>  (novel-library skill)',
@@ -330,6 +331,21 @@ function permit(command, scope) {
     if (operation === 'strands') valid = tokens[2] === novel && [...flags.keys()].every(name => ['--ask', '--max-questions', '--min-impact'].includes(name)) && count('--max-questions', 60) && count('--min-impact', 500);
     if (!valid) throw new Error('Time-place runs must propose for the assigned book: novel timeplace run <book> --propose [options] or novel timeplace tree <book> --propose [--max-questions N] [--no-jev], or report strands with novel timeplace strands <book> [--ask] [--max-questions N≤60] [--min-impact N]; review through novel review --scope book');
     return { kind: 'cli', args: tokens, label: `novel timeplace ${operation}` };
+  }
+  if (verb === 'sim') {
+    // The stage simulation: rank the story lines, run the engine (no model calls) and keep each run as derived view data. Accepting a run
+    // (--accept) fixes the book's staged history: the user's decision, never Pi's.
+    const flags = new Map();
+    for (let index = 3; index < tokens.length; index++) {
+      const name = tokens[index];
+      if (flags.has(name) || !['--auto', '--strand'].includes(name)) throw new Error('Simulation options are bounded: novel sim run <book> [--auto N≤5] [--strand <id>]; accepting a run is the user\'s');
+      flags.set(name, tokens[++index]);
+    }
+    const auto = !flags.has('--auto') || /^\d+$/.test(flags.get('--auto') ?? '') && Number(flags.get('--auto')) >= 1 && Number(flags.get('--auto')) <= 5;
+    const strand = !flags.has('--strand') || /^[A-Za-z0-9_-]{1,80}$/.test(flags.get('--strand') ?? '');
+    valid = tokens[2] === novel && (['strands', 'show'].includes(operation) ? tokens.length === 3 : operation === 'run' && auto && strand);
+    if (!valid) throw new Error('Simulation commands work on the assigned book: novel sim strands|show <book>, novel sim run <book> [--auto N≤5] [--strand <id>]');
+    return { kind: 'cli', args: tokens, label: `novel sim ${operation}` };
   }
   if (verb === 'stage') {
     // Read mode's stage: reports for the view (place scale, buildings, movement, animation prep) and the objects faculty's review packet (named

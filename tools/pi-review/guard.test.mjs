@@ -255,6 +255,14 @@ test('read mode stage commands run on the assigned book, bounded, and the prep t
   assert.throws(() => authorize(`novel review show ${novel} cs_stage_objects_2 --scope book --offset 0 --limit 20`, { ...defaultScope, stageObjectsChangesetIds: ['cs_stage_objects_1'] }));
 });
 
+test('the stage simulation: Pi ranks story lines, runs the engine within bounds and shows the runs; accepting a run is the user\'s', () => {
+  assert.equal(authorize(`novel sim strands ${novel}`, defaultScope).label, 'novel sim strands');
+  assert.equal(authorize(`novel sim run ${novel} --auto 3`, defaultScope).label, 'novel sim run');
+  assert.equal(authorize(`novel sim run ${novel} --strand scene_000002`, defaultScope).label, 'novel sim run');
+  assert.equal(authorize(`novel sim show ${novel}`, defaultScope).label, 'novel sim show');
+  for (const command of [`novel sim run ${novel} --accept`, `novel sim run ${novel} --auto 9`, `novel sim run ${novel} --auto 0`, `novel sim run /tmp/other --auto 1`, `novel sim run ${novel} --strand ../x`, `novel sim show ${novel} --auto 1`, `novel sim delete ${novel}`]) assert.throws(() => authorize(command, defaultScope), command);
+});
+
 test('universal EM: Pi may show and sweep its own book; identity packets review through the shared gate', () => {
   assert.equal(authorize(`novel em show ${novel}`).label, 'novel em show');
   assert.equal(authorize(`novel em sweep ${novel} --limit 50`).label, 'novel em sweep');
