@@ -6,6 +6,7 @@ import type { FloorMark } from "../data/orbitalTimePlace";
 import type { ArchitectureKind } from "../data/placeArchitecture";
 import type { NavBox } from "../data/holoNav";
 import type { SimulatedLot, SimulatedPlace } from "../data/placeBuildings";
+import { HOLO } from "./hologram";
 
 /**
  * Orbital Places: a hologram of the building a place's name names, standing
@@ -21,11 +22,12 @@ interface Shape { fill: BufferGeometry; edges: BufferGeometry; width: number; de
 type Shapes = Map<string, Shape>;
 
 const noRaycast = () => undefined;
-const EDGE = "#8fd6ff", PROPOSED = "#ffd36b", FILL = "#2b86c4";
+// The hologram palette is shared with every 3D view (./hologram).
+const EDGE = HOLO.edge, PROPOSED = HOLO.proposed, FILL = HOLO.fill;
 /** Buildings the story names at a place: warm, so they read apart from the generic skyline. */
-const NAMED_EDGE = "#ffe7b0", NAMED_FILL = "#b97f2c";
+const NAMED_EDGE = HOLO.namedEdge, NAMED_FILL = HOLO.namedFill;
 /** A simulated place (the stage simulation records), in the strand page's colours: Jev's placed things in gold, damage and impacts in red. */
-const THING_EDGE = "#ffd36e", THING_FILL = "#ffd36e", DAMAGE = "#ff4d5e";
+const THING_EDGE = HOLO.thingEdge, THING_FILL = HOLO.thingFill, DAMAGE = HOLO.damage;
 /** World units above the floor where the lowest scene sphere floats; buildings stay under it. */
 const CEILING = 215;
 const RISE_SECONDS = 1.6, SCAN_SECONDS = 7;

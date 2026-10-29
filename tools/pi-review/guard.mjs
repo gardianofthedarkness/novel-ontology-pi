@@ -46,7 +46,7 @@ const FORMS = {
   causality: 'novel causality candidates <book> [--unit ID] [--chapter N] [--limit 1-20] | sweep <book> [--limit 1-20] | evidence <book> <from> <to> | propose <book> <from> <to> --reason "…"',
   timeplace: 'novel timeplace show <book> | run <book> --propose [--mode M] [--chapter N] [--limit N] | tree <book> --propose [--max-questions N] | strands <book> [--ask] [--max-questions N] [--min-impact N]',
   atlas: 'novel atlas show <library> <universe-id> | novel atlas sweep <library> <universe-id> --propose [--max-questions N]',
-  sim: 'novel sim strands <book> | pick <book> --max-calls N≤60 [--auto N] [--strand <id>] | run <book> [--auto N] [--strand <id>] | show <book>  (the stage simulation: pick asks Jev on pictures, run makes no model calls and keeps each run; accepting a run is the user\'s)',
+  sim: 'novel sim strands <book> | places <book> | pick <book> --max-calls N≤60 [--auto N] [--strand <id>] | run <book> [--auto N] [--strand <id>] | show <book>  (the stage simulation: pick asks Jev on pictures, run makes no model calls and keeps each run; accepting a run is the user\'s)',
   stage: 'novel stage show <book> | scale <book> [--no-jev] | landscape <book> [--no-jev] | architecture <book> [--no-jev] | objects <book> [--max-calls N] [--no-jev] | movement <book> [--max-calls N] [--no-jev] | prep <book>  (read mode; objects and landscape propose review packets; prep only once everything else is done)',
   em: 'novel em show|sweep <book> [--limit 1-200]  (identity matches it raises are reviewed with novel review)', calendar: 'novel calendar show|build <book> | novel calendar show|build <library> --universe <id>  (year questions are reviewed with novel review)', fix: 'novel fix <operation> <book> … --reason "…"  (references/repair.md)',
   graph: 'novel graph build <book>/ontology', album: 'novel album list|portraits <book>', library: 'novel library … <library>  (novel-library skill)',
@@ -344,8 +344,8 @@ function permit(command, scope) {
     const auto = !flags.has('--auto') || /^\d+$/.test(flags.get('--auto') ?? '') && Number(flags.get('--auto')) >= 1 && Number(flags.get('--auto')) <= 5;
     const strand = !flags.has('--strand') || /^[A-Za-z0-9_-]{1,80}$/.test(flags.get('--strand') ?? '');
     const budget = /^\d+$/.test(flags.get('--max-calls') ?? '') && Number(flags.get('--max-calls')) >= 1 && Number(flags.get('--max-calls')) <= 60;
-    valid = tokens[2] === novel && (['strands', 'show'].includes(operation) ? tokens.length === 3 : operation === 'run' ? auto && strand : operation === 'pick' && auto && strand && budget);
-    if (!valid) throw new Error('Simulation commands work on the assigned book: novel sim strands|show <book>, novel sim pick <book> --max-calls N≤60 [--auto N≤5] [--strand <id>], novel sim run <book> [--auto N≤5] [--strand <id>]');
+    valid = tokens[2] === novel && (['strands', 'show', 'places'].includes(operation) ? tokens.length === 3 : operation === 'run' ? auto && strand : operation === 'pick' && auto && strand && budget);
+    if (!valid) throw new Error('Simulation commands work on the assigned book: novel sim strands|show|places <book>, novel sim pick <book> --max-calls N≤60 [--auto N≤5] [--strand <id>], novel sim run <book> [--auto N≤5] [--strand <id>]');
     return { kind: 'cli', args: tokens, label: `novel sim ${operation}` };
   }
   if (verb === 'stage') {

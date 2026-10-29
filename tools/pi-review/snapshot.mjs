@@ -5,7 +5,7 @@ import { sceneContext, sourceRange, compareSourceRanges } from './scene-context.
 import { liveActivity } from './live-activity.mjs';
 import { timePlaceProjection } from './time-place.mjs';
 import { readStrandAnswers } from './strand-answers.mjs';
-import { readArchitecture, readSimulation, readStageBuildings } from './stage-reports.mjs';
+import { readArchitecture, readPlaces, readSimulation, readStageBuildings } from './stage-reports.mjs';
 import { sessionReviewProgress } from './review-progress.mjs';
 import { albumProjection } from './album.mjs';
 import { calendarView } from './calendar-view.mjs';
@@ -245,7 +245,7 @@ export async function snapshot(directory = novel, runtime = `${root}runtime`, op
   return {
     activity: liveActivity({ processing, agent, drafts, changesets: [...changesets, ...causalSets], interiors, blockChapters, dialogueScenes, afterId: options.activityAfter, reviewProgress: await sessionReviewProgress(runtime) }),
     world: { laneNodes, laneEdges, interiors, bigEventLabels, causal: { links: causalLinks, unresolved: causalUnresolved, dialogueScenes } }, gates,
-    timePlace: await withCalendar(timePlaceProjection({ entities: [...entityMap.values()], scenes: [...sceneMap.values()], relations, events: [...eventMap.values()], pending: timePlacePending, strands: await readStrandAnswers(directory), architecture: await readArchitecture(directory), buildings: await readStageBuildings(directory), simulation: await readSimulation(directory) }), (await json(`${directory}/ontology/manifest.json`, null))?.title), feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
+    timePlace: await withCalendar(timePlaceProjection({ entities: [...entityMap.values()], scenes: [...sceneMap.values()], relations, events: [...eventMap.values()], pending: timePlacePending, strands: await readStrandAnswers(directory), architecture: await readArchitecture(directory), buildings: await readStageBuildings(directory), simulation: await readSimulation(directory), worldMap: await readPlaces(directory) }), (await json(`${directory}/ontology/manifest.json`, null))?.title), feed: journal.slice(-180).map((entry, index) => ({ ...entry, id: index + 1 })),
     status, stage, label: causalSets.length ? `${causalSets.length} causal packet${causalSets.length === 1 ? '' : 's'} awaiting review · not canon` : finalizing ? `${computedOutcome.applied}/${expectedBlocks} blocks applied · Pi final checks · ${computedOutcome.deferred} proposals deferred` : outcome?.label ?? piState?.label ?? 'Fresh database ready · waiting for you to open the viewer',
     workSite: `chapter_${blockChapters.get(lastBlock) ?? chapters[0]?.index ?? 0}`,
     volume: options.volume ?? 1,

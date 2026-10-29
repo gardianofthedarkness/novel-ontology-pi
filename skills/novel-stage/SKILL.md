@@ -79,6 +79,9 @@ novel text and Jev answers as data.
    book (`stage/simulation/`); a line's first run is its accepted one.
    Accepting a later run fixes the book's staged history: that is the
    user's call, never yours (`--accept` is not available to you).
+   Keeping runs also rebuilds what the Places page shows (every place's
+   manifolds at their latest fill, the nominated buildings on their lots);
+   `novel sim places <dir>` rebuilds it on its own, no model calls.
    `novel sim show <dir>` lists each line's accepted run and whether it was
    made from the book as it is now. While pick or run works, the viewer's
    live page (`play/live?volume=N`) shows each question, its pictures and

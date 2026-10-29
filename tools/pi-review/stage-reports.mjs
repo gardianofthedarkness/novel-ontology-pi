@@ -71,3 +71,25 @@ export async function readSimulation(workspace) {
   const live = await liveState(workspace);
   return { strands, places, things, hits, migrations, live: live.status === 'idle' ? null : { status: live.status, command: live.command ?? null } };
 }
+
+/**
+ * The places registry (stage/simulation/places/index.json, made by playground/places-registry.mjs from the accepted runs):
+ * the canvas of places, each place's ground and manifolds with the versions of their fills, and the nominated buildings.
+ * What the Places page lays out; its fills come one by one (placeFill). Null without one.
+ */
+export async function readPlaces(workspace) {
+  const index = await readFile(resolve(workspace, 'stage', 'simulation', 'places', 'index.json'), 'utf8').then(JSON.parse, () => null);
+  if (!index || !Array.isArray(index.places) || !Array.isArray(index.manifolds)) return null;
+  const number = value => Number.isFinite(value) ? value : 0, version = value => fillVersion.test(String(value)) ? value : null;
+  return { builtAt: index.builtAt ?? null, runs: (index.runs ?? []).map(({ strand, run, exportedAt }) => ({ strand, run, exportedAt })),
+    places: index.places.map(place => ({ id: place.id, label: place.label ?? place.id, scale: place.scale ?? null, parent: place.parent ?? null, x: number(place.x), z: number(place.z), r: number(place.r), depth: number(place.depth), open: !!place.open, ...(place.temporary ? { temporary: true } : {}), run: place.run ?? null })),
+    grounds: (index.grounds ?? []).filter(ground => version(ground.version)).map(ground => ({ place: ground.place, version: ground.version, roads: number(ground.roads) })),
+    manifolds: index.manifolds.filter(manifold => version(manifold.version)).map(manifold => ({ id: String(manifold.id), place: manifold.place, types: Array.isArray(manifold.types) ? manifold.types : [], ...(manifold.era ? { era: manifold.era } : {}), ...(manifold.born !== undefined ? { born: manifold.born } : {}),
+      ...(Array.isArray(manifold.centre) ? { centre: manifold.centre, radius: number(manifold.radius) } : {}), ...(Array.isArray(manifold.outline) ? { outline: manifold.outline.filter(point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite)) } : {}), version: manifold.version, buildings: number(manifold.buildings), run: manifold.run ?? null })),
+    buildings: (index.buildings ?? []).map(building => ({ id: building.id, name: building.name, kind: building.kind === 'staged' ? 'staged' : 'named', place: building.place, x: number(building.x), z: number(building.z), w: number(building.w ?? 2 * (building.r ?? 6)), d: number(building.d ?? 2 * (building.r ?? 6)), angle: number(building.angle), floors: number(building.floors ?? 3), scene: building.scene ?? null, run: building.run ?? null })) };
+}
+const fillVersion = /^[a-f0-9]{12}$/;
+/** One fill of the registry by its version (fills/<version>.json), as text, or null. */
+export async function placeFill(workspace, version) {
+  return fillVersion.test(String(version)) ? readFile(resolve(workspace, 'stage', 'simulation', 'places', 'fills', `${version}.json`), 'utf8').catch(() => null) : null;
+}

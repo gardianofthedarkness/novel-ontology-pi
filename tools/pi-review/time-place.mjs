@@ -63,7 +63,7 @@ export function buildingLog(mentions, sceneRows, architecture, canon = []) {
   return [...log.values()];
 }
 
-export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [], strands = null, architecture = null, buildings = null, simulation = null }) {
+export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [], strands = null, architecture = null, buildings = null, simulation = null, worldMap = null }) {
   const known = new Set(applied.map((entity) => entity.id));
   const proposedEntities = pending.filter((proposal) => proposal.kind === 'upsert_entity' && ['TimePoint', 'Location'].includes(proposal.payload?.kind) && !known.has(proposal.payload.id)).map((proposal) => proposal.payload);
   const proposedIds = new Set(proposedEntities.map((entity) => entity.id));
@@ -147,5 +147,5 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
   const appliedParents = new Map(appliedRelations.filter((relation) => relation.type === 'PART_OF').map((relation) => [relation.fromId, relation.toId]));
   const canon = applied.filter((entity) => entity.kind === 'Location' && entity.properties?.source === 'stage-objects' && appliedParents.has(entity.id))
     .map((entity) => ({ id: entity.id, names: entity.names.map((form) => form.text), placeId: appliedParents.get(entity.id), model: entity.properties.building ?? null, size: entity.properties.size ?? null, sceneId: entity.properties.firstSceneId ?? null }));
-  return { available: timeRows.length > 0, times: timeRows, scenes: sceneRows, places, characters, names, ...(buildings || canon.length ? { buildings: buildingLog(buildings ?? [], sceneRows, architecture, canon) } : {}), ...(simulation ? { simulation } : {}) };
+  return { available: timeRows.length > 0, times: timeRows, scenes: sceneRows, places, characters, names, ...(buildings || canon.length ? { buildings: buildingLog(buildings ?? [], sceneRows, architecture, canon) } : {}), ...(simulation ? { simulation } : {}), ...(worldMap ? { worldMap } : {}) };
 }
