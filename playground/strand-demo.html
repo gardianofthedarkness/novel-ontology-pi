@@ -130,6 +130,23 @@ const timing = (place, move) => {
   return { total: steps.at(-1) / DEMO, steps: steps.map((s) => s / DEMO) };
 };
 
+/** Walking out of a place and into the next runs at twice an event's pace; the map between at about 45 m a second, 2.4 to 7 s. */
+const LEG = 2;
+const legOf = (placeId, path) => { const move = { how: "walk", path }, time = timing(data.places[placeId], move); return { ...move, place: placeId, time: { total: time.total / LEG, steps: time.steps.map((s) => s / LEG) } }; };
+/**
+ * One person's way between places, as the exporter drew it: out of the old place along its own path integral, across the
+ * map along a curve through the map walk's nodes, and into the new place to where the scene finds them. Without a route,
+ * straight across the map between the two places.
+ */
+function travelOf(migration) {
+  const route = migration.route, spot = (id) => data.macro.find((node) => node.id === id);
+  const exit = route?.exit?.length > 1 ? legOf(migration.from, route.exit) : null, entry = route?.entry?.length > 1 ? legOf(migration.to, route.entry) : null;
+  const points = route ? route.path : [[spot(migration.from)?.spotX ?? 0, spot(migration.from)?.spotZ ?? 0], [spot(migration.to)?.spotX ?? 0, spot(migration.to)?.spotZ ?? 0]];
+  const curve = new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0.35, z)), false, "centripetal");
+  const exitEnd = exit?.time.total ?? 0, mapEnd = exitEnd + Math.min(7, Math.max(2.4, (route?.metres ?? curve.getLength()) / 45));
+  return { migration, exit, entry, curve, exitEnd, mapEnd, total: mapEnd + (entry?.time.total ?? 0) };
+}
+
 // The timeline: a card per scene, then its events, each as long as its slowest move or long enough to read; hits counted per place.
 const segments = [];
 let clock = 0;
@@ -139,7 +156,13 @@ for (const [index, scene] of data.scenes.entries()) {
   hitsSoFar[scene.place] ??= 0;
   // People coming from another place: the macro view first, in 2D.
   const migrations = data.migrations.filter((migration) => migration.scene === scene.id);
-  if (migrations.length) { segments.push({ kind: "macro", scene, index, place, start: clock, end: clock + MACRO, positions: { ...positions }, moves: [], hits: hitsSoFar[scene.place], migrations }); clock += MACRO; }
+  if (migrations.length) {
+    // The camera rises once the first of them is out of the old place's grid, and comes down on the new place as the last arrives at its edge.
+    const travels = migrations.map(travelOf), length = Math.max(MACRO, ...travels.map((travel) => travel.total + 0.6));
+    const glideFrom = Math.min(...travels.map((travel) => travel.exitEnd)), glideTo = Math.max(...travels.map((travel) => travel.mapEnd));
+    segments.push({ kind: "macro", scene, index, place, start: clock, end: clock + length, positions: { ...positions }, moves: [], hits: hitsSoFar[scene.place], migrations, travels, glide: { from: glideFrom, seconds: Math.max(1.5, glideTo - glideFrom) } });
+    clock += length;
+  }
   segments.push({ kind: "card", scene, index, place, start: clock, end: clock + CARD, positions: { ...positions }, moves: [], hits: hitsSoFar[scene.place] });
   clock += CARD;
   for (const [eventIndex, event] of scene.events.entries()) {
@@ -159,7 +182,7 @@ const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low <
 
 // The macro layout comes with the data (the place tree's production layout, in metres): a place's grid stands at its spot,
 // the centre of its own disc; its circle holds its children.
-const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label }]));
+const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale }]));
 
 // The 3D stage.
 const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -359,18 +382,26 @@ for (const [id, spot] of macroAt) {
   ring.rotation.x = -Math.PI / 2; ring.position.set(spot.cx, -0.3 - spot.depth * 0.05, spot.cz); world.add(ring);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x0a1e2b, transparent: true, opacity: 0.45, depthWrite: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.set(spot.cx, -0.5 - spot.depth * 0.05, spot.cz); world.add(disc);
-  const tag = label(spot.label, strand ? "#ffffff" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
+  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}` : spot.label, strand ? "#ffffff" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
 }
-const macroSegment = new Map(segments.filter((segment) => segment.kind === "macro").map((segment) => [segment.scene.id, segment]));
-const traces = data.migrations.flatMap((migration) => {
-  const a = macroAt.get(migration.from), b = macroAt.get(migration.to), segment = macroSegment.get(migration.scene);
-  if (!a || !b || !segment) return [];
-  const d = Math.hypot(b.x - a.x, b.z - a.z), points = [];
-  for (let n = 0; n <= 40; n++) { const t = n / 40; points.push(new THREE.Vector3(a.x + (b.x - a.x) * t, 4 + Math.sin(Math.PI * t) * (24 + d * 0.22), a.z + (b.z - a.z) * t)); }
-  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: data.people[migration.person].color, transparent: true, opacity: 0.35 }));
+/** Where a traveller is, so long into the move between places: on a leg in a place's grid, or on the map's curve. */
+function travelAt(travel, elapsed) {
+  const leg = (move, t) => { const entry = built.get(move.place), p = position(data.places[move.place], move, t); return new THREE.Vector3(p.x - entry.cx, p.y, p.z - entry.cz); };
+  if (travel.exit && elapsed < travel.exitEnd) return leg(travel.exit, elapsed);
+  if (elapsed < travel.mapEnd || !travel.entry) return travel.curve.getPointAt(Math.min(1, Math.max(0, (elapsed - travel.exitEnd) / (travel.mapEnd - travel.exitEnd)))).setY(0);
+  return leg(travel.entry, elapsed - travel.mapEnd);
+}
+// Each move between places as a trace on the ground, drawn as the person walks it: out, across the map, in.
+const traces = segments.filter((segment) => segment.kind === "macro").flatMap((segment) => segment.travels.map((travel) => {
+  const points = [], times = [];
+  const legPoints = (move, offset) => { const entry = built.get(move.place); move.path.forEach((node, k) => { const p = at(data.places[move.place], node); points.push(new THREE.Vector3(p.x - entry.cx, p.y + 0.35, p.z - entry.cz)); times.push(offset + move.time.steps[k]); }); };
+  if (travel.exit) legPoints(travel.exit, 0);
+  for (let n = 0; n <= 80; n++) { points.push(travel.curve.getPointAt(n / 80)); times.push(travel.exitEnd + (travel.mapEnd - travel.exitEnd) * n / 80); }
+  if (travel.entry) legPoints(travel.entry, travel.mapEnd);
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: data.people[travel.migration.person].color, transparent: true, opacity: 0.35 }));
   line.visible = false; world.add(line);
-  return [{ migration, line, points, segment }];
-});
+  return { migration: travel.migration, travel, line, times, segment };
+}));
 // Things the story puts in the place: gold holograms of the model Jev picked for each, fitted as large as fits the cast its
 // two boxes give (the exporter's fit: models keep their proportions, basic shapes stretch to fill, a donut may stand).
 const thingMaterial = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.28, depthWrite: false }), thingEdges = new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.9 });
@@ -430,10 +461,12 @@ const sphereLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.Ico
 const boxLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.95 })); boxLines.visible = false; world.add(boxLines);
 /** Where the camera rests on a place, and a glide to it: out over both places, across, and down, like a hand on the mouse. */
 const poseFor = (id) => { const spot = macroAt.get(id) ?? { x: 0, z: 0 }, place = data.places[id], span = Math.max(place.NX, place.NZ) * CELL; return { target: new THREE.Vector3(spot.x, 4, spot.z), position: new THREE.Vector3(spot.x + span * 0.45, span * 0.8, spot.z + span * 0.95) }; };
-function glideTo(id, seconds) {
-  const from = { target: controls.target.clone(), position: camera.position.clone() }, to = poseFor(id), d = from.target.distanceTo(to.target);
-  const midTarget = from.target.clone().lerp(to.target, 0.5), mid = { target: midTarget, position: midTarget.clone().add(new THREE.Vector3(d * 0.2, Math.max(140, d * 0.85), d * 0.55)) };
-  glide = { from, mid, to, start: time, seconds };
+function glideTo(id, seconds, start = time) { glide = { to: poseFor(id), start, seconds }; }
+/** The glide's way, from wherever the camera is when it starts: out over both places, across, and down. */
+function glideFrom(glide) {
+  const from = { target: controls.target.clone(), position: camera.position.clone() }, d = from.target.distanceTo(glide.to.target);
+  const midTarget = from.target.clone().lerp(glide.to.target, 0.5);
+  return { ...glide, from, mid: { target: midTarget, position: midTarget.clone().add(new THREE.Vector3(d * 0.2, Math.max(140, d * 0.85), d * 0.55)) } };
 }
 function showPaths(segment, entry) {
   for (const line of pathLines) world.remove(line.object);
@@ -466,12 +499,14 @@ function frame(now) {
   const segment = segmentAt(time), place = segment.place, elapsed = time - segment.start, entry = buildPlace(segment.scene.place);
   if (shownPlace !== segment.scene.place) {
     if (shownPlace === null) { const pose = poseFor(segment.scene.place); camera.position.copy(pose.position); controls.target.copy(pose.target); }
-    else glideTo(segment.scene.place, segment.kind === "macro" ? MACRO - 0.2 : 2.6);
+    else if (segment.kind === "macro") glideTo(segment.scene.place, segment.glide.seconds, segment.start + segment.glide.from);
+    else glideTo(segment.scene.place, 2.6);
     shownPlace = segment.scene.place;
   }
-  if (glide) {
+  if (glide && time >= glide.start) {
+    if (!glide.from) glide = glideFrom(glide);
     const u = (time - glide.start) / glide.seconds;
-    if (u < 0 || u >= 1) { if (u >= 1) { camera.position.copy(glide.to.position); controls.target.copy(glide.to.target); } glide = null; }
+    if (u >= 1) { camera.position.copy(glide.to.position); controls.target.copy(glide.to.target); glide = null; }
     else {
       const e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2, bend = (a, b, c) => a.clone().multiplyScalar((1 - e) ** 2).add(b.clone().multiplyScalar(2 * (1 - e) * e)).add(c.clone().multiplyScalar(e * e));
       camera.position.copy(bend(glide.from.position, glide.mid.position, glide.to.position)); controls.target.copy(bend(glide.from.target, glide.mid.target, glide.to.target));
@@ -519,7 +554,7 @@ function frame(now) {
 
   if (segment.index !== shownScene) {
     shownScene = segment.index;
-    $("crumb").textContent = place.path.join(" › ") + ` · ${place.kind} of ${place.lots.length} buildings`;
+    $("crumb").textContent = place.path.join(" › ") + ` · ${place.scale && place.scale !== place.kind ? `${place.scale}, built as a ` : ""}${place.kind} of ${place.lots.length} buildings`;
     $("scene").textContent = `Scene ${segment.index + 1} of ${data.scenes.length}` + (segment.scene.label ? ` · ${segment.scene.label}` : "");
     const status = { stays: "stays on", arrives: "arrives", enters: "enters" };
     $("people").replaceChildren(...Object.entries(segment.scene.from).map(([person, from]) => { const chip = document.createElement("span"); chip.style.setProperty("--c", data.people[person].color); chip.textContent = `${data.people[person].name} · ${status[from]}`; return chip; }));
@@ -532,7 +567,7 @@ function frame(now) {
   for (const trace of traces) {
     const current = trace.segment === segment, past = trace.segment.start < segment.start;
     trace.line.visible = current || past;
-    trace.line.geometry.setDrawRange(0, current ? Math.max(2, Math.floor(41 * Math.min(1, elapsed / (MACRO - 0.6)))) : 41);
+    trace.line.geometry.setDrawRange(0, current ? Math.max(2, trace.times.filter((at) => at <= elapsed).length) : trace.times.length);
     trace.line.material.opacity = current ? 0.95 : 0.3;
   }
   $("event").textContent = segment.kind === "macro" ? segment.migrations.map((m) => `${data.people[m.person].name}: ${label2(m.from)} → ${label2(m.to)}`).join("　") : segment.kind === "card" ? (segment.scene.label || segment.scene.events[0]?.text || "") : segment.event.text;
@@ -542,17 +577,17 @@ function frame(now) {
   const present = new Set(Object.keys(segment.scene.starts)), movers = [];
   for (const [id, { pawn, body }] of pawns) {
     const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
-    const trace = segment.kind === "macro" && traces.find((entry) => entry.segment === segment && entry.migration.person === id);
+    const travel = segment.kind === "macro" && segment.travels.find((entry) => entry.migration.person === id);
     const p = !present.has(id) ? null : move ? position(place, move, elapsed) : node == null ? null : at(place, node);
     if (!p) { if (pawn.parent) world.remove(pawn); continue; }
     if (!pawn.parent) world.add(pawn);
-    if (trace && elapsed < MACRO - 0.6) { pawn.position.copy(trace.points[Math.min(40, Math.floor(40 * elapsed / (MACRO - 0.6)))]); continue; }
+    if (travel && elapsed < travel.total) { pawn.position.copy(travelAt(travel, elapsed)); body.material.opacity = 1; movers.push(pawn.position); continue; }
     pawn.position.set(p.x - entry.cx, p.y, p.z - entry.cz);
     body.material.opacity = p.fade ?? 1;
     if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
   }
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
-  if (follow && movers.length && !glide) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
+  if (follow && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
   if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
 
@@ -566,11 +601,12 @@ const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const places = Object.values(data.places), moveCount = data.scenes.reduce((n, s) => n + s.events.reduce((m, e) => m + e.moves.length, 0), 0);
 $("how").innerHTML = [
   `<b>One strand of the timeline.</b> ${data.scenes.length} scenes in story order. People keep their place and heading from scene to scene along their own world line ("stays on"), or arrive from elsewhere.`,
-  `<b>Places from the place tree.</b> ${places.map((p) => `${esc(p.label)} (${p.kind}, ${p.lots.length} buildings)`).join(", ")}: its building children (named) take the widest lots, generated buildings fill the rest.`,
+  `<b>Places from the place tree.</b> ${places.map((p) => `${esc(p.label)} (${p.scale ? `${p.scale}, ` : ""}${p.kind}, ${p.lots.length} buildings)`).join(", ")}: its building children (named) take the widest lots, generated buildings fill the rest. How big each place is comes from Jev (region, city, district, street, building or room, from its name and its path in the tree): a building or a room is built as a site, a street as a street, anything larger as a district.`,
   `<b>Buildings as skeletons.</b> Only corridors (a cell is corridor with σ(h + a·axial + c·diagonal + v·above/below + f·facade), Gibbs-sampled), protected stair cores, and rooms as boxes that must open onto a corridor. Every floor is walkable; roofs are reached by the cores, crossed by jumps, left by falls.`,
   `<b>Percolation.</b> Clutter closes outdoor cells at 10%, never in front of a door, redrawn while it cuts a door off the avenue. Damage is a step down a building's percolation curve inside a box (the red outline: where Jev's box on the view would back-project): occupation drops by the event's strength, read from its embedding along the book's own destruction direction; stair cores are reinforced; whatever can no longer reach the ground floor glows red, and later scenes walk what is left (${data.notes.hits} hits here).`,
   `<b>Path integral.</b> Each of the ${moveCount} moves is one exact draw from all walks to its destination, weighted e^(−S/T): metres walked, climbs ×${data.lambda}, a turning cost κ=${data.kappa}, T=${data.T} (under the convergence bound). Faint lines are other draws.`,
-  `<b>Sky and the place tree.</b> Moves may launch along a rising cube diagonal of the 14 directions and fly under gravity, roof to roof or down to the street (a launch speed of 7, 10 or 13 m/s, no arc gaining height). A direct move (4 more directions, for people with powers) flies straight to its end; here it stands in where the event's wording shows its actor using a power to move (${data.notes.direct ?? 0} moves). Every place sits on its circle of the place tree; when people move between places the camera glides out, across and down to the next one, and a trace arcs between the circles.`,
+  `<b>Sky and the place tree.</b> Moves may launch along a rising cube diagonal of the 14 directions and fly under gravity, roof to roof or down to the street (a launch speed of 7, 10 or 13 m/s, no arc gaining height). A direct move (4 more directions, for people with powers) flies straight to its end; here it stands in where the event's wording shows its actor using a power to move (${data.notes.direct ?? 0} moves). Every place sits on its circle of the place tree, and places people travel between more sit closer.`,
+  `<b>Between places.</b> People walk: out of the old place along its own path integral, across the map along one draw of the map's path integral (metres, plus a cost for every place boundary crossed, more the more slanted the crossing: ${data.travel ? `μ=${data.travel.crossing.mu} m, ν=${data.travel.crossing.nu}` : "μ, ν"}), and into the new place to where the scene finds them. The camera rises once they are out and comes down as they arrive; their traces stay on the ground (${data.notes.travel?.routes ?? 0} routes, ${data.notes.travel?.metres ?? 0} m).`,
   `<b>Buildings wear artistic models.</b> Each lot draws one of the Kenney CC0 kit models for its kind (towers, skyscrapers, offices, a market, a hospital with its cross) at random, stretched over its skeleton.`,
   `<b>Things the story mentions.</b> Each scene's buildings and large visible things are detected from its events (novel stage objects: a work-model call per few scenes, only things big enough to see from a wide view) and matched against one ranking of building models and pure shapes. A named building takes a lot and lights up in gold when first mentioned. Other things are gold hologram shapes fitted to a box in 3D: Jev boxes the thing on the reader's view of the place, then on a view turned 90° about the place that shows the first box as a beam, and where the two boxes meet is its position, size and height (things not yet asked stand on the ground beside the event's first actor); mentions of one named thing are one thing (A.A.A. and Anti-Art Attachment, the 姬蜂 FIVE_Over), which glides to wherever a later event puts it. Big things carry structure inside that hits break away, and every thing is part of the walk: people land on and cross its top, and small ones on the ground are walked around.`,
   `<b>Stand-ins.</b> Where moves end comes from Jev's typed spot answers in the book's movement run; how hard a fight hits a building is read from the event summary's wording, standing in for a Jev damage question not yet asked.`,

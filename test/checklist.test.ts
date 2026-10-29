@@ -27,7 +27,7 @@ test("the checklist lists each faculty in dependency order with its next command
   const statusOf = async () => Object.fromEntries((await bookChecklist(directory)).items.map((item) => [item.id, item.status]));
   // Nothing applied yet: extraction is the gap; everything after it waits.
   assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", identities: "blocked", causality: "blocked", "time-place": "blocked", calendar: "blocked", "place-tree": "blocked", strands: "blocked", graph: "blocked" });
-  assert.deepEqual(Object.fromEntries((await bookChecklist(directory)).stage!.items.map((item) => [item.id, item.status])), { architecture: "blocked", movement: "blocked", stage: "blocked" });
+  assert.deepEqual(Object.fromEntries((await bookChecklist(directory)).stage!.items.map((item) => [item.id, item.status])), { scale: "blocked", architecture: "blocked", movement: "blocked", stage: "blocked" });
   await saveChangeSet(directory, packet("cs_b0001", "b0001", "approved"));
   await markCausalitySweepPending(directory);
   const after = await bookChecklist(directory);
@@ -67,13 +67,14 @@ test("read mode's stage is listed apart and never holds the analysis open: build
   const { directory } = await workspace(context);
   const checklist = await bookChecklist(directory);
   // `complete` and `next` are the analysis alone: the loop that works them never spends Jev on animation, and a universe never waits for it.
-  assert.ok(!checklist.items.some((item) => ["architecture", "movement", "stage"].includes(item.id)));
+  assert.ok(!checklist.items.some((item) => ["scale", "architecture", "movement", "stage"].includes(item.id)));
   assert.ok(!checklist.next.some((entry) => entry.includes("novel stage ")));
   const items = new Map(checklist.stage!.items.map((item) => [item.id, item]));
+  assert.deepEqual(items.get("scale")!.dependsOn, ["time-place", "place-tree"]);
   assert.deepEqual(items.get("architecture")!.dependsOn, ["time-place", "place-tree"]);
   assert.deepEqual(items.get("movement")!.dependsOn, ["blocks", "strands", "architecture"]);
   // The prep waits for every analysis step, causality and its reviews included, and both stage reports.
-  assert.deepEqual(new Set(items.get("stage")!.dependsOn), new Set([...checklist.items.map((item) => item.id), "architecture", "movement"]));
+  assert.deepEqual(new Set(items.get("stage")!.dependsOn), new Set([...checklist.items.map((item) => item.id), "scale", "architecture", "movement"]));
   assert.match(items.get("stage")!.note!, /Waits for .*causality/);
   assert.equal((await bookChecklist(directory, { stage: false })).stage, undefined, "left out on request (the universe checklist, the stage's own readiness checks)");
 });

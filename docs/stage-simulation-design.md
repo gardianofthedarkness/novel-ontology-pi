@@ -32,9 +32,10 @@ The **micro** view is a place's interior: its grid, its buildings and the people
   - **The layout is automatic, the production one** (`placeTreeCircles` in `timePlace.ts`; the places map fits the same layout to its canvas). Nothing is placed or sized by hand:
     - each place reserves a disc as wide as its own content: its grid on the stage, its own scenes on the map;
     - a region that is itself a place keeps that disc above its children, never on top of them;
-    - siblings pack together (places linked by moves sit closer), and a final settling pass guarantees no two circles at a level overlap.
-  - When people move between places, the camera zooms out, shifts across and settles on the next place, as a hand on the mouse would. The reader can orbit at any moment.
-  - A trace arcs between the circles for every move between places.
+    - siblings pack together, and a final settling pass guarantees no two circles at a level overlap;
+    - **the more people travel between two places, the closer they sit.** Trips are lifted to the level where the two are siblings (a trip between streets of two districts counts for the districts). A pair's gap is the level's gap / (1 + trips / 2), where pairs without trips keep the whole gap, and their link pulls with log(1 + trips). In book 2, 第七学区 and 第十五学区 (10 trips) end up about 50 m apart at the edge of 学园都市; in book 3, the two places with 4 trips each to 学园都市 sit 12 m from it, against 36 m between the two that share none.
+  - **People walk between places** (next section). The camera stays while they walk out, rises over the map as the first of them leaves the old place's grid, and comes down on the new place as they reach its edge. The reader can orbit at any moment.
+  - Each move between places leaves a trace on the ground: out, across, in.
   - For a destination in another place, Jev boxes it on a top-down capture of this macro view.
 - **Traces stay in the database.** The redesign moves the place system anyway, so each person's per-scene trace is kept as data: where they entered, moved and left, and every migration between places. The timeline page is notified of place migrations, so a person's move from one place to another shows there too.
 - **The loop between scales:**
@@ -54,6 +55,28 @@ Buildings are added as the story detects them, not fixed up front.
 - **The place-system redesign.**
   - An architecture is the smallest unit of place.
   - Jev types the groups above it (city, district, street, plaza) on the existing place-tree path.
+  - **Tested 2026-10-29: Jev, not a package.** 68 places of the toaru vols 1–4 snapshot, labelled by hand on a ladder of region, city, district, street, building and room. 66 were scored; 2 are not places on the ladder. Each method saw the name only, plus the tree for Jev:
+
+    | Method | Right | No answer |
+    |---|---|---|
+    | Jev (jev-1.14.0), one choice per place from its name and tree path | 64 / 66 | 0 |
+    | Suffix rules (通名, the name's generic part), tuned on these names | 54 / 66 | 11 |
+    | Suffix rules, a plain textbook list | 44 / 66 | 20 |
+    | BAAI/bge-small-zh-v1.5 (the books' embedding model), nearest class prototype | 43 / 66 | 0 |
+    | spaCy zh_core_web_sm NER: area (GPE, LOC) or site (FAC, ORG) only, not the ladder | 21 / 66 right side | 43 |
+
+    - Jev's two misses were also its two least confident answers: 伦敦市场 and 游艇停泊港 as districts, at 0.51 and 0.53. Every other answer was at 0.5 or above, with a median of 1.
+    - The suffix rules are nearly always right when they answer, but are silent on bare proper names (巴黎, 日本, 纽约).
+    - The NER knows real cities and countries but reads fictional names as numbers, people or dates (第七学区, Home_Ground_Hospital, 博览大道).
+    - Suffix rules first, then Jev for the rest, scored 63: no better than Jev alone.
+  - **Built: `novel stage scale <novel-dir>`** (`src/digger/stage/scale.ts`), a checklist step after the place tree. It writes `stage/scale.json` and works like the architecture step:
+    - one Jev choice per place in the tree, asked exactly as in the test: the name, other names, the path in the tree and the places inside it;
+    - kept per place and reused while those stay the same;
+    - without Jev, the textbook suffix list stands, and the place is asked again once Jev is available;
+    - answers under 0.6 confidence are listed as unsure.
+  - **Run with `JEV_MODEL=jev-1.14.0`,** the model it was tested with; the CLI's default is still 1.13.0.
+  - **Books 1–3:** 25 places, all by Jev. Unsure: 东京都 as a city (0.44) and 伦敦市场 as a district (0.51).
+  - **The stage builds a place by its scale:** a building or a room as a site (that building on the widest lot, wearing its architecture), a street as a street, a district, city or region as a district of buildings. The architecture pick and the name only stand in where there is no scale. The strand pages show each place's scale on the map and in the place line.
   - Jev may add an unnamed architecture under a group when a scene needs one.
   - Nothing becomes a free-standing entity outside the tree.
 
@@ -260,6 +283,26 @@ A building is its circulation only: corridors and stairs on 2 m cells and 3 m fl
 - T stays under the certified bound, 0.92 for 2 m steps at λ = 8 and κ = 1. The bound reproduces the research figure for 1 m steps.
 - The mode (the least-action path) is a diagnostic; the sample is what happens.
 
+## Between places: the map's path integral
+
+A move to another place is walked, not jumped, with the same path integral as inside a place, on three graphs joined at the edges of the two grids:
+
+1. **Across the map** (`macroPath.ts`): a lattice of ground nodes every 4 m over the place map, joined in 8 directions, with a turning cost.
+   - Each step costs its metres, plus μ (1 + ν (1 − |cos θ|)) for every place boundary it crosses, θ between the step and the boundary's normal where it crosses.
+   - Boundaries are every circle of the place tree, and the own disc of a region that is itself a place.
+   - μ = 24 m and ν = 3: a boundary crossed squarely costs as much as 24 m of walking, crossed along it four times that.
+   - So the least action is the shortest way that crosses the fewest boundaries and crosses each one squarely. A walk is one exact draw around it (`solveWalk`, `sampleWalk`) from where the person stands to the new place's grid, at T = 0.6 × the bound for 4 m steps (κ = 2).
+2. **Out of the old place:** its own graph, from where the person was last to the street cells on the grid's edge nearest where the map walk leaves the grid.
+3. **Into the new place:** its own graph, from the edge cell nearest where the map walk arrives to where the scene finds them.
+
+- **The curve:** the map walk's nodes between the two grids, each averaged with its neighbours within three steps, twice, ends kept. This smooths the lattice's stair-steps into the line they stand for.
+- **Timing:** the walks out and in run at twice an event's pace. The map leg takes about a second per 45 m (2.4 to 7 s).
+- **In the tests** (`test/macro-path.test.ts`): a place on the straight line between two others is walked around, not through; and entries are squarer with ν > 0 than without.
+- **In the books:**
+  - Book 2: 15 routes, 1,489 m, 49 boundaries crossed.
+  - Book 3: 12 routes, 1,604 m, 32 crossed.
+  - Every route reached its place: 2 to 4 crossings each, exactly the boundaries between the two places.
+
 ## Timeline: the per-fork environment
 
 - **People, not places, carry state.** Each person's state is handed along their own world line, so a scene holds only its own cast.
@@ -284,7 +327,7 @@ As of 2026-10-28, uncommitted on `claude/place-read-mode`.
 **Built for the animation:**
 - **Sky arcs:** up-diagonal launches at 7, 10 and 13 m/s, landing no higher than they started, priced by launch effort.
 - **Direct moves.**
-- **The 2D macro view** with migration traces.
+- **The 2D macro view,** walked between places along the map's path integral, with traces on the ground.
 
 **Still stand-ins:**
 - Destinations come from Jev's typed spot answers.

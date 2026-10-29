@@ -118,7 +118,11 @@ A **Read mode** link in the top bar opens the same page with `?read`.
 
 ### Where the data comes from
 
-Two Jev faculties and a last step, each a report under `<book>/stage/`. These are view inputs: no review packet, never canon. The steps are `novel stage architecture|movement|prep`, run on request in the order of the `stage` section of `novel checklist`. That section is never part of a book's `complete` or `next`, so the analysis loop never spends Jev on animation and a universe's atlas never waits for it. The stage reads reviewed canon only (a place awaiting review is not staged), and each paid step refuses while the analysis steps it builds on are unfinished, unless `--force`.
+Three Jev faculties and a last step, each a report under `<book>/stage/`. These are view inputs: no review packet, never canon. The steps are `novel stage scale|architecture|movement|prep`, run on request in the order of the `stage` section of `novel checklist`. That section is never part of a book's `complete` or `next`, so the analysis loop never spends Jev on animation and a universe's atlas never waits for it. The stage reads reviewed canon only (a place awaiting review is not staged), and each paid step refuses while the analysis steps it builds on are unfinished, unless `--force`.
+
+- **scale:** how big each place in the place tree is: region, city, district, street, building or room.
+  - One Jev choice per place, from its name, other names, its path in the tree and the places inside it. Tested against packages and embeddings in [stage-simulation-design.md](stage-simulation-design.md); Jev was right on 64 of 66 places.
+  - The stage builds a place by it: a building or a room as a site, a street as a street, anything larger as a district.
 
 - **architecture:** each place's building, a sub-kind of place.
   - Runs after story time and the place tree, beside strands and causality.

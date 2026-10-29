@@ -9,7 +9,7 @@ This note records where things stand and a checklist for making it a fully autom
 ## Where it stands: limitations
 
 1. **Tied to the analysis checklist.**
-   - `novel checklist` ends with three stage items: architecture, movement and the animation prep.
+   - `novel checklist` ends with four stage items: scale, architecture, movement and the animation prep.
    - `novel stage prep` refuses until every other step is reviewed.
    - The `novel-stage` skill works the analysis checklist first.
    - So the animation waits on, and is reported as part of, the analysis.
@@ -42,7 +42,7 @@ This note records where things stand and a checklist for making it a fully autom
    - `playground/strand-demo.html` gets its data inlined at export. It is not part of the app and does not read live data.
    - Its picker lists only what was exported.
    - Read mode (`?read`) and clips (`?clips`) still play the older `stage/plan.json`.
-8. **Pi cannot run all of it.** The Pi guard allows `novel stage show|architecture|movement|prep`; `objects` and `forks` are not on its list.
+8. **Pi cannot run all of it.** The Pi guard allows `novel stage show|scale|architecture|movement|prep`; `objects` and `forks` are not on its list.
 9. **Publishing is manual.**
    - github.io is a hand-made commit to `demo-live`, and claude.ai pages are hand-published.
    - Phones need three.js served beside the page; the CDN does not load on the user's phone.

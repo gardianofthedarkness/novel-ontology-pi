@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MockDecisionModel, type DecisionAnswer, type DecisionModel, type DecisionQuestion } from "../src/ground/connectors/jev.js";
 import { pickArchitecture, type ArchitecturePlace } from "../src/digger/stage/architecture.js";
+import { pickScales, scaleOfName, stageKindOf, SCALE_HINTS, type ScalePlace } from "../src/digger/stage/scale.js";
 import { askMovement, sceneCallLimit, type MovementScene } from "../src/digger/stage/movement.js";
 import { prepareStage } from "../src/digger/stage/prep.js";
 import { navGrid } from "../src/ground/stage/holoNav.js";
@@ -48,6 +49,27 @@ test("buildings: a place holding a city is a city all the way up the tree, whate
     const picks = (await pickArchitecture(places)).places;
     assert.deepEqual(Object.fromEntries(Object.entries(picks).map(([id, pick]) => [id, pick.kind])), { country: "city", city: "city", d7: "city" }, places.map((entry) => entry.id).join(","));
   }
+});
+
+test("scale: Jev picks region to room from the name and the tree; without Jev the name's generic part stands, and is asked again once Jev is there", async () => {
+  const places: ScalePlace[] = [{ id: "city", label: "学园都市", path: ["city"], contains: ["d7"] }, { id: "d7", label: "第七学区", path: ["city", "d7"], contains: ["street"] },
+    { id: "street", label: "购物美食大街", path: ["city", "d7", "street"] }, { id: "paris", label: "巴黎", path: ["paris"] }];
+  // The generic part of the name (通名), longest first; Latin words and brackets after a Chinese name do not count as its end.
+  assert.deepEqual(["第七学区", "购物美食大街", "保安室", "小馆Diner", "秘密住宅（Secret Residence）", "加利福尼亚州", "巴黎"].map(scaleOfName), ["district", "street", "room", "building", "building", "region", null]);
+  const plain = await pickScales(places);
+  assert.deepEqual(Object.values(plain.places).map((pick) => `${pick.scale}/${pick.by}`), ["city/name", "district/name", "street/name", "none/none"]);
+  const names = { city: "学园都市", d7: "第七学区", street: "购物美食大街", paris: "巴黎" };
+  const { model, asked } = recording((state) => (state.includes("巴黎") ? "city" : state.includes("购物美食大街.") ? "street" : state.includes("第七学区.") ? "district" : "city"));
+  const picked = await pickScales(places, { decisions: model, names, previous: plain });
+  assert.equal(asked.length, 4, "picks made from the name alone are asked again once Jev is there");
+  assert.deepEqual(asked[0].questions[0].options, Object.keys(SCALE_HINTS));
+  const street = asked.find((call) => call.state.startsWith("A place named in a novel: 购物美食大街"))!.state;
+  assert.ok(street.includes("学园都市 › 第七学区 › 购物美食大街"), "the place's path in the tree, by name");
+  assert.ok(asked.find((call) => call.state.startsWith("A place named in a novel: 学园都市"))!.state.includes("Places the novel puts inside it: 第七学区"));
+  assert.deepEqual([picked.places.paris.scale, picked.places.paris.by], ["city", "jev"]);
+  const again = recording(() => "none");
+  assert.deepEqual((await pickScales(places, { decisions: again.model, names, previous: picked })).usage, { calls: 0, reused: 4 });
+  assert.deepEqual(["room", "building", "street", "district", "city", "region", "none"].map((scale) => stageKindOf(scale as never)), ["site", "site", "street", "district", "district", "district", null]);
 });
 
 const scene: MovementScene = { id: "s1", placeId: "tower", placeLabel: "废弃大楼", kind: "skyscraper", opening: "白井走进废弃大楼。", cast: ["a", "b"],
