@@ -169,10 +169,12 @@ const jevShare = (data: StrandData) => {
 /**
  * `pace` (seconds): each moment held that long, so the live view of the world shows every event as it plays (a run to watch).
  * `force`: an operator's run on a book whose other steps are not all done (never Pi's: its guard does not allow it).
+ * `from` (with `--strand`): the line from that scene on, kept as a run of its own (`<line>_from_<scene>`), not the line's.
  */
-export async function simRun(novelDir: string, options: { strand?: string; auto?: number; accept?: boolean; pace?: number; force?: boolean } = {}): Promise<Record<string, unknown>> {
+export async function simRun(novelDir: string, options: { strand?: string; auto?: number; accept?: boolean; pace?: number; force?: boolean; from?: string } = {}): Promise<Record<string, unknown>> {
   if (!options.force) await requireStage(novelDir);
-  const chosen = await chooseLines(novelDir, options);
+  if (options.from && !options.strand) throw new Error("--from needs --strand: the line it starts on.");
+  const chosen = (await chooseLines(novelDir, options)).map((line) => (options.from ? { ...line, strand: { ...line.strand, id: `${line.strand.id}_from_${options.from.replace(/[^A-Za-z0-9_-]/g, "_")}`, from: options.from } } : line));
   const sim = await engine(), inputs = await sim.simulationInputs(novelDir), runs = [];
   const live = await (await pickers()).createLive(novelDir, { command: "run", lines: chosen.map((line) => ({ id: line.strand.id, title: line.title })) });
   try {
@@ -218,4 +220,4 @@ export async function simCurrent(novelDir: string): Promise<{ current: boolean; 
   return { current: status.lines.length > 0 && status.lines.every((line) => line.playable && (line.current || line.newerCurrent)), lines: status.lines.length };
 }
 
-export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id>] [--accept] [--pace seconds] [--force] | novel sim show <novel-dir>";
+export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id> [--from <scene-id>]] [--accept] [--pace seconds] [--force] | novel sim show <novel-dir>";

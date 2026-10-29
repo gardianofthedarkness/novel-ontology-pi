@@ -545,7 +545,7 @@ async function main(): Promise<void> {
   if (cmd === "sim") {
     const novelDir = positional[2];
     if (!["strands", "pick", "run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${SIM_USAGE}`);
-    const valued = sub === "run" ? ["--auto", "--strand", "--pace"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : [], switches = sub === "run" ? ["--accept", "--force"] : [];
+    const valued = sub === "run" ? ["--auto", "--strand", "--pace", "--from"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : [], switches = sub === "run" ? ["--accept", "--force"] : [];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];
@@ -560,7 +560,7 @@ async function main(): Promise<void> {
     const pace = flag(positional, "--pace");
     if (pace !== undefined && (!/^\d+(\.\d+)?$/.test(pace) || Number(pace) > 30)) throw new Error("--pace must be seconds per moment, from 0 to 30.");
     const lines = { auto: auto === undefined ? undefined : Number(auto), strand: flag(positional, "--strand") };
-    out(await (sub === "strands" ? simStrands(novelDir) : sub === "show" ? simShow(novelDir) : sub === "pick" ? simPick(novelDir, { ...lines, maxCalls: maxCalls === undefined ? undefined : Number(maxCalls) }) : simRun(novelDir, { ...lines, accept: positional.includes("--accept"), force: positional.includes("--force"), pace: pace === undefined ? undefined : Number(pace) })), pretty);
+    out(await (sub === "strands" ? simStrands(novelDir) : sub === "show" ? simShow(novelDir) : sub === "pick" ? simPick(novelDir, { ...lines, maxCalls: maxCalls === undefined ? undefined : Number(maxCalls) }) : simRun(novelDir, { ...lines, from: flag(positional, "--from"), accept: positional.includes("--accept"), force: positional.includes("--force"), pace: pace === undefined ? undefined : Number(pace) })), pretty);
     return;
   }
 
