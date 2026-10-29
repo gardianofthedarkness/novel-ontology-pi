@@ -7,15 +7,19 @@
  * then for every placement, a box question (Jev 1.14: one bounding box as fractions of the picture) and a yes/no on
  * whether the spot is in the picture at all, on
  *   1. the place at that moment from the reader's camera;
- *   2. the same moment from the side: turned 90° (left or right, drawn from the placement) and lowered to a near-level
- *      look, aimed at the first box drawn into it as a beam (everything that box could mean in 3D). From the side the
- *      beam's run and the thing's height read directly.
- * The points of the place both pictures show inside their boxes are the cast: its position, size and height. The
- * exporter fits the picked model into it, as large as fits.
+ *   2. the same moment from the side, lowered to a near-level look and aimed at the first box drawn in as a beam
+ *      (everything that box could mean in 3D), at six turns (±45°, ±90°, ±135°) in one call: Jev's box and confidence
+ *      for each, so the turn it is surest of is kept (one whose box pins a stretch of the beam first);
+ *   3. only when the best turn is still unsure (confidence under --low, or its box spans the beam): the same moment from
+ *      above, aimed at the beam, whose box pins the footprint even for a thing in the air.
+ * The points of the place all the kept pictures show inside their boxes are the cast: its position, size and height.
+ * The exporter fits the picked model into it, as large as fits. The report keeps every turn's confidence, so how sure Jev
+ * is by turn can be compared over the same scenes (printed at the end).
  *
- *   node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh] [--resolve] [--model jev-1.14.0]
+ *   node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh] [--resweep] [--resolve] [--low 0.5] [--model jev-1.14.0]
  *
- * --resolve re-renders the two views of answers already given and solves them again, with no Jev calls.
+ * --resweep keeps the models and the reader's-view boxes and asks the side and top views again; --resolve re-renders the
+ * views of answers already given and solves them again, with no Jev calls.
  *
  * The page is the strand exporter's single-strand output with --vendor; <dir> holds its three.js files. Writes
  * <novel-dir>/stage/thing-boxes.json (read by the exporter) and, under --out, each still Jev saw and a check still per
@@ -84,6 +88,16 @@ async function pickModel(jev, sheet, keys, thing, text) {
   return { id: answer.value, kind: SHAPES.includes(answer.value) ? 'shape' : 'model', confidence: answer.confidence ?? null, top };
 }
 
+/** The side view's turns, in degrees from the reader's view, each a picture named for its turn. */
+const TURNS = [-135, -90, -45, 45, 90, 135], picture = turn => `side_${turn < 0 ? 'm' : 'p'}${Math.abs(turn)}`;
+
+/** One Jev call on several stills of one moment: a box and its confidence on each. */
+async function askMany(jev, state, stills, name) {
+  const answers = await jev.decide(state, stills.map(({ turn }) => ({ key: picture(turn), primitive: 'box', instructions: `${name} in picture "${picture(turn)}": the space it takes up where this event puts it, its whole extent at its size.` })), { images: Object.fromEntries(stills.map(({ turn, still }) => [picture(turn), still])) });
+  const pct = value => Math.round(value * 100);
+  return stills.map(({ turn }, n) => ({ turn, box: answers[n].box, confidence: answers[n].confidence ?? 0, label: `x ${pct(answers[n].box.left)}–${pct(answers[n].box.right)}%, y ${pct(answers[n].box.top)}–${pct(answers[n].box.bottom)}%` }));
+}
+
 /** One Jev call on one still: where the thing is (a box) and whether its spot is in the picture at all. */
 async function ask(jev, state, still, name) {
   const [where, seen] = await jev.decide(state, [
@@ -95,7 +109,7 @@ async function ask(jev, state, still, name) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, resolve: { type: 'boolean' }, model: { type: 'string', default: 'jev-1.14.0' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, resweep: { type: 'boolean' }, resolve: { type: 'boolean' }, low: { type: 'string', default: '0.5' }, model: { type: 'string', default: 'jev-1.14.0' } } });
   const [page, novelDir] = positionals.map(path => resolve(path));
   if (!page || !novelDir || !values.vendor) throw new Error('Usage: node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh]');
   const load = path => import(pathToFileURL(`${repository}/${path}`));
@@ -129,42 +143,66 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const place = stage.places[spot.place], text = stage.scenes.find(scene => scene.id === spot.scene)?.events[spot.event] ?? '';
       const inputs = createHash('sha256').update(JSON.stringify([key, spot.place, text, thing.size, thing.airborne])).digest('hex').slice(0, 16);
       const earlier = placements[key]?.inputs === inputs ? placements[key] : null;
-      if (earlier && !values.resolve) { reused++; continue; }
+      if (earlier && !values.resolve && !values.resweep) { reused++; continue; }
       if (earlier) reused++; else asked++;
-      // Left or right, drawn from the placement, so a re-run turns the same way.
-      const yaw = (parseInt(inputs.slice(0, 2), 16) % 2 ? 1 : -1) * Math.PI / 2, base = { scene: spot.scene, event: spot.event, place: spot.place, hide: [thing.id] };
+      const base = { scene: spot.scene, event: spot.event, place: spot.place, hide: [thing.id] }, keep = earlier && (values.resolve || values.resweep);
       const about = [
         `A still of a 3D model of a place in a novel, used to place one thing the story mentions.`,
         `Place: ${place.path.join(' › ')} (${place.kind} of ${place.lots} buildings). Blue lattices are the buildings' corridors and orange their stairs; gold shapes are things already there; small labelled dots are people.`,
         `Event: ${text}`,
         `Thing: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}${models[thing.name] ? `, drawn as ${hint(models[thing.name].id)}` : ''}.`,
       ];
+      // Call 1: the reader's view.
       await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: `${key}#1` })})`);
       const first = await chrome.still();
-      const one = earlier ? earlier.views[0] : await ask(jev, [...about, `Picture "view": the place as the reader sees it at this moment.`].join('\n'), first, thing.name);
-      if (!earlier) calls++;
-      await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: `${key}#2`, yaw, elevation: 12, aim: { camera: `${key}#1`, box: one.box }, beams: [{ camera: `${key}#1`, box: one.box }] })})`);
-      const second = await chrome.still();
-      const two = earlier ? earlier.views[1] : await ask(jev, [...about, `Picture "view": the same moment seen from the side, turned 90° and from low down. The orange beam is everything a box drawn on the reader's view could mean in 3D; ${thing.name} lies inside the beam.`].join('\n'), second, thing.name);
-      if (!earlier) calls++;
-      const solved = await chrome.evaluate(`window.__stage.solve(${JSON.stringify({ place: spot.place, views: [{ camera: `${key}#1`, box: one.box }, { camera: `${key}#2`, box: two.box }] })})`);
+      const one = keep ? earlier.views[0] : await ask(jev, [...about, `Picture "view": the place as the reader sees it at this moment.`].join('\n'), first, thing.name);
+      if (!keep) calls++;
+      const view1 = { camera: `${key}#1`, box: one.box }, solve = views => chrome.evaluate(`window.__stage.solve(${JSON.stringify({ place: spot.place, views })})`);
+      // Call 2: the side view at every turn, in one call; each turn solved with view 1.
+      const sides = [];
+      for (const turn of TURNS) {
+        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: `${key}#${turn}`, yaw: turn * Math.PI / 180, elevation: 12, aim: view1, beams: [view1] })})`);
+        sides.push({ turn, still: await chrome.still() });
+      }
+      const swept = values.resolve && earlier?.sweep ? earlier.sweep : await askMany(jev, [...about, `Pictures ${TURNS.map(picture).join(', ')}: the same moment seen from the side and from low down, turned by the angle in each name (m: left, p: right, in degrees) from the reader's view. The orange beam is everything a box drawn on the reader's view could mean in 3D; ${thing.name} lies inside the beam.`].join('\n'), sides, thing.name);
+      if (!(values.resolve && earlier?.sweep)) calls++;
+      for (const side of swept) { const solved = await solve([view1, { camera: `${key}#${side.turn}`, box: side.box }]); side.cover = solved?.cover ?? null; side.uncertain = solved?.uncertain ?? true; }
+      // The turn Jev is surest of, among those whose box pins a stretch of the beam (else among all).
+      const pinned = swept.filter(side => !side.uncertain), best = (pinned.length ? pinned : swept).reduce((a, b) => (b.confidence > a.confidence ? b : a));
+      const side = { camera: `${key}#${best.turn}`, box: best.box };
+      // Call 3, only when still unsure: the view from above, aimed at the beam.
+      let top = null;
+      if (best.confidence < Number(values.low) || best.uncertain) {
+        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: `${key}#top`, elevation: 84, aim: view1, beams: [view1] })})`);
+        const above = await chrome.still();
+        top = values.resolve && earlier?.top ? earlier.top : await ask(jev, [...about, `Picture "view": the same moment seen from above. The orange beam is everything a box drawn on the reader's view could mean in 3D; ${thing.name} lies inside the beam.`].join('\n'), above, thing.name);
+        if (!(values.resolve && earlier?.top)) calls++;
+        if (out) await writeFile(join(out, `${String(n + 1).padStart(2, '0')}-${thing.id}-top.png`), Buffer.from(above, 'base64'));
+      }
+      const solved = await solve([view1, side, ...(top ? [{ camera: `${key}#top`, box: top.box }] : [])]);
+      // Carving from every still at once (view 1, all six turns, the top view), each box weighted by Jev's confidence.
+      const carved = await chrome.evaluate(`window.__stage.carve(${JSON.stringify({ place: spot.place, views: [view1, ...swept.map(entry => ({ camera: `${key}#${entry.turn}`, box: entry.box, confidence: entry.confidence })), ...(top ? [{ camera: `${key}#top`, box: top.box, confidence: top.confidence }] : [])] })})`);
       const round = value => Math.round(value * 10) / 10, box = solved && { x: solved.x.map(round), y: solved.y.map(round), z: solved.z.map(round) };
       if (!box) failed++;
-      placements[key] = { inputs, thing: thing.name, place: spot.place, views: [{ ...one, yaw: 0 }, { ...two, yaw: Math.round(yaw * 180 / Math.PI) }], box, hull: solved?.hull, cover: solved?.cover, uncertain: solved?.uncertain ?? null, points: solved?.points ?? 0 };
+      placements[key] = { inputs, thing: thing.name, place: spot.place, views: [{ ...one, yaw: 0 }, { ...best, yaw: best.turn }], sweep: swept, top, box, carved: carved && { x: carved.x.map(round), y: carved.y.map(round), z: carved.z.map(round) }, hull: solved?.hull, cover: solved?.cover, uncertain: solved?.uncertain ?? null, points: solved?.points ?? 0 };
       if (out) {
         const slug = `${String(n + 1).padStart(2, '0')}-${thing.id}`;
         await writeFile(join(out, `${slug}-1.png`), Buffer.from(first, 'base64'));
-        await writeFile(join(out, `${slug}-2.png`), Buffer.from(second, 'base64'));
-        // Check stills: each view with its own box (cyan), and the solved 3D box (green).
+        for (const { turn, still } of sides) await writeFile(join(out, `${slug}-side${turn}.png`), Buffer.from(still, 'base64'));
+        // Check stills: the reader's view and the kept side view, each with its box (cyan) and the solved 3D box (green).
         await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: 'check-1', boxes: [{ box: one.box, color: '#7ce6ff' }], solved: box })})`);
         await writeFile(join(out, `${slug}-check-1.png`), Buffer.from(await chrome.still(), 'base64'));
-        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: 'check-2', yaw, elevation: 12, aim: { camera: `${key}#1`, box: one.box }, beams: [{ camera: `${key}#1`, box: one.box }], boxes: [{ box: two.box, color: '#7ce6ff' }], solved: box })})`);
+        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: 'check-2', yaw: best.turn * Math.PI / 180, elevation: 12, aim: view1, beams: [view1], boxes: [{ box: best.box, color: '#7ce6ff' }], solved: box })})`);
         await writeFile(join(out, `${slug}-check-2.png`), Buffer.from(await chrome.still(), 'base64'));
       }
       const size = box ? `${round(box.x[1] - box.x[0])}×${round(box.z[1] - box.z[0])}×${round(box.y[1] - box.y[0])} m at y ${box.y[0]}–${box.y[1]}` : 'no overlap';
-      console.error(`${thing.name} (${thing.size} m${thing.airborne ? ', in the air' : ''}) @ ${spot.scene}#${spot.event}: view 1 ${one.label} (spot in view ${one.seen}), view 2 ${two.label} covering ${Math.round((solved?.cover ?? 0) * 100)}% of the beam → ${size}${solved?.uncertain ? ', depth uncertain' : ''}`);
+      const turns = swept.map(entry => `${entry.turn > 0 ? '+' : ''}${entry.turn}° ${entry.confidence.toFixed(2)}${entry.uncertain ? '~' : ''}`).join(' ');
+      console.error(`${thing.name} @ ${spot.scene}#${spot.event}: turns ${turns} → kept ${best.turn}°${top ? `, top view ${top.confidence?.toFixed(2)}` : ''} → ${size}${solved?.uncertain ? ', depth uncertain' : ''}; carved from all → ${carved ? `${round(carved.x[1] - carved.x[0])}×${round(carved.z[1] - carved.z[0])}×${round(carved.y[1] - carved.y[0])} m at y ${round(carved.y[0])}–${round(carved.y[1])}` : 'nothing'}`);
     }
   } finally { await chrome.close(); server.close(); }
-  await writeFile(report, JSON.stringify({ version: 1, model: jev.modelId, askedAt: new Date().toISOString(), models, placements }, null, 1), { mode: 0o644 });
+  // How sure Jev is by turn, over the same scenes: mean box confidence, how often its box spans the beam, how often it was kept.
+  const byTurn = Object.fromEntries(TURNS.map(turn => { const entries = Object.values(placements).map(entry => entry.sweep?.find(side => side.turn === turn)).filter(Boolean); return [turn, { confidence: Math.round(entries.reduce((sum, side) => sum + side.confidence, 0) / Math.max(1, entries.length) * 100) / 100, spans: entries.filter(side => side.uncertain).length, kept: Object.values(placements).filter(entry => entry.views?.[1]?.turn === turn).length, of: entries.length }]; }));
+  console.error(`by turn (mean confidence, boxes spanning the beam, kept): ${Object.entries(byTurn).map(([turn, row]) => `${turn > 0 ? '+' : ''}${turn}° ${row.confidence} ${row.spans}/${row.of} ${row.kept}`).join(' | ')}; top views asked: ${Object.values(placements).filter(entry => entry.top).length}`);
+  await writeFile(report, JSON.stringify({ version: 1, model: jev.modelId, askedAt: new Date().toISOString(), byTurn, models, placements }, null, 1), { mode: 0o644 });
   console.log(JSON.stringify({ report, placements: Object.keys(placements).length, asked, reused, failed, calls, seconds: (Date.now() - started) / 1000 }));
 }

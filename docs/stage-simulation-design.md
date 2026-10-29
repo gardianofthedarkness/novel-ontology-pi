@@ -88,6 +88,12 @@ Buildings are added as the story detects them, not fixed up front.
      - The scaffolding, the helicopter in the air, the long pipe, the lab, and the small room up in a building are plausible.
      - Things with nothing to fix them along the beam (in the air, or generic "building" mentions) get a whole-beam second box.
      - One box landed on a person's name label.
+   - **Rotation sweep and a fourth call** (user question, 2026-10-29): the side view at six turns in one call (±45°, ±90°, ±135°, one box question per picture), keeping the turn Jev is surest of; when that is still under 0.5 or spans the beam, a top view aimed at the beam (a fourth call) joins the solve.
+     - **Measured on the same 10 scenes:** mean box confidence by turn was −45° 0.21, +45° 0.17, −90° 0.17, −135° 0.16, +90° 0.14, +135° 0.11. No turn stands out.
+     - ±90° spanned the beam least (5 and 7 of 10), as the geometry predicts. Every placement stayed under 0.5, so all 10 asked the top view (confidence 0.09–0.57).
+     - The top view removed the 40–70 m casts: footprints are now 8–34 m. But it brought the helicopter to the ground (from above, nothing shows height), and the torii's three boxes did not meet.
+     - Carving from all eight stills at once, weighted by confidence, was worse (30–57 m casts) and is kept only as a measurement.
+     - Cost: 2 calls per placement plus the model pick, about 6 s per placement.
 6. **Placement rules:**
    - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
    - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.

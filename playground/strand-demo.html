@@ -566,10 +566,30 @@ if (capture) {
       return { entries: entries.length };
     },
     /**
+     * Carving from many stills at once: a point of the place counts when the first still's box holds it and stills
+     * holding at least half the others' confidence agree (each box weighted by Jev's confidence in it). The cast is the
+     * extent of the points that count; it stands on the ground when they reach it.
+     */
+    carve({ place, views, step = 1 }) {
+      const entry = built.get(place), b = bounds(place), checks = views.map((view) => ({ cam: cameras.get(view.camera), rect: ndc(view.box), weight: Math.max(0.01, view.confidence ?? 1) })), p = new THREE.Vector3(), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+      const inside = ({ cam, rect }) => { const q = p.clone().project(cam); return q.z > -1 && q.z < 1 && q.x >= rect.x[0] && q.x <= rect.x[1] && q.y >= rect.y[0] && q.y <= rect.y[1]; };
+      const [first, ...others] = checks, total = others.reduce((sum, view) => sum + view.weight, 0);
+      let points = 0;
+      for (let x = b.x[0]; x <= b.x[1]; x += step) for (let z = b.z[0]; z <= b.z[1]; z += step) for (let y = b.y[0]; y <= b.y[1]; y += step) {
+        p.set(x - entry.cx, y, z - entry.cz);
+        if (!inside(first) || others.reduce((sum, view) => sum + (inside(view) ? view.weight : 0), 0) < total / 2) continue;
+        points++; [x, y, z].forEach((value, axis) => { lo[axis] = Math.min(lo[axis], value); hi[axis] = Math.max(hi[axis], value); });
+      }
+      if (!points) return null;
+      const y0 = lo[1] <= 1.5 ? 0 : lo[1];
+      return { points, x: [lo[0], hi[0] + step], y: [y0, hi[1] + step], z: [lo[2], hi[2] + step] };
+    },
+    /**
      * Where two stills' boxes agree, in the place's metres. The points of the place both show inside their boxes give the
      * hull and its centre; the thing's own size is each box measured at that depth: view 1's width across it, view 2's
      * (a low side look) width along view 1's line of sight and its height, less the little of the top a low look sees.
-     * When view 2's box spans most of the beam, depth along the beam is uncertain and taken as about the width.
+     * When view 2's box spans most of the beam, depth along the beam is uncertain and taken as about the width. A third
+     * still from above pins the footprint: the hull of all three is then the cast's footprint, and nothing is uncertain.
      */
     solve({ place, views, step = 1 }) {
       const entry = built.get(place), b = bounds(place), checks = views.map((view) => ({ cam: cameras.get(view.camera), rect: ndc(view.box) })), p = new THREE.Vector3(), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity], sum = [0, 0, 0];
@@ -587,9 +607,9 @@ if (capture) {
       const [one, two] = measured;
       // How much of the beam view 2's box covers: the beam's run through the place, projected into view 2.
       const run = reach(place, views[0]), cover = (() => { const [a, c] = [run.from.clone().project(checks[1].cam), run.to.clone().project(checks[1].cam)], span = Math.max(1e-6, Math.abs(a.x - c.x)); return Math.min(1, (checks[1].rect.x[1] - checks[1].rect.x[0]) / span); })();
-      const uncertain = cover > 0.8, deep = uncertain ? one.across : two.across;
+      const above = checks.length > 2, uncertain = !above && cover > 0.8, deep = uncertain ? one.across : two.across;
       const height = Math.max(1, (two.up - one.across * Math.sin(two.down)) / Math.cos(two.down));
-      const ex = Math.min(hi[0] + step - lo[0], Math.abs(one.right.x) * one.across + Math.abs(two.right.x) * deep), ez = Math.min(hi[2] + step - lo[2], Math.abs(one.right.z) * one.across + Math.abs(two.right.z) * deep);
+      const ex = above ? hi[0] + step - lo[0] : Math.min(hi[0] + step - lo[0], Math.abs(one.right.x) * one.across + Math.abs(two.right.x) * deep), ez = above ? hi[2] + step - lo[2] : Math.min(hi[2] + step - lo[2], Math.abs(one.right.z) * one.across + Math.abs(two.right.z) * deep);
       const grounded = lo[1] <= 1.5, y0 = grounded ? 0 : Math.max(lo[1], centre[1] - height / 2);
       return { points, cover: Math.round(cover * 100) / 100, uncertain, hull: { x: [lo[0], hi[0] + step], y: [lo[1], hi[1] + step], z: [lo[2], hi[2] + step] }, x: [centre[0] - ex / 2, centre[0] + ex / 2], y: [y0, y0 + height], z: [centre[2] - ez / 2, centre[2] + ez / 2] };
     },
