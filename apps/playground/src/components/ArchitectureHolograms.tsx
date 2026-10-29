@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DoubleSide, EdgesGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, IcosahedronGeometry, LineBasicMaterial, LineLoop, LineSegments, Mesh, MeshBasicMaterial, Shape as Outline, SphereGeometry } from "three";
+import { AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, DoubleSide, EdgesGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, IcosahedronGeometry, InstancedMesh, LineBasicMaterial, LineLoop, LineSegments, type Material, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Shape as Outline, Quaternion, SphereGeometry, Vector3 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { FloorMark } from "../data/orbitalTimePlace";
 import type { ArchitectureKind } from "../data/placeArchitecture";
 import type { NavBox } from "../data/holoNav";
+import type { SimulatedLot, SimulatedPlace } from "../data/placeBuildings";
 
 /**
  * Orbital Places: a hologram of the building a place's name names, standing
@@ -23,8 +24,8 @@ const noRaycast = () => undefined;
 const EDGE = "#8fd6ff", PROPOSED = "#ffd36b", FILL = "#2b86c4";
 /** Buildings the story names at a place: warm, so they read apart from the generic skyline. */
 const NAMED_EDGE = "#ffe7b0", NAMED_FILL = "#b97f2c";
-/** A simulated place (the stage simulation records): Jev's placed things in lavender, damage and impacts in red. */
-const THING_EDGE = "#d9c8ff", DAMAGE = "#ff5a6e";
+/** A simulated place (the stage simulation records), in the strand page's colours: Jev's placed things in gold, damage and impacts in red. */
+const THING_EDGE = "#ffd36e", THING_FILL = "#ffd36e", DAMAGE = "#ff4d5e";
 /** World units above the floor where the lowest scene sphere floats; buildings stay under it. */
 const CEILING = 215;
 const RISE_SECONDS = 1.6, SCAN_SECONDS = 7;
@@ -278,89 +279,184 @@ function NamedBuildings({ mark, shapes, reducedMotion }: { mark: FloorMark; shap
 }
 
 /**
- * A place as the stage simulation recorded it (docs/stage-simulation-records.md), as of the chosen
- * moment: each lot at its footprint and floors on the place's 2 m grid (a district's at the back of
- * its disc, clear of the places inside), warm where the story names it, turning red as the hits so
- * far take its cells; Jev's placed things where they last stood; each impact a red sphere. What
- * comes later stands faint. Read from the records, never recomputed here.
+ * A building's insides as the strand page draws them (playground/strand-demo.html): corridor slabs,
+ * stair cores and rooms floor by floor; once a hit reaches it, its walls and roof unit by unit, what is
+ * cut off from the ground in red, and what fell as rubble.
+ */
+const CELL = 2, STOREY = 3;
+const SKELETON = {
+  corridor: { color: "#7ce6ff", emissive: "#0b3a48", opacity: 0.85, see: false },
+  stair: { color: "#ffb547", emissive: "#4a2a00", opacity: 0.8, see: false },
+  room: { color: "#3d6a8a", opacity: 0.18, see: true },
+  wall: { color: "#5fb4e8", opacity: 0.2, see: true },
+  roof: { color: "#5fb4e8", opacity: 0.3, see: true },
+  rubble: { color: "#9aa7b2", opacity: 0.85, see: false },
+  cut: { color: "#ff4d5e", opacity: 0.9, see: false, flat: true },
+  roomCut: { color: "#ff4d5e", opacity: 0.32, see: true, flat: true },
+  tile: { color: "#112532", opacity: 0.85, see: true, flat: true },
+} as const;
+type Part = keyof typeof SKELETON;
+const unitBox = new BoxGeometry(1, 1, 1);
+/** Boxes [x, y, z, w, h, d] as one instanced mesh. */
+function instanced(material: Material, boxes: number[][]) {
+  const mesh = new InstancedMesh(unitBox, material, Math.max(1, boxes.length)), matrix = new Matrix4(), position = new Vector3(), size = new Vector3(), still = new Quaternion();
+  boxes.forEach(([x, y, z, w, h, d], index) => mesh.setMatrixAt(index, matrix.compose(position.set(x, y, z), still, size.set(w, h, d))));
+  mesh.count = boxes.length;
+  mesh.frustumCulled = false;
+  mesh.raycast = noRaycast;
+  return mesh;
+}
+/** A structural unit's box in the place's metres (structure.ts): a corridor slab, a stair, a wall on the outer face, a roof slab. */
+function unitBoxOf(lot: SimulatedLot, [kind, i, j, k]: number[]): number[] {
+  const x = (lot.i0 + i + 0.5) * CELL, z = (lot.j0 + j + 0.5) * CELL;
+  if (kind === 4) return [x, lot.floors * STOREY + 0.12, z, CELL * 0.96, 0.24, CELL * 0.96];
+  if (kind === 2) return [x, k * STOREY + STOREY / 2, z, 1.4, STOREY * 0.96, 1.4];
+  if (kind === 1) return [x, k * STOREY + 0.15, z, CELL * 0.9, 0.3, CELL * 0.9];
+  const y = k * STOREY + STOREY / 2, side = i === 0 ? [-1, 0] : i === lot.nx - 1 ? [1, 0] : j === 0 ? [0, -1] : [0, 1];
+  return side[0] ? [x + side[0] * (CELL / 2 - 0.12), y, z, 0.24, STOREY * 0.94, CELL * 0.96] : [x, y, z + side[1] * (CELL / 2 - 0.12), CELL * 0.96, STOREY * 0.94, 0.24];
+}
+/** Every lot's insides as of the moment, in the place's metres, by part. */
+function skeletonBoxes(place: SimulatedPlace): Record<Part, number[][]> {
+  const boxes = Object.fromEntries(Object.keys(SKELETON).map((part) => [part, [] as number[][]])) as Record<Part, number[][]>;
+  for (let cell = 0; cell < place.grid.nx * place.grid.nz; cell++) boxes.tile.push([(cell % place.grid.nx + 0.5) * CELL, -0.05, (Math.floor(cell / place.grid.nx) + 0.5) * CELL, CELL * 0.98, 0.1, CELL * 0.98]);
+  for (const lot of place.lots) {
+    const lost = new Set(lot.lost), cut = new Set(lot.cutOff), cutRooms = new Set(lot.cutRooms), gone = new Set(lot.gone);
+    if (lot.struck) {
+      for (let k = 0; k < lot.floors; k++) for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if ((i === 0 || j === 0 || i === lot.nx - 1 || j === lot.nz - 1) && !gone.has(`3|${i}|${j}|${k}`)) boxes.wall.push(unitBoxOf(lot, [3, i, j, k]));
+      for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if (!gone.has(`4|${i}|${j}|${lot.floors}`)) boxes.roof.push(unitBoxOf(lot, [4, i, j, lot.floors]));
+      for (const unit of lot.rubble) { const box = unitBoxOf(lot, unit); boxes.rubble.push([box[0], (unit[4] ?? 0) + 0.3, box[2], Math.min(box[3], CELL * 0.9), 0.6, Math.min(box[5], CELL * 0.9)]); }
+    }
+    for (let cell = 0; cell < lot.skeleton.length; cell++) {
+      const type = lot.skeleton[cell];
+      if (type === "0" || lost.has(cell)) continue;
+      const i = cell % lot.nx, j = Math.floor(cell / lot.nx) % lot.nz, k = Math.floor(cell / (lot.nx * lot.nz)), x = (lot.i0 + i + 0.5) * CELL, z = (lot.j0 + j + 0.5) * CELL;
+      if (cut.has(cell)) boxes.cut.push(type === "2" ? [x, k * STOREY + STOREY / 2, z, 1.4, STOREY * 0.96, 1.4] : [x, k * STOREY + 0.2, z, CELL * 0.9, 0.4, CELL * 0.9]);
+      else if (type === "2") boxes.stair.push([x, k * STOREY + STOREY / 2, z, 1.4, STOREY * 0.96, 1.4]);
+      else boxes.corridor.push([x, k * STOREY + 0.15, z, CELL * 0.9, 0.3, CELL * 0.9]);
+    }
+    lot.rooms.forEach(([k, i0, j0, i1, j1], room) => (cutRooms.has(room) ? boxes.roomCut : boxes.room).push([(lot.i0 + (i0 + i1 + 1) / 2) * CELL, k * STOREY + 1.25, (lot.j0 + (j0 + j1 + 1) / 2) * CELL, (i1 - i0 + 1) * CELL - 0.35, 2.4, (j1 - j0 + 1) * CELL - 0.35]));
+  }
+  return boxes;
+}
+
+/**
+ * A place as the stage simulation recorded it (docs/stage-simulation-records.md), drawn the way the
+ * strand page draws it, as of the chosen moment: its grid of ground tiles; each lot at its footprint
+ * and floors (a district's at the back of its disc, clear of the places inside), a faint shell (white
+ * once the story has named it) over its walkable skeleton; a lot a hit has reached shows its walls and
+ * roof instead, without the units that broke or fell, with what is cut off in red and rubble below;
+ * Jev's placed things in gold where they last stood; each impact a red sphere. What comes later stands
+ * faint. Read from the records, never recomputed here.
  */
 function SimulatedPlaceHologram({ mark, shapes, reducedMotion }: { mark: FloorMark; shapes: Shapes; reducedMotion: boolean }) {
   const place = mark.simulation!;
-  const width = place.grid.nx * 2, depth = place.grid.nz * 2;
+  const width = place.grid.nx * CELL, depth = place.grid.nz * CELL;
   const span = mark.region ? mark.radius * 0.9 : mark.radius * 1.6, metre = span / Math.max(width, depth);
+  // Up keeps the place's proportions, unless its tallest lot would rise past the scenes.
+  const up = Math.min(metre, CEILING / Math.max(STOREY, ...place.lots.map((lot) => lot.floors * STOREY + 1)));
   const centre: [number, number] = mark.region ? [0, -mark.radius * 0.45] : [(mark.spotX ?? mark.x) - mark.x, (mark.spotZ ?? mark.z) - mark.z];
-  const at = (x: number, z: number): [number, number] => [centre[0] + (x - width / 2) * metre, centre[1] + (z - depth / 2) * metre];
   const layout = [mark.id, mark.x, mark.z, mark.radius, mark.depth ?? 0, !!mark.region, place.strand, ...place.lots.map((lot) => `${lot.index}:${lot.model}`), ...place.things.map((thing) => `${thing.id}@${thing.x},${thing.z}`), place.hits.length].join("|");
-  const { group, lots, things, hits } = useMemo(() => {
-    const group = new Group();
+  const { group, scaled, shells, things, hits, parts } = useMemo(() => {
+    const group = new Group(), scaled = new Group();
     group.position.set(mark.x, -944 + 1.5 * (mark.depth ?? 0) + 1, mark.z);
-    const materials = (color: string, fill: string) => ({ edge: new LineBasicMaterial({ color, vertexColors: true, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, toneMapped: false }),
+    // The place's metres, scaled and set on its spot: x and z across the grid, y up.
+    scaled.position.set(centre[0] - (width / 2) * metre, 0, centre[1] - (depth / 2) * metre);
+    scaled.scale.set(metre, up, metre);
+    group.add(scaled);
+    const parts = Object.fromEntries(Object.entries(SKELETON).map(([part, look]) => [part, "flat" in look
+      ? new MeshBasicMaterial({ color: look.color, transparent: true, opacity: 0, depthWrite: !look.see, toneMapped: false })
+      : new MeshLambertMaterial({ color: look.color, emissive: "emissive" in look ? look.emissive : "#000000", transparent: true, opacity: 0, depthWrite: !look.see, toneMapped: false })])) as Record<Part, MeshBasicMaterial | MeshLambertMaterial>;
+    const paint = (color: string, fill: string) => ({ edge: new LineBasicMaterial({ color, vertexColors: true, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, toneMapped: false }),
       fill: new MeshBasicMaterial({ color: fill, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, toneMapped: false }) });
-    const add = (shape: Shape, x: number, z: number, sx: number, sy: number, sz: number, turn: number, paint: ReturnType<typeof materials>, y = 0) => {
+    const hold = (shape: Shape, [x, y, z]: number[], [sx, sy, sz]: number[], turn: number, look: ReturnType<typeof paint>, into: Group) => {
       const holder = new Group();
       holder.position.set(x, y, z);
       holder.rotation.y = turn;
       holder.scale.set(sx, sy, sz);
-      const body = new Mesh(shape.fill, paint.fill), outline = new LineSegments(shape.edges, paint.edge);
+      const body = new Mesh(shape.fill, look.fill), outline = new LineSegments(shape.edges, look.edge);
       body.raycast = noRaycast; outline.raycast = noRaycast;
       holder.add(body, outline);
-      group.add(holder);
+      into.add(holder);
       return holder;
     };
-    const lots = place.lots.map((lot) => {
-      const shape = shapes.get(lot.model) ?? shapes.get(VARIANTS.office[0])!, paint = materials(lot.named ? NAMED_EDGE : EDGE, lot.named ? NAMED_FILL : FILL);
-      const [x, z] = at((lot.i0 + lot.nx / 2) * 2, (lot.j0 + lot.nz / 2) * 2), tall = Math.min(CEILING, lot.floors * 3 * metre);
-      const holder = add(shape, x, z, (lot.nx * 2 * metre) / shape.width, tall / shape.height, (lot.nz * 2 * metre) / shape.depth, 0, paint);
-      return { lot, holder, paint, base: tall / shape.height, level: 0 };
+    // Each lot's shell, stretched to its footprint and floors, with a faint line at every floor.
+    const shells = place.lots.map((lot) => {
+      const shape = shapes.get(lot.model) ?? shapes.get(VARIANTS.office[0])!, look = paint(EDGE, FILL), shell = new Group();
+      const w = lot.nx * CELL, d = lot.nz * CELL, h = lot.floors * STOREY, x = lot.i0 * CELL + w / 2, z = lot.j0 * CELL + d / 2;
+      hold(shape, [x, 0, z], [w / shape.width, h / shape.height, d / shape.depth], 0, look, shell);
+      const slabs: number[] = [];
+      for (let k = 1; k <= lot.floors; k++) { const y = k * STOREY, [x0, x1, z0, z1] = [x - w / 2, x + w / 2, z - d / 2, z + d / 2]; slabs.push(x0, y, z0, x1, y, z0, x1, y, z0, x1, y, z1, x1, y, z1, x0, y, z1, x0, y, z1, x0, y, z0); }
+      const floors = new LineSegments(new BufferGeometry().setAttribute("position", new Float32BufferAttribute(slabs, 3)), new LineBasicMaterial({ color: "#7ce6ff", transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+      floors.raycast = noRaycast;
+      shell.add(floors);
+      scaled.add(shell);
+      return { index: lot.index, shell, look, floors };
     });
     // A thing: the model Jev picked when the stage can draw it, else its plain shape, fitted to its extent.
     const primitive = (kind: string | null): Shape => { const geometry = kind === "oval" ? new SphereGeometry(0.5, 12, 8).translate(0, 0.5, 0) : kind === "triangle" ? new ConeGeometry(0.6, 1, 3).translate(0, 0.5, 0) : new BoxGeometry(1, 1, 1).translate(0, 0.5, 0); return shapeOf(geometry); };
     const things = place.things.map((thing) => {
-      const shape = (thing.model && shapes.get(thing.model)) || primitive(thing.shape), paint = materials(THING_EDGE, "#6b5bd2");
-      const [x, z] = at(thing.x, thing.z), size = (value: number) => Math.max(4, value * metre);
-      const holder = add(shape, x, z, size(thing.w) / shape.width, size(thing.h) / shape.height, size(thing.d) / shape.depth, thing.turn, paint, Math.min(CEILING, thing.y * metre));
-      return { thing, holder, paint, own: !(thing.model && shapes.get(thing.model)) ? shape : null, level: 0 };
+      const own = thing.model && shapes.get(thing.model) ? null : primitive(thing.shape), shape = own ?? shapes.get(thing.model!)!, look = paint(THING_EDGE, THING_FILL);
+      const holder = hold(shape, [thing.x, thing.y, thing.z], [thing.w / shape.width, thing.h / shape.height, thing.d / shape.depth], (thing.turn * Math.PI) / 180, look, scaled);
+      return { thing, holder, look, own, level: 0 };
     });
     const hits = place.hits.map((hit) => {
-      const geometry = new EdgesGeometry(new IcosahedronGeometry(1, 1)), material = new LineBasicMaterial({ color: DAMAGE, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, toneMapped: false });
+      const geometry = new EdgesGeometry(new IcosahedronGeometry(1, 2)), material = new LineBasicMaterial({ color: DAMAGE, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, toneMapped: false });
       const ring = new LineSegments(geometry, material);
-      const [x, z] = at(hit.x, hit.z);
-      ring.position.set(x, Math.min(CEILING, hit.y * metre), z);
-      ring.scale.setScalar(Math.max(6, hit.r * metre));
+      ring.position.set(centre[0] + (hit.x - width / 2) * metre, hit.y * up, centre[1] + (hit.z - depth / 2) * metre);
+      ring.scale.setScalar(hit.r * metre);
       ring.raycast = noRaycast;
       group.add(ring);
       return { hit, ring, material, geometry, level: 0 };
     });
-    return { group, lots, things, hits };
-  }, [layout, shapes]); // eslint-disable-line react-hooks/exhaustive-deps -- the layout key holds every field of the place it reads
+    return { group, scaled, shells, things, hits, parts };
+  }, [layout, shapes, metre, up]); // eslint-disable-line react-hooks/exhaustive-deps -- the layout key holds every field of the place it reads
   useEffect(() => () => {
-    for (const entry of [...lots, ...things]) { entry.paint.edge.dispose(); entry.paint.fill.dispose(); }
+    for (const material of Object.values(parts)) material.dispose();
+    for (const entry of [...shells, ...things]) { entry.look.edge.dispose(); entry.look.fill.dispose(); }
+    for (const entry of shells) { entry.floors.geometry.dispose(); (entry.floors.material as Material).dispose(); }
     for (const entry of things) { entry.own?.fill.dispose(); entry.own?.edges.dispose(); }
     for (const entry of hits) { entry.material.dispose(); entry.geometry.dispose(); }
-  }, [lots, things, hits]);
-  // What changes with the moment without a rebuild: standing or later, damage so far, broken things.
+  }, [parts, shells, things, hits]);
+  // The insides change with the moment: rebuilt when what the hits so far took changes.
+  const damage = place.lots.map((lot) => `${lot.lost.length}.${lot.cutOff.length}.${lot.cutRooms.length}.${lot.gone.length}.${lot.rubble.length}`).join(",");
+  const insides = useMemo(() => {
+    const boxes = skeletonBoxes(place), insides = new Group();
+    for (const part of Object.keys(SKELETON) as Part[]) if (boxes[part].length) insides.add(instanced(parts[part], boxes[part]));
+    return insides;
+  }, [parts, damage]); // eslint-disable-line react-hooks/exhaustive-deps -- the damage key holds every field of the lots it reads
+  useEffect(() => {
+    scaled.add(insides);
+    return () => { scaled.remove(insides); for (const mesh of insides.children) (mesh as InstancedMesh).dispose(); };
+  }, [scaled, insides]);
+  // What changes with the moment without a rebuild: named or not, shell or units, things standing or later, broken things, hits so far.
   const state = useMemo(() => ({ lots: new Map(place.lots.map((lot) => [lot.index, lot])), things: new Map(place.things.map((thing) => [thing.id, thing])), hits: place.hits }), [place]);
-  const red = useMemo(() => new Color(DAMAGE), []);
-  useFrame(() => {
-    const active = mark.active ? 1 : 0.28, ease = reducedMotion ? 1 : 0.1;
-    for (const entry of lots) {
-      const now = state.lots.get(entry.lot.index) ?? entry.lot;
-      entry.level += ((now.standing ? 1 : 0.2) - entry.level) * ease;
-      entry.holder.scale.y = entry.base * Math.max(0.05, (now.standing ? 1 - 0.35 * now.damage : 0.35));
-      entry.paint.edge.color.set(now.named ? NAMED_EDGE : EDGE).lerp(red, now.damage);
-      entry.paint.edge.opacity = 0.75 * entry.level * active;
-      entry.paint.fill.opacity = (0.08 + 0.12 * now.damage) * entry.level * active;
+  const born = useRef<number | null>(null), level = useRef(0);
+  useFrame(({ clock }) => {
+    const time = clock.getElapsedTime(), ease = reducedMotion ? 1 : 0.1;
+    born.current ??= time;
+    const risen = reducedMotion ? 1 : easeOut(Math.max(0, Math.min(1, (time - born.current) / RISE_SECONDS)));
+    level.current += ((mark.active ? 1 : 0.28) - level.current) * (reducedMotion ? 1 : 0.08);
+    const shown = risen * level.current;
+    scaled.scale.y = up * Math.max(0.001, risen);
+    for (const [part, material] of Object.entries(parts) as [Part, Material][]) material.opacity = (part === "cut" && !reducedMotion ? 0.55 + 0.4 * Math.sin(time * 4.5) : part === "roomCut" && !reducedMotion ? 0.2 + 0.18 * Math.sin(time * 4.5) : SKELETON[part].opacity) * shown;
+    for (const entry of shells) {
+      const lot = state.lots.get(entry.index), white = !!lot && (lot.named || !!lot.label);
+      entry.shell.visible = !lot?.struck;
+      entry.look.edge.color.set(white ? "#ffffff" : EDGE);
+      entry.look.edge.opacity = (white ? 0.75 : 0.5) * shown;
+      entry.look.fill.opacity = 0.09 * shown;
+      (entry.floors.material as Material).opacity = 0.14 * shown;
     }
     for (const entry of things) {
       const now = state.things.get(entry.thing.id) ?? entry.thing;
       entry.level += ((now.standing ? 1 : 0.2) - entry.level) * ease;
-      entry.paint.edge.color.set(now.broken ? DAMAGE : THING_EDGE);
-      entry.paint.edge.opacity = 0.9 * entry.level * active;
-      entry.paint.fill.opacity = 0.12 * entry.level * active;
+      entry.look.edge.color.set(now.broken ? DAMAGE : THING_EDGE);
+      entry.look.edge.opacity = 0.9 * entry.level * shown;
+      entry.look.fill.opacity = 0.2 * entry.level * shown;
     }
     hits.forEach((entry, index) => {
       entry.level += ((state.hits[index]?.standing ? 1 : 0.15) - entry.level) * ease;
-      entry.material.opacity = 0.55 * entry.level * active;
+      entry.material.opacity = 0.8 * entry.level * shown;
     });
   });
   return <primitive object={group} />;

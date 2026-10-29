@@ -25,12 +25,15 @@ export async function readStageBuildings(workspace) {
 }
 
 const simulationFile = /^[\w.-]+\.json$/;
-const count = list => Array.isArray(list) ? list.length : 0;
+const cells = list => Array.isArray(list) ? list.filter(Number.isInteger) : [];
+/** Structural units `[kind, i, j, k]` (a fallen one also has where it came to rest). */
+const units = list => Array.isArray(list) ? list.filter(unit => Array.isArray(unit) && unit.length >= 4 && unit.every(Number.isFinite)) : [];
 
 /**
  * The stage simulation records (stage/simulation/, docs/stage-simulation-records.md), trimmed to what
- * the Places map draws: per place its lots (the first strand's layout of a place stands), the things
- * placed there, the hits with what each lot lost, and who moved between places. Null without records.
+ * the Places map draws: per place its lots with their skeletons and rooms (the first strand's layout of
+ * a place stands), the things placed there, the hits with the cells and units each lot lost, and who
+ * moved between places. Null without records.
  */
 export async function readSimulation(workspace) {
   const folder = resolve(workspace, 'stage', 'simulation');
@@ -45,12 +48,14 @@ export async function readSimulation(workspace) {
     for (const [placeId, place] of Object.entries(record.buildings)) {
       if (places[placeId] || !Array.isArray(place?.lots)) continue;
       places[placeId] = { strand: id, label: place.label, kind: place.kind, grid: { nx: place.grid?.NX ?? 32, nz: place.grid?.NZ ?? 24 },
-        lots: place.lots.map(lot => ({ name: lot.detected?.name ?? lot.label ?? null, since: lot.detected?.scene ?? null, model: lot.model, i0: lot.footprint.i0, j0: lot.footprint.j0, nx: lot.footprint.nx, nz: lot.footprint.nz, floors: lot.floors, cells: String(lot.skeleton ?? '').length })) };
+        lots: place.lots.map(lot => ({ name: lot.detected?.name ?? lot.label ?? null, since: lot.detected?.scene ?? null, label: lot.label ?? null, role: lot.role ?? null, model: lot.model, i0: lot.footprint.i0, j0: lot.footprint.j0, nx: lot.footprint.nx, nz: lot.footprint.nz, floors: lot.floors,
+          skeleton: typeof lot.skeleton === 'string' && /^[0-9]*$/.test(lot.skeleton) ? lot.skeleton : '', rooms: Array.isArray(lot.rooms) ? lot.rooms.filter(room => Array.isArray(room) && room.length === 5 && room.every(Number.isInteger)) : [] })) };
     }
     for (const thing of record.things ?? []) things.push({ id: `${id}:${thing.id}`, name: thing.name, model: thing.model ?? null, shape: thing.shape ?? null,
       placements: (thing.placements ?? []).map(placement => ({ scene: placement.scene, place: placement.place, x: placement.x, y: placement.y ?? 0, z: placement.z, w: placement.fit?.w ?? 4, h: placement.fit?.h ?? 4, d: placement.fit?.d ?? 4, turn: placement.fit?.turn ?? 0 })) });
     for (const scene of record.scenes) for (const event of scene.events ?? []) if (event.hit?.sphere) hits.push({ scene: scene.id, place: scene.place, event: event.index, ...event.hit.sphere, strength: event.hit.strength,
-      lots: (event.hit.parts ?? []).map(part => ({ lot: part.lot, lost: count(part.destroyedCells) + count(part.fellCells) + count(part.cutOffCells) })), things: (event.hitThings ?? []).map(entry => `${id}:${entry.id}`) });
+      lots: (event.hit.parts ?? []).map(part => ({ lot: part.lot, destroyed: cells(part.destroyedCells), fell: cells(part.fellCells), cutOff: cells(part.cutOffCells), cutRooms: cells(part.cutOffRooms), blasted: units(part.blasted), fallen: units(part.fallen) })),
+      things: (event.hitThings ?? []).map(entry => `${id}:${entry.id}`) });
     for (const move of record.migrations ?? []) migrations.push({ scene: move.scene, person: move.person, from: move.from, to: move.to });
   }
   return strands.length ? { strands, places, things, hits, migrations } : null;

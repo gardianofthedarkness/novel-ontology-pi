@@ -80,7 +80,7 @@ test('the building log keeps one entry per name at a place: the scene place with
   assert.deepEqual(log, [{ id: 'loc_tower|钟塔', name: '钟塔', placeId: 'loc_tower', model: 'skyscraper', size: 30, sceneIds: ['s1', 's2'] }], 'a scene with no place names no building on the map');
 });
 
-test('the simulation records reach the map trimmed: lots with when they are named, things placed, hits with what each lot lost', async (context) => {
+test('the simulation records reach the map trimmed: lots with their skeletons and when they are named, things placed, hits with the cells and units each lot lost', async (context) => {
   const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -91,14 +91,14 @@ test('the simulation records reach the map trimmed: lots with when they are name
   await mkdir(join(workspace, 'stage', 'simulation'), { recursive: true });
   await writeFile(join(workspace, 'stage', 'simulation', 'index.json'), JSON.stringify({ strands: { k: { file: 'k.json', title: 'K' }, bad: { file: '../escape.json' } } }));
   await writeFile(join(workspace, 'stage', 'simulation', 'k.json'), JSON.stringify({ strand: { id: 'k', title: '白井', from: 's1', to: 's2' },
-    buildings: { loc_1: { label: '钟塔', kind: 'site', grid: { NX: 32, NZ: 24 }, lots: [{ label: null, detected: { name: '仓库', scene: 's2' }, model: 'market', footprint: { i0: 1, j0: 2, nx: 3, nz: 4 }, floors: 2, skeleton: '0'.repeat(24), rooms: [] }] } },
+    buildings: { loc_1: { label: '钟塔', kind: 'site', grid: { NX: 32, NZ: 24 }, lots: [{ label: null, detected: { name: '仓库', scene: 's2' }, role: 'shop', model: 'market', footprint: { i0: 1, j0: 2, nx: 3, nz: 4 }, floors: 2, skeleton: '0120'.repeat(6), rooms: [[0, 0, 0, 1, 1], [1, 'x']] }] } },
     things: [{ id: 'thing_1', name: '直升机', model: null, shape: 'oval', placements: [{ scene: 's1', event: 0, place: 'loc_1', x: 1, y: 2, z: 3, fit: { w: 12, h: 4, d: 8, turn: 0 } }] }],
-    scenes: [{ id: 's1', place: 'loc_1', events: [{ index: 2, hit: { sphere: { x: 4, y: 5, z: 6, r: 4 }, strength: 0.9, parts: [{ lot: 0, destroyedCells: [1, 2], fellCells: [3], cutOffCells: [] }] }, hitThings: [{ id: 'thing_1' }] }] }],
+    scenes: [{ id: 's1', place: 'loc_1', events: [{ index: 2, hit: { sphere: { x: 4, y: 5, z: 6, r: 4 }, strength: 0.9, parts: [{ lot: 0, energy: 96, blasted: [[3, 0, 0, 1]], fallen: [[4, 1, 1, 2, 0], [4, 'x']], destroyedCells: [1, 2], fellCells: [3], cutOffCells: [5], cutOffRooms: [0] }] }, hitThings: [{ id: 'thing_1' }] }] }],
     migrations: [{ scene: 's2', person: 'char_1', from: 'loc_1', to: 'loc_2' }] }));
   const simulation = await readSimulation(workspace);
   assert.deepEqual(simulation.strands, [{ id: 'k', title: '白井', from: 's1', to: 's2' }], 'a file outside the folder is never read');
-  assert.deepEqual(simulation.places.loc_1.lots, [{ name: '仓库', since: 's2', model: 'market', i0: 1, j0: 2, nx: 3, nz: 4, floors: 2, cells: 24 }]);
-  assert.deepEqual(simulation.hits, [{ scene: 's1', place: 'loc_1', event: 2, x: 4, y: 5, z: 6, r: 4, strength: 0.9, lots: [{ lot: 0, lost: 3 }], things: ['k:thing_1'] }]);
+  assert.deepEqual(simulation.places.loc_1.lots, [{ name: '仓库', since: 's2', label: null, role: 'shop', model: 'market', i0: 1, j0: 2, nx: 3, nz: 4, floors: 2, skeleton: '0120'.repeat(6), rooms: [[0, 0, 0, 1, 1]] }], 'a malformed room is left out');
+  assert.deepEqual(simulation.hits, [{ scene: 's1', place: 'loc_1', event: 2, x: 4, y: 5, z: 6, r: 4, strength: 0.9, lots: [{ lot: 0, destroyed: [1, 2], fell: [3], cutOff: [5], cutRooms: [0], blasted: [[3, 0, 0, 1]], fallen: [[4, 1, 1, 2, 0]] }], things: ['k:thing_1'] }], 'a malformed unit is left out');
   assert.deepEqual(simulation.things[0].placements[0], { scene: 's1', place: 'loc_1', x: 1, y: 2, z: 3, w: 12, h: 4, d: 8, turn: 0 });
   assert.equal(simulation.migrations.length, 1);
 });

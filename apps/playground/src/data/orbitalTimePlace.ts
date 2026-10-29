@@ -544,9 +544,9 @@ export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter,
   const buildings = new Map(data.places.map((place) => [place.id, architectureOf(place.label, place.architecture)]));
   const named = data.buildings?.length ? buildingsAt(data, filter.buildingsAt ?? null) : new Map<string, NamedBuilding[]>();
   const shownNamed = (placeId: string) => (named.get(placeId) ?? []).filter((building) => building.standing || filter.laterBuildings);
-  // Simulated places (the stage simulation records): what had happened there by the moment; later lots and things only with laterBuildings.
+  // Simulated places (the stage simulation records): what had happened there by the moment (its lots always stand); later things and hits only with laterBuildings.
   const simulated = new Map([...(data.simulation ? simulationAt(data, filter.buildingsAt ?? null) : new Map<string, SimulatedPlace>())].map(([id, place]) => [id, filter.laterBuildings ? place
-    : { ...place, lots: place.lots.filter((lot) => lot.standing), things: place.things.filter((thing) => thing.standing), hits: place.hits.filter((hit) => hit.standing) }]));
+    : { ...place, things: place.things.filter((thing) => thing.standing), hits: place.hits.filter((hit) => hit.standing) }]));
   const floor: FloorMark[] = data.places.flatMap((place): FloorMark[] => {
     const point = layout.get(place.id);
     // In a universe, the reader's book's places stay bright; the others' recede.
@@ -560,8 +560,8 @@ export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter,
     const standing = here.filter((entry) => entry.standing), later = here.filter((entry) => !entry.standing);
     const list = (entries: NamedBuilding[]) => `${entries.slice(0, 10).map((entry) => `${entry.name} (${entry.sinceLabel})`).join("、")}${entries.length > 10 ? ` +${entries.length - 10} more` : ""}`;
     const sim = simulated.get(place.id), count = (value: number, noun: string) => `${value} ${noun}${value === 1 ? "" : "s"}`;
-    const lost = sim ? sim.lots.filter((lot) => lot.standing).reduce((sum, lot) => sum + lot.damage, 0) / Math.max(1, sim.lots.filter((lot) => lot.standing).length) : 0;
-    const story = sim ? ` · simulated (${sim.title}): ${sim.lots.filter((lot) => lot.standing).length} buildings (${sim.lots.filter((lot) => lot.standing && lot.named).map((lot) => lot.name).join("、") || "none named"}), ${count(sim.things.filter((thing) => thing.standing).length, "thing")}, ${count(sim.hits.filter((hit) => hit.standing).length, "hit")}${filter.buildingsAt ? " by then" : ""}, ${Math.round(lost * 100)}% of the buildings destroyed (stage simulation records, not reviewed)`
+    const lost = sim ? sim.lots.reduce((sum, lot) => sum + lot.damage, 0) / Math.max(1, sim.lots.length) : 0;
+    const story = sim ? ` · simulated (${sim.title}): ${count(sim.lots.length, "building")} (${sim.lots.filter((lot) => lot.named).map((lot) => lot.name).join("、") || "none named"}), ${count(sim.things.filter((thing) => thing.standing).length, "thing")}, ${count(sim.hits.filter((hit) => hit.standing).length, "hit")}${filter.buildingsAt ? " by then" : ""}, ${Math.round(lost * 100)}% of the buildings destroyed (stage simulation records, not reviewed)`
       : here.length ? ` · named in the story${filter.buildingsAt ? " by then" : ""}: ${list(standing) || "none yet"}${later.length ? ` · later: ${list(later)}` : ""} (stage objects, not reviewed)` : "";
     return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: place.proposed ? "proposed" : "canon", parent: null, lane: "canon", chrono: 0, summary: `${building ? `${ARCHITECTURE_LABEL[building]} · ` : ""}${(place.path?.length ?? 1) > 1 ? `${placePathLabel(place, data.names)} · ` : ""}${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it)${(place.totalScenes ?? 0) > place.sceneIds.length ? ` · ${place.totalScenes} inside` : ""}${place.parentProposed ? " · inside-link proposed" : ""} · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}${story}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
   });

@@ -26,17 +26,21 @@ test("named buildings stand from the story moment that first names them, and sta
 
 test("a simulated place as of a moment: named lots from their scene, damage from the hits so far, things where they last stood", async () => {
   const { simulationAt, migrationsAt } = await import("../apps/playground/src/data/placeBuildings.js");
-  const lot = (name: string | null, since: string | null) => ({ name, since, model: "tower-c", i0: 0, j0: 0, nx: 2, nz: 2, floors: 5, cells: 20 });
+  // A 2 × 2 lot of 5 floors: 20 cells, all corridor but the first (mass).
+  const lot = (name: string | null, since: string | null) => ({ name, since, label: null, role: "office", model: "tower-c", i0: 0, j0: 0, nx: 2, nz: 2, floors: 5, skeleton: "0" + "1".repeat(19), rooms: [] });
+  const part = (destroyed: number[], cutOff: number[], fallen: number[][] = []) => ({ lot: 0, destroyed, fell: [], cutOff, cutRooms: [], blasted: [[3, 0, 0, 1]], fallen });
   const simulated = { ...data, simulation: {
     strands: [{ id: "k", title: "白井", from: "s1", to: "s2" }],
     places: { tower: { strand: "k", label: "钟塔", kind: "site", grid: { nx: 32, nz: 24 }, lots: [lot("钟塔", null), lot("仓库", "s2"), lot(null, null)] } },
     things: [{ id: "k:t1", name: "直升机", model: null, shape: "oval", placements: [{ scene: "s2", place: "tower", x: 9, y: 20, z: 9, w: 12, h: 4, d: 8, turn: 0 }, { scene: "s1", place: "tower", x: 1, y: 0, z: 1, w: 12, h: 4, d: 8, turn: 0 }] }],
-    hits: [{ scene: "s1", place: "tower", event: 2, x: 4, y: 6, z: 4, r: 4, strength: 0.9, lots: [{ lot: 0, lost: 5 }], things: [] }, { scene: "s2", place: "tower", event: 1, x: 4, y: 6, z: 4, r: 8, strength: 0.9, lots: [{ lot: 0, lost: 10 }], things: ["k:t1"] }],
+    hits: [{ scene: "s1", place: "tower", event: 2, x: 4, y: 6, z: 4, r: 4, strength: 0.9, lots: [part([1, 2, 3], [4, 5])], things: [] }, { scene: "s2", place: "tower", event: 1, x: 4, y: 6, z: 4, r: 8, strength: 0.9, lots: [part([3, 6, 7], [8], [[3, 1, 0, 2, 0]])], things: ["k:t1"] }],
     migrations: [{ scene: "s2", person: "a", from: "tower", to: "station" }, { scene: "s2", person: "b", from: "tower", to: "station" }],
   } } as unknown as TimePlaceProjection;
   const early = simulationAt(simulated, "t1").get("tower")!, late = simulationAt(simulated, null).get("tower")!;
-  assert.deepEqual(early.lots.map((entry) => [entry.name, entry.standing, entry.damage]), [["钟塔", true, 0.25], ["仓库", false, 0], [null, true, 0]]);
-  assert.deepEqual(late.lots[0].damage, 0.75, "damage adds up over the hits so far");
+  assert.deepEqual(early.lots.map((entry) => [entry.name, entry.named, entry.struck, entry.damage]), [["钟塔", true, true, 5 / 19], ["仓库", false, false, 0], [null, false, false, 0]], "every lot stands; one the story names later is not named yet");
+  assert.deepEqual(late.lots[1].named, true);
+  assert.deepEqual([late.lots[0].lost, late.lots[0].cutOff, late.lots[0].gone, late.lots[0].rubble], [[1, 2, 3, 6, 7], [8], ["3|0|0|1", "3|1|0|2"], [[3, 1, 0, 2, 0]]], "cells lost add up over the hits so far; what is cut off is the latest hit's word");
+  assert.equal(late.lots[0].damage, 6 / 19, "the share of its corridor and stair cells lost or cut off");
   assert.deepEqual([early.things[0].x, early.things[0].broken, late.things[0].x, late.things[0].broken], [1, false, 9, true], "a thing stands where it last stood, and breaks with the hit that breaks it");
   assert.deepEqual(early.hits.map((hit) => hit.standing), [true, false]);
   assert.deepEqual(migrationsAt(simulated, "t1"), [{ scene: "s2", from: "tower", to: "station", people: ["a", "b"], standing: false }], "people moving together in one scene are one move");

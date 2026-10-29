@@ -1,4 +1,4 @@
-import { dateLine, scenePeriod, type StoryTime, type TimePlaceProjection } from "./timePlace.js";
+import { dateLine, scenePeriod, type SimulationLot, type StoryTime, type TimePlaceProjection } from "./timePlace.js";
 
 /**
  * The buildings a story names at its places (the building log the viewer
@@ -44,12 +44,27 @@ export function buildingsAt(data: TimePlaceProjection, at: string | null): Map<s
   return byPlace;
 }
 
+/** A lot of a simulated place as of a moment: it always stands; the story may not have named it yet, and the hits so far took parts of it. */
+export interface SimulatedLot extends Omit<SimulationLot, "since"> {
+  index: number;
+  /** Named in a scene by the moment. */
+  named: boolean;
+  /**
+   * What the hits so far left: skeleton cells gone (destroyed or fallen), cells and rooms cut off from the ground (as the latest
+   * hit on it left them), structural units gone ("kind|i|j|k") and the fallen ones lying as rubble.
+   */
+  lost: number[]; cutOff: number[]; cutRooms: number[]; gone: string[]; rubble: number[][];
+  /** A hit has reached it: its walls and roof show unit by unit instead of its shell. */
+  struck: boolean;
+  /** The share of its corridor and stair cells lost or cut off. */
+  damage: number;
+}
 /** A simulated place as of a moment (the stage simulation records): its lots, the things placed there and the hits so far. */
 export interface SimulatedPlace {
   strand: string; title: string;
   /** Grid size in 2 m cells. */
   grid: { nx: number; nz: number };
-  lots: { index: number; name: string | null; model: string; i0: number; j0: number; nx: number; nz: number; floors: number; standing: boolean; named: boolean; damage: number }[];
+  lots: SimulatedLot[];
   /** Each thing where it last stood by the moment (or, if it comes later, where it first stands), in metres. */
   things: { id: string; name: string; model: string | null; shape: string | null; x: number; y: number; z: number; w: number; h: number; d: number; turn: number; standing: boolean; broken: boolean }[];
   hits: { x: number; y: number; z: number; r: number; strength: number; standing: boolean }[];
@@ -66,10 +81,22 @@ export function simulationAt(data: TimePlaceProjection, at: string | null): Map<
   for (const hit of simulation.hits) hitsByPlace.set(hit.place, [...hitsByPlace.get(hit.place) ?? [], hit]);
   for (const [placeId, place] of Object.entries(simulation.places)) {
     const hits = hitsByPlace.get(placeId) ?? [];
-    const lost = new Map<number, number>();
-    for (const hit of hits) if (happened(hit.scene)) for (const part of hit.lots) lost.set(part.lot, (lost.get(part.lot) ?? 0) + part.lost);
+    const state = place.lots.map(() => ({ lost: new Set<number>(), cutOff: [] as number[], cutRooms: [] as number[], gone: new Set<string>(), rubble: [] as number[][], struck: false }));
+    // The hits so far in the strand's order; what is cut off is the latest hit's word on it.
+    for (const hit of hits) if (happened(hit.scene)) for (const part of hit.lots) {
+      const lot = state[part.lot];
+      if (!lot) continue;
+      for (const cell of [...part.destroyed, ...part.fell]) lot.lost.add(cell);
+      for (const unit of [...part.blasted, ...part.fallen]) lot.gone.add(unit.slice(0, 4).join("|"));
+      lot.rubble.push(...part.fallen);
+      Object.assign(lot, { cutOff: part.cutOff, cutRooms: part.cutRooms, struck: true });
+    }
     places.set(placeId, { strand: place.strand, title: titles.get(place.strand) ?? place.strand, grid: place.grid,
-      lots: place.lots.map((lot, lotIndex) => ({ index: lotIndex, name: lot.name, model: lot.model, i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, named: !!lot.name, standing: happened(lot.since), damage: Math.min(1, (lost.get(lotIndex) ?? 0) / Math.max(1, lot.cells)) })),
+      lots: place.lots.map(({ since, ...lot }, lotIndex) => {
+        const now = state[lotIndex], walkable = [...lot.skeleton].filter((cell) => cell !== "0").length;
+        return { ...lot, index: lotIndex, named: !!lot.name && happened(since), lost: [...now.lost], cutOff: now.cutOff, cutRooms: now.cutRooms, gone: [...now.gone], rubble: now.rubble, struck: now.struck,
+          damage: Math.min(1, new Set([...now.lost, ...now.cutOff]).size / Math.max(1, walkable)) };
+      }),
       things: [], hits: hits.map((hit) => ({ x: hit.x, y: hit.y, z: hit.z, r: hit.r, strength: hit.strength, standing: happened(hit.scene) })) });
   }
   const broken = new Set(simulation.hits.filter((hit) => happened(hit.scene)).flatMap((hit) => hit.things));
