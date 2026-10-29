@@ -23,7 +23,7 @@ import { createLibraryAccess } from './library-access.mjs';
 import { createCausalityAccess } from './causality-access.mjs';
 import { embeddingEnvironment } from './embedding-env.mjs';
 import { createUniverseCausalityAccess } from './universe-causality-access.mjs';
-import { requireSharedReviewSkills, sharedReviewReceipt } from './shared-review.mjs';
+import { bookPacketFile, requireSharedReviewSkills, sharedReviewReceipt } from './shared-review.mjs';
 
 const job = await loadJob(process.argv[2]);
 const interactive = process.argv[3] === '--interactive';
@@ -228,7 +228,9 @@ try {
         const checkpoint = `${jobRoot}/checkpoints/review-${Date.now()}-${calls}`;
         await mkdir(checkpoint, { recursive: true, mode: 0o700 });
         if (scope === 'book') {
-          await cp(`${args[2]}/changesets/${args[3]}.json`, `${checkpoint}/packet.json`);
+          // A book's packet, or a standalone book's identity packet (universal EM: its own shared list under cast/, which an accepted match changes).
+          await cp(bookPacketFile(args[2], args[3]), `${checkpoint}/packet.json`);
+          if (/^um_/.test(args[3])) await cp(`${args[2]}/cast`, `${checkpoint}/cast`, { recursive: true });
           await cp(`${args[2]}/ontology`, `${checkpoint}/ontology`, { recursive: true, filter: path => !path.split('/').at(-1).startsWith('graph.lbug') });
         } else {
           await cp(`${args[2]}/catalog.json`, `${checkpoint}/catalog.json`);
