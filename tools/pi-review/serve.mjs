@@ -11,7 +11,7 @@ import { bookCatalog } from './book-catalog.mjs';
 import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
-import { liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationPage, simulationVendor, simulationWorldPage } from './sim-play.mjs';
+import { liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -199,7 +199,7 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         send(200, await readFile(asset.filename), { 'Content-Type': asset.type });
         return;
       }
-      if (scopedPath === '/play/' || scopedPath === '/play/live' || scopedPath === '/play/world' || scopedPath === '/play/live.json' || scopedPath.startsWith('/play/live/')) {
+      if (scopedPath === '/play/' || scopedPath === '/play/live' || scopedPath === '/play/world' || scopedPath === '/play/now' || scopedPath === '/play/live.json' || scopedPath.startsWith('/play/live/')) {
         // The stage simulation: the player (the selected book's accepted runs, or with newest=1 its latest; novel sim run) in the
         // engine's own page, and the live page with what a running novel sim pick|run is doing and the replay of Jev's questions.
         const volume = url.searchParams.get('volume') ?? 'active';
@@ -212,6 +212,7 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
           return;
         }
         // The live view of the world: the engine's world as it stands at the moment being played (live/world.json).
+        if (scopedPath === '/play/now') { const page = await bounded(async () => simulationNowPage(await resolveWorkspace(volume))); if (!page) { send(404); return; } send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy, 'Cache-Control': 'no-store' }); return; }
         if (scopedPath === '/play/world') { const page = await simulationWorldPage(); send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy }); return; }
         if (scopedPath === '/play/live/world.json') { send(200, await bounded(async () => liveWorld(await resolveWorkspace(volume))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
         if (scopedPath === '/play/live.json') { send(200, JSON.stringify(await bounded(async () => liveState(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }

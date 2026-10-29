@@ -80,6 +80,20 @@ export async function simulationWorldPage() {
   return { html, policy: pagePolicy(html) };
 }
 
+/**
+ * The player in live mode (play/now): the engine's own page with the line as far as the moment being played (live/page.json),
+ * which it plays and holds, drawn round where Jev looks and the people; the world view swaps these in as the moments come.
+ * Null before any page.
+ */
+export async function simulationNowPage(workspace) {
+  const page = await readFile(resolve(workspace, 'stage', 'simulation', 'live', 'page.json'), 'utf8').then(JSON.parse, () => null);
+  if (!page) return null;
+  const { inlineStrand } = await import(pathToFileURL(`${repo}/playground/export-strand-demo.mjs`).href);
+  const template = await readFile(`${repo}/playground/strand-demo.html`, 'utf8');
+  const html = inlineStrand(template, page, { name: 'World · now', vendor: true });
+  return { html, policy: pagePolicy(html), run: page.live?.run ?? null };
+}
+
 /** The world as the running command last stood it (live/world.json), or 'null' before any. */
 export async function liveWorld(workspace) {
   return readFile(resolve(workspace, 'stage', 'simulation', 'live', 'world.json'), 'utf8').catch(() => 'null');

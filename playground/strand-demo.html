@@ -27,6 +27,10 @@
   @media (min-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr) 320px; } }
   .stage { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #071019; aspect-ratio: 1 / 1; touch-action: none; }
   @media (min-width: 600px) { .stage { aspect-ratio: 4 / 3; } }
+  /* Live mode (the world view's frames): the stage alone, full screen. */
+  body.live .wrap > :not(.layout), body.live .side { display: none; }
+  body.live .wrap { padding: 0; max-width: none; }
+  body.live .stage { position: fixed; inset: 0; aspect-ratio: auto; border: 0; border-radius: 0; }
   .stage canvas { display: block; width: 100% !important; height: 100% !important; }
   .hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
   .flash { position: absolute; right: 10px; top: 8px; font-size: 12px; color: var(--red); font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; }
@@ -102,6 +106,10 @@ const chosen = strands && (strands.find((entry) => entry.id === location.hash.sl
 // are the world's, whichever place a scene is at.
 if (data?.world) for (const place of Object.values(data.places)) if (place.world) place.lots = data.world.lots;
 const keyOf = (id) => (data?.places[id]?.world ? "world" : id);
+// Live mode (data.live, from the live record's page.json): the moment just played is played and held, full screen, drawn
+// round where Jev looks and where the people are; the world view swaps these frames in as moments come.
+const liveMode = !!data?.live;
+if (liveMode) document.body.classList.add("live");
 if (strands?.length > 1) {
   for (const entry of strands) { const link = document.createElement("a"); link.href = `#${entry.id}`; link.textContent = entry.label; if (entry === chosen) link.setAttribute("aria-current", "true"); $("pick").append(link); }
   $("pick").hidden = false;
@@ -271,7 +279,7 @@ function buildPlace(id) {
     for (const [ci, cj, born, ground] of data.world.chunks) {
       const tiles = new THREE.InstancedMesh(unit, new THREE.MeshBasicMaterial(), 256);
       for (let n = 0; n < 256; n++) { matrix.compose(new THREE.Vector3((ci * 16 + (n % 16) + 0.5) * CELL, -0.05, (cj * 16 + Math.floor(n / 16) + 0.5) * CELL), new THREE.Quaternion(), new THREE.Vector3(CELL * 0.98, 0.1, CELL * 0.98)); tiles.setMatrixAt(n, matrix); tiles.setColorAt(n, color.set(GROUND_COLOR[Number(ground[n])] ?? 0x112532)); }
-      group.add(tiles); chunks.push({ mesh: tiles, at: bornAt(born) });
+      group.add(tiles); chunks.push({ mesh: tiles, at: bornAt(born), x: (ci * 16 + 8) * CELL, z: (cj * 16 + 8) * CELL });
     }
     const clutter = [];
     for (let n = 0; n < data.world.clutter.length; n += 2) clutter.push([(data.world.clutter[n] + 0.5) * CELL, 0.45, (data.world.clutter[n + 1] + 0.5) * CELL, 1.2, 0.9, 1.2]);
@@ -327,7 +335,7 @@ function unitBox(lot, entry, [kind, i, j, k]) {
  * animation is still bringing down.
  */
 function drawSkeletons(id, entry, count, settling = null) {
-  const reached = entry.bornAt ? entry.bornAt.filter((at) => at <= time).length : 0, key = `${count}|${settling ? 1 : 0}|${reached}`;
+  const reached = entry.bornAt ? entry.bornAt.filter((at) => at <= time).length : 0, key = `${count}|${settling ? 1 : 0}|${reached}|${entry.farKey ?? ""}`;
   if (entry.shownHits === key) return;
   entry.shownHits = key;
   if (entry.dynamic) entry.group.remove(entry.dynamic);
@@ -345,14 +353,14 @@ function drawSkeletons(id, entry, count, settling = null) {
   const corridors = [], stairs = [], red = [], rooms = [], redRooms = [], walls = [], roofs = [];
   // A hit building's walls and roof, unit by unit; its artistic shell gives way to them.
   place.lots.forEach((lot, n) => {
-    const unborn = entry.bornAt && entry.bornAt[n] > time;
+    const unborn = (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n);
     for (const { part } of entry.lots[n].parts) part.visible = !unborn && (part.isSprite || !structural.has(n));
     if (unborn || !structural.has(n) || entry.masked.has(n)) return;
     for (let k = 0; k < lot.floors; k++) for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if ((i === 0 || j === 0 || i === lot.nx - 1 || j === lot.nz - 1) && !gone[n].has(`3|${i}|${j}|${k}`)) walls.push(unitBox(lot, entry, [3, i, j, k]));
     for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if (!gone[n].has(`4|${i}|${j}|${lot.floors}`)) roofs.push(unitBox(lot, entry, [4, i, j, lot.floors]));
   });
   place.lots.forEach((lot, n) => {
-    if (entry.masked.has(n) || (entry.bornAt && entry.bornAt[n] > time)) return;
+    if (entry.masked.has(n) || (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n)) return;
     for (let cell = 0; cell < lot.cells.length; cell++) {
       const type = lot.cells[cell];
       if (type === "0" || lost[n].has(cell)) continue;
@@ -569,7 +577,7 @@ function position(place, move, elapsed) {
 
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (playing) { time += dt * speed; if (time >= total) time = 0; }
+  if (playing) { time += dt * speed; if (time >= total) time = liveMode ? total - 0.001 : 0; }
   const segment = segmentAt(time), place = segment.place, elapsed = time - segment.start, entry = buildPlace(segment.scene.place);
   if (shownPlace !== segment.scene.place) {
     if (shownPlace === null) { const pose = poseFor(segment.scene.place); camera.position.copy(pose.position); controls.target.copy(pose.target); }
@@ -664,10 +672,28 @@ function frame(now) {
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
   if (follow && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
   // The world as explored by now: chunks and the faint city's copies of buildings since stood up.
-  for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.at <= time;
+  if (liveMode && now - lastCull > 400) { lastCull = now; cullByInterest(entry); }
+  for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.at <= time && chunk.near !== false;
   decor(time);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
+}
+
+/**
+ * Live mode: what is drawn follows where Jev looks (data.live.focus) and where the people are, never the camera. Ground and
+ * buildings within 112 m of them are shown and go beyond 160 m (the room between keeps an edge from flickering).
+ */
+const LOAD = 112, UNLOAD = 160;
+let lastCull = 0;
+function cullByInterest(entry) {
+  if (!entry?.chunks) return;
+  const focus = data.live.focus ?? { x: 0, z: 0, r: 0 }, points = [{ x: focus.x, z: focus.z, r: focus.r }, ...[...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => ({ x: pawn.position.x, z: pawn.position.z, r: 0 }))];
+  const gap = (x, z, r) => Math.min(...points.map((p) => Math.hypot(p.x - x, p.z - z) - p.r)) - r;
+  for (const chunk of entry.chunks) { const d = gap(chunk.x, chunk.z, 23); chunk.near = chunk.near === false ? d < LOAD : d < UNLOAD; }
+  const far = new Set();
+  data.world.lots.forEach((lot, n) => { const d = gap((lot.i0 + lot.nx / 2) * CELL, (lot.j0 + lot.nz / 2) * CELL, Math.hypot(lot.nx, lot.nz) * CELL / 2); if (entry.far?.has(n) ? d > LOAD : d > UNLOAD) far.add(n); });
+  const key = [...far].join(",");
+  if (key !== entry.farKey) { entry.far = far; entry.farKey = key; entry.shownHits = -1; }
 }
 
 /**
@@ -708,6 +734,19 @@ function seeThrough(entry, segment, now, dt, elapsed) {
     lot.fade = (lot.fade ?? 1) + (goal - (lot.fade ?? 1)) * Math.min(1, dt * 6);
     for (const { part, opacity } of lot.parts) if (!part.isSprite) part.material.opacity = opacity * lot.fade;
   });
+}
+
+if (liveMode) {
+  time = segments.at(-1)?.start ?? 0;
+  const origin = location.origin;
+  addEventListener("message", (event) => {
+    if (event.source !== parent || event.origin !== origin || event.data?.type !== "camera") return;
+    camera.position.fromArray(event.data.position); controls.target.fromArray(event.data.target); controls.update();
+    shownPlace = segmentAt(time).scene.place; glide = null; follow = event.data.follow ?? follow;
+  });
+  let frames = 0;
+  const tell = () => { frames++; if (frames === 3) parent.postMessage({ type: "ready", run: data.live.run }, origin); if (frames > 3 && frames % 20 === 0) parent.postMessage({ type: "camera", run: data.live.run, position: camera.position.toArray(), target: controls.target.toArray(), follow }, origin); requestAnimationFrame(tell); };
+  requestAnimationFrame(tell);
 }
 
 const label2 = (id) => data.macro.find((node) => node.id === id)?.label ?? data.places[id]?.label ?? "elsewhere";

@@ -18,7 +18,7 @@ import { access, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } fro
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { inlineStrand, runStrand } from './export-strand-demo.mjs';
+import { compactData, inlineStrand, runStrand } from './export-strand-demo.mjs';
 import { fightWork, pickImpacts, SIZES } from './impact-choices.mjs';
 import { browser, CHROME, pickModels, placementWork, placeThings, serve } from './two-view-things.mjs';
 
@@ -84,7 +84,7 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
   // far as that event (an engine that cannot stop early makes all of it).
   const load = async (until = null) => {
     // The world as the engine plays it goes to the live record too (live/world.json), for the live view of the world.
-    const data = await runStrand(novelDir, strand, { ...(until ? { until: { scene: until.scene, event: until.index } } : {}), ...(live ? { live: snapshot => live.world(snapshot) } : {}) });
+    const data = await runStrand(novelDir, strand, { ...(until ? { until: { scene: until.scene, event: until.index } } : {}), ...(live ? { live: (snapshot, page) => live.world(snapshot, page) } : {}) });
     await writeFile(join(work, 'index.html'), inlineStrand(template, data, { vendor: true }));
     await chrome.evaluate('delete window.__stage').catch(() => {});
     await chrome.open(url);
@@ -277,9 +277,11 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
      * The world as the engine stands it at a moment (export-strand-demo.mjs's snapshot): written whole to live/world.json, which
      * the live view of the world reads; live.json says which run and moment it is.
      */
-    world(snapshot) {
-      state.world = { run: (state.world?.run ?? 0) + 1, moment: snapshot.moment, final: snapshot.final, focus: snapshot.focus, notes: snapshot.notes };
-      return queue(() => replace(join(recording, 'world.json'), JSON.stringify({ ...snapshot, run: state.world.run, at: at() }))).then(write);
+    world(snapshot, page = null) {
+      const run = (state.world?.run ?? 0) + 1;
+      state.world = { run, moment: snapshot.moment, final: snapshot.final, focus: snapshot.focus, notes: snapshot.notes, page: page ? run : state.world?.page ?? null };
+      // With the page so far (the player's data as far as this moment), the live player draws it in full (live/page.json).
+      return queue(async () => { await replace(join(recording, 'world.json'), JSON.stringify({ ...snapshot, run, at: at() })); if (page) await replace(join(recording, 'page.json'), JSON.stringify({ ...compactData(page), live: { run, moment: snapshot.moment, focus: snapshot.focus, final: snapshot.final } })); }).then(write);
     },
     /** What an answer made, as a picture and a line of text. */
     outcome({ subject, text, picture = null, jpeg = false }) { return this.frame({ kind: 'outcome', subject, text, pictures: picture ? [{ name: 'outcome', picture, jpeg }] : [] }); },

@@ -578,7 +578,9 @@ export async function strandDemo(novelDir, options) {
       notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied } };
   };
   let lastLive = 0;
-  const live = (final = false, now = false) => { if (!options.live || (!final && !now && Date.now() - lastLive < 300)) return; lastLive = Date.now(); options.live(snapshot(final)); };
+  const live = (final = false, now = false) => { if (!options.live || (!final && !now && Date.now() - lastLive < 300)) return; lastLive = Date.now(); options.live(snapshot(final), now ? assemble(partialRuns(), moment) : null); };
+  /** The walk so far as runs: each scene begun, with where its people began (where they were after each event is not kept). */
+  const partialRuns = () => { const out = {}; for (const [key, begin] of begun) { const [sceneId, person] = key.split('|'); ((out[sceneId] ??= { starts: {}, events: [] }).starts[person] = begin); } return out; };
   const { start, act } = mover;
   mover.start = args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
   // `pace` (seconds): each moment held that long before the next is played, so a live view shows every event.
@@ -591,84 +593,94 @@ export async function strandDemo(novelDir, options) {
     if (outcome.kind === 'move') { where.set(args.person, { place: args.scene.placeId, at: outcome.to }); const end = W.nodePos(world, outcome.to[0]); reach(end.x, end.z, 40); }
     return outcome;
   };
-  const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: ENGINE });
-  live(true);
-  notes.solves = fields.size;
-  const people = [...new Set(chosen.flatMap(scene => scene.cast))], color = new Map(people.map((id, index) => [id, PALETTE[index % PALETTE.length]]));
-  const clean = text => (text ?? '').split('（原文：')[0].trim();
-  // Things the scenes put in their places (novel stage objects): a named building takes a generic lot and lights up when first
-  // mentioned; anything else stands in the box where Jev's two views agree (placeThings above).
   const detected = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
-  const ROLE_FOR = { hospital: 'hospital', skyscraper: 'office', office: 'office', market: 'shop', station: 'station', school: 'office', home: 'shop' };
-  const lotNames = new Map(), placedObjects = new Map();
-  for (const scene of chosen) {
-    const group = groups.get(scene.placeId), found = detected?.scenes?.[scene.id]?.objects ?? [], run = runs[scene.id];
-    for (const object of found) {
-      const eventIndex = Math.max(0, scene.events.findIndex(event => event.id === object.event));
-      // A room is inside a building: it never takes a lot of its own.
-      if (object.room) continue;
-      if (object.kind === 'building' && object.match.kind === 'building') {
-        if (!newBuildingHere(object.name, group.label, [...groups.values()].map(other => other.label))) continue;
-        const key = `${scene.placeId}|${object.name}`;
-        if (lotNames.has(key)) continue;
-        // The nearest free lot of the world round the place's anchor (within 80 m), of the building's role if there is one.
-        const { anchor } = group, gap = lot => Math.hypot((lot.i0 + lot.nx / 2) * 2 - anchor.x, (lot.j0 + lot.nz / 2) * 2 - anchor.z);
-        const near = world.lots.map((lot, index) => ({ lot, index, gap: gap(lot) })).filter(entry => entry.gap <= 80 && !entry.lot.label && !entry.lot.place && ![...lotNames.values()].some(other => other.lot === entry.index)).sort((a, b) => a.gap - b.gap);
-        const index = (near.find(entry => entry.lot.role === ROLE_FOR[object.match.id]) ?? near[0])?.index ?? -1;
-        if (index >= 0) lotNames.set(key, { place: scene.placeId, lot: index, name: object.name, scene: scene.id, event: eventIndex, model: object.match.id });
-        continue;
+  /**
+   * The page's data from the walk (`runs`: each scene's starts and where people were after each event), or, with `upto` (a
+   * moment, `<scene>|<event>`), the line as far as that moment, for a live view while the walk goes on.
+   */
+  const assemble = (runs, upto = null) => {
+    const [uptoScene, uptoEvent] = upto ? upto.split('|') : [];
+    const shown = !upto ? chosen : chosen.filter(scene => byIndex.get(scene.id) <= byIndex.get(uptoScene) && runs[scene.id]).map(scene => (scene.id === uptoScene ? { ...scene, events: scene.events.slice(0, uptoEvent === 'start' ? 0 : Number(uptoEvent) + 1) } : scene));
+    notes.solves = fields.size;
+    const people = [...new Set(chosen.flatMap(scene => scene.cast))], color = new Map(people.map((id, index) => [id, PALETTE[index % PALETTE.length]]));
+    const clean = text => (text ?? '').split('（原文：')[0].trim();
+    // Things the scenes put in their places (novel stage objects): a named building takes a generic lot and lights up when first
+    // mentioned; anything else stands in the box where Jev's two views agree (placeThings above).
+    const ROLE_FOR = { hospital: 'hospital', skyscraper: 'office', office: 'office', market: 'shop', station: 'station', school: 'office', home: 'shop' };
+    const lotNames = new Map(), placedObjects = new Map();
+    for (const scene of chosen) {
+      const group = groups.get(scene.placeId), found = detected?.scenes?.[scene.id]?.objects ?? [], run = runs[scene.id];
+      for (const object of found) {
+        const eventIndex = Math.max(0, scene.events.findIndex(event => event.id === object.event));
+        // A room is inside a building: it never takes a lot of its own.
+        if (object.room) continue;
+        if (object.kind === 'building' && object.match.kind === 'building') {
+          if (!newBuildingHere(object.name, group.label, [...groups.values()].map(other => other.label))) continue;
+          const key = `${scene.placeId}|${object.name}`;
+          if (lotNames.has(key)) continue;
+          // The nearest free lot of the world round the place's anchor (within 80 m), of the building's role if there is one.
+          const { anchor } = group, gap = lot => Math.hypot((lot.i0 + lot.nx / 2) * 2 - anchor.x, (lot.j0 + lot.nz / 2) * 2 - anchor.z);
+          const near = world.lots.map((lot, index) => ({ lot, index, gap: gap(lot) })).filter(entry => entry.gap <= 80 && !entry.lot.label && !entry.lot.place && ![...lotNames.values()].some(other => other.lot === entry.index)).sort((a, b) => a.gap - b.gap);
+          const index = (near.find(entry => entry.lot.role === ROLE_FOR[object.match.id]) ?? near[0])?.index ?? -1;
+          if (index >= 0) lotNames.set(key, { place: scene.placeId, lot: index, name: object.name, scene: scene.id, event: eventIndex, model: object.match.id });
+          continue;
+        }
       }
     }
-  }
-  notes.detected = { buildings: lotNames.size, objects: [...placedObjects.values()].reduce((sum, list) => sum + list.length, 0) };
-  const worn = new Set(entities.filter(entity => entity.model && entity.placed.length).map(entity => entity.model));
-  // One world: a lot is named whichever place named it.
-  const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
-  const shellOf = (placeId, lot, index) => { if (lot.era === 'ancient' && !named(placeId, index)) { const model = ANCIENT_SHELLS[Math.floor(stream('shell', placeId, index)() * ANCIENT_SHELLS.length)]; worn.add(model); return model; } const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
-  const shells = world.lots.map((lot, index) => shellOf('world', lot, index));
-  // The world as the page draws it: one grid over everything explored (oi, oj: the offset of world cell 0, 0 on it), its nodes
-  // as that grid's dense cells, each lot and chunk with the moment it was first reached.
-  const bounds = W.worldBounds(world), NX = bounds.i1 - bounds.i0, NZ = bounds.j1 - bounds.j0, oi = -bounds.i0, oj = -bounds.j0;
-  const K = Math.max(1, ...world.lots.map(lot => lot.floors + 1), ...[...shared.things.values()].map(thing => thing.top + 1));
-  const dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return (k * NZ + (j + oj)) * NX + (i + oi); };
-  const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
-  const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
-    i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
-  notes.world = { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
-  return {
-    models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
-    things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, model: entity.model, theme: entity.theme ?? null, switched: entity.switched, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
-      struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
-    title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
-    migrations: migrations.map(migration => { const route = routes.get(`${migration.scene}|${migration.person}`); return { ...migration, route: route ? { ...route, exit: route.exit?.map(dense) ?? null, entry: route.entry?.map(dense) ?? null } : null }; }),
-    macro, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
-    people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
-    // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
-    world: { NX, NZ, K, oi, oj, lots: worldLots, earlier,
-      ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]) },
-    places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, theme: anchor.era, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, lots: worldLots }])),
-    scenes: chosen.map(scene => {
-      const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label, kind = staged.get(scene.id)?.kind ?? null;
-      // The spots the movement questions offer for this building, each at a node of the world near a point (the one nearest
-      // the middle of the nodes the spot covers): where the live simulation pins them on its pictures. The scene's at its
-      // anchor; each event's round where its people stand as it begins.
-      const pins = focus => kind ? navGrid(kind).spots.flatMap(spot => {
-        const nodes = spotsFor(scene.placeId, focus)[spotKey(scene.placeId, spot.id, focus)] ?? [];
-        if (!nodes.length) return [];
-        const at = nodes.map(id => W.nodePos(world, id)), mx = at.reduce((sum, p) => sum + p.x, 0) / at.length, mz = at.reduce((sum, p) => sum + p.z, 0) / at.length;
-        const best = at.reduce((b, p, n) => (Math.hypot(p.x - mx, p.z - mz) < Math.hypot(at[b].x - mx, at[b].z - mz) ? n : b), 0);
-        return [{ id: spot.id, label: spot.label, hint: spot.hint, node: dense(nodes[best]) }];
-      }) : [];
-      const standing = index => Object.values(index ? run.events[index - 1]?.at ?? {} : run.starts).filter(Boolean).map(at => W.nodePos(world, at[0]));
-      const middle = points => (points.length ? { x: points.reduce((sum, p) => sum + p.x, 0) / points.length, z: points.reduce((sum, p) => sum + p.z, 0) / points.length } : undefined);
-      return { id: scene.id, index: byIndex.get(scene.id), place: scene.placeId, label: label && label !== scene.id ? label : null, kind, cast: scene.cast, spots: pins(),
-        starts: Object.fromEntries(Object.entries(run.starts).map(([person, at]) => [person, at ? dense(at[0]) : null])),
-        from: Object.fromEntries((timeline.handoffs.get(scene.id) ?? []).map(handoff => [handoff.person, handoff.from ? (handoff.samePlace ? 'stays' : 'arrives') : 'enters'])),
-        objects: placedObjects.get(scene.id) ?? [],
-        trace: traces.get(`${scene.id}|start`) ?? null,
-        events: scene.events.map((event, index) => ({ id: event.id, actors: event.actors ?? [], text: clean(event.text), spots: pins(middle(standing(index))), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(denseMove), trace: traces.get(`${scene.id}|${index}`) ?? null })) };
-    }),
+    notes.detected = { buildings: lotNames.size, objects: [...placedObjects.values()].reduce((sum, list) => sum + list.length, 0) };
+    const worn = new Set(entities.filter(entity => entity.model && entity.placed.length).map(entity => entity.model));
+    // One world: a lot is named whichever place named it.
+    const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
+    const shellOf = (placeId, lot, index) => { if (lot.era === 'ancient' && !named(placeId, index)) { const model = ANCIENT_SHELLS[Math.floor(stream('shell', placeId, index)() * ANCIENT_SHELLS.length)]; worn.add(model); return model; } const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
+    const shells = world.lots.map((lot, index) => shellOf('world', lot, index));
+    // The world as the page draws it: one grid over everything explored (oi, oj: the offset of world cell 0, 0 on it), its nodes
+    // as that grid's dense cells, each lot and chunk with the moment it was first reached.
+    const bounds = W.worldBounds(world), NX = bounds.i1 - bounds.i0, NZ = bounds.j1 - bounds.j0, oi = -bounds.i0, oj = -bounds.j0;
+    const K = Math.max(1, ...world.lots.map(lot => lot.floors + 1), ...[...shared.things.values()].map(thing => thing.top + 1));
+    const dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return (k * NZ + (j + oj)) * NX + (i + oi); };
+    const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
+    const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
+      i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
+    notes.world = { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
+    return {
+      models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
+      things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, model: entity.model, theme: entity.theme ?? null, switched: entity.switched, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
+        struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
+      title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
+      migrations: migrations.map(migration => { const route = routes.get(`${migration.scene}|${migration.person}`); return { ...migration, route: route ? { ...route, exit: route.exit?.map(dense) ?? null, entry: route.entry?.map(dense) ?? null } : null }; }),
+      macro, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
+      people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
+      // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
+      world: { NX, NZ, K, oi, oj, lots: worldLots, earlier,
+        ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]) },
+      places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, theme: anchor.era, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, lots: worldLots }])),
+      scenes: shown.map(scene => {
+        const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label, kind = staged.get(scene.id)?.kind ?? null;
+        // The spots the movement questions offer for this building, each at a node of the world near a point (the one nearest
+        // the middle of the nodes the spot covers): where the live simulation pins them on its pictures. The scene's at its
+        // anchor; each event's round where its people stand as it begins.
+        const pins = focus => kind ? navGrid(kind).spots.flatMap(spot => {
+          const nodes = spotsFor(scene.placeId, focus)[spotKey(scene.placeId, spot.id, focus)] ?? [];
+          if (!nodes.length) return [];
+          const at = nodes.map(id => W.nodePos(world, id)), mx = at.reduce((sum, p) => sum + p.x, 0) / at.length, mz = at.reduce((sum, p) => sum + p.z, 0) / at.length;
+          const best = at.reduce((b, p, n) => (Math.hypot(p.x - mx, p.z - mz) < Math.hypot(at[b].x - mx, at[b].z - mz) ? n : b), 0);
+          return [{ id: spot.id, label: spot.label, hint: spot.hint, node: dense(nodes[best]) }];
+        }) : [];
+        const standing = index => Object.values(index ? run.events[index - 1]?.at ?? {} : run.starts).filter(Boolean).map(at => W.nodePos(world, at[0]));
+        const middle = points => (points.length ? { x: points.reduce((sum, p) => sum + p.x, 0) / points.length, z: points.reduce((sum, p) => sum + p.z, 0) / points.length } : undefined);
+        return { id: scene.id, index: byIndex.get(scene.id), place: scene.placeId, label: label && label !== scene.id ? label : null, kind, cast: scene.cast, spots: pins(),
+          starts: Object.fromEntries(Object.entries(run.starts).map(([person, at]) => [person, at ? dense(at[0]) : null])),
+          from: Object.fromEntries((timeline.handoffs.get(scene.id) ?? []).map(handoff => [handoff.person, handoff.from ? (handoff.samePlace ? 'stays' : 'arrives') : 'enters'])),
+          objects: placedObjects.get(scene.id) ?? [],
+          trace: traces.get(`${scene.id}|start`) ?? null,
+          events: scene.events.map((event, index) => ({ id: event.id, actors: event.actors ?? [], text: clean(event.text), spots: pins(middle(standing(index))), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(denseMove), trace: traces.get(`${scene.id}|${index}`) ?? null })) };
+      }),
+    };
   };
+  const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: ENGINE });
+  const data = assemble(runs);
+  if (options.live) options.live(snapshot(true), data);
+  return data;
 }
 
 /**
@@ -791,13 +803,14 @@ export async function runStrand(novelDir, { from, to, fork = null, title } = {},
   return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}), ...(until ? { until } : {}), ...(live ? { live } : {}), ...(pace ? { pace } : {}) });
 }
 
+/** A strand's page data with the world's lots once (data.world.lots): each place's copy of them is restored by the page. */
+export const compactData = value => value?.world?.lots ? { ...value, places: Object.fromEntries(Object.entries(value.places).map(([id, place]) => [id, place.world ? { ...place, lots: undefined } : place])) } : value;
+
 /** The player page with the strand inlined. */
 export function inlineStrand(template, data, { name = 'One Strand', fragment = false, vendor = false } = {}) {
   // `vendor`: three.js served beside the page (vendor/), so the page needs no CDN.
   if (vendor) template = template.replace('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js', './vendor/three.module.js').replace('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/', './vendor/addons/');
-  // The world's lots go once (data.world.lots); each place's copy of them is restored by the page.
-  const once = value => value?.world?.lots ? { ...value, places: Object.fromEntries(Object.entries(value.places).map(([id, place]) => [id, place.world ? { ...place, lots: undefined } : place])) } : value;
-  data = data.strands ? { ...data, strands: data.strands.map(strand => ({ ...strand, data: once(strand.data) })) } : once(data);
+  data = data.strands ? { ...data, strands: data.strands.map(strand => ({ ...strand, data: compactData(strand.data) })) } : compactData(data);
   let page = template.replace('<title>One Strand · Holo Stage</title>', () => `<title>${name}</title>`).replace('<script type="application/json" id="strand-data"></script>', () => `<script type="application/json" id="strand-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`);
   // A host that adds its own document wrapper (a claude.ai page) takes the title, import map, styles and body.
   if (fragment) page = [page.match(/<title>[^<]*<\/title>/)[0], '<meta name="claude:viewport-fit-sides" content="cover">', page.match(/<script type="importmap">[\s\S]*?<\/script>/)[0], page.match(/<style>[\s\S]*?<\/style>/)[0], page.match(/<body>([\s\S]*)<\/body>/)[1]].join('\n');
