@@ -12,6 +12,7 @@ import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
 import { liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationPage, simulationVendor, simulationWorldPage } from './sim-play.mjs';
+import { placeFill } from './stage-reports.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -229,6 +230,15 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         const body = await simulationVendor(scopedPath.slice('/play/vendor/'.length));
         if (!body) { send(404); return; }
         send(200, body, { 'Content-Type': types['.js'] });
+        return;
+      }
+      if (scopedPath === '/api/places/fill') {
+        // One fill of the book's places registry (a manifold's buildings or a place's ground), by its version: never changes, so cached.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const body = await bounded(async () => placeFill(await resolveWorkspace(volume), url.searchParams.get('version')));
+        if (!body) { send(404); return; }
+        send(200, body, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, max-age=31536000, immutable' });
         return;
       }
       if (scopedPath === '/api/book-text' || scopedPath === '/api/stage') {

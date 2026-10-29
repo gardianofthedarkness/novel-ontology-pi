@@ -261,6 +261,7 @@ test('the stage simulation: Pi ranks story lines, asks Jev and runs the engine w
   assert.equal(authorize(`novel sim run ${novel} --auto 3`, defaultScope).label, 'novel sim run');
   assert.equal(authorize(`novel sim run ${novel} --strand scene_000002`, defaultScope).label, 'novel sim run');
   assert.equal(authorize(`novel sim show ${novel}`, defaultScope).label, 'novel sim show');
+  assert.equal(authorize(`novel sim places ${novel}`, defaultScope).label, 'novel sim places');
   assert.equal(authorize(`novel sim pick ${novel} --auto 3 --max-calls 40`, defaultScope).label, 'novel sim pick');
   for (const command of [`novel sim pick ${novel} --auto 3`, `novel sim pick ${novel} --max-calls 61`, `novel sim pick ${novel} --max-calls 0`, `novel sim pick ${novel} --max-calls 10 --accept`, `novel sim run ${novel} --max-calls 10`, `novel sim pick /tmp/other --max-calls 10`]) assert.throws(() => authorize(command, defaultScope), command);
   for (const command of [`novel sim run ${novel} --accept`, `novel sim run ${novel} --auto 9`, `novel sim run ${novel} --auto 0`, `novel sim run /tmp/other --auto 1`, `novel sim run ${novel} --strand ../x`, `novel sim show ${novel} --auto 1`, `novel sim delete ${novel}`]) assert.throws(() => authorize(command, defaultScope), command);

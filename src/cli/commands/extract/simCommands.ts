@@ -61,6 +61,14 @@ async function repository(): Promise<string> {
 }
 const engine = async (): Promise<Engine> => import(pathToFileURL(join(await repository(), "playground", "export-strand-demo.mjs")).href) as Promise<Engine>;
 const pickers = async (): Promise<Pickers> => import(pathToFileURL(join(await repository(), "playground", "sim-jev.mjs")).href) as Promise<Pickers>;
+interface PlacesIndex { places: unknown[]; manifolds: unknown[]; buildings: unknown[] }
+const registry = async (): Promise<{ buildPlaces(novelDir: string): Promise<PlacesIndex | null> }> => import(pathToFileURL(join(await repository(), "playground", "places-registry.mjs")).href) as Promise<{ buildPlaces(novelDir: string): Promise<PlacesIndex | null> }>;
+
+/** `novel sim places`: the places registry (what the Places page shows) rebuilt from the book's accepted runs. No model calls. */
+export async function simPlaces(novelDir: string): Promise<Record<string, unknown>> {
+  const index = await (await registry()).buildPlaces(novelDir);
+  return index ? { places: index.places.length, manifolds: index.manifolds.length, buildings: index.buildings.length, note: "The Places page shows these: every place's manifolds at their latest fill, with the nominated buildings on their lots." } : { places: 0, note: "No accepted run of the world engine yet: novel sim run first." };
+}
 const simulationFolder = (novelDir: string) => join(novelDir, "stage", "simulation");
 const readIndex = async (novelDir: string): Promise<SimIndex> => readFile(join(simulationFolder(novelDir), "index.json"), "utf8").then((text) => JSON.parse(text) as SimIndex, () => ({ strands: {} }));
 
@@ -185,8 +193,10 @@ export async function simRun(novelDir: string, options: { strand?: string; auto?
     throw error;
   }
   await live.finish("done");
+  // What the Places page shows follows the accepted runs.
+  const places = await (await registry()).buildPlaces(novelDir);
   const standIns = runs.some((run) => run.jev.placements.jev < run.jev.placements.of || run.jev.fights.jev + run.jev.fights.none < run.jev.fights.of);
-  return { engine: sim.ENGINE, inputs, runs, note: `Derived view data, never canon. The viewer plays each line's accepted run (play/ beside the app).${standIns ? " Some placements or fights use stand-ins: novel sim pick asks Jev for them." : ""}` };
+  return { engine: sim.ENGINE, inputs, runs, ...(places ? { places: { places: places.places.length, manifolds: places.manifolds.length, buildings: places.buildings.length } } : {}), note: `Derived view data, never canon. The viewer plays each line's accepted run (play/ beside the app).${standIns ? " Some placements or fights use stand-ins: novel sim pick asks Jev for them." : ""}` };
 }
 
 /** A book's simulation as kept: per story line its accepted run, how many runs, and whether the accepted run was made from the book as it is now. */
@@ -213,4 +223,4 @@ export async function simCurrent(novelDir: string): Promise<{ current: boolean; 
   return { current: status.lines.length > 0 && status.lines.every((line) => line.playable && (line.current || line.newerCurrent)), lines: status.lines.length };
 }
 
-export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id>] [--accept] | novel sim show <novel-dir>";
+export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim places <novel-dir> | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id>] [--accept] | novel sim show <novel-dir>";
