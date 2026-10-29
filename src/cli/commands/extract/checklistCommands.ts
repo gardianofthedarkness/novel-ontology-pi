@@ -184,7 +184,7 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
     status: causalReview.length ? "review" : sweepPending ? "todo" : "done",
     counts: { causalLinks: relations.filter((relation) => relation.type === "CAUSES" || relation.type === "CAUSED_BY").length, awaitingReview: causalReview.length, sweepPending },
     next: causalReview.length ? causalReview.map((changeset) => reviewCommand(changeset.id)) : sweepPending ? [`novel causality sweep ${dir}`] : [],
-    note: "Read references/causality.md before reviewing causal packets." });
+    note: `${sweepPending && !causalReview.length ? "Run the sweep again until it reports complete: it settles once enough top-ranked pairs in a row hold no link (its missesToSettle), not after every pair is asked. " : ""}Read references/causality.md before reviewing causal packets.` });
 
   // Graph: the queryable graph rebuilt after canon changed.
   const graph = await stat(join(novelDir, "ontology", "graph.lbug")).catch(() => null);
