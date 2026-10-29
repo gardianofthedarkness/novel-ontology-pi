@@ -66,7 +66,10 @@ export async function strandDemo(novelDir, options) {
   const staged = new Map(inputs.movementScenes.map(scene => [scene.id, scene])), byIndex = new Map(inputs.data.scenes.map(scene => [scene.id, scene.index]));
   const all = inputs.data.scenes.map(scene => { const stage = staged.get(scene.id); return { id: scene.id, index: scene.index, placeId: stage?.placeId ?? scene.placeIds[0] ?? null, flashback: scene.flashback, cast: stage?.cast ?? answers?.presence.get(scene.id) ?? scene.characterIds, events: stage?.events }; });
   const fork = options.fork ? forkTimeline(all, strands).forkOf : null;
-  const chosen = all.filter(scene => staged.has(scene.id) && scene.events?.length && byIndex.get(scene.id) >= byIndex.get(options.from) && byIndex.get(scene.id) <= byIndex.get(options.to) && (!fork || fork.get(scene.id) === fork.get(options.fork)));
+  const lineScenes = all.filter(scene => staged.has(scene.id) && scene.events?.length && byIndex.get(scene.id) >= byIndex.get(options.from) && byIndex.get(scene.id) <= byIndex.get(options.to) && (!fork || fork.get(scene.id) === fork.get(options.fork)));
+  // `until` (a scene and an event index): the line only as far as that event, for a loop that decides one event at a time.
+  const stop = options.until ? byIndex.get(options.until.scene) : Infinity;
+  const chosen = lineScenes.filter(scene => byIndex.get(scene.id) <= stop).map(scene => (scene.id === options.until?.scene ? { ...scene, events: scene.events.slice(0, options.until.event + 1) } : scene));
   const timeline = forkTimeline(chosen, strands);
   const places = new Map(inputs.data.places.map(place => [place.id, place])), name = id => inputs.names[id] ?? id;
 
@@ -723,8 +726,8 @@ export async function keepWorldDamage(folder) {
  * returns the player's data (what strandDemo makes). The one entry point `novel sim run` uses, so the engine behind it can
  * change (city filling, say) without the command changing.
  */
-export async function runStrand(novelDir, { from, to, fork = null, title } = {}) {
-  return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}) });
+export async function runStrand(novelDir, { from, to, fork = null, title } = {}, { until = null } = {}) {
+  return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}), ...(until ? { until } : {}) });
 }
 
 /** The player page with the strand inlined. */
