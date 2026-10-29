@@ -219,14 +219,18 @@ export function degrade(place: SkeletonPlace, index: number, standing: Uint8Arra
     if (box.sphere && Math.hypot(x - box.sphere.x, y - box.sphere.y, z - box.sphere.z) > box.sphere.r) continue;
     if (rng() < (lot.skeleton.cells[cell] === STAIR ? loss / 3 : loss)) { after[cell] = 0; destroyed.push(cell); }
   }
-  // Cut off: what can no longer reach the ground floor. A blasted ground floor opens its own way out, so losing the door alone does not cut the building off.
-  const seen = new Uint8Array(after.length), queue: number[] = [];
-  for (let cell = 0; cell < after.length; cell++) if (after[cell] && cellAt(lot.skeleton, cell).k === 0) { seen[cell] = 1; queue.push(cell); }
-  for (let head = 0; head < queue.length; head++) for (const next of neighbours(lot.skeleton, after, queue[head])) if (!seen[next]) { seen[next] = 1; queue.push(next); }
+  return { standing: after, destroyed, ...cutOffOf(place, index, after) };
+}
+
+/** What can no longer reach the ground floor (cells and rooms). A blasted ground floor opens its own way out, so losing the door alone does not cut the building off. */
+export function cutOffOf(place: SkeletonPlace, index: number, standing: Uint8Array) {
+  const lot = place.lots[index], seen = new Uint8Array(standing.length), queue: number[] = [];
+  for (let cell = 0; cell < standing.length; cell++) if (standing[cell] && cellAt(lot.skeleton, cell).k === 0) { seen[cell] = 1; queue.push(cell); }
+  for (let head = 0; head < queue.length; head++) for (const next of neighbours(lot.skeleton, standing, queue[head])) if (!seen[next]) { seen[next] = 1; queue.push(next); }
   const cutOff: number[] = [];
-  for (let cell = 0; cell < after.length; cell++) if (after[cell] && !seen[cell]) cutOff.push(cell);
-  const cutRooms = lot.rooms.flatMap((room, r) => room.doors.some((door) => after[door] && seen[door]) ? [] : [r]);
-  return { standing: after, destroyed, cutOff, cutRooms };
+  for (let cell = 0; cell < standing.length; cell++) if (standing[cell] && !seen[cell]) cutOff.push(cell);
+  const cutRooms = lot.rooms.flatMap((room, r) => room.doors.some((door) => standing[door] && seen[door]) ? [] : [r]);
+  return { cutOff, cutRooms };
 }
 
 /** A direction in an embedding space and where events fall along it: strength 0 at the typical calm event, 1 at the typical destructive one. */

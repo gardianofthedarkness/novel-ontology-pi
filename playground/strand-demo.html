@@ -179,6 +179,10 @@ const mats = {
   cut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.9 }),
   room: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.18, depthWrite: false }),
   roomCut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.32, depthWrite: false }),
+  // A hit building's units: its walls and roof as panels, and what fell as rubble.
+  wall: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.2, depthWrite: false }),
+  roof: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.3, depthWrite: false }),
+  rubble: new THREE.MeshLambertMaterial({ color: 0x9aa7b2, transparent: true, opacity: 0.85 }),
   // Fragments: warm white, apart from the orange stairs and the blue corridors they broke from.
   debris: new THREE.MeshBasicMaterial({ color: 0xfff1dc, transparent: true, opacity: 0.95 }),
 };
@@ -251,14 +255,45 @@ function buildPlace(id) {
   return entry;
 }
 /** The skeletons after the first `count` hits on this place: what stands, what is cut off (red), rooms cut off. */
-function drawSkeletons(id, entry, count) {
-  if (entry.shownHits === count) return;
-  entry.shownHits = count;
+/** A unit's place in a lot (structure.ts): a corridor slab, a stair, a wall on the outer face, a roof slab. */
+function unitBox(lot, entry, [kind, i, j, k]) {
+  const x = (lot.i0 + i + 0.5) * CELL - entry.cx, z = (lot.j0 + j + 0.5) * CELL - entry.cz;
+  if (kind === 4) return [x, lot.floors * FLOOR + 0.12, z, CELL * 0.96, 0.24, CELL * 0.96];
+  if (kind === 2) return [x, k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4];
+  if (kind === 1) return [x, k * FLOOR + 0.15, z, CELL * 0.9, 0.3, CELL * 0.9];
+  const y = k * FLOOR + FLOOR / 2, side = i === 0 ? [-1, 0] : i === lot.nx - 1 ? [1, 0] : j === 0 ? [0, -1] : [0, 1];
+  return side[0] ? [x + side[0] * (CELL / 2 - 0.12), y, z, 0.24, FLOOR * 0.94, CELL * 0.96] : [x, y, z + side[1] * (CELL / 2 - 0.12), CELL * 0.96, FLOOR * 0.94, 0.24];
+}
+/**
+ * The skeletons after the first `count` hits on this place: what stands, what is cut off (red), rooms cut off. A building
+ * a structural hit has reached shows its walls and roof as units instead of its shell, without those that broke or fell,
+ * and what fell lies as rubble; except, while `settling` (a hit in progress) is falling, its own rubble, which the
+ * animation is still bringing down.
+ */
+function drawSkeletons(id, entry, count, settling = null) {
+  const key = `${count}|${settling ? 1 : 0}`;
+  if (entry.shownHits === key) return;
+  entry.shownHits = key;
   if (entry.dynamic) entry.group.remove(entry.dynamic);
   const place = data.places[id], dynamic = new THREE.Group(), lost = place.lots.map(() => new Set()), cutCells = place.lots.map(() => new Set()), cutRooms = place.lots.map(() => new Set());
   // A hit may reach several buildings (an impact sphere): each lot it reaches loses its own cells.
-  for (const hit of (placeHits[id] ?? []).slice(0, count)) for (const part of [hit, ...(hit.more ?? [])]) { for (const cell of part.destroyed) lost[part.lot].add(cell); cutCells[part.lot] = new Set(part.cutOff); cutRooms[part.lot] = new Set(part.cutRooms); }
-  const corridors = [], stairs = [], red = [], rooms = [], redRooms = [];
+  const gone = place.lots.map(() => new Set()), structural = new Set(), rubble = [];
+  for (const hit of (placeHits[id] ?? []).slice(0, count)) for (const part of [hit, ...(hit.more ?? [])]) {
+    for (const cell of [...part.destroyed, ...(part.fell ?? [])]) lost[part.lot].add(cell);
+    cutCells[part.lot] = new Set(part.cutOff); cutRooms[part.lot] = new Set(part.cutRooms);
+    if (!part.blasted) continue;
+    structural.add(part.lot);
+    for (const unit of [...part.blasted, ...part.fallen]) gone[part.lot].add(unit.slice(0, 4).join("|"));
+    if (hit !== settling) for (const unit of part.fallen) { const box = unitBox(place.lots[part.lot], entry, unit); rubble.push([box[0], unit[4] + 0.3, box[2], Math.min(box[3], CELL * 0.9), 0.6, Math.min(box[5], CELL * 0.9)]); }
+  }
+  const corridors = [], stairs = [], red = [], rooms = [], redRooms = [], walls = [], roofs = [];
+  // A hit building's walls and roof, unit by unit; its artistic shell gives way to them.
+  place.lots.forEach((lot, n) => {
+    for (const { part } of entry.lots[n].parts) if (!part.isSprite) part.visible = !structural.has(n);
+    if (!structural.has(n) || entry.masked.has(n)) return;
+    for (let k = 0; k < lot.floors; k++) for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if ((i === 0 || j === 0 || i === lot.nx - 1 || j === lot.nz - 1) && !gone[n].has(`3|${i}|${j}|${k}`)) walls.push(unitBox(lot, entry, [3, i, j, k]));
+    for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if (!gone[n].has(`4|${i}|${j}|${lot.floors}`)) roofs.push(unitBox(lot, entry, [4, i, j, lot.floors]));
+  });
   place.lots.forEach((lot, n) => {
     if (entry.masked.has(n)) return;
     for (let cell = 0; cell < lot.cells.length; cell++) {
@@ -271,7 +306,7 @@ function drawSkeletons(id, entry, count) {
     }
     lot.rooms.forEach(([k, i0, j0, i1, j1], r) => { const w = (i1 - i0 + 1) * CELL - 0.35, d = (j1 - j0 + 1) * CELL - 0.35; (cutRooms[n].has(r) ? redRooms : rooms).push([(lot.i0 + (i0 + i1 + 1) / 2) * CELL - entry.cx, k * FLOOR + 1.25, (lot.j0 + (j0 + j1 + 1) / 2) * CELL - entry.cz, w, 2.4, d]); });
   });
-  dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.roomCut, redRooms));
+  dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.roomCut, redRooms), instanced(mats.wall, walls), instanced(mats.roof, roofs), instanced(mats.rubble, rubble));
   entry.group.add(dynamic); entry.dynamic = dynamic;
 }
 
@@ -295,18 +330,25 @@ function fragmentsOf(place, entry, hit) {
   const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (const part of [hit, ...(hit.more ?? [])]) {
     const lot = place.lots[part.lot];
-    for (const cell of part.destroyed) {
-      const i = cell % lot.nx, j = Math.floor(cell / lot.nx) % lot.nz, k = Math.floor(cell / (lot.nx * lot.nz)), stair = lot.cells[cell] === "2";
-      const local = new THREE.Vector3((lot.i0 + i + 0.5) * CELL, k * FLOOR + (stair ? FLOOR / 2 : 0.15), (lot.j0 + j + 0.5) * CELL), away = local.clone().sub(centre), gap = away.length();
+    // A structural hit's blasted units (walls and roofs among them); a stand-in hit's cells.
+    const units = part.blasted ?? part.destroyed.map((cell) => [lot.cells[cell] === "2" ? 2 : 1, cell % lot.nx, Math.floor(cell / lot.nx) % lot.nz, Math.floor(cell / (lot.nx * lot.nz))]);
+    for (const unit of units) {
+      const box = unitBox(lot, { cx: 0, cz: 0 }, unit), stair = unit[0] === 2;
+      const local = new THREE.Vector3(box[0], box[1], box[2]), away = local.clone().sub(centre), gap = away.length();
       const speed = (3 + 10 * hit.strength) * Math.max(0.25, 1 - gap / Math.max(r, 1)) * (0.7 + 0.6 * random()), direction = (gap > 0.1 ? away.normalize() : new THREE.Vector3(random() - 0.5, 0, random() - 0.5).normalize());
       const velocity = direction.multiplyScalar(speed).add(new THREE.Vector3(0, 2 + 4 * hit.strength * random(), 0)), from = new THREE.Vector3(local.x - entry.cx, local.y, local.z - entry.cz);
       // When it lands: the later root of y(t) = y0 + vy t − g t²/2 = ground.
       const land = (velocity.y + Math.sqrt(velocity.y * velocity.y + 2 * 9.8 * Math.max(0, from.y - 0.25))) / 9.8;
-      out.push({ from, velocity, land, axis: new THREE.Vector3(random() - 0.5, random() - 0.5, random() - 0.5).normalize(), spin: 2 + 6 * random(), size: stair ? new THREE.Vector3(1.1, 1.6, 1.1) : new THREE.Vector3(1.5, 0.35, 1.5) });
+      out.push({ from, velocity, land, axis: new THREE.Vector3(random() - 0.5, random() - 0.5, random() - 0.5).normalize(), spin: 2 + 6 * random(), size: stair ? new THREE.Vector3(1.1, 1.6, 1.1) : unit[0] === 3 ? new THREE.Vector3(0.3, 1.6, 1.4) : new THREE.Vector3(1.5, 0.35, 1.5) });
     }
   }
   return out.slice(0, 600);
 }
+/** A structural hit's collapse: every unit that lost its load path drops straight down under gravity, a beat after the blast (higher ones a little later), onto where it comes to rest. */
+function fallingOf(place, entry, hit) {
+  return [hit, ...(hit.more ?? [])].flatMap((part) => (part.fallen ?? []).map((unit) => { const box = unitBox(place.lots[part.lot], entry, unit); return { x: box[0], z: box[2], from: box[1], to: unit[4] + 0.3, delay: 0.3 + 0.04 * unit[3], size: new THREE.Vector3(Math.min(box[3], CELL * 0.9), Math.max(0.3, Math.min(box[4], 1.2)), Math.min(box[5], CELL * 0.9)) }; })).slice(0, 600);
+}
+const falling = new THREE.InstancedMesh(unit, mats.rubble, 600); falling.count = 0; falling.frustumCulled = false; world.add(falling);
 const blast = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0, depthWrite: false })); world.add(blast);
 
 let shownNotice = false, shownPlace = null, shownSegment = null, pathLines = [], time = 0, speed = 2, playing = true, follow = true, last = performance.now(), shownScene = -1, glide = null;
@@ -435,13 +477,14 @@ function frame(now) {
       camera.position.copy(bend(glide.from.position, glide.mid.position, glide.to.position)); controls.target.copy(bend(glide.from.target, glide.mid.target, glide.to.target));
     }
   }
-  for (const id of Object.keys(data.places)) drawSkeletons(id, built.get(id), (hitTimes[id] ?? []).filter((at) => at <= time && (hitsBefore === null || at < hitsBefore)).length);
+  const settling = !quiet && segment.kind === "event" && segment.event.hit && elapsed < 3.2 ? segment.event.hit : null;
+  for (const id of Object.keys(data.places)) drawSkeletons(id, built.get(id), (hitTimes[id] ?? []).filter((at) => at <= time && (hitsBefore === null || at < hitsBefore)).length, id === segment.scene.place ? settling : null);
   if (segment !== shownSegment) {
     shownSegment = segment; showPaths(segment, entry);
     const hit = segment.kind === "event" && segment.event.hit;
     $("flash").textContent = hit ? `damage ${Math.round(hit.strength * 100)}% · ${hit.destroyed.length} cells lost · ${hit.cutRooms.length} rooms cut off` : "";
     $("flash").style.opacity = hit ? 1 : 0;
-    if (hit) { segment.fragments = fragmentsOf(place, entry, hit); segment.blast = new THREE.Vector3(hit.point.x - entry.cx, hit.point.y + 1.5, hit.point.z - entry.cz); const [x, y, z] = [hit.box.x, hit.box.y, hit.box.z]; boxLines.position.set((x[0] + x[1]) / 2 - entry.cx, (y[0] + y[1]) / 2, (z[0] + z[1]) / 2 - entry.cz); boxLines.scale.set(x[1] - x[0], y[1] - y[0], z[1] - z[0]); if (hit.sphere) { sphereLines.position.set(hit.sphere.x - entry.cx, hit.sphere.y, hit.sphere.z - entry.cz); sphereLines.scale.setScalar(hit.sphere.r); } }
+    if (hit) { segment.fragments = fragmentsOf(place, entry, hit); segment.falling = fallingOf(place, entry, hit); segment.blast = new THREE.Vector3(hit.point.x - entry.cx, hit.point.y + 1.5, hit.point.z - entry.cz); const [x, y, z] = [hit.box.x, hit.box.y, hit.box.z]; boxLines.position.set((x[0] + x[1]) / 2 - entry.cx, (y[0] + y[1]) / 2, (z[0] + z[1]) / 2 - entry.cz); boxLines.scale.set(x[1] - x[0], y[1] - y[0], z[1] - z[0]); if (hit.sphere) { sphereLines.position.set(hit.sphere.x - entry.cx, hit.sphere.y, hit.sphere.z - entry.cz); sphereLines.scale.setScalar(hit.sphere.r); } }
   }
   // Damage, from the skeleton's change: every cell the hit took flies out from the impact and falls to rest; the blast swells to the impact's size and fades.
   const pieces = segment.fragments ?? [], t = elapsed;
@@ -452,6 +495,11 @@ function frame(now) {
     matrix.compose(p, new THREE.Quaternion().setFromAxisAngle(piece.axis, turn), piece.size.clone().multiplyScalar(s)); debris.setMatrixAt(n, matrix);
   }
   if (debris.count) debris.instanceMatrix.needsUpdate = true;
+  // The collapse: what lost its load path comes straight down, then lies as rubble (drawn with the skeletons once settled).
+  const drops = segment.falling ?? [];
+  falling.count = !quiet && t < 3.2 ? drops.length : 0;
+  for (let n = 0; n < falling.count; n++) { const drop = drops[n], fall = Math.max(0, t - drop.delay), y = Math.max(drop.to, drop.from - 4.9 * fall * fall); matrix.compose(new THREE.Vector3(drop.x, y, drop.z), new THREE.Quaternion(), drop.size); falling.setMatrixAt(n, matrix); }
+  if (falling.count) falling.instanceMatrix.needsUpdate = true;
   if (segment.event?.hit?.sphere && t < 2.6) { const r = segment.event.hit.sphere.r; sphereLines.scale.setScalar(r * Math.min(1, 0.15 + t / 0.35)); sphereLines.material.opacity = t < 1.2 ? 0.85 : 0.85 * (1 - (t - 1.2) / 1.4); }
   const blastSize = segment.event?.hit?.sphere?.r ?? 8;
   if (segment.blast && t < 1.2) { blast.position.copy(segment.blast); blast.scale.setScalar(1 + (t / 1.2) * blastSize); blast.material.opacity = 0.5 * (1 - t / 1.2); } else blast.material.opacity = 0;

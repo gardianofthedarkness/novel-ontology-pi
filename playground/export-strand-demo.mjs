@@ -52,7 +52,8 @@ export async function strandDemo(novelDir, options) {
   const { storyStrands } = await load('dist/src/digger/timeplace/strandQuestions.js');
   const { latestStrandAnswers } = await load('dist/src/digger/timeplace/strandView.js');
   const { forkTimeline, walkTimeline } = await load('dist/src/digger/stage/environment.js');
-  const { composePlace, placeGraph, placeSpot, nodePosition, degrade, semanticAxis, cellAt } = await load('dist/apps/playground/src/data/skeletonPlace.js');
+  const { composePlace, placeGraph, placeSpot, nodePosition, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
+  const { structureOf, intact, blast, settle, skeletonStanding, unitAt } = await load('dist/apps/playground/src/data/structure.js');
   const { placeTreeCircles } = await load('dist/apps/playground/src/data/timePlace.js');
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -74,7 +75,7 @@ export async function strandDemo(novelDir, options) {
     // A place that is itself a building (the architecture pick says so) is a site: that building, named, on the widest lot.
     const own = inputs.architecture?.places[placeId]?.kind, site = ['skyscraper', 'office', 'home', 'hospital', 'school', 'station', 'church', 'market', 'castle'].includes(own);
     const layout = composePlace({ id: placeId, kind: site ? 'site' : /[街路巷道]$/.test(label) ? 'street' : 'district', seed, members: site ? [{ label, role: ROLE_OF[own] ?? 'office', floors: own === 'skyscraper' ? [10, 14] : [5, 7] }, ...members] : members });
-    groups.set(placeId, { label, path: (place?.path ?? [placeId]).map(name), layout, things: new Map(), standing: layout.lots.map(lot => lot.skeleton.cells.map(value => (value ? 1 : 0))), version: 0, built: null });
+    groups.set(placeId, { label, path: (place?.path ?? [placeId]).map(name), layout, things: new Map(), standing: layout.lots.map(lot => lot.skeleton.cells.map(value => (value ? 1 : 0))), structures: [], units: [], version: 0, built: null });
   }
   const graphOf = placeId => { const group = groups.get(placeId); if (!group.built || group.built.version !== group.version) group.built = { version: group.version, ...placeGraph(group.layout, group.standing, [...group.things.values()]) }; return group.built; };
   const T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 }), kappa = 1, lambda = 8;
@@ -184,20 +185,30 @@ export async function strandDemo(novelDir, options) {
   };
   /**
    * A chosen impact: every building the sphere reaches loses what its percolation step takes inside the sphere; things in it
-   * are hit too. A blast reaches into the building it hits: chosen on a face, the sphere centres on the nearest standing cell
-   * of that building (its skeleton lies inside), so it always meets structure.
+   * are hit too. A blast reaches into the building it hits: chosen off its structure, the sphere centres on that building's
+   * nearest standing unit (a wall, a slab, a stair), so it always meets structure.
    */
   const hitSphere = (scene, event, chosen, strength, seed) => {
-    const group = groups.get(scene.placeId), cellCentre = (lot, cell) => { const { i, j, k } = cellAt(lot.skeleton, cell); return { x: (lot.i0 + i + 0.5) * 2, y: (k + 0.5) * 3, z: (lot.j0 + j + 0.5) * 2 }; };
+    const group = groups.get(scene.placeId);
+    // A lot's structure and what of it stands now (its skeleton's cells as the walk left them, walls and roof as hits left them).
+    const unitsOf = index => { const structure = (group.structures[index] ??= structureOf(group.layout.lots[index])), units = group.units[index] ?? intact(structure); for (let cell = 0; cell < structure.cells; cell++) units[cell] = group.standing[index][cell] && structure.kind[cell] ? 1 : 0; return { structure, units }; };
     const struck = group.layout.lots.map((lot, index) => ({ lot, index, gap: Math.hypot(Math.max(0, lot.i0 * 2 - chosen.x, chosen.x - (lot.i0 + lot.nx) * 2), Math.max(0, lot.j0 * 2 - chosen.z, chosen.z - (lot.j0 + lot.nz) * 2)) })).sort((a, b) => a.gap - b.gap)[0];
     let sphere = chosen;
-    if (struck) { let best = null, far = Infinity; group.standing[struck.index].forEach((up, cell) => { if (!up) return; const at = cellCentre(struck.lot, cell), gap = Math.hypot(at.x - chosen.x, at.y - chosen.y, at.z - chosen.z); if (gap < far) { far = gap; best = at; } }); if (best && far > chosen.r / 2) sphere = { ...best, r: chosen.r }; }
+    if (struck) { const { structure, units } = unitsOf(struck.index); let best = null, far = Infinity; units.forEach((up, unit) => { if (!up) return; const at = unitAt(structure, unit), gap = Math.hypot(at.x - chosen.x, at.y - chosen.y, at.z - chosen.z); if (gap < far) { far = gap; best = at; } }); if (best && far > chosen.r / 2) sphere = { ...best, r: chosen.r }; }
     const reach = (lot) => Math.hypot(Math.max(0, lot.i0 * 2 - sphere.x, sphere.x - (lot.i0 + lot.nx) * 2), Math.max(0, -sphere.y, sphere.y - lot.floors * 3), Math.max(0, lot.j0 * 2 - sphere.z, sphere.z - (lot.j0 + lot.nz) * 2));
     const box = { x: [sphere.x - sphere.r, sphere.x + sphere.r], y: [sphere.y - sphere.r, sphere.y + sphere.r], z: [sphere.z - sphere.r, sphere.z + sphere.r], sphere };
+    // Each building the sphere reaches, as structural units (structure.ts): those the blast's energy breaks go, then what
+    // has lost its load path falls straight down to rest; walls and the roof break and fall like corridors and stairs.
     const parts = group.layout.lots.map((lot, index) => [index, reach(lot)]).filter(([, gap]) => gap <= sphere.r).sort((a, b) => a[1] - b[1]).map(([index]) => {
-      const result = degrade(group.layout, index, group.standing[index], box, strength, stream(seed, 'hit', index));
-      group.standing[index] = result.standing; notes.destroyed += result.destroyed.length;
-      return { lot: index, destroyed: result.destroyed, cutOff: result.cutOff, cutRooms: result.cutRooms };
+      const { structure, units } = unitsOf(index);
+      const { broken, energy } = blast(structure, units, sphere, strength), hit = units.slice();
+      for (const unit of broken) hit[unit] = 0;
+      const { standing: after, fallen } = settle(structure, hit);
+      group.units[index] = after; group.standing[index] = skeletonStanding(structure, after);
+      notes.destroyed += broken.length + fallen.length; notes.fell = (notes.fell ?? 0) + fallen.length;
+      const tuple = unit => [structure.kind[unit], structure.i[unit], structure.j[unit], structure.k[unit]];
+      return { lot: index, destroyed: broken.filter(unit => unit < structure.cells), fell: fallen.filter(({ unit }) => unit < structure.cells).map(({ unit }) => unit), ...cutOffOf(group.layout, index, group.standing[index]),
+        blasted: broken.map(tuple), fallen: fallen.map(({ unit, to }) => [...tuple(unit), Math.round(to * 10) / 10]), energy: Math.round(energy) };
     });
     const thingHits = entities.filter(entity => entity.at?.place === scene.placeId && Math.hypot(entity.at.x - sphere.x, entity.at.y - sphere.y, entity.at.z - sphere.z) <= sphere.r + entity.size / 2).map(entity => {
       const rng = stream(seed, 'thing', entity.id), destroyed = [];
