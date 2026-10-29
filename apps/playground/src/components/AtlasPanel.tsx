@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { dateLine, scenePeriod, type TimePlaceProjection } from "../data/timePlace";
 import type { AtlasLevels } from "../data/orbitalTimePlace";
-import { buildingMoments, buildingsAt as namedAt } from "../data/placeBuildings";
+import { buildingMoments, buildingsAt as namedAt, simulationAt } from "../data/placeBuildings";
 
 /**
  * Orbital Places side panel: what floats above the map — scenes, events
@@ -31,11 +31,13 @@ const NOT_STATED = "";
 
 export function AtlasPanel({ data, periods, onPeriods, focus, onClearFocus, levels, onLevels, onCharacter, buildingsAt, onBuildingsAt, laterBuildings, onLaterBuildings }: Props) {
   // Named buildings by story moment: the slider's last step is the end of the story (everything standing).
-  const moments = useMemo(() => data.buildings?.length ? buildingMoments(data) : [], [data]);
+  const moments = useMemo(() => data.buildings?.length || data.simulation ? buildingMoments(data) : [], [data]);
   // A moment of another book (or none) is the end of the story, as the map reads it.
   const found = moments.findIndex((moment) => moment.id === buildingsAt), step = found < 0 ? moments.length : found;
   const named = useMemo(() => [...namedAt(data, step < moments.length ? moments[step].id : null).values()].flat(), [data, moments, step]);
   const standingCount = named.filter((entry) => entry.standing).length;
+  const simulated = useMemo(() => [...simulationAt(data, step < moments.length ? moments[step].id : null).values()], [data, moments, step]);
+  const hitsSoFar = simulated.reduce((sum, place) => sum + place.hits.filter((hit) => hit.standing).length, 0);
   const placed = useMemo(() => data.scenes.filter((scene) => scene.placeIds.length), [data]);
   const rows = useMemo(() => {
     const counts = new Map<string, number>();
@@ -71,6 +73,7 @@ export function AtlasPanel({ data, periods, onPeriods, focus, onClearFocus, leve
       <input id="atlas-buildings-at" type="range" min={0} max={moments.length} step={1} value={step} aria-valuetext={step < moments.length ? moments[step].label : "the end of the story"}
         onChange={(event) => { const at = Number(event.target.value); onBuildingsAt(at >= moments.length ? null : moments[at].id); }} />
       <small>{standingCount} of {named.length} building{named.length === 1 ? "" : "s"} the story names are standing (warm) · the rest of each skyline always stands · named by a model, not reviewed</small>
+      {simulated.length > 0 && <small>{simulated.length} place{simulated.length === 1 ? "" : "s"} drawn from the stage simulation ({[...new Set(simulated.map((place) => place.title))].join("; ")}): their lots, Jev's placed things (lavender), {hitsSoFar} hit{hitsSoFar === 1 ? "" : "s"} so far (red), amber arcs for who moved between places</small>}
       <label className="atlas-later"><input type="checkbox" checked={laterBuildings} onChange={(event) => onLaterBuildings(event.target.checked)} /> Show later ones faintly</label>
     </div>}
     {data.characters.length > 0 && <label className="atlas-character"><span>Trace a character</span><select value="" onChange={(event) => { if (event.target.value) onCharacter(event.target.value); }}><option value="">Choose…</option>{data.characters.slice(0, 20).map((character) => <option key={character.id} value={character.id}>{character.label} · {character.scenes}</option>)}</select></label>}

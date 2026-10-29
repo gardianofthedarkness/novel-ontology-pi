@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CylinderGeometry, DoubleSide, EdgesGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, LineBasicMaterial, LineLoop, LineSegments, Mesh, MeshBasicMaterial, Shape as Outline } from "three";
+import { AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DoubleSide, EdgesGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, IcosahedronGeometry, LineBasicMaterial, LineLoop, LineSegments, Mesh, MeshBasicMaterial, Shape as Outline, SphereGeometry } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { FloorMark } from "../data/orbitalTimePlace";
 import type { ArchitectureKind } from "../data/placeArchitecture";
@@ -23,6 +23,8 @@ const noRaycast = () => undefined;
 const EDGE = "#8fd6ff", PROPOSED = "#ffd36b", FILL = "#2b86c4";
 /** Buildings the story names at a place: warm, so they read apart from the generic skyline. */
 const NAMED_EDGE = "#ffe7b0", NAMED_FILL = "#b97f2c";
+/** A simulated place (the stage simulation records): Jev's placed things in lavender, damage and impacts in red. */
+const THING_EDGE = "#d9c8ff", DAMAGE = "#ff5a6e";
 /** World units above the floor where the lowest scene sphere floats; buildings stay under it. */
 const CEILING = 215;
 const RISE_SECONDS = 1.6, SCAN_SECONDS = 7;
@@ -275,19 +277,111 @@ function NamedBuildings({ mark, shapes, reducedMotion }: { mark: FloorMark; shap
   return <primitive object={group} />;
 }
 
+/**
+ * A place as the stage simulation recorded it (docs/stage-simulation-records.md), as of the chosen
+ * moment: each lot at its footprint and floors on the place's 2 m grid (a district's at the back of
+ * its disc, clear of the places inside), warm where the story names it, turning red as the hits so
+ * far take its cells; Jev's placed things where they last stood; each impact a red sphere. What
+ * comes later stands faint. Read from the records, never recomputed here.
+ */
+function SimulatedPlaceHologram({ mark, shapes, reducedMotion }: { mark: FloorMark; shapes: Shapes; reducedMotion: boolean }) {
+  const place = mark.simulation!;
+  const width = place.grid.nx * 2, depth = place.grid.nz * 2;
+  const span = mark.region ? mark.radius * 0.9 : mark.radius * 1.6, metre = span / Math.max(width, depth);
+  const centre: [number, number] = mark.region ? [0, -mark.radius * 0.45] : [(mark.spotX ?? mark.x) - mark.x, (mark.spotZ ?? mark.z) - mark.z];
+  const at = (x: number, z: number): [number, number] => [centre[0] + (x - width / 2) * metre, centre[1] + (z - depth / 2) * metre];
+  const layout = [mark.id, mark.x, mark.z, mark.radius, mark.depth ?? 0, !!mark.region, place.strand, ...place.lots.map((lot) => `${lot.index}:${lot.model}`), ...place.things.map((thing) => `${thing.id}@${thing.x},${thing.z}`), place.hits.length].join("|");
+  const { group, lots, things, hits } = useMemo(() => {
+    const group = new Group();
+    group.position.set(mark.x, -944 + 1.5 * (mark.depth ?? 0) + 1, mark.z);
+    const materials = (color: string, fill: string) => ({ edge: new LineBasicMaterial({ color, vertexColors: true, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, toneMapped: false }),
+      fill: new MeshBasicMaterial({ color: fill, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, toneMapped: false }) });
+    const add = (shape: Shape, x: number, z: number, sx: number, sy: number, sz: number, turn: number, paint: ReturnType<typeof materials>, y = 0) => {
+      const holder = new Group();
+      holder.position.set(x, y, z);
+      holder.rotation.y = turn;
+      holder.scale.set(sx, sy, sz);
+      const body = new Mesh(shape.fill, paint.fill), outline = new LineSegments(shape.edges, paint.edge);
+      body.raycast = noRaycast; outline.raycast = noRaycast;
+      holder.add(body, outline);
+      group.add(holder);
+      return holder;
+    };
+    const lots = place.lots.map((lot) => {
+      const shape = shapes.get(lot.model) ?? shapes.get(VARIANTS.office[0])!, paint = materials(lot.named ? NAMED_EDGE : EDGE, lot.named ? NAMED_FILL : FILL);
+      const [x, z] = at((lot.i0 + lot.nx / 2) * 2, (lot.j0 + lot.nz / 2) * 2), tall = Math.min(CEILING, lot.floors * 3 * metre);
+      const holder = add(shape, x, z, (lot.nx * 2 * metre) / shape.width, tall / shape.height, (lot.nz * 2 * metre) / shape.depth, 0, paint);
+      return { lot, holder, paint, base: tall / shape.height, level: 0 };
+    });
+    // A thing: the model Jev picked when the stage can draw it, else its plain shape, fitted to its extent.
+    const primitive = (kind: string | null): Shape => { const geometry = kind === "oval" ? new SphereGeometry(0.5, 12, 8).translate(0, 0.5, 0) : kind === "triangle" ? new ConeGeometry(0.6, 1, 3).translate(0, 0.5, 0) : new BoxGeometry(1, 1, 1).translate(0, 0.5, 0); return shapeOf(geometry); };
+    const things = place.things.map((thing) => {
+      const shape = (thing.model && shapes.get(thing.model)) || primitive(thing.shape), paint = materials(THING_EDGE, "#6b5bd2");
+      const [x, z] = at(thing.x, thing.z), size = (value: number) => Math.max(4, value * metre);
+      const holder = add(shape, x, z, size(thing.w) / shape.width, size(thing.h) / shape.height, size(thing.d) / shape.depth, thing.turn, paint, Math.min(CEILING, thing.y * metre));
+      return { thing, holder, paint, own: !(thing.model && shapes.get(thing.model)) ? shape : null, level: 0 };
+    });
+    const hits = place.hits.map((hit) => {
+      const geometry = new EdgesGeometry(new IcosahedronGeometry(1, 1)), material = new LineBasicMaterial({ color: DAMAGE, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, toneMapped: false });
+      const ring = new LineSegments(geometry, material);
+      const [x, z] = at(hit.x, hit.z);
+      ring.position.set(x, Math.min(CEILING, hit.y * metre), z);
+      ring.scale.setScalar(Math.max(6, hit.r * metre));
+      ring.raycast = noRaycast;
+      group.add(ring);
+      return { hit, ring, material, geometry, level: 0 };
+    });
+    return { group, lots, things, hits };
+  }, [layout, shapes]); // eslint-disable-line react-hooks/exhaustive-deps -- the layout key holds every field of the place it reads
+  useEffect(() => () => {
+    for (const entry of [...lots, ...things]) { entry.paint.edge.dispose(); entry.paint.fill.dispose(); }
+    for (const entry of things) { entry.own?.fill.dispose(); entry.own?.edges.dispose(); }
+    for (const entry of hits) { entry.material.dispose(); entry.geometry.dispose(); }
+  }, [lots, things, hits]);
+  // What changes with the moment without a rebuild: standing or later, damage so far, broken things.
+  const state = useMemo(() => ({ lots: new Map(place.lots.map((lot) => [lot.index, lot])), things: new Map(place.things.map((thing) => [thing.id, thing])), hits: place.hits }), [place]);
+  const red = useMemo(() => new Color(DAMAGE), []);
+  useFrame(() => {
+    const active = mark.active ? 1 : 0.28, ease = reducedMotion ? 1 : 0.1;
+    for (const entry of lots) {
+      const now = state.lots.get(entry.lot.index) ?? entry.lot;
+      entry.level += ((now.standing ? 1 : 0.2) - entry.level) * ease;
+      entry.holder.scale.y = entry.base * Math.max(0.05, (now.standing ? 1 - 0.35 * now.damage : 0.35));
+      entry.paint.edge.color.set(now.named ? NAMED_EDGE : EDGE).lerp(red, now.damage);
+      entry.paint.edge.opacity = 0.75 * entry.level * active;
+      entry.paint.fill.opacity = (0.08 + 0.12 * now.damage) * entry.level * active;
+    }
+    for (const entry of things) {
+      const now = state.things.get(entry.thing.id) ?? entry.thing;
+      entry.level += ((now.standing ? 1 : 0.2) - entry.level) * ease;
+      entry.paint.edge.color.set(now.broken ? DAMAGE : THING_EDGE);
+      entry.paint.edge.opacity = 0.9 * entry.level * active;
+      entry.paint.fill.opacity = 0.12 * entry.level * active;
+    }
+    hits.forEach((entry, index) => {
+      entry.level += ((state.hits[index]?.standing ? 1 : 0.15) - entry.level) * ease;
+      entry.material.opacity = 0.55 * entry.level * active;
+    });
+  });
+  return <primitive object={group} />;
+}
+
 export function ArchitectureHolograms({ marks, reducedMotion }: { marks: FloorMark[]; reducedMotion: boolean }) {
-  const built = useMemo(() => marks.filter((mark): mark is FloorMark & { architecture: ArchitectureKind } => !!mark.architecture), [marks]);
-  const storied = useMemo(() => marks.filter((mark) => mark.named?.length), [marks]);
+  // A simulated place is drawn from its records alone (its lots stand for its building and the buildings the story names).
+  const simulated = useMemo(() => marks.filter((mark) => mark.simulation), [marks]);
+  const built = useMemo(() => marks.filter((mark): mark is FloorMark & { architecture: ArchitectureKind } => !!mark.architecture && !mark.simulation), [marks]);
+  const storied = useMemo(() => marks.filter((mark) => mark.named?.length && !mark.simulation), [marks]);
   const [shapes, setShapes] = useState<Shapes | null>(null);
   useEffect(() => {
-    if ((!built.length && !storied.length) || shapes) return;
+    if ((!built.length && !storied.length && !simulated.length) || shapes) return;
     let live = true;
     loadShapes().then((loaded) => { if (live) setShapes(loaded); }, () => undefined);
     return () => { live = false; };
-  }, [built.length, storied.length, shapes]);
+  }, [built.length, storied.length, simulated.length, shapes]);
   if (!shapes) return null;
   return <>
     {built.map((mark, order) => <PlaceHologram key={`${mark.id}:${mark.architecture}`} mark={mark} kind={mark.architecture} shapes={shapes} order={order} reducedMotion={reducedMotion} />)}
     {storied.map((mark) => <NamedBuildings key={`named:${mark.id}`} mark={mark} shapes={shapes} reducedMotion={reducedMotion} />)}
+    {simulated.map((mark) => <SimulatedPlaceHologram key={`simulated:${mark.id}`} mark={mark} shapes={shapes} reducedMotion={reducedMotion} />)}
   </>;
 }

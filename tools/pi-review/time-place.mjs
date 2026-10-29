@@ -26,6 +26,9 @@
  * picks it), with every scene that names it, so the map can show each from
  * the scene it first appears in. Names are matched exactly; not canon.
  *
+ * `simulation` is the stage simulation records, trimmed (stage-reports.mjs):
+ * passed through for the Places map's simulated places. Not canon.
+ *
  * `strands` are the answers of the latest strands report (strand-answers.mjs):
  * where "who is present?" was asked, the answered cast replaces the recorded
  * one, and a scene answered as "nobody known, someone else" is marked `alone`
@@ -54,7 +57,7 @@ export function buildingLog(mentions, sceneRows, architecture) {
   return [...log.values()];
 }
 
-export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [], strands = null, architecture = null, buildings = null }) {
+export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [], strands = null, architecture = null, buildings = null, simulation = null }) {
   const known = new Set(applied.map((entity) => entity.id));
   const proposedEntities = pending.filter((proposal) => proposal.kind === 'upsert_entity' && ['TimePoint', 'Location'].includes(proposal.payload?.kind) && !known.has(proposal.payload.id)).map((proposal) => proposal.payload);
   const proposedIds = new Set(proposedEntities.map((entity) => entity.id));
@@ -134,5 +137,5 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
   for (const scene of sceneRows) for (const id of scene.characterIds) characterCounts.set(id, (characterCounts.get(id) ?? 0) + 1);
   const characters = [...characterCounts].sort((first, second) => second[1] - first[1]).slice(0, 40).map(([id, scenes]) => ({ id, label: nameOf(byId.get(id)), scenes }));
   const names = Object.fromEntries([...placeIds, ...characterCounts.keys()].map((id) => [id, nameOf(byId.get(id))]));
-  return { available: timeRows.length > 0, times: timeRows, scenes: sceneRows, places, characters, names, ...(buildings ? { buildings: buildingLog(buildings, sceneRows, architecture) } : {}) };
+  return { available: timeRows.length > 0, times: timeRows, scenes: sceneRows, places, characters, names, ...(buildings ? { buildings: buildingLog(buildings, sceneRows, architecture) } : {}), ...(simulation ? { simulation } : {}) };
 }

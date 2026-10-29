@@ -23,3 +23,35 @@ export async function readStageBuildings(workspace) {
     .filter(thing => thing?.kind === 'building' && typeof thing.name === 'string' && thing.name.trim())
     .map(thing => ({ sceneId, name: thing.name.trim(), model: thing.match?.kind === 'building' && typeof thing.match.id === 'string' ? thing.match.id : null, size: Number.isFinite(thing.size) ? thing.size : null })));
 }
+
+const simulationFile = /^[\w.-]+\.json$/;
+const count = list => Array.isArray(list) ? list.length : 0;
+
+/**
+ * The stage simulation records (stage/simulation/, docs/stage-simulation-records.md), trimmed to what
+ * the Places map draws: per place its lots (the first strand's layout of a place stands), the things
+ * placed there, the hits with what each lot lost, and who moved between places. Null without records.
+ */
+export async function readSimulation(workspace) {
+  const folder = resolve(workspace, 'stage', 'simulation');
+  const index = await readFile(resolve(folder, 'index.json'), 'utf8').then(JSON.parse, () => null);
+  if (!index?.strands || typeof index.strands !== 'object') return null;
+  const strands = [], places = {}, things = [], hits = [], migrations = [];
+  for (const [id, entry] of Object.entries(index.strands)) {
+    if (!simulationFile.test(String(entry?.file))) continue;
+    const record = await readFile(resolve(folder, entry.file), 'utf8').then(JSON.parse, () => null);
+    if (!record?.buildings || !Array.isArray(record.scenes)) continue;
+    strands.push({ id, title: record.strand?.title ?? entry.title ?? id, from: record.strand?.from ?? null, to: record.strand?.to ?? null });
+    for (const [placeId, place] of Object.entries(record.buildings)) {
+      if (places[placeId] || !Array.isArray(place?.lots)) continue;
+      places[placeId] = { strand: id, label: place.label, kind: place.kind, grid: { nx: place.grid?.NX ?? 32, nz: place.grid?.NZ ?? 24 },
+        lots: place.lots.map(lot => ({ name: lot.detected?.name ?? lot.label ?? null, since: lot.detected?.scene ?? null, model: lot.model, i0: lot.footprint.i0, j0: lot.footprint.j0, nx: lot.footprint.nx, nz: lot.footprint.nz, floors: lot.floors, cells: String(lot.skeleton ?? '').length })) };
+    }
+    for (const thing of record.things ?? []) things.push({ id: `${id}:${thing.id}`, name: thing.name, model: thing.model ?? null, shape: thing.shape ?? null,
+      placements: (thing.placements ?? []).map(placement => ({ scene: placement.scene, place: placement.place, x: placement.x, y: placement.y ?? 0, z: placement.z, w: placement.fit?.w ?? 4, h: placement.fit?.h ?? 4, d: placement.fit?.d ?? 4, turn: placement.fit?.turn ?? 0 })) });
+    for (const scene of record.scenes) for (const event of scene.events ?? []) if (event.hit?.sphere) hits.push({ scene: scene.id, place: scene.place, event: event.index, ...event.hit.sphere, strength: event.hit.strength,
+      lots: (event.hit.parts ?? []).map(part => ({ lot: part.lot, lost: count(part.destroyedCells) + count(part.fellCells) + count(part.cutOffCells) })), things: (event.hitThings ?? []).map(entry => `${id}:${entry.id}`) });
+    for (const move of record.migrations ?? []) migrations.push({ scene: move.scene, person: move.person, from: move.from, to: move.to });
+  }
+  return strands.length ? { strands, places, things, hits, migrations } : null;
+}

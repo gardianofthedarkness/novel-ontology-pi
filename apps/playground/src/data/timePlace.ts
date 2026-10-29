@@ -74,8 +74,21 @@ export interface TimePlaceProjection {
   calendar?: CalendarView | null;
   /** The buildings the story names at its places (novel stage objects): one entry per name at a place, with the scenes that name it in reading order. Not canon. */
   buildings?: PlaceBuilding[];
+  /** The stage simulation records (docs/stage-simulation-records.md), trimmed: each simulated place's lots, the things placed, the hits and who moved. Not canon. */
+  simulation?: PlaceSimulation;
 }
 export interface PlaceBuilding { id: string; name: string; placeId: string; model: string | null; size: number | null; sceneIds: string[] }
+/** A lot of a simulated place, on its grid of 2 m cells: named when the story names it (from `since`, a scene id; null: it always stands). */
+export interface SimulationLot { name: string | null; since: string | null; model: string; i0: number; j0: number; nx: number; nz: number; floors: number; cells: number }
+export interface PlaceSimulation {
+  strands: { id: string; title: string; from: string | null; to: string | null }[];
+  places: Record<string, { strand: string; label: string; kind: string; grid: { nx: number; nz: number }; lots: SimulationLot[] }>;
+  /** Placements in the place's metres (x, z across its grid, y up), with the fitted extent. */
+  things: { id: string; name: string; model: string | null; shape: string | null; placements: { scene: string; place: string; x: number; y: number; z: number; w: number; h: number; d: number; turn: number }[] }[];
+  /** An impact: its sphere (metres), strength, the cells each lot it reached lost, and the things it broke. */
+  hits: { scene: string; place: string; event: number; x: number; y: number; z: number; r: number; strength: number; lots: { lot: number; lost: number }[]; things: string[] }[];
+  migrations: { scene: string; person: string; from: string; to: string }[];
+}
 
 /** Calendar minutes: ordering keys from the backend (`novel calendar`), not real date arithmetic. */
 export interface CalendarSpan { start: number; end: number }
