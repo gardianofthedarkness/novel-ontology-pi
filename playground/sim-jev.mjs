@@ -80,9 +80,10 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
   const chrome = await browser();
   const stop = () => void chrome.close().finally(() => process.exit(143));
   process.once('SIGTERM', stop);
-  // The line as the engine makes it now, with every answer so far, in capture mode.
-  const load = async () => {
-    const data = await runStrand(novelDir, strand);
+  // The line as the engine makes it now, with every answer so far, in capture mode; with `until` (one of its events), only as
+  // far as that event (an engine that cannot stop early makes all of it).
+  const load = async (until = null) => {
+    const data = await runStrand(novelDir, strand, until ? { until: { scene: until.scene, event: until.index } } : {});
     await writeFile(join(work, 'index.html'), inlineStrand(template, data, { vendor: true }));
     await chrome.evaluate('delete window.__stage').catch(() => {});
     await chrome.open(url);
@@ -96,21 +97,22 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
     await live.outcome({ subject: view.subject, text: view.text, ...(view.capture ? { picture: await chrome.still('jpeg'), jpeg: true } : {}) });
   } : null;
   try {
-    let { data, stage } = await load(), calls = 0, dirty = false;
+    // The page loaded has every answer so far and reaches event `through` of the line (all of it at first).
+    let { data, stage } = await load(), calls = 0, through = Infinity;
     await live?.phase('models');
     const picked = await pickModels({ chrome, jev, stage, models, limit: budget, log });
     calls += picked;
     if (picked) { await saveBoxes(); ({ data, stage } = await load()); }
+    // The whole line as first made: what each event is (its text, its people, the things it places, its fight), which answers do not change.
+    const line = { data, stage };
     const counts = { events: { asked: 0, reused: 0, left: 0 }, placements: { asked: 0, reused: 0, failed: 0, left: 0 }, fights: { asked: 0, reused: 0, left: 0 } };
     let chain = hash(['line', strand.from, strand.to, strand.fork ?? null]), stepped = 0, stopped = null;
-    const events = data.scenes.flatMap(scene => scene.events.map((event, index) => ({ scene: scene.id, index, id: event.id })));
+    const events = line.data.scenes.flatMap(scene => scene.events.map((event, index) => ({ scene: scene.id, index, id: event.id })));
     for (const [position, { scene: sceneId, index, id }] of events.entries()) {
-      // The scene and event as the engine made them with every answer so far (the page is made again after each decided event).
-      const scene = data.scenes.find(entry => entry.id === sceneId), event = scene.events[index], key = `${sceneId}|${index}`, place = stage.places[scene.place];
+      const scene = line.data.scenes.find(entry => entry.id === sceneId), event = scene.events[index], key = `${sceneId}|${index}`, place = line.stage.places[scene.place];
       chain = hash([chain, key, id, event.text]);
-      const things = placementWork(stage).filter(item => item.spot.scene === sceneId && item.spot.event === index), hits = fightWork(stage).filter(item => item.fight.scene === sceneId && item.fight.event === index);
-      // The spots people may go to: the event's own when the engine gives them (taken around the event's focus), else the scene's.
-      const people = [...new Set([...event.actors, ...scene.cast])].filter(person => data.people[person]), spots = event.spots ?? scene.spots ?? [];
+      const things = placementWork(line.stage).filter(item => item.spot.scene === sceneId && item.spot.event === index), hits = fightWork(line.stage).filter(item => item.fight.scene === sceneId && item.fight.event === index);
+      const people = [...new Set([...event.actors, ...scene.cast])].filter(person => line.data.people[person]), hasSpots = (event.spots ?? scene.spots ?? []).length > 0;
       // What was answered at this event, by the answers' own keys (a fight Jev said breaks nothing is gone from the page, but its
       // answer stays): the digest the chain carries on.
       const answered = () => [decisions[key]?.moves ?? null, Object.keys(placements).filter(name => name.startsWith(`${key}|`)).sort().map(name => [name, placements[name]?.box ?? null]), fights[key]?.sphere ?? fights[key]?.none ?? null];
@@ -120,7 +122,7 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
         for (const name of Object.keys(placements)) if (name.startsWith(`${key}|`)) delete placements[name];
         delete fights[key];
       }
-      const ask = { people: people.length && spots.length && !decisions[key]?.moves, things: things.filter(item => placements[item.key]?.inputs !== item.inputs), fights: hits.filter(item => !fights[item.key]) };
+      const ask = { people: people.length && hasSpots && !decisions[key]?.moves, things: things.filter(item => placements[item.key]?.inputs !== item.inputs), fights: hits.filter(item => !fights[item.key]) };
       if (!ask.people && !ask.things.length && !ask.fights.length) {
         if (decisions[key]) counts.events.reused++; else { decisions[key] = { chain, scene: sceneId, event: id }; await saveDecisions(); }
         counts.placements.reused += things.length; counts.fights.reused += hits.length;
@@ -128,7 +130,10 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
         continue;
       }
       if (calls >= budget) { stopped = position; break; }
-      if (dirty) { ({ data, stage } = await load()); dirty = false; }
+      // The page as far as this event, with every answer so far (the world as it stands when the event begins).
+      if (through < position) { ({ data, stage } = await load(events[position])); through = position; }
+      // The spots people may go to: the event's own when the engine gives them (taken around where its people stand), else the scene's.
+      const here = data.scenes.find(entry => entry.id === sceneId), spots = here.events[index].spots ?? here.spots ?? [];
       const label = `${scene.label ?? sceneId} · event ${index + 1}`;
       await live?.phase(`people · ${label}`);
       let moves = decisions[key]?.moves ?? null;
@@ -137,7 +142,7 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
         // Spots that come to the same place on the graph share one pin, named for all of them.
         const pins = [...Map.groupBy(spots, spot => spot.node)].map(([node, same]) => ({ node, label: same.map(spot => spot.label).join(' / ') })), pinOf = spot => pins.find(pin => pin.node === spot.node).label;
         await capture({ id: `${key}#now`, scene: sceneId, event: index, place: scene.place, mask: true, beforeHit: true, pins });
-        const now = await chrome.still(), name = person => data.people[person].name;
+        const now = await chrome.still(), name = person => line.data.people[person].name;
         const questions = people.flatMap((person, n) => [
           { key: `moves_${n}`, primitive: 'noul', label: `${name(person)} moves`, instructions: `In this event, does ${name(person)} go to a different spot of the place (walk, run, climb, go down, fall, get dragged or teleport)? Talking, looking, or acting in place is not moving.` },
           { key: `to_${n}`, primitive: 'choice', label: `${name(person)} to`, instructions: `Which pinned spot in picture "now" is ${name(person)} at when this event ends (the one they are at, if they do not move)?`, options: spots.map(spot => spot.id), optionHints: Object.fromEntries(spots.map(spot => [spot.id, `${spot.id}: the pin named ${pinOf(spot)}${spot.hint ? `, ${spot.hint}` : ''}`])) },
@@ -179,9 +184,12 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
       // The event played with its answers: its end, with each move's path drawn, as the next event begins from it. When
       // nothing in it changed the world (nobody moves, now or as the page last played it; nothing placed or hit), the page
       // as it is already begins the next event.
-      const movers = Object.values(moves ?? {}).filter(answer => answer.to).length, played = scene.events[index].moves.length;
+      const movers = Object.values(moves ?? {}).filter(answer => answer.to).length, played = here.events[index].moves.length;
       if (!movers && !played && !ask.things.length && !ask.fights.length) continue;
-      ({ data, stage } = await load());
+      // One run as far as the next event: this one's end, and the world as the next begins.
+      const next = events[position + 1] ?? null;
+      ({ data, stage } = await load(next ?? events[position]));
+      through = next ? position + 1 : position;
       if (live) {
         await live.phase(`step · ${label}`);
         const played = data.scenes.find(entry => entry.id === sceneId).events[index];
@@ -198,7 +206,7 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
     }
     // Stopped at the budget: the events from there on are still to be decided (an over-count: some may only need checking).
     if (stopped !== null) counts.events.left = events.length - stopped;
-    const unmodelled = stage.things.filter(thing => thing.placed.length && !models[thing.name]).length;
+    const unmodelled = line.stage.things.filter(thing => thing.placed.length && !models[thing.name]).length;
     return { calls, models: { picked, left: unmodelled }, ...counts, stepped, left: unmodelled + counts.events.left + counts.placements.left + counts.fights.left };
   } finally {
     process.off('SIGTERM', stop);
