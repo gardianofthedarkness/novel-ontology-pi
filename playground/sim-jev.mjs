@@ -130,7 +130,7 @@ async function recordMoves(novelDir, strand, { chrome, live, load }) {
     const span = axis => [Math.min(...ends.map(point => point[axis])), Math.max(...ends.map(point => point[axis]))], [x, y, z] = ['x', 'y', 'z'].map(span);
     const focus = ends.length ? { x: (x[0] + x[1]) / 2, y0: y[0], z: (z[0] + z[1]) / 2, w: x[1] - x[0] + 8, h: Math.max(3, y[1] - y[0] + 3), d: z[1] - z[0] + 8 } : null;
     const start = await shot('start', null, focus), end = await shot('end', Math.max(0.05, start.shown.seconds - 0.05), focus), place = stage.places[scene.place];
-    const moves = start.shown.moves.map((move, n) => ({ person: move.person, name: move.name, color: move.color, how: move.how, spot: move.spot, from: move.from, to: move.to,
+    const moves = start.shown.moves.map((move, n) => ({ person: move.person, name: move.name, color: move.color, how: move.how, spot: move.spot, ...(move.with ? { with: move.with } : {}), from: move.from, to: move.to,
       overlays: { start: { path: move.path, ensemble: move.ensemble }, end: { path: end.shown.moves[n]?.path ?? [], ensemble: end.shown.moves[n]?.ensemble ?? [] } } }));
     await live.frame({ kind: 'move', subject: event.text.slice(0, 40), text: moves.map(move => `${move.name} → ${move.spot} (${move.how})`).join('; '), context: [`Place: ${place.path.join(' › ')}`, `Event: ${event.text.slice(0, 400)}`],
       pictures: [{ name: 'start', picture: start.picture, jpeg: true }, { name: 'end', picture: end.picture, jpeg: true }], moves, answers: moveAnswers(movement, scene.id, index, scene.events.length, moves) });
@@ -143,7 +143,7 @@ async function recordMoves(novelDir, strand, { chrome, live, load }) {
 /**
  * Jev's movement answers for an event's moves (stage/movement.json, by the scene's event order; nothing when the order does
  * not match the `count` of events the run has): per mover whether they move (how sure), where to (the spot and the next
- * likeliest), how, and which way.
+ * likeliest), how, and which way; then, for each mover, whether they go together with anyone else there (Jev's pairs).
  */
 export function moveAnswers(movement, sceneId, index, count, moves) {
   const scene = movement?.scenes?.[sceneId], asked = scene?.order?.length === count ? scene.events?.[scene.order[index]] : null;
@@ -158,7 +158,13 @@ export function moveAnswers(movement, sceneId, index, count, moves) {
       ...(answer.how ? [{ key: `${move.name} how`, value: answer.how, confidence: null }] : []),
       ...(way.length ? [{ key: `${move.name} way`, value: way[0][0], confidence: way[0][1], top: way }] : []),
     ];
-  });
+  }).concat(pairAnswers(movement, scene, asked && scene.order[index], moves));
+}
+/** Jev's pairs for an event (who goes together with a mover), named; each pair once. */
+function pairAnswers(movement, scene, eventId, moves) {
+  const movers = new Set(moves.map(move => move.person)), name = id => moves.find(move => move.person === id)?.name ?? movement?.names?.[id] ?? id;
+  return (eventId ? scene.pairs?.[eventId] ?? [] : []).filter(([a, b]) => movers.has(a) || movers.has(b))
+    .map(([a, b, p]) => ({ key: `${name(a)} with ${name(b)}`, value: p >= 0.5 ? 'together' : 'apart', confidence: p }));
 }
 
 /** What a question is about, in a few words for the live page's list: the thing, or the start of the event. */

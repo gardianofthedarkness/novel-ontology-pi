@@ -96,6 +96,9 @@ test('an event\'s moves with Jev\'s movement answers, by the scene\'s event orde
     { key: 'Ada how', value: 'run', confidence: null },
     { key: 'Ada way', value: 'up', confidence: 0.9, top: [['up', 0.9], ['down', 0.1]] },
   ], 'Cy was not asked about: nothing for Cy');
+  // Who goes together, named: Jev's pairs for the event.
+  const paired = { ...movement, names: { p2: 'Bo' }, scenes: { s1: { ...movement.scenes.s1, pairs: { e2: [['p1', 'p2', 0.8]] } } } };
+  assert.deepEqual(moveAnswers(paired, 's1', 1, 2, moves).at(-1), { key: 'Ada with Bo', value: 'together', confidence: 0.8 });
   assert.deepEqual(moveAnswers(movement, 's1', 1, 3, moves), [], 'the run has another count of events: the order cannot be trusted');
   assert.deepEqual(moveAnswers(null, 's1', 1, 2, moves), []);
 });

@@ -1002,7 +1002,7 @@ if (capture) {
     },
     /**
      * An event's moves as a still of it shows them (call after a capture of that event; `camera` is its id): how long the
-     * event plays (`seconds`) and per move, who, how, the spot it ends at, its path and the path integral's other draws (at
+     * event plays (`seconds`) and per move, who, how, the spot it ends at (or beside whom, and `with`, for someone going along), its path and the path integral's other draws (at
      * most 12) as points of the picture (fractions of its width and height from the top left), and where it starts and ends
      * in the place's metres.
      */
@@ -1012,7 +1012,7 @@ if (capture) {
       const entry = built.get(segment.scene.place), v = new THREE.Vector3(), round = (value) => Math.round(value * 1000) / 1000;
       const flat = (node) => { const p = at(segment.place, node); v.set(p.x - entry.cx, p.y + 0.35, p.z - entry.cz).project(cam); return [round((v.x + 1) / 2), round((1 - v.y) / 2)]; };
       const metres = (node) => { const p = at(segment.place, node); return { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, z: Math.round(p.z * 10) / 10 }; };
-      return { seconds: segment.end - segment.start, moves: segment.moves.map((move) => ({ person: move.person, name: data.people[move.person]?.name ?? move.person, color: data.people[move.person]?.color ?? "#ffffff", how: move.how, spot: move.spot,
+      return { seconds: segment.end - segment.start, moves: segment.moves.map((move) => ({ person: move.person, name: data.people[move.person]?.name ?? move.person, color: data.people[move.person]?.color ?? "#ffffff", how: move.how, spot: move.with ? `beside ${data.people[move.with]?.name ?? move.with}` : move.spot, ...(move.with ? { with: move.with } : {}),
         path: move.path.map(flat), ensemble: move.ensemble.slice(0, 12).map((nodes) => nodes.map(flat)), from: metres(move.path[0]), to: metres(move.path.at(-1)) })) };
     },
     /**
