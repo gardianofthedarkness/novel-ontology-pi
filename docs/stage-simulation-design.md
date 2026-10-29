@@ -76,6 +76,15 @@ Buildings are added as the story detects them, not fixed up front.
      - It is visible when all timelines are selected.
    - **Packing:** districts and their circles pack like the ontology bubbles, scaling themselves to make room for their neighbours.
 
+**Objects once placed:**
+- **They sit still.** No spinning: an object rests where it was put, fitted to the box Jev draws. The box gives its footprint, and the matched model or shape gives its proportions.
+- **Small objects** (small next to the buildings around them) never shrink the view.
+- **Big objects** (not small next to the buildings) likely have structures inside.
+  - They get a skeleton of their own and can be damaged like a building.
+  - When one matches a building type in the library, existing buildings shrink to make room.
+- **The library grows from its source.** Novels bring vehicles, aircraft, ships and machines. The library search should include more of the source the models came from (the Kenney CC0 catalog: vehicles, aircraft, space and so on), baked into the same int16 format.
+  - The bake tool named in commit `9d988e0` (`tools/architecture-models.mjs`) was never committed; it needs writing again and committing.
+
 **Variety:** every lot wears an artistic model (the Kenney CC0 kits baked in `architectureModels.json`), drawn per lot from its kind's variants. The walkable skeleton glows inside.
 
 ## Moves: 14 directions, and the sky
