@@ -20,6 +20,7 @@ import { NarrativeList } from "./components/NarrativeList";
 import "./narrative.css";
 import "./chrome.css";
 import { PlaceMap } from "./components/PlaceMap";
+import { PlacesWorld } from "./components/PlacesWorld";
 import { followTarget, timePlaceEmergence, universeIds, type TimePlaceProjection } from "./data/timePlace";
 import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProjection, sceneOfSpiral, spiralNodeId, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels, type StoryShape } from "./data/orbitalTimePlace";
 import { AtlasPanel } from "./components/AtlasPanel";
@@ -142,6 +143,9 @@ export default function App() {
   /** Orbital Story time: one spiral line, or strands on a ribbon (remembered per browser). */
   const [storyShape, setStoryShape] = useState<StoryShape>(() => { try { return localStorage.getItem("story-shape") === "strands" ? "strands" : "line"; } catch { return "line"; } });
   const chooseStoryShape = (shape: StoryShape) => { setStoryShape(shape); try { localStorage.setItem("story-shape", shape); } catch { /* per-browser convenience only */ } };
+  // Places as the world engine left it (the places registry), or as the atlas of the place tree.
+  const [placesShape, setPlacesShape] = useState<"world" | "atlas">(() => { try { return localStorage.getItem("places-shape") === "atlas" ? "atlas" : "world"; } catch { return "world"; } });
+  const choosePlacesShape = (shape: "world" | "atlas") => { setPlacesShape(shape); try { localStorage.setItem("places-shape", shape); } catch { /* per-browser convenience only */ } };
   /** Scenes at the centre of the Story time spiral, kept for the switch to Places. */
   const storyCentre = useRef<string[]>([]);
   const noteStoryCentre = useCallback((ids: string[]) => { storyCentre.current = ids.map(sceneOfSpiral).filter((id): id is string => !!id); }, []);
@@ -907,6 +911,8 @@ export default function App() {
     );
   }
 
+  /** The Places page as the world engine left it, when the book has a places registry and World is chosen. */
+  const placesWorld = stageView === "places" && placesShape === "world" ? viewTimePlace?.worldMap ?? null : null;
   if (clipsMode) return <StageClips timePlace={timePlace} world={shownWorld} volume={loadedBook} requested={requestedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion}
     books={books.length ? books.map((book) => ({ id: book.id, label: bookName(book) })) : loadedBook !== null ? [{ id: loadedBook, label: liveCollection }] : []} bookQuery={bookQuery(phoneLive ? loadedBook : null)} simulationHref={simulationHref} simulationLabel={simulationLabel} exitHref={withClips(null)} clipsHref={withClips} />;
   if (readMode) return <ReadMode simulationHref={simulationHref} simulationLabel={simulationLabel} timePlace={timePlace} world={shownWorld} volume={loadedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withRead(false)} />;
@@ -928,14 +934,16 @@ export default function App() {
           <div className="design-switch stage-switch" role="toolbar" aria-label="Mode and view">
             <div className="stage-group" role="group" aria-label="Mode">{MODES.map(([orbital, label]) => <button key={label} aria-pressed={orbitalMode === orbital} onClick={() => switchMode(orbital)} title={orbital ? "3D orbital views" : "Flat traditional views"}>{label}</button>)}</div>
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
+            {stageView === "places" && viewTimePlace?.worldMap && <div className="stage-group" role="group" aria-label="Places shape">{([["world", "World"], ["atlas", "Atlas"]] as const).map(([value, label]) => <button key={value} aria-pressed={placesShape === value} title={value === "world" ? "Every place's manifolds at their latest fill, with the nominated buildings, as the world engine left them" : "The place tree as an atlas"} onClick={() => choosePlacesShape(value)}>{label}</button>)}</div>}
             {orbitalMode && stageView === "story" && viewTimePlace?.available && <div className="stage-group" role="group" aria-label="Story shape">{([["line", "Line"], ["strands", "Strands"]] as const).map(([value, label]) => <button key={value} aria-pressed={storyShape === value} title={value === "strands" ? "Scenes that run in parallel side by side (estimated from who is in each scene)" : "Every scene on one line in story order"} onClick={() => chooseStoryShape(value)}>{label}</button>)}</div>}
           </div>
-          {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} buildingsAt={atlasBuildingsAt} onBuildingsAt={setAtlasBuildingsAt} laterBuildings={atlasLaterBuildings} onLaterBuildings={setAtlasLaterBuildings} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
-          {regroupedOrbit && stageView === "places" && viewTimePlace && <div className="holo-entry" role="toolbar" aria-label="Holo stage">
+          {!placesWorld && regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} buildingsAt={atlasBuildingsAt} onBuildingsAt={setAtlasBuildingsAt} laterBuildings={atlasLaterBuildings} onLaterBuildings={setAtlasLaterBuildings} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
+          {!placesWorld && regroupedOrbit && stageView === "places" && viewTimePlace && <div className="holo-entry" role="toolbar" aria-label="Holo stage">
             {selectedPlace && <button className="is-primary" onClick={() => setHolo({ target: selectedPlace.id, mode: "diorama", beat: 0 })}>▶ Enter {selectedPlace.label}</button>}
             <button onClick={() => setHolo({ target: "journey", mode: "journey", beat: 0 })}>➝ Journey</button>
           </div>}
-          {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} albumPictures={stageView === "story" ? albumPictures : []} albumPortraits={albumPortraits} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
+          {placesWorld ? <PlacesWorld map={placesWorld} bookQuery={bookQuery(phoneLive ? loadedBook : null)} bookBar={bookBar} />
+          : regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} albumPictures={stageView === "story" ? albumPictures : []} albumPortraits={albumPortraits} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
           : stageView === "story" ? <StoryTimeline pictures={albumPictures} album={storyAlbum} onPicture={selectStoryPicture} data={viewTimePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(viewTimePlace?.names ?? {}))} bookBar={bookBar} focusBook={focusBook} emerging={shownEmerging?.times} touched={emerging && Date.now() - emerging.at < 9000 ? undefined : shownTouched} following={followingActivity} onShowInOrbit={(sceneId) => {
             // Universe ids are "<volume>:<scene>": another book opens first.
             const scene = viewTimePlace?.scenes.find((entry) => entry.id === sceneId);

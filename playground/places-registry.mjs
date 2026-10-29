@@ -62,10 +62,11 @@ export async function buildPlaces(novelDir) {
   for (const { strand, run, data } of runs) {
     for (const node of data.macro) places.set(node.id, { id: node.id, label: node.label, scale: node.scale ?? null, parent: node.parent ?? null, x: node.x, z: node.z, r: node.r, depth: node.depth ?? 0, ...(node.temporary ? { temporary: true } : {}), strand, run });
     for (const land of data.landscapes) fills.set(land.place, { land, strand, run });
-    // Named buildings on the lots they borrowed: a lot carries the fill building it stands on (`<place>:<n>`).
+    // Named buildings on the lots they borrowed: a lot carries the fill building it stands on (`<place>:<lot>`, the lot's
+    // own id after the first colon).
     for (const lot of data.world?.lots ?? []) {
       const nominee = lot.detected && names.get(lot.detected.name);
-      if (nominee && /^[^:]+:\d+$/.test(String(lot.source))) named.set(nominee.id, { entity: nominee.id, name: nominee.name, source: lot.source, scene: lot.detected.scene, strand, run });
+      if (nominee && /^[^:]+:.+$/.test(String(lot.source)) && !String(lot.source).startsWith('anchor')) named.set(nominee.id, { entity: nominee.id, name: nominee.name, source: lot.source, scene: lot.detected.scene, strand, run });
     }
   }
   // A fill kept once, named by its content: a later run that fills the same reuses it.
@@ -95,7 +96,7 @@ export async function buildPlaces(novelDir) {
   // A nominated building where it stands: its fill building, in its place's own metres.
   const buildings = [];
   for (const entry of named.values()) {
-    const place = entry.source.slice(0, entry.source.lastIndexOf(':')), land = fills.get(place)?.land, row = land?.buildings[land.ids?.indexOf(entry.source) ?? -1], at = places.get(place);
+    const place = entry.source.slice(0, entry.source.indexOf(':')), land = fills.get(place)?.land, row = land?.buildings[land.ids?.indexOf(entry.source) ?? -1], at = places.get(place);
     if (!row || !at) continue;
     const [x, z, w, d, angle, floors] = row;
     buildings.push({ id: entry.entity, name: entry.name, kind: 'named', place, x: round(x - at.x), z: round(z - at.z), w, d, angle, floors, scene: entry.scene, strand: entry.strand, run: entry.run });

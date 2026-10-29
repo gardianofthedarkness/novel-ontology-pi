@@ -76,6 +76,8 @@ export interface TimePlaceProjection {
   buildings?: PlaceBuilding[];
   /** The stage simulation records (docs/stage-simulation-records.md), trimmed: each simulated place's lots, the things placed, the hits and who moved. Not canon. */
   simulation?: PlaceSimulation;
+  /** What the Places page lays out (the places registry, from the accepted runs): the canvas of places, their manifolds at their latest fills, the nominated buildings. */
+  worldMap?: WorldMap;
 }
 /** A named building at a place: from the stage objects report (a model's reading, not reviewed) or, once reviewed, the ontology record it is (`entityId`). */
 export interface PlaceBuilding { id: string; name: string; placeId: string; model: string | null; size: number | null; sceneIds: string[]; entityId?: string; reviewed?: boolean }
@@ -500,3 +502,20 @@ export function followTarget(change: { times: string[]; places: string[] }, comm
   if (causal) return "story";
   return otherWork ? "narrative" : null;
 }
+
+/**
+ * The places registry (playground/places-registry.mjs, served with the book): every place's circle on the canvas (world
+ * metres), each place's ground and manifolds in birth order (a manifold: one patch of its landscape, with the version of
+ * its latest fill), and the nominated buildings where they stand (in their place's own metres). Fills come by version
+ * (`api/places/fill`), never change, and are laid out as they are.
+ */
+export interface WorldMap {
+  builtAt: string | null;
+  runs: { strand: string; run: string; exportedAt: string }[];
+  places: { id: string; label: string; scale: string | null; parent: string | null; x: number; z: number; r: number; depth: number; open: boolean; temporary?: boolean; run: string | null }[];
+  grounds: { place: string; version: string; roads: number }[];
+  manifolds: { id: string; place: string; types: string[]; era?: string; born?: unknown; centre?: [number, number]; radius?: number; outline?: [number, number][]; version: string; buildings: number; run: string | null }[];
+  buildings: { id: string; name: string; kind: "named" | "staged"; place: string; x: number; z: number; w: number; d: number; angle: number; floors: number; scene: string | null; run: string | null }[];
+}
+/** A manifold's fill: its buildings as [x, z, w, d, angle, floors] in its place's metres. A place's ground: its roads [ax, az, bx, bz, width] and walls. */
+export interface WorldFill { version: string; place: string; types?: string[]; buildings?: number[][]; roads?: number[][]; walls?: number[][] }
