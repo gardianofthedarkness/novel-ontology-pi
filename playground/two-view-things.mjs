@@ -73,7 +73,7 @@ export async function browser() {
   return {
     open: async url => { await send('Page.navigate', { url }, sessionId); for (let tries = 0; tries < 300; tries++) { if (await evaluate('!!window.__stage').catch(() => false)) return; await new Promise(done => setTimeout(done, 100)); } throw new Error('The page did not start in capture mode'); },
     evaluate,
-    still: async () => (await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 800, height: 600, scale: 1 } }, sessionId)).data,
+    still: async (format = 'png') => (await send('Page.captureScreenshot', { format, ...(format === 'jpeg' ? { quality: 88 } : {}), clip: { x: 0, y: 0, width: 800, height: 600, scale: 1 } }, sessionId)).data,
     // Chrome writes its profile until it exits; a leftover temporary profile is no reason to lose a run.
     close: async () => { socket.close(); const exited = new Promise(done => chrome.once('exit', done)); chrome.kill(); await Promise.race([exited, new Promise(done => setTimeout(done, 3000))]); await rm(profile, { recursive: true, force: true }).catch(() => {}); },
   };
