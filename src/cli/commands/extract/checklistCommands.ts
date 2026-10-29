@@ -12,7 +12,7 @@ import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/a
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { loadWorkspaceSentences, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
-import { stageInputs } from "./stageCommands.js";
+import { objectsPacketsOpen, stageInputs } from "./stageCommands.js";
 import { castScope, loadCast } from "../../../solidifier/identity/cast.js";
 import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js";
 import { calendarStale, loadCalendar } from "../../../solidifier/calendar/calendar.js";
@@ -202,14 +202,20 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   stageItems.push({ id: "architecture", title: "Buildings of places (a sub-kind of place, for read mode)", dependsOn: ["time-place", "place-tree"],
     status: stage.architectureCurrent ? "done" : "todo", counts: { places: stage.places.length, picked: Object.keys(stage.architecture?.places ?? {}).length, current: stage.architectureCurrent },
     next: stage.architectureCurrent ? [] : [`novel stage architecture ${dir}`], note: stage.architectureCurrent ? undefined : `About ${stage.places.length} Jev picture choice(s), one per place; a view input, no review.` });
+  // Named buildings and large things: into the ontology through review (a building is a place of the tree, a thing an Item), after the identity check.
+  const objectsOpen = await objectsPacketsOpen(novelDir);
+  stageItems.push({ id: "objects", title: "Named buildings and large things (into the ontology, reviewed)", dependsOn: ["architecture"],
+    status: objectsOpen.length ? "review" : stage.objectsCurrent ? "done" : "todo", counts: { scenes: stage.movementScenes.length, detected: Object.keys(stage.objects?.scenes ?? {}).length, proposed: stage.objects?.proposed?.length ?? 0, awaitingReview: objectsOpen.length, current: stage.objectsCurrent },
+    next: objectsOpen.length ? objectsOpen.map((changeset) => reviewCommand(changeset.id)) : stage.objectsCurrent ? [] : [`novel stage objects ${dir}`],
+    note: objectsOpen.length ? "Review it like any packet: accept a building or thing only if its sentences show it, where it is and that it is the one named." : stage.objectsCurrent ? undefined : "Work-model calls (a few scenes each) and Jev for names that are not full proper names; it proposes a review packet." });
   stageItems.push({ id: "movement", title: "Movement in scenes (who goes where, how, for read mode)", dependsOn: ["blocks", "strands", "architecture"],
     status: stage.movementCurrent ? "done" : "todo", counts: { scenes: stage.movementScenes.length, asked: Object.keys(stage.movement?.scenes ?? {}).length, estimatedRequests: stage.estimate, maxRequests: stage.limit, current: stage.movementCurrent },
     next: stage.movementCurrent ? [] : [`novel stage movement ${dir} --max-calls ${stage.limit}`], note: stage.movementCurrent ? undefined : `About ${stage.estimate} Jev request(s), at most ${stage.limit}; answers are kept and reused, so a stopped run continues. A view input, no review.` });
-  stageItems.push({ id: "stage", title: "Animation prep (read mode)", dependsOn: [...items.map((item) => item.id), "architecture", "movement"],
+  stageItems.push({ id: "stage", title: "Animation prep (read mode)", dependsOn: [...items.map((item) => item.id), "architecture", "objects", "movement"],
     status: stage.planCurrent ? "done" : "todo", counts: { prepared: !!stage.plan, current: stage.planCurrent, moves: stage.plan?.counts.moves ?? 0 },
-    next: stage.planCurrent ? [] : [`novel stage prep ${dir}`], note: "Last of all: waits for every analysis step and review. No model calls." });
+    next: stage.planCurrent ? [] : [`novel stage prep ${dir}`], note: "Last of all: waits for every analysis step and review, the stage objects packet included. No model calls." });
   settle(stageItems, items);
-  return { ...result, stage: { items: stageItems, next: stageItems.filter((item) => item.status === "todo").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) } };
+  return { ...result, stage: { items: stageItems, next: stageItems.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) } };
 }
 
 export interface UniverseChecklist { library: string; universeId: string; title: string; complete: boolean; books: { sourceId: string; title: string; continuityId: string | null; readingOrder: number | null; workspace: string | null; extracted: boolean; complete: boolean; firstGap: string | null }[]; items: ChecklistItem[]; next: string[] }

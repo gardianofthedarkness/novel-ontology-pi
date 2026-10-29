@@ -6,6 +6,7 @@
 // Where each move ends comes from Jev's spot answers in the book's movement report. The page carries scene
 // and event summaries, names and places; no quotes or source text.
 //   npm run build && node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text]
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -253,7 +254,7 @@ export async function strandDemo(novelDir, options) {
       return { kind: 'move', to: [path.at(-1), last >= 0 ? last : heading] };
     },
   };
-  const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: 'strand-demo-2' });
+  const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: ENGINE });
   notes.solves = fields.size;
   const people = [...new Set(chosen.flatMap(scene => scene.cast))], color = new Map(people.map((id, index) => [id, PALETTE[index % PALETTE.length]]));
   // The macro view: the strand's places and their ancestors in the place tree; and who migrated between places, scene by scene.
@@ -343,6 +344,48 @@ export function simulationRecord(data, strand) {
   };
 }
 
+/** The simulation engine a run comes from: its walk (seeds come from the scene keys under this version) and its record format. */
+export const ENGINE = 'strand-demo-2';
+/** What a run is made from: the book's reviewed ontology and the stage's answers (buildings, objects, movement, Jev's placements and impacts). */
+const SIMULATION_INPUTS = ['ontology/entities.jsonl', 'ontology/relations.jsonl', 'ontology/scenes.jsonl', 'ontology/events.jsonl', 'stage/architecture.json', 'stage/objects.json', 'stage/movement.json', 'stage/thing-boxes.json', 'stage/impacts.json'];
+export async function simulationInputs(novelDir) {
+  const hash = createHash('sha256');
+  for (const name of SIMULATION_INPUTS) hash.update(`${name}\n${await readFile(`${novelDir}/${name}`, 'utf8').catch(() => '')}\n`);
+  return hash.digest('hex').slice(0, 16);
+}
+
+/**
+ * A strand's record kept as a run of its own (stage/simulation/runs/<strand>/<run>.json), never overwritten: each run says
+ * what it was made from (`inputs`), the engine and when; the same outcome again is the same run. A strand's accepted run (its
+ * first, or this one with `accept`) is the one readers take: copied to <strand>.json, where they look, and named in
+ * index.json, which lists every run. A strand recorded before runs existed keeps that record as its first run.
+ * Derived view data, never canon (docs/stage-simulation-records.md).
+ */
+export async function keepRun(folder, strand, record, { inputs, accept = false }) {
+  const index = JSON.parse(await readFile(`${folder}/index.json`, 'utf8').catch(() => '{"strands":{}}'));
+  const before = index.strands[strand.id] ?? null, runs = before?.runs ?? [];
+  const contentOf = value => createHash('sha256').update(JSON.stringify({ ...value, exportedAt: null, run: null })).digest('hex').slice(0, 12);
+  const entryOf = (value, id, extra) => ({ id, file: `runs/${strand.id}/${id}.json`, exportedAt: value.exportedAt, content: contentOf(value), scenes: value.scenes.length, hits: value.scenes.reduce((n, scene) => n + scene.events.filter(event => event.hit).length, 0), things: value.things.length, ...extra });
+  const write = async (entry, value) => { await mkdir(`${folder}/runs/${strand.id}`, { recursive: true }); await writeFile(`${folder}/${entry.file}`, JSON.stringify({ ...value, run: { id: entry.id, inputs: entry.inputs, engine: entry.engine } }, null, 1), { mode: 0o644, flag: 'wx' }); };
+  // Before runs: the strand's one record becomes its first run, accepted.
+  let accepted = before?.accepted ?? null;
+  if (before && !before.runs) {
+    const legacy = JSON.parse(await readFile(`${folder}/${before.file}`, 'utf8').catch(() => 'null'));
+    if (legacy?.scenes) { const entry = entryOf(legacy, `${String(legacy.exportedAt).replace(/\D/g, '').slice(0, 14)}-${contentOf(legacy).slice(0, 6)}`, { inputs: null, engine: null }); await write(entry, legacy); runs.push(entry); accepted = entry.id; }
+  }
+  const content = contentOf(record);
+  let run = runs.find(entry => entry.content === content);
+  const fresh = !run;
+  if (!run) { run = entryOf(record, `${record.exportedAt.replace(/\D/g, '').slice(0, 14)}-${content.slice(0, 6)}`, { inputs, engine: ENGINE }); await write(run, record); runs.push(run); }
+  if (accept || !accepted) accepted = run.id;
+  const chosen = runs.find(entry => entry.id === accepted);
+  await writeFile(`${folder}/${strand.id}.json`, await readFile(`${folder}/${chosen.file}`, 'utf8'), { mode: 0o644 });
+  index.version = 2;
+  index.strands[strand.id] = { file: `${strand.id}.json`, from: strand.from, to: strand.to, fork: strand.fork ?? null, title: record.strand.title, accepted, exportedAt: chosen.exportedAt, scenes: chosen.scenes, hits: chosen.hits, things: chosen.things, runs };
+  await writeFile(`${folder}/index.json`, JSON.stringify(index, null, 1), { mode: 0o644 });
+  return { strand: strand.id, run: run.id, fresh, accepted, ...(accepted !== run.id ? { note: `Kept as a run; ${accepted} stays accepted (--accept to take this one)` } : {}) };
+}
+
 /** The player page with the strand inlined. */
 export function inlineStrand(template, data, { name = 'One Strand', fragment = false, vendor = false } = {}) {
   // `vendor`: three.js served beside the page (vendor/), so the page needs no CDN.
@@ -355,8 +398,8 @@ export function inlineStrand(template, data, { name = 'One Strand', fragment = f
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { from: { type: 'string' }, to: { type: 'string' }, fork: { type: 'string' }, title: { type: 'string' }, name: { type: 'string' }, fragment: { type: 'boolean' }, vendor: { type: 'boolean' }, set: { type: 'string' }, records: { type: 'boolean' } } });
-  const usage = 'Usage: node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text] [--name text] [--fragment] [--vendor]\n       node playground/export-strand-demo.mjs --set <strands.json> <out.html> [--name text] [--fragment] [--vendor] [--records]   (strands.json: [{ id, label, name, novel, from, to, fork, title }], one page with a strand picker)';
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { from: { type: 'string' }, to: { type: 'string' }, fork: { type: 'string' }, title: { type: 'string' }, name: { type: 'string' }, fragment: { type: 'boolean' }, vendor: { type: 'boolean' }, set: { type: 'string' }, records: { type: 'boolean' }, accept: { type: 'boolean' } } });
+  const usage = 'Usage: node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text] [--name text] [--fragment] [--vendor]\n       node playground/export-strand-demo.mjs --set <strands.json> <out.html> [--name text] [--fragment] [--vendor] [--records [--accept]]   (strands.json: [{ id, label, name, novel, from, to, fork, title }], one page with a strand picker)';
   const template = await readFile(`${repository}/playground/strand-demo.html`, 'utf8'), started = Date.now();
   // One page per strand, or one page carrying a set of strands to pick from.
   const entries = values.set ? JSON.parse(await readFile(values.set, 'utf8')) : [{ ...values, novel: positionals[0] }], out = values.set ? positionals[0] : positionals[1];
@@ -365,15 +408,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const entry of entries) strands.push({ id: entry.id, label: entry.label, name: entry.name, data: await strandDemo(entry.novel.replace(/^~(?=\/)/, process.env.HOME), entry) });
   const page = inlineStrand(template, values.set ? { strands } : strands[0].data, { name: values.name, fragment: values.fragment, vendor: values.vendor });
   await writeFile(out, page, { mode: 0o644 });
-  // --records: each strand's simulation, kept with its book (stage/simulation/<strand>.json, listed in index.json).
+  // --records: each strand's simulation kept with its book as a versioned run (keepRun); --accept makes this export's run the accepted one.
+  const kept = [];
   if (values.records) for (const [n, strand] of strands.entries()) {
-    const entry = entries[n], folder = `${entry.novel.replace(/^~(?=\/)/, process.env.HOME)}/stage/simulation`, id = entry.id ?? `${entry.from}-${entry.to}`;
+    const entry = entries[n], novel = entry.novel.replace(/^~(?=\/)/, process.env.HOME), folder = `${novel}/stage/simulation`, id = entry.id ?? `${entry.from}-${entry.to}`;
     await mkdir(folder, { recursive: true });
-    await writeFile(`${folder}/${id}.json`, JSON.stringify(simulationRecord(strand.data, { id, from: entry.from, to: entry.to, fork: entry.fork ?? null }), null, 1), { mode: 0o644 });
-    const index = JSON.parse(await readFile(`${folder}/index.json`, 'utf8').catch(() => '{"strands":{}}'));
-    index.strands[id] = { file: `${id}.json`, from: entry.from, to: entry.to, fork: entry.fork ?? null, title: strand.data.title, exportedAt: strand.data.exportedAt, scenes: strand.data.scenes.length, hits: strand.data.notes.hits, things: strand.data.things.length };
-    await writeFile(`${folder}/index.json`, JSON.stringify(index, null, 1), { mode: 0o644 });
+    const meta = { id, from: entry.from, to: entry.to, fork: entry.fork ?? null };
+    kept.push(await keepRun(folder, meta, simulationRecord(strand.data, meta), { inputs: await simulationInputs(novel), accept: values.accept }));
   }
   const summary = data => ({ scenes: data.scenes.length, events: data.scenes.reduce((n, s) => n + s.events.length, 0), ...data.notes, T: data.T, places: Object.values(data.places).map(p => ({ label: p.label, kind: p.kind, lots: p.lots.length, floors: p.lots.map(l => l.floors).join('/'), clutter: p.clutter.length, draws: p.clutterDraws })) });
-  console.log(JSON.stringify({ out, bytes: Buffer.byteLength(page), ...(values.set ? { strands: strands.map(strand => ({ id: strand.id, ...summary(strand.data) })) } : summary(strands[0].data)), seconds: (Date.now() - started) / 1000 }));
+  console.log(JSON.stringify({ out, bytes: Buffer.byteLength(page), ...(values.set ? { strands: strands.map(strand => ({ id: strand.id, ...summary(strand.data) })) } : summary(strands[0].data)), ...(kept.length ? { runs: kept } : {}), seconds: (Date.now() - started) / 1000 }));
 }

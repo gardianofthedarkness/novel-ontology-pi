@@ -30,8 +30,8 @@ const cells = list => Array.isArray(list) ? list.filter(Number.isInteger) : [];
 const units = list => Array.isArray(list) ? list.filter(unit => Array.isArray(unit) && unit.length >= 4 && unit.every(Number.isFinite)) : [];
 
 /**
- * The stage simulation records (stage/simulation/, docs/stage-simulation-records.md), trimmed to what
- * the Places map draws: per place its lots with their skeletons and rooms (the first strand's layout of
+ * The stage simulation records (stage/simulation/, docs/stage-simulation-records.md), each strand's
+ * accepted run, trimmed to what the Places map draws: per place its lots with their skeletons and rooms (the first strand's layout of
  * a place stands), the things placed there, the hits with the cells and units each lot lost, and who
  * moved between places. Null without records.
  */
@@ -44,7 +44,9 @@ export async function readSimulation(workspace) {
     if (!simulationFile.test(String(entry?.file))) continue;
     const record = await readFile(resolve(folder, entry.file), 'utf8').then(JSON.parse, () => null);
     if (!record?.buildings || !Array.isArray(record.scenes)) continue;
-    strands.push({ id, title: record.strand?.title ?? entry.title ?? id, from: record.strand?.from ?? null, to: record.strand?.to ?? null });
+    // The strand's accepted run (versioned records: index.json lists every run; <strand>.json is the accepted one).
+    const run = record.run && typeof record.run.id === 'string' ? { id: record.run.id, engine: record.run.engine ?? null, inputs: record.run.inputs ?? null } : null;
+    strands.push({ id, title: record.strand?.title ?? entry.title ?? id, from: record.strand?.from ?? null, to: record.strand?.to ?? null, run, runs: Array.isArray(entry.runs) ? entry.runs.length : 1 });
     for (const [placeId, place] of Object.entries(record.buildings)) {
       if (places[placeId] || !Array.isArray(place?.lots)) continue;
       places[placeId] = { strand: id, label: place.label, kind: place.kind, grid: { nx: place.grid?.NX ?? 32, nz: place.grid?.NZ ?? 24 },

@@ -7,7 +7,11 @@ import { cachedDecisions } from "../../../digger/timeplace/cache.js";
 import { storyStrands, strandProjection } from "../../../digger/timeplace/strandQuestions.js";
 import { latestStrandAnswers } from "../../../digger/timeplace/strandView.js";
 import { forkTimeline, type TimelineScene } from "../../../digger/stage/environment.js";
-import { detectObjects, type ObjectScene, type ObjectsReport } from "../../../digger/stage/objects.js";
+import { detectObjects, namedThings, objectIdentities, objectProposals, objectSceneInputs, type ObjectScene, type ObjectScenePlace, type ObjectsReport } from "../../../digger/stage/objects.js";
+import { listChangeSets, saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
+import { timePlaceReviewSource } from "../../../digger/timeplace/afterApply.js";
+import { castScope } from "../../../solidifier/identity/cast.js";
+import { loadThings } from "../../../solidifier/identity/things.js";
 import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
 import { loadEmbedder } from "../../../ground/connectors/embeddings.js";
 import { loadConfig } from "../../config.js";
@@ -18,23 +22,29 @@ import { prepareStage, prepFingerprint, type StagePlan } from "../../../digger/s
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 
 /**
- * `novel stage architecture|movement|prep|show` — what read mode replays.
- * Two faculties and a last step, each writing a report under <book>/stage/
- * (view inputs: no review packet, nothing written to canon). They run on
- * request, apart from the book's analysis (`novel checklist` lists them
- * under `stage`), and read reviewed canon only: a place or cast still
- * awaiting review is never paid for.
+ * `novel stage architecture|objects|movement|prep|show` — what read mode replays.
+ * Three faculties and a last step, each writing a report under <book>/stage/
+ * (view inputs, nothing written to canon directly; only the objects
+ * faculty proposes facts, through a review packet). They run on request,
+ * apart from the book's analysis (`novel checklist` lists them under
+ * `stage`), and read reviewed canon only: a place or cast still awaiting
+ * review is never paid for.
  *
  *   architecture  each place's building, a sub-kind of place (names
  *                 shortlist, Jev picks among pictures) — after story time
  *                 and the place tree, beside strands and causality;
+ *   objects       the buildings and large things each staged scene names;
+ *                 the named ones, after the identity check, proposed to the
+ *                 ontology (a building as a place of the tree, a thing as an
+ *                 Item named in its scenes) for review — after architecture;
  *   movement      who moves where inside each scene's building, how (Jev) —
  *                 once the whole file is extracted (the full character list
  *                 feeds the cast-candidate scorer) and the buildings are
  *                 picked;
  *   prep          the animation prep: every chain checked physically, one
  *                 movement plan per place — only once every other faculty
- *                 of the book is done (novel checklist), no model calls.
+ *                 of the book is done and the objects packet reviewed
+ *                 (novel checklist), no model calls.
  *
  * Each keeps its answers per place or scene and reuses them while their
  * inputs stay the same, so a later run asks only about what changed.
@@ -111,13 +121,20 @@ export async function stageInputs(novelDir: string) {
   }
   const movement = await readJson<MovementReport>(stageFile(novelDir, "movement"));
   const movementCurrent = !!movement?.complete && movement.inputs === movementFingerprint(movementScenes, names);
+  const objects = await readJson<ObjectsReport>(stageFile(novelDir, "objects"));
+  const objectsCurrent = !!objects?.complete && movementScenes.every((scene) => objects.scenes[scene.id]?.inputs === objectSceneInputs(objectScene(scene)));
   const plan = await readJson<StagePlan>(stageFile(novelDir, "plan"));
   const planCurrent = architectureCurrent && movementCurrent && plan?.inputs === prepFingerprint(architecture!.inputs, movement!.inputs);
   // What movement would still ask: the usual cost, and the most it can cost (what --max-calls must allow to finish in one run).
   const toAsk = movementScenes.filter((scene) => movement?.scenes[scene.id]?.inputs !== sceneInputs(scene, names));
-  return { data, places, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, plan, planCurrent, answers,
+  return { data, places, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, objects, objectsCurrent, plan, planCurrent, answers,
     estimate: Math.ceil(toAsk.reduce((sum, scene) => sum + sceneCallEstimate(scene), 0)), limit: toAsk.reduce((sum, scene) => sum + sceneCallLimit(scene), 0) };
 }
+
+/** A staged scene as object detection reads it: its place and its events' summaries (without the quoted source). */
+const objectScene = (scene: MovementScene): ObjectScene => ({ id: scene.id, placeLabel: scene.placeLabel, events: scene.events.map((event) => ({ id: event.id, text: event.text.split("（原文：")[0] })) });
+/** A stage-objects packet still awaiting review (one at a time). */
+export const objectsPacketsOpen = async (novelDir: string) => (await listChangeSets(novelDir)).filter((changeset) => changeset.id.startsWith("cs_stage_objects_") && ["pending_review", "held", "revision_requested"].includes(changeset.status));
 
 /** The analysis steps a stage step builds on must be done first (reviews included), unless forced: the stage never pays for unreviewed or unfinished input. */
 async function requireAnalysis(novelDir: string, step: string, needs: string[] | "all", force?: boolean) {
@@ -159,8 +176,9 @@ export async function stagePrep(novelDir: string, options: StageOptions = {}): P
   const waiting = await requireAnalysis(novelDir, "Animation prep", "all", options.force);
   const inputs = await stageInputs(novelDir);
   if (!inputs.architecture || !inputs.movement) throw new Error("Animation prep needs the stage faculties' reports: novel stage architecture, then novel stage movement.");
-  const stale = [...inputs.architectureCurrent ? [] : ["architecture"], ...inputs.movementCurrent ? [] : ["movement"]];
-  if (stale.length && !options.force) throw new Error(`Animation prep waits for every other step: ${stale.map((id) => `${id} (todo)`).join(", ")}. See novel checklist.`);
+  const objectsOpen = await objectsPacketsOpen(novelDir);
+  const stale = [...inputs.architectureCurrent ? [] : ["architecture (todo)"], ...inputs.objectsCurrent ? [] : ["objects (todo)"], ...objectsOpen.length ? ["objects (review)"] : [], ...inputs.movementCurrent ? [] : ["movement (todo)"]];
+  if (stale.length && !options.force) throw new Error(`Animation prep waits for every other step: ${stale.join(", ")}. See novel checklist.`);
   const plan = prepareStage(inputs.architecture, inputs.movement);
   await writeReport(stageFile(novelDir, "plan"), plan);
   const behind = [...waiting.map((item) => item.id), ...stale];
@@ -223,21 +241,57 @@ export async function stageLines(novelDir: string, options: { line?: string } = 
  * scene puts in its place (objects.ts), matched to what the stage can draw.
  * Work-model calls, a few scenes per call, bounded by --max-calls; answers
  * are kept per scene and reused while the scene's events stay the same.
+ *
+ * What the book says about the named ones then goes to the ontology: each
+ * name passes the identity check (this book's records and the universe's
+ * things; Jev for names that are not full proper names, unless --no-jev),
+ * and one review packet proposes the new records, a building's place in the
+ * tree, a thing's scenes and new name forms, each citing the sentences of
+ * the event that names it. While a packet awaits review no other is made.
  */
 export async function stageObjects(novelDir: string, options: StageOptions & { work?: boolean } = {}): Promise<Record<string, unknown>> {
   await requireAnalysis(novelDir, "Object detection", ["blocks", "strands", "time-place", "place-tree"], options.force);
   const env = options.env ?? process.env, inputs = await stageInputs(novelDir);
-  const scenes: ObjectScene[] = inputs.movementScenes.map((scene) => ({ id: scene.id, placeLabel: scene.placeLabel, events: scene.events.map((event) => ({ id: event.id, text: event.text.split("（原文：")[0] })) }));
+  const scenes = inputs.movementScenes.map(objectScene);
   const work = options.work === false || !env.WORK_LLM_API_KEY?.trim() ? undefined : options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env);
   let embedder = null;
   try { const cfg = loadConfig(env); embedder = loadEmbedder({ provider: cfg.embeddings.provider, model: cfg.embeddings.model, dimension: cfg.embeddings.dimension, baseUrl: cfg.embeddings.baseUrl, apiKey: env.EMBEDDING_API_KEY?.trim() || null }); } catch { embedder = null; }
-  const report = await detectObjects(scenes, { work, embedder, previous: await readJson<ObjectsReport>(stageFile(novelDir, "objects")), maxCalls: options.maxCalls });
-  await writeReport(stageFile(novelDir, "objects"), report);
+  const previous = await readJson<ObjectsReport>(stageFile(novelDir, "objects"));
+  const report: ObjectsReport = { ...await detectObjects(scenes, { work, embedder, previous, maxCalls: options.maxCalls }), proposed: previous?.proposed ?? [] };
   const all = Object.values(report.scenes).flatMap((scene) => scene.objects);
   const byMatch: Record<string, number> = {};
   for (const object of all) byMatch[object.match.id] = (byMatch[object.match.id] ?? 0) + 1;
-  return { scenes: scenes.length, withObjects: Object.values(report.scenes).filter((scene) => scene.objects.length).length, objects: all.length, rejected: Object.values(report.scenes).reduce((sum, scene) => sum + scene.rejected, 0), byMatch, ranking: report.embedder ? `embedding (${report.embedder})` : "words", usage: report.usage, complete: report.complete, report: stageFile(novelDir, "objects"),
+
+  // Into the ontology, through the shared review gate.
+  const open = await objectsPacketsOpen(novelDir);
+  let ontology: Record<string, unknown>;
+  if (open.length) ontology = { packet: open[0].id, note: `A stage-objects packet awaits review (${open[0].id}): review it (novel review show ${novelDir} ${open[0].id} --scope book --offset 0 --limit 20) before anything more is proposed.` };
+  else {
+    const bundle = new BundleStore(join(novelDir, "ontology"));
+    const entities = fold(await bundle.loadFile<Entity>("entities.jsonl")), relations = await bundle.loadFile<Relation>("relations.jsonl");
+    const evidence = new Map(fold(await bundle.loadFile<StoredEvent>("events.jsonl")).map((event) => [event.id, event.evidence?.sentenceIds ?? []]));
+    const sentences = await loadWorkspaceSentences(novelDir);
+    const staged: ObjectScenePlace[] = inputs.movementScenes.map((scene) => ({ id: scene.id, placeId: scene.placeId, placeLabel: scene.placeLabel, events: objectScene(scene).events.map((event) => ({ ...event, sentenceIds: evidence.get(event.id) ?? [] })) }));
+    const placeLabels = entities.filter((entity) => entity.kind === "Location" && entity.properties.source !== "stage-objects").flatMap((entity) => entity.names.map((form) => form.text));
+    const things = namedThings(report, staged, placeLabels);
+    const scope = await castScope(novelDir, env);
+    const identities = await objectIdentities(things, { entities, things: await loadThings(scope), sourceId: scope.sourceId, books: scope.books, decisions: decisionsFor(options) });
+    const proposals = objectProposals(things, identities, { entities, relations, proposed: new Set(report.proposed), sourceHas: (text, ids) => ids.some((id) => sentences.get(id)?.text.includes(text)) });
+    const resolved = [...identities.values()], count = (method: string) => resolved.filter((identity) => identity.method === method).length;
+    let packet: string | null = null;
+    if (proposals.length) {
+      packet = `cs_stage_objects_${Date.now()}`;
+      const records = proposals.filter((proposal) => proposal.kind === "upsert_entity").length;
+      await saveChangeSet(novelDir, { id: packet, blockId: "stage-objects", proposals, status: "pending_review", reviewSource: timePlaceReviewSource(proposals, sentences), createdAt: new Date().toISOString(),
+        reviewNotes: { "stage-objects": `Stage objects: ${things.length} named building(s) and thing(s) in ${scenes.length} staged scene(s); ${records} new record(s) (a building is a place inside its scene's place, a thing an Item named in its scenes). Identity check: ${count("full-name")} bound by full name, ${count("jev")} by Jev, ${count("new")} new${resolved.some((identity) => identity.possible) ? `, ${resolved.filter((identity) => identity.possible).length} with a likely match (see possiblySame)` : ""}. Accept a fact only if its sentences show the thing, where it is and that it is the one named.` } });
+      report.proposed = [...new Set([...report.proposed ?? [], ...proposals.map((proposal) => proposal.id)])];
+    }
+    ontology = { packet, proposals: proposals.length, named: things.length, identity: { fullName: count("full-name"), jev: count("jev"), new: count("new"), possible: resolved.filter((identity) => identity.possible).length },
+      ...(packet ? { next: `novel review show ${novelDir} ${packet} --scope book --offset 0 --limit 20` } : {}) };
+  }
+  await writeReport(stageFile(novelDir, "objects"), report);
+  return { scenes: scenes.length, withObjects: Object.values(report.scenes).filter((scene) => scene.objects.length).length, objects: all.length, rejected: Object.values(report.scenes).reduce((sum, scene) => sum + scene.rejected, 0), byMatch, ranking: report.embedder ? `embedding (${report.embedder})` : "words", usage: report.usage, complete: report.complete, report: stageFile(novelDir, "objects"), ontology,
     ...(work ? {} : { note: "No work model configured (WORK_LLM_API_KEY): nothing was asked; scenes are left for a run with one." }) };
 }
 
-export const STAGE_USAGE = "novel stage objects <novel-dir> [--max-calls N] [--cache dir] [--no-work] [--force] | novel stage show <novel-dir> | novel stage lines <novel-dir> [--line <scene-id>] | novel stage architecture <novel-dir> [--no-jev] [--cache dir] [--force] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] [--force] | novel stage prep <novel-dir> [--force]";
+export const STAGE_USAGE = "novel stage objects <novel-dir> [--max-calls N] [--cache dir] [--no-work] [--no-jev] [--force] | novel stage show <novel-dir> | novel stage lines <novel-dir> [--line <scene-id>] | novel stage architecture <novel-dir> [--no-jev] [--cache dir] [--force] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] [--force] | novel stage prep <novel-dir> [--force]";

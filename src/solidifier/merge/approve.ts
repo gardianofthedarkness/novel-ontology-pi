@@ -7,6 +7,7 @@ import { observeDecisions } from "../../ground/events/observe.js";
 import { markCausalitySweepPending } from "../causality/faculty.js";
 import { runIdentityAfterApply } from "../identity/afterApply.js";
 import { castScope } from "../identity/cast.js";
+import { syncThings } from "../identity/things.js";
 import { buildCalendar } from "../calendar/calendar.js";
 import { treeViolation } from "../../ground/ontology/placeTree.js";
 import type { Relation } from "../../ground/ontology/types.js";
@@ -41,6 +42,9 @@ export async function approveBook(directory: string, id: string, env: NodeJS.Pro
   // Universal EM: the book joins the shared character list; its new characters are checked against the book and the universe.
   let identity: Awaited<ReturnType<typeof runIdentityAfterApply>> | { error: string } | null = null;
   try { identity = await runIdentityAfterApply({ novelDir: directory, decisions: observeDecisions(jevFromEnv(env), emit, { blockId: packet.blockId }), changeset: packet, events: emit, env }); } catch (error) { identity = { error: error instanceof Error ? error.message : String(error) }; }
+  // Named buildings and things (stage objects): the book's reviewed ones join the universe's list of things.
+  let things: Awaited<ReturnType<typeof syncThings>> | { error: string } | null = null;
+  if (packet.blockId === "stage-objects") try { things = await syncThings(directory, env); } catch (error) { things = { error: error instanceof Error ? error.message : String(error) }; }
   try { await markCausalitySweepPending(directory); } catch {}
   // Story time changed: the universe calendar (the one clock) is rebuilt. No model calls.
   let calendar: { entries: number; questions: number } | { error: string } | null = null;
@@ -48,5 +52,5 @@ export async function approveBook(directory: string, id: string, env: NodeJS.Pro
     try { const built = await buildCalendar(await castScope(directory, env)); calendar = { entries: built.entries.length, questions: built.questions.length }; } catch (error) { calendar = { error: error instanceof Error ? error.message : String(error) }; }
   }
   const graph = await buildGraphFromBundle(ontology, join(ontology, "graph.lbug"), emit);
-  return { id, status: packet.status, ...application, ...(verifiedFacts !== undefined ? { verifiedFacts } : {}), graph, ...(identity ? { identity } : {}), ...(calendar ? { calendar } : {}) };
+  return { id, status: packet.status, ...application, ...(verifiedFacts !== undefined ? { verifiedFacts } : {}), graph, ...(identity ? { identity } : {}), ...(things ? { things } : {}), ...(calendar ? { calendar } : {}) };
 }

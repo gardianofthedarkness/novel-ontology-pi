@@ -542,7 +542,7 @@ async function main(): Promise<void> {
   if (cmd === "stage") {
     const novelDir = positional[2];
     if (!["show", "lines", "objects", "architecture", "movement", "prep"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${STAGE_USAGE}`);
-    const valued = sub === "movement" || sub === "objects" ? ["--max-calls", "--cache"] : sub === "architecture" ? ["--cache"] : sub === "lines" ? ["--line"] : [], switches = sub === "prep" ? ["--force"] : sub === "show" || sub === "lines" ? [] : sub === "objects" ? ["--no-work", "--force"] : ["--no-jev", "--force"];
+    const valued = sub === "movement" || sub === "objects" ? ["--max-calls", "--cache"] : sub === "architecture" ? ["--cache"] : sub === "lines" ? ["--line"] : [], switches = sub === "prep" ? ["--force"] : sub === "show" || sub === "lines" ? [] : sub === "objects" ? ["--no-work", "--no-jev", "--force"] : ["--no-jev", "--force"];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];

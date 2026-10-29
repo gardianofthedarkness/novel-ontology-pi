@@ -16,6 +16,8 @@ export interface NamedBuilding {
   standing: boolean;
   /** The story moment it first appears (period id, or null before any time word) and that moment's label. */
   since: string | null; sinceLabel: string;
+  /** Reviewed into the ontology (stage objects); otherwise a model's reading. */
+  reviewed: boolean;
 }
 export interface BuildingMoment { id: string; label: string; storyIndex: number }
 
@@ -38,7 +40,7 @@ export function buildingsAt(data: TimePlaceProjection, at: string | null): Map<s
       .sort((a, b) => a.index - b.index)[0];
     if (!first) continue;
     const since = first.period, sinceTime = since ? times.get(since) : undefined;
-    const entry: NamedBuilding = { id: building.id, name: building.name, placeId: building.placeId, model: building.model, standing: first.index <= cutoff, since, sinceLabel: sinceTime ? timeLabel(sinceTime) : "before the first time word" };
+    const entry: NamedBuilding = { id: building.id, name: building.name, placeId: building.placeId, model: building.model, standing: first.index <= cutoff, since, sinceLabel: sinceTime ? timeLabel(sinceTime) : "before the first time word", reviewed: !!building.reviewed };
     byPlace.set(building.placeId, [...byPlace.get(building.placeId) ?? [], entry]);
   }
   return byPlace;
@@ -76,7 +78,8 @@ export function simulationAt(data: TimePlaceProjection, at: string | null): Map<
   if (!simulation) return places;
   const { index, cutoff } = storyClock(data, at);
   const happened = (sceneId: string | null) => sceneId === null || index(sceneId) <= cutoff;
-  const titles = new Map(simulation.strands.map((strand) => [strand.id, strand.title]));
+  // A strand's title says which of its runs is drawn: the accepted one.
+  const titles = new Map(simulation.strands.map((strand) => [strand.id, `${strand.title}${strand.run ? `, accepted run ${strand.run.id}${(strand.runs ?? 1) > 1 ? ` of ${strand.runs}` : ""}` : ""}`]));
   const hitsByPlace = new Map<string, typeof simulation.hits>();
   for (const hit of simulation.hits) hitsByPlace.set(hit.place, [...hitsByPlace.get(hit.place) ?? [], hit]);
   for (const [placeId, place] of Object.entries(simulation.places)) {

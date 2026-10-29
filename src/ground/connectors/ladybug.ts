@@ -60,7 +60,8 @@ const REL_DEFS: Partial<
   CAUSES: { from: ["Event", "DialogueCard"], to: ["Event", "DialogueCard"], props: ["confidence"] },
   CAUSED_BY: { from: ["Event", "DialogueCard"], to: ["Event", "DialogueCard"], props: ["confidence"] },  PARTICIPATES_IN: { from: "Character", to: "Event", props: ["role"] },
   PRESENT_IN: { from: "Character", to: "Scene", props: [] },
-  MENTIONED_IN: { from: "Character", to: "Scene", props: [] },
+  // A character or a large thing (stage objects) named in a scene: a multi-pair table like CAUSES.
+  MENTIONED_IN: { from: ["Character", "Item"], to: "Scene", props: [] },
   LOCATED_AT: { from: "Scene", to: "Location", props: [] },
   OCCURS_DURING: { from: "Scene", to: "TimePoint", props: [] },
   PART_OF: { from: "Location", to: "Location", props: [] },

@@ -39,7 +39,7 @@ const order = (id) => { const match = /^b(\d+)_s(\d+)$/.exec(id ?? ''); return m
 const clip = (value, length) => typeof value === 'string' && value.length > length ? `${value.slice(0, length - 1)}…` : value;
 
 /** One entry per named building at a place, with the scenes that name it in reading order. */
-export function buildingLog(mentions, sceneRows, architecture) {
+export function buildingLog(mentions, sceneRows, architecture, canon = []) {
   const sceneById = new Map(sceneRows.map((scene) => [scene.id, scene]));
   const placeOf = (scene) => scene.placeIds.find((id) => architecture?.[id] && architecture[id] !== 'none') ?? scene.placeIds[0];
   const log = new Map();
@@ -51,6 +51,12 @@ export function buildingLog(mentions, sceneRows, architecture) {
     entry.model ??= mention.model;
     if (!entry.sceneIds.includes(scene.id)) entry.sceneIds.push(scene.id);
     log.set(id, entry);
+  }
+  // Reviewed into the ontology (a stage-objects building: a place of the tree under its scene's place): the mention is that record; one never mentioned in the report still stands from its first scene.
+  for (const building of canon) {
+    const entry = [...log.values()].find((candidate) => candidate.placeId === building.placeId && building.names.includes(candidate.name));
+    if (entry) Object.assign(entry, { entityId: building.id, reviewed: true, model: entry.model ?? building.model });
+    else if (building.sceneId && sceneById.has(building.sceneId)) log.set(`${building.placeId}|${building.names[0]}`, { id: `${building.placeId}|${building.names[0]}`, name: building.names[0], placeId: building.placeId, model: building.model, size: building.size, sceneIds: [building.sceneId], entityId: building.id, reviewed: true });
   }
   const reading = new Map(sceneRows.map((scene) => [scene.id, scene.index]));
   for (const entry of log.values()) entry.sceneIds.sort((first, second) => reading.get(first) - reading.get(second));
@@ -137,5 +143,9 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
   for (const scene of sceneRows) for (const id of scene.characterIds) characterCounts.set(id, (characterCounts.get(id) ?? 0) + 1);
   const characters = [...characterCounts].sort((first, second) => second[1] - first[1]).slice(0, 40).map(([id, scenes]) => ({ id, label: nameOf(byId.get(id)), scenes }));
   const names = Object.fromEntries([...placeIds, ...characterCounts.keys()].map((id) => [id, nameOf(byId.get(id))]));
-  return { available: timeRows.length > 0, times: timeRows, scenes: sceneRows, places, characters, names, ...(buildings ? { buildings: buildingLog(buildings, sceneRows, architecture) } : {}), ...(simulation ? { simulation } : {}) };
+  // The named buildings reviewed into the ontology (stage objects): applied records with an applied parent place.
+  const appliedParents = new Map(appliedRelations.filter((relation) => relation.type === 'PART_OF').map((relation) => [relation.fromId, relation.toId]));
+  const canon = applied.filter((entity) => entity.kind === 'Location' && entity.properties?.source === 'stage-objects' && appliedParents.has(entity.id))
+    .map((entity) => ({ id: entity.id, names: entity.names.map((form) => form.text), placeId: appliedParents.get(entity.id), model: entity.properties.building ?? null, size: entity.properties.size ?? null, sceneId: entity.properties.firstSceneId ?? null }));
+  return { available: timeRows.length > 0, times: timeRows, scenes: sceneRows, places, characters, names, ...(buildings || canon.length ? { buildings: buildingLog(buildings ?? [], sceneRows, architecture, canon) } : {}), ...(simulation ? { simulation } : {}) };
 }

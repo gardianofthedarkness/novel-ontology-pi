@@ -2,6 +2,14 @@ import { createHash } from "node:crypto";
 import type { WorkModel } from "../../ground/connectors/llm.js";
 import type { Embedder } from "../../ground/connectors/embeddings.js";
 import { cosineSimilarity } from "../../ground/connectors/embeddings.js";
+import type { Entity, Relation } from "../../ground/ontology/types.js";
+import { treeViolation } from "../../ground/ontology/placeTree.js";
+import type { ChangeProposal } from "../../solidifier/merge/changeset.js";
+import type { DecisionModel } from "../../ground/connectors/jev.js";
+import { EM_MIN_SCORE, resolveNewNames, type NewName } from "../../solidifier/identity/em.js";
+import type { PoolEntry, Recommendation } from "../../solidifier/identity/recommender.js";
+import { nameAffinity, thingPool, type ThingsFile } from "../../solidifier/identity/things.js";
+import type { CastBook } from "../../solidifier/identity/cast.js";
 
 /**
  * Stage faculty — objects: the buildings and large things each scene puts in
@@ -27,7 +35,11 @@ import { cosineSimilarity } from "../../ground/connectors/embeddings.js";
 export interface ObjectScene { id: string; placeLabel: string; events: { id: string; text: string }[] }
 export interface DetectedObject { name: string; kind: "building" | "object"; size: number; airborne: boolean; event: string | null; match: { id: string; kind: "building" | "shape"; score: number; by: "embedding" | "words" } }
 export interface SceneObjects { inputs: string; objects: DetectedObject[]; rejected: number }
-export interface ObjectsReport { version: 1; model: string | null; embedder: string | null; askedAt: string; complete: boolean; usage: { calls: number; reused: number; skipped: number }; scenes: Record<string, SceneObjects> }
+export interface ObjectsReport {
+  version: 1; model: string | null; embedder: string | null; askedAt: string; complete: boolean; usage: { calls: number; reused: number; skipped: number }; scenes: Record<string, SceneObjects>;
+  /** Proposal ids already put to review (whatever the verdict): a later run never asks them again. */
+  proposed?: string[];
+}
 
 /** The things the stage can draw: building models (by kind) and pure shapes, each with the words it is known by. */
 export const OBJECT_LIBRARY: { id: string; kind: "building" | "shape"; words: string[] }[] = [
@@ -134,4 +146,145 @@ export async function detectObjects(scenes: ObjectScene[], options: { work?: Wor
     }
   }
   return { version: 1, model: options.work?.modelId ?? null, embedder: options.embedder?.model ?? null, askedAt: new Date().toISOString(), complete: skipped === 0, usage: { calls, reused, skipped }, scenes: Object.fromEntries(scenes.filter((scene) => done[scene.id]).map((scene) => [scene.id, done[scene.id]])) };
+}
+
+// --- Into the ontology --------------------------------------------------
+
+/**
+ * What the book says about these things becomes reviewed ontology, like any
+ * other fact: a named building is a place inside the place where its scene
+ * happens (a Location, PART_OF that place, so the place tree grows with the
+ * story); a large thing is an Item named in the scenes it appears in
+ * (MENTIONED_IN). Each cites the sentences of the event that names it and
+ * goes through the shared review gate. Before anything is minted, each name
+ * passes the identity check (universal EM's rules: a full proper name owned by
+ * one candidate binds by code, any other name gets one Jev choice), against
+ * this book's records and the universe's list of things (identity/things.ts).
+ * What the simulation does with them (lots, paths, damage) is not here: those
+ * are versioned runs, never canon.
+ */
+export interface NamedThing {
+  /** A building by its place and name, a thing by its name. */
+  key: string;
+  name: string;
+  kind: "building" | "object";
+  /** How the stage draws it, from its first sighting. */
+  match: DetectedObject["match"]; size: number; airborne: boolean;
+  /** Every scene that names it, in reading order, with the sentences of the event that does. */
+  sightings: { sceneId: string; placeId: string; sentenceIds: string[]; passage: string }[];
+}
+/** A staged scene as the proposals need it: its place, and each event's text and source sentences. */
+export interface ObjectScenePlace { id: string; placeId: string; placeLabel: string; events: { id: string; text: string; sentenceIds: string[] }[] }
+
+const compact = (name: string) => name.replace(/\s+/g, "").toLowerCase();
+const GENERIC_THINGS = new Set(OBJECT_LIBRARY.flatMap((entry) => entry.words.map(compact)));
+/** A bare kind word ("大楼", "卡车", "球"): says nothing about which one. */
+export const isGenericThing = (name: string) => GENERIC_THINGS.has(compact(name)) || ANONYMOUS.test(name.trim()) || [...compact(name)].length < 2;
+const thingKey = (kind: NamedThing["kind"], name: string, placeId: string) => kind === "building" ? `building|${placeId}|${compact(name)}` : `object|${compact(name)}`;
+const idHash = (text: string) => createHash("sha256").update(text).digest("hex").slice(0, 12);
+/** The record a new name is minted as. */
+export const thingEntityId = (thing: Pick<NamedThing, "key" | "kind">) => `${thing.kind === "building" ? "loc_obj" : "item_obj"}_${idHash(thing.key)}`;
+
+/** The named buildings and things a report found, one per name (a building per name at its place). Unnamed buildings, the places themselves and anything without its event's sentences are left out. */
+export function namedThings(report: ObjectsReport, scenes: ObjectScenePlace[], placeLabels: string[]): NamedThing[] {
+  const things = new Map<string, NamedThing>();
+  for (const scene of scenes) for (const object of report.scenes[scene.id]?.objects ?? []) {
+    if (object.kind === "building" && !newBuildingHere(object.name, scene.placeLabel, placeLabels)) continue;
+    const event = scene.events.find((entry) => entry.id === object.event);
+    if (!event?.sentenceIds.length) continue;
+    const key = thingKey(object.kind, object.name, scene.placeId);
+    const thing = things.get(key) ?? { key, name: object.name, kind: object.kind, match: object.match, size: object.size, airborne: object.airborne, sightings: [] };
+    if (!thing.sightings.some((sighting) => sighting.sceneId === scene.id)) thing.sightings.push({ sceneId: scene.id, placeId: scene.placeId, sentenceIds: event.sentenceIds, passage: `At ${scene.placeLabel}: ${event.text}` });
+    things.set(key, thing);
+  }
+  return [...things.values()];
+}
+
+/** The identity check's answer for one named thing: an existing record or a universe thing it is, or new (possibly with a likely match for the reviewer). */
+export interface ThingIdentity { key: string; ref: string | null; method: "full-name" | "jev" | "new"; confidence: number; possible?: { label: string; confidence: number }; note: string }
+
+/**
+ * The proposals for a review packet: each new record (with its identity
+ * check's result), a building's place in the tree, a thing's scenes, and an
+ * alias when a name bound to an existing record is a new form of it (only
+ * when the cited source carries that name). Nothing already in the book,
+ * and nothing an earlier run already put to review, is proposed again.
+ */
+export function objectProposals(things: NamedThing[], identities: Map<string, ThingIdentity>, context: { entities: Entity[]; relations: Relation[]; proposed: Set<string>; sourceHas: (text: string, sentenceIds: string[]) => boolean }): ChangeProposal[] {
+  const proposals: ChangeProposal[] = [];
+  const entities = new Map(context.entities.map((entity) => [entity.id, entity]));
+  const relationKeys = new Set(context.relations.map((relation) => `${relation.type}:${relation.fromId}:${relation.toId}`));
+  const tree = context.relations.filter((relation) => relation.type === "PART_OF").map(({ fromId, toId, type }) => ({ fromId, toId, type }));
+  const byKey = new Map(things.map((thing) => [thing.key, thing]));
+  const lang = (text: string) => /[぀-ヿ]/.test(text) ? "ja" : /[一-鿿]/.test(text) ? "zh" : "en";
+  const provenance = (sentenceIds: string[]) => ({ blockId: "stage-objects", sentenceIds, patchId: "stage-objects" });
+  const push = (proposal: ChangeProposal) => { if (!context.proposed.has(proposal.id) && !proposals.some((entry) => entry.id === proposal.id)) proposals.push(proposal); };
+  // The record a thing is: an existing one it was bound to, the record minted for another new name it follows, or its own.
+  const recordOf = (thing: NamedThing, seen = new Set<string>()): { id: string; existing: boolean; universalId: string | null } => {
+    const ref = identities.get(thing.key)?.ref ?? null;
+    if (ref && entities.has(ref)) return { id: ref, existing: true, universalId: null };
+    if (ref?.startsWith("new:") && byKey.has(ref.slice(4)) && !seen.has(thing.key)) return recordOf(byKey.get(ref.slice(4))!, seen.add(thing.key));
+    return { id: thingEntityId(thing), existing: false, universalId: ref?.startsWith("thing:") ? ref : null };
+  };
+  for (const thing of things) {
+    const record = recordOf(thing), first = thing.sightings[0], identity = identities.get(thing.key);
+    const entityProposal = `so_ent_${record.id}`;
+    // A record an earlier run proposed that never reached the book (held or rejected) is not built on.
+    if (!record.existing && context.proposed.has(entityProposal)) continue;
+    if (!record.existing) {
+      const properties: Record<string, unknown> = thing.kind === "building"
+        ? { source: "stage-objects", building: thing.match.kind === "building" ? thing.match.id : null, size: thing.size, firstSceneId: first.sceneId }
+        : { source: "stage-objects", shape: thing.match.id, size: thing.size, airborne: thing.airborne, firstSceneId: first.sceneId };
+      if (record.universalId) properties.universalId = record.universalId;
+      if (identity?.possible) properties.possiblySame = `${identity.possible.label} (identity check ${identity.possible.confidence.toFixed(2)}; kept new for review)`;
+      const entity: Entity = { id: record.id, kind: thing.kind === "building" ? "Location" : "Item", names: [{ text: thing.name, lang: lang(thing.name), kind: "canonical" }], properties, confidence: 0.6 };
+      // Two new names bound together make one record: the first proposes it, the other adds its name.
+      if (!proposals.some((entry) => entry.id === entityProposal)) push({ id: entityProposal, kind: "upsert_entity", payload: entity, confidence: 0.6, provenance: provenance(first.sentenceIds) });
+      else if (context.sourceHas(thing.name, first.sentenceIds)) push({ id: `so_alias_${idHash(`${record.id}|${thing.name}`)}`, kind: "add_alias", payload: { entityId: record.id, aliasText: thing.name }, confidence: 0.6, provenance: provenance(first.sentenceIds) });
+    } else {
+      const known = entities.get(record.id)!.names.some((form) => compact(form.text) === compact(thing.name));
+      if (!known && context.sourceHas(thing.name, first.sentenceIds)) push({ id: `so_alias_${idHash(`${record.id}|${thing.name}`)}`, kind: "add_alias", payload: { entityId: record.id, aliasText: thing.name }, confidence: identity?.confidence ?? 0.6, provenance: provenance(first.sentenceIds) });
+    }
+    const relate = (relation: Relation, sentenceIds: string[]) => {
+      const key = `${relation.type}:${relation.fromId}:${relation.toId}`;
+      if (relationKeys.has(key)) return;
+      relationKeys.add(key);
+      push({ id: `so_rel_${idHash(key)}`, kind: "add_relation", payload: relation, confidence: relation.confidence, provenance: provenance(sentenceIds) });
+    };
+    if (thing.kind === "building") {
+      // One parent per place: a building already in the tree stays where it is.
+      const link = { fromId: record.id, toId: first.placeId, type: "PART_OF" as const };
+      if (record.id !== first.placeId && !tree.some((relation) => relation.fromId === record.id) && !treeViolation(tree, [link])) {
+        tree.push(link);
+        relate({ ...link, properties: { via: "stage-objects" }, confidence: 0.6 }, first.sentenceIds);
+      }
+    } else for (const sighting of thing.sightings) relate({ fromId: record.id, toId: sighting.sceneId, type: "MENTIONED_IN", properties: { via: "stage-objects" }, confidence: 0.6 }, sighting.sentenceIds);
+  }
+  return proposals;
+}
+
+/**
+ * The identity check for named things (universal EM, applied to things): per
+ * kind, the pool is this book's records of that kind, the universe's things
+ * not yet in this book, and the run's other new names; candidates are ranked
+ * by their names (nameAffinity). Without Jev only full proper names bind.
+ */
+export async function objectIdentities(things: NamedThing[], input: { entities: Entity[]; things: ThingsFile | null; sourceId: string; books?: CastBook[]; decisions?: DecisionModel | null }): Promise<Map<string, ThingIdentity>> {
+  const identities = new Map<string, ThingIdentity>();
+  for (const kind of ["building", "object"] as const) {
+    const named = things.filter((thing) => thing.kind === kind);
+    if (!named.length) continue;
+    const pool: PoolEntry[] = [...thingPool({ book: input.entities, things: input.things, sourceId: input.sourceId, books: input.books, kind, generic: isGenericThing }),
+      ...named.map((thing): PoolEntry => ({ ref: `new:${thing.key}`, kind: "new", name: thing.name, label: thing.name, forms: [thing.name], full: [], where: "new in this run" }))];
+    const seen = new Map<string, number>();
+    for (const entry of pool) seen.set(entry.label, (seen.get(entry.label) ?? 0) + 1);
+    for (const entry of pool) if (seen.get(entry.label)! > 1) entry.label = `${entry.label} (${entry.where}${entry.kind === "new" ? ` ${entry.ref.slice(-8)}` : ""})`;
+    const names: NewName[] = named.map((thing) => ({ key: thing.key, name: thing.name, aliases: [], descriptive: isGenericThing(thing.name), sceneId: thing.sightings[0].sceneId, passage: thing.sightings[0].passage }));
+    const candidates = (name: NewName): Recommendation[] => pool.filter((entry) => entry.ref !== `new:${name.key}`)
+      .map((entry) => ({ id: entry.ref, score: nameAffinity(name.name, entry.forms), evidence: "shared-name" as const, entry }))
+      .filter((candidate) => candidate.score >= EM_MIN_SCORE).sort((first, second) => second.score - first.score);
+    for (const resolution of await resolveNewNames({ names, pool, candidates, decisions: input.decisions, subject: "thing" }))
+      identities.set(resolution.key, { key: resolution.key, ref: resolution.to?.ref ?? null, method: resolution.method, confidence: resolution.confidence, ...(resolution.possible ? { possible: { label: resolution.possible.entry.label, confidence: resolution.possible.confidence } } : {}), note: resolution.note });
+  }
+  return identities;
 }

@@ -77,7 +77,8 @@ export interface TimePlaceProjection {
   /** The stage simulation records (docs/stage-simulation-records.md), trimmed: each simulated place's lots, the things placed, the hits and who moved. Not canon. */
   simulation?: PlaceSimulation;
 }
-export interface PlaceBuilding { id: string; name: string; placeId: string; model: string | null; size: number | null; sceneIds: string[] }
+/** A named building at a place: from the stage objects report (a model's reading, not reviewed) or, once reviewed, the ontology record it is (`entityId`). */
+export interface PlaceBuilding { id: string; name: string; placeId: string; model: string | null; size: number | null; sceneIds: string[]; entityId?: string; reviewed?: boolean }
 /**
  * A lot of a simulated place, on its grid of 2 m cells: named when the story names it (from `since`, a scene id; null: from the
  * start). Its skeleton has one digit per cell, floor by floor (0 mass, 1 corridor, 2 stair); a room is [floor, i0, j0, i1, j1].
@@ -86,7 +87,8 @@ export interface SimulationLot { name: string | null; since: string | null; labe
 /** What one hit took from a lot: skeleton cells destroyed, fallen, and cut off from the ground (with its rooms), and the structural units [kind, i, j, k] blasted or fallen (a fallen one also has where it came to rest). */
 export interface SimulationHitPart { lot: number; destroyed: number[]; fell: number[]; cutOff: number[]; cutRooms: number[]; blasted: number[][]; fallen: number[][] }
 export interface PlaceSimulation {
-  strands: { id: string; title: string; from: string | null; to: string | null }[];
+  /** Each strand's accepted run (its id, engine and inputs' hash; null for a record from before runs) and how many runs it has. */
+  strands: { id: string; title: string; from: string | null; to: string | null; run?: { id: string; engine: string | null; inputs: string | null } | null; runs?: number }[];
   places: Record<string, { strand: string; label: string; kind: string; grid: { nx: number; nz: number }; lots: SimulationLot[] }>;
   /** Placements in the place's metres (x, z across its grid, y up), with the fitted extent. */
   things: { id: string; name: string; model: string | null; shape: string | null; placements: { scene: string; place: string; x: number; y: number; z: number; w: number; h: number; d: number; turn: number }[] }[];
