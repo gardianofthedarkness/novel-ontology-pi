@@ -65,3 +65,17 @@ test("a site's own building takes the floors and roof a decision model names; st
   assert.deepEqual(["street", "alley", "courtyard", "the moon", null].map((spot) => placeSpot(place, "废弃大楼", spots, spot)), ["avenue", "north", "plaza", null, null]);
   assert.equal(placeSpot(place, "别处", spots, "roof"), "rooftop", "without a building of its own, any roof");
 });
+
+test("an impact sphere degrades only the cells inside it", async () => {
+  const { composePlace, degrade } = await import("../apps/playground/src/data/skeletonPlace.js"), CELL = 2, FLOOR = 3;
+  const place = composePlace({ id: "loc_9", kind: "site", seed: 4, members: [{ label: "塔", role: "office", floors: [6, 6] }] });
+  const index = place.lots.findIndex((lot) => lot.label === "塔"), lot = place.lots[index], standing = Uint8Array.from(lot.skeleton.cells.map((cell) => (cell ? 1 : 0)));
+  const centre = { x: (lot.i0 + lot.nx / 2) * CELL, y: 9, z: (lot.j0 + lot.nz / 2) * CELL }, r = 4;
+  const whole = { x: [0, 999] as [number, number], y: [0, 999] as [number, number], z: [0, 999] as [number, number] };
+  const hit = degrade(place, index, standing, { ...whole, sphere: { ...centre, r } }, 1, () => 0);
+  assert.ok(hit.destroyed.length > 0, "the sphere breaks something");
+  const { nx, nz } = lot.skeleton;
+  for (const cell of hit.destroyed) { const i = cell % nx, j = Math.floor(cell / nx) % nz, k = Math.floor(cell / (nx * nz)); assert.ok(Math.hypot((lot.i0 + i + 0.5) * CELL - centre.x, (k + 0.5) * FLOOR - centre.y, (lot.j0 + j + 0.5) * CELL - centre.z) <= r, "nothing outside the sphere"); }
+  assert.ok(degrade(place, index, standing, whole, 1, () => 0).destroyed.length > hit.destroyed.length, "the box alone takes more");
+});
+

@@ -43,7 +43,7 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 /** The page and its three.js files on a local port, for the headless browser. */
-async function serve(page, vendor) {
+export async function serve(page, vendor) {
   const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript' };
   const server = createServer(async (request, response) => {
     const path = new URL(request.url, 'http://x').pathname;
@@ -56,7 +56,7 @@ async function serve(page, vendor) {
 }
 
 /** Headless Chrome over the DevTools protocol: one page, evaluate and screenshot. */
-async function browser() {
+export async function browser() {
   const profile = await mkdtemp(join(tmpdir(), 'two-view-'));
   const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=800,600', '--hide-scrollbars', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check', 'about:blank'], { stdio: 'ignore' });
   let port = null;

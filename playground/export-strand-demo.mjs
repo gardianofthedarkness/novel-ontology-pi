@@ -52,7 +52,7 @@ export async function strandDemo(novelDir, options) {
   const { storyStrands } = await load('dist/src/digger/timeplace/strandQuestions.js');
   const { latestStrandAnswers } = await load('dist/src/digger/timeplace/strandView.js');
   const { forkTimeline, walkTimeline } = await load('dist/src/digger/stage/environment.js');
-  const { composePlace, placeGraph, placeSpot, nodePosition, degrade, semanticAxis } = await load('dist/apps/playground/src/data/skeletonPlace.js');
+  const { composePlace, placeGraph, placeSpot, nodePosition, degrade, semanticAxis, cellAt } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { placeTreeCircles } = await load('dist/apps/playground/src/data/timePlace.js');
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -151,12 +151,18 @@ export async function strandDemo(novelDir, options) {
     }
   };
   notes.things = { mentions: mentions.length, things: entities.length, withStructure: entities.filter(entity => entity.struct).length };
+  // Where each fight hits and how big, as Jev chose (playground/impact-choices.mjs): a sphere on a building, or no damage.
+  const impacts = JSON.parse(await readFile(`${novelDir}/stage/impacts.json`, 'utf8').catch(() => 'null'))?.fights ?? {};
+  notes.impacts = { sphere: 0, none: 0 };
   const damage = (scene, event, at, seed) => {
     if (struck.has(event.id)) return;
     struck.add(event.id);
     // Without event embeddings for this book, the wording's degree stands in for the strength.
     const strength = axis ? axis.strength(event.id) ?? 0 : [0, 0, 0, 0.85, 0.95][damageDegree(summary(event))];
     if (strength < 0.8 || !at) return;
+    const chosen = impacts[`${scene.id}|${scene.events.findIndex(entry => entry.id === event.id)}`];
+    if (chosen?.none) { notes.impacts.none++; return; }
+    if (chosen?.sphere) return hitSphere(scene, event, chosen.sphere, strength, seed);
     // Things near the blast are hit too; a big one loses part of its structure.
     const near = nodePosition(groups.get(scene.placeId).layout, at[0]), thingHits = [];
     for (const entity of entities) if (entity.at?.place === scene.placeId && Math.hypot(entity.at.x - near.x, entity.at.z - near.z) <= 4 + entity.size / 2) {
@@ -175,6 +181,34 @@ export async function strandDemo(novelDir, options) {
     group.standing[index] = result.standing; group.version++;
     notes.hits++; notes.destroyed += result.destroyed.length;
     hits.set(event.id, { lot: index, strength: Math.round(strength * 100) / 100, point, box, destroyed: result.destroyed, cutOff: result.cutOff, cutRooms: result.cutRooms });
+  };
+  /**
+   * A chosen impact: every building the sphere reaches loses what its percolation step takes inside the sphere; things in it
+   * are hit too. A blast reaches into the building it hits: chosen on a face, the sphere centres on the nearest standing cell
+   * of that building (its skeleton lies inside), so it always meets structure.
+   */
+  const hitSphere = (scene, event, chosen, strength, seed) => {
+    const group = groups.get(scene.placeId), cellCentre = (lot, cell) => { const { i, j, k } = cellAt(lot.skeleton, cell); return { x: (lot.i0 + i + 0.5) * 2, y: (k + 0.5) * 3, z: (lot.j0 + j + 0.5) * 2 }; };
+    const struck = group.layout.lots.map((lot, index) => ({ lot, index, gap: Math.hypot(Math.max(0, lot.i0 * 2 - chosen.x, chosen.x - (lot.i0 + lot.nx) * 2), Math.max(0, lot.j0 * 2 - chosen.z, chosen.z - (lot.j0 + lot.nz) * 2)) })).sort((a, b) => a.gap - b.gap)[0];
+    let sphere = chosen;
+    if (struck) { let best = null, far = Infinity; group.standing[struck.index].forEach((up, cell) => { if (!up) return; const at = cellCentre(struck.lot, cell), gap = Math.hypot(at.x - chosen.x, at.y - chosen.y, at.z - chosen.z); if (gap < far) { far = gap; best = at; } }); if (best && far > chosen.r / 2) sphere = { ...best, r: chosen.r }; }
+    const reach = (lot) => Math.hypot(Math.max(0, lot.i0 * 2 - sphere.x, sphere.x - (lot.i0 + lot.nx) * 2), Math.max(0, -sphere.y, sphere.y - lot.floors * 3), Math.max(0, lot.j0 * 2 - sphere.z, sphere.z - (lot.j0 + lot.nz) * 2));
+    const box = { x: [sphere.x - sphere.r, sphere.x + sphere.r], y: [sphere.y - sphere.r, sphere.y + sphere.r], z: [sphere.z - sphere.r, sphere.z + sphere.r], sphere };
+    const parts = group.layout.lots.map((lot, index) => [index, reach(lot)]).filter(([, gap]) => gap <= sphere.r).sort((a, b) => a[1] - b[1]).map(([index]) => {
+      const result = degrade(group.layout, index, group.standing[index], box, strength, stream(seed, 'hit', index));
+      group.standing[index] = result.standing; notes.destroyed += result.destroyed.length;
+      return { lot: index, destroyed: result.destroyed, cutOff: result.cutOff, cutRooms: result.cutRooms };
+    });
+    const thingHits = entities.filter(entity => entity.at?.place === scene.placeId && Math.hypot(entity.at.x - sphere.x, entity.at.y - sphere.y, entity.at.z - sphere.z) <= sphere.r + entity.size / 2).map(entity => {
+      const rng = stream(seed, 'thing', entity.id), destroyed = [];
+      if (entity.standing) for (let cell = 0; cell < entity.standing.length; cell++) if (entity.standing[cell] && rng() < strength * 0.6) { entity.standing[cell] = 0; destroyed.push(cell); }
+      return { id: entity.id, destroyed };
+    });
+    if (thingHits.length) hitThings.set(event.id, thingHits);
+    if (!parts.length) return;
+    group.version++; notes.hits++; notes.impacts.sphere++;
+    const [main, ...more] = parts, round = value => Math.round(value * 10) / 10;
+    hits.set(event.id, { ...main, more, strength: Math.round(strength * 100) / 100, point: { x: sphere.x, y: sphere.y, z: sphere.z }, box: { x: box.x, y: box.y, z: box.z }, sphere: { x: round(sphere.x), y: round(sphere.y), z: round(sphere.z), r: sphere.r } });
   };
   const mover = {
     // Carried from this place when they were last here; else where Jev said the scene finds them, else coming in off the avenue.

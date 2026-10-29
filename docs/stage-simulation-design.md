@@ -218,6 +218,26 @@ A building is its circulation only: corridors and stairs on 2 m cells and 3 m fl
 - **What it cuts off:** whatever stands but no longer reaches the street door glows red, and so does any room whose corridors are all cut off.
 - **Damage persists on the place** and is applied in story order. A scene sees a hit only if the hit happened before it (happens-before across strands, not reading order).
 
+
+**Impacts chosen like placements** (user design, 2026-10-29; `playground/impact-choices.mjs`): the fights the stand-in found breaking something are asked again, on pictures, the way things are placed.
+1. **Where it hits (one choice):** the place just before the hit, from the reader's camera, with lettered red spheres at the likely impact points.
+   - The points: the faces of the buildings by the fighters (those moving first), level with them; the nearest roofs; and the building nearest the middle between the first two fighters.
+   - The options include "no damage".
+2. **How big (one call):** close-ups of the chosen point from the reader's side and from the side, with concentric red spheres 4, 8, 16 and 32 m across, labelled 1–4, and one choice on both. The same call boxes the blast on a close-up with only the point marked, to compare a box with the choice.
+3. **The damage:** every building the chosen sphere reaches loses a step down its percolation curve inside the sphere (`degrade()` now takes an optional sphere).
+   - A blast reaches into the building it hits: chosen on a face, the sphere centres on that building's nearest standing cell, because the skeleton lies inside and a sphere on the face alone often touched nothing.
+   - The strength still comes from the event's embedding.
+4. **The animation follows the skeleton's change:**
+   - Every cell the hit took becomes a fragment, launched from where it stood, out from the impact (faster near it and in a harder hit) and up, falling under gravity to rest on the ground.
+   - The impact's sphere swells to its chosen size and fades. What the hit cut off glows red, as before.
+
+**Book 2's strand** (22 fights, 40 calls, 64 s):
+- **"No damage" for 4,** all fights that break nothing: a carry over a snowy roof, a leap over roofs, a throw into the air, pulling someone out of a fire. The stand-in had counted all four as hits.
+- **Where:** choice confidence 0.27.
+- **Size:** 8 m chosen 13 times, 16 m 4 times, 4 m once; choice confidence 0.27.
+- **The box comparison:** box confidence 0.43; the box measured about 0.66 of the chosen size.
+- **Damage:** 18 sphere hits took 69 cells (the stand-in boxes took 58); 17 of 18 hits broke something.
+
 ## Motion: the path integral
 
 - Every walk from start to its first entry into Y weighs exp(−S/T). The action S adds metres walked, λ × metres climbed and κ(1 − cos θ) per turn.
