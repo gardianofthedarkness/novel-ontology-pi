@@ -22,7 +22,7 @@
  * side and top views again; --resolve re-renders the views of answers already given and solves them again, with no Jev
  * calls. Every still sees through the buildings in front of what it looks at (the beam, or the people there).
  *
- * --method candidates places by candidates instead (see byCandidates); --use choice|marker|ghost picks which of its casts
+ * --method candidates (the default) places by candidates (see byCandidates); --method boxes runs the box loop above; --use choice|marker|ghost picks which of its casts
  * the exporter gets (default ghost: the surest). The run ends with a comparison of its options over the same placements.
  *
  * The page is the strand exporter's single-strand output with --vendor; <dir> holds its three.js files. Writes
@@ -160,7 +160,7 @@ async function ask(jev, state, still, name) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, reask: { type: 'boolean' }, resweep: { type: 'boolean' }, resolve: { type: 'boolean' }, low: { type: 'string', default: '0.5' }, method: { type: 'string', default: 'boxes' }, use: { type: 'string', default: 'ghost' }, model: { type: 'string', default: 'jev-1.14.0' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, reask: { type: 'boolean' }, resweep: { type: 'boolean' }, resolve: { type: 'boolean' }, low: { type: 'string', default: '0.5' }, method: { type: 'string', default: 'candidates' }, use: { type: 'string', default: 'ghost' }, model: { type: 'string', default: 'jev-1.14.0' } } });
   const [page, novelDir] = positionals.map(path => resolve(path));
   if (!page || !novelDir || !values.vendor) throw new Error('Usage: node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh]');
   const load = path => import(pathToFileURL(`${repository}/${path}`));
