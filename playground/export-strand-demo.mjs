@@ -62,7 +62,7 @@ export async function strandDemo(novelDir, options) {
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
-  const { stageKindOf } = await load('dist/src/digger/stage/scale.js');
+  const { stageKindOf, scaleOfName } = await load('dist/src/digger/stage/scale.js');
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
   const { solveWalk, sampleWalk: walkSample, temperatureBound, directionOf } = await load('dist/apps/playground/src/data/pathIntegral.js');
   const { navGrid } = await load('dist/src/ground/stage/holoNav.js');
@@ -294,38 +294,57 @@ export async function strandDemo(novelDir, options) {
   // The macro view: the strand's places and their ancestors in the place tree; and who migrated between places, scene by scene.
   const placeOf = new Map(chosen.map(scene => [scene.id, scene.placeId])), tree = new Set(chosen.flatMap(scene => places.get(scene.placeId)?.path ?? [scene.placeId]));
   const migrations = chosen.flatMap(scene => (timeline.handoffs.get(scene.id) ?? []).filter(handoff => handoff.from && !handoff.samePlace).map(handoff => ({ scene: scene.id, person: handoff.person, from: placeOf.get(handoff.from), to: scene.placeId })));
-  // The macro view is the canvas of places (src/ground/stage/placeCanvas.ts), built from the bottom up in story order: each
-  // open place (a city, district or street by Jev's scale) is a circle of its own, born when a scene first needs it, outermost
-  // first, as large as what is built in it; a staged building is a unit with its grid on a lot of the nearest open place
-  // above it, and one known only to lie in a city gets an unnamed temporary area of that city. A newborn circle takes the
-  // free spot toward the sibling it has the most travel with, so places people travel between more sit closer. Each open
-  // place's ground is its landscape (Jev's, stage/landscape.json), filled from its centre; a staged open place keeps its grid
-  // at its middle.
+  // The same over the whole book (every staged scene, whatever the strand): what the central build's places sit toward.
+  const book = all.filter(scene => staged.has(scene.id) && scene.events?.length), bookPlace = new Map(book.map(scene => [scene.id, scene.placeId])), bookTimeline = forkTimeline(book, strands);
+  const bookTrips = book.flatMap(scene => (bookTimeline.handoffs.get(scene.id) ?? []).filter(handoff => handoff.from && !handoff.samePlace).map(handoff => ({ from: bookPlace.get(handoff.from), to: scene.placeId })));
+  // The macro view is the canvas of places (src/ground/stage/placeCanvas.ts). Before any scene, the central build: every
+  // area larger than a building in the ontology's place tree (a city, district or street by Jev's scale, or before Jev has
+  // scaled it the generic part of its name) is a circle of its own, the larger first, as large as what is built in it; one
+  // the ontology puts in no larger area dwells at a random spot of the build (seeded by its id) until it is named. Then, in
+  // story order, a staged building is a unit with its grid on a lot of the nearest open place above it; one known only to
+  // lie in a city gets an unnamed temporary area of that city, and one the ontology puts in no area dwells in one of the
+  // build's districts or streets at random. A newborn circle takes the free spot toward the sibling it has the most travel
+  // with over the whole book, so places people travel between more sit closer, and every strand stands in the same city.
+  // Each open place's ground is its landscape (Jev's, stage/landscape.json), filled from its centre; a staged open place
+  // keeps its grid at its middle.
   const canvasLayout = () => {
     const OPEN = new Set(['region', 'city', 'district', 'street']), scaleOf = id => inputs.scale?.places[id]?.scale ?? null;
     const isOpen = id => OPEN.has(scaleOf(id)) || (!scaleOf(id) && (ownGrids.has(id) ? kindOf(id) : 'district') !== 'site');
     // Jev's landscape for the place (novel stage landscape); without one yet, the kind of ground its scale suggests, so the
     // world is never bare: a street of shops, a district or a city of homes. A region is too varied for one.
     const DEFAULT = { street: 'commercial', district: 'residential', city: 'residential' };
-    const landscapeOf = id => { const type = inputs.landscape?.places[id]?.type; if (type && type !== 'none') return type; const fallback = type === 'none' ? null : DEFAULT[scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')] ?? null; if (fallback) notes.landscapeDefaults = (notes.landscapeDefaults ?? 0) + 1; return fallback; };
+    const landscapeOf = (id, scale = scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')) => { const type = inputs.landscape?.places[id]?.type; if (type && type !== 'none') return type; const fallback = type === 'none' ? null : DEFAULT[scale] ?? null; if (fallback) notes.landscapeDefaults = (notes.landscapeDefaults ?? 0) + 1; return fallback; };
     // A staged building's lot, with room round it; an open place's own ground is its landscape, filled from its middle.
     const gridRadius = () => 22;
-    const pathOf = id => (places.get(id)?.path ?? [id]).filter(step => tree.has(step));
-    const trips = (a, b) => migrations.filter(m => m.from && m.to && (pathOf(m.from).includes(a) && pathOf(m.to).includes(b) || pathOf(m.from).includes(b) && pathOf(m.to).includes(a))).length;
+    const placeTree = inputs.placeTree ?? inputs.data.places, treePath = new Map(placeTree.map(place => [place.id, place.path ?? [place.id]]));
+    const pathOf = id => treePath.get(id) ?? places.get(id)?.path ?? [id];
+    const trips = (a, b) => bookTrips.filter(m => m.from && m.to && (pathOf(m.from).includes(a) && pathOf(m.to).includes(b) || pathOf(m.from).includes(b) && pathOf(m.to).includes(a))).length;
     const canvas = C.emptyCanvas();
+    const toward = (id, parent) => Object.values(canvas.places).filter(place => place.parent === parent && place.id !== id).map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0].at;
     const birth = (id, parent) => {
       if (canvas.places[id]) return;
-      const siblings = Object.values(canvas.places).filter(place => place.parent === parent), near = siblings.map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0];
-      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: near?.at });
+      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent) });
     };
+    const areaScale = id => { const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };
+    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), parent: place.parentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
+    const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
+    notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
     for (const scene of chosen) {
       const chain = pathOf(scene.placeId), open = chain.filter(id => id !== scene.placeId && isOpen(id));
       open.forEach((id, n) => birth(id, n ? open[n - 1] : null));
       if (isOpen(scene.placeId)) { birth(scene.placeId, open.at(-1) ?? null); continue; }
       if (Object.values(canvas.places).some(place => place.units.some(unit => unit.id === scene.placeId))) continue;
+      const host = open.length ? null : C.dwellingFor(canvas, scene.placeId);
+      if (host) {
+        // A building the place tree puts in no larger place dwells at a random spot of the central build until the text names where it is.
+        const holder = C.holderFor(canvas, host, scaleOf(scene.placeId) ?? 'building', scene.placeId);
+        C.addUnit(canvas, holder, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) });
+        dwellingUnits[scene.placeId] = host; notes.build.dwelling.push(`${name(scene.placeId)} in ${name(host)}`);
+        continue;
+      }
       if (!open.length) {
-        // A building the place tree puts in no larger place: an unnamed area of its own round it (a temporary district of
-        // ordinary ground, until the text names where it is), so it stands in a city rather than on bare ground.
+        // With no area in the build at all: an unnamed area of its own round it (a temporary district of ordinary ground,
+        // until the text names where it is), so it stands in a city rather than on bare ground.
         const area = `tmp:${scene.placeId}`;
         if (!canvas.places[area]) { C.bear(canvas, { id: area, label: `round ${name(scene.placeId)}`, scale: 'district', parent: null, landscape: 'residential' }); canvas.places[area].temporary = true; }
         C.addUnit(canvas, area, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) });
@@ -338,8 +357,8 @@ export async function strandDemo(novelDir, options) {
     const nodes = [];
     for (const place of Object.values(canvas.places)) {
       const [x, z] = C.worldOf(canvas, place.id), grid = place.units.find(unit => unit.id === `${place.id}#grid`);
-      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}) });
-      for (const unit of place.units) if (unit.kind === 'building') nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]) });
+      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}) });
+      for (const unit of place.units) if (unit.kind === 'building') nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
     }
     return { nodes, canvas };
   };
@@ -582,7 +601,7 @@ export async function strandDemo(novelDir, options) {
       lots: world.lots.map(lot => ({ i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, label: lot.label, role: lot.role, source: lot.source, place: lot.place, born: lot.born, cells: [...lot.skeleton.cells].join('') })),
       broken, hits: [...hits.entries()].map(([id, hit]) => ({ event: id, sphere: hit.sphere ?? null, point: hit.point })), earlier: earlier.map(({ lot, strand, scene: from, story: at }) => ({ lot, strand, scene: from, story: at })),
       landscapes: landscapes.map(entry => ({ place: entry.place, buildings: entry.buildings, ids: entry.source.buildings.map(b => b.id), roads: entry.roads })),
-      notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied } };
+      notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied, build: notes.build } };
   };
   let lastLive = 0;
   const live = (final = false, now = false) => { if (!options.live || (!final && !now && Date.now() - lastLive < 300)) return; lastLive = Date.now(); options.live(snapshot(final), now ? assemble(partialRuns(), moment) : null); };

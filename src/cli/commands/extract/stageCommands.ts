@@ -101,10 +101,19 @@ export async function stageInputs(novelDir: string) {
     const sceneId = sceneOf.get(event.evidence?.sentenceIds?.[0] ?? "");
     if (sceneId) eventsByScene.set(sceneId, [...eventsByScene.get(sceneId) ?? [], event]);
   }
+  // The ontology's place tree: the strands' places, and every other place the ontology names, under the first place it
+  // puts each in (as the strands view does). The stage's central build lays out every area of it before a scene runs.
+  const projected = new Set(data.places.map((place) => place.id)), isLocation = (id: string) => byId.get(id)?.kind === "Location";
+  const parentOf = new Map<string, string>();
+  for (const relation of relations) if (relation.type === "PART_OF" && isLocation(relation.fromId) && isLocation(relation.toId) && !parentOf.has(relation.fromId)) parentOf.set(relation.fromId, relation.toId);
+  const treePath = (id: string) => { const path: string[] = [], seen = new Set<string>(); for (let at: string | undefined = id; at && !seen.has(at); at = parentOf.get(at)) { seen.add(at); path.unshift(at); } return path; };
+  const placeTree = [...data.places.map((place) => ({ id: place.id, label: place.label, parentId: place.parentId, path: place.path ?? [place.id], sceneIds: place.sceneIds })),
+    ...entities.filter((entity) => entity.kind === "Location" && !projected.has(entity.id)).map((entity) => ({ id: entity.id, label: names[entity.id] ?? entity.id, parentId: parentOf.get(entity.id) ?? null, path: treePath(entity.id), sceneIds: [] as string[] }))];
+  const within = (id: string) => placeTree.filter((place) => place.parentId === id).map((place) => place.id);
   // Scale: every place in the tree, with scenes of its own or not (the stage's map draws them all).
-  const scalePlaces: ScalePlace[] = data.places.map((place) => {
+  const scalePlaces: ScalePlace[] = placeTree.map((place) => {
     const forms = byId.get(place.id)?.names ?? [], canonical = names[place.id] ?? place.label;
-    return { id: place.id, label: place.label, aliases: [...new Set(forms.map((form) => form.text).filter((text) => text && text !== canonical))], path: place.path ?? [place.id], contains: inside(place.id) };
+    return { id: place.id, label: place.label, aliases: [...new Set(forms.map((form) => form.text).filter((text) => text && text !== canonical))], path: place.path, contains: within(place.id) };
   });
   const scale = await readJson<ScaleReport>(stageFile(novelDir, "scale"));
   const scaleCurrent = scale?.inputs === scaleFingerprint(scalePlaces);
@@ -145,14 +154,14 @@ export async function stageInputs(novelDir: string) {
   const objectsAt = new Map<string, string[]>();
   for (const [sceneId, found] of Object.entries(objects?.scenes ?? {})) objectsAt.set(sceneId, found.objects.filter((object) => object.kind === "building" && !object.room).map((object) => object.name));
   const sentenceList = [...sentences.entries()];
-  const landscapePlaces: LandscapePlace[] = data.places.filter((place) => OPEN_SCALES.has(scale?.places[place.id]?.scale ?? "")).map((place) => {
+  const landscapePlaces: LandscapePlace[] = placeTree.filter((place) => OPEN_SCALES.has(scale?.places[place.id]?.scale ?? "")).map((place) => {
     const label = names[place.id] ?? place.label, naming = sentenceList.filter(([, sentence]) => sentence.text.includes(label) && sentence.text.length >= label.length + 8).slice(0, 3);
-    return { id: place.id, label, scale: scale!.places[place.id].scale, path: place.path ?? [place.id], contains: inside(place.id), scenes: place.sceneIds.map((id) => (sceneLabel.get(id) ?? "").split("（原文：")[0]).filter((text) => text && !/^scene_\d+$/.test(text)).map((text) => clip(text, 110)),
+    return { id: place.id, label, scale: scale!.places[place.id].scale, path: place.path, contains: within(place.id), scenes: place.sceneIds.map((id) => (sceneLabel.get(id) ?? "").split("（原文：")[0]).filter((text) => text && !/^scene_\d+$/.test(text)).map((text) => clip(text, 110)),
       buildings: [...new Set(place.sceneIds.flatMap((id) => objectsAt.get(id) ?? []))], sentences: naming.map(([, sentence]) => clip(sentence.text, 110)), sentenceIds: naming.map(([id]) => id) };
   });
   const landscape = await readJson<LandscapeReport>(stageFile(novelDir, "landscape"));
   const landscapeCurrent = !!landscape?.complete && landscape.inputs === landscapeFingerprint(landscapePlaces);
-  return { data, places, scalePlaces, scale, scaleCurrent, landscapePlaces, landscape, landscapeCurrent, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, objects, objectsCurrent, plan, planCurrent, answers,
+  return { data, places, placeTree, scalePlaces, scale, scaleCurrent, landscapePlaces, landscape, landscapeCurrent, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, objects, objectsCurrent, plan, planCurrent, answers,
     estimate: Math.ceil(toAsk.reduce((sum, scene) => sum + sceneCallEstimate(scene), 0) + toPair.reduce((sum, scene) => sum + pairsCallLimit(scene) * 0.5, 0)), limit: toAsk.reduce((sum, scene) => sum + sceneCallLimit(scene), 0) + toPair.reduce((sum, scene) => sum + pairsCallLimit(scene), 0) };
 }
 

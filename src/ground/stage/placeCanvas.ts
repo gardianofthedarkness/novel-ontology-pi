@@ -16,8 +16,11 @@ import type { Point } from "./cityFill.js";
  *   their parent's frame, so nothing inside any place ever moves in its own frame. Growth then carries on up.
  */
 export interface Unit { id: string; label: string; kind: "building" | "street" | "room"; at: Point; r: number }
-/** temporary: an unnamed area holding what is known only to lie somewhere in a larger place, until the text names it. */
-export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; temporary?: boolean }
+/**
+ * temporary: an unnamed area holding what is known only to lie somewhere in a larger place, until the text names it.
+ * dwelling: the area of the central build a place the ontology puts in no larger one dwells in, until it is named.
+ */
+export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; temporary?: boolean; dwelling?: string }
 export interface Canvas { places: Record<string, CanvasPlace>; born: number }
 
 /** The least radius of a place of each scale, in metres, before anything is built in it. */
@@ -131,6 +134,57 @@ export function adopt(canvas: Canvas, temporaryId: string, named: { id: string; 
   canvas.places[named.id] = { ...area, id: named.id, label: named.label, scale: named.scale ?? area.scale, temporary: false };
   for (const place of Object.values(canvas.places)) if (place.parent === temporaryId) place.parent = named.id;
   return canvas;
+}
+
+/** An area of the central build (a place larger than a building) and the place the ontology puts it in, if any. */
+export interface BuildArea { id: string; label: string; scale: string; parent: string | null; landscape?: LandscapeType | null }
+/** One of several choices, picked by a seed (a place's id), so the same in every run; the choices' order does not matter. */
+function pickBy(seed: string, choices: string[]): string {
+  const sorted = [...choices].sort(), hash = [...seed].reduce((sum, char) => (Math.imul(sum, 31) + char.charCodeAt(0)) >>> 0, 7);
+  return sorted[hash % sorted.length];
+}
+const isArea = (place: CanvasPlace) => !place.temporary && (RANK[place.scale] ?? 0) > RANK.building;
+
+/**
+ * The central build, before any scene runs: every area larger than a building the ontology names (a region, a city, a
+ * district, a street) is born on the canvas, the larger first, so every strand of the story stands in one city. An area
+ * the ontology puts inside another is born in it. One it puts in no larger area (a district the text never places in a
+ * city) dwells at a spot of the build picked at random, inside one of its areas of the next larger scale there is
+ * (seeded by its id, so the same spot in every run), until the ontology names where it belongs; the largest stay at the
+ * top. `toward` gives a newborn area a direction in its parent (the sibling it has most to do with). Returns where each
+ * dwelling area dwells.
+ */
+export function centralBuild(canvas: Canvas, areas: BuildArea[], toward?: (id: string, parent: string | null) => Point | undefined): Record<string, string> {
+  const ids = new Set(areas.map((area) => area.id)), dwelling: Record<string, string> = {}, rank = (scale: string) => RANK[scale] ?? 0;
+  // A named parent counts when it is an area of the build and its chain of parents does not loop back.
+  const named = new Map(areas.map((area) => [area.id, area.parent && ids.has(area.parent) ? area.parent : null]));
+  for (const area of areas) { const seen = new Set([area.id]); for (let at = named.get(area.id); at; at = named.get(at)) { if (seen.has(at)) { named.set(area.id, null); break; } seen.add(at); } }
+  let left = [...areas].sort((a, b) => rank(b.scale) - rank(a.scale));
+  while (left.length) {
+    const waiting: BuildArea[] = [];
+    for (const area of left) {
+      const parent = named.get(area.id) ?? null;
+      if (parent && !canvas.places[parent]) { waiting.push(area); continue; }
+      const hosts = parent ? [] : Object.values(canvas.places).filter((place) => isArea(place) && rank(place.scale) > rank(area.scale));
+      const nearest = Math.min(...hosts.map((place) => rank(place.scale))), host = hosts.length ? pickBy(area.id, hosts.filter((place) => rank(place.scale) === nearest).map((place) => place.id)) : null;
+      const into = parent ?? host;
+      bear(canvas, { ...area, parent: into, toward: toward?.(area.id, into) });
+      if (host) { canvas.places[area.id].dwelling = host; dwelling[area.id] = host; }
+    }
+    if (waiting.length === left.length) break;
+    left = waiting;
+  }
+  return dwelling;
+}
+
+/**
+ * Where a building the ontology puts in no area dwells: one of the build's districts and streets (with none, one of its
+ * larger areas), picked at random by the building's id, until the text names where it is; null with no area at all.
+ */
+export function dwellingFor(canvas: Canvas, unitId: string): string | null {
+  const areas = Object.values(canvas.places).filter(isArea), own = areas.filter((place) => place.scale === "district" || place.scale === "street");
+  const choices = (own.length ? own : areas).map((place) => place.id);
+  return choices.length ? pickBy(unitId, choices) : null;
 }
 
 /** A place's centre on the whole canvas: its offset added up through its ancestors. */

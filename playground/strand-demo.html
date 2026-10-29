@@ -210,8 +210,9 @@ const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low <
 
 // The macro layout comes with the data (the canvas of places, in metres): a place's grid stands at its spot, the centre of
 // its own disc (a staged building's on a lot of the place holding it); its circle holds its children. A temporary area (an
-// unnamed district or street of a place, holding what is known only to lie in it) is drawn fainter.
-const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale, temporary: !!node.temporary }]));
+// unnamed district or street of a place, holding what is known only to lie in it) is drawn fainter; a dwelling place (one
+// the ontology puts in no larger place, at a random spot of the central build until it is named) says where it dwells.
+const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale, temporary: !!node.temporary, dwelling: node.dwelling ? data.macro.find((other) => other.id === node.dwelling)?.label ?? node.dwelling : null }]));
 
 // The 3D stage.
 const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -428,7 +429,7 @@ for (const [id, spot] of macroAt) {
   ring.rotation.x = -Math.PI / 2; ring.position.set(spot.cx, -0.3 - spot.depth * 0.05, spot.cz); world.add(ring);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x0a1e2b, transparent: true, opacity: 0.45, depthWrite: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.set(spot.cx, -0.5 - spot.depth * 0.05, spot.cz); world.add(disc);
-  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}` : spot.label, strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
+  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : ""}` : spot.label, strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
 }
 let decor = () => {};
 // Each open place's landscape around the staged grids (src/ground/stage/landscape.ts): faint hologram blocks and roads,
