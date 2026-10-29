@@ -315,7 +315,7 @@ As of 2026-10-28, uncommitted on `claude/place-read-mode`.
 
 | Piece | Where | State |
 |---|---|---|
-| Per-fork environment, `novel stage forks` | `src/digger/stage/environment.ts` | built, tested |
+| Per-fork environment, `novel stage lines` | `src/digger/stage/environment.ts` | built, tested |
 | Path integral: sampler and temperature bound | `apps/playground/src/data/pathIntegral.ts` | built, matches exact enumeration |
 | Skeleton buildings, rooms, damage, robustness | `apps/playground/src/data/skeleton.ts` | built, tested |
 | Places of skeleton buildings, movement graph, hits | `apps/playground/src/data/skeletonPlace.ts` | built, tested |

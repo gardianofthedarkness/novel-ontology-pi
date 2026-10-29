@@ -29,6 +29,8 @@ export interface HoloBeat {
   scene: number; when?: string;
   /** The source sentences it tells (sentenceKey of the first and last), when the record carries them: read mode finds a page's beats by these. */
   source?: { from: number; to: number };
+  /** Other records told by this beat (the same moment told twice, merged into one): their ids, for the moves planned on them. */
+  also?: string[];
 }
 export interface HoloActor { id: string; label: string; color: string; beats: number }
 export interface HoloPlace { id: string; label: string; kind: ArchitectureKind | null; x: number; z: number; scenes: number }
@@ -118,6 +120,7 @@ function sceneBeats(scene: StoryScene, local: string, placeId: string, number: n
       }
       const also = rangeOf(record);
       if (also) earlier.source = earlier.source ? { from: Math.min(earlier.source.from, also.from), to: Math.max(earlier.source.to, also.to) } : also;
+      earlier.also = [...earlier.also ?? [], record.id];
       continue;
     }
     const dialogue = !!card || record.kind === "dialogue";

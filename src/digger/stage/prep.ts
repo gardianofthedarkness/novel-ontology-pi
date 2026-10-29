@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import type { ArchitectureKind } from "../../../apps/playground/src/data/placeArchitecture.js";
-import { navGrid, solveChain, type ChainStep, type MovePlan } from "../../../apps/playground/src/data/holoNav.js";
+import type { ArchitectureKind } from "../../ground/stage/placeArchitecture.js";
+import { navGrid, solveChain, type ChainStep, type MovePlan } from "../../ground/stage/holoNav.js";
+import { ARCHITECTURE_LABEL } from "../../ground/stage/placeArchitecture.js";
 import type { ArchitectureReport } from "./architecture.js";
 import type { MovementReport } from "./movement.js";
 
@@ -26,9 +27,10 @@ export interface StagePlan {
   counts: { places: number; scenes: number; moves: number; revisedStarts: number; droppedMoves: number; stayedMoves: number };
 }
 
-/** Bump when solveChain or the nav grids change, so every book's plan is rebuilt. */
+/** Bump when solveChain changes, so every book's plan is rebuilt; a change to any nav grid (spots, heights, ways) rebuilds it by itself. */
 export const STAGE_PHYSICS_VERSION = 1;
-export const prepFingerprint = (architectureInputs: string, movementInputs: string) => createHash("sha256").update(JSON.stringify([architectureInputs, movementInputs, STAGE_PHYSICS_VERSION])).digest("hex").slice(0, 16);
+const NAV_GRIDS = (Object.keys(ARCHITECTURE_LABEL) as ArchitectureKind[]).map((kind) => [kind, navGrid(kind)]);
+export const prepFingerprint = (architectureInputs: string, movementInputs: string) => createHash("sha256").update(JSON.stringify([architectureInputs, movementInputs, STAGE_PHYSICS_VERSION, NAV_GRIDS])).digest("hex").slice(0, 16);
 
 export function prepareStage(architecture: ArchitectureReport, movement: MovementReport): StagePlan {
   const places: Record<string, MovePlan> = {};

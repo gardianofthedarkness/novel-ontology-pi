@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inlinePage, trimPlace } from './export-clips-demo.mjs';
+import { inlinePage, trimPlace, unquoted } from './export-clips-demo.mjs';
 
 const beat = (sceneId, record, extra = {}) => ({ id: `${sceneId}:${record}`, kind: record === 'card' ? 'scene' : 'event', sceneId, placeId: 'loc_1', title: record, text: record, actors: [`char_${record}`], present: [], conflict: false, scene: 1, ...extra });
 
 test('a place keeps only what its clips play: scene card to last beat, no quotes or source positions', () => {
-  const beats = [beat('s1', 'card'), beat('s1', 'e1'), beat('s1', 'e2', { quote: '原话', source: { from: 1, to: 2 } }), beat('s1', 'e3'), beat('s2', 'card'), beat('s2', 'e1'), beat('s3', 'card'), beat('s3', 'e1'), beat('s3', 'e2')];
+  const beats = [beat('s1', 'card'), beat('s1', 'e1'), beat('s1', 'e2', { text: '甲说「原话」，乙答“另一句”', quote: '原话', source: { from: 1, to: 2 }, also: ['e9'] }), beat('s1', 'e3'), beat('s2', 'card'), beat('s2', 'e1'), beat('s3', 'card'), beat('s3', 'e1'), beat('s3', 'e2')];
   const script = { title: 'Tower', places: [{ id: 'loc_1', label: 'Tower', kind: 'skyscraper', x: 0, z: 0, scenes: 3 }], actors: [...new Set(beats.map(entry => entry.actors[0]))].map(id => ({ id, label: id, color: '#fff', beats: 1 })), beats };
   const plan = { place: 'loc_1', kind: 'skyscraper', starts: { s1: { char_e1: '1f-hall' }, s2: {}, s3: {} }, moves: { 's1:e2': [{ actor: 'char_e2', to: '2f-hall', how: 'walk', p: 1 }], 's2:e1': [{ actor: 'char_e1', to: '1f-hall', how: 'run', p: 1 }], 's3:e2': [{ actor: 'char_e2', to: '3f-hall', how: 'walk', p: 1 }] } };
   const clip = (sceneId, from, to) => ({ id: `loc_1:${sceneId}`, placeId: 'loc_1', sceneId, title: sceneId, scene: 'Scene 1', place: 'Tower', kind: 'skyscraper', from, to, moves: 1, movers: 1, at: from });
@@ -13,10 +13,17 @@ test('a place keeps only what its clips play: scene card to last beat, no quotes
   const { clips, script: kept, plan: moves } = trimPlace([clip('s3', 7, 8), clip('s1', 1, 2)].map(entry => ({ clip: entry, script, plan })));
   assert.deepEqual(kept.beats.map(entry => entry.id), ['s1:card', 's1:e1', 's1:e2', 's3:card', 's3:e1', 's3:e2']);
   assert.deepEqual(clips.map(entry => [entry.sceneId, entry.from, entry.to]), [['s1', 1, 2], ['s3', 4, 5]]);
-  assert.ok(kept.beats.every(entry => !('quote' in entry) && !('source' in entry)));
+  assert.ok(kept.beats.every(entry => !('quote' in entry) && !('source' in entry) && !('also' in entry)));
+  assert.equal(kept.beats.find(entry => entry.id === 's1:e2').text, '甲说「…」，乙答「…」', 'a quoted line inside a summary never reaches the page');
   assert.deepEqual(Object.keys(moves.moves), ['s1:e2', 's3:e2']);
   assert.deepEqual(Object.keys(moves.starts), ['s1', 's3']);
   assert.deepEqual(kept.actors.map(actor => actor.id).sort(), ['char_card', 'char_e1', 'char_e2']);
+});
+
+test('every quoted span is cut from a summary, an unclosed one to the end', () => {
+  assert.equal(unquoted('A said "go now" and left'), 'A said 「…」 and left');
+  assert.equal(unquoted('她喊道『快跑'), '她喊道「…」');
+  assert.equal(unquoted('没有引号的摘要'), '没有引号的摘要');
 });
 
 test('the page inlines its script, style and clips, and never carries a private viewer path', () => {

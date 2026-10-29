@@ -57,6 +57,7 @@ const EMPTY_TIME_PLACE: TimePlaceProjection = { available: false, times: [], sce
 type StageView = "narrative" | "story" | "places";
 const STAGE_VIEWS: [StageView, string][] = [["narrative", "Narrative"], ["story", "Story time"], ["places", "Places"]];
 const MODES: [boolean, string][] = [[true, "3D"], [false, "Flat"]];
+const HOLO_MODES: HoloMode[] = ["diorama", "cutscene", "journey"];
 const NO_NODES: WorldNode[] = [];
 const NO_EDGES: WorldEdge[] = [];
 const NO_JOINS: PendingJoin[] = [];
@@ -174,7 +175,8 @@ export default function App() {
   const [clipsMode] = useState(() => new URLSearchParams(location.search).has("clips"));
   const [holo, setHolo] = useState<{ target: string; mode: HoloMode; beat: number; paused?: boolean } | null>(() => {
     const params = new URLSearchParams(location.search), target = params.get("holo");
-    return target ? { target, mode: (params.get("holoMode") as HoloMode | null) ?? (target === "journey" ? "journey" : "diorama"), beat: Number(params.get("holoBeat") ?? 0), paused: params.has("holoPause") } : null;
+    const mode = params.get("holoMode"), beat = Number(params.get("holoBeat") ?? 0);
+    return target ? { target, mode: HOLO_MODES.includes(mode as HoloMode) ? mode as HoloMode : target === "journey" ? "journey" : "diorama", beat: Number.isInteger(beat) && beat >= 0 ? beat : 0, paused: params.has("holoPause") } : null;
   });
   const [dynNodes, setDynNodes] = useState<WorldNode[]>([]);
   const [dynEdges, setDynEdges] = useState<WorldEdge[]>([]);
@@ -864,12 +866,13 @@ export default function App() {
   }, [holoOpen, phoneLive, loadedBook]);
   const holoPlan = useMemo(() => {
     const placeId = holoScript && !holoJourney ? holoScript.places[0]?.id : undefined;
-    // Without a prepared plan from this host, the stage asks api/holo-moves (the design preview's snapshot host).
-    if (!placeId || stagePlan === undefined || stagePlan === null) return undefined;
+    // Without a prepared plan from this host, nobody moves.
+    if (!placeId || !stagePlan) return null;
     const plan = placePlan(stagePlan, placeId, loadedBook);
     return plan ? keyedPlan(plan, holoScript!) : null;
   }, [holoScript, holoJourney, stagePlan, loadedBook]);
-  const busiestPlace = () => [...(viewTimePlace?.places ?? [])].sort((first, second) => placeScript(viewTimePlace!, shownWorld, second.id, loadedBook).beats.length - placeScript(viewTimePlace!, shownWorld, first.id, loadedBook).beats.length)[0]?.id ?? "journey";
+  // The place with the most beats: each place's script built once, not twice per comparison.
+  const busiestPlace = () => (viewTimePlace?.places ?? []).map((place) => [place.id, placeScript(viewTimePlace!, shownWorld, place.id, loadedBook).beats.length] as const).reduce<readonly [string, number] | null>((best, entry) => !best || entry[1] > best[1] ? entry : best, null)?.[0] ?? "journey";
   const closeHolo = () => {
     setHolo(null);
     const url = new URL(location.href);

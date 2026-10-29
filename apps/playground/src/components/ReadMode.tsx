@@ -59,7 +59,11 @@ export function ReadMode({ timePlace, world, volume, title, reducedMotion, bookQ
       setBlocks([...loaded]);
       setTextState("ready");
       for (let block = 1; block < first.blocks && live; block++) {
-        const next = await fetch(`api/book-text${glue}block=${block}`, { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ sentences: ReadSentence[] }> : null).catch(() => null);
+        const response = await fetch(`api/book-text${glue}block=${block}`, { cache: "no-store" }).catch(() => null);
+        if (!live || !response) break;
+        // A block the host does not have (404) is skipped; any other failure stops loading.
+        if (response.status === 404) continue;
+        const next = response.ok ? await (response.json() as Promise<{ sentences: ReadSentence[] }>).catch(() => null) : null;
         if (!live || !next) break;
         loaded.push(next.sentences);
         setBlocks([...loaded]);
@@ -151,7 +155,7 @@ export function ReadMode({ timePlace, world, volume, title, reducedMotion, bookQ
       </div>
       <section className="read-stage" aria-label="Places of this page">
         {show && script && show.placeId ? <HoloStage key={show.placeId} script={script} mode={mode} onMode={setMode} onClose={() => undefined} reducedMotion={reducedMotion} embedded
-          plan={plan} reel={show.reel} onReelEnd={reelDone} onBeat={setBeat} initialBeat={show.window?.to ?? 0} autoplay={false} />
+          plan={plan} reel={show.reel} onReelEnd={reelDone} onBeat={setBeat} initialBeat={show.window?.to ?? 0} seek={`page:${show.page}`} autoplay={false} />
           : <div className="read-idle"><div className="read-idle-ring" /><p>{settled === null ? "Rest on a page to see where it happens." : "This page names no place to stage."}</p></div>}
         {show && script && <div className={`read-hook${replaying ? " is-replaying" : ""}`} role="status">
           <b>Page {show.page + 1}</b>

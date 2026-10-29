@@ -1,7 +1,7 @@
 // Stage clips as one shareable page: the clips of each prepared book, cut down to what they play,
 // with the clip player (apps/playground clips-demo.html) inlined around them. No host, archive,
 // book text or agent is reachable from the page; each clip carries its scene's beats (summaries
-// and names, no quotes or source positions), its place and the prepared moves.
+// and names, with every quoted line cut out, and no source positions), its place and the prepared moves.
 //   npm run build && node playground/export-clips-demo.mjs <live-volumes.json> <out.html> [--catalog catalog.json] [--fragment]
 // live-volumes.json is the Pi runner's list of books ({id, workspace, metadataDirectory}).
 // --fragment leaves out the document wrapper (<!doctype>, <html>, <head>, <body>), for hosts that add their own.
@@ -15,10 +15,14 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontend = `${repository}/apps/playground`;
 const load = path => import(pathToFileURL(`${repository}/${path}`));
 
+/** A record's summary with what anyone says cut out: every quoted span (「…」『…』“…”"…", or one left open to the end) becomes 「…」. */
+export const unquoted = text => text.replace(/[「『“"][^」』”"]*(?:[」』”"]|$)/g, '「…」');
+
 /**
  * A place's clips cut down to what they play: each clip's scene from its title card to its last
  * beat (enough for the stage to place everyone), the scenes one after another in one script per
- * place, so clips of a place share one stage. Quotes and source positions are left out.
+ * place, so clips of a place share one stage. Quotes, quoted lines inside summaries, merged record
+ * ids and source positions are left out.
  */
 export function trimPlace(entries) {
   const { script, plan } = entries[0];
@@ -26,8 +30,8 @@ export function trimPlace(entries) {
   const beats = [], clips = [];
   for (const { clip, start } of cuts) {
     const offset = beats.length - start;
-    beats.push(...script.beats.slice(start, clip.to + 1).map(({ quote, source, ...beat }) => beat));
-    clips.push({ ...clip, from: clip.from + offset, to: clip.to + offset });
+    beats.push(...script.beats.slice(start, clip.to + 1).map(({ quote, source, also, ...beat }) => ({ ...beat, title: unquoted(beat.title), text: unquoted(beat.text) })));
+    clips.push({ ...clip, title: unquoted(clip.title), from: clip.from + offset, to: clip.to + offset });
   }
   const people = new Set(beats.flatMap(beat => [...beat.actors, ...beat.present]));
   const ids = new Set(beats.map(beat => beat.id)), scenes = cuts.map(({ clip }) => clip.sceneId);

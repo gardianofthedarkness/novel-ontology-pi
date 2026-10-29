@@ -118,7 +118,7 @@ A **Read mode** link in the top bar opens the same page with `?read`.
 
 ### Where the data comes from
 
-Three Jev faculties and a last step, each a report under `<book>/stage/`. These are view inputs: no review packet, never canon. The steps are `novel stage scale|architecture|movement|prep`, run in the order `novel checklist` gives.
+Three Jev faculties and a last step, each a report under `<book>/stage/`. These are view inputs: no review packet, never canon. The steps are `novel stage scale|architecture|movement|prep`, run on request in the order of the `stage` section of `novel checklist`. That section is never part of a book's `complete` or `next`, so the analysis loop never spends Jev on animation and a universe's atlas never waits for it. The stage reads reviewed canon only (a place awaiting review is not staged), and each paid step refuses while the analysis steps it builds on are unfinished, unless `--force`.
 
 - **scale:** how big each place in the place tree is: region, city, district, street, building or room.
   - One Jev choice per place, from its name, other names, its path in the tree and the places inside it. Tested against packages and embeddings in [stage-simulation-design.md](stage-simulation-design.md); Jev was right on 64 of 66 places.
@@ -129,8 +129,9 @@ Three Jev faculties and a last step, each a report under `<book>/stage/`. These 
   - The name shortlists up to four kinds; Jev then picks among pictures of them (`assets/architecture/<kind>.png`) under neutral option names.
   - A place that contains a district is a city, whatever its name suggests (学园都市).
 - **movement:** who moves where, how and which way, per event.
-  - Needs the whole file extracted, so each scene's cast comes from the cast-candidate scorer over the full character list.
-  - Needs the buildings picked, so Jev chooses among real spots.
+  - Each scene's cast is who is present, read as the strands view and causality read it (the answered cast where "who is present?" was asked, else the recorded one), plus whoever its events record taking part. Someone only mentioned, or named in an event's evidence, is not on stage.
+  - Needs the buildings picked, so Jev chooses among real spots. Answers are spot ids of the building's nav grid, so they are reused only while that grid (its spots, names, hints and ways) and the questions stay the same.
+  - `--max-calls` is never exceeded: each scene reserves the most it can cost (its opening, then two calls per event) and gives back what it did not spend.
 - **stage (the animation prep):** no model calls, and only once every other step is done and reviewed.
   - Every chain is checked physically, and the result is one plan per place.
   - Served at `api/stage`, with the text at `api/book-text?block=N`.
@@ -252,9 +253,9 @@ The per-fork environment (`src/digger/stage/environment.ts`) is the part that do
   - A later run walks only the scenes downstream of a change, along the people it touches.
   - Each turn gets a seed from that key, so the same history samples the same way.
 
-`novel stage forks <book> [--fork <scene-id>]` shows it, with no model calls. On the demo copies:
+`novel stage lines <book> [--line <scene-id>]` shows it, with no model calls (a line is a fork of the timeline, not a `novel fork` branch). On the demo copies, before the stage read presence only:
 
-| Book | Scenes (staged) | Forks | Splits / merges | People per scene, max | Per place if carried from the start, max | People entering scenes: stay / arrive / fresh |
+| Book | Scenes (staged) | Lines | Splits / merges | People per scene, max | Per place if carried from the start, max | People entering scenes: stay / arrive / fresh |
 |---|---|---|---|---|---|---|
 | 1 | 77 (69) | 14 | 4 / 5 | 8 | 29 | 224 / 3 / 30 |
 | 2 | 84 (46) | 21 | 8 / 9 | 8 | 13 | 110 / 62 / 31 |

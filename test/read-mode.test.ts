@@ -39,6 +39,12 @@ test("the prepared plan's moves are keyed by event id; the stage's beats by scen
   assert.equal(plan.starts.s1.a, "floor-3");
 });
 
+test("a beat telling two records (the same moment told twice) carries the moves planned on either, a person's last one standing", () => {
+  const merged: HoloScript = { ...script, beats: script.beats.filter((beat) => beat.id !== "s1:e2").map((beat) => beat.id === "s1:e1" ? { ...beat, also: ["e2"] } : beat) };
+  const plan = keyedPlan({ place: "tower", kind: "skyscraper", starts: {}, moves: { e1: [{ actor: "a", to: "floor-2", how: "walk", p: 0.9 }], e2: [{ actor: "a", to: "roof", how: "climb up", p: 0.9 }, { actor: "b", to: "floor-2", how: "run", p: 0.7 }] } }, merged);
+  assert.deepEqual(plan.moves["s1:e1"].map((move) => [move.actor, move.to]), [["a", "roof"], ["b", "floor-2"]]);
+});
+
 test("a universe stage finds the loaded book's prepared plan under its book prefix", () => {
   const plan = { place: "loc_1", kind: "skyscraper" as const, starts: { s1: { a: "floor-3" } }, moves: { e1: [{ actor: "a", to: "roof", how: "climb up" as const, p: 0.9 }] } };
   const stage = { inputs: "", preparedAt: "", architecture: {}, places: { loc_1: plan }, counts: {} };

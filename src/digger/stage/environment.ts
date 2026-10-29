@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import type { StoryStrands } from "../../../apps/playground/src/data/storyStrands.js";
 
 /**
  * The stage's simulation environment, per fork of the timeline.
@@ -29,8 +28,10 @@ export interface Handoff { person: string; from: string | null; samePlace: boole
 /** A run of scenes one strand follows (reading order), its people, and the forks people come from and go on to. */
 export interface Fork { id: string; scenes: string[]; people: string[]; from: string[]; to: string[] }
 export interface ForkTimeline { forks: Fork[]; forkOf: Map<string, string>; handoffs: Map<string, Handoff[]>; order: string[] }
+/** What the forks read from the story strands (storyStrands): each scene's layer, and the scene its lane continues. */
+export interface StrandLanes { layer: Map<string, number>; continues: Map<string, string | null> }
 
-export function forkTimeline(scenes: TimelineScene[], strands: Pick<StoryStrands, "layer" | "continues">): ForkTimeline {
+export function forkTimeline(scenes: TimelineScene[], strands: StrandLanes): ForkTimeline {
   const order = [...scenes].sort((first, second) => first.index - second.index);
   // A scene stays on the fork of the scene its lane continues; predecessors sit on lower layers, so they are placed first.
   const forkOf = new Map<string, string>();

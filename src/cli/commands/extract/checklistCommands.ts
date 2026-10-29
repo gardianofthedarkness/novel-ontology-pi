@@ -31,11 +31,13 @@ import { calendarPacketId } from "../../../solidifier/calendar/review.js";
  *                     │                                                    ordered by story time and strands)
  *                     └─▶ graph (rebuilt after canon changes)
  *
- * and read mode's stage (view inputs, no review packet):
+ * Read mode's stage is listed apart, under `stage` (view inputs, no review
+ * packet, run on request): it never holds a book's analysis open, so the
+ * analysis `next` list never spends Jev on animation and a universe's atlas
+ * and causality never wait for it.
  *   time-place + place-tree ─▶ architecture (each place's building) ─┐
  *   blocks (the full character list) + strands ──────────────────────┴─▶ movement (who goes where, how)
- *   every step above, all reviewed ─▶ stage (the animation prep, last of all)
- * Architecture and movement run beside causality; the prep waits for everything.
+ *   every analysis step, all reviewed ─▶ stage (the animation prep, last of all)
  *
  * and a universe's when every member book is complete and its cross-book
  * faculties are too:  organization ─▶ books ─┬─▶ atlas (same place / inside, across books)
@@ -47,15 +49,19 @@ import { calendarPacketId } from "../../../solidifier/calendar/review.js";
  */
 export type ChecklistStatus = "done" | "todo" | "review" | "blocked" | "optional";
 export interface ChecklistItem { id: string; title: string; status: ChecklistStatus; dependsOn: string[]; counts: Record<string, number | string | boolean>; next: string[]; note?: string }
-export interface BookChecklist { novelDir: string; title: string; complete: boolean; items: ChecklistItem[]; next: string[] }
+export interface BookChecklist {
+  novelDir: string; title: string; complete: boolean; items: ChecklistItem[]; next: string[];
+  /** Read mode's stage, run on request: never part of `complete` or `next`. Left out with `stage: false`. */
+  stage?: { items: ChecklistItem[]; next: string[] };
+}
 
 const fold = <T extends { id: string }>(records: T[]) => [...new Map(records.map((record) => [record.id, record])).values()];
 const exists = (path: string) => stat(path).then(() => true, () => false);
 const quote = (path: string) => /[\s'"]/.test(path) ? `'${path.replace(/'/g, "'\\''")}'` : path;
 
-/** Resolve dependencies: an item whose dependency is not done is blocked (its own counts still show). */
-function settle(items: ChecklistItem[]): ChecklistItem[] {
-  const byId = new Map(items.map((item) => [item.id, item]));
+/** Resolve dependencies: an item whose dependency is not done is blocked (its own counts still show). `known` adds items settled earlier. */
+function settle(items: ChecklistItem[], known: ChecklistItem[] = []): ChecklistItem[] {
+  const byId = new Map([...known, ...items].map((item) => [item.id, item]));
   for (const item of items) {
     const waiting = item.dependsOn.filter((id) => byId.get(id) && !["done", "optional"].includes(byId.get(id)!.status));
     // Nothing is complete while what it builds on is not: a gap upstream blocks it (its own counts still show).
@@ -64,7 +70,7 @@ function settle(items: ChecklistItem[]): ChecklistItem[] {
   return items;
 }
 
-export async function bookChecklist(novelDir: string, options: { input?: string; env?: NodeJS.ProcessEnv } = {}): Promise<BookChecklist> {
+export async function bookChecklist(novelDir: string, options: { input?: string; env?: NodeJS.ProcessEnv; stage?: boolean } = {}): Promise<BookChecklist> {
   const dir = quote(novelDir);
   const store = new BundleStore(join(novelDir, "ontology"));
   const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}")) as { title?: string };
@@ -189,24 +195,28 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   items.push({ id: "graph", title: "Query graph up to date", dependsOn: ["blocks"], status: !graph || graph.mtimeMs < newest ? "todo" : "done",
     counts: { built: !!graph }, next: !graph || graph.mtimeMs < newest ? [`novel graph build ${quote(join(novelDir, "ontology"))}`] : [] });
 
+  settle(items);
+  const result: BookChecklist = { novelDir, title: manifest.title ?? novelDir, complete: items.every((item) => item.status === "done" || item.status === "optional"), items,
+    next: items.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) };
+  if (options.stage === false) return result;
+
   // Read mode's stage: each place's building, then who moves where in its scenes (Jev, view inputs, no review), then the animation prep, last.
   const stage = await stageInputs(novelDir);
-  items.push({ id: "scale", title: "Scale of places (region to room, for read mode)", dependsOn: ["time-place", "place-tree"],
+  const stageItems: ChecklistItem[] = [];
+  stageItems.push({ id: "scale", title: "Scale of places (region to room, for read mode)", dependsOn: ["time-place", "place-tree"],
     status: stage.scaleCurrent ? "done" : "todo", counts: { places: stage.scalePlaces.length, picked: Object.keys(stage.scale?.places ?? {}).length, current: stage.scaleCurrent },
     next: stage.scaleCurrent ? [] : [`novel stage scale ${dir}`], note: stage.scaleCurrent ? undefined : `About ${stage.scalePlaces.length} Jev choice(s), one per place; a view input, no review.` });
-  items.push({ id: "architecture", title: "Buildings of places (a sub-kind of place, for read mode)", dependsOn: ["time-place", "place-tree"],
+  stageItems.push({ id: "architecture", title: "Buildings of places (a sub-kind of place, for read mode)", dependsOn: ["time-place", "place-tree"],
     status: stage.architectureCurrent ? "done" : "todo", counts: { places: stage.places.length, picked: Object.keys(stage.architecture?.places ?? {}).length, current: stage.architectureCurrent },
     next: stage.architectureCurrent ? [] : [`novel stage architecture ${dir}`], note: stage.architectureCurrent ? undefined : `About ${stage.places.length} Jev picture choice(s), one per place; a view input, no review.` });
-  items.push({ id: "movement", title: "Movement in scenes (who goes where, how, for read mode)", dependsOn: ["blocks", "strands", "architecture"],
-    status: stage.movementCurrent ? "done" : "todo", counts: { scenes: stage.movementScenes.length, asked: Object.keys(stage.movement?.scenes ?? {}).length, estimatedRequests: stage.estimate, current: stage.movementCurrent },
-    next: stage.movementCurrent ? [] : [`novel stage movement ${dir}`], note: stage.movementCurrent ? undefined : `About ${stage.estimate} Jev request(s); answers are kept and reused, so a stopped run continues. A view input, no review.` });
-  items.push({ id: "stage", title: "Animation prep (read mode)", dependsOn: items.map((item) => item.id),
+  stageItems.push({ id: "movement", title: "Movement in scenes (who goes where, how, for read mode)", dependsOn: ["blocks", "strands", "architecture"],
+    status: stage.movementCurrent ? "done" : "todo", counts: { scenes: stage.movementScenes.length, asked: Object.keys(stage.movement?.scenes ?? {}).length, estimatedRequests: stage.estimate, maxRequests: stage.limit, current: stage.movementCurrent },
+    next: stage.movementCurrent ? [] : [`novel stage movement ${dir} --max-calls ${stage.limit}`], note: stage.movementCurrent ? undefined : `About ${stage.estimate} Jev request(s), at most ${stage.limit}; answers are kept and reused, so a stopped run continues. A view input, no review.` });
+  stageItems.push({ id: "stage", title: "Animation prep (read mode)", dependsOn: [...items.map((item) => item.id), "scale", "architecture", "movement"],
     status: stage.planCurrent ? "done" : "todo", counts: { prepared: !!stage.plan, current: stage.planCurrent, moves: stage.plan?.counts.moves ?? 0 },
-    next: stage.planCurrent ? [] : [`novel stage prep ${dir}`], note: "Last of all: waits for every other step and review. No model calls." });
-
-  settle(items);
-  const complete = items.every((item) => item.status === "done" || item.status === "optional");
-  return { novelDir, title: manifest.title ?? novelDir, complete, items, next: items.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) };
+    next: stage.planCurrent ? [] : [`novel stage prep ${dir}`], note: "Last of all: waits for every analysis step and review. No model calls." });
+  settle(stageItems, items);
+  return { ...result, stage: { items: stageItems, next: stageItems.filter((item) => item.status === "todo").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) } };
 }
 
 export interface UniverseChecklist { library: string; universeId: string; title: string; complete: boolean; books: { sourceId: string; title: string; continuityId: string | null; readingOrder: number | null; workspace: string | null; extracted: boolean; complete: boolean; firstGap: string | null }[]; items: ChecklistItem[]; next: string[] }
@@ -223,7 +233,7 @@ export async function universeChecklist(directory: string, universeId: string, e
   for (const entry of context.books) {
     const book = { ...entry, title: entry.title.replace(/\s+/g, " ").trim() };
     if (!book.workspace) { books.push({ ...book, extracted: false, complete: false, firstGap: "no database yet (not extracted)" }); continue; }
-    const check = await bookChecklist(book.workspace);
+    const check = await bookChecklist(book.workspace, { env, stage: false });
     const gap = check.items.find((item) => !["done", "optional"].includes(item.status));
     const applied = Number(check.items.find((item) => item.id === "blocks")?.counts.applied ?? 0);
     books.push({ ...book, extracted: applied > 0, complete: check.complete, firstGap: gap ? `${gap.id}: ${gap.status}` : null });

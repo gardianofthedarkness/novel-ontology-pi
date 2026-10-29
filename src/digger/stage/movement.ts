@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { DecisionAnswer, DecisionModel, DecisionQuestion } from "../../ground/connectors/jev.js";
-import { ARCHITECTURE_LABEL, type ArchitectureKind } from "../../../apps/playground/src/data/placeArchitecture.js";
-import { DIRECTIONS, DIRECTION_HINT, MANNERS, centreSpot, navGrid, type Manner } from "../../../apps/playground/src/data/holoNav.js";
+import { ARCHITECTURE_LABEL, type ArchitectureKind } from "../../ground/stage/placeArchitecture.js";
+import { DIRECTIONS, DIRECTION_HINT, MANNERS, centreSpot, navGrid, type Manner } from "../../ground/stage/holoNav.js";
 
 /**
  * Stage faculty 2 — movement: who moves where inside a scene's building, and
@@ -36,10 +36,16 @@ export interface SceneMovement {
 export interface MovementReport { version: 1; inputs: string; model: string | null; askedAt: string; complete: boolean; usage: { calls: number; reused: number; skipped: number }; names: Record<string, string>; scenes: Record<string, SceneMovement> }
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
-export const sceneInputs = (scene: MovementScene, names: Record<string, string>) => hash([scene.placeId, scene.kind, scene.opening, scene.cast.map((id) => [id, names[id]]), scene.events.map((event) => [event.id, event.text, event.actors])]);
+/** Bump when the questions change (their wording, the thresholds, the manners or directions offered): every scene is asked again. */
+export const MOVEMENT_QUESTIONS_VERSION = 1;
+/** What Jev chooses from in a building of this kind: its spots (ids, names, hints) and the ways between them. An answer is a spot id of this grid, so it is reused only while the grid stays the same. */
+export const navGridSignature = (kind: ArchitectureKind) => { const grid = navGrid(kind); return hash([grid.spots.map((spot) => [spot.id, spot.label, spot.hint]), grid.links]); };
+export const sceneInputs = (scene: MovementScene, names: Record<string, string>) => hash([MOVEMENT_QUESTIONS_VERSION, navGridSignature(scene.kind), scene.placeId, scene.kind, scene.opening, scene.cast.map((id) => [id, names[id]]), scene.events.map((event) => [event.id, event.text, event.actors])]);
 export const movementFingerprint = (scenes: MovementScene[], names: Record<string, string>) => hash(scenes.map((scene) => [scene.id, sceneInputs(scene, names)]));
-/** Requests a scene costs at most: its starts, then per event who moves and (for movers) where and how. */
+/** Requests a scene usually costs: its starts, then per event who moves, and where and how for the few with movers. */
 export const sceneCallEstimate = (scene: MovementScene) => 1 + scene.events.length * 1.4;
+/** Requests a scene can cost at most: its starts (when it has a cast), then per event who moves and, when someone does, where and how. The budget reserves this. */
+export const sceneCallLimit = (scene: MovementScene) => (scene.cast.length ? 1 : 0) + scene.events.length * 2;
 
 const MOVE_THRESHOLD = { named: 0.5, other: 0.8 };
 const top = (distribution: Record<string, number> = {}) => Object.entries(distribution).sort((first, second) => second[1] - first[1])[0]?.[0];
@@ -102,7 +108,7 @@ export async function askSceneMovement(scene: MovementScene, decisions: Decision
 export async function askMovement(scenes: MovementScene[], options: { decisions?: DecisionModel; names: Record<string, string>; previous?: MovementReport | null; maxCalls?: number; concurrency?: number; onScene?: (sceneId: string, calls: number) => void }): Promise<MovementReport> {
   const done: Record<string, SceneMovement> = {};
   let calls = 0, reused = 0, skipped = 0, next = 0;
-  // Scenes run side by side, so each reserves its estimate before asking: the budget holds across workers.
+  // Scenes run side by side, so each reserves the most it can cost before asking and gives back what it did not spend: the budget holds across workers.
   let reserved = 0;
   const budget = options.maxCalls ?? Infinity;
   const worker = async () => {
@@ -111,11 +117,11 @@ export async function askMovement(scenes: MovementScene[], options: { decisions?
       const earlier = options.previous?.scenes[scene.id];
       if (earlier && earlier.inputs === sceneInputs(scene, options.names)) { done[scene.id] = earlier; reused++; continue; }
       // Without Jev, or over budget: the scene is left for a later run (nobody moves until then).
-      const estimate = sceneCallEstimate(scene);
-      if (!options.decisions || reserved + estimate > budget) { skipped++; continue; }
-      reserved += estimate;
+      const limit = sceneCallLimit(scene);
+      if (!options.decisions || reserved + limit > budget) { skipped++; continue; }
+      reserved += limit;
       const asked = await askSceneMovement(scene, options.decisions, options.names);
-      reserved += asked.calls - estimate;
+      reserved += asked.calls - limit;
       calls += asked.calls;
       done[scene.id] = asked;
       options.onScene?.(scene.id, asked.calls);

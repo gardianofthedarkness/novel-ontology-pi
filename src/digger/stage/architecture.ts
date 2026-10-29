@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DecisionModel } from "../../ground/connectors/jev.js";
-import { architectureCandidates, type ArchitectureKind } from "../../../apps/playground/src/data/placeArchitecture.js";
+import { architectureCandidates, type ArchitectureKind } from "../../ground/stage/placeArchitecture.js";
 
 /**
  * Stage faculty 1 — architecture: which building each place is, a sub-kind
@@ -102,8 +102,12 @@ export async function pickArchitecture(places: ArchitecturePlace[], options: { d
     }
   };
   await Promise.all(Array.from({ length: Math.max(1, Math.min(options.concurrency ?? 4, places.length)) }, worker));
-  // The tree outranks the picture: a place that contains a district is a city (学园都市 holds its 学区, whatever its name suggests).
-  for (const place of places) if (picks[place.id].kind !== "city" && (place.contains ?? []).some((id) => picks[id]?.kind === "city")) picks[place.id] = { ...picks[place.id], kind: "city", by: "tree" };
+  // The tree outranks the picture: a place that contains a district is a city (学园都市 holds its 学区, whatever its name suggests),
+  // all the way up the tree, whatever order the places come in.
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const place of places) if (picks[place.id].kind !== "city" && (place.contains ?? []).some((id) => picks[id]?.kind === "city")) { picks[place.id] = { ...picks[place.id], kind: "city", by: "tree" }; changed = true; }
+  }
   const ordered = Object.fromEntries(places.map((place) => [place.id, picks[place.id]]));
   return { version: 1, inputs: architectureFingerprint(places), model: options.decisions?.modelId ?? null, askedAt: new Date().toISOString(), usage: { calls, reused }, places: ordered };
 }
