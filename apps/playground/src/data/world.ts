@@ -23,14 +23,15 @@ const chunkKey = (ci: number, cj: number) => cellKey(ci, cj);
 const nodeKey = (i: number, j: number, k: number) => cellKey(i, j) * 1024 + k;
 
 /** `manifold`: a fingerprint of the landscape it was filled from, so damage kept for it applies only while that landscape stands. */
-export interface SourceBuilding { id: string; x: number; z: number; w: number; d: number; angle: number; floors: number; kind: string; manifold?: string }
+export interface SourceBuilding { id: string; x: number; z: number; w: number; d: number; angle: number; floors: number; kind: string; manifold?: string; era?: string }
 export interface SourceRoad { a: [number, number]; b: [number, number]; width: number; level: string }
 /** A staged place where the canvas put it: a building of its own (`own`, a site) on its spot, or the middle of an open place. */
-export interface Anchor { place: string; label: string; x: number; z: number; own: boolean; role: BuildingRole; floors: number }
+export interface Anchor { place: string; label: string; x: number; z: number; own: boolean; role: BuildingRole; floors: number; era?: string }
 export interface WorldSource { buildings: SourceBuilding[]; roads: SourceRoad[]; plazas: { x: number; z: number; r: number }[]; anchors: Anchor[] }
 
 /** A lot of the world: its footprint in world cells, its skeleton walked up to WALK_FLOORS, its full `height` in floors for its shell. */
-export interface WorldLot extends PlaceLot { source: string; manifold: string; height: number; born: number | string; place: string | null }
+/** `era`: of the landscape patch the lot's building stands on (modern or ancient), which decides how it is drawn. */
+export interface WorldLot extends PlaceLot { source: string; manifold: string; era: string; height: number; born: number | string; place: string | null }
 export interface World {
   source: WorldSource;
   /** Materialized chunks and the moment each was. */
@@ -96,7 +97,7 @@ function materialize(world: World, ci: number, cj: number, born: number | string
     const [w, d] = ROLE_SIZE[anchor.role], nx = w, nz = d, ai = Math.round(anchor.x / SKELETON_CELL - nx / 2), aj = Math.round(anchor.z / SKELETON_CELL - nz / 2);
     for (const b of world.source.buildings) if (Math.abs(b.x - anchor.x) < (nx * SKELETON_CELL + b.w) / 2 + 2 && Math.abs(b.z - anchor.z) < (nz * SKELETON_CELL + b.d) / 2 + 2) world.claimed.add(b.id);
     for (let j = aj; j < aj + nz; j++) for (let i = ai; i < ai + nx; i++) world.lotAt.delete(cellKey(i, j));
-    const lot = { id: `anchor_${anchor.place}`, label: anchor.label, role: anchor.role, i0: ai, j0: aj, nx, nz, floors: Math.min(WALK_FLOORS, anchor.floors), height: anchor.floors, source: `anchor:${anchor.place}`, manifold: "anchor", born, place: anchor.place };
+    const lot = { id: `anchor_${anchor.place}`, label: anchor.label, role: anchor.role, i0: ai, j0: aj, nx, nz, floors: Math.min(WALK_FLOORS, anchor.floors), height: anchor.floors, source: `anchor:${anchor.place}`, manifold: "anchor", era: anchor.era ?? "modern", born, place: anchor.place };
     const skeleton = generateSkeleton(ROLE_KIND[anchor.role], seedOf(anchor.place), { width: nx * SKELETON_CELL, depth: nz * SKELETON_CELL, floors: lot.floors, cores: 2 });
     const index = world.lots.push({ ...lot, side: "west", skeleton, rooms: furnish(skeleton, 1) }) - 1;
     for (let j = aj; j < aj + nz; j++) for (let i = ai; i < ai + nx; i++) world.lotAt.set(cellKey(i, j), index);
@@ -109,7 +110,7 @@ function materialize(world: World, ci: number, cj: number, born: number | string
     const nx = Math.floor((b.x + hx) / SKELETON_CELL) - bi, nz = Math.floor((b.z + hz) / SKELETON_CELL) - bj;
     if (nx < 3 || nz < 3) continue;
     const floors = Math.max(1, Math.min(WALK_FLOORS, b.floors)), role = roleOf(b.kind, b.floors);
-    standLot(world, { id: b.id, label: null, role, i0: bi, j0: bj, nx, nz, floors, height: b.floors, source: b.id, manifold: b.manifold ?? "", born, place: null }, KIND_OF[b.kind] ?? ROLE_KIND[role], seedOf(b.id));
+    standLot(world, { id: b.id, label: null, role, i0: bi, j0: bj, nx, nz, floors, height: b.floors, source: b.id, manifold: b.manifold ?? "", era: b.era ?? "modern", born, place: null }, KIND_OF[b.kind] ?? ROLE_KIND[role], seedOf(b.id));
   }
   // Clutter on open ground (one cell in ten), never on a road or in front of a door.
   const draw = skeletonStream("world-clutter", ci, cj);

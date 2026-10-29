@@ -545,7 +545,7 @@ async function main(): Promise<void> {
   if (cmd === "sim") {
     const novelDir = positional[2];
     if (!["strands", "places", "pick", "run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${SIM_USAGE}`);
-    const valued = sub === "run" ? ["--auto", "--strand"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : [], switches = sub === "run" ? ["--accept"] : [];
+    const valued = sub === "run" ? ["--auto", "--strand", "--pace"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : [], switches = sub === "run" ? ["--accept", "--force"] : [];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];
@@ -557,8 +557,10 @@ async function main(): Promise<void> {
     if (auto !== undefined && (!/^\d+$/.test(auto) || Number(auto) < 1 || Number(auto) > 20)) throw new Error("--auto must be a whole number from 1 to 20.");
     const maxCalls = flag(positional, "--max-calls");
     if (maxCalls !== undefined && (!/^\d+$/.test(maxCalls) || Number(maxCalls) < 1 || Number(maxCalls) > 500)) throw new Error("--max-calls must be a whole number from 1 to 500.");
+    const pace = flag(positional, "--pace");
+    if (pace !== undefined && (!/^\d+(\.\d+)?$/.test(pace) || Number(pace) > 30)) throw new Error("--pace must be seconds per moment, from 0 to 30.");
     const lines = { auto: auto === undefined ? undefined : Number(auto), strand: flag(positional, "--strand") };
-    out(await (sub === "strands" ? simStrands(novelDir) : sub === "places" ? simPlaces(novelDir) : sub === "show" ? simShow(novelDir) : sub === "pick" ? simPick(novelDir, { ...lines, maxCalls: maxCalls === undefined ? undefined : Number(maxCalls) }) : simRun(novelDir, { ...lines, accept: positional.includes("--accept") })), pretty);
+    out(await (sub === "strands" ? simStrands(novelDir) : sub === "places" ? simPlaces(novelDir) : sub === "show" ? simShow(novelDir) : sub === "pick" ? simPick(novelDir, { ...lines, maxCalls: maxCalls === undefined ? undefined : Number(maxCalls) }) : simRun(novelDir, { ...lines, accept: positional.includes("--accept"), force: positional.includes("--force"), pace: pace === undefined ? undefined : Number(pace) })), pretty);
     return;
   }
 

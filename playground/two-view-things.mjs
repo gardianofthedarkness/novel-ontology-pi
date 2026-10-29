@@ -82,9 +82,9 @@ export async function browser() {
 const SHAPES = ['box', 'oval', 'triangle', 'diamond', 'donut'];
 /** What each model or shape on the sheet is, in words, beside its picture. */
 const hint = key => key.startsWith('skyscraper') ? 'a skyscraper' : key.startsWith('tower') ? 'a slim tower block' : key.startsWith('block-wide') ? 'a wide low block' : key.startsWith('office') ? 'an office building'
-  : ({ market: 'a market hall', keep: 'a castle keep', fountain: 'a fountain', windmill: 'a windmill', box: 'a box: vehicles, containers, machines', oval: 'an egg, capsule or ball: airships, pods, spheres', triangle: 'a triangular prism: roofs, ramps, tents', diamond: 'a diamond: crystals', donut: 'a ring: halos, wheels, rings' })[key] ?? key;
+  : ({ market: 'a market hall', keep: 'a castle keep', fountain: 'a fountain', windmill: 'an old windmill with sails', 'wind-turbine': 'a modern wind turbine: a tall mast with three long blades', 'wind-turbine-scifi': 'a futuristic turbine', wagon: 'a wooden cart or wagon', 'crate-wood': 'a wooden crate', 'crate-scifi': 'a metal sci-fi crate', 'barrel-scifi': 'a sci-fi barrel or canister', 'chest-scifi': 'a sci-fi storage chest', 'computer-scifi': 'a sci-fi console or terminal', 'switch-theme': 'none of these fits: it belongs to another era or style (ask again among the other themes\' models)', box: 'a box: vehicles, containers, machines', oval: 'an egg, capsule or ball: airships, pods, spheres', triangle: 'a triangular prism: roofs, ramps, tents', diamond: 'a diamond: crystals', donut: 'a ring: halos, wheels, rings' })[key] ?? key;
 
-/** Call 0: which model or shape a thing is drawn as, picked from the labelled sheet. */
+/** Call 0: which model or shape a thing is drawn as, picked from the labelled sheet (`keys` may end with switching theme). */
 async function pickModel(jev, sheet, keys, thing, text) {
   const [answer] = await jev.decide([`Picture "models" is a sheet of every model and shape a 3D stage can draw, each labelled with its name.`, `A thing a novel mentions: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}.`, `Where it is mentioned: ${text}`].join('\n'),
     [{ key: 'model', primitive: 'choice', instructions: `Which model or shape on picture "models" should ${thing.name} be drawn as: the one that looks most like it?`, options: keys, optionHints: Object.fromEntries(keys.map(key => [key, `${key}: ${hint(key)}`])) }], { images: { models: sheet } });
@@ -229,16 +229,27 @@ const aboutPlacement = (place, text, thing, model) => [
 export async function pickModels({ chrome, jev, stage, models, limit = Infinity, out = null, log = console.error }) {
   const waiting = stage.things.filter(thing => thing.placed.length && !models[thing.name]);
   if (!waiting.length || limit <= 0) return 0;
-  const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8')), keys = [...Object.keys(library.models), ...SHAPES];
-  await chrome.evaluate(`window.__stage.sheet(${JSON.stringify({ models: library.models, entries: keys })})`);
-  const sheet = await chrome.still();
-  if (out) await writeFile(join(out, '00-models.png'), Buffer.from(sheet, 'base64'));
+  // Themes (modelThemes.json): a thing is offered the models of its place's theme (the era of the manifold there: modern
+  // or ancient) and the shapes, with switching theme as the last option; switching asks again among the other themes'.
+  const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8')), themes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
+  const { themedKeys, otherKeys, SWITCH_THEME } = await import(pathToFileURL(`${repository}/dist/apps/playground/src/data/modelThemes.js`).href), all = Object.keys(library.models), sheets = new Map();
+  const sheetOf = async (name, keys) => {
+    if (!sheets.has(name)) { await chrome.evaluate(`window.__stage.sheet(${JSON.stringify({ models: Object.fromEntries(keys.filter(key => library.models[key]).map(key => [key, library.models[key]])), entries: keys })})`); const still = await chrome.still(); sheets.set(name, still); if (out) await writeFile(join(out, `00-models-${name}.png`), Buffer.from(still, 'base64')); }
+    return sheets.get(name);
+  };
   let calls = 0;
   for (const thing of waiting) {
     if (calls >= limit) break;
-    const first = thing.placed[0], text = stage.scenes.find(scene => scene.id === first.scene)?.events[first.event] ?? '';
-    models[thing.name] = await pickModel(jev, sheet, keys, thing, text); calls++;
-    log(`${thing.name}: drawn as ${models[thing.name].id} (${models[thing.name].top.map(([key, p]) => `${key} ${p}`).join(', ')})`);
+    const first = thing.placed[0], text = stage.scenes.find(scene => scene.id === first.scene)?.events[first.event] ?? '', theme = stage.places[first.place]?.theme ?? 'modern';
+    const own = [...themedKeys(themes, all, theme), ...SHAPES];
+    let answer = await pickModel(jev, await sheetOf(theme, own), [...own, SWITCH_THEME], thing, text); calls++;
+    if (answer.id === SWITCH_THEME && calls < limit) {
+      const other = [...otherKeys(themes, all, theme), ...SHAPES];
+      answer = { ...await pickModel(jev, await sheetOf(`not-${theme}`, other), other, thing, text), switched: true }; calls++;
+    }
+    if (answer.id === SWITCH_THEME) continue;
+    models[thing.name] = { ...answer, theme: answer.switched ? themes.models[answer.id]?.theme ?? null : theme };
+    log(`${thing.name}: drawn as ${models[thing.name].id}${answer.switched ? ' (switched theme)' : ''} on ${theme} ground (${models[thing.name].top.map(([key, p]) => `${key} ${p}`).join(', ')})`);
   }
   return calls;
 }
