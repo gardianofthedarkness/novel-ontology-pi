@@ -2,3 +2,7 @@ node_modules
 dist
 *.local
 playground-live.html
+dist-clips-demo
+dist-strand-demo
+dist-skeleton-lab
+dist-strand-demo-2

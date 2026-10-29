@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -104,7 +104,39 @@ async function configuredWorkspace(volume) {
   return resolve(root, selected.workspace);
 }
 
-export async function createViewer({ port = 4324, origin, expiresAt, readLive = configuredLive, resolveWorkspace = readLive === configuredLive ? configuredWorkspace : undefined, watchPaths, console: consoleOptions, dist = `${repo}/apps/playground/dist`, libraryDirectory = process.env.NOVEL_LIBRARY_DIR, libraryBindings, libraryReader = readLibraryLive } = {}) {
+async function configuredSource(volume) {
+  const { volumes, active } = await liveConfiguration();
+  const selected = volumes.find(entry => entry.id === (volume === 'active' ? active.volume : Number(volume)));
+  if (!selected) throw new Error('Unknown volume');
+  return { workspace: resolve(root, selected.workspace), metadataDirectory: resolve(root, selected.metadataDirectory) };
+}
+
+/**
+ * Read mode's text: one block of the book's source, cut into the sentences
+ * every record cites (b0003_s0012), each marked when a paragraph starts.
+ * Read-only, on the private link like the rest of the viewer.
+ */
+export async function bookText(metadataDirectory, block) {
+  const files = (await readdir(metadataDirectory)).filter(name => /^b\d{4}\.txt$/.test(name)).sort();
+  if (block >= files.length) return null;
+  const { sectionBlock } = await import('../../dist/src/digger/intake/sectioning.js');
+  const text = await readFile(resolve(metadataDirectory, `b${String(block + 1).padStart(4, '0')}.txt`), 'utf8');
+  let cursor = 0;
+  const sentences = sectionBlock(text, block).sentences.map((sentence) => {
+    const start = text.indexOf(sentence.text, cursor);
+    const paragraph = start < 0 || cursor === 0 || text.slice(cursor, start).includes('\n');
+    if (start >= 0) cursor = start + sentence.text.length;
+    return { id: sentence.id, text: sentence.text, ...(paragraph ? { paragraph: true } : {}) };
+  });
+  return { block, blocks: files.length, sentences };
+}
+
+/** Read mode's prepared animation (novel stage prep): one movement plan per place, or null until the book's analysis is complete. */
+export async function stagePlan(workspace) {
+  return readFile(resolve(workspace, 'stage', 'plan.json'), 'utf8').then(JSON.parse, error => { if (error.code === 'ENOENT') return null; throw error; });
+}
+
+export async function createViewer({ port = 4324, origin, expiresAt, readLive = configuredLive, resolveWorkspace = readLive === configuredLive ? configuredWorkspace : undefined, resolveSource = readLive === configuredLive ? configuredSource : undefined, watchPaths, console: consoleOptions, dist = `${repo}/apps/playground/dist`, libraryDirectory = process.env.NOVEL_LIBRARY_DIR, libraryBindings, libraryReader = readLibraryLive } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new TypeError('Invalid loopback port');
   const expiry = deadline(expiresAt);
   if (origin !== undefined) validateOrigin(origin, port);
@@ -162,6 +194,20 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         const asset = await bounded(async () => resolveAlbumAsset(await resolveWorkspace(volume), url.searchParams.get('id')));
         if (!asset) { send(404); return; }
         send(200, await readFile(asset.filename), { 'Content-Type': asset.type });
+        return;
+      }
+      if (scopedPath === '/api/book-text' || scopedPath === '/api/stage') {
+        // Read mode: the selected book's text, one block at a time, and its prepared animation.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveSource || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const block = url.searchParams.get('block') ?? '0';
+        if (scopedPath === '/api/book-text' && (!/^\d{1,4}$/.test(block))) { send(400); return; }
+        const data = await bounded(async () => {
+          const source = await resolveSource(volume);
+          return scopedPath === '/api/stage' ? stagePlan(source.workspace) : bookText(source.metadataDirectory, Number(block));
+        });
+        if (!data) { send(404); return; }
+        send(200, JSON.stringify(data), { 'Content-Type': 'application/json; charset=utf-8' });
         return;
       }
       if (['/api/live', '/db/novel/view.json', '/api/live/stream'].includes(scopedPath)) {

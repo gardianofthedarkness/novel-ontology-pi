@@ -6,22 +6,36 @@ import { storedSource } from "../../../ground/workspace/source.js";
 import { libraryShow } from "../../../ground/workspace/library.js";
 import { cutBlocks } from "../../../digger/intake/blocks.js";
 import { nominatePlacePairs, type PlaceTreeMemory } from "../../../digger/timeplace/placeTreeSweep.js";
+import { flagForRepair } from "../../../digger/timeplace/placeTreeRepair.js";
 import { readCausalityMemory } from "../../../solidifier/causality/faculty.js";
 import { loadUniverseContext, universeBindings, universeCandidates } from "../../../solidifier/causality/universe.js";
 import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/atlas/universeAtlas.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
-import { loadWorkspaceSentences, strandInputs } from "./timeplaceCommands.js";
+import { loadWorkspaceSentences, placeScales, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
+import { stageInputs } from "./stageCommands.js";
+import { castScope, loadCast } from "../../../solidifier/identity/cast.js";
+import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js";
+import { calendarStale, loadCalendar } from "../../../solidifier/calendar/calendar.js";
+import { calendarPacketId } from "../../../solidifier/calendar/review.js";
 
 /**
  * `novel checklist` — what a completed analysis still lacks, in dependency
  * order, with the exact next command for each gap. A book's analysis is
  * complete when every faculty below is "done":
  *
- *   source ─▶ blocks ─┬─▶ time-place ─┬─▶ place-tree
- *   (album, optional) │               └─▶ strands (who is in each scene) ─▶ causality (in-book, cross-scene sweep,
+ *   source ─▶ blocks ─┬─▶ identities (universal EM: the universe's shared character list)
+ *   (album, optional) ├─▶ time-place ─┬─▶ calendar (the universe's one clock)
+ *                     │               ├─▶ place-tree
+ *                     │               └─▶ strands (who is in each scene) ─▶ causality (in-book, cross-scene sweep,
  *                     │                                                    ordered by story time and strands)
  *                     └─▶ graph (rebuilt after canon changes)
+ *
+ * and read mode's stage (view inputs, no review packet):
+ *   time-place + place-tree ─▶ architecture (each place's building) ─┐
+ *   blocks (the full character list) + strands ──────────────────────┴─▶ movement (who goes where, how)
+ *   every step above, all reviewed ─▶ stage (the animation prep, last of all)
+ * Architecture and movement run beside causality; the prep waits for everything.
  *
  * and a universe's when every member book is complete and its cross-book
  * faculties are too:  organization ─▶ books ─┬─▶ atlas (same place / inside, across books)
@@ -50,7 +64,7 @@ function settle(items: ChecklistItem[]): ChecklistItem[] {
   return items;
 }
 
-export async function bookChecklist(novelDir: string, options: { input?: string } = {}): Promise<BookChecklist> {
+export async function bookChecklist(novelDir: string, options: { input?: string; env?: NodeJS.ProcessEnv } = {}): Promise<BookChecklist> {
   const dir = quote(novelDir);
   const store = new BundleStore(join(novelDir, "ontology"));
   const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}")) as { title?: string };
@@ -81,6 +95,19 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
     counts: { blocks: blocks.length, applied: blocks.length - missingBlocks.length, awaitingReview: blockReview.length, scenes: scenes.length, entities: entities.length },
     next: blockReview.length ? blockReview.map((changeset) => reviewCommand(changeset.id)) : missingBlocks.length ? [options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>  (continues at ${missingBlocks[0]})`] : [] });
 
+  // Identities: every character is someone in the universe's shared list; less confident matches reviewed.
+  const castAt = await castScope(novelDir, options.env ?? process.env);
+  const cast = await loadCast(castAt);
+  const characters = entities.filter((entity) => entity.kind === "Character");
+  const outside = characters.filter((entity) => !cast.persons.some((person) => person.members.some((member) => member.sourceId === castAt.sourceId && member.entityId === entity.id)));
+  const identityReview = await openIdentityPackets(castAt, castAt.sourceId);
+  const identityCommand = (id: string) => castAt.standalone ? reviewCommand(id) : `novel review show ${quote(castAt.root)} ${id} --scope universe --universe ${castAt.universeId} --offset 0 --limit 20`;
+  items.push({ id: "identities", title: "Characters in the universe's shared list (universal EM)", dependsOn: ["blocks"],
+    status: identityReview.length ? "review" : outside.length ? "todo" : "done",
+    counts: { characters: characters.length, outsideTheList: outside.length, sharedWithOtherBooks: cast.persons.filter((person) => person.members.some((member) => member.sourceId === castAt.sourceId) && person.members.some((member) => member.sourceId !== castAt.sourceId)).length, awaitingReview: identityReview.reduce((sum, packet) => sum + packet.proposals.length, 0) },
+    next: identityReview.length ? identityReview.map((packet) => identityCommand(packet.id)) : outside.length ? [`novel em sweep ${dir}`] : [],
+    note: "Applying a block runs universal EM; a sweep checks every character again." });
+
   // Story time and places: every scene in a period, packets reviewed.
   const timed = new Set(relations.filter((relation) => relation.type === "OCCURS_DURING").map((relation) => relation.fromId));
   const attempted = await timePlaceAttempted(novelDir);
@@ -97,17 +124,31 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
   const places = entities.filter((entity) => entity.kind === "Location");
   const parents = new Set(relations.filter((relation) => relation.type === "PART_OF").map((relation) => relation.fromId));
   const treeReview = pending((id, blockId) => id.startsWith("cs_timeplace_") && blockId === "place-tree");
-  let unsettled = 0;
+  let unsettled = 0, unrepaired = 0;
   if (places.length > 1 && !treeReview.length && sourceFile) {
-    const memory = JSON.parse(await readFile(join(novelDir, "timeplace", "place-tree.json"), "utf8").catch(() => '{"distinct":[]}')) as PlaceTreeMemory;
-    unsettled = nominatePlacePairs({ places: places.filter((place) => !place.properties?.generic), relations, scenes, sentences: await loadWorkspaceSentences(novelDir), memory }).length;
+    const memory = JSON.parse(await readFile(join(novelDir, "timeplace", "place-tree.json"), "utf8").catch(() => '{"distinct":[]}')) as PlaceTreeMemory, sentences = await loadWorkspaceSentences(novelDir);
+    unsettled = nominatePlacePairs({ places: places.filter((place) => !place.properties?.generic), relations, scenes, sentences, memory }).length;
+    // With place scales, places left without a larger parent wait for the repair until asked with what they read now.
+    const scales = await placeScales(novelDir), asked = new Map((memory.repairs ?? []).map((entry) => [entry.place, entry.inputs]));
+    if (scales) unrepaired = flagForRepair({ entities, relations, scenes, sentences, scales }).filter((flag) => asked.get(flag.id) !== flag.inputs).length;
   }
   const swept = await exists(join(novelDir, "timeplace", "place-tree.json"));
+  // The universe calendar: every book's story time on one clock; years it had to infer are reviewed.
+  const calendarAt = await loadCalendar(castAt);
+  const calendarPacket = calendarAt ? calendarPacketId(calendarAt) : null;
+  const calendarBehind = await calendarStale(castAt).catch(() => true);
+  const calendarCommand = `novel calendar build ${dir}`;
+  items.push({ id: "calendar", title: "Universe calendar (one clock for every book)", dependsOn: ["time-place"],
+    status: calendarBehind ? "todo" : calendarPacket ? "review" : "done",
+    counts: { entries: calendarAt?.entries.filter((entry) => entry.sourceId === castAt.sourceId).length ?? 0, books: calendarAt?.books.length ?? 0, conflicts: calendarAt?.conflicts.length ?? 0, yearQuestions: calendarAt?.questions.length ?? 0 },
+    next: calendarBehind ? [calendarCommand] : calendarPacket ? [castAt.standalone ? `novel calendar show ${dir}` : `novel review show ${quote(castAt.root)} ${calendarPacket} --scope universe --universe ${castAt.universeId} --offset 0 --limit 20`] : [],
+    note: "Rebuilt after every story-time apply; a book whose dates go back from the previous book's is asked: same year, or a later one?" });
+
   items.push({ id: "place-tree", title: "Place tree (which place is inside which)", dependsOn: ["time-place"],
-    status: treeReview.length ? "review" : unsettled ? "todo" : "done",
-    counts: { places: places.length, withParent: parents.size, candidatePairs: unsettled, swept, awaitingReview: treeReview.length },
-    next: treeReview.length ? treeReview.map((changeset) => reviewCommand(changeset.id)) : unsettled ? [`novel timeplace tree ${dir} --propose`] : [],
-    note: unsettled && swept ? "New pairs, or asked pairs with more evidence since, are waiting." : undefined });
+    status: treeReview.length ? "review" : unsettled || unrepaired ? "todo" : "done",
+    counts: { places: places.length, withParent: parents.size, candidatePairs: unsettled, placesToRepair: unrepaired, swept, awaitingReview: treeReview.length },
+    next: treeReview.length ? treeReview.map((changeset) => reviewCommand(changeset.id)) : unsettled || unrepaired ? [`novel timeplace tree ${dir} --propose`] : [],
+    note: unrepaired ? `${unrepaired} place(s) have no larger parent by their scale; the sweep repairs them.` : unsettled && swept ? "New pairs, or asked pairs with more evidence since, are waiting." : undefined });
 
   const newest = Math.max(0, ...await Promise.all(["entities", "relations", "events", "scenes"].map((name) => stat(join(novelDir, "ontology", `${name}.jsonl`)).then((info) => info.mtimeMs, () => 0))));
 
@@ -147,6 +188,21 @@ export async function bookChecklist(novelDir: string, options: { input?: string 
   const graph = await stat(join(novelDir, "ontology", "graph.lbug")).catch(() => null);
   items.push({ id: "graph", title: "Query graph up to date", dependsOn: ["blocks"], status: !graph || graph.mtimeMs < newest ? "todo" : "done",
     counts: { built: !!graph }, next: !graph || graph.mtimeMs < newest ? [`novel graph build ${quote(join(novelDir, "ontology"))}`] : [] });
+
+  // Read mode's stage: each place's building, then who moves where in its scenes (Jev, view inputs, no review), then the animation prep, last.
+  const stage = await stageInputs(novelDir);
+  items.push({ id: "scale", title: "Scale of places (region to room, for read mode)", dependsOn: ["time-place", "place-tree"],
+    status: stage.scaleCurrent ? "done" : "todo", counts: { places: stage.scalePlaces.length, picked: Object.keys(stage.scale?.places ?? {}).length, current: stage.scaleCurrent },
+    next: stage.scaleCurrent ? [] : [`novel stage scale ${dir}`], note: stage.scaleCurrent ? undefined : `About ${stage.scalePlaces.length} Jev choice(s), one per place; a view input, no review.` });
+  items.push({ id: "architecture", title: "Buildings of places (a sub-kind of place, for read mode)", dependsOn: ["time-place", "place-tree"],
+    status: stage.architectureCurrent ? "done" : "todo", counts: { places: stage.places.length, picked: Object.keys(stage.architecture?.places ?? {}).length, current: stage.architectureCurrent },
+    next: stage.architectureCurrent ? [] : [`novel stage architecture ${dir}`], note: stage.architectureCurrent ? undefined : `About ${stage.places.length} Jev picture choice(s), one per place; a view input, no review.` });
+  items.push({ id: "movement", title: "Movement in scenes (who goes where, how, for read mode)", dependsOn: ["blocks", "strands", "architecture"],
+    status: stage.movementCurrent ? "done" : "todo", counts: { scenes: stage.movementScenes.length, asked: Object.keys(stage.movement?.scenes ?? {}).length, estimatedRequests: stage.estimate, current: stage.movementCurrent },
+    next: stage.movementCurrent ? [] : [`novel stage movement ${dir}`], note: stage.movementCurrent ? undefined : `About ${stage.estimate} Jev request(s); answers are kept and reused, so a stopped run continues. A view input, no review.` });
+  items.push({ id: "stage", title: "Animation prep (read mode)", dependsOn: items.map((item) => item.id),
+    status: stage.planCurrent ? "done" : "todo", counts: { prepared: !!stage.plan, current: stage.planCurrent, moves: stage.plan?.counts.moves ?? 0 },
+    next: stage.planCurrent ? [] : [`novel stage prep ${dir}`], note: "Last of all: waits for every other step and review. No model calls." });
 
   settle(items);
   const complete = items.every((item) => item.status === "done" || item.status === "optional");
@@ -221,5 +277,5 @@ export async function checklistCommand(args: string[], env: NodeJS.ProcessEnv = 
   const [target, flag, value, ...rest] = args;
   if (!target || target.startsWith("--") || rest.length || flag !== undefined && !["--input", "--universe"].includes(flag) || flag && !value) throw new Error(`Usage: ${CHECKLIST_USAGE}`);
   if (flag === "--universe") return universeChecklist(target, value, env);
-  return bookChecklist(target, { input: flag === "--input" ? value : undefined });
+  return bookChecklist(target, { input: flag === "--input" ? value : undefined, env });
 }

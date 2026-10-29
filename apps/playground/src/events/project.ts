@@ -51,7 +51,7 @@ export type ProcessingEvent =
       deferredFactIds?: string[];
     }
   | { type: "draft.updated"; blockId: string; patchId: string; stage: "miniloop" | "extraction" | "gate"; touchedIds?: string[] }
-  | { type: "faculty.activity"; blockId: string; callId: string; faculty: string; system: "system1" | "system2" | "work"; status: "started" | "completed" | "failed" }
+  | { type: "faculty.activity"; blockId?: string; callId: string; faculty: string; system: "system1" | "system2" | "work"; status: "started" | "completed" | "failed" }
   | { type: "entity.merged"; keepId: string; dropId: string }
   | { type: "entity.distinct"; aId: string; bId: string }
   | { type: "album.anchored"; blockId: string; pictures: { id: string; asset: string; kind: string; sentenceId: string | null }[] }

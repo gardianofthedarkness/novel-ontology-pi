@@ -17,6 +17,9 @@
  * and places are included, flagged `proposed`, so the views can show them
  * the moment Pi proposes them (never as canon).
  *
+ * `architecture` is each place's picked building (stage/architecture.json:
+ * place id → kind or "none"), a sub-kind of place.
+ *
  * `strands` are the answers of the latest strands report (strand-answers.mjs):
  * where "who is present?" was asked, the answered cast replaces the recorded
  * one, and a scene answered as "nobody known, someone else" is marked `alone`
@@ -26,7 +29,7 @@ const nameOf = (entity) => entity?.names?.find((form) => form.kind === 'canonica
 const order = (id) => { const match = /^b(\d+)_s(\d+)$/.exec(id ?? ''); return match ? Number(match[1]) * 1_000_000 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
 const clip = (value, length) => typeof value === 'string' && value.length > length ? `${value.slice(0, length - 1)}…` : value;
 
-export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [], strands = null }) {
+export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [], strands = null, architecture = null }) {
   const known = new Set(applied.map((entity) => entity.id));
   const proposedEntities = pending.filter((proposal) => proposal.kind === 'upsert_entity' && ['TimePoint', 'Location'].includes(proposal.payload?.kind) && !known.has(proposal.payload.id)).map((proposal) => proposal.payload);
   const proposedIds = new Set(proposedEntities.map((entity) => entity.id));
@@ -86,6 +89,7 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
       id: time.id, label: nameOf(time), gloss: properties.gloss ?? '', family: properties.family ?? 'date', role: properties.role ?? 'ADVANCE',
       flashback: properties.flashback === true, flashbackProbability: Number(properties.flashbackProbability ?? 0), decidedBy: properties.decidedBy ?? null,
       toldFromId: properties.toldFromId ?? null, date: properties.date ?? null, partOfDay: properties.partOfDay ?? null,
+      ...(typeof properties.value?.hour === 'number' ? { clock: { hour: properties.value.hour, minute: typeof properties.value.minute === 'number' ? properties.value.minute : 0 } } : {}),
       chapterIndex: Number(properties.chapterIndex ?? 0), storyIndex: Number(properties.storyIndex ?? 0), narrativeIndex: Number(properties.narrativeIndex ?? 0), proposed: proposedIds.has(time.id),
       anchorSceneId: properties.sceneId ?? null, sceneIds: sceneRows.filter((scene) => scene.times.some((entry) => entry.id === time.id)).map((scene) => scene.id),
     };
@@ -97,7 +101,9 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
     const here = sceneRows.filter((scene) => scene.placeIds.includes(id));
     const path = pathOf(id);
     return { id, label: nameOf(byId.get(id)), sceneIds: here.map((scene) => scene.id), statedScenes: here.filter((scene) => !scene.placeCarried).length, characterIds: [...new Set(here.flatMap((scene) => scene.characterIds))], proposed: proposedIds.has(id),
-      parentId: parents.get(id) ?? null, parentProposed: proposedLinks.has(id), depth: path.length - 1, path, totalScenes: sceneRows.filter((scene) => within(id, scene)).length, generic: byId.get(id)?.properties?.generic === true };
+      parentId: parents.get(id) ?? null, parentProposed: proposedLinks.has(id), depth: path.length - 1, path, totalScenes: sceneRows.filter((scene) => within(id, scene)).length, generic: byId.get(id)?.properties?.generic === true,
+      // The building picked for it (novel stage architecture), a sub-kind of place: the map and the stage draw it instead of guessing from the name.
+      ...(architecture?.[id] ? { architecture: architecture[id] } : {}) };
   }).sort((first, second) => second.totalScenes - first.totalScenes || second.sceneIds.length - first.sceneIds.length);
   const characterCounts = new Map();
   for (const scene of sceneRows) for (const id of scene.characterIds) characterCounts.set(id, (characterCounts.get(id) ?? 0) + 1);

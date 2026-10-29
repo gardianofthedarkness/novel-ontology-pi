@@ -27,7 +27,8 @@ import {
 import { llmPing, llmProbe } from "./commands/shared/llmCommands.js";
 import { ingestNovel } from "./commands/extract/ingestCommands.js";
 import { libraryCommand } from "./commands/extract/libraryCommands.js";
-import { runMatch } from "./commands/extract/matchCommands.js";
+import { emShow, emSweep } from "./commands/extract/emCommands.js";
+import { calendarCommand } from "./commands/extract/calendarCommands.js";
 import {
   listCausalityCandidates,
   proposeCausalityLink,
@@ -47,6 +48,7 @@ import { albumImport, albumList, albumPortraits } from "./commands/extract/album
 import { albumAssign } from "./commands/extract/portraitCommands.js";
 import { evalExtract, evalRun } from "./commands/extract/evalCommands.js";
 import { evalDialogueCards } from "./commands/extract/dialogueEval.js";
+import { evalStoryOrder } from "./commands/extract/storyOrderEval.js";
 import { sectionBlock } from "../digger/intake/sectioning.js";
 import { cutBlocks } from "../digger/intake/blocks.js";
 import { initWorkspace } from "../ground/workspace/init.js";
@@ -61,6 +63,7 @@ import { reviewCommand } from "./commands/extract/reviewCommands.js";
 import { approveBook } from "../solidifier/merge/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
+import { STAGE_USAGE, stageArchitecture, stageForks, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
   listChangeSets,
@@ -105,12 +108,16 @@ const COMMANDS: Record<string, string> = {
     "The universe's places: one per cluster of book places, with its path through the universe place tree.",
   "novel timeplace strands <novel-dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]":
     "Story strands from stored story time: parallel scenes, splits and meetings checked against places; plans \"who is present?\" questions only where a borrowed cast creates a strand link (free), and asks them with --ask (work model, 4 scenes per call), at most --max-questions (default 30), only in chapters of at least --min-impact scenes (default 8); report only, no canon writes",
+  "novel stage show|forks|objects|scale|architecture|movement|prep <novel-dir> [--no-jev] [--no-work] [--max-calls N] [--cache dir] [--force] [--fork scene-id]":
+    "Read mode's stage (view inputs, never canon, no review): `objects` lists the buildings and large visible things each staged scene puts in its place, matched to what the stage can draw (work model, a few scenes per call, within --max-calls); `forks` shows the timeline as the simulation walks it, fork by fork (each scene's own cast and where each person comes from; --fork lists one fork's scenes; no model calls); `scale` asks Jev how big each place in the tree is (region, city, district, street, building or room), which decides how the stage builds it; `architecture` picks each place's building, a sub-kind of place (name shortlist, then Jev picks among pictures); `movement` asks Jev who moves where inside each scene's building and how (needs the whole file extracted and the buildings picked; --max-calls bounds a run, answers are kept and later runs continue); `prep` is the animation prep, last of all once every other checklist step is done: each chain checked physically, one movement plan per place (no model calls). Answers are reused while their inputs stay the same.",
   "novel timeplace show <novel-dir>":
     "Applied time periods in story order, places as paths through the place tree, and the tree's links.",
   "novel causality sweep <novel-dir> [--limit N]":
     "On-demand systematic sweep: Jev-determined CAUSES pass over the whole universe (same machinery as the ingest chapter-close sweep).",
-  "novel match <novel-dir> [--changeset <id>]":
-    "Entity-matching review packet: code nominates duplicate pairs, System 1 (Jev) reviews the batch with a checklist, only unsettled pairs are raised to the agent",
+  "novel calendar show|build <novel-dir> | <library-dir> --universe <id>":
+    "The universe calendar: one clock for every book of a universe. Each story period on its day (clock time or part of the day; undated ones as a range between dated neighbours); books as marks on it; years nobody states are relative (Year 1 = first dated book) and a book whose dates go back is raised for review (ut_ packet). Rebuilt after every story-time apply; no model calls.",
+  "novel em show|sweep <novel-dir> [--limit N]":
+    "Universal EM: one shared character list per universe (the library's, or the book's own when standalone). show: this book's people and identity matches awaiting review; sweep: check every character of the book against the book and the universe (full proper names join automatically, confident Jev matches merge, less confident ones become a um_ review packet).",
   "novel fix merge|rename|add-form|relate|unrelate|remove-entity|remove-event <novel-dir> ...":
     "Pointwise maintenance over the bundle (audited in maintenance.jsonl, graph rebuilt): merge two entities, rename, add a name form, relate/unrelate, remove a record",
   "novel fix correct <novel-dir> --block <id> --key <decision-key> --value <v>":
@@ -166,6 +173,8 @@ const COMMANDS: Record<string, string> = {
     "Score prediction files against a golden-chapter dataset (precision/recall; metrics only, no thresholds)",
   "novel eval dialogues <gold-cards.json> <predicted-cards.json>":
     "Score exchange-level participants: correct/wrong/missing, unknown cards and source-span matching; no model calls",
+  "novel eval story-order <gold.json> <predicted.json> [--timeplace] [--ties]":
+    "Score story order pair by pair (before / after / parallel) against a strand gold; --timeplace reads a time-place run report as the prediction (--ties leaves scenes of one period unordered); no model calls",
   "novel eval extract <novel-dir> <predictions-dir>":
     "Project an ingested bundle's ontology into a per-chapter predictions dir for eval run (records as stored; no model calls)",
   "novel config": "Show model routing config (keys via env / secure store only)",
@@ -310,6 +319,10 @@ async function main(): Promise<void> {
       out(await evalDialogueCards(positional[2], positional[3]), pretty);
       return;
     }
+    if (sub === "story-order" && positional[2] && positional[3]) {
+      out(await evalStoryOrder(positional[2], positional[3], { timeplace: positional.includes("--timeplace"), ties: positional.includes("--ties") }), pretty);
+      return;
+    }
     if (sub === "run" && positional[2] && positional[3]) {
       out(await evalRun(positional[2], positional[3]), pretty);
       return;
@@ -318,7 +331,7 @@ async function main(): Promise<void> {
       out(await evalExtract(positional[2], positional[3]), pretty);
       return;
     }
-    throw new Error("Usage: novel eval run <dataset-dir> <predictions-dir> | novel eval extract <novel-dir> <predictions-dir> | novel eval dialogues <gold-cards.json> <predicted-cards.json>");
+    throw new Error("Usage: novel eval run <dataset-dir> <predictions-dir> | novel eval extract <novel-dir> <predictions-dir> | novel eval dialogues <gold-cards.json> <predicted-cards.json> | novel eval story-order <gold.json> <predicted.json> [--timeplace] [--ties]");
   }
 
   if (cmd === "watch") {
@@ -526,6 +539,24 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "stage") {
+    const novelDir = positional[2];
+    if (!["show", "forks", "objects", "scale", "architecture", "movement", "prep"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${STAGE_USAGE}`);
+    const valued = sub === "movement" || sub === "objects" ? ["--max-calls", "--cache"] : sub === "architecture" || sub === "scale" ? ["--cache"] : sub === "forks" ? ["--fork"] : [], switches = sub === "prep" ? ["--force"] : sub === "show" || sub === "forks" ? [] : sub === "objects" ? ["--no-work"] : ["--no-jev"];
+    const seen = new Set<string>();
+    for (let index = 3; index < positional.length; index++) {
+      const name = positional[index];
+      if (seen.has(name) || ![...valued, ...switches].includes(name)) throw new Error(`Usage: ${STAGE_USAGE}`);
+      seen.add(name);
+      if (valued.includes(name)) { const value = positional[++index]; if (!value || value.startsWith("--")) throw new Error(`${name} needs a value.`); }
+    }
+    const maxCalls = flag(positional, "--max-calls");
+    if (maxCalls !== undefined && (!/^\d+$/.test(maxCalls) || Number(maxCalls) < 1)) throw new Error("--max-calls must be a positive integer.");
+    const options = { jev: !positional.includes("--no-jev"), cache: flag(positional, "--cache"), maxCalls: maxCalls === undefined ? undefined : Number(maxCalls), force: positional.includes("--force") };
+    out(await (sub === "show" ? stageShow(novelDir) : sub === "objects" ? stageObjects(novelDir, { ...options, work: !positional.includes("--no-work") }) : sub === "forks" ? stageForks(novelDir, { fork: flag(positional, "--fork") }) : sub === "scale" ? stageScale(novelDir, options) : sub === "architecture" ? stageArchitecture(novelDir, options) : sub === "movement" ? stageMovement(novelDir, options) : stagePrep(novelDir, options)), pretty);
+    return;
+  }
+
   if (cmd === "checklist") { out(await checklistCommand(positional.slice(1)), pretty); return; }
 
   if (cmd === "atlas") { out(await atlasCommand(positional.slice(1)), pretty); return; }
@@ -586,15 +617,17 @@ async function main(): Promise<void> {
     throw new Error(`Unknown causality subcommand ${sub} (candidates | propose | sweep)`);
   }
 
-  if (cmd === "match") {
-    const novelDir = positional[1];
-    if (!novelDir || novelDir.startsWith("--")) {
-      throw new Error("Usage: novel match <novel-dir> [--changeset <id>]");
-    }
-    out(
-      await runMatch(novelDir, { changesetId: flag(positional, "--changeset") }),
-      pretty,
-    );
+  if (cmd === "calendar") {
+    out(await calendarCommand(positional.slice(1)), pretty);
+    return;
+  }
+
+  if (cmd === "em") {
+    const [sub, novelDir] = [positional[1], positional[2]];
+    if (!novelDir || novelDir.startsWith("--") || !["show", "sweep"].includes(sub ?? "")) throw new Error("Usage: novel em show|sweep <novel-dir> [--limit N]");
+    const limit = flag(positional, "--limit");
+    if (limit !== undefined && !(Number.isInteger(Number(limit)) && Number(limit) > 0)) throw new Error("--limit must be a positive integer");
+    out(sub === "show" ? await emShow(novelDir) : await emSweep(novelDir, { limit: limit === undefined ? undefined : Number(limit) }), pretty);
     return;
   }
 

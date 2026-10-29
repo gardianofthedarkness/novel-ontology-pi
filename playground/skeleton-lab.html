@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Skeleton Lab · Holo Stage</title>
+<style>
+  :root { color-scheme: dark; --bg: #060c12; --panel: #0b1620; --ink: #d9e3ea; --dim: #8aa0b0; --line: #1d3442; --accent: #7ce6ff; --red: #ff4d5e; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .eyebrow { font-size: 11px; letter-spacing: .14em; color: var(--accent); }
+  h1 { font-size: 18px; margin: 2px 0 4px; font-weight: 600; }
+  p.lead { margin: 0 0 8px; color: var(--dim); font-size: 13px; }
+  .layout { display: grid; gap: 12px; }
+  @media (min-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr) 330px; } }
+  .stage { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #071019; aspect-ratio: 1 / 1; touch-action: none; }
+  @media (min-width: 600px) { .stage { aspect-ratio: 4 / 3; } }
+  .stage canvas { display: block; width: 100% !important; height: 100% !important; }
+  .hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
+  .side { display: flex; flex-direction: column; gap: 10px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  button, select { font: inherit; color: var(--ink); background: #10202c; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; min-height: 36px; }
+  button.hit { border-color: #5a2830; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .stats { font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--ink); font-weight: 600; }
+  .formula { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); white-space: pre-wrap; margin: 0; }
+  .label { font-size: 11px; letter-spacing: .08em; color: var(--dim); margin-bottom: 4px; }
+  svg text { fill: var(--dim); font-size: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; margin-right: 10px; font-size: 12px; color: var(--dim); }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">SKELETON LAB · HOLO STAGE</div>
+  <h1>Buildings as corridors, stairs and rooms</h1>
+  <p class="lead">Only circulation is modelled: corridors grow from the cells around them, stairs are protected cores, rooms are whole boxes that must open onto a corridor. Strike it: what loses its way to the street door glows red.</p>
+  <div class="layout">
+    <div class="stage" id="stage"><div class="hint">tap the building to aim · drag to orbit · pinch to zoom</div></div>
+    <div class="side">
+      <div class="card row">
+        <select id="kind" aria-label="Building"><option value="house">House · 2 floors</option><option value="school">School · 4 floors</option><option value="tower" selected>Tower · 20 floors</option></select>
+        <button id="again">New building</button>
+        <button id="rooms" aria-pressed="true">Rooms</button>
+      </div>
+      <div class="card">
+        <div class="label">STRIKE (DAMAGE DEGREE)</div>
+        <div class="row" id="hits"></div>
+        <div class="row" style="margin-top:6px"><button id="repair">Repair</button><span class="stats" id="aim">aim: random</span></div>
+      </div>
+      <div class="card stats" id="stats"></div>
+      <div class="card legend"><span><i style="background:#7ce6ff"></i>corridor</span><span><i style="background:#ffb547"></i>stair core</span><span><i style="background:#3d6a8a"></i>room</span><span><i style="background:#ff4d5e"></i>cut off</span></div>
+      <div class="card"><div class="label">UNIFORM DAMAGE → STILL REACHED (THIS BUILDING)</div><svg id="chart" viewBox="0 0 300 130" width="100%" role="img" aria-label="Share of circulation still reached, and chance the top floor is, against uniform damage"></svg></div>
+      <div class="card"><div class="label">THE CONDITIONS</div><pre class="formula" id="formula"></pre></div>
+    </div>
+  </div>
+</div>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+// @skeleton-module
+
+const $ = (id) => document.getElementById(id);
+$("formula").textContent = [
+  "Corridor, given the cells around it:",
+  "  P(x=1 | rest) = σ(h + a·axial + c·diagonal + v·above/below + f·facade)",
+  "  a>0 runs corridors on, c<0 keeps them one cell wide.",
+  "Stairs: protected core columns, stair on every floor.",
+  "Kept: the street door's cluster; redrawn until it reaches a core.",
+  "Room R (a box of mass on one floor) exists only if",
+  "  R ⊆ free mass,  R ∋ a cell beside a corridor,",
+  "  grows a side at a time with σ(g − α(|R| − m̄)).",
+  "Damage of degree d at p: each standing cell is lost with",
+  "  q_d · exp(−|x−p|² / 2σ_d²);  what can't reach the door is cut off.",
+].join("\n");
+
+const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+host.prepend(renderer.domElement);
+const world = new THREE.Scene(); world.background = new THREE.Color(0x060c12);
+world.add(new THREE.AmbientLight(0xffffff, 0.75)); const sun = new THREE.DirectionalLight(0xffffff, 0.7); sun.position.set(30, 80, 40); world.add(sun);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 800), controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.49;
+const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
+new ResizeObserver(resize).observe(host);
+
+let s, rooms, standing, cut = new Set(), group = null, showRooms = true, aim = null, falling = [], pulses = [];
+const C = SKELETON_CELL, H = FLOOR_HEIGHT, matrix = new THREE.Matrix4();
+const box = new THREE.BoxGeometry(1, 1, 1);
+const mats = {
+  corridor: new THREE.MeshLambertMaterial({ color: 0x7ce6ff, emissive: 0x0b3a48, transparent: true, opacity: 0.85 }),
+  stair: new THREE.MeshLambertMaterial({ color: 0xffb547, emissive: 0x4a2a00, transparent: true, opacity: 0.8 }),
+  cut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.9 }),
+  debris: new THREE.MeshBasicMaterial({ color: 0xff8a5c, transparent: true, opacity: 0.9 }),
+};
+const centre = (cell) => { const c = cellCentre(s, cell); return new THREE.Vector3(c.x - s.nx * C / 2, c.y, c.z - s.nz * C / 2); };
+
+function instanced(cells, material, scale) {
+  const mesh = new THREE.InstancedMesh(box, material, Math.max(1, cells.length));
+  mesh.count = cells.length;
+  cells.forEach((cell, index) => { const p = centre(cell); matrix.compose(new THREE.Vector3(p.x, p.y - H / 2 + scale.y / 2 + (scale.lift ?? 0), p.z), new THREE.Quaternion(), new THREE.Vector3(scale.x, scale.y, scale.x)); mesh.setMatrixAt(index, matrix); });
+  mesh.userData.cells = cells;
+  return mesh;
+}
+function draw() {
+  if (group) world.remove(group);
+  group = new THREE.Group();
+  const W = s.nx * C, D = s.nz * C, top = s.floors * H, reachedNow = reachable(s, standing);
+  cut = new Set(); for (let cell = 0; cell < standing.length; cell++) if (standing[cell] && !reachedNow[cell]) cut.add(cell);
+  const envelope = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W, top, D)), new THREE.LineBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.35 }));
+  envelope.position.y = top / 2; group.add(envelope);
+  const slabs = [];
+  for (let k = 1; k < s.floors; k++) slabs.push(-W / 2, k * H, -D / 2, W / 2, k * H, -D / 2, W / 2, k * H, -D / 2, W / 2, k * H, D / 2, W / 2, k * H, D / 2, -W / 2, k * H, D / 2, -W / 2, k * H, D / 2, -W / 2, k * H, -D / 2);
+  if (slabs.length) group.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(slabs, 3)), new THREE.LineBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.12 })));
+  const live = (type) => [...standing.keys()].filter((cell) => standing[cell] && s.cells[cell] === type && !cut.has(cell));
+  group.add(instanced(live(CORRIDOR), mats.corridor, { x: C * 0.92, y: 0.35 }));
+  group.add(instanced(live(STAIR), mats.stair, { x: C * 0.8, y: H * 0.98 }));
+  const red = instanced([...cut], mats.cut, { x: C * 0.92, y: 0.45 }); group.add(red);
+  // Rooms: translucent boxes; red when every corridor they open onto is cut off or gone.
+  if (showRooms) for (const room of rooms) {
+    const w = (room.i1 - room.i0 + 1) * C, d = (room.j1 - room.j0 + 1) * C, open = room.doors.some((door) => standing[door] && reachedNow[door]);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w - 0.25, H * 0.82, d - 0.25), new THREE.MeshLambertMaterial({ color: open ? 0x3d6a8a : 0xff4d5e, transparent: true, opacity: open ? 0.22 : 0.4, depthWrite: false }));
+    mesh.position.set(room.i0 * C + w / 2 - W / 2, room.floor * H + H * 0.41, room.j0 * C + d / 2 - D / 2);
+    group.add(mesh);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: open ? 0x6fa8c8 : 0xff4d5e, transparent: true, opacity: open ? 0.35 : 0.8 }));
+    edges.position.copy(mesh.position); group.add(edges);
+  }
+  if (aim) { const marker = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 12), new THREE.MeshBasicMaterial({ color: 0xff4d5e })); marker.position.copy(aim); group.add(marker); }
+  world.add(group);
+  pulses = [mats.cut];
+  // Stats.
+  const walkable = s.cells.reduce((n, v) => n + (v ? 1 : 0), 0), reached = reachedNow.reduce((n, v) => n + v, 0);
+  let topReached = false; for (let cell = 0; cell < reachedNow.length; cell++) if (reachedNow[cell] && cellAt(s, cell).k === s.floors - 1) { topReached = true; break; }
+  const openRooms = rooms.filter((room) => room.doors.some((door) => standing[door] && reachedNow[door])).length;
+  $("stats").innerHTML = `<b>${s.floors}</b> floors · <b>${walkable}</b> circulation cells (${s.cells.filter((v) => v === STAIR).length} stair) · <b>${rooms.length}</b> rooms · drawn in ${s.attempts} ${s.attempts === 1 ? "try" : "tries"}<br>Reached from the street door: <b>${Math.round(100 * reached / walkable)}%</b> of circulation, <b>${openRooms}/${rooms.length}</b> rooms · top floor <b style="color:${topReached ? "#9dff8a" : "#ff4d5e"}">${topReached ? "reached" : "cut off"}</b>`;
+}
+function chart() {
+  const levels = Array.from({ length: 11 }, (_, n) => n * 0.05), curve = robustness(s, levels, 30), X = (q) => 28 + q / 0.5 * 262, Y = (v) => 110 - v * 100;
+  const path = (key) => curve.map((p, n) => `${n ? "L" : "M"}${X(p.q).toFixed(1)},${Y(p[key]).toFixed(1)}`).join("");
+  $("chart").innerHTML = `<line x1="28" y1="110" x2="290" y2="110" stroke="#1d3442"/><line x1="28" y1="10" x2="28" y2="110" stroke="#1d3442"/>`
+    + [0, 0.5, 1].map((v) => `<text x="22" y="${Y(v) + 3}" text-anchor="end">${v * 100}%</text>`).join("")
+    + [0, 0.1, 0.2, 0.3, 0.4, 0.5].map((q) => `<text x="${X(q)}" y="124" text-anchor="middle">${q * 100}%</text>`).join("")
+    + `<path d="${path("reached")}" fill="none" stroke="#7ce6ff" stroke-width="2"/><path d="${path("top")}" fill="none" stroke="#ffb547" stroke-width="2" stroke-dasharray="4 3"/>`
+    + `<text x="290" y="20" text-anchor="end" style="fill:#7ce6ff">circulation reached</text><text x="290" y="33" text-anchor="end" style="fill:#ffb547">top floor reached</text>`;
+}
+function build(seed = Math.floor(Math.random() * 1e6)) {
+  s = generateSkeleton($("kind").value, seed); rooms = furnish(s, 1); standing = s.cells.map((v) => (v ? 1 : 0)); aim = null; falling = []; $("aim").textContent = "aim: random";
+  const top = s.floors * H, span = Math.max(s.nx * C, s.nz * C, top);
+  camera.position.set(span * 0.95, top * 0.6 + span * 0.35, span * 1.15); controls.target.set(0, top * 0.45, 0); controls.update();
+  draw(); chart();
+}
+function hit(degree) {
+  const targets = [...standing.keys()].filter((cell) => standing[cell]);
+  const p = aim ?? (targets.length ? centre(targets[Math.floor(Math.random() * targets.length)]) : new THREE.Vector3());
+  const before = new Set(cut), result = strike(s, standing, { x: p.x + s.nx * C / 2, y: p.y, z: p.z + s.nz * C / 2, degree }, Math.random);
+  standing = result.standing;
+  // Destroyed cells fall and fade.
+  const now = performance.now();
+  for (const cell of result.destroyed) falling.push({ position: centre(cell), start: now, spin: Math.random() * 2 - 1 });
+  if (!aim) { aim = p; }
+  draw(); aim = null;
+}
+for (const [degree, label] of [[1, "Scratched"], [2, "Damaged"], [3, "Heavy"], [4, "Destroyed"]]) { const button = document.createElement("button"); button.className = "hit"; button.textContent = label; button.addEventListener("click", () => hit(degree)); $("hits").append(button); }
+$("again").addEventListener("click", () => build());
+$("kind").addEventListener("change", () => build());
+$("repair").addEventListener("click", () => { standing = s.cells.map((v) => (v ? 1 : 0)); falling = []; draw(); });
+$("rooms").addEventListener("click", () => { showRooms = !showRooms; $("rooms").setAttribute("aria-pressed", String(showRooms)); draw(); });
+// Tap to aim: the nearest cell under the pointer.
+const ray = new THREE.Raycaster(), pointer = new THREE.Vector2();
+let down = null;
+renderer.domElement.addEventListener("pointerdown", (event) => { down = [event.clientX, event.clientY]; });
+renderer.domElement.addEventListener("pointerup", (event) => {
+  if (!down || Math.hypot(event.clientX - down[0], event.clientY - down[1]) > 6) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
+  ray.setFromCamera(pointer, camera);
+  const found = ray.intersectObjects(group.children.filter((child) => child.isInstancedMesh || child.isMesh), false)[0];
+  if (found) { aim = found.point.clone(); $("aim").textContent = `aim: floor ${Math.min(s.floors, Math.floor(aim.y / H) + 1)}`; draw(); }
+});
+const debris = new THREE.InstancedMesh(box, mats.debris, 4000); debris.count = 0; world.add(debris);
+function frame(now) {
+  // Cut-off cells pulse; debris falls under gravity and fades.
+  mats.cut.opacity = 0.55 + 0.4 * Math.sin(now / 220);
+  falling = falling.filter((piece) => now - piece.start < 1400);
+  debris.count = Math.min(falling.length, 4000);
+  falling.slice(0, 4000).forEach((piece, index) => {
+    const t = (now - piece.start) / 1000, y = piece.position.y - 0.5 * 9.8 * t * t, scale = Math.max(0.05, 1.4 * (1 - t / 1.4));
+    matrix.compose(new THREE.Vector3(piece.position.x, Math.max(0.2, y), piece.position.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(piece.spin * t * 3, piece.spin * t * 2, 0)), new THREE.Vector3(scale, scale * 0.5, scale));
+    debris.setMatrixAt(index, matrix);
+  });
+  debris.instanceMatrix.needsUpdate = true;
+  controls.update(); renderer.render(world, camera); requestAnimationFrame(frame);
+}
+resize(); build(7); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

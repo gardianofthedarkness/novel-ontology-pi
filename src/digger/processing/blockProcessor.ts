@@ -19,6 +19,7 @@ import { applyChangeSet } from "../../solidifier/merge/apply.js";
 import { saveChangeSet } from "../../solidifier/merge/changesetStore.js";
 import { EventLog } from "../../ground/events/log.js";
 import type { EventSink } from "../../ground/events/types.js";
+import { observeDecisions, observeWork } from "../../ground/events/observe.js";
 import { saveWorkingDraft, touchedDraftIds, type WorkingDraft } from "./draft.js";
 import { resolveCandidates } from "./entityCandidates.js";
 import { timePlaceForNewScenes } from "../timeplace/afterApply.js";
@@ -29,7 +30,8 @@ import { previewFacultyStates } from "./facultyContinuity.js";
 import { join } from "node:path";
 import { BundleStore } from "../../ground/connectors/bundle.js";
 import type { OntEvent, Relation, Scene } from "../../ground/ontology/types.js";
-import { runEmPassAfterApply, loadMatchMemory, saveMatchMemory, type EmSummary } from "../../solidifier/matching/emFaculty.js";
+import { runIdentityAfterApply, type IdentitySummary } from "../../solidifier/identity/afterApply.js";
+import { castScope, loadCast } from "../../solidifier/identity/cast.js";
 import { runCausalityPass } from "../../solidifier/causality/faculty.js";
 import type { StateChange } from "../../ground/ontology/types.js";
 
@@ -82,15 +84,15 @@ export class BlockProcessor {
       workModel?: WorkModel;
       facultyGraph?: false | FacultyGraphOptions;
       /**
-       * The EM faculty (sector 04): after each block is applied, run
-       * the strict structural entity-matching pass over pairs that
-       * touch the block's entities (new x registry, new x new).
-       * Confident Jev verdicts merge through the audited maintenance
-       * path; distinct verdicts are remembered per novel. Only the
-       * ingest CLI enables this; EM failures never block ingestion.
+       * Universal EM after each block is applied in-process (the gate
+       * path runs it from approveBook): the book joins the universe's
+       * shared character list and its new characters are checked
+       * against the book and the universe. Confident matches merge;
+       * less confident ones are raised for review. Only the ingest CLI
+       * enables this; EM failures never block ingestion.
        */
       entityMatching?: boolean;
-      onEntityMatching?: (blockId: string, summary: EmSummary) => void;
+      onEntityMatching?: (blockId: string, summary: IdentitySummary) => void;
       /**
        * The causality faculty (systematic path): after extraction, run
        * the hybrid candidate + Jev checklist pass over pairs touching
@@ -128,13 +130,8 @@ export class BlockProcessor {
     stopReason: string | null;
   }> {
     const mergedBlocks: string[] = [];
-    const miniloop = new Miniloop(this.decisions, {
-      refineNameCandidates: this.observation.workModel
-        ? createCandidateRefiner(this.observation.workModel)
-        : undefined,
-    });
     const extract = this.observation.workModel
-      ? createExtractor(this.observation.workModel)
+      ? (blockId: string) => createExtractor(emit ? observeWork(this.observation.workModel!, emit, { blockId, faculty: "extraction" }) : this.observation.workModel!)
       : undefined;
     const emit = this.observation.emit ?? (this.observation.novelDir ? new EventLog(this.observation.novelDir).emit : undefined);
 
@@ -180,24 +177,15 @@ export class BlockProcessor {
         const constraintsValue = corrections.find(correction => correction.blockId === block.blockId && correction.key === EXTRACTION_CONSTRAINTS_KEY)?.value;
         const constraints = constraintsValue ? parseExtractionConstraints(constraintsValue) : undefined;
         const legacyPins = [...pins.keys()].some(key => !key.startsWith("scene_") && !key.startsWith("dlg_") && key !== EXTRACTION_CONSTRAINTS_KEY);
-        let callSequence = 0;
         let telemetry = Promise.resolve();
-        const observedDecisions: DecisionModel = {
-          modelId: this.decisions.modelId,
-          decide: async (state, questions, options) => {
-            const callId = `${observationId}:system1:${revisionRounds}:${++callSequence}`;
-            const faculty = (questions[0]?.key.split(":")[0] ?? "decisions").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
-            await emit?.({ type: "faculty.activity", blockId: block.blockId, callId, faculty, system: "system1", status: "started" });
-            try {
-              const result = await this.decisions.decide(state, questions, options);
-              await emit?.({ type: "faculty.activity", blockId: block.blockId, callId, faculty, system: "system1", status: "completed" });
-              return result;
-            } catch (error) {
-              await emit?.({ type: "faculty.activity", blockId: block.blockId, callId, faculty, system: "system1", status: "failed" });
-              throw error;
-            }
-          },
-        };
+        // Every model call made for this block reports itself, faculties after apply included.
+        const observedDecisions = emit ? observeDecisions(this.decisions, emit, { blockId: block.blockId }) : this.decisions;
+        const observedWork = (faculty: string) => this.observation.workModel && emit ? observeWork(this.observation.workModel, emit, { blockId: block.blockId, faculty }) : this.observation.workModel;
+        // The miniloop keeps no state across blocks, so it is built per block with observed clients.
+        const refinerModel = observedWork("newname");
+        const miniloop = new Miniloop(observedDecisions, {
+          refineNameCandidates: refinerModel ? createCandidateRefiner(refinerModel) : undefined,
+        });
         const graphOptions = this.observation.facultyGraph || {};
         const graph = this.observation.workModel && this.observation.facultyGraph !== false && !legacyPins
           ? new FacultyGraph(observedDecisions, this.observation.workModel, { ...graphOptions, onCall: call => {
@@ -210,19 +198,9 @@ export class BlockProcessor {
           ...sentences,
           ...(blockIndex + 1 < blocks.length ? sectionBlock(blocks[blockIndex + 1].text, blocks[blockIndex + 1].sectionIndex ?? blockIndex + 1).sentences.slice(0, margin) : []),
         ] : sentences;
-        const faculty = await graph?.run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, contextSentences, knownEntities, pins, constraints, fragmentDeclines: graph && this.observation.novelDir ? (await loadMatchMemory(this.observation.novelDir)).fragmentDeclines : [], onProgress: async progress => publish(progress, true) });
-        if (faculty && faculty.fragmentDeclines.length && this.observation.novelDir) {
-          // Remember fragment-at-birth declines per novel so later
-          // blocks do not re-ask the same pair (matching.json).
-          const memory = await loadMatchMemory(this.observation.novelDir);
-          const known = new Set(memory.fragmentDeclines.map((fd) => `${fd.form}|${fd.entityId}`));
-          for (const fd of faculty.fragmentDeclines) {
-            if (!known.has(`${fd.form}|${fd.entityId}`)) {
-              memory.fragmentDeclines.push({ ...fd, ts: new Date().toISOString() });
-            }
-          }
-          await saveMatchMemory(this.observation.novelDir, memory);
-        }
+        // Universal EM at birth sees the universe's shared character list.
+        const universe = graph && this.observation.novelDir ? await castScope(this.observation.novelDir).then(async (scope) => ({ cast: await loadCast(scope), sourceId: scope.sourceId, books: scope.books })).catch(() => undefined) : undefined;
+        const faculty = await graph?.run({ blockId: block.blockId, chapterIndex: block.chapterIndex ?? 0, sentences, contextSentences, knownEntities, pins, constraints, universe, onProgress: async progress => publish(progress, true) });
         const result = faculty?.miniloop ?? await miniloop.runBlock({
           blockId: block.blockId,
           sentences,
@@ -247,7 +225,7 @@ export class BlockProcessor {
           const counts = this.observation.loadCounts
             ? await this.observation.loadCounts()
             : { events: 0, scenes: 0 };
-          const out: ExtractionOutput = await extract({
+          const out: ExtractionOutput = await extract(block.blockId)({
             blockId: block.blockId,
             chapterIndex: block.chapterIndex ?? 0,
             sentences,
@@ -285,7 +263,7 @@ export class BlockProcessor {
             ]);
             const pass = await runCausalityPass({
               novelDir: this.observation.novelDir,
-              decisions: this.decisions,
+              decisions: observedDecisions,
               embedder: this.observation.embedder ?? null,
               touchedIds,
               extras: {
@@ -325,7 +303,7 @@ export class BlockProcessor {
           if (this.observation.timePlace && this.observation.novelDir) {
             try {
               const sceneIds = result.changeset.proposals.filter((proposal) => proposal.kind === "create_scene").map((proposal) => (proposal.payload as Scene).id);
-              const output = sceneIds.length ? await timePlaceForNewScenes({ novelDir: this.observation.novelDir, sentences: new Map(sentences.map((sentence) => [sentence.id, sentence])), mode: this.observation.timePlace.mode, work: this.observation.workModel, decisions: this.decisions, sceneIds, provenanceBlockId: block.blockId , reviewSource: !!this.observation.semanticReview, remember: true }) : null;
+              const output = sceneIds.length ? await timePlaceForNewScenes({ novelDir: this.observation.novelDir, sentences: new Map(sentences.map((sentence) => [sentence.id, sentence])), mode: this.observation.timePlace.mode, work: observedWork("timeplace") ?? undefined, decisions: observedDecisions, sceneIds, provenanceBlockId: block.blockId , reviewSource: !!this.observation.semanticReview, remember: true }) : null;
               if (output?.changeset) {
                 await saveChangeSet(this.observation.novelDir, output.changeset);
                 // Semantic hosts review time-place packets through the shared gate (novel review); legacy hosts approve here.
@@ -340,16 +318,17 @@ export class BlockProcessor {
             }
           }
           if (this.observation.entityMatching && this.observation.novelDir) {
-            const summary = await runEmPassAfterApply({
-              novelDir: this.observation.novelDir,
-              decisions: this.decisions,
-              changeset: result.changeset,
-              events: this.observation.emit ?? new EventLog(this.observation.novelDir).emit,
-            });
-            if (summary && summary.nominated > 0) {
-              result.changeset.reviewNotes["em-faculty"] =
-                `EM pass after apply: ${summary.nominated} nominated, ${summary.merged.length} merged, ${summary.distinct.length} distinct (remembered), ${summary.uncertain.length} uncertain.`;
+            try {
+              const summary = await runIdentityAfterApply({
+                novelDir: this.observation.novelDir,
+                decisions: observedDecisions,
+                changeset: result.changeset,
+                events: this.observation.emit ?? new EventLog(this.observation.novelDir).emit,
+              });
+              result.changeset.reviewNotes["identity"] = `Universal EM after apply: ${summary.joined} joined known people, ${summary.created} new, ${summary.checked} checked, ${summary.merged.length} merged${summary.review ? `, ${summary.review.proposals} raised for review (${summary.review.packetId})` : ""}.`;
               this.observation.onEntityMatching?.(block.blockId, summary);
+            } catch (error) {
+              result.changeset.reviewNotes["identity"] = `Universal EM after apply failed (${error instanceof Error ? error.message : String(error)}); \`novel em sweep\` retries.`;
             }
           }
           break;

@@ -1,0 +1,81 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { CORRIDOR, MASS, STAIR, cellAt, cellIndex, furnish, generateSkeleton, reachable, robustness, skeletonStream, strike, type SkeletonKind } from "../apps/playground/src/data/skeleton.js";
+
+test("a skeleton is the entrance's cluster and reaches every floor; stairs come in stacked pairs", () => {
+  for (const kind of ["house", "school", "tower"] as SkeletonKind[]) for (let seed = 1; seed <= 20; seed++) {
+    const s = generateSkeleton(kind, seed), seen = reachable(s, s.cells);
+    const floors = new Set<number>();
+    for (let cell = 0; cell < s.cells.length; cell++) if (s.cells[cell] !== MASS) { assert.ok(seen[cell], `${kind} ${seed}: an unreached corridor`); floors.add(cellAt(s, cell).k); }
+    assert.equal(floors.size, s.floors, `${kind} ${seed}: every floor reached`);
+    for (let cell = 0; cell < s.cells.length; cell++) if (s.cells[cell] === STAIR) {
+      const { i, j, k } = cellAt(s, cell);
+      assert.ok((k + 1 < s.floors && s.cells[cellIndex(s, i, j, k + 1)] === STAIR) || (k > 0 && s.cells[cellIndex(s, i, j, k - 1)] === STAIR), "a stair joins two floors");
+    }
+  }
+});
+
+test("rooms are boxes of mass, each opening onto circulation, none overlapping", () => {
+  const s = generateSkeleton("school", 3), rooms = furnish(s, 1), owner = new Map<number, number>();
+  assert.ok(rooms.length > 20);
+  rooms.forEach((room, index) => {
+    assert.ok(room.doors.length >= 1 && room.doors.every((door) => s.cells[door] === CORRIDOR || s.cells[door] === STAIR));
+    for (let i = room.i0; i <= room.i1; i++) for (let j = room.j0; j <= room.j1; j++) { const cell = cellIndex(s, i, j, room.floor); assert.equal(s.cells[cell], MASS); assert.ok(!owner.has(cell)); owner.set(cell, index); }
+  });
+});
+
+test("damage cuts off what it disconnects, and buildings fall apart as uniform damage grows", () => {
+  const s = generateSkeleton("tower", 2), hit = strike(s, s.cells.map((value) => value ? 1 : 0), { x: 10, y: 1.5, z: 10, degree: 4 }, skeletonStream("hit"));
+  assert.ok(hit.destroyed.length > 0);
+  const seen = reachable(s, hit.standing);
+  assert.ok(hit.cutOff.every((cell) => hit.standing[cell] && !seen[cell]));
+  const curve = robustness(s, [0, 0.1, 0.3, 0.6], 40);
+  assert.equal(curve[0].top, 1);
+  assert.ok(curve[0].reached > curve[1].reached && curve[1].reached > curve[2].reached && curve[2].reached >= curve[3].reached);
+});
+
+test("a district of skeleton buildings: rooms on upper floors and roofs are walked to by stairs, and a hit takes them away", async () => {
+  const { composePlace, placeGraph, hitLot, nodePosition } = await import("../apps/playground/src/data/skeletonPlace.js");
+  const { solveWalk, sampleWalk, temperatureBound, directionOf } = await import("../apps/playground/src/data/pathIntegral.js");
+  const place = composePlace({ id: "loc_7", kind: "district", seed: 5, members: [{ label: "医院", role: "hospital" }] });
+  const standing: Uint8Array[] = place.lots.map((lot) => lot.skeleton.cells.map((value) => (value ? 1 : 0)));
+  const { graph, spots } = placeGraph(place, standing);
+  const T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3 });
+  const upper = spots.west.filter((node) => nodePosition(place, node).k >= 2);
+  assert.ok(upper.length > 0 && spots.rooftop.length > 0);
+  const path = sampleWalk(graph, solveWalk(graph, upper, { T, kappa: 1, lambda: 8 }), spots.avenue[0], directionOf(0, -1), skeletonStream("up"))!;
+  assert.ok(path && nodePosition(place, path.at(-1)!).k >= 2, "from the avenue up to a room two floors up");
+  const lot = place.lots.findIndex((entry) => entry.floors >= 4), result = hitLot(place, lot, standing[lot], { x: (place.lots[lot].i0 + place.lots[lot].nx / 2) * 2, y: 0, z: (place.lots[lot].j0 + 6) * 2 }, 4, skeletonStream("blast"));
+  assert.ok(result.destroyed.length > 0);
+  standing[lot] = result.standing;
+  const after = placeGraph(place, standing);
+  assert.ok(after.graph.to.length < graph.to.length, "the walk sees less building");
+});
+
+test("a site's own building takes the floors and roof a decision model names; streets and doors land on the ground", async () => {
+  const { composePlace, placeGraph, placeSpot } = await import("../apps/playground/src/data/skeletonPlace.js");
+  const place = composePlace({ id: "loc_4", kind: "site", seed: 3, members: [{ label: "废弃大楼", role: "office", floors: [6, 6] }] });
+  const { spots } = placeGraph(place, place.lots.map((lot) => Uint8Array.from(lot.skeleton.cells)));
+  const main = place.lots.findIndex((lot) => lot.label === "废弃大楼");
+  assert.ok(main >= 0);
+  assert.equal(placeSpot(place, "废弃大楼", spots, "floor-3"), `lot${main}:floor3`);
+  assert.equal(placeSpot(place, "废弃大楼", spots, "stairs-40"), `lot${main}:floor${place.lots[main].floors}`, "a floor above the top is the top");
+  assert.equal(placeSpot(place, "废弃大楼", spots, "roof"), `lot${main}:roof`);
+  assert.equal(placeSpot(place, "废弃大楼", spots, "plaza"), "plaza", "the place's own spots stand as they are");
+  assert.deepEqual(["street", "alley", "courtyard", "the moon", null].map((spot) => placeSpot(place, "废弃大楼", spots, spot)), ["avenue", "north", "plaza", null, null]);
+  assert.equal(placeSpot(place, "别处", spots, "roof"), "rooftop", "without a building of its own, any roof");
+});
+
+test("an impact sphere degrades only the cells inside it", async () => {
+  const { composePlace, degrade } = await import("../apps/playground/src/data/skeletonPlace.js"), CELL = 2, FLOOR = 3;
+  const place = composePlace({ id: "loc_9", kind: "site", seed: 4, members: [{ label: "塔", role: "office", floors: [6, 6] }] });
+  const index = place.lots.findIndex((lot) => lot.label === "塔"), lot = place.lots[index], standing = Uint8Array.from(lot.skeleton.cells.map((cell) => (cell ? 1 : 0)));
+  const centre = { x: (lot.i0 + lot.nx / 2) * CELL, y: 9, z: (lot.j0 + lot.nz / 2) * CELL }, r = 4;
+  const whole = { x: [0, 999] as [number, number], y: [0, 999] as [number, number], z: [0, 999] as [number, number] };
+  const hit = degrade(place, index, standing, { ...whole, sphere: { ...centre, r } }, 1, () => 0);
+  assert.ok(hit.destroyed.length > 0, "the sphere breaks something");
+  const { nx, nz } = lot.skeleton;
+  for (const cell of hit.destroyed) { const i = cell % nx, j = Math.floor(cell / nx) % nz, k = Math.floor(cell / (nx * nz)); assert.ok(Math.hypot((lot.i0 + i + 0.5) * CELL - centre.x, (k + 0.5) * FLOOR - centre.y, (lot.j0 + j + 0.5) * CELL - centre.z) <= r, "nothing outside the sphere"); }
+  assert.ok(degrade(place, index, standing, whole, 1, () => 0).destroyed.length > hit.destroyed.length, "the box alone takes more");
+});
+

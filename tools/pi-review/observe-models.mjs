@@ -30,7 +30,8 @@ export async function observeModels(apiKey, emit) {
       const start = Date.now();
       await emit({ type: 'system1.call', call, status: 'working', stage: isJev ? 1 : 2, label });
       const upstream = await fetch(isJev ? 'https://api.typesafe.ai/v1/systemone' : 'https://api.deepseek.com/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${isJev ? jevKey : apiKey}` }, body,
+        // Jev's picture questions (stage buildings) opt in to images per request; pass that opt-in on, nothing else.
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${isJev ? jevKey : apiKey}`, ...(isJev && request.headers['typesafe-danger-zone-images'] === 'true' ? { 'TypeSafe-Danger-Zone-Images': 'true' } : {}) }, body,
         signal: AbortSignal.timeout(180000),
       });
       const result = await upstream.arrayBuffer();

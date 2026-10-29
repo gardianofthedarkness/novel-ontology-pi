@@ -1,5 +1,8 @@
 # Semantic identity choices, backend-owned references
 
+> Identity matching (who a name is, across a block, a book and a universe) is
+> now [universal EM](universal-em.md); the binding contract below still holds.
+
 Models judge what a name or description means. Code owns entity IDs, exact label
 binding, reference typing and propagation. A name resemblance is a candidate,
 not evidence that two people are the same. Regex never decides semantic sameness.
@@ -30,8 +33,9 @@ flowchart TD
   Pi -->|accept / reject / hold| Gate
   Gate -->|accepted and dependencies available| Canon[Canonical graph]
   Gate -->|uncertain| Held[Retained outside canon]
-  Canon --> EM[Existing EM pass: structural nomination and Jev pair checklist]
-  EM -->|confident match| Merge[Audited merge and canonical-reference rewiring]
+  Canon --> EM[Universal EM after apply: universal recommender, Jev pair check]
+  EM -->|sure and tied by names| Merge[Audited merge and canonical-reference rewiring]
+  EM -->|less sure| Review[um_ identity packet through the shared gate]
   Merge --> Index
 ```
 

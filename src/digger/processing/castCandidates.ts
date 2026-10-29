@@ -31,17 +31,20 @@ export interface CastSceneInput {
   mentioned: string[];
 }
 export interface CastCharacter { id: string; forms: string[] }
-export type CastEvidence = "named" | "recorded" | "neighbour" | "shared-name" | "chapter" | "volume";
+export type CastEvidence = "named" | "recorded" | "neighbour" | "shared-name" | "chapter" | "volume" | "universe";
 export interface CastCandidate { id: string; score: number; evidence: CastEvidence }
 
 export const CAST_CANDIDATE_LIMIT = 32;
 const GENERIC_FORMS = new Set(["少年", "少女", "幼女", "女孩", "男孩", "修女", "男人", "女人", "老师", "医生", "护士", "姐姐", "妹妹", "哥哥", "弟弟", "大小姐", "小姑娘", "那家伙"]);
 const NEIGHBOUR_SCORES = [0.7, 0.5, 0.35];
 
-/** Characters named in a text: longest forms first, so a short form inside a longer name is not counted again. */
-export function namedInText(text: string, characters: CastCharacter[]): { unique: Set<string>; weak: Set<string> } {
+/**
+ * Characters named in a text: longest forms first, so a short form inside a longer name is not counted again.
+ * Forms shorter than `minLength` (default 2) are ignored: a one-character alias matches inside other words.
+ */
+export function namedInText(text: string, characters: CastCharacter[], minLength = 2): { unique: Set<string>; weak: Set<string> } {
   const owners = new Map<string, Set<string>>();
-  for (const character of characters) for (const form of character.forms) if (form.length >= 2) owners.set(form, (owners.get(form) ?? new Set()).add(character.id));
+  for (const character of characters) for (const form of character.forms) if (form.length >= minLength) owners.set(form, (owners.get(form) ?? new Set()).add(character.id));
   const unique = new Set<string>(), weak = new Set<string>();
   let rest = text;
   for (const form of [...owners.keys()].sort((first, second) => second.length - first.length)) {

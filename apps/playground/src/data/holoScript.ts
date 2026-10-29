@@ -27,6 +27,8 @@ export interface HoloBeat {
   from?: string;
   /** 1-based scene number on this stage, and when it is (period label). */
   scene: number; when?: string;
+  /** The source sentences it tells (sentenceKey of the first and last), when the record carries them: read mode finds a page's beats by these. */
+  source?: { from: number; to: number };
 }
 export interface HoloActor { id: string; label: string; color: string; beats: number }
 export interface HoloPlace { id: string; label: string; kind: ArchitectureKind | null; x: number; z: number; scenes: number }
@@ -41,6 +43,10 @@ export function quoteOf(text: string): string | undefined {
   const match = /(?:说|道|问|喊|叫|答|吼|骂|嘀咕|念叨|宣布|回应|表示|告诉|：|:|says?|said|asks?|asked|shouts?|shouted|replies|replied)\s*[「『“"]([^」』”"]{2,80})[」』”"]?/i.exec(text);
   return match?.[1]?.replace(/[‘’']/g, "").trim() || undefined;
 }
+
+/** A sentence id (b0003_s0012) as a number that sorts in reading order. */
+export const sentenceKey = (id: string) => { const match = /^b(\d+)_s(\d+)$/.exec(id); return match ? Number(match[1]) * 1_000_000 + Number(match[2]) : NaN; };
+const rangeOf = (node: WorldNode | undefined) => node?.sourceRange ? { from: node.sourceRange.startBlock * 1_000_000 + node.sourceRange.startSentence, to: node.sourceRange.endBlock * 1_000_000 + node.sourceRange.endSentence } : undefined;
 
 export const ACTOR_COLORS = ["#5ee7ff", "#ffb86b", "#ff6fae", "#9dff7a", "#b49bff", "#ffd84d", "#6fffd2", "#ff8a7a", "#8fb8ff", "#f5a3ff"];
 
@@ -93,7 +99,8 @@ function sceneBeats(scene: StoryScene, local: string, placeId: string, number: n
   const present = unique([...(index.present.get(local) ?? []), ...scene.characterIds.map((id) => id.slice(id.indexOf(":") + 1))]).filter((id) => index.nodes.has(id));
   const cast = present.map((id) => index.nodes.get(id)!).concat(index.characters.filter((character) => !present.includes(character.id)));
   const title = node?.summary ?? node?.label ?? scene.label;
-  const beats: HoloBeat[] = [{ id: `scene:${scene.id}`, kind: "scene", sceneId: scene.id, placeId, title: `Scene ${number}`, text: title, actors: present, present, conflict: false, scene: number, when }];
+  const sceneSource = rangeOf(node);
+  const beats: HoloBeat[] = [{ id: `scene:${scene.id}`, kind: "scene", sceneId: scene.id, placeId, title: `Scene ${number}`, text: title, actors: present, present, conflict: false, scene: number, when, ...(sceneSource ? { source: sceneSource } : {}) }];
   const records = [...(index.records.get(local) ?? [])].sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id));
   const seen = new Map<string, HoloBeat>();
   for (const record of records) {
@@ -109,6 +116,8 @@ function sceneBeats(scene: StoryScene, local: string, placeId: string, number: n
         if (speaker) earlier.actors = [speaker, ...earlier.actors.filter((id) => id !== speaker)];
         earlier.title = index.nodes.get(earlier.actors[0])?.label ?? earlier.title;
       }
+      const also = rangeOf(record);
+      if (also) earlier.source = earlier.source ? { from: Math.min(earlier.source.from, also.from), to: Math.max(earlier.source.to, also.to) } : also;
       continue;
     }
     const dialogue = !!card || record.kind === "dialogue";
@@ -116,7 +125,8 @@ function sceneBeats(scene: StoryScene, local: string, placeId: string, number: n
     let actors = unique([...named(text, cast), ...(card?.participantIds ?? []), ...(index.participants.get(record.id) ?? [])]).filter((id) => index.nodes.has(id));
     const speaker = dialogue ? speakerOf(text, actors, (id) => index.nodes.get(id)?.label ?? id) : undefined;
     if (speaker) actors = [speaker, ...actors.filter((id) => id !== speaker)];
-    const beat: HoloBeat = { id: `${scene.id}:${record.id}`, kind: dialogue ? "dialogue" : "event", sceneId: scene.id, placeId, title: dialogue ? index.nodes.get(actors[0])?.label ?? "Dialogue" : "Event", text, quote: quoteOf(text), actors, present: unique([...present, ...actors]), conflict: isConflict(text), scene: number, when };
+    const source = rangeOf(record);
+    const beat: HoloBeat = { id: `${scene.id}:${record.id}`, kind: dialogue ? "dialogue" : "event", sceneId: scene.id, placeId, title: dialogue ? index.nodes.get(actors[0])?.label ?? "Dialogue" : "Event", text, quote: quoteOf(text), actors, present: unique([...present, ...actors]), conflict: isConflict(text), scene: number, when, ...(source ? { source } : {}) };
     seen.set(text, beat);
     beats.push(beat);
   }

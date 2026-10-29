@@ -4,11 +4,6 @@ import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  checkMatches,
-  foldVariants,
-  nominateMatchCandidates,
-} from "../src/solidifier/matching/entityMatch.js";
 import { MockDecisionModel } from "../src/ground/connectors/jev.js";
 import { Miniloop } from "../src/digger/autostep/miniloop.js";
 import { sectionBlock } from "../src/digger/intake/sectioning.js";
@@ -30,7 +25,6 @@ import {
 } from "../src/solidifier/maintenance/corrections.js";
 import { ingestNovel } from "../src/cli/commands/extract/ingestCommands.js";
 import { runRecall } from "../src/cli/commands/extract/recallCommands.js";
-import { runMatch } from "../src/cli/commands/extract/matchCommands.js";
 import { newChangeSet } from "../src/solidifier/merge/changeset.js";
 import { saveChangeSet } from "../src/solidifier/merge/changesetStore.js";
 import { EventLog } from "../src/ground/events/log.js";
@@ -42,64 +36,6 @@ const ent = (id: string, kind: Entity["kind"], ...forms: string[]): Entity => ({
   names: forms.map((text, i) => ({ text, lang: "zh", kind: i === 0 ? "canonical" : "alias" })),
   properties: {},
   confidence: 1,
-});
-
-test("matching nomination: variant fold, containment, and near-identical forms; kind-gated", () => {
-  assert.equal(foldVariants("白井黒子"), "白井黑子");
-  const entities = [
-    ent("char_000001", "Character", "白井黒子"),
-    ent("char_000002", "Character", "白井黑子"),
-    ent("char_000003", "Character", "食蜂操祈"),
-    ent("char_000004", "Character", "食蜂"),
-    ent("loc_000001", "Location", "第七学区车站前的繁华街"),
-    ent("loc_000002", "Location", "学园都市第七学区车站前的繁华街"),
-    ent("char_000005", "Character", "上条当麻"),
-  ];
-  const pairs = nominateMatchCandidates(entities);
-  const has = (a: string, b: string) =>
-    pairs.some((p) => [p.aId, p.bId].sort().join() === [a, b].sort().join());
-  assert.ok(has("char_000001", "char_000002"), "kanji-variant pair nominated");
-  assert.ok(
-    pairs.find((p) => p.aId === "char_000001")?.reasons.some((r) => /script-variant/.test(r)),
-  );
-  assert.ok(has("char_000003", "char_000004"), "containment pair nominated");
-  assert.ok(has("loc_000001", "loc_000002"), "location containment nominated");
-  assert.ok(!has("char_000005", "char_000001"), "unrelated pair not nominated");
-  assert.ok(!pairs.some((p) => p.aId.startsWith("loc") && p.bId.startsWith("char")), "kind-gated");
-});
-
-test("matching checklist routes: confident settles, uncertain escalates, distinct settles apart", async () => {
-  const entities = [
-    ent("char_000001", "Character", "甲"),
-    ent("char_000002", "Character", "甲子"),
-    ent("char_000003", "Character", "乙"),
-    ent("char_000004", "Character", "乙子"),
-    ent("char_000005", "Character", "丙"),
-    ent("char_000006", "Character", "丙子"),
-    ent("char_000007", "Character", "丁"),
-    ent("char_000008", "Character", "丁子"),
-  ];
-  const cand = (i: number) => ({
-    aId: entities[i * 2].id,
-    bId: entities[i * 2 + 1].id,
-    kind: "Character",
-    aForms: ["x"],
-    bForms: ["y"],
-    reasons: ["test"],
-    codeScore: 0.8,
-  });
-  const mock = new MockDecisionModel({
-    "same:0": 0.95, "distinct:0": 0.05, "variant:0": 0.9, // confident
-    "same:1": 0.6, "distinct:1": 0.2, "variant:1": 0.5, // uncertain -> agent
-    "same:2": 0.9, "distinct:2": 0.92, "variant:2": 0.1, // distinct wins
-    "same:3": 0.2, "distinct:3": 0.1, "variant:3": 0.1, // rejected
-  });
-  const verdicts = await checkMatches(mock, [cand(0), cand(1), cand(2), cand(3)], entities, []);
-  assert.deepEqual(
-    verdicts.map((v) => v.verdict),
-    ["confident", "uncertain", "distinct", "rejected"],
-  );
-  assert.equal(verdicts[0].keepId, "char_000001");
 });
 
 async function makeWorkspace() {
@@ -328,18 +264,6 @@ test("extraction corrections are validated and audited before a recall", async (
   assert.equal(audit.op, "correct");
   assert.equal(audit.args.key, "extraction:constraints");
   assert.deepEqual(audit.args.value, value);
-});
-
-test("matching an approved ChangeSet does not resurrect removed proposed entities", async () => {
-  const dir = await makeWorkspace();
-  const bundle = new BundleStore(join(dir, "ontology"));
-  await bundle.upsertEntity(ent("char_000001", "Character", "白井黒子"));
-  const changeset = newChangeSet("b0001");
-  changeset.status = "approved";
-  changeset.proposals = [{ id: "old_duplicate", kind: "upsert_entity", payload: ent("char_000002", "Character", "白井黑子"), confidence: 1, provenance: { blockId: "b0001", sentenceIds: [], patchId: "test" } }];
-  await saveChangeSet(dir, changeset);
-  const packet = await runMatch(dir, { changesetId: changeset.id, env: { TYPESAFE_API_KEY: "fake-test-key", JEV_ENDPOINT: "http://127.0.0.1:1/should-not-be-called" } });
-  assert.equal(packet.candidates, 0);
 });
 
 test("changing an applied gate to held cannot bypass recall's rollback requirement", async () => {

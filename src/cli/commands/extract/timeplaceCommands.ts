@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { parentMap, placePath } from "../../../ground/ontology/placeTree.js";
 import { sweepPlaceTree, type PlaceTreeMemory } from "../../../digger/timeplace/placeTreeSweep.js";
+import { repairPlaceTree } from "../../../digger/timeplace/placeTreeRepair.js";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
 import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
+import { EventLog } from "../../../ground/events/log.js";
+import { observeDecisions, observeWork } from "../../../ground/events/observe.js";
 import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
 import { storedSource } from "../../../ground/workspace/source.js";
 import { cutBlocks } from "../../../digger/intake/blocks.js";
@@ -70,9 +73,10 @@ export async function timeplaceRun(novelDir: string, options: TimeplaceRunOption
   const env = options.env ?? process.env;
   const mode = options.mode ?? "hybrid";
   if (!["programmatic", "llm", "hybrid"].includes(mode)) throw new Error("--mode must be programmatic, llm or hybrid.");
+  const emit = new EventLog(novelDir).emit;
   const models = () => ({
-    work: mode === "programmatic" ? undefined : options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env),
-    decisions: options.jev === false ? undefined : options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env),
+    work: mode === "programmatic" ? undefined : observeWork(options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env), emit, { faculty: "timeplace" }),
+    decisions: options.jev === false ? undefined : observeDecisions(options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env), emit),
   });
   if (!options.force) return timeplaceIncremental(novelDir, { ...options, mode }, models());
   const { scenes, entities, relations } = await loadBundle(novelDir);
@@ -135,8 +139,9 @@ async function timeplaceIncremental(novelDir: string, options: TimeplaceRunOptio
 export async function timeplaceAfterApprove(novelDir: string, approved: ChangeSet, env: NodeJS.ProcessEnv = process.env): Promise<Record<string, unknown> | null> {
   const sceneIds = approved.proposals.filter((proposal) => proposal.kind === "create_scene").map((proposal) => (proposal.payload as Scene).id);
   if (!sceneIds.length) return null;
-  const work = env.WORK_LLM_API_KEY?.trim() ? workModelFromEnv(env) : undefined;
-  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: work ? "hybrid" : "programmatic", work, decisions: jevFromEnv(env), sceneIds, provenanceBlockId: approved.blockId, remember: true });
+  const emit = new EventLog(novelDir).emit;
+  const work = env.WORK_LLM_API_KEY?.trim() ? observeWork(workModelFromEnv(env), emit, { blockId: approved.blockId, faculty: "timeplace" }) : undefined;
+  const output = await timePlaceForNewScenes({ novelDir, sentences: await loadWorkspaceSentences(novelDir), mode: work ? "hybrid" : "programmatic", work, decisions: observeDecisions(jevFromEnv(env), emit, { blockId: approved.blockId }), sceneIds, provenanceBlockId: approved.blockId, remember: true });
   if (output.changeset) await saveChangeSet(novelDir, output.changeset);
   return { changesetId: output.changeset?.id ?? null, scenes: output.scenes, periods: output.result.periods.length, flashbacks: output.result.periods.filter((period) => period.flashback).length, usage: output.result.usage };
 }
@@ -181,30 +186,42 @@ export interface TimeplaceTreeOptions { propose?: boolean; jev?: boolean; maxQue
 
 /**
  * Place-tree sweep over a workspace's stored places: nominate pairs, let Jev
- * judge containment, and (with --propose) write a pending `place-tree`
- * ChangeSet of PART_OF links for the shared review gate. Confident
- * "neither" verdicts are remembered in timeplace/place-tree.json.
+ * judge containment, then repair what pairs cannot reach (placeTreeRepair.ts:
+ * with each place's scale from `novel stage scale`, places left without a
+ * larger parent get one Jev choice among scored candidates), and (with
+ * --propose) write a pending `place-tree` ChangeSet of PART_OF links for the
+ * shared review gate. Asked pairs and places are remembered in
+ * timeplace/place-tree.json.
  */
+export const pendingTreeLinks = async (novelDir: string) => (await listChangeSets(novelDir).catch(() => [] as ChangeSet[])).filter((changeset) => changeset.status === "pending_review" && changeset.id.startsWith("cs_timeplace"))
+  .flatMap((changeset) => changeset.proposals).filter((proposal) => proposal.kind === "add_relation" && (proposal.payload as unknown as Relation).type === "PART_OF").map((proposal) => proposal.payload as unknown as Relation);
+/** Each place's scale from `novel stage scale` (stage/scale.json), by id; null when it has not run. */
+export const placeScales = async (novelDir: string) => { const report = JSON.parse(await readFile(join(novelDir, "stage", "scale.json"), "utf8").catch(() => "null")) as { places: Record<string, { scale: string }> } | null; return report ? Object.fromEntries(Object.entries(report.places).map(([id, pick]) => [id, pick.scale])) : null; };
 export async function timeplaceTree(novelDir: string, options: TimeplaceTreeOptions = {}): Promise<Record<string, unknown>> {
   const env = options.env ?? process.env;
   const { scenes, entities, relations } = await loadBundle(novelDir);
   const sentences = await loadWorkspaceSentences(novelDir);
   const memoryPath = join(novelDir, "timeplace", "place-tree.json");
   const memory = JSON.parse(await readFile(memoryPath, "utf8").catch(() => '{"distinct":[]}')) as PlaceTreeMemory;
-  const decisions = options.jev === false ? undefined : options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env);
+  const decisions = options.jev === false ? undefined : observeDecisions(options.cache ? cachedDecisions(jevFromEnv(env), options.cache) : jevFromEnv(env), new EventLog(novelDir).emit);
   const started = Date.now();
   const result = await sweepPlaceTree({ entities, relations, scenes, sentences, decisions, maxQuestions: options.maxQuestions, memory });
+  // The repair sees the tree as it will stand: stored links, links awaiting review, and the ones this sweep proposes.
+  const scales = await placeScales(novelDir), pending = await pendingTreeLinks(novelDir);
+  const repair = scales && decisions ? await repairPlaceTree({ entities, relations: [...relations, ...pending, ...result.proposals.map((proposal) => proposal.payload as unknown as Relation)], scenes, sentences, scales, decisions, maxQuestions: options.maxQuestions, memory: memory.repairs })
+    : { flagged: 0, asked: 0, proposals: [], suggestions: [], notes: [scales ? "No Jev: places without a larger parent were not repaired." : `No place scales yet: run \`novel stage scale ${novelDir}\`, then this sweep again, to repair places left without a larger parent.`], memory: memory.repairs ?? [] };
+  result.proposals.push(...repair.proposals);
   await mkdir(join(novelDir, "timeplace"), { recursive: true, mode: 0o700 });
-  await writeFile(memoryPath, JSON.stringify(result.memory, null, 1), { mode: 0o600 });
+  await writeFile(memoryPath, JSON.stringify({ ...result.memory, repairs: repair.memory }, null, 1), { mode: 0o600 });
   const names = new Map(entities.map((entity) => [entity.id, entity.names.find((form) => form.kind === "canonical")?.text ?? entity.names[0]?.text ?? entity.id]));
   const out = options.out ?? join(novelDir, "timeplace", `tree-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
-  await writeFile(out, JSON.stringify({ novelDir, seconds: (Date.now() - started) / 1000, candidates: result.candidates, asked: result.asked, verdicts: result.verdicts, proposals: result.proposals.length, notes: result.notes }, null, 1), { mode: 0o600 });
+  await writeFile(out, JSON.stringify({ novelDir, seconds: (Date.now() - started) / 1000, candidates: result.candidates, asked: result.asked, verdicts: result.verdicts, proposals: result.proposals.length, notes: result.notes, repair: { flagged: repair.flagged, asked: repair.asked, proposals: repair.proposals.length, suggestions: repair.suggestions, notes: repair.notes } }, null, 1), { mode: 0o600 });
   let changesetId: string | null = null;
   if (options.propose && result.proposals.length) {
     changesetId = `cs_timeplace_place-tree_${Date.now()}`;
     await saveChangeSet(novelDir, {
       id: changesetId, blockId: "place-tree", proposals: result.proposals, status: "pending_review", reviewSource: timePlaceReviewSource(result.proposals, sentences),
-      reviewNotes: { "place-tree": `Place-tree sweep (phase 2${decisions ? ", Jev judged each pair" : ", name prefixes only (no Jev)"}): ${result.candidates} candidate pair(s), ${result.asked} asked, ${result.proposals.length} PART_OF link(s) proposed (child ⊂ parent; one parent per place; the deepest judged parent kept). Accept a link only if its sentences show the child lies within the parent.${result.notes.length ? ` Notes: ${result.notes.slice(0, 4).join(" ")}` : ""}` },
+      reviewNotes: { "place-tree": `Place-tree sweep (phase 2${decisions ? ", Jev judged each pair" : ", name prefixes only (no Jev)"}): ${result.candidates} candidate pair(s), ${result.asked} asked, ${result.proposals.length} PART_OF link(s) proposed (child ⊂ parent; one parent per place; the deepest judged parent kept). Accept a link only if its sentences show the child lies within the parent.${result.notes.length ? ` Notes: ${result.notes.slice(0, 4).join(" ")}` : ""}${repair.proposals.length ? ` ${repair.proposals.length} of them come from the repair (via "repair"): places with no larger parent, where Jev chose among the larger places named in the place's scenes or before them; their sentences are that text.` : ""}${repair.suggestions.length ? ` Not proposed, for a look: ${repair.suggestions.join(" ")}` : ""}${repair.notes.length ? ` ${repair.notes.join(" ")}` : ""}` },
       createdAt: new Date().toISOString(),
     });
   }
@@ -212,6 +229,7 @@ export async function timeplaceTree(novelDir: string, options: TimeplaceTreeOpti
     candidates: result.candidates, asked: result.asked, proposals: result.proposals.length, changesetId, report: out, seconds: (Date.now() - started) / 1000,
     links: result.proposals.map((proposal) => { const relation = proposal.payload as Relation; return `${names.get(relation.fromId) ?? relation.fromId} ⊂ ${names.get(relation.toId) ?? relation.toId} (${Number(proposal.confidence).toFixed(2)})`; }),
     neither: result.verdicts.filter((verdict) => verdict.choice === "NEITHER").length, unsure: result.verdicts.filter((verdict) => verdict.choice !== "NEITHER" && verdict.probability < 0.7).length,
+    repair: { flagged: repair.flagged, asked: repair.asked, proposed: repair.proposals.length, suggestions: repair.suggestions, notes: repair.notes },
     notes: result.notes.slice(0, 10),
   };
 }

@@ -24,6 +24,9 @@ import { followTarget, timePlaceEmergence, universeIds, type TimePlaceProjection
 import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProjection, sceneOfSpiral, spiralNodeId, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels, type StoryShape } from "./data/orbitalTimePlace";
 import { AtlasPanel } from "./components/AtlasPanel";
 import { HoloStage, type HoloMode } from "./components/HoloStage";
+import { ReadMode } from "./components/ReadMode";
+import { StageClips } from "./components/StageClips";
+import { keyedPlan, placePlan, type StagePlan } from "./data/readMode";
 import { journeyScript, placeScript } from "./data/holoScript";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
@@ -165,6 +168,10 @@ export default function App() {
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   /** Holo stage (places phase 2): a place replayed like a game, or the journey across places.
    * Deep link: ?holo=<place id or name | journey>&holoMode=diorama|cutscene|journey&holoBeat=<n>[&holoPause]. */
+  /** Read mode: the book's text with its places replayed beside it (?read; desktop). */
+  const [readMode] = useState(() => new URLSearchParams(location.search).has("read"));
+  /** Stage clips: the prepared animation as a reel of short pieces (?clips; phones too). */
+  const [clipsMode] = useState(() => new URLSearchParams(location.search).has("clips"));
   const [holo, setHolo] = useState<{ target: string; mode: HoloMode; beat: number; paused?: boolean } | null>(() => {
     const params = new URLSearchParams(location.search), target = params.get("holo");
     return target ? { target, mode: (params.get("holoMode") as HoloMode | null) ?? (target === "journey" ? "journey" : "diorama"), beat: Number(params.get("holoBeat") ?? 0), paused: params.has("holoPause") } : null;
@@ -846,6 +853,22 @@ export default function App() {
     return place ? placeScript(viewTimePlace, shownWorld, place.id, loadedBook) : null;
   }, [holo?.target, holoJourney, viewTimePlace, shownWorld, loadedBook]);
   /** Leaving the journey for one place's stage: the busiest place this book can replay. */
+  // The book's prepared animation (novel stage prep), for the place stage's moves; undefined until asked, null when there is none.
+  const [stagePlan, setStagePlan] = useState<StagePlan | null | undefined>(undefined);
+  const holoOpen = !!holo && !holoJourney;
+  useEffect(() => {
+    if (!holoOpen) return;
+    let live = true;
+    fetch(`api/stage${bookQuery(phoneLive ? loadedBook : null)}`, { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((plan: StagePlan | null) => { if (live) setStagePlan(plan?.places ? plan : null); }).catch(() => { if (live) setStagePlan(null); });
+    return () => { live = false; };
+  }, [holoOpen, phoneLive, loadedBook]);
+  const holoPlan = useMemo(() => {
+    const placeId = holoScript && !holoJourney ? holoScript.places[0]?.id : undefined;
+    // Without a prepared plan from this host, the stage asks api/holo-moves (the design preview's snapshot host).
+    if (!placeId || stagePlan === undefined || stagePlan === null) return undefined;
+    const plan = placePlan(stagePlan, placeId, loadedBook);
+    return plan ? keyedPlan(plan, holoScript!) : null;
+  }, [holoScript, holoJourney, stagePlan, loadedBook]);
   const busiestPlace = () => [...(viewTimePlace?.places ?? [])].sort((first, second) => placeScript(viewTimePlace!, shownWorld, second.id, loadedBook).beats.length - placeScript(viewTimePlace!, shownWorld, first.id, loadedBook).beats.length)[0]?.id ?? "journey";
   const closeHolo = () => {
     setHolo(null);
@@ -865,16 +888,25 @@ export default function App() {
   const libraryAtTop = !!shownWorld?.library && ["library", "series"].includes(orbitalPage?.kind ?? "");
   const libraryCaption = shownWorld?.library?.events.at(-1)?.type.replaceAll(".", " / ") ?? "Waiting for organization";
 
+  // The same page with ?read toggled (other parameters and the fragment kept), so read mode opens as its own link.
+  const withRead = (on: boolean) => { const params = new URLSearchParams(location.search); if (on) params.set("read", "1"); else params.delete("read"); return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
+  const withClips = (book: number | null) => { const params = new URLSearchParams(location.search); params.delete("read"); if (book === null) params.delete("clips"); else { params.set("clips", "1"); params.set("book", String(book)); } return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
   if (!world) {
     return (
       <main className="loading-screen"><span className="eyebrow">NOVEL / ONTOLOGY PI</span><h1>Narrative archive.</h1><p role={loadError ? "alert" : "status"}>{loadError ? `Could not open the archive: ${loadError}` : "Opening local records…"}</p></main>
     );
   }
 
+  if (clipsMode) return <StageClips timePlace={timePlace} world={shownWorld} volume={loadedBook} requested={requestedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion}
+    books={books.length ? books.map((book) => ({ id: book.id, label: bookName(book) })) : loadedBook !== null ? [{ id: loadedBook, label: liveCollection }] : []} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withClips(null)} clipsHref={withClips} />;
+  if (readMode) return <ReadMode timePlace={timePlace} world={shownWorld} volume={loadedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withRead(false)} />;
+
   return (
     <div className={`app orbital-active ${orbitalMode ? "mode-orbital" : "mode-traditional"}${stageView !== "narrative" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}${dockOpen ? " dock-open" : " dock-closed"}`}>
       <header className="topbar">
         <button className="brand" onClick={overview} aria-label="Return to archive overview"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 32V8h7l18 24h7V8M4 32h7V18l18 14M19 8h17" fill="none" stroke="currentColor" strokeWidth="3" /></svg><span>NOVEL<span>ONTOLOGY / PI</span></span></button>
+        <a className="read-link" href={withRead(true)} title="Read the book with its places replayed beside the text (desktop)">Read mode</a>
+        <a className="read-link clips-link" href={withClips(loadedBook ?? 1)} title="Flip through short clips of the book's prepared animation">Clips</a>
         <span className="sample-badge"><i />{phoneLive || liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">
@@ -926,13 +958,13 @@ export default function App() {
         </aside>
         <div className="activity-dock"><ActivityTab count={activity.count} shine={activity.shine} caughtUp={activity.caughtUp} active={followingActivity} onClick={flyToSite} /></div>
       </main>
-      {holo && holoScript && <HoloStage key={`${holo.target}:${holoJourney}`} script={holoScript} mode={holo.mode} initialBeat={holo.beat} autoplay={!holo.paused} reducedMotion={reducedMotion} onClose={closeHolo}
+      {holo && holoScript && <HoloStage key={`${holo.target}:${holoJourney}`} script={holoScript} mode={holo.mode} initialBeat={holo.beat} autoplay={!holo.paused} reducedMotion={reducedMotion} onClose={closeHolo} plan={holoPlan}
         onMode={(mode) => setHolo({ mode, beat: 0, target: mode !== "journey" && holo.target === "journey" ? busiestPlace() : holo.target })}
         onEnterPlace={(placeId) => setHolo({ target: placeId, mode: "diorama", beat: 0 })} />}
       <button className="dock-toggle" aria-expanded={dockOpen} onClick={toggleDock} title={dockOpen ? "Fold the processing dock" : "Show the processing dock"}><i className={piBusy(liveActivity) ? "is-busy" : ""} /><span className="dock-label">{dockOpen ? "Hide processing" : phoneLive ? liveLabel : `Processing · ${processingStatus}`}</span><span aria-hidden="true">{dockOpen ? "▾" : "▴"}</span></button>
       <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} faculties={liveActivity?.faculties} telemetryNote={liveActivity?.telemetryNote} />
       {phoneLive && (!libraryAtTop || liveActivity?.review) && <PiReviewProgress review={liveActivity?.review} />}
-      {phoneLive && <PiConsole />}
+      {phoneLive && <PiConsole activity={liveActivity} reducedMotion={reducedMotion} />}
       {identityNotice && <div className="identity-notice" role="status">{identityNotice}</div>}
       <footer className="transport" ref={transportRef}>
         <div className="selection-counter"><span className="eyebrow">RECORD / SELECT</span><div>{String(selected ? selectedIndex + 1 : 0).padStart(2, "0")}<small>/ {String(displayNodes.length).padStart(2, "0")}</small></div></div>

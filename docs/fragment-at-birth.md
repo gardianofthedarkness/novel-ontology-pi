@@ -1,5 +1,9 @@
 # Fragment-at-birth — design spec (draft for ratification, 2026-10-23)
 
+> **Superseded (2026-10-28) by [universal EM](universal-em.md).** Fragments, descriptions
+> and full names are now resolved together, per block, against the universe's
+> shared character list. Kept for history.
+
 ## Problem (live evidence)
 
 The dominant duplicate class in real ingests is **name fragments**: a

@@ -25,10 +25,14 @@ named, take every assigned book in reading order.
 | "I found errors in vol 1", "review the data in vol 1", "something is wrong with X" | the [review workflow](references/review.md) for that book |
 | "who / where / when …", "is X in this scene?", "what happened between …" | answer from the data (`novel query`, `novel search`, `novel timeline list`, `novel timeplace show`), citing ids and source sentences |
 | new files, or several books | the `novel-library` skill first, then the checklist loop |
+| "prepare the animations", "read mode", "make demo clips" | the [novel-stage skill](../novel-stage/SKILL.md) for each book, after its checklist |
 
 Ask the user only what the data cannot settle and what is theirs to
 decide: spending beyond the job's limits, a merge two readings support
 equally, recalling an applied block. Everything else runs behind the scenes.
+Never offer to skip or bulk-pass the review gate (`--auto-approve`, accepting
+facts unread): it is not an option, and the host refuses it. When a review is
+long, say how far it got and how much is left, and keep going in the next turn.
 
 ## Completed analysis — start here
 
@@ -133,8 +137,15 @@ Act on the aspect; do not retry variants blindly:
   not invented Cypher properties.
   Scenes expose `dialogue_cards_json` after rebuilding the graph; legacy turns
   remain readable, not verified card memberships.
-- `novel match <dir> --changeset <id>` suggests duplicate identities;
-  source evidence decides whether to merge.
+- Identities (universal EM): one shared character list per universe (the
+  library's; a standalone book has its own). Applying a block runs EM: a full
+  proper name already in the list IS that person, automatically; short forms,
+  titles and descriptions are judged by Jev over the passage — confident
+  matches merge, less confident ones become a `um_` identity packet. `novel em
+  show <dir>` shows the book's people and open packets; `novel em sweep <dir>`
+  checks every character again (also how an older book joins the list).
+  Review `um_` packets like any other ("are these the same character?" — read
+  both sides' lines; accept merges, reject is remembered).
 - `novel fix ...` changes existing canonical records, not pending-only
   entities. Use source-grounded audited repairs; preserve checkpoints.
 - `novel bundle export <dir> <out>` / `import <bundle> <new-dir>` share
@@ -170,7 +181,8 @@ Act on the aspect; do not retry variants blindly:
   propose|show|decide|list <library-dir> <universe-id> ...`. Use source-qualified
   IDs, the same continuity, original evidence from both books, and an explicit
   temporal reason. Cross-book links live in a reviewed universe ledger; do not
-  fuse book databases or infer story time/identity from volume order/names.
+  fuse book databases or infer story time from volume order. Identity is the
+  exception by design: the universe's shared character list (universal EM).
 - Direct textual support + novel-sequence order decide. Succession,
   correlation, or shared topic alone is never causation, and order or
   adjacency alone never implies a link.
@@ -206,6 +218,19 @@ Act on the aspect; do not retry variants blindly:
   the parent — never from outside knowledge; neighbours, routes and two
   names for one place are not containment. The gate refuses a second parent
   or a loop: hold the weaker link instead.
+- Time has ONE clock per universe: the universe calendar. Every book's story
+  periods sit on it (its day; its stated time or part of the day; an undated
+  period as a range between its dated neighbours); books are marks on it, and
+  a flashback sits at its own date. Answer "when", "what happened on that day",
+  "what came first across books" from `novel calendar show <dir>` (or
+  `<library> --universe <id>`), never from volume or reading order. It is
+  rebuilt after every story-time apply; `novel calendar build <dir>` refreshes
+  it by hand. Years nobody states are relative (Year 1 = the first dated book);
+  when a book's dates go back from the previous book's, a `ut_` packet asks
+  "same year, or a later one?" — accept for the same year (another side of
+  the same days), reject for a later year, after reading both books' lines.
+  A stated date that contradicts the story order is listed as a conflict:
+  check the time word and the scene order in the text.
 - Story time and places belong to a universe. Book databases stay
   separate; the universe atlas (a reviewed ledger in the library) says which
   places in different books are the SAME place and which lie inside places
