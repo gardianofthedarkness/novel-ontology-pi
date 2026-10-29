@@ -29,6 +29,8 @@
   .head .subject { font-size: 16px; font-weight: 600; }
   .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 1px 7px; border-radius: 5px; background: #12324a; color: var(--accent); }
   .kind.outcome { background: #143a24; color: var(--good); }
+  .kind.move { background: #3a2f12; color: var(--gold); }
+  svg.moves { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .pictures { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
   .pictures:has(> figure:only-child) { grid-template-columns: minmax(0, 720px); }
   .pictures:has(> figure:nth-child(4)) { grid-template-columns: repeat(auto-fit, minmax(max(260px, 40%), 1fr)); }
@@ -85,7 +87,7 @@
   </div>
   <section class="card" id="frame"><div class="empty">Nothing recorded yet. <code>novel sim pick</code> records every question Jev is asked here, with its pictures and answers.</div></section>
   <div class="log" id="log"></div>
-  <p class="note">Every question Jev is asked on pictures of the story lines (which model a thing is, where it stands, where a fight hits and how big), Jev's answers drawn on them (boxes as it drew them, choices with how sure it was), and what each answer made: the thing's solved box, the blast's sphere. Replays use the recorded timing, sped up.</p>
+  <p class="note">Every question Jev is asked on pictures of the story lines (which model a thing is, where it stands, where a fight hits and how big), Jev's answers drawn on them (boxes as it drew them, choices with how sure it was), and what each answer made: the thing's solved box, the blast's sphere. Then each event's moves: every person's path from where they stand to where Jev said they go, with the path integral's other draws. Replays use the recorded timing, sped up.</p>
 </main>
 <script>
 (() => {
@@ -97,6 +99,31 @@
   const percent = value => `${Math.round(value * 100)}%`;
   const time = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
+  // An event's moves on a picture (800×600, as recorded): the other draws of the path integral faint, the path taken with an
+  // arrow, where it starts and a dashed box where it ends, named with the spot.
+  const SVG = 'http://www.w3.org/2000/svg', svg = (tag, attributes = {}) => { const node = document.createElementNS(SVG, tag); for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value); return node; };
+  function movesLayer(frame, picture) {
+    const layer = svg('svg', { class: 'moves', viewBox: '0 0 800 600', preserveAspectRatio: 'xMidYMid meet' }), defs = svg('defs');
+    layer.append(defs);
+    frame.moves.forEach((move, n) => {
+      const shown = move.overlays?.[picture.name];
+      if (!shown?.path?.length) return;
+      const color = /^#[0-9a-f]{6}$/i.test(move.color ?? '') ? move.color : '#7ce6ff', points = list => list.map(([x, y]) => `${x * 800},${y * 600}`).join(' '), arrow = `arrow-${frame.f}-${n}-${picture.name}`;
+      const head = svg('marker', { id: arrow, viewBox: '0 0 10 10', refX: 8, refY: 5, markerWidth: 5, markerHeight: 5, orient: 'auto-start-reverse' });
+      head.append(svg('path', { d: 'M0,0 L10,5 L0,10 z', fill: color }));
+      defs.append(head);
+      for (const other of shown.ensemble ?? []) layer.append(svg('polyline', { points: points(other), fill: 'none', stroke: color, 'stroke-opacity': 0.28, 'stroke-width': 1.5 }));
+      layer.append(svg('polyline', { points: points(shown.path), fill: 'none', stroke: color, 'stroke-width': 3, ...(move.how === 'teleport' ? { 'stroke-dasharray': '6 5' } : {}), 'marker-end': `url(#${arrow})` }));
+      const [sx, sy] = shown.path[0], [ex, ey] = shown.path.at(-1);
+      layer.append(svg('circle', { cx: sx * 800, cy: sy * 600, r: 5, fill: color }));
+      layer.append(svg('rect', { x: ex * 800 - 15, y: ey * 600 - 15, width: 30, height: 30, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-dasharray': '4 3' }));
+      const tag = svg('text', { x: ex * 800 + 19, y: ey * 600 - 8, fill: color, 'font-size': 17, 'font-weight': 600, 'paint-order': 'stroke', stroke: '#000', 'stroke-width': 3 });
+      tag.textContent = `${move.name} → ${move.spot}`;
+      layer.append(tag);
+    });
+    return layer;
+  }
+
   // A box answer is drawn on the picture it names (the blast on the plain close-up; a lone picture takes any box).
   const target = (answer, pictures) => pictures.find(picture => picture.name === answer.key) ?? (answer.key === 'blast' ? pictures.find(picture => picture.name === 'plain') : pictures.length === 1 ? pictures[0] : null);
 
@@ -104,7 +131,7 @@
     const card = $('frame');
     if (!frame) { card.replaceChildren(make('div', { className: 'empty', textContent: 'Nothing recorded yet.' })); return; }
     const line = state?.lines?.[frame.line];
-    const head = make('div', { className: 'head' }, make('span', { className: `kind ${frame.kind === 'outcome' ? 'outcome' : ''}`, textContent: frame.kind === 'outcome' ? 'outcome' : `question · ${frame.phase ?? ''}` }), make('span', { className: 'subject', textContent: frame.subject || '—' }),
+    const head = make('div', { className: 'head' }, make('span', { className: `kind ${frame.kind === 'ask' || !frame.kind ? '' : frame.kind}`, textContent: frame.kind === 'outcome' ? 'outcome' : frame.kind === 'move' ? 'moves' : `question · ${frame.phase ?? ''}` }), make('span', { className: 'subject', textContent: frame.subject || '—' }),
       make('span', { className: 'meta', textContent: `frame ${frame.f + 1}${frame.call ? ` · call ${frame.call}` : ''}${frame.ms ? ` · ${(frame.ms / 1000).toFixed(1)} s` : ''} · ${time(frame.at)}${line ? ` · ${line.title}` : ''}` }));
     const pictures = make('div', { className: 'pictures' });
     for (const picture of frame.pictures ?? []) {
@@ -113,11 +140,13 @@
         const { left, top, right, bottom } = answer.box;
         figure.append(make('div', { className: 'box', style: `left:${left * 100}%;top:${top * 100}%;width:${(right - left) * 100}%;height:${(bottom - top) * 100}%` }, make('em', { textContent: `${answer.key} ${answer.confidence == null ? '' : percent(answer.confidence)}` })));
       }
+      if (frame.moves?.length) figure.append(movesLayer(frame, picture));
       if (pending) figure.append(make('span', { className: 'waiting', textContent: 'Jev is answering…' }));
       pictures.append(figure);
     }
     const body = [head, pictures];
-    if (frame.kind === 'outcome') body.push(make('div', { className: 'outcome-text', textContent: frame.text }));
+    if (frame.kind === 'outcome' || frame.kind === 'move') body.push(make('div', { className: 'outcome-text', textContent: frame.text }));
+    if (frame.kind === 'move') body.push(make('p', { className: 'meta', textContent: 'Where each person goes, how and which way are Jev\'s answers from the movement step (asked in words, before the simulation); the path is one draw of the path integral, the faint lines its other draws.' }));
     if (frame.answers) {
       const answers = make('div', { className: 'answers' });
       for (const answer of frame.answers) {
@@ -144,8 +173,8 @@
   }
 
   function log() {
-    $('log').replaceChildren(...frames.slice(-60).reverse().map(frame => make('div', { onclick: () => { show('replay'); seek(frame.f); } }, make('span', { textContent: `#${frame.f + 1}` }), make('span', { textContent: frame.kind === 'outcome' ? 'outcome' : frame.phase ?? '' }),
-      make('span', { textContent: `${frame.subject ?? ''} → ${frame.kind === 'outcome' ? frame.text : (frame.answers ?? []).map(answer => `${answer.key} ${answer.box ? 'box' : answer.value}${answer.confidence == null ? '' : ` (${percent(answer.confidence)})`}`).join(', ')}` }))));
+    $('log').replaceChildren(...frames.slice(-60).reverse().map(frame => make('div', { onclick: () => { show('replay'); seek(frame.f); } }, make('span', { textContent: `#${frame.f + 1}` }), make('span', { textContent: frame.kind === 'outcome' ? 'outcome' : frame.kind === 'move' ? 'moves' : frame.phase ?? '' }),
+      make('span', { textContent: `${frame.subject ?? ''} → ${frame.kind === 'outcome' || frame.kind === 'move' ? frame.text : (frame.answers ?? []).map(answer => `${answer.key} ${answer.box ? 'box' : answer.value}${answer.confidence == null ? '' : ` (${percent(answer.confidence)})`}`).join(', ')}` }))));
   }
 
   async function poll() {

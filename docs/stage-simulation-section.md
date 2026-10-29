@@ -21,7 +21,9 @@ The engine now runs as a product step; the engine itself is unchanged (`runStran
 - **The checklist** asks for `pick` until it leaves nothing (`picks.json`, against the book's inputs), then `run`. Pi may run `pick` with `--max-calls` at most 60.
 - **The live page** (`play/live?volume=N`; the player and the app's **Simulation** link lead to it while a command runs) shows each question's pictures as Jev gets them, its answers drawn on them (boxes, the chosen option with how sure), and a picture of what each answer made; **Replay** plays the recording at its recorded pace, 1× to 32×. The player can show each line's newest run (`newest=1`) before the user accepts it.
 
-Still open: character movement in the live page (the movement step's questions are text, asked before the simulation), the simulation as its own section rather than a stage step, and feeding runs back to the timeline and places views.
+- **Character movement in the live page:** once a line has nothing left to ask, `pick` records each event that has moves: the event at its start and at its end, framed on the movers, with every move's path (one draw of the path integral, with an arrow), its other draws faint, where it starts and a box where it ends, projected from the page (`window.__stage.moves`). Beside them, Jev's movement answers for each mover from `stage/movement.json`: whether they move, the spot they end at, how and which way, each with how sure. No Jev calls; recorded again only when the book changes.
+
+Still open: the movement step itself still asks Jev in words (spots by name), not on pictures; the simulation as its own section rather than a stage step; feeding runs back to the timeline and places views.
 
 ## Where it stands: limitations
 

@@ -18,7 +18,8 @@ Everything is under `<novel-dir>/stage/`:
 | `impacts.json` | Jev's impact choice per fight: the spot (or no damage), the size, the box asked for comparison | `novel sim pick` (or `playground/impact-choices.mjs`) |
 | `simulation/picks.json` | What the last `novel sim pick` left: the inputs it ended on, its lines, questions left; the checklist reads it | `novel sim pick` |
 | `simulation/live.json` | What the last `novel sim pick` or `run` did, or is doing: its lines, phase, calls spent, the question Jev is on | `novel sim pick`, `novel sim run` |
-| `simulation/live/frames.jsonl`, `live/frames/` | The recording: every question Jev was asked (pictures, what it was about, the questions, the answers, how long) and every outcome (a picture of the solved box or the blast), across commands | `novel sim pick` |
+| `simulation/live/frames.jsonl`, `live/frames/` | The recording: every question Jev was asked (pictures, what it was about, the questions, the answers, how long), every outcome (a picture of the solved box or the blast) and, once a line is answered, each event's moves (pictures at its start and end, each move's path and the path integral's other draws on them, Jev's movement answers), across commands | `novel sim pick` |
+| `simulation/live/moves.json` | The inputs each line's moves were last recorded for, so they are recorded again only when the book changes | `novel sim pick` |
 | `scale.json` | Each place's scale: region, city, district, street, building or room (Jev) | `novel stage scale` |
 | `architecture.json`, `movement.json` | Each place's building kind; Jev's typed movement answers | `novel stage architecture`, `novel stage movement` |
 

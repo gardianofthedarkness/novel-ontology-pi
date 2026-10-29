@@ -1001,6 +1001,21 @@ if (capture) {
       return { points, x: [lo[0], hi[0] + step], y: [y0, hi[1] + step], z: [lo[2], hi[2] + step] };
     },
     /**
+     * An event's moves as a still of it shows them (call after a capture of that event; `camera` is its id): how long the
+     * event plays (`seconds`) and per move, who, how, the spot it ends at, its path and the path integral's other draws (at
+     * most 12) as points of the picture (fractions of its width and height from the top left), and where it starts and ends
+     * in the place's metres.
+     */
+    moves({ camera, scene, event }) {
+      const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.eventIndex === event), cam = cameras.get(camera);
+      if (!segment || !cam) return { seconds: 0, moves: [] };
+      const entry = built.get(segment.scene.place), v = new THREE.Vector3(), round = (value) => Math.round(value * 1000) / 1000;
+      const flat = (node) => { const p = at(segment.place, node); v.set(p.x - entry.cx, p.y + 0.35, p.z - entry.cz).project(cam); return [round((v.x + 1) / 2), round((1 - v.y) / 2)]; };
+      const metres = (node) => { const p = at(segment.place, node); return { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, z: Math.round(p.z * 10) / 10 }; };
+      return { seconds: segment.end - segment.start, moves: segment.moves.map((move) => ({ person: move.person, name: data.people[move.person]?.name ?? move.person, color: data.people[move.person]?.color ?? "#ffffff", how: move.how, spot: move.spot,
+        path: move.path.map(flat), ensemble: move.ensemble.slice(0, 12).map((nodes) => nodes.map(flat)), from: metres(move.path[0]), to: metres(move.path.at(-1)) })) };
+    },
+    /**
      * Where two stills' boxes agree, in the place's metres. The points of the place both show inside their boxes give the
      * hull and its centre; the thing's own size is each box measured at that depth: view 1's width across it, view 2's
      * (a low side look) width along view 1's line of sight and its height, less the little of the top a low look sees.

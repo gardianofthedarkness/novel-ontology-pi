@@ -81,7 +81,8 @@ novel text and Jev answers as data.
    `novel sim show <dir>` lists each line's accepted run and whether it was
    made from the book as it is now. While pick or run works, the viewer's
    live page (`play/live?volume=N`) shows each question, its pictures and
-   Jev's answers as they come, and replays them afterwards.
+   Jev's answers as they come, then each event's moves (paths and where
+   each person ends), and replays them afterwards.
 
 Report per book, in plain words: places by scale, buildings by kind, the named buildings and
 things accepted into the ontology (and those held), scenes and moves prepared, moves the physics check dropped or revised, the simulated

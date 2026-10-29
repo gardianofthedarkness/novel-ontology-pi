@@ -16,7 +16,7 @@ import { access, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } fro
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inlineStrand, runStrand } from './export-strand-demo.mjs';
+import { inlineStrand, runStrand, simulationInputs } from './export-strand-demo.mjs';
 import { pickImpacts, SIZES } from './impact-choices.mjs';
 import { browser, CHROME, pickModels, placeThings, serve } from './two-view-things.mjs';
 
@@ -43,7 +43,8 @@ async function replace(file, body) {
  * Jev's answers for one story line (`strand`: from, to, fork, as runStrand takes it): the model of every thing on it, then
  * its placements, then its fights. Questions stop being started once `budget` calls are spent. The page is made again after
  * models are picked (so ghosts take their shape) and after placements (so fights are seen with the things where Jev put
- * them). Returns the calls made and, per kind, what was asked, reused and left.
+ * them). With a live record, once nothing is left on the line, each event's moves are recorded too (recordMoves). Returns
+ * the calls made and, per kind, what was asked, reused and left, and the events whose moves were recorded.
  */
 export async function pickStrand(novelDir, strand, { jev, budget = Infinity, live = null, log = () => {} }) {
   await access(CHROME).catch(() => { throw new Error(`The pictures Jev answers on are drawn by Google Chrome, headless, which is not at ${CHROME} (NOVEL_CHROME names another).`); });
@@ -63,11 +64,14 @@ export async function pickStrand(novelDir, strand, { jev, budget = Infinity, liv
   const stop = () => void chrome.close().finally(() => process.exit(143));
   process.once('SIGTERM', stop);
   // The line as the engine makes it now, with every answer so far, in capture mode.
-  const load = async () => {
-    await writeFile(join(work, 'index.html'), inlineStrand(template, await runStrand(novelDir, strand), { vendor: true }));
+  let data = null;
+  const load = async ({ data: withData = false } = {}) => {
+    data = await runStrand(novelDir, strand);
+    await writeFile(join(work, 'index.html'), inlineStrand(template, data, { vendor: true }));
     await chrome.evaluate('delete window.__stage').catch(() => {});
     await chrome.open(url);
-    return chrome.evaluate('({ things: window.__stage.things, places: window.__stage.places, scenes: window.__stage.scenes, fights: window.__stage.fights })');
+    const stage = await chrome.evaluate('({ things: window.__stage.things, places: window.__stage.places, scenes: window.__stage.scenes, fights: window.__stage.fights })');
+    return withData ? { stage, data } : stage;
   };
   // The live record: pictures re-encoded small by the page, and a picture of what each answer made.
   live?.encoder(png => chrome.evaluate(`(async () => { const image = new Image(); image.src = 'data:image/png;base64,${png}'; await image.decode(); const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight; canvas.getContext('2d').drawImage(image, 0, 0); return canvas.toDataURL('image/jpeg', 0.78).split(',')[1]; })()`));
@@ -89,8 +93,9 @@ export async function pickStrand(novelDir, strand, { jev, budget = Infinity, liv
     await live?.phase('fights');
     const hits = await pickImpacts({ chrome, jev, stage, fights, save: saveImpacts, budget: budget - calls, log, after });
     calls += hits.calls;
-    const unmodelled = stage.things.filter(thing => thing.placed.length && !models[thing.name]).length;
-    return { calls, models: { picked, left: unmodelled }, placements: { asked: things.asked, reused: things.reused, failed: things.failed, left: things.left }, fights: { asked: hits.asked, reused: hits.reused, left: hits.left }, left: unmodelled + things.left + hits.left };
+    const unmodelled = stage.things.filter(thing => thing.placed.length && !models[thing.name]).length, left = unmodelled + things.left + hits.left;
+    const moved = live && !left ? await recordMoves(novelDir, strand, { chrome, live, load }) : 0;
+    return { calls, models: { picked, left: unmodelled }, placements: { asked: things.asked, reused: things.reused, failed: things.failed, left: things.left }, fights: { asked: hits.asked, reused: hits.reused, left: hits.left }, left, moved };
   } finally {
     process.off('SIGTERM', stop);
     live?.encoder(null);
@@ -98,6 +103,62 @@ export async function pickStrand(novelDir, strand, { jev, budget = Infinity, liv
     server.close();
     await rm(work, { recursive: true, force: true });
   }
+}
+
+/**
+ * Each event's moves on a line, as the run will play them, into the live record: the event at its start and at its end, every
+ * move's path, the path integral's other draws and its destination projected onto both pictures, and Jev's movement answers
+ * for the people moving (asked earlier by `novel stage movement`, in words; moveAnswers). No Jev calls. Done once per line for
+ * the book as it is now (live/moves.json keeps the inputs each line was recorded for). `load` makes the line's page again and
+ * returns its stage and data. Returns how many events were recorded.
+ */
+async function recordMoves(novelDir, strand, { chrome, live, load }) {
+  const marker = join(novelDir, 'stage', 'simulation', 'live', 'moves.json'), key = `${strand.from}|${strand.to}|${strand.fork ?? ''}`, inputs = await simulationInputs(novelDir);
+  const recorded = JSON.parse(await readFile(marker, 'utf8').catch(() => '{}'));
+  if (recorded[key] === inputs) return 0;
+  await live.phase('moves');
+  const { stage, data } = await load({ data: true }), movement = JSON.parse(await readFile(join(novelDir, 'stage', 'movement.json'), 'utf8').catch(() => 'null'));
+  let events = 0;
+  for (const scene of data.scenes) for (const [index, event] of scene.events.entries()) {
+    if (!event.moves.length) continue;
+    const id = `${scene.id}|${index}`, shot = async (name, play, focus) => {
+      await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: `${id}#${name}`, scene: scene.id, event: index, place: scene.place, mask: true, ...(play === null ? {} : { play }), ...(focus ? { focus, radius: Math.max(10, Math.max(focus.w, focus.d) / 2 + 2) } : {}) })})`);
+      return { picture: await chrome.still('jpeg'), shown: await chrome.evaluate(`window.__stage.moves(${JSON.stringify({ camera: `${id}#${name}`, scene: scene.id, event: index })})`) };
+    };
+    // Framed on the movers: a first look finds where the moves start and end, and both pictures cover that with some room.
+    const look = await shot('look', null, null), ends = look.shown.moves.flatMap(move => [move.from, move.to]);
+    const span = axis => [Math.min(...ends.map(point => point[axis])), Math.max(...ends.map(point => point[axis]))], [x, y, z] = ['x', 'y', 'z'].map(span);
+    const focus = ends.length ? { x: (x[0] + x[1]) / 2, y0: y[0], z: (z[0] + z[1]) / 2, w: x[1] - x[0] + 8, h: Math.max(3, y[1] - y[0] + 3), d: z[1] - z[0] + 8 } : null;
+    const start = await shot('start', null, focus), end = await shot('end', Math.max(0.05, start.shown.seconds - 0.05), focus), place = stage.places[scene.place];
+    const moves = start.shown.moves.map((move, n) => ({ person: move.person, name: move.name, color: move.color, how: move.how, spot: move.spot, from: move.from, to: move.to,
+      overlays: { start: { path: move.path, ensemble: move.ensemble }, end: { path: end.shown.moves[n]?.path ?? [], ensemble: end.shown.moves[n]?.ensemble ?? [] } } }));
+    await live.frame({ kind: 'move', subject: event.text.slice(0, 40), text: moves.map(move => `${move.name} → ${move.spot} (${move.how})`).join('; '), context: [`Place: ${place.path.join(' › ')}`, `Event: ${event.text.slice(0, 400)}`],
+      pictures: [{ name: 'start', picture: start.picture, jpeg: true }, { name: 'end', picture: end.picture, jpeg: true }], moves, answers: moveAnswers(movement, scene.id, index, scene.events.length, moves) });
+    events++;
+  }
+  await replace(marker, JSON.stringify({ ...recorded, [key]: inputs }));
+  return events;
+}
+
+/**
+ * Jev's movement answers for an event's moves (stage/movement.json, by the scene's event order; nothing when the order does
+ * not match the `count` of events the run has): per mover whether they move (how sure), where to (the spot and the next
+ * likeliest), how, and which way.
+ */
+export function moveAnswers(movement, sceneId, index, count, moves) {
+  const scene = movement?.scenes?.[sceneId], asked = scene?.order?.length === count ? scene.events?.[scene.order[index]] : null;
+  const top = distribution => Object.entries(distribution ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([option, p]) => [option, Math.round(p * 100) / 100]);
+  return moves.flatMap(move => {
+    const answer = asked?.[move.person];
+    if (!answer) return [];
+    const to = top(answer.to), way = top(answer.direction);
+    return [
+      { key: `${move.name} moves`, value: answer.moves >= 0.5 ? 'yes' : 'no', confidence: answer.moves },
+      ...(to.length ? [{ key: `${move.name} to`, value: to[0][0], confidence: to[0][1], top: to }] : []),
+      ...(answer.how ? [{ key: `${move.name} how`, value: answer.how, confidence: null }] : []),
+      ...(way.length ? [{ key: `${move.name} way`, value: way[0][0], confidence: way[0][1], top: way }] : []),
+    ];
+  });
 }
 
 /** What a question is about, in a few words for the live page's list: the thing, or the start of the event. */
@@ -108,9 +169,11 @@ const round = value => Math.round(value * 10) / 10;
  * The live record of a running `novel sim pick|run` (`command`), on story lines `lines` ([{ id, title }]):
  *   stage/simulation/live.json        the command, its lines and their state, the calls spent, the question Jev is on, the latest frames;
  *   stage/simulation/live/frames.jsonl every frame so far, across commands, for the replay: a question (its pictures, what it is about,
- *                                     the questions, Jev's answers and how long they took) or an outcome (a picture of what came out);
+ *                                     the questions, Jev's answers and how long they took), an outcome (a picture of what came out)
+ *                                     or an event's moves (pictures at its start and end, each move's path on them, Jev's movement answers);
  *   stage/simulation/live/frames/     the frames' pictures, <frame>-<n>.jpg (or .png when no browser could re-encode them).
- * `watch(jev)` gives a model that records each question before passing it on; `outcome()` records what an answer made. Writes
+ * `watch(jev)` gives a model that records each question before passing it on; `outcome()` records what an answer made and
+ * `frame()` any other frame (an event's moves). Writes
  * never fail the command: the record is for watching only.
  */
 export async function createLive(novelDir, { command, lines, budget = null, model = null }) {
@@ -143,12 +206,18 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
     finish(status, extra = {}) { state.status = status; state.phase = null; Object.assign(state, extra); return write(); },
     /** How pictures are made small for the record (base64 PNG in, base64 JPEG out): set once a browser is open, cleared when it closes. */
     encoder(fn) { encode = fn; },
-    /** What an answer made, as a picture (base64 PNG or JPEG) and a line of text. */
-    async outcome({ subject, text, picture = null, jpeg = false }) {
-      const f = frame++, files = picture ? [{ name: 'outcome', file: `frames/${f}-0.${jpeg ? 'jpg' : 'png'}` }] : [];
-      if (picture) await writeFile(join(recording, files[0].file), Buffer.from(picture, 'base64'), { mode: 0o644 }).catch(() => {});
-      return record({ f, kind: 'outcome', at: at(), line: state.line, phase: state.phase, subject, text, pictures: files });
+    /** A frame that is not a question (an outcome, an event's moves): its pictures (base64 PNG or JPEG) and what it shows. */
+    async frame({ kind, subject, text, context = [], pictures = [], answers = null, moves = null }) {
+      const f = frame++, files = [];
+      for (const [index, { name, picture, jpeg = false }] of pictures.slice(0, LIVE_PICTURES).entries()) {
+        const file = `frames/${f}-${index}.${jpeg ? 'jpg' : 'png'}`;
+        await writeFile(join(recording, file), Buffer.from(picture, 'base64'), { mode: 0o644 }).catch(() => {});
+        files.push({ name, file });
+      }
+      return record({ f, kind, at: at(), line: state.line, phase: state.phase, subject, text, ...(context.length ? { context } : {}), pictures: files, ...(answers ? { answers } : {}), ...(moves ? { moves } : {}) });
     },
+    /** What an answer made, as a picture and a line of text. */
+    outcome({ subject, text, picture = null, jpeg = false }) { return this.frame({ kind: 'outcome', subject, text, pictures: picture ? [{ name: 'outcome', picture, jpeg }] : [] }); },
     watch(jev) {
       return {
         modelId: jev.modelId,
