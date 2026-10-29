@@ -18,11 +18,12 @@ import { stageInputs } from "./stageCommands.js";
  * never canon (docs/stage-simulation-records.md). The host plays a book's
  * accepted runs (the viewer's `play/` page).
  *
- * `novel sim pick` asks Jev first, on pictures of each story line (headless
- * Chrome): which model each thing is drawn as, where each placement stands,
- * where each fight hits and how big (playground/sim-jev.mjs). Answers are
- * kept in the stage reports the engine reads, so the runs made after it use
- * them instead of the stand-ins. While either command runs, it writes what it
+ * `novel sim pick` simulates each story line live first, event by event in
+ * story time: on a picture of the event as it begins (headless Chrome), Jev
+ * decides where the people go, where the things it mentions stand and where
+ * its fight hits and how big (playground/sim-jev.mjs), and the next event
+ * begins from what those answers made. Answers are kept in the stage reports
+ * the engine reads, so the runs made after it play them. While either command runs, it writes what it
  * is doing to stage/simulation/live.json for the host's `play/live` page.
  */
 interface SimStrand { id: string; from: string; to: string; fork: string; title?: string }
@@ -40,7 +41,7 @@ interface Live { line(index: number, patch: Record<string, unknown>): Promise<vo
 interface PickCount { asked: number; reused: number; left: number; failed?: number }
 interface Pickers {
   PICKER_MODEL: string;
-  pickStrand(novelDir: string, strand: Omit<SimStrand, "id" | "title">, options: { jev: DecisionModel; budget: number; live?: Live }): Promise<{ calls: number; models: { picked: number; left: number }; placements: PickCount; fights: PickCount; left: number; moved: number }>;
+  simulateLine(novelDir: string, strand: Omit<SimStrand, "id" | "title">, options: { jev: DecisionModel; budget: number; live?: Live }): Promise<{ calls: number; models: { picked: number; left: number }; events: PickCount; placements: PickCount; fights: PickCount; left: number; stepped: number }>;
   createLive(novelDir: string, options: { command: string; lines: LiveLine[]; budget?: number | null; model?: string | null }): Promise<Live>;
 }
 /** What `novel sim pick` last left (stage/simulation/picks.json): the book it asked on (`inputs`), the lines, and how many questions it did not get to. */
@@ -107,9 +108,10 @@ async function chooseLines(novelDir: string, options: { strand?: string; auto?: 
 }
 
 /**
- * `novel sim pick`: Jev's answers on pictures of the chosen story lines, within `--max-calls` (questions stop being started
- * once that many calls are spent; what was answered is kept, so running it again continues). Records what it left in
- * stage/simulation/picks.json, which the checklist reads.
+ * `novel sim pick`: the chosen story lines simulated live, event by event, Jev deciding on a picture of each event as it
+ * begins where the people go, where the things it mentions stand and where its fight hits (simulateLine), within
+ * `--max-calls` (questions stop being started once that many calls are spent; what was decided is kept, so running it
+ * again continues). Records what it left in stage/simulation/picks.json, which the checklist reads.
  */
 export async function simPick(novelDir: string, options: { strand?: string; auto?: number; maxCalls?: number; env?: NodeJS.ProcessEnv } = {}): Promise<Record<string, unknown>> {
   if (!Number.isInteger(options.maxCalls) || options.maxCalls! < 1) throw new Error("novel sim pick asks Jev: give --max-calls N, the most calls it may spend.");
@@ -122,10 +124,10 @@ export async function simPick(novelDir: string, options: { strand?: string; auto
   try {
     for (const [index, line] of chosen.entries()) {
       await live.line(index, { status: "asking" });
-      const started = Date.now(), result = await pick.pickStrand(novelDir, { from: line.strand.from, to: line.strand.to, fork: line.strand.fork }, { jev: watched, budget: budget - calls, live });
+      const started = Date.now(), result = await pick.simulateLine(novelDir, { from: line.strand.from, to: line.strand.to, fork: line.strand.fork }, { jev: watched, budget: budget - calls, live });
       calls += result.calls;
       lines.push({ strand: line.strand.id, title: line.title, ...result, seconds: (Date.now() - started) / 1000 });
-      await live.line(index, { status: result.left ? "unfinished" : "answered", calls: result.calls, left: result.left, placements: result.placements, fights: result.fights, moved: result.moved });
+      await live.line(index, { status: result.left ? "unfinished" : "answered", calls: result.calls, left: result.left, events: result.events, placements: result.placements, fights: result.fights, stepped: result.stepped });
     }
   } catch (error) {
     await live.finish("failed", { error: String((error as Error).message).slice(0, 300) });
@@ -136,7 +138,7 @@ export async function simPick(novelDir: string, options: { strand?: string; auto
   await replaceFile(join(simulationFolder(novelDir), "picks.json"), JSON.stringify(picks, null, 1));
   await live.finish("done", { left });
   return { model: jev.modelId, calls, budget, lines, left, complete: picks.complete,
-    note: left ? `Stopped at --max-calls with ${left} question(s) left; run it again to continue (answers so far are kept).` : "Every thing, placement and fight on these lines has Jev's answer. Next: novel sim run (the runs use them)." };
+    note: left ? `Stopped at --max-calls with about ${left} event(s) or question(s) left; run it again to continue (decisions so far are kept).` : "Every event on these lines is decided: where people go, where things stand, where fights hit. Next: novel sim run (the runs use them)." };
 }
 
 /** Whether Jev's answers are complete for the book as it is now: the last pick left nothing and nothing it was made from changed since. */

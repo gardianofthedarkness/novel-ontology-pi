@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pickImpacts } from './impact-choices.mjs';
-import { createLive, moveAnswers, outcomeView } from './sim-jev.mjs';
+import { createLive, outcomeView } from './sim-jev.mjs';
 
 /** A browser that draws nothing: stills are a fixed picture, impact spots two letters, a measure 6 m across. */
 const fakeChrome = () => {
@@ -87,28 +87,15 @@ test('what an answer made, as the live record draws it', () => {
   assert.deepEqual(hit.capture.spheres, [{ x: 1, y: 2, z: 3, r: 8, outline: true, label: '16 m' }]);
 });
 
-test('an event\'s moves with Jev\'s movement answers, by the scene\'s event order', () => {
-  const movement = { scenes: { s1: { order: ['e1', 'e2'], events: { e2: { p1: { moves: 0.88, to: { street: 0.1, roof: 0.85, entrance: 0.05 }, how: 'run', direction: { up: 0.9, down: 0.1 } }, p2: { moves: 0.2 } } } } } };
-  const moves = [{ person: 'p1', name: 'Ada' }, { person: 'p3', name: 'Cy' }];
-  assert.deepEqual(moveAnswers(movement, 's1', 1, 2, moves), [
-    { key: 'Ada moves', value: 'yes', confidence: 0.88 },
-    { key: 'Ada to', value: 'roof', confidence: 0.85, top: [['roof', 0.85], ['street', 0.1], ['entrance', 0.05]] },
-    { key: 'Ada how', value: 'run', confidence: null },
-    { key: 'Ada way', value: 'up', confidence: 0.9, top: [['up', 0.9], ['down', 0.1]] },
-  ], 'Cy was not asked about: nothing for Cy');
-  assert.deepEqual(moveAnswers(movement, 's1', 1, 3, moves), [], 'the run has another count of events: the order cannot be trusted');
-  assert.deepEqual(moveAnswers(null, 's1', 1, 2, moves), []);
-});
-
-test('a frame of moves is recorded with both pictures, the moves and the answers', async (context) => {
+test('an event played is recorded with its picture and every move on it', async (context) => {
   const novel = await mkdtemp(join(tmpdir(), 'sim-moves-'));
   context.after(() => rm(novel, { recursive: true, force: true }));
   const live = await createLive(novel, { command: 'pick', lines: [{ id: 'line_a', title: 'A' }] });
-  await live.phase('moves');
-  const moves = [{ person: 'p1', name: 'Ada', color: '#ff8800', how: 'walk', spot: 'roof', overlays: { start: { path: [[0.2, 0.5], [0.6, 0.4]], ensemble: [] }, end: { path: [[0.2, 0.5], [0.6, 0.4]], ensemble: [] } } }];
-  await live.frame({ kind: 'move', subject: 'Ada climbs', text: 'Ada → roof (walk)', context: ['Event: Ada climbs.'], pictures: [{ name: 'start', picture: '/9j/', jpeg: true }, { name: 'end', picture: '/9j/', jpeg: true }], moves, answers: [{ key: 'Ada to', value: 'roof', confidence: 0.85 }] });
+  await live.phase('step · Scene 1 · event 2');
+  const moves = [{ person: 'p1', name: 'Ada', color: '#ff8800', how: 'walk', spot: 'roof', overlays: { end: { path: [[0.2, 0.5], [0.6, 0.4]], ensemble: [[[0.2, 0.5], [0.5, 0.45], [0.6, 0.4]]] } } }];
+  await live.frame({ kind: 'step', subject: 'Scene 1 · event 2', text: 'Ada → roof (walk)', context: ['Event: Ada climbs.'], pictures: [{ name: 'end', picture: '/9j/', jpeg: true }], moves });
   const [frame] = (await readFile(join(novel, 'stage', 'simulation', 'live', 'frames.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
-  assert.deepEqual([frame.kind, frame.phase, frame.text, frame.pictures.map(picture => picture.file)], ['move', 'moves', 'Ada → roof (walk)', ['frames/0-0.jpg', 'frames/0-1.jpg']]);
+  assert.deepEqual([frame.kind, frame.phase, frame.text, frame.pictures.map(picture => picture.file)], ['step', 'step · Scene 1 · event 2', 'Ada → roof (walk)', ['frames/0-0.jpg']]);
   assert.deepEqual(frame.moves, moves);
   assert.equal(JSON.parse(await readFile(join(novel, 'stage', 'simulation', 'live.json'), 'utf8')).log[0].text, 'Ada → roof (walk)');
 });

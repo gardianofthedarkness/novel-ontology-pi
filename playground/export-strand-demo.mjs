@@ -61,6 +61,7 @@ export async function strandDemo(novelDir, options) {
   const { stageKindOf } = await load('dist/src/digger/stage/scale.js');
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
   const { solveWalk, sampleWalk, temperatureBound, directionOf } = await load('dist/apps/playground/src/data/pathIntegral.js');
+  const { navGrid } = await load('dist/src/ground/stage/holoNav.js');
   const inputs = await stageInputs(novelDir), answers = await latestStrandAnswers(novelDir), strands = storyStrands(inputs.data, answers ?? {});
   const staged = new Map(inputs.movementScenes.map(scene => [scene.id, scene])), byIndex = new Map(inputs.data.scenes.map(scene => [scene.id, scene.index]));
   const all = inputs.data.scenes.map(scene => { const stage = staged.get(scene.id); return { id: scene.id, index: scene.index, placeId: stage?.placeId ?? scene.placeIds[0] ?? null, flashback: scene.flashback, cast: stage?.cast ?? answers?.presence.get(scene.id) ?? scene.characterIds, events: stage?.events }; });
@@ -93,7 +94,12 @@ export async function strandDemo(novelDir, options) {
     return fields.get(cacheKey);
   };
   const pick = (list, rng) => list[Math.floor(rng() * list.length)];
-  const report = inputs.movement?.scenes ?? {}, moves = new Map(), hits = new Map(), hitThings = new Map(), struck = new Set(), notes = { unreachable: 0, sampled: 0, teleports: 0, solves: 0, hits: 0, destroyed: 0, travel: { routes: 0, metres: 0, crossed: 0, unreachable: 0 } };
+  // Where people go: as the live simulation decided it (novel sim pick, Jev on a picture of each event as it stood), over the
+  // movement step's answers in words; an event the live simulation decided takes its answers from there.
+  const decided = JSON.parse(await readFile(`${novelDir}/stage/sim-decisions.json`, 'utf8').catch(() => 'null'))?.events ?? {};
+  const report = structuredClone(inputs.movement?.scenes ?? {});
+  for (const entry of Object.values(decided)) if (entry?.moves && entry.scene && entry.event) ((report[entry.scene] ??= { starts: {}, events: {} }).events ??= {})[entry.event] = entry.moves;
+  const moves = new Map(), hits = new Map(), hitThings = new Map(), struck = new Set(), notes = { unreachable: 0, sampled: 0, teleports: 0, solves: 0, hits: 0, destroyed: 0, travel: { routes: 0, metres: 0, crossed: 0, unreachable: 0 } };
   const top = distribution => Object.entries(distribution ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0];
   /** A spot as Jev named it, in this place: districts name streets and sides; buildings name floors, the roof and the street. */
   const spotKey = (placeId, spot) => { const group = groups.get(placeId); return placeSpot(group.layout, group.label, graphOf(placeId).spots, spot); };
@@ -370,12 +376,21 @@ export async function strandDemo(novelDir, options) {
     places: Object.fromEntries([...groups].map(([id, { label, path, scale, layout }]) => [id, { label, path, scale, kind: layout.kind, NX: layout.NX, NZ: layout.NZ, K: layout.K, ground: [...layout.ground].join(''), clutter: [...layout.clutter.keys()].filter(cell => layout.clutter[cell]), clutterDraws: layout.clutterDraws,
       lots: layout.lots.map((lot, index) => ({ model: exported[id][index], label: lot.label, detected: named(id, index) ? { name: named(id, index).name, scene: named(id, index).scene, event: named(id, index).event } : null, role: named(id, index) && ROLE_FOR[named(id, index).model] === 'hospital' ? 'hospital' : lot.role, i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) })) }])),
     scenes: chosen.map(scene => {
-      const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label;
-      return { id: scene.id, place: scene.placeId, label: label && label !== scene.id ? label : null,
+      const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label, kind = staged.get(scene.id)?.kind ?? null;
+      // The spots the movement questions offer for this building, each at a node of the place's graph (the one nearest the
+      // middle of the nodes the spot covers): where the live simulation pins them on its pictures.
+      const { graph, spots: graphSpots } = graphOf(scene.placeId), spots = kind ? navGrid(kind).spots.flatMap(spot => {
+        const nodes = graphSpots[spotKey(scene.placeId, spot.id)] ?? [];
+        if (!nodes.length) return [];
+        const mx = nodes.reduce((sum, node) => sum + graph.x[node], 0) / nodes.length, mz = nodes.reduce((sum, node) => sum + graph.z[node], 0) / nodes.length;
+        const node = nodes.reduce((best, other) => Math.hypot(graph.x[other] - mx, graph.z[other] - mz) < Math.hypot(graph.x[best] - mx, graph.z[best] - mz) ? other : best);
+        return [{ id: spot.id, label: spot.label, hint: spot.hint, node }];
+      }) : [];
+      return { id: scene.id, place: scene.placeId, label: label && label !== scene.id ? label : null, kind, cast: scene.cast, spots,
         starts: Object.fromEntries(Object.entries(run.starts).map(([person, at]) => [person, at?.[0] ?? null])),
         from: Object.fromEntries((timeline.handoffs.get(scene.id) ?? []).map(handoff => [handoff.person, handoff.from ? (handoff.samePlace ? 'stays' : 'arrives') : 'enters'])),
         objects: placedObjects.get(scene.id) ?? [],
-        events: scene.events.map(event => ({ text: clean(event.text), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean) })) };
+        events: scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: clean(event.text), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean) })) };
     }),
   };
 }
@@ -410,8 +425,8 @@ export function simulationRecord(data, strand) {
 
 /** The simulation engine a run comes from: its walk (seeds come from the scene keys under this version) and its record format. */
 export const ENGINE = 'strand-demo-2';
-/** What a run is made from: the book's reviewed ontology and the stage's answers (buildings, objects, movement, Jev's placements and impacts). */
-const SIMULATION_INPUTS = ['ontology/entities.jsonl', 'ontology/relations.jsonl', 'ontology/scenes.jsonl', 'ontology/events.jsonl', 'stage/architecture.json', 'stage/objects.json', 'stage/movement.json', 'stage/thing-boxes.json', 'stage/impacts.json'];
+/** What a run is made from: the book's reviewed ontology and the stage's answers (buildings, objects, movement, Jev's placements and impacts, the live simulation's decisions). */
+const SIMULATION_INPUTS = ['ontology/entities.jsonl', 'ontology/relations.jsonl', 'ontology/scenes.jsonl', 'ontology/events.jsonl', 'stage/architecture.json', 'stage/objects.json', 'stage/movement.json', 'stage/thing-boxes.json', 'stage/impacts.json', 'stage/sim-decisions.json'];
 export async function simulationInputs(novelDir) {
   const hash = createHash('sha256');
   for (const name of SIMULATION_INPUTS) hash.update(`${name}\n${await readFile(`${novelDir}/${name}`, 'utf8').catch(() => '')}\n`);

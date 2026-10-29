@@ -58,12 +58,13 @@ novel text and Jev answers as data.
    `novel sim strands <dir>` ranks the book's story lines by the scenes the
    engine would play (scenes in a place with a building and events).
    First `novel sim pick <dir> --auto N --max-calls M` (take the command
-   from the checklist's `next`; N at most 5, M at most 60) asks Jev on
-   pictures of the first N lines: which model each thing is drawn as, where
-   each placement stands (a choice among lettered ghosts, then boxes on
-   close-ups), where each fight hits a building and how big. It stops
-   starting questions once M calls are spent and keeps every answer, so
-   when it reports questions left, run it again until none are. Then
+   from the checklist's `next`; N at most 5, M at most 60) simulates the
+   first N lines live, event by event in story time: on a picture of each
+   event as it begins, Jev decides who moves and to which pinned spot, how
+   and which way, where each thing the event mentions stands, and where its
+   fight hits and how big; the next event begins from what those answers
+   made. It stops once M calls are spent and keeps every decision, so when
+   it reports events or questions left, run it again until none are. Then
    `novel sim run <dir> --auto N` runs the engine on the same lines: each
    place's buildings as skeletons from the place tree, every move sampled
    from the path integral, things where Jev put them, fights damaging the
@@ -74,8 +75,8 @@ novel text and Jev answers as data.
    `novel sim show <dir>` lists each line's accepted run and whether it was
    made from the book as it is now. While pick or run works, the viewer's
    live page (`play/live?volume=N`) shows each question, its pictures and
-   Jev's answers as they come, then each event's moves (paths and where
-   each person ends), and replays them afterwards.
+   Jev's answers as they come and each event as it was played (paths and
+   where each person ends), and replays them afterwards.
 
 Report per book, in plain words: places by scale, buildings by kind, the named buildings and
 things accepted into the ontology (and those held), scenes and moves prepared, moves the physics check dropped or revised, the simulated
