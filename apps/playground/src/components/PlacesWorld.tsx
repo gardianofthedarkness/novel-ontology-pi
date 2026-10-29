@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { BoxGeometry, BufferGeometry, CanvasTexture, Color, DoubleSide, Float32BufferAttribute, InstancedMesh, LineBasicMaterial, LineLoop, LineSegments, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, Shape, ShapeGeometry, SRGBColorSpace, Sprite, SpriteMaterial, Vector2, Vector3 } from "three";
+import { BoxGeometry, BufferGeometry, CanvasTexture, Float32BufferAttribute, InstancedMesh, type LineBasicMaterial, LineLoop, LineSegments, Matrix4, Mesh, Object3D, Shape, ShapeGeometry, SRGBColorSpace, Sprite, SpriteMaterial, Vector2, Vector3 } from "three";
+import { boxEdges, HOLO, holoEdge, holoFill } from "./hologram";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useChromeInsets } from "./useChromeInsets";
 import type { WorldFill, WorldMap } from "../data/timePlace";
 import "../places-world.css";
 
 /**
- * The Places page as the world engine left it: every place of the book on one canvas (each a circle in its parent's
- * frame), each place's manifolds (one per patch of its landscape, outlined and tinted by its type) filled with their latest
- * fills, and the nominated buildings on the lots they borrowed. Nothing is filled here: the fills come from the places
+ * The Places page as the world engine left it, in the stage's hologram look: every place of the book on one canvas (each
+ * a circle in its parent's frame), each place's manifolds (one per patch of its landscape, outlined in its type's colour)
+ * filled with their latest fills as cyan hologram shells, and the nominated buildings, warm, on the lots they borrowed. Nothing is filled here: the fills come from the places
  * registry by version and are laid out as they are; a new patch only adds one. Drag to orbit, pinch or scroll to zoom.
  */
 interface Props { map: WorldMap; /** "?volume=N" or "", for the fills. */ bookQuery: string; /** The book picker and status, as in every view. */ bookBar?: ReactNode }
@@ -17,7 +18,6 @@ interface Props { map: WorldMap; /** "?volume=N" or "", for the fills. */ bookQu
 /** Ground and buildings by landscape type. */
 const TYPE_COLOR: Record<string, string> = { skyscrapers: "#7aa2ff", commercial: "#ffb36b", residential: "#8fd694", industrial: "#b58cff", harbour: "#5fc4d8", park: "#4fbf6f", stadium: "#ff7aa8", village: "#e0c27a", castle: "#d9a77f", farm: "#c9d66b" };
 const colorOf = (types: string[]) => TYPE_COLOR[types[0]] ?? "#9aa5b1";
-const GOLD = "#ffd36e";
 const FLOOR = 3;
 
 /** A label that faces the camera, `size` metres tall. */
@@ -49,60 +49,56 @@ function useFills(map: WorldMap, bookQuery: string) {
   return fills;
 }
 
-/** The world in three.js: rings, manifolds, buildings, roads, nominated buildings and labels; rebuilt when the map or its fills change. */
+/**
+ * The world in three.js, in the stage's hologram look (./hologram): rings for places, each manifold's outline in its type's
+ * colour, its fill's buildings as cyan hologram shells, roads, and the nominated buildings warm with a line at every floor,
+ * named. Rebuilt when the map, its fills or the choice change.
+ */
 function World({ map, fills, selected }: { map: WorldMap; fills: Map<string, WorldFill>; selected: string | null }) {
   const { scene } = useThree();
   useEffect(() => {
-    const added: Object3D[] = [], add = (object: Object3D) => { scene.add(object); added.push(object); };
+    const added: Object3D[] = [], add = (object: Object3D) => { object.raycast = () => undefined; scene.add(object); added.push(object); };
     const at = new Map(map.places.map((place) => [place.id, place])), unit = new BoxGeometry(1, 1, 1), matrix = new Matrix4(), turn = new Matrix4(), scale = new Matrix4();
-    const ring = (x: number, z: number, r: number, color: string, opacity: number) => {
-      const points = Array.from({ length: 96 }, (_, n) => { const a = n / 96 * Math.PI * 2; return [x + Math.cos(a) * r, 0.3, z + Math.sin(a) * r]; }).flat();
-      add(new LineLoop(new BufferGeometry().setAttribute("position", new Float32BufferAttribute(points, 3)), new LineBasicMaterial({ color, transparent: true, opacity })));
-    };
+    const line = (points: number[], material: LineBasicMaterial, loop = false) => add(new (loop ? LineLoop : LineSegments)(new BufferGeometry().setAttribute("position", new Float32BufferAttribute(points, 3)), material));
     for (const place of map.places) {
       if (!place.open) continue;
       const lit = place.id === selected;
-      ring(place.x, place.z, place.r, lit ? "#ffffff" : "#5d7f96", lit ? 0.9 : 0.35 + 0.15 / (1 + place.depth));
-      const tag = textSprite(place.label, lit ? "#ffffff" : "#cfe3f0", Math.min(24, Math.max(6, place.r * 0.06))); tag.position.set(place.x, Math.min(30, Math.max(10, place.r * 0.08)), place.z - place.r * 0.92); add(tag);
+      line(Array.from({ length: 96 }, (_, n) => { const a = n / 96 * Math.PI * 2; return [place.x + Math.cos(a) * place.r, 0.3, place.z + Math.sin(a) * place.r]; }).flat(), holoEdge(lit ? "#ffffff" : HOLO.edge, lit ? 0.7 : 0.16 + 0.1 / (1 + place.depth)), true);
+      const tag = textSprite(place.label, lit ? "#ffffff" : HOLO.edge, Math.min(24, Math.max(6, place.r * 0.06))); tag.position.set(place.x, Math.min(30, Math.max(10, place.r * 0.08)), place.z - place.r * 0.92); add(tag);
     }
     // A nominated building stands on a fill building's lot: that fill building is not drawn under it.
     const borrowed = new Set(map.buildings.map((building) => `${building.place}|${building.x}|${building.z}`));
-    // Each manifold: its outline and a faint ground in its type's colour, then its fill's buildings.
+    // Each manifold: its outline in its type's colour (a breath of it on its ground), then its fill's buildings as hologram shells.
     for (const manifold of map.manifolds) {
       const place = at.get(manifold.place); if (!place) continue;
       const color = colorOf(manifold.types), fill = fills.get(manifold.version);
       if (manifold.outline?.length) {
-        const points = manifold.outline.map(([x, z]) => [place.x + x, 0.4, place.z + z]).flat();
-        add(new LineLoop(new BufferGeometry().setAttribute("position", new Float32BufferAttribute(points, 3)), new LineBasicMaterial({ color, transparent: true, opacity: 0.8 })));
-        const shape = new Shape(manifold.outline.map(([x, z]) => new Vector2(place.x + x, -(place.z + z))));
-        const ground = new Mesh(new ShapeGeometry(shape), new MeshBasicMaterial({ color, transparent: true, opacity: 0.1, side: DoubleSide, depthWrite: false })); ground.rotation.x = -Math.PI / 2; add(ground);
+        line(manifold.outline.map(([x, z]) => [place.x + x, 0.4, place.z + z]).flat(), holoEdge(color, 0.55), true);
+        const ground = new Mesh(new ShapeGeometry(new Shape(manifold.outline.map(([x, z]) => new Vector2(place.x + x, -(place.z + z))))), holoFill(color, 0.035)); ground.rotation.x = -Math.PI / 2; add(ground);
       }
-      const rows = (fill?.buildings ?? []).filter(([x, z]) => !borrowed.has(`${manifold.place}|${x}|${z}`));
+      const rows = (fill?.buildings ?? []).filter(([x, z]) => !borrowed.has(`${manifold.place}|${x}|${z}`)).map(([x, z, w, d, angle, floors]) => [place.x + x, place.z + z, w, d, angle, Math.max(1, floors) * FLOOR]);
       if (!rows.length) continue;
-      const mesh = new InstancedMesh(unit, new MeshLambertMaterial({ color: new Color(color).lerp(new Color("#0b1620"), 0.35) }), rows.length);
-      rows.forEach(([x, z, w, d, angle, floors], n) => {
-        const h = Math.max(1, floors) * FLOOR;
-        mesh.setMatrixAt(n, matrix.makeTranslation(place.x + x, h / 2, place.z + z).multiply(turn.makeRotationY(-angle)).multiply(scale.makeScale(w, h, d)));
-      });
-      mesh.instanceMatrix.needsUpdate = true; add(mesh);
+      const body = new InstancedMesh(unit, holoFill(), rows.length);
+      rows.forEach(([x, z, w, d, angle, h], n) => body.setMatrixAt(n, matrix.makeTranslation(x, h / 2, z).multiply(turn.makeRotationY(-angle)).multiply(scale.makeScale(w, h, d))));
+      body.instanceMatrix.needsUpdate = true; add(body);
+      add(new LineSegments(boxEdges(rows), holoEdge(HOLO.edge, 0.42)));
     }
     // Each place's ground: its roads.
     for (const ground of map.grounds) {
       const place = at.get(ground.place), roads = fills.get(ground.version)?.roads ?? [];
       if (!place || !roads.length) continue;
-      const points = roads.flatMap(([ax, az, bx, bz]) => [place.x + ax, 0.2, place.z + az, place.x + bx, 0.2, place.z + bz]);
-      add(new LineSegments(new BufferGeometry().setAttribute("position", new Float32BufferAttribute(points, 3)), new LineBasicMaterial({ color: "#3d5566", transparent: true, opacity: 0.7 })));
+      line(roads.flatMap(([ax, az, bx, bz]) => [place.x + ax, 0.2, place.z + az, place.x + bx, 0.2, place.z + bz]), holoEdge(HOLO.fill, 0.4));
     }
-    // The nominated buildings: gold, a little taller than what is round them, named.
-    const named = map.buildings.filter((building) => at.has(building.place));
+    // The nominated buildings: warm, a line at every floor, named (the chosen one white).
+    const named = map.buildings.filter((building) => at.has(building.place)).map((building) => { const place = at.get(building.place)!; return { building, row: [place.x + building.x, place.z + building.z, Math.max(4, building.w), Math.max(4, building.d), building.angle, Math.max(2, building.floors) * FLOOR] }; });
     if (named.length) {
-      const mesh = new InstancedMesh(unit, new MeshLambertMaterial({ color: GOLD, emissive: new Color(GOLD).multiplyScalar(0.35) }), named.length);
-      named.forEach((building, n) => {
-        const place = at.get(building.place)!, h = Math.max(2, building.floors) * FLOOR + 1;
-        mesh.setMatrixAt(n, matrix.makeTranslation(place.x + building.x, h / 2, place.z + building.z).multiply(turn.makeRotationY(-building.angle)).multiply(scale.makeScale(Math.max(4, building.w), h, Math.max(4, building.d))));
-        const tag = textSprite(building.name, GOLD, 5); tag.position.set(place.x + building.x, h + 5, place.z + building.z); add(tag);
+      const body = new InstancedMesh(unit, holoFill(HOLO.namedFill, 0.16), named.length);
+      named.forEach(({ building, row: [x, z, w, d, angle, h] }, n) => {
+        body.setMatrixAt(n, matrix.makeTranslation(x, h / 2, z).multiply(turn.makeRotationY(-angle)).multiply(scale.makeScale(w, h, d)));
+        const tag = textSprite(building.name, building.id === selected ? "#ffffff" : HOLO.namedEdge, 5); tag.position.set(x, h + 5, z); add(tag);
       });
-      mesh.instanceMatrix.needsUpdate = true; add(mesh);
+      body.instanceMatrix.needsUpdate = true; add(body);
+      add(new LineSegments(boxEdges(named.map(({ row }) => row), FLOOR), holoEdge(HOLO.namedEdge, 0.9)));
     }
     return () => { for (const object of added) { scene.remove(object); object.traverse((part) => { const mesh = part as Mesh; mesh.geometry?.dispose?.(); const material = mesh.material as { dispose?: () => void; map?: { dispose(): void } } | undefined; material?.map?.dispose(); material?.dispose?.(); }); } unit.dispose(); };
   }, [map, fills, selected, scene]);
@@ -166,8 +162,6 @@ export function PlacesWorld({ map: given, bookQuery, bookBar }: Props) {
     {bookBar}
     <Canvas className="pw-stage" camera={{ fov: 45, near: 1, far: 50000, position: [focus.x, focus.r * 1.6, focus.z + focus.r * 1.4] }} dpr={[1, 2]}>
       <color attach="background" args={["#060c12"]} />
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[300, 600, 200]} intensity={0.9} />
       <World map={map} fills={fills} selected={selected} />
       <Controls focus={focus} />
     </Canvas>
@@ -175,7 +169,7 @@ export function PlacesWorld({ map: given, bookQuery, bookBar }: Props) {
       <header><span className="eyebrow">PLACES · WORLD</span><button onClick={() => setPanelOpen(!panelOpen)} aria-expanded={panelOpen}>{panelOpen ? "Fold" : "Places"}</button></header>
       {panelOpen && <>
         <p className="pw-note">Every place's manifolds at their latest fill, with the nominated buildings on their lots: from {map.runs.length} accepted run{map.runs.length === 1 ? "" : "s"}.</p>
-        <div className="pw-legend">{types.map((type) => <span key={type}><i style={{ background: TYPE_COLOR[type] ?? "#9aa5b1" }} />{type}</span>)}<span><i style={{ background: GOLD }} />nominated</span></div>
+        <div className="pw-legend">{types.map((type) => <span key={type}><i style={{ background: TYPE_COLOR[type] ?? "#9aa5b1" }} />{type}</span>)}<span><i style={{ background: HOLO.namedEdge }} />nominated</span></div>
         <ul className="pw-tree">{tree(null, 0)}</ul>
       </>}
     </aside>

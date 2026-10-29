@@ -16,9 +16,9 @@
 .pw-tree button.is-on b, .pw-building.is-on { color: #ffffff; }
 .pw-parts { margin: 3px 0 2px 2px !important; font-size: 12px; color: #9fb4c2; }
 .pw-parts li { padding: 1px 0; }
-.pw-building { color: #ffd36e !important; }
+.pw-building { color: #ffe7b0 !important; }
 .pw-building.is-on { color: #ffffff !important; text-decoration: underline; }
-.pw-building i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ffd36e; margin-right: 6px; }
+.pw-building i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ffe7b0; margin-right: 6px; }
 .pw-building span { margin-left: 6px; }
 @media (max-width: 700px) {
   .pw-panel { top: auto; left: 12px; right: 64px; bottom: 104px; width: auto; max-height: 40%; }
