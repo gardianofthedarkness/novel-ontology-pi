@@ -6,7 +6,7 @@
 // Where each move ends comes from Jev's spot answers in the book's movement report. The page carries scene
 // and event summaries, names and places; no quotes or source text.
 //   npm run build && node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text]
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -315,6 +315,34 @@ export async function strandDemo(novelDir, options) {
   };
 }
 
+/**
+ * A strand's simulation as a record other sessions and tools can read without the player: the buildings (places, lots,
+ * skeletons), the things and where each placement stands, every move as points in the place's metres, and every hit with
+ * its sphere, energy and the units it broke or brought down. Derived view data, never canon: it lives with the book under
+ * `stage/simulation/` (docs/stage-simulation-records.md).
+ */
+export function simulationRecord(data, strand) {
+  const CELL = 2, FLOOR = 3, round = value => Math.round(value * 100) / 100;
+  const point = (place, node) => { const i = node % place.NX, j = Math.floor(node / place.NX) % place.NZ, k = Math.floor(node / (place.NX * place.NZ)); return [round((i + 0.5) * CELL), k * FLOOR, round((j + 0.5) * CELL)]; };
+  const part = part => ({ lot: part.lot, energy: part.energy ?? null, blasted: part.blasted ?? null, fallen: part.fallen ?? null, destroyedCells: part.destroyed, fellCells: part.fell ?? [], cutOffCells: part.cutOff, cutOffRooms: part.cutRooms });
+  return {
+    kind: 'stage-simulation', version: 1, exportedAt: data.exportedAt, strand: { ...strand, title: data.title },
+    units: { metres: { cell: CELL, floor: FLOOR }, kinds: { 1: 'corridor', 2: 'stair', 3: 'wall', 4: 'roof' }, tuple: '[kind, i, j, k] on the lot\'s grid; fallen ones add where they came to rest (metres up)' },
+    engine: { T: data.T, kappa: data.kappa, lambda: data.lambda, notes: data.notes },
+    people: data.people,
+    buildings: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, kind: place.kind, grid: { NX: place.NX, NZ: place.NZ, floors: place.K },
+      lots: place.lots.map(lot => ({ label: lot.label, detected: lot.detected, role: lot.role, model: lot.model, footprint: { i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz }, floors: lot.floors, skeleton: lot.cells, rooms: lot.rooms })) }])),
+    things: data.things.map(thing => ({ id: thing.id, name: thing.name, aliases: thing.aliases, model: thing.model, shape: thing.shape, size: thing.size, placements: thing.placed })),
+    migrations: data.migrations,
+    scenes: data.scenes.map(scene => {
+      const place = data.places[scene.place];
+      return { id: scene.id, place: scene.place, label: scene.label, starts: Object.fromEntries(Object.entries(scene.starts).map(([person, node]) => [person, node == null ? null : point(place, node)])),
+        events: scene.events.map((event, index) => ({ index, text: event.text, moves: event.moves.map(move => ({ person: move.person, how: move.how, spot: move.spot, path: move.path.map(node => point(place, node)) })),
+          hit: event.hit && { sphere: event.hit.sphere ?? null, strength: event.hit.strength, parts: [event.hit, ...(event.hit.more ?? [])].map(part) }, hitThings: event.hitThings })) };
+    }),
+  };
+}
+
 /** The player page with the strand inlined. */
 export function inlineStrand(template, data, { name = 'One Strand', fragment = false, vendor = false } = {}) {
   // `vendor`: three.js served beside the page (vendor/), so the page needs no CDN.
@@ -327,8 +355,8 @@ export function inlineStrand(template, data, { name = 'One Strand', fragment = f
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { from: { type: 'string' }, to: { type: 'string' }, fork: { type: 'string' }, title: { type: 'string' }, name: { type: 'string' }, fragment: { type: 'boolean' }, vendor: { type: 'boolean' }, set: { type: 'string' } } });
-  const usage = 'Usage: node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text] [--name text] [--fragment] [--vendor]\n       node playground/export-strand-demo.mjs --set <strands.json> <out.html> [--name text] [--fragment] [--vendor]   (strands.json: [{ id, label, name, novel, from, to, fork, title }], one page with a strand picker)';
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { from: { type: 'string' }, to: { type: 'string' }, fork: { type: 'string' }, title: { type: 'string' }, name: { type: 'string' }, fragment: { type: 'boolean' }, vendor: { type: 'boolean' }, set: { type: 'string' }, records: { type: 'boolean' } } });
+  const usage = 'Usage: node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text] [--name text] [--fragment] [--vendor]\n       node playground/export-strand-demo.mjs --set <strands.json> <out.html> [--name text] [--fragment] [--vendor] [--records]   (strands.json: [{ id, label, name, novel, from, to, fork, title }], one page with a strand picker)';
   const template = await readFile(`${repository}/playground/strand-demo.html`, 'utf8'), started = Date.now();
   // One page per strand, or one page carrying a set of strands to pick from.
   const entries = values.set ? JSON.parse(await readFile(values.set, 'utf8')) : [{ ...values, novel: positionals[0] }], out = values.set ? positionals[0] : positionals[1];
@@ -337,6 +365,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const entry of entries) strands.push({ id: entry.id, label: entry.label, name: entry.name, data: await strandDemo(entry.novel.replace(/^~(?=\/)/, process.env.HOME), entry) });
   const page = inlineStrand(template, values.set ? { strands } : strands[0].data, { name: values.name, fragment: values.fragment, vendor: values.vendor });
   await writeFile(out, page, { mode: 0o644 });
+  // --records: each strand's simulation, kept with its book (stage/simulation/<strand>.json, listed in index.json).
+  if (values.records) for (const [n, strand] of strands.entries()) {
+    const entry = entries[n], folder = `${entry.novel.replace(/^~(?=\/)/, process.env.HOME)}/stage/simulation`, id = entry.id ?? `${entry.from}-${entry.to}`;
+    await mkdir(folder, { recursive: true });
+    await writeFile(`${folder}/${id}.json`, JSON.stringify(simulationRecord(strand.data, { id, from: entry.from, to: entry.to, fork: entry.fork ?? null }), null, 1), { mode: 0o644 });
+    const index = JSON.parse(await readFile(`${folder}/index.json`, 'utf8').catch(() => '{"strands":{}}'));
+    index.strands[id] = { file: `${id}.json`, from: entry.from, to: entry.to, fork: entry.fork ?? null, title: strand.data.title, exportedAt: strand.data.exportedAt, scenes: strand.data.scenes.length, hits: strand.data.notes.hits, things: strand.data.things.length };
+    await writeFile(`${folder}/index.json`, JSON.stringify(index, null, 1), { mode: 0o644 });
+  }
   const summary = data => ({ scenes: data.scenes.length, events: data.scenes.reduce((n, s) => n + s.events.length, 0), ...data.notes, T: data.T, places: Object.values(data.places).map(p => ({ label: p.label, kind: p.kind, lots: p.lots.length, floors: p.lots.map(l => l.floors).join('/'), clutter: p.clutter.length, draws: p.clutterDraws })) });
   console.log(JSON.stringify({ out, bytes: Buffer.byteLength(page), ...(values.set ? { strands: strands.map(strand => ({ id: strand.id, ...summary(strand.data) })) } : summary(strands[0].data)), seconds: (Date.now() - started) / 1000 }));
 }

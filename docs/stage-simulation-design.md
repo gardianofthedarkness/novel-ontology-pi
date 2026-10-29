@@ -296,6 +296,8 @@ As of 2026-10-28, uncommitted on `claude/place-read-mode`.
 
 The full list of stand-ins, and a checklist for running the simulation as its own section of the product (its own CLI, skill, page and progress), is in [stage-simulation-section.md](stage-simulation-section.md).
 
+What a strand's simulation produced (buildings, things, motion, destruction) is kept with each book under `stage/simulation/`, for other sessions and tools: [stage-simulation-records.md](stage-simulation-records.md).
+
 ## Build order (proposed)
 
 1. **Capture.** Render the stage from the player itself on the desktop layout: a capture with its camera pose, from the reader's camera and from a rotated one. The reader can open any capture and its answer.
