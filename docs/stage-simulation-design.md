@@ -231,6 +231,21 @@ A building is its circulation only: corridors and stairs on 2 m cells and 3 m fl
    - Every cell the hit took becomes a fragment, launched from where it stood, out from the impact (faster near it and in a harder hit) and up, falling under gravity to rest on the ground.
    - The impact's sphere swells to its chosen size and fades. What the hit cut off glows red, as before.
 
+**Buildings as structural units; the lowest stable shape after a blast** (user principle, 2026-10-29; `apps/playground/src/data/structure.ts`). This replaces the percolation step for chosen impacts.
+- **Units:** a building's units sit on the skeleton's grid (2 × 2 × 3 m): its corridors and stairs, a wall on every outer cell of every floor, and a roof over the footprint.
+  - Bonds: walls 1, roof 1.5, corridors 2, stairs 4. Stairs are no longer immune: they used to break at a third of the corridors' rate, so a hit through a stair tube looked like it missed.
+- **Energy:** E = E₀ · s · (d / 8 m)³. It grows with the chosen diameter, not with what the blast touches; s is the event's strength.
+  - A unit at distance ρ receives E / (4π max(ρ, ½ m)²). An 8 m blast at full strength breaks walls out to 3 m.
+- **The shape after the blast** minimizes F = Σ_broken (b_u − e_u) + g Σ m_u y_u over shapes where every standing unit has a load path to the ground: down through the unit below, or sideways along its own layer (slabs, walls) for at most 2 units; a stair also hangs on the corridor beside it.
+  - Breaking exactly the units whose energy exceeds their bond minimizes the first sum.
+  - Every unit then left without a load path falls straight down onto the first support below and lies as rubble. Falling only lowers the potential energy, so one pass reaches the fixed point.
+- **The player:** a building a structural hit reaches shows its walls and roof as units instead of its artistic shell, without the broken and fallen ones; fallen units lie as rubble.
+  - During the hit, blasted units (wall panels among them) fly out, and fallen units drop straight down a beat later.
+- **Book 2** (18 sphere hits): 303 units blasted, 34 fell.
+  - 16 m blasts carry about 900 energy units and take 30–70 units each, walls and roofs mostly. The worst brought 19 corridor units down.
+  - 8 m blasts (about 100) take 1–6, and their roofs or corridors fall where they lose support.
+  - The blast centres on the struck building's nearest standing unit, so every hit, even the 4 m one, breaks what it touches.
+
 **Book 2's strand** (22 fights, 40 calls, 64 s):
 - **"No damage" for 4,** all fights that break nothing: a carry over a snowy roof, a leap over roofs, a throw into the air, pulling someone out of a fire. The stand-in had counted all four as hits.
 - **Where:** choice confidence 0.27.
@@ -280,6 +295,8 @@ As of 2026-10-28, uncommitted on `claude/place-read-mode`.
 - There are no captures yet: the macro view is shown, not captured for Jev.
 
 The full list of stand-ins, and a checklist for running the simulation as its own section of the product (its own CLI, skill, page and progress), is in [stage-simulation-section.md](stage-simulation-section.md).
+
+What a strand's simulation produced (buildings, things, motion, destruction) is kept with each book under `stage/simulation/`, for other sessions and tools: [stage-simulation-records.md](stage-simulation-records.md).
 
 ## Build order (proposed)
 
