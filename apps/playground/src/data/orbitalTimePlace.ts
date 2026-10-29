@@ -168,6 +168,14 @@ export function continuityLanes(data: TimePlaceProjection): (scene: StoryScene) 
 }
 export const bookNodeId = (volume: number) => `book:${volume}`;
 export const spiralNodeId = (sceneId: string) => `spiral:${sceneId}`;
+export const tripNodeId = (trip: { from: string; to: string }) => `trip:${trip.from}>${trip.to}`;
+const TRIP_SAMPLES = 16;
+/** A group trip's arc: up over the spiral from the scene they leave to the scene they arrive at (world units). */
+function tripArc(from: Position3, to: Position3): Position3[] {
+  const lift = Math.max(420, 0.35 * Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]));
+  const top: Position3 = [(from[0] + to[0]) / 2, Math.max(from[1], to[1]) + lift, (from[2] + to[2]) / 2];
+  return Array.from({ length: TRIP_SAMPLES + 1 }, (_, index) => { const t = index / TRIP_SAMPLES, u = 1 - t; return [0, 1, 2].map((axis) => u * u * from[axis] + 2 * u * t * top[axis] + t * t * to[axis]) as Position3; });
+}
 export const sceneOfSpiral = (id: string) => id.startsWith("spiral:") ? id.slice(7) : null;
 
 function causalContainers(world: RegroupedWorld): void {
@@ -670,6 +678,16 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     node: { id: portal.id, label: portal.label, viewKind: "Other volume", kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono: 0, summary: `${portal.links} cross-volume causal link${portal.links === 1 ? "" : "s"} with this book (universe ledger) · ${portal.before ? "read before" : "read after"} this volume`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] },
     position: [portal.before ? -reach : reach, 0, 0], radius: 70, role: "preview", order: portal.before ? -1 : order.length + 1,
   });
+  // Group trips on a stored spiral: a lime arc over the spiral from the scene they leave to the scene they arrive at, and a marker at its top.
+  const trips = stored ? (data.spiral!.trips ?? []).filter((trip) => anchors.has(spiralNodeId(trip.from)) && anchors.has(spiralNodeId(trip.to))) : [];
+  const rankOf = new Map(order.map((scene, rank) => [scene.id, rank]));
+  for (const trip of trips) {
+    const [a, b] = [trip.from, trip.to].map((id) => anchors.get(spiralNodeId(id))!.map((value) => value * 3) as Position3);
+    const who = `${trip.names.slice(0, 3).join("、")}${trip.names.length > 3 ? ` +${trip.names.length - 3}` : ""}`;
+    records.push({ node: { id: tripNodeId(trip), label: `${who} → ${trip.places[1]}`, viewKind: "Group trip", kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0],
+      summary: `${trip.names.join("、")} travel together from ${trip.places[0]} to ${trip.places[1]}${dayOf.get(trip.from) || dayOf.get(trip.to) ? ` · ${[dayOf.get(trip.from), dayOf.get(trip.to)].map((day) => day ? day.split("-").slice(1).join("/") : "?").join(" → ")}` : ""}${trip.guessed ? " · a place at one end is borrowed from an earlier scene (a guess)" : ""}${trip.nested ? " · one place lies inside the other: perhaps only the place named more closely" : ""}${trip.backed ? " · an extracted movement event backs it" : ""} · worked out from places and who is present; not reviewed` },
+      position: tripArc(a, b)[TRIP_SAMPLES >> 1], radius: 26, role: "preview", order: rankOf.get(trip.to) ?? 0 });
+  }
   const pins = calendarPins(data, anchors, laneOf);
   const meters = stored ? timeMeters(data, data.spiral!, stored.layout) : [];
   const parts = dayPartMarks(data, anchors, laneOf);
@@ -694,7 +712,7 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     // Shredding: in story order, each scene peels off the one line onto its strand.
     morphDelays: (draws) => { const last = Math.max(1, ...position.values()); return new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / last) * SHRED_MS)])); },
     timeKey: stored
-      ? { label: "STORY SPIRAL →", detail: `Story time as a precomputed spiral (built ${stored.built.slice(0, 16).replace("T", " ")}): each strand a glowing cyan axis, brighter the more scenes it holds (tap one to light it for that day and gather its characters), with a coil that winds once per few scenes, tight where scenes are dense and almost straight where there are none,; forks and merges joined smoothly; busy strands low in the middle and the rest spread over the floor before they stack up; quiet time is compressed (the ruler under the dates: a tick per story moment, packed closer where time is squeezed, its notes the pace)${anchors.size > stored.anchors.size ? ` · ${anchors.size - stored.anchors.size} newer scene${anchors.size - stored.anchors.size === 1 ? "" : "s"} wait under it until \`novel calendar build\`` : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
+      ? { label: "STORY SPIRAL →", detail: `Story time as a precomputed spiral (built ${stored.built.slice(0, 16).replace("T", " ")})${trips.length ? `: lime arcs are group trips, ${trips.length} where several people arrive together from another place (faint where a place is a guess, or one place lies inside the other); ` : ": "}each strand a glowing cyan axis, brighter the more scenes it holds (tap one to light it for that day and gather its characters), with a coil that winds once per few scenes, tight where scenes are dense and almost straight where there are none,; forks and merges joined smoothly; busy strands low in the middle and the rest spread over the floor before they stack up; quiet time is compressed (the ruler under the dates: a tick per story moment, packed closer where time is squeezed, its notes the pace)${anchors.size > stored.anchors.size ? ` · ${anchors.size - stored.anchors.size} newer scene${anchors.size - stored.anchors.size === 1 ? "" : "s"} wait under it until \`novel calendar build\`` : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
       : strands
       ? { label: "STORY STRANDS →", detail: `Story time as strands, estimated from who is in each scene (a guess where a scene names no one): each coil follows the same characters · S-curves: strands splitting and meeting · a faint rung: scenes nothing orders, side by side at one moment · amber: a flashback, threaded to where it is told · orange arcs: causes between the records inside the bubbles, judged in this order · place check: ${strandSummary(strands.checks)}${pinNote}` }
       : data.available
@@ -707,6 +725,8 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     // A selected scene is framed with its neighbours on the spiral (about half a turn); a book marker frames its book.
     focusFor: (selectedId, draws) => {
       if (selectedId.startsWith("book:")) return bookPositions(Number(selectedId.slice(5)), draws);
+      const trip = trips.find((entry) => tripNodeId(entry) === selectedId);
+      if (trip) return draws.filter((draw) => draw.role === "main" && (draw.node.id === spiralNodeId(trip.from) || draw.node.id === spiralNodeId(trip.to))).map((draw) => draw.position);
       const self = draws.find((draw) => draw.role === "main" && draw.node.id === selectedId);
       if (!self) return null;
       const here = position.get(self.node.id) ?? self.node.chrono;
@@ -721,7 +741,8 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
       if (stored) {
         // As stored: cyan coils around coloured axes; faint links where a character crosses strands mid-way.
         const crossings = stored.links.flatMap((link): OrbitalPath[] => { const from = at.get(spiralNodeId(link.from)), to = at.get(spiralNodeId(link.to)); return from && to ? [{ id: `spiral-cross:${link.from}:${link.to}`, tone: "link", points: [from, to] }] : []; });
-        return [...stored.tracks, ...stored.axes, ...crossings, ...threads];
+        const arcs = trips.flatMap((trip): OrbitalPath[] => { const from = at.get(spiralNodeId(trip.from)), to = at.get(spiralNodeId(trip.to)); return from && to ? [{ id: `spiral-trip:${trip.from}:${trip.to}`, tone: "trip", points: tripArc(from, to), strandIds: [...trip.runs], faint: trip.guessed || trip.nested }] : []; });
+        return [...stored.tracks, ...stored.axes, ...crossings, ...arcs, ...threads];
       }
       if (strands) {
         // The skeleton: one curve per strand run along its coil, S-curves where strands split and meet.

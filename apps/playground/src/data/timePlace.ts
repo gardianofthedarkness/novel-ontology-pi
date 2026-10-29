@@ -93,7 +93,9 @@ export interface CalendarViewEntry {
 }
 /** One strand of the precomputed spiral: its knots (scenes, view ids) and its coil track and axis as solved (x along time, q across). */
 export interface SpiralViewRun { id: string; lane: number; knots: { id: string; x: number; q: [number, number] }[]; track: [number, number, number][]; axis: [number, number, number][] }
-export interface SpiralView { builtAt: string; scale: { dx: number; knot: number; width: number; height: number }; runs: SpiralViewRun[]; links: { from: string; to: string; lane: number }[]; days: { key: string; label: string; from: number; to: number; lane: number }[] }
+/** Several people arriving together at a scene from one earlier scene at another place (worked out at build time, not reviewed). */
+export interface SpiralViewTrip { from: string; to: string; lane: number; runs: [string, string]; names: string[]; places: [string, string]; guessed: boolean; nested: boolean; backed: boolean }
+export interface SpiralView { builtAt: string; scale: { dx: number; knot: number; width: number; height: number }; runs: SpiralViewRun[]; links: { from: string; to: string; lane: number }[]; trips?: SpiralViewTrip[]; days: { key: string; label: string; from: number; to: number; lane: number }[] }
 export interface CalendarView {
   books: { sourceId: string; volume: number | null; title: string; readingOrder: number | null; year: number | null; yearBy: string | null; span: CalendarSpan | null }[];
   entries: CalendarViewEntry[];
