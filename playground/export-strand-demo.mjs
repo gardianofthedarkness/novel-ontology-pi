@@ -98,6 +98,7 @@ export async function strandDemo(novelDir, options) {
     W.ensure(world, x, z, radius + 32, at);
     while (shared.standing.length < world.lots.length) shared.standing.push(world.lots[shared.standing.length].skeleton.cells.map(value => (value ? 1 : 0)));
     shared.version++;
+    applyEarlier();
   };
   const T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 }), kappa = 1, lambda = 8;
   /**
@@ -330,7 +331,10 @@ export async function strandDemo(novelDir, options) {
     // Not where a child place stands: it has its own ground there.
     const keep = Object.values(canvas.places).filter(child => child.parent === place.id).map(child => ({ at: child.at, r: child.r }));
     const clear = (x, z, margin = 3) => keep.every(({ at, r }) => Math.hypot(x - at[0], z - at[1]) > r + margin);
-    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map((b, n) => ({ id: `${place.id}:${n}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind }));
+    // A building's id is its place and its order in the fill; `manifold` fingerprints the landscape it was filled from, so
+    // damage kept for it (world.json) applies only while that landscape stands.
+    const manifold = createHash('sha256').update(JSON.stringify(place.landscape)).digest('hex').slice(0, 12);
+    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map((b, n) => ({ id: `${place.id}:${n}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, manifold }));
     const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
     return { place: place.id, types: place.landscape.patches.map(patch => patch.type), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width]),
       walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })) } };
@@ -339,6 +343,31 @@ export async function strandDemo(novelDir, options) {
   const anchors = [...ownGrids].map(id => { const node = macroOf.get(id), own = kindOf(id) === 'site', kind = inputs.architecture?.places[id]?.kind; return { place: id, label: name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role: ROLE_OF[kind] ?? 'office', floors: kind === 'skyscraper' ? 12 : 6 }; });
   world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors });
   shared.layout = { id: 'world', kind: 'world', lots: world.lots };
+  // Damage other story lines left on the world (stage/simulation/world.json, from their accepted runs): applied in story order,
+  // to a building the moment it stands here, when the scene that broke it comes before the one being walked. A building whose
+  // landscape has changed since (another fingerprint) is not that building any more. Derived view data, never canon.
+  const damageLog = JSON.parse(await readFile(`${novelDir}/stage/simulation/world.json`, 'utf8').catch(() => 'null'));
+  const sameLine = entry => entry.strand?.from === options.from && entry.strand?.to === options.to && (entry.strand?.fork ?? null) === (options.fork ?? null);
+  let pending = (damageLog?.entries ?? []).filter(entry => !sameLine(entry) && Number.isFinite(entry.story)).sort((a, b) => a.story - b.story), story = -Infinity;
+  const earlier = [];
+  notes.earlier = { log: damageLog?.version ?? null, applied: 0, stale: 0 };
+  const applyEarlier = () => {
+    pending = pending.filter(entry => {
+      if (entry.story >= story) return true;
+      const index = world.lots.findIndex(lot => lot.source === entry.building);
+      if (index < 0) return true;
+      const lot = world.lots[index];
+      if (entry.manifold !== lot.manifold) { notes.earlier.stale++; return false; }
+      const structure = (shared.structures[index] ??= structureOf(lot)), units = shared.units[index] ?? intact(structure), unitOf = new Map();
+      for (let unit = 0; unit < structure.kind.length; unit++) unitOf.set(`${structure.kind[unit]}|${structure.i[unit]}|${structure.j[unit]}|${structure.k[unit]}`, unit);
+      for (const [kind, i, j, k] of [...entry.blasted, ...entry.fallen]) { const unit = unitOf.get(`${kind}|${i}|${j}|${k}`); if (unit !== undefined) units[unit] = 0; }
+      const standing = skeletonStanding(structure, units);
+      for (const cell of [...entry.destroyed, ...entry.fell]) standing[cell] = 0;
+      shared.units[index] = units; shared.standing[index] = standing; shared.version++; notes.earlier.applied++;
+      earlier.push({ lot: index, strand: entry.strand.id, run: entry.run, scene: entry.scene, label: entry.label, story: entry.story, blasted: entry.blasted, fallen: entry.fallen, destroyed: entry.destroyed, fell: entry.fell });
+      return false;
+    });
+  };
   for (const id of ownGrids) groups.set(id, groupOf({ label: name(id), path: (places.get(id)?.path ?? [id]).map(name), scale: inputs.scale?.places[id]?.scale ?? null, kind: kindOf(id), anchor: anchors.find(anchor => anchor.place === id), main: () => { const index = world.lots.findIndex(lot => lot.place === id); return index >= 0 ? index : null; } }));
   notes.landscape = { places: landscapes.length, buildings: landscapes.reduce((sum, entry) => sum + entry.buildings.length, 0), temporary: macro.filter(node => node.temporary).length };
   // Between places, people walk the map: its own path integral over a lattice (macroPath.ts), from where they leave one
@@ -493,7 +522,7 @@ export async function strandDemo(novelDir, options) {
   }
   // Where each person was last: the place and node a later scene's travel starts from.
   const { start, act } = mover;
-  mover.start = args => { moment = `${args.scene.id}|start`; const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
+  mover.start = args => { moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
   mover.act = args => {
     moment = `${args.scene.id}|${args.scene.events.findIndex(entry => entry.id === args.event.id)}`;
     const outcome = act(args);
@@ -541,7 +570,7 @@ export async function strandDemo(novelDir, options) {
   const dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return (k * NZ + (j + oj)) * NX + (i + oi); };
   const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
   const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
-    i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
+    i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
   notes.world = { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
   return {
     models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
@@ -552,7 +581,8 @@ export async function strandDemo(novelDir, options) {
     macro, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
     people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
     // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
-    world: { NX, NZ, K, oi, oj, lots: worldLots, chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]) },
+    world: { NX, NZ, K, oi, oj, lots: worldLots, earlier,
+      ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]) },
     places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, lots: worldLots }])),
     scenes: chosen.map(scene => {
       const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label, kind = staged.get(scene.id)?.kind ?? null;
@@ -596,7 +626,8 @@ export function simulationRecord(data, strand) {
     people: data.people,
     // The world once (every lot explored, in world cells, with the moment it was first reached); each place lists the lots round its anchor.
     world: data.world ? { grid: { NX: data.world.NX, NZ: data.world.NZ, floors: data.world.K, oi: data.world.oi, oj: data.world.oj }, chunks: data.world.chunks.map(([ci, cj, born]) => [ci, cj, born]),
-      lots: data.world.lots.map(lot => ({ label: lot.label, detected: lot.detected, role: lot.role, model: lot.model, footprint: { i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz }, floors: lot.floors, height: lot.height, born: lot.born, place: lot.place, skeleton: lot.cells, rooms: lot.rooms })) } : null,
+      lots: data.world.lots.map(lot => ({ label: lot.label, detected: lot.detected, role: lot.role, model: lot.model, source: lot.source, manifold: lot.manifold, footprint: { i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz }, floors: lot.floors, height: lot.height, born: lot.born, place: lot.place, skeleton: lot.cells, rooms: lot.rooms })),
+      earlier: data.world.earlier.map(({ lot, strand, run, scene, story }) => ({ lot, strand, run, scene, story })) } : null,
     buildings: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, scale: place.scale, kind: place.kind, anchor: place.anchor,
       lots: (data.world?.lots ?? []).flatMap((lot, index) => Math.hypot((lot.i0 + lot.nx / 2) * CELL - place.anchor.x, (lot.j0 + lot.nz / 2) * CELL - place.anchor.z) <= 80 ? [index] : []) }])),
     things: data.things.map(thing => ({ id: thing.id, name: thing.name, aliases: thing.aliases, model: thing.model, shape: thing.shape, size: thing.size, placements: thing.placed })),
@@ -605,7 +636,7 @@ export function simulationRecord(data, strand) {
     landscapes: (data.landscapes ?? []).map(entry => ({ place: entry.place, types: entry.types, buildings: entry.buildings.length })),
     scenes: data.scenes.map(scene => {
       const place = data.places[scene.place];
-      return { id: scene.id, place: scene.place, label: scene.label, starts: Object.fromEntries(Object.entries(scene.starts).map(([person, node]) => [person, node == null ? null : point(place, node)])),
+      return { id: scene.id, index: scene.index ?? null, place: scene.place, label: scene.label, starts: Object.fromEntries(Object.entries(scene.starts).map(([person, node]) => [person, node == null ? null : point(place, node)])),
         events: scene.events.map((event, index) => ({ index, text: event.text, moves: event.moves.map(move => ({ person: move.person, how: move.how, spot: move.spot, ...(move.with ? { with: move.with } : {}), path: move.path.map(node => point(place, node)) })),
           hit: event.hit && { sphere: event.hit.sphere ?? null, strength: event.hit.strength, parts: [event.hit, ...(event.hit.more ?? [])].map(part) }, hitThings: event.hitThings })) };
     }),
@@ -653,7 +684,38 @@ export async function keepRun(folder, strand, record, { inputs, accept = false, 
   index.version = 2;
   index.strands[strand.id] = { file: `${strand.id}.json`, from: strand.from, to: strand.to, fork: strand.fork ?? null, title: record.strand.title, accepted, exportedAt: chosen.exportedAt, scenes: chosen.scenes, hits: chosen.hits, things: chosen.things, runs };
   await writeFile(`${folder}/index.json`, JSON.stringify(index, null, 1), { mode: 0o644 });
-  return { strand: strand.id, run: run.id, fresh, accepted, ...(accepted !== run.id ? { note: `Kept as a run; ${accepted} stays accepted (--accept to take this one)` } : {}) };
+  const damage = await keepWorldDamage(folder);
+  return { strand: strand.id, run: run.id, fresh, accepted, world: damage.version, ...(accepted !== run.id ? { note: `Kept as a run; ${accepted} stays accepted (--accept to take this one)` } : {}) };
+}
+
+/**
+ * The world's damage as the story lines leave it (stage/simulation/world.json): every building each line's accepted run broke,
+ * by the building's id in its landscape (and that landscape's fingerprint), with the scene's story order and what broke (units
+ * blasted and fallen, skeleton cells destroyed). A run of any other line applies these, in story order, to the same building
+ * when it stands there again (the engine), so a later scene finds it broken. Rebuilt from the accepted runs whenever a run is
+ * kept; each version it replaces is kept in world-history/. Derived view data from versioned runs, never canon.
+ */
+export async function keepWorldDamage(folder) {
+  const index = JSON.parse(await readFile(`${folder}/index.json`, 'utf8').catch(() => '{"strands":{}}')), entries = [], runs = [];
+  for (const [id, line] of Object.entries(index.strands)) {
+    const run = line.runs?.find(entry => entry.id === line.accepted);
+    const record = run && JSON.parse(await readFile(`${folder}/${run.file}`, 'utf8').catch(() => 'null'));
+    // A run of an earlier engine (fixed grids, no world) leaves nothing on the world.
+    if (!record?.world) continue;
+    runs.push({ strand: id, run: run.id });
+    for (const scene of record.scenes) for (const event of scene.events) for (const part of event.hit?.parts ?? []) {
+      const lot = record.world.lots[part.lot];
+      if (!lot?.source) continue;
+      entries.push({ strand: { id, from: record.strand.from, to: record.strand.to, fork: record.strand.fork ?? null }, run: run.id, scene: scene.id, label: scene.label ?? null, event: event.index, story: scene.index,
+        building: lot.source, manifold: lot.manifold ?? '', sphere: event.hit.sphere ?? null, energy: part.energy ?? null, blasted: part.blasted ?? [], fallen: part.fallen ?? [], destroyed: part.destroyedCells ?? [], fell: part.fellCells ?? [] });
+    }
+  }
+  const before = JSON.parse(await readFile(`${folder}/world.json`, 'utf8').catch(() => 'null'));
+  if (before && JSON.stringify([before.runs, before.entries]) === JSON.stringify([runs, entries])) return before;
+  if (before) { await mkdir(`${folder}/world-history`, { recursive: true }); await writeFile(`${folder}/world-history/${before.version}.json`, JSON.stringify(before, null, 1), { mode: 0o644, flag: 'wx' }).catch(() => {}); }
+  const world = { kind: 'stage-world-damage', version: (before?.version ?? 0) + 1, updatedAt: new Date().toISOString(), runs, entries };
+  await writeFile(`${folder}/world.json`, JSON.stringify(world, null, 1), { mode: 0o644 });
+  return world;
 }
 
 /**

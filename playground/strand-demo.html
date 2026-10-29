@@ -187,6 +187,10 @@ const total = clock;
 const eventStart = new Map(segments.filter((segment) => segment.kind === "event").map((segment) => [`${segment.scene.id}|${segment.eventIndex}`, segment.start]));
 const placeHits = {};
 for (const scene of data.scenes) for (const event of scene.events) if (event.hit) (placeHits[keyOf(scene.place)] ??= []).push(event.hit);
+// Damage other story lines left on the world before this one (the engine applied it from stage/simulation/world.json): drawn
+// as hits from the start, before this line's own.
+const earlierHits = (data.world?.earlier ?? []).map((entry) => ({ lot: entry.lot, destroyed: entry.destroyed, fell: entry.fell, cutOff: [], cutRooms: [], blasted: entry.blasted.length ? entry.blasted : null, fallen: entry.fallen }));
+if (earlierHits.length) placeHits.world = [...earlierHits, ...(placeHits.world ?? [])];
 // When the world first reached each chunk and lot: its event's start (a scene's opening for `<scene>|start`).
 const sceneStart = new Map(segments.filter((segment) => segment.kind === "card").map((segment) => [segment.scene.id, segment.start]));
 const bornAt = (key) => { if (key === undefined || key === null) return 0; const [scene, event] = String(key).split("|"); return event === "start" ? sceneStart.get(scene) ?? 0 : eventStart.get(key) ?? sceneStart.get(scene) ?? 0; };
@@ -430,6 +434,10 @@ let decor = () => {};
     buildings.forEach(([x, z, w, d, angle, floors], i) => { q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w, floors * FLOOR, d)); mesh.setMatrixAt(i, m); shown.push(m.clone()); if (reached.has(ids[i])) return; for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); lines.push(v.x, v.y, v.z); } });
     world.add(mesh);
     const hidden = new THREE.Matrix4().makeScale(0, 0, 0), gone = new Set();
+    // A building another line broke that this run never stood up: a red outline on the faint city, so it is known there.
+    const ruined = new Set((data.world?.ruins ?? []).map((ruin) => ruin.building)), red = [];
+    ids.forEach((id, i) => { if (!ruined.has(id)) return; mesh.getMatrixAt(i, m); for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); red.push(v.x, v.y, v.z); } });
+    if (red.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(red, 3)); world.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xff5a6a, transparent: true, opacity: 0.7 }))); }
     decor = (now) => { let changed = false; ids.forEach((id, i) => { const at = reached.get(id); if (at === undefined) return; const off = at <= now; if (off === gone.has(i)) return; mesh.setMatrixAt(i, off ? hidden : shown[i]); if (off) gone.add(i); else gone.delete(i); changed = true; }); if (changed) mesh.instanceMatrix.needsUpdate = true; };
   }
   for (const [ax, az, bx, bz] of (data.landscapes ?? []).flatMap((entry) => entry.walls ?? [])) lines.push(ax, 0, az, bx, 0, bz, ax, 6, az, bx, 6, bz);
@@ -516,6 +524,13 @@ function drawStructure(item, count) {
 // Each place's damage, as of now on the strand: the hits that have happened there so far.
 const hitTimes = {};
 for (const segment of segments) if (segment.kind === "event" && segment.event.hit) (hitTimes[keyOf(segment.scene.place)] ??= []).push(segment.start);
+if (earlierHits.length) hitTimes.world = [...earlierHits.map(() => -1), ...(hitTimes.world ?? [])];
+// A notice above each building broken earlier in the story, from the moment it stands here.
+const notices = [...Map.groupBy(data.world?.earlier ?? [], (entry) => entry.lot)].map(([index, entries]) => {
+  const lot = data.world.lots[index], first = entries[0], tag = label(`broken earlier${entries.length > 1 ? ` ×${entries.length}` : ""} · ${String(first.label ?? first.scene).slice(0, 16)}`, "#ff8a8a", 26);
+  tag.position.set((lot.i0 + lot.nx / 2) * CELL, lot.floors * FLOOR + 6, (lot.j0 + lot.nz / 2) * CELL); world.add(tag);
+  return { tag, at: bornAt(lot.born) };
+});
 const sphereLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1, 2)), new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.8 })); sphereLines.visible = false; world.add(sphereLines);
 const boxLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.95 })); boxLines.visible = false; world.add(boxLines);
 /** Where the camera rests on a place, and a glide to it: out over both places, across, and down, like a hand on the mouse. */
@@ -609,6 +624,7 @@ function frame(now) {
     drawStructure(item, item.losses.filter((loss) => loss.time <= time).length);
   }
   for (const reveal of reveals) reveal.tag.visible = time >= reveal.time;
+  for (const notice of notices) notice.tag.visible = time >= notice.at;
   mats.cut.opacity = 0.55 + 0.4 * Math.sin(now / 220); mats.roomCut.opacity = 0.2 + 0.18 * Math.sin(now / 220);
 
   if (segment.index !== shownScene) {
