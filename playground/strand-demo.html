@@ -31,6 +31,9 @@
   .hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
   .flash { position: absolute; right: 10px; top: 8px; font-size: 12px; color: var(--red); font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; }
   .fade { position: absolute; inset: 0; background: var(--bg); opacity: 0; pointer-events: none; transition: opacity .35s; }
+  .overlay { position: absolute; inset: 0; pointer-events: none; }
+  .capture .stage { position: fixed; left: 0; top: 0; width: 800px; height: 600px; aspect-ratio: auto; border: 0; border-radius: 0; z-index: 5; }
+  .capture .hint, .capture .flash, .capture .fade { display: none; }
   .side { display: flex; flex-direction: column; gap: 10px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .scene { color: var(--dim); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -60,7 +63,7 @@
   <p class="lead">One storyline of the novel played as a live simulation. Buildings are generated from the place tree, every move is sampled from a path integral, people keep their positions from scene to scene, and fights damage the buildings. Drag to look around.</p>
   <div class="crumb" id="crumb"></div>
   <div class="layout">
-    <div class="stage" id="stage" aria-label="3D hologram of the current place with the people moving"><div class="hint">drag to orbit · pinch or scroll to zoom</div><div class="flash" id="flash"></div><div class="fade" id="fade"></div></div>
+    <div class="stage" id="stage" aria-label="3D hologram of the current place with the people moving"><div class="hint">drag to orbit · pinch or scroll to zoom</div><div class="flash" id="flash"></div><div class="fade" id="fade"></div><canvas class="overlay" id="overlay" hidden></canvas></div>
     <div class="side">
       <div class="card"><div class="scene" id="scene"></div><div class="event" id="event"></div><div class="people" id="people"></div></div>
       <div class="card controls">
@@ -85,6 +88,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const $ = (id) => document.getElementById(id);
+/** ?capture: the page holds still and renders pictures for the stage's questions (see window.__stage at the end). */
+const capture = new URLSearchParams(location.search).has("capture");
 // A page may carry several strands: the one named in the address (#id) plays, and picking another loads the page on it.
 const bundle = JSON.parse($("strand-data").textContent || "null"), strands = Array.isArray(bundle?.strands) ? bundle.strands : null;
 const chosen = strands && (strands.find((entry) => entry.id === location.hash.slice(1)) ?? strands[0]), data = strands ? chosen?.data ?? null : bundle;
@@ -295,33 +300,36 @@ const traces = data.migrations.flatMap((migration) => {
   line.visible = false; world.add(line);
   return [{ migration, line, points, segment }];
 });
-// Things the story puts in the place: gold hologram shapes where the event happens, floating on what is under them.
+// Things the story puts in the place: gold hologram shapes, each fitted to the box where Jev's two views agree.
 const thingMaterial = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.28, depthWrite: false }), thingEdges = new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.9 });
 const shapeGeometry = (shape, size) => shape === "sphere" ? new THREE.SphereGeometry(size / 2, 20, 14) : shape === "oval" ? new THREE.SphereGeometry(size / 2, 20, 14).scale(1, 0.55, 0.7) : shape === "diamond" ? new THREE.OctahedronGeometry(size / 2) : new THREE.BoxGeometry(size, Math.max(1.2, size * 0.35), Math.max(1.2, size * 0.35));
 // Things the story mentions: one piece per thing (mentions of one named thing are one thing), shown from its first mention,
 // gliding to wherever a later event puts it, in any place. A big thing carries structure inside; hits break it away.
+let hiddenThings = new Set();
 const things = (data.things ?? []).map((thing) => {
-  const geometry = shapeGeometry(thing.shape, thing.size), piece = new THREE.Group(), depth = thing.shape === "box" ? Math.max(1.2, thing.size * 0.35) : thing.size;
-  piece.add(new THREE.Mesh(geometry, thingMaterial), new THREE.LineSegments(new THREE.EdgesGeometry(geometry), thingEdges));
+  const geometry = shapeGeometry(thing.shape, thing.size), piece = new THREE.Group(), body = new THREE.Group(), depth = thing.shape === "box" ? Math.max(1.2, thing.size * 0.35) : thing.size;
+  // The shape's own extent, to fit it to a placement's box.
+  const base = { w: thing.size, h: thing.height, d: thing.shape === "box" ? depth : thing.shape === "oval" ? thing.size * 0.7 : thing.size };
+  body.add(new THREE.Mesh(geometry, thingMaterial), new THREE.LineSegments(new THREE.EdgesGeometry(geometry), thingEdges)); piece.add(body);
   const tag = label(thing.name.slice(0, 12), "#ffd36e", 24); tag.position.y = thing.height / 2 + 1.6; piece.add(tag);
   piece.visible = false; world.add(piece);
   const placed = thing.placed.map((spot) => ({ ...spot, time: eventStart.get(`${spot.scene}|${spot.event}`) ?? Infinity })).sort((a, b) => a.time - b.time);
   const losses = [];
   for (const segment of segments) if (segment.kind === "event") for (const hit of segment.event.hitThings ?? []) if (hit.id === thing.id && hit.destroyed.length) losses.push({ time: segment.start, cells: hit.destroyed });
-  return { thing, piece, placed, losses, depth, shownLosses: -1, structure: null };
+  return { thing, piece, body, tag, base, placed, losses, depth, shownLosses: -1, structure: null };
 });
 const worldOf = (spot) => { const entry = built.get(spot.place); return new THREE.Vector3(spot.x - entry.cx, spot.y, spot.z - entry.cz); };
 function drawStructure(item, count) {
   if (!item.thing.struct || item.shownLosses === count) return;
   item.shownLosses = count;
-  if (item.structure) item.piece.remove(item.structure);
+  if (item.structure) item.body.remove(item.structure);
   const { nx, nz, floors, cells } = item.thing.struct, lost = new Set(item.losses.slice(0, count).flatMap((loss) => loss.cells)), boxes = [], sx = item.thing.size / nx, sy = item.thing.height / floors, sz = item.depth / nz;
   for (let cell = 0; cell < cells.length; cell++) {
     if (cells[cell] === "0" || lost.has(cell)) continue;
     const i = cell % nx, j = Math.floor(cell / nx) % nz, k = Math.floor(cell / (nx * nz));
     boxes.push([(i + 0.5) * sx - item.thing.size / 2, k * sy - item.thing.height / 2 + sy * 0.2, (j + 0.5) * sz - item.depth / 2, sx * 0.85, sy * 0.25, sz * 0.85]);
   }
-  item.structure = instanced(mats.corridor, boxes); item.piece.add(item.structure);
+  item.structure = instanced(mats.corridor, boxes); item.body.add(item.structure);
 }
 // Each place's damage, as of now on the strand: the hits that have happened there so far.
 const hitTimes = {};
@@ -393,9 +401,11 @@ function frame(now) {
   // Things sit still where they were last put, fitted to their box; new ones grow in, moved ones glide; structure loses what hits break.
   for (const item of things) {
     const index = item.placed.findLastIndex((spot) => spot.time <= time);
-    item.piece.visible = index >= 0;
+    item.piece.visible = index >= 0 && !hiddenThings.has(item.thing.id);
     if (index < 0) continue;
     const spot = item.placed[index], since = time - spot.time, to = worldOf(spot);
+    item.body.scale.set(spot.w ? spot.w / item.base.w : 1, spot.h ? spot.h / item.base.h : 1, spot.d ? spot.d / item.base.d : 1);
+    item.tag.position.y = (spot.h ?? item.thing.height) / 2 + 1.6;
     item.piece.position.copy(index > 0 && since < 1.2 ? worldOf(item.placed[index - 1]).lerp(to, since / 1.2) : to);
     item.piece.scale.setScalar(index === 0 ? Math.max(0.01, Math.min(1, since / 0.7)) : 1);
     drawStructure(item, item.losses.filter((loss) => loss.time <= time).length);
@@ -455,9 +465,96 @@ $("how").innerHTML = [
   `<b>Path integral.</b> Each of the ${moveCount} moves is one exact draw from all walks to its destination, weighted e^(−S/T): metres walked, climbs ×${data.lambda}, a turning cost κ=${data.kappa}, T=${data.T} (under the convergence bound). Faint lines are other draws.`,
   `<b>Sky and the place tree.</b> Moves may launch along a rising cube diagonal of the 14 directions and fly under gravity, roof to roof or down to the street (a launch speed of 7, 10 or 13 m/s, no arc gaining height). A direct move (4 more directions, for people with powers) flies straight to its end; here it stands in where the event's wording shows its actor using a power to move (${data.notes.direct ?? 0} moves). Every place sits on its circle of the place tree; when people move between places the camera glides out, across and down to the next one, and a trace arcs between the circles.`,
   `<b>Buildings wear artistic models.</b> Each lot draws one of the Kenney CC0 kit models for its kind (towers, skyscrapers, offices, a market, a hospital with its cross) at random, stretched over its skeleton.`,
-  `<b>Things the story mentions.</b> Each scene's buildings and large visible things are detected from its events (novel stage objects: a work-model call per few scenes, only things big enough to see from a wide view) and matched against one ranking of building models and pure shapes. A named building takes a lot and lights up in gold when first mentioned. Other things are gold hologram shapes beside the event's first actor, resting on what is under them; mentions of one named thing are one thing (A.A.A. and Anti-Art Attachment, the 姬蜂 FIVE_Over), which glides to wherever a later event puts it. Big things carry structure inside that hits break away, and every thing is part of the walk: people land on and cross its top, and small ones on the ground are walked around.`,
+  `<b>Things the story mentions.</b> Each scene's buildings and large visible things are detected from its events (novel stage objects: a work-model call per few scenes, only things big enough to see from a wide view) and matched against one ranking of building models and pure shapes. A named building takes a lot and lights up in gold when first mentioned. Other things are gold hologram shapes fitted to a box in 3D: Jev boxes the thing on the reader's view of the place, then on a view turned 90° about the place that shows the first box as a beam, and where the two boxes meet is its position, size and height (things not yet asked stand on the ground beside the event's first actor); mentions of one named thing are one thing (A.A.A. and Anti-Art Attachment, the 姬蜂 FIVE_Over), which glides to wherever a later event puts it. Big things carry structure inside that hits break away, and every thing is part of the walk: people land on and cross its top, and small ones on the ground are walked around.`,
   `<b>Stand-ins.</b> Where moves end comes from Jev's typed spot answers in the book's movement run; how hard a fight hits a building is read from the event summary's wording, standing in for a Jev damage question not yet asked.`,
 ].map((item) => `<li>${item}</li>`).join("");
+// Capture mode: the stage's questions see what the reader sees. A still is the place at a moment of the strand from the
+// reader's camera (turned by a yaw about the place); a later still shows an earlier box as a beam: everything that box could
+// mean in 3D. Boxes are fractions of the still (Jev's box answers); they back-project here, with the very cameras that drew them.
+if (capture) {
+  document.body.classList.add("capture"); playing = false; follow = false;
+  const overlay = $("overlay"), cameras = new Map(), extras = [];
+  const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const bounds = (id) => { const place = data.places[id]; return { x: [-8, place.NX * CELL + 8], y: [0, 70], z: [-8, place.NZ * CELL + 8] }; };
+  const ndc = ({ left, right, top, bottom }) => ({ x: [left * 2 - 1, right * 2 - 1], y: [1 - bottom * 2, 1 - top * 2] });
+  /** Boxes drawn over the still, for checking. */
+  function outline(boxes) {
+    const w = (overlay.width = host.clientWidth), h = (overlay.height = host.clientHeight), ctx = overlay.getContext("2d");
+    overlay.hidden = !boxes.length; ctx.clearRect(0, 0, w, h);
+    for (const { box, color } of boxes) { ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.strokeRect(box.left * w, box.top * h, (box.right - box.left) * w, (box.bottom - box.top) * h); }
+  }
+  /** An earlier box's reach into the place: its camera's frustum through the box, from where it enters the place to where it leaves. */
+  function reach(id, view) {
+    const cam = cameras.get(view.camera), rect = ndc(view.box), entry = built.get(id), b = bounds(id), forward = cam.getWorldDirection(new THREE.Vector3()), corners = [];
+    for (const x of b.x) for (const y of b.y) for (const z of b.z) corners.push(new THREE.Vector3(x - entry.cx, y, z - entry.cz).sub(cam.position).dot(forward));
+    const ray = (x, y, d) => { const dir = new THREE.Vector3(x, y, 0.5).unproject(cam).sub(cam.position).normalize(); return cam.position.clone().addScaledVector(dir, d / dir.dot(forward)); };
+    const middle = [(rect.x[0] + rect.x[1]) / 2, (rect.y[0] + rect.y[1]) / 2];
+    // Where the box's central ray runs through the place's volume (the depth range of its corners when it misses it).
+    const centre = new THREE.Ray(cam.position.clone(), new THREE.Vector3(...middle, 0.5).unproject(cam).sub(cam.position).normalize()), volume = new THREE.Box3(new THREE.Vector3(b.x[0] - entry.cx, b.y[0], b.z[0] - entry.cz), new THREE.Vector3(b.x[1] - entry.cx, b.y[1], b.z[1] - entry.cz));
+    const enter = volume.containsPoint(centre.origin) ? centre.origin.clone() : centre.intersectBox(volume, new THREE.Vector3()), leave = enter && new THREE.Ray(centre.at(1e4, new THREE.Vector3()), centre.direction.clone().negate()).intersectBox(volume, new THREE.Vector3());
+    const [near, far] = enter && leave ? [Math.max(1, enter.clone().sub(cam.position).dot(forward)), leave.clone().sub(cam.position).dot(forward)] : [Math.max(1, Math.min(...corners)), Math.max(...corners)];
+    return { near, far, ray, rect, from: ray(...middle, near), to: ray(...middle, far) };
+  }
+  /** The beam drawn over everything (an earlier box, as all it could mean in 3D). */
+  function beam(id, view) {
+    const { near, far, ray, rect } = reach(id, view);
+    const points = [near, far].flatMap((d) => [[rect.x[0], rect.y[0]], [rect.x[1], rect.y[0]], [rect.x[1], rect.y[1]], [rect.x[0], rect.y[1]]].map(([x, y]) => ray(x, y, d)));
+    const geometry = new THREE.BufferGeometry().setFromPoints(points); geometry.setIndex([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0]);
+    const group = new THREE.Group(), fill = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0.16, depthWrite: false, depthTest: false, side: THREE.DoubleSide })), edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({ color: 0xff8a3d, depthTest: false }));
+    fill.renderOrder = edges.renderOrder = 10; group.add(fill, edges);
+    return group;
+  }
+  window.__stage = {
+    things: (data.things ?? []).map(({ id, name, shape, size, height, airborne, placed }) => ({ id, name, shape, size, height, airborne, placed })),
+    places: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, kind: place.kind, lots: place.lots.length }])),
+    scenes: data.scenes.map((scene) => ({ id: scene.id, place: scene.place, events: scene.events.map((event) => event.text) })),
+    /** One still: `place` at the start of an event, the reader's camera turned by `yaw` about it; `hide` things, `beams` of earlier boxes, `boxes` and a `solved` 3D box drawn for checking. */
+    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null }) {
+      time = (eventStart.get(`${scene}|${event}`) ?? 0) + 0.02; shownPlace = place; glide = null; hiddenThings = new Set(hide);
+      for (const extra of extras.splice(0)) world.remove(extra);
+      const pose = poseFor(place), offset = pose.position.clone().sub(pose.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      // Aimed at an earlier box: look at the middle of its beam's run through the place, far enough back to see all of it.
+      if (aim) { const { from, to } = reach(place, aim), length = from.distanceTo(to); pose.target.copy(from).lerp(to, 0.5); offset.setLength(Math.min(400, Math.max(40, length * 1.15 / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)))))); }
+      // A lower look (degrees above level): from the side, a beam's run and a thing's height read directly.
+      if (elevation !== null) { const length = offset.length(), level = new THREE.Vector3(offset.x, 0, offset.z).normalize(), up = THREE.MathUtils.degToRad(elevation); offset.copy(level.multiplyScalar(Math.cos(up) * length)).setY(Math.max(2 - pose.target.y, Math.sin(up) * length)); }
+      camera.position.copy(pose.target).add(offset); controls.target.copy(pose.target); controls.update();
+      for (const view of beams) { const group = beam(place, view); extras.push(group); world.add(group); }
+      if (solved) { const entry = built.get(place), box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0x5dff8a })); box.position.set((solved.x[0] + solved.x[1]) / 2 - entry.cx, (solved.y[0] + solved.y[1]) / 2, (solved.z[0] + solved.z[1]) / 2 - entry.cz); box.scale.set(solved.x[1] - solved.x[0], solved.y[1] - solved.y[0], solved.z[1] - solved.z[0]); extras.push(box); world.add(box); }
+      outline(boxes);
+      await frames();
+      camera.updateMatrixWorld(); cameras.set(id, camera.clone());
+      return { id, width: host.clientWidth, height: host.clientHeight };
+    },
+    /**
+     * Where two stills' boxes agree, in the place's metres. The points of the place both show inside their boxes give the
+     * hull and its centre; the thing's own size is each box measured at that depth: view 1's width across it, view 2's
+     * (a low side look) width along view 1's line of sight and its height, less the little of the top a low look sees.
+     * When view 2's box spans most of the beam, depth along the beam is uncertain and taken as about the width.
+     */
+    solve({ place, views, step = 1 }) {
+      const entry = built.get(place), b = bounds(place), checks = views.map((view) => ({ cam: cameras.get(view.camera), rect: ndc(view.box) })), p = new THREE.Vector3(), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity], sum = [0, 0, 0];
+      let points = 0;
+      for (let x = b.x[0]; x <= b.x[1]; x += step) for (let z = b.z[0]; z <= b.z[1]; z += step) for (let y = b.y[0]; y <= b.y[1]; y += step) {
+        if (!checks.every(({ cam, rect }) => { p.set(x - entry.cx, y, z - entry.cz).project(cam); return p.z > -1 && p.z < 1 && p.x >= rect.x[0] && p.x <= rect.x[1] && p.y >= rect.y[0] && p.y <= rect.y[1]; })) continue;
+        points++; [x, y, z].forEach((value, axis) => { lo[axis] = Math.min(lo[axis], value); hi[axis] = Math.max(hi[axis], value); sum[axis] += value; });
+      }
+      if (!points) return null;
+      const centre = sum.map((value) => value / points), world = new THREE.Vector3(centre[0] - entry.cx, centre[1], centre[2] - entry.cz);
+      const measured = checks.map(({ cam, rect }) => {
+        const forward = cam.getWorldDirection(new THREE.Vector3()), half = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * world.clone().sub(cam.position).dot(forward), right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).setY(0).normalize();
+        return { right, across: (rect.x[1] - rect.x[0]) * half * cam.aspect, up: (rect.y[1] - rect.y[0]) * half, down: Math.asin(Math.min(1, Math.max(0, -forward.y))) };
+      });
+      const [one, two] = measured;
+      // How much of the beam view 2's box covers: the beam's run through the place, projected into view 2.
+      const run = reach(place, views[0]), cover = (() => { const [a, c] = [run.from.clone().project(checks[1].cam), run.to.clone().project(checks[1].cam)], span = Math.max(1e-6, Math.abs(a.x - c.x)); return Math.min(1, (checks[1].rect.x[1] - checks[1].rect.x[0]) / span); })();
+      const uncertain = cover > 0.8, deep = uncertain ? one.across : two.across;
+      const height = Math.max(1, (two.up - one.across * Math.sin(two.down)) / Math.cos(two.down));
+      const ex = Math.min(hi[0] + step - lo[0], Math.abs(one.right.x) * one.across + Math.abs(two.right.x) * deep), ez = Math.min(hi[2] + step - lo[2], Math.abs(one.right.z) * one.across + Math.abs(two.right.z) * deep);
+      const grounded = lo[1] <= 1.5, y0 = grounded ? 0 : Math.max(lo[1], centre[1] - height / 2);
+      return { points, cover: Math.round(cover * 100) / 100, uncertain, hull: { x: [lo[0], hi[0] + step], y: [lo[1], hi[1] + step], z: [lo[2], hi[2] + step] }, x: [centre[0] - ex / 2, centre[0] + ex / 2], y: [y0, y0 + height], z: [centre[2] - ez / 2, centre[2] + ez / 2] };
+    },
+  };
+}
 resize();
 requestAnimationFrame(frame);
 </script>

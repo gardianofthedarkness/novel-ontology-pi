@@ -96,7 +96,11 @@ export async function strandDemo(novelDir, options) {
     const struct = size >= 10 ? generateSkeleton('house', 4049 + n, { width: Math.max(4, Math.round(size / 2) * 2), depth: Math.max(4, Math.round(Math.max(size * 0.35, 4) / 2) * 2), floors: Math.max(1, Math.round(height / 3)), cores: 1 }) : null;
     return { id: `thing_${n + 1}`, name: label, aliases: [...tally.keys()].filter(other => other !== label), shape, size, height, airborne: own.filter(entry => entry.object.airborne).length * 2 > own.length, struct, standing: struct ? struct.cells.map(value => (value ? 1 : 0)) : null, mentions: own.map(entry => ({ scene: entry.scene, event: entry.event })), placed: [] };
   });
-  /** Place (or move) the things an event mentions, where its first actor stands, resting on whatever is under them. */
+  // Where each placement stands, from Jev's two views (playground/two-view-things.mjs): a box on the reader's view, a box on a
+  // view turned 90° showing the first as a beam; where they meet is the thing's position, size and height in metres.
+  const boxes = JSON.parse(await readFile(`${novelDir}/stage/thing-boxes.json`, 'utf8').catch(() => 'null'))?.placements ?? {};
+  notes.thingBoxes = 0;
+  /** Place (or move) the things an event mentions: in their two-view box, or else on the ground beside the event's first actor. */
   const placedAt = new Set();
   const placeThings = (scene, event, at) => {
     const index = scene.events.findIndex(entry => entry.id === event.id);
@@ -104,16 +108,20 @@ export async function strandDemo(novelDir, options) {
     if (placedAt.has(event.id)) return;
     placedAt.add(event.id);
     for (const entity of entities) if (entity.mentions.some(entry => entry.scene === scene.id && entry.event === index) && at) {
-      // Beside the actor, in the first direction with open ground; on the actor's own spot when there is none.
-      const group = groups.get(scene.placeId), actor = nodePosition(group.layout, at[0]), lotAt = (x, z) => group.layout.lots.find(entry => x >= entry.i0 * 2 && x < (entry.i0 + entry.nx) * 2 && z >= entry.j0 * 2 && z < (entry.j0 + entry.nz) * 2);
-      const reach = entity.size / 2 + 2, open = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => ({ x: actor.x + dx * reach, z: actor.z + dz * reach })).find(spot => spot.x > 0 && spot.z > 0 && spot.x < group.layout.NX * 2 && spot.z < group.layout.NZ * 2 && !lotAt(spot.x, spot.z) && actor.k === 0);
-      const p = open ?? actor, lot = lotAt(p.x, p.z);
-      const y = (lot ? lot.floors * 3 : 0) + entity.height / 2 + (entity.airborne ? 8 : 0), depth = entity.shape === 'box' ? Math.max(1.2, entity.size * 0.35) : entity.size;
+      const group = groups.get(scene.placeId), box = boxes[`${scene.id}|${index}|${entity.name}`]?.box, round = value => Math.round(value * 10) / 10;
+      let x, z, w, d, y0, y1;
+      if (box) { [x, z, w, d, y0, y1] = [(box.x[0] + box.x[1]) / 2, (box.z[0] + box.z[1]) / 2, box.x[1] - box.x[0], box.z[1] - box.z[0], box.y[0], box.y[1]]; notes.thingBoxes++; }
+      else {
+        // No box yet: on the ground beside the actor, in the first direction with open ground; on the actor's spot when there is none.
+        const actor = nodePosition(group.layout, at[0]), lotAt = (px, pz) => group.layout.lots.find(entry => px >= entry.i0 * 2 && px < (entry.i0 + entry.nx) * 2 && pz >= entry.j0 * 2 && pz < (entry.j0 + entry.nz) * 2);
+        const reach = entity.size / 2 + 2, open = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => ({ x: actor.x + dx * reach, z: actor.z + dz * reach })).find(spot => spot.x > 0 && spot.z > 0 && spot.x < group.layout.NX * 2 && spot.z < group.layout.NZ * 2 && !lotAt(spot.x, spot.z) && actor.k === 0);
+        ({ x, z } = open ?? actor); w = entity.size; d = entity.shape === 'box' ? Math.max(1.2, entity.size * 0.35) : entity.size; y0 = entity.airborne ? 8 : 0; y1 = y0 + entity.height;
+      }
       for (const other of groups.values()) if (other.things.delete(entity.id)) other.version++;
-      group.things.set(entity.id, { i0: Math.floor((p.x - entity.size / 2) / 2), i1: Math.floor((p.x + entity.size / 2) / 2), j0: Math.floor((p.z - depth / 2) / 2), j1: Math.floor((p.z + depth / 2) / 2), top: Math.round((y + entity.height / 2) / 3), grounded: y - entity.height / 2 < 1.5 && entity.size <= 8 });
+      group.things.set(entity.id, { i0: Math.floor((x - w / 2) / 2), i1: Math.floor((x + w / 2) / 2), j0: Math.floor((z - d / 2) / 2), j1: Math.floor((z + d / 2) / 2), top: Math.round(y1 / 3), grounded: y0 < 1.5 && Math.max(w, d) <= 8 });
       group.version++;
-      entity.placed.push({ scene: scene.id, event: index, place: scene.placeId, x: Math.round(p.x * 10) / 10, y: Math.round(y * 10) / 10, z: Math.round(p.z * 10) / 10 });
-      entity.at = { place: scene.placeId, x: p.x, y, z: p.z };
+      entity.placed.push({ scene: scene.id, event: index, place: scene.placeId, x: round(x), y: round((y0 + y1) / 2), z: round(z), ...(box ? { w: round(w), h: round(y1 - y0), d: round(d), boxed: true } : {}) });
+      entity.at = { place: scene.placeId, x, y: (y0 + y1) / 2, z };
     }
   };
   notes.things = { mentions: mentions.length, things: entities.length, withStructure: entities.filter(entity => entity.struct).length };
@@ -182,8 +190,7 @@ export async function strandDemo(novelDir, options) {
   const migrations = chosen.flatMap(scene => (timeline.handoffs.get(scene.id) ?? []).filter(handoff => handoff.from && !handoff.samePlace).map(handoff => ({ scene: scene.id, person: handoff.person, from: placeOf.get(handoff.from), to: scene.placeId })));
   const clean = text => (text ?? '').split('（原文：')[0].trim();
   // Things the scenes put in their places (novel stage objects): a named building takes a generic lot and lights up when first
-  // mentioned; anything else stands where the event's first actor is (standing in for Jev's box on the top view), floating on
-  // top of whatever is under it.
+  // mentioned; anything else stands in the box where Jev's two views agree (placeThings above).
   const detected = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
   const ROLE_FOR = { hospital: 'hospital', skyscraper: 'office', office: 'office', market: 'shop', station: 'station', school: 'office', home: 'shop' };
   const lotNames = new Map(), placedObjects = new Map();

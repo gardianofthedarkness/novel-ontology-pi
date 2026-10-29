@@ -2,10 +2,13 @@
  * Decision model interface — Jev (TypeSafe AI "System One") or compatible.
  *
  * Jev generates no text. Send it a compact state + typed questions; it
- * returns probabilities/distributions in ~70-500 ms. Three primitives:
+ * returns probabilities/distributions in ~70-500 ms. Four primitives:
  *  - noul:   yes/no question       -> probability 0..1
  *  - choice: fixed candidate set   -> distribution + confidence (ONE pick)
  *  - score:  ordered scale (2-10)  -> distribution over levels
+ *  - box:    a thing in a picture  -> one bounding box (fractions of the
+ *            picture) + confidence. Jev 1.14+, images only, experimental;
+ *            it always answers a box, so ask a noul whether the thing is there.
  *
  * Context limit is ~32k tokens, so questions always carry a compact state
  * summary, never raw chapter text. Pin the model version (e.g. jev-1.13.0)
@@ -14,7 +17,7 @@
 import { loadConfig } from "../../cli/config.js";
 import { resolveJevKey } from "./secrets.js";
 
-export type DecisionPrimitive = "noul" | "choice" | "score";
+export type DecisionPrimitive = "noul" | "choice" | "score" | "box";
 
 export interface DecisionQuestion {
   /** Stable key the calling patch uses to read its answer back. */
@@ -40,7 +43,11 @@ export interface DecisionAnswer {
   distribution?: Record<string, number>;
   /** The model's own confidence, 0..1, when reported. */
   confidence?: number;
+  /** box only: the box, as fractions of the picture's width (left, right) and height (top, bottom). The value is its confidence. */
+  box?: DecisionBox;
 }
+
+export interface DecisionBox { left: number; top: number; right: number; bottom: number }
 
 /** Pictures a question looks at (PNG, base64), each named in the state by its key. */
 export type DecisionImages = Record<string, string>;
@@ -128,6 +135,7 @@ interface WireAnswer {
   probabilities?: Record<string, number>;
   score?: number;
   confidence?: number;
+  box?: Partial<DecisionBox>;
 }
 
 function withRubric(q: DecisionQuestion): string {
@@ -147,6 +155,8 @@ function toWireQuestions(
   for (const q of questions) {
     if (q.primitive === "noul") {
       wire[q.key] = { type: "noul", instructions: withRubric(q) };
+    } else if (q.primitive === "box") {
+      wire[q.key] = { type: "box", instructions: withRubric(q) };
     } else if (q.primitive === "choice") {
       wire[q.key] = {
         type: "choice",
@@ -185,6 +195,12 @@ function fromWireAnswers(
         distribution: a.probabilities,
         confidence: a.confidence,
       };
+    }
+    if (q.primitive === "box") {
+      const edges = [a.box?.left, a.box?.top, a.box?.right, a.box?.bottom];
+      if (!edges.every((edge) => typeof edge === "number" && Number.isFinite(edge) && edge >= 0 && edge <= 1)) throw new Error(`Jev response has an invalid box for question "${q.key}"`);
+      const [left, top, right, bottom] = edges as number[];
+      return { key: q.key, value: a.confidence ?? 0, confidence: a.confidence, box: { left: Math.min(left, right), top: Math.min(top, bottom), right: Math.max(left, right), bottom: Math.max(top, bottom) } };
     }
     return { key: q.key, value: a.score ?? 0, confidence: a.confidence };
   });
@@ -225,8 +241,9 @@ export class MockDecisionModel implements DecisionModel {
   async decide(_state: string, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> {
     return questions.map((q) => ({
       key: q.key,
-      value: this.table[q.key] ?? (q.primitive === "noul" ? 0 : (q.options?.[0] ?? "")),
+      value: this.table[q.key] ?? (q.primitive === "noul" ? 0 : q.primitive === "box" ? this.defaultConfidence : (q.options?.[0] ?? "")),
       confidence: this.defaultConfidence,
+      ...(q.primitive === "box" ? { box: { left: 0, top: 0, right: 1, bottom: 1 } } : {}),
     }));
   }
 }

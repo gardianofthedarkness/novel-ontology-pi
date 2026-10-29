@@ -71,9 +71,17 @@ Buildings are added as the story detects them, not fixed up front.
    - The match is against each model's names and description in Chinese and English: towers, skyscrapers, offices, a hospital, a station, a church, a market, a keep, a fountain, a windmill.
    - The nearest model above a threshold is used, drawn at random among that kind's variants.
 3. **One ranking for everything.** The four pure shapes (an oval, a sphere, a box, a diamond) are ranked together with the library's models, and the best match wins, shape or building.
-4. **Jev points where it goes** with a box on a top-down capture of the current view. The capture scales itself to the buildings around the camera's focus, so the box maps to metres.
+4. **Jev boxes where it goes, in a two-call mini loop** (user decision, 2026-10-28; it replaces the top-down pointing and the floating rule, which the user dropped as over-engineering). Each call is a box question (Jev 1.14: one bounding box as fractions of the picture) plus a yes/no on whether the spot is in the picture at all:
+   1. **The reader's view** of the place at that moment.
+   2. **A side view** of the same moment: turned 90° (left or right, drawn from the placement), lowered to a near-level look, and aimed at the first box, which is drawn in as a beam (everything that box could mean in 3D).
+   - **The 3D box:** the points of the place both pictures show inside their boxes give the centre. The size is each box measured in metres at that depth: view 1's width across; view 2's width along view 1's line of sight, and its height. A thing that starts at the ground stands on it, and one higher up stays where the boxes put it.
+   - **When view 2's box covers most of the beam,** depth along it is marked uncertain and taken as about the width.
+   - **Built as a demo:** the player's capture mode (`?capture`, `window.__stage`) and `playground/two-view-things.mjs` (headless Chrome, `<book>/stage/thing-boxes.json`).
+   - **First try** (book 3's Kuroko strand, 10 placements, 20 calls, 30 s): position and height are right for about half.
+     - The scaffolding, the helicopter in the air, the long pipe, the lab, and the small room up in a building are plausible.
+     - Things with nothing to fix them along the beam (in the air, or generic "building" mentions) get a whole-beam second box.
+     - One box landed on a person's name label.
 5. **Placement rules:**
-   - **A shape floats.** Placed over existing buildings, it rests at the highest point of everything under its box.
    - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
    - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.
      - It is hidden while other volumes are being processed.
