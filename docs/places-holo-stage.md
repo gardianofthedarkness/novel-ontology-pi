@@ -217,8 +217,157 @@ Possible next steps:
   - Box needs `jev-1.14.0` (the CLI is pinned to 1.13), and TypeSafe calls it experimental.
   - It always returns a box, so pair it with a yes/no question.
 
+## Toward simulation: the per-fork environment (in progress)
+
+Movement is being rebuilt for simulation in later phases, not only for the animation. The design, decided 2026-10-28:
+
+- **Everyone acts.** In each event, every person in the scene's cast is walked in turn, the event's actors first. Each acts on their own: one of 14 directions (6 axial, 8 cube diagonals), "same as someone already handled in this event", or no move. A destination follows.
+- **Sampled, not searched.** The path is a sample from a discrete path integral over the place's walkable space, weighted e^(−S/T), where S is effort under gravity plus a turning cost. A sample is what happens, as in the real world; the animation shows one.
+- **Buildings are built around their circulation, not drawn as random cells.** This follows the research on the math handout and a generation recommendation, both from 2026-10-28.
+  - **Why random cells fail:** they cannot carry a scene.
+    - A destination that has to happen to be open caps success at pⁿ.
+    - Scattered stair holes fail: a two-floor house needs 5.6% openings even with every cell open.
+    - The 14-direction cell threshold is 0.142, not about 0.20 as the handout said.
+  - **What replaces them:** the hall or corridor, doors and stair cores come first, and rooms grow around them. Percolation stays only as a model for random blockages.
+  - **Ends:** a move's end is picked from the reachable cells under Jev's box.
+  - **The walk:** its temperature stays under a certified bound: T < 0.92 for buildings plus ground at λ = 8, κ = 1. Paths are drawn exactly with the h-transform.
+- **Fights keep people close.** When two people fight but end too far apart, their earlier positions are recalculated backwards, the way scene starts are inferred.
+
+The per-fork environment (`src/digger/stage/environment.ts`) is the part that does not wait on the math:
+
+- **Forks:** the lane runs of the story strands, as the story view draws them.
+- **World lines, not places:** each person's state goes from the last scene they were in to the next, and a scene holds only its own cast.
+  - They keep their position when they were last at the same stage place.
+  - They arrive afresh when they come from elsewhere.
+  - A flashback starts afresh and hands nothing on.
+  - Why not per place: carrying people through a place from the start of the timeline piles up everyone ever there.
+- **The walk:** a scene runs once its people's earlier scenes are done, and independent forks run side by side (6 at a time by default).
+  - A mover decides starts and outcomes. Later that is Jev's answers plus the path engine; for now, the tests use a scripted one.
+  - "With" takes the leader's destination, or leaves the follower where they are when the leader stays.
+- **Keys and reuse:** each scene is keyed by its inputs, the mover's version and the keys of the scenes its people come from.
+  - A later run walks only the scenes downstream of a change, along the people it touches.
+  - Each turn gets a seed from that key, so the same history samples the same way.
+
+`novel stage forks <book> [--fork <scene-id>]` shows it, with no model calls. On the demo copies:
+
+| Book | Scenes (staged) | Forks | Splits / merges | People per scene, max | Per place if carried from the start, max | People entering scenes: stay / arrive / fresh |
+|---|---|---|---|---|---|---|
+| 1 | 77 (69) | 14 | 4 / 5 | 8 | 29 | 224 / 3 / 30 |
+| 2 | 84 (46) | 21 | 8 / 9 | 8 | 13 | 110 / 62 / 31 |
+| 3 | 144 (121) | 29 | 13 / 14 | 7 | 42 | 216 / 117 / 47 |
+
+Walking book 3 with a test mover takes 6 ms for 3,759 turns, so the environment adds nothing noticeable to a run.
+
+### Generated floors (stage 1)
+
+`apps/playground/src/data/buildingPlan.ts` generates one floor and its street from a spec and a seed.
+
+- **Spine first.** A house gets a hall back from the front door; a short hall leaves one room across the back. A school floor gets a corridor along its length, with a lobby from the street.
+- **Rooms and doors.** Rooms are cut from the bands beside the spine, the largest taking the first uses on the program. Every room opens onto the spine.
+  - Public rooms (living, kitchen, lobby) may be walked through.
+  - Two neighbouring public rooms sometimes get a door between them, a loop.
+  - Private rooms (bedroom, bath, classroom, office) are only destinations.
+- **Stair cores are reserved now,** one per house and one or two per school floor, because they couple floors. Their flights come in stage 2.
+- **Checked as a walker would move:**
+  - The movement grid has 0.5 m cells, with walls on cell edges.
+  - Moving between rooms is allowed only through a portal, and a diagonal step only where both axial routes are free. That makes it exact for a 0.5 m body.
+  - The certificate records, per room, the regions a walker passes from the street, through public rooms only.
+  - Its failure codes are `core_does_not_fit`, `no_clear_door` and `unreachable_target`.
+  - A failed candidate is redrawn from the next independent stream, at most 12 times, then reported with its failures.
+- **Measured over 1,000 seeds each:** every plan passed on its first candidate. Construction guarantees the access, and the certificate re-checks it.
+
+| Archetype | Rooms | Variation | Time per plan |
+|---|---|---|---|
+| House (12 × 10 m) | 6–8 | a living–kitchen loop in about a quarter | 0.55 ms |
+| School floor (60 × 20 m) | 15–19 | a second stair in about half | 6.7 ms |
+
+`planSvg` draws a plan: rooms by use, walls from the movement grid (so the gaps are doors), the entrance and stair cores.
+
+Next:
+- **Stage 2:** floors and stair flights.
+- **Stage 3:** scene queries and the sampler (Jev's boxes over the plan, the h-transform walk, the backward pass for fights).
+- **Stage 4:** lifts and districts.
+- **The hologram:** drawing a generated plan.
+
+### One strand, continuous (demo)
+
+https://gardianofthedarkness.github.io/novel-ontology-pi/stage-strand/ plays book 2's Christmas Eve battle in 3D, start to end. It covers scenes 29–64 of the strand that starts at scene 6: Misaka and Shokuhou against Anna Sprengel across 购物美食大街, 第十五学区 and 第七学区. Built with `playground/export-strand-demo.mjs` into the `playground/strand-demo.html` player (three.js from a CDN).
+
+- **Places from the place tree** (`placeGroup.ts`):
+  - A street or district is composed of architectures: its building children take named lots, as 医院 and 地铁站 do in 第七学区, and generated buildings fill the rest.
+  - Streets, alleys and a plaza join the lots.
+  - Roofs are reached by stair cores, crossed by jumps over alleys, and left by falls.
+- **Percolation:** clutter closes 12% of outdoor cells and 8% of indoor cells, never in a doorway. A draw that cuts a room off is redrawn; it took 1–2 draws per place.
+- **Path integral** (`pathIntegral.ts`):
+  - Each of the 64 moves is an exact h-transform draw at T = 0.355, which is 0.6 of the bound for 0.5 m steps with κ = 1.
+  - 14 more draws of each move show the ensemble.
+  - The bound reproduces the research's 8-direction figure (0.562562), and the sampler matches exhaustive enumeration on a small loop.
+- **Persistence:** positions and headings are carried along each person's world line by the stage environment.
+- **Not new yet:**
+  - Where each move ends still comes from Jev's typed spot answers in the book's movement report.
+  - Upper floors are outlines only; just the ground floors and roofs are walkable.
+- **Size and speed:** 21 scenes, 217 events and 64 moves make 275 KB. The export takes about 5 s (43 field solves).
+
+**Skeleton version (2026-10-28):**
+- **Buildings:** the strand's places are now skeleton buildings (`skeletonPlace.ts`), so every floor is walkable: 26 of 63 moves climb to upper floors, up to level 8.
+- **Damage:**
+  - Combat events damage the building where they happen, in story order: 18 hits destroying 37 cells. Later scenes walk what is left, and what is cut off glows red.
+  - How hard an event hits is read from its summary's wording, standing in for a Jev damage question.
+- **Sharing:** shown privately first, before github.io.
+
+### Skeleton buildings (exploration)
+
+`apps/playground/src/data/skeleton.ts` models a building as its circulation only: corridors and stairs on 2 m cells and 3 m floors, with rooms as whole boxes attached to them. The lab is `playground/skeleton-lab.html`, built with `export-skeleton-lab.mjs`.
+
+- **Corridors:** a cell is corridor with σ(h + a·axial + c·diagonal + v·above/below + f·facade), sampled by Gibbs sweeps (an auto-logistic field).
+  - a > 0 lets corridors run on, and c < 0 keeps them one cell wide.
+  - v makes floors resemble each other, and f leaves the facade to rooms.
+- **Stairs are protected cores** (1–2 per building). When stairs could appear wherever two floors aligned, every aligned column became a shaft.
+- **Conditioning:** the building is the street door's cluster, redrawn until the door reaches a core.
+  - Over 200 seeds every building was accepted, after 1.7 / 4.1 / 2.5 draws on average (house / school / tower).
+  - A building takes 0.3–22 ms to generate.
+- **Rooms:**
+  - A room is a box of free mass on one floor that holds a cell beside a corridor.
+  - It grows a side at a time with σ(g − α(|R| − m̄)), so every room opens onto circulation.
+  - Mass no room reaches stays solid: 10% / 35% / 13% of the house / school / tower.
+- **Damage:** a hit of degree d at p loses each standing cell with q_d · exp(−|x − p|² / 2σ_d²).
+
+  | Degree | q (loss at the impact) | Reach |
+  |---|---|---|
+  | scratched | 0.25 | 3 m |
+  | damaged | 0.5 | 5 m |
+  | heavy | 0.75 | 8 m |
+  | destroyed | 0.95 | 12 m |
+
+  Whatever stands but cannot reach the door is cut off (glows red), and so is any room whose corridors are all cut off.
+
+Uniform damage (each circulation cell lost with chance q), 20 buildings × 40 draws each:
+
+| Building | Measure | q = 0.05 | 0.1 | 0.2 | 0.3 |
+|---|---|---|---|---|---|
+| House | circulation reached | 87% | 74% | 57% | 44% |
+| House | top floor reached | 85% | 72% | 53% | 37% |
+| School | circulation reached | 49% | 26% | 11% | 6% |
+| School | top floor reached | 62% | 34% | 15% | 7% |
+| Tower | circulation reached | 46% | 20% | 5% | 2% |
+| Tower | top floor reached | 50% | 20% | 3% | 0% |
+
+The skeletons sit just above their percolation threshold: thin tree-like corridors and stairs in series. Small damage cascades, which suits a fight but may be too fragile. The knobs are more cores, loops (a less negative c) and a denser field h.
+
+### Place system redesign (proposed)
+
+An architecture becomes the smallest unit of place, and everything above it is a group built on the existing place tree, not a separate entity.
+
+- **Groups and architectures:**
+  - Jev types each non-leaf place as a group: city, district, street, plaza or campus.
+  - Its building children are architectures.
+  - A scene set at a group can be placed by Jev in one of its architectures or open spaces, or in an unnamed generated one added under that group.
+- **Layout:** composed recursively, city → district → street or plaza → architecture.
+- **Movement:** a move between two children is a walk in their parent's composed space.
+
 ## Open questions
 
 - Should the CLI own movement extraction, recorded on events (spot, manner) with review like other facts, or stay a view-side proposal?
 - Do the remaining kinds need hand-built interior grids (church nave / bell tower, station platforms), or is one generic storey grid enough?
 - Conflict, speaker and alias detection could become Jev questions too, batched per scene the way movement is.
+- The environment matches "the same place" exactly: someone last seen in a room arrives afresh in the building that holds it. Should a position carry across the place tree?

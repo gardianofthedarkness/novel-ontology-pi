@@ -3,3 +3,5 @@ dist
 *.local
 playground-live.html
 dist-clips-demo
+dist-strand-demo
+dist-skeleton-lab

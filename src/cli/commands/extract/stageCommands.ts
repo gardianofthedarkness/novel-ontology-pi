@@ -4,7 +4,9 @@ import { BundleStore } from "../../../ground/connectors/bundle.js";
 import { jevFromEnv, type DecisionModel } from "../../../ground/connectors/jev.js";
 import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
 import { cachedDecisions } from "../../../digger/timeplace/cache.js";
-import { strandProjection } from "../../../digger/timeplace/strandQuestions.js";
+import { storyStrands, strandProjection } from "../../../digger/timeplace/strandQuestions.js";
+import { latestStrandAnswers } from "../../../digger/timeplace/strandView.js";
+import { forkTimeline, type TimelineScene } from "../../../digger/stage/environment.js";
 import { castCandidates, namedInText } from "../../../digger/processing/castCandidates.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { architectureFingerprint, architecturePictures, pickArchitecture, type ArchitecturePlace, type ArchitectureReport } from "../../../digger/stage/architecture.js";
@@ -104,7 +106,7 @@ export async function stageInputs(novelDir: string) {
   const movementCurrent = !!movement?.complete && movement.inputs === movementFingerprint(movementScenes, names);
   const plan = await readJson<StagePlan>(stageFile(novelDir, "plan"));
   const planCurrent = architectureCurrent && movementCurrent && plan?.inputs === prepFingerprint(architecture!.inputs, movement!.inputs);
-  return { places, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, plan, planCurrent,
+  return { data, places, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, plan, planCurrent,
     estimate: Math.ceil(movementScenes.reduce((sum, scene) => sum + (movement?.scenes[scene.id]?.inputs === sceneInputs(scene, names) ? 0 : sceneCallEstimate(scene)), 0)) };
 }
 
@@ -164,4 +166,45 @@ export async function stageShow(novelDir: string): Promise<Record<string, unknow
   };
 }
 
-export const STAGE_USAGE = "novel stage show <novel-dir> | novel stage architecture <novel-dir> [--no-jev] [--cache dir] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] | novel stage prep <novel-dir> [--force]";
+/**
+ * The timeline as forks for the stage's simulation (no model calls): each
+ * scene's own cast and where each person comes from (environment.ts).
+ * `fork` lists one fork's scenes, by the id of the scene it starts at.
+ */
+export async function stageForks(novelDir: string, options: { fork?: string } = {}): Promise<Record<string, unknown>> {
+  const inputs = await stageInputs(novelDir);
+  if (!inputs.data.available) throw new Error(`The forks follow story time, which ${novelDir} does not have yet. See novel checklist.`);
+  const answers = await latestStrandAnswers(novelDir);
+  const strands = storyStrands(inputs.data, answers ?? {});
+  const staged = new Map(inputs.movementScenes.map((scene) => [scene.id, scene]));
+  // A staged scene walks its stage cast; any other scene still passes people on, with its answered or recorded cast (never a borrowed one),
+  // at its place with a building as the stage picks it, so "the same place" means the same stage.
+  const scenes: TimelineScene[] = inputs.data.scenes.map((scene) => {
+    const stage = staged.get(scene.id);
+    return { id: scene.id, index: scene.index, placeId: stage?.placeId ?? scene.placeIds.find((id) => inputs.architecture?.places[id]?.kind && inputs.architecture.places[id].kind !== "none") ?? scene.placeIds[0] ?? null, flashback: scene.flashback, cast: stage?.cast ?? answers?.presence.get(scene.id) ?? scene.characterIds, events: stage?.events };
+  });
+  const timeline = forkTimeline(scenes, strands);
+  const label = new Map(inputs.data.scenes.map((scene) => [scene.id, scene.label === scene.id ? null : scene.label])), byId = new Map(scenes.map((scene) => [scene.id, scene]));
+  const name = (id: string) => inputs.names[id] ?? id;
+  if (options.fork) {
+    const fork = timeline.forks.find((entry) => entry.id === options.fork);
+    if (!fork) throw new Error(`No fork starts at ${options.fork}. Forks start at: ${timeline.forks.map((entry) => entry.id).join(", ")}.`);
+    return { fork: fork.id, from: fork.from, to: fork.to, people: fork.people.map(name), scenes: fork.scenes.map((id) => {
+      const scene = byId.get(id)!;
+      return { id, label: label.get(id), place: scene.placeId ? name(scene.placeId) : null, events: scene.events?.length ?? 0,
+        cast: Object.fromEntries((timeline.handoffs.get(id) ?? []).map((handoff) => [name(handoff.person), handoff.from ? `${handoff.samePlace ? "stays on from" : "arrives from"} ${handoff.from}` : "starts here"])) };
+    }) };
+  }
+  const handoffs = [...timeline.handoffs.values()].flat();
+  // What carrying people through a place from the start of the timeline would hold: everyone ever there.
+  const stacked = new Map<string, Set<string>>();
+  for (const scene of scenes) if (scene.placeId) for (const person of scene.cast) stacked.set(scene.placeId, (stacked.get(scene.placeId) ?? new Set()).add(person));
+  return {
+    scenes: scenes.length, staged: staged.size, forks: timeline.forks.length, splits: strands.forks.size, merges: strands.merges.size,
+    people: { perSceneMax: Math.max(0, ...scenes.map((scene) => scene.cast.length)), perForkMax: Math.max(0, ...timeline.forks.map((fork) => fork.people.length)), perPlaceIfStackedMax: Math.max(0, ...[...stacked.values()].map((people) => people.size)) },
+    handoffs: { staysAtPlace: handoffs.filter((handoff) => handoff.samePlace).length, arrivesFromElsewhere: handoffs.filter((handoff) => handoff.from && !handoff.samePlace).length, startsFresh: handoffs.filter((handoff) => !handoff.from).length },
+    list: timeline.forks.map((fork) => ({ id: fork.id, starts: label.get(fork.scenes[0]), scenes: fork.scenes.length, people: fork.people.length, from: fork.from, to: fork.to })),
+  };
+}
+
+export const STAGE_USAGE = "novel stage show <novel-dir> | novel stage forks <novel-dir> [--fork <scene-id>] |novel stage architecture <novel-dir> [--no-jev] [--cache dir] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] | novel stage prep <novel-dir> [--force]";

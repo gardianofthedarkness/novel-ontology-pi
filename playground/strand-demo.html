@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>One Strand · Holo Stage</title>
+<meta name="description" content="One storyline of a novel played as a live 3D simulation: buildings generated from the place tree, every move sampled from a path integral, positions carried scene to scene, fights damaging buildings.">
+<meta property="og:title" content="One Strand · Holo Stage">
+<meta property="og:description" content="One storyline of a novel played as a live 3D simulation: buildings from the place tree, moves sampled from a path integral, fights damaging buildings.">
+<meta property="og:image" content="https://gardianofthedarkness.github.io/novel-ontology-pi/stage-strand/preview.jpg">
+<style>
+  :root { color-scheme: dark; --bg: #060c12; --panel: #0b1620; --ink: #d9e3ea; --dim: #8aa0b0; --line: #1d3442; --accent: #7ce6ff; --red: #ff4d5e; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-block: 12px 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  @media (prefers-reduced-motion: reduce) { .fade, .flash { transition: none; } }
+  .eyebrow { font-size: 11px; letter-spacing: .14em; color: var(--accent); }
+  h1 { font-size: 18px; margin: 2px 0; font-weight: 600; }
+  .crumb { color: var(--dim); font-size: 13px; min-height: 20px; }
+  .lead { color: var(--dim); font-size: 13px; margin: 2px 0 0; max-width: 72ch; }
+  .notice { color: var(--red); font-size: 13px; margin: 6px 0 0; }
+  .layout { display: grid; gap: 12px; margin-top: 8px; }
+  @media (min-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr) 320px; } }
+  .stage { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #071019; aspect-ratio: 1 / 1; touch-action: none; }
+  @media (min-width: 600px) { .stage { aspect-ratio: 4 / 3; } }
+  .stage canvas { display: block; width: 100% !important; height: 100% !important; }
+  .hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
+  .flash { position: absolute; right: 10px; top: 8px; font-size: 12px; color: var(--red); font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .fade { position: absolute; inset: 0; background: var(--bg); opacity: 0; pointer-events: none; transition: opacity .35s; }
+  .side { display: flex; flex-direction: column; gap: 10px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .scene { color: var(--dim); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .event { font-size: 15px; min-height: 66px; }
+  .people { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 12px; color: var(--dim); }
+  .people span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--c); }
+  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  button { font: inherit; color: var(--ink); background: #10202c; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; min-height: 36px; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type=range] { flex: 1 1 160px; accent-color: var(--accent); min-width: 120px; }
+  .count { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--dim); }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+  details summary { cursor: pointer; color: var(--accent); }
+  details ul { margin: 8px 0 0; padding-left: 18px; color: var(--dim); font-size: 13px; }
+  details li { margin-bottom: 6px; }
+  b { color: var(--ink); font-weight: 600; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">ONE STRAND · CONTINUOUS · HOLO STAGE</div>
+  <h1 id="title">Loading…</h1>
+  <p class="lead">One storyline of the novel played as a live simulation. Buildings are generated from the place tree, every move is sampled from a path integral, people keep their positions from scene to scene, and fights damage the buildings. Drag to look around.</p>
+  <div class="crumb" id="crumb"></div>
+  <div class="layout">
+    <div class="stage" id="stage" aria-label="3D hologram of the current place with the people moving"><div class="hint">drag to orbit · pinch or scroll to zoom</div><div class="flash" id="flash"></div><div class="fade" id="fade"></div></div>
+    <div class="side">
+      <div class="card"><div class="scene" id="scene"></div><div class="event" id="event"></div><div class="people" id="people"></div></div>
+      <div class="card controls">
+        <button id="play" aria-label="Play or pause">⏸ Pause</button>
+        <button data-speed="1" aria-pressed="false">1×</button><button data-speed="2" aria-pressed="true">2×</button><button data-speed="4" aria-pressed="false">4×</button>
+        <button id="follow" aria-pressed="true">Follow</button>
+        <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Position in the strand">
+        <span class="count" id="count"></span>
+      </div>
+      <div class="card legend"><span><i style="background:#7ce6ff"></i>corridor</span><span><i style="background:#ffb547"></i>stair core</span><span><i style="background:#3d6a8a"></i>room</span><span><i style="background:#9fb4c3"></i>clutter</span><span><i style="background:#ff4d5e"></i>cut off by damage</span></div>
+      <details class="card"><summary>How this is made</summary><ul id="how"></ul></details>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="strand-data"></script>
+<script>
+  // If the 3D view has not started after 8 s (WebGL blocked, or the 3D library did not load), say so instead of leaving a blank stage.
+  setTimeout(() => { if (!window.__stageStarted) { const note = document.createElement("p"); note.className = "notice"; note.textContent = "The 3D view could not start in this browser (WebGL is off, or the 3D library did not load). Try another browser or network."; document.getElementById("crumb")?.after(note); } }, 8000);
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const data = JSON.parse(document.getElementById("strand-data").textContent || "null");
+const $ = (id) => document.getElementById(id);
+if (!data) { $("title").textContent = "No strand in this page."; throw new Error("no data"); }
+$("title").textContent = data.title;
+const CELL = 2, FLOOR = 3, DEMO = 3, READ = 2.1, CARD = 2.0, MACRO = 3.8;
+const ELEVATION = Math.atan(1 / Math.SQRT2), G = 9.8;
+/** A sky arc between two nodes too far apart to step: launched along a rising cube diagonal, it lands on b; null for a step. */
+const flight = (a, b) => {
+  const D = Math.hypot(b.x - a.x, b.z - a.z);
+  if (D <= 3) return null;
+  const denominator = 2 * Math.cos(ELEVATION) ** 2 * (D * Math.tan(ELEVATION) - (b.y - a.y));
+  if (denominator <= 0) return null;
+  const v = Math.sqrt(G * D * D / denominator);
+  return { v, T: D / (v * Math.cos(ELEVATION)) };
+};
+const along = (a, b, arc, f) => { const t = f * arc.T; return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + arc.v * Math.sin(ELEVATION) * t - G * t * t / 2 }; };
+const SPEED = { walk: 1.4, run: 3.6, sneak: 0.8, "climb up": 1.1, "go down": 1.4, fall: 1.6, dragged: 1.2 };
+const GROUND_COLOR = [0x0c1822, 0x112532, 0x173444, 0x15293a, 0x112532];
+
+const at = (place, node) => { const i = node % place.NX, j = Math.floor(node / place.NX) % place.NZ, k = Math.floor(node / (place.NX * place.NZ)); return { x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, y: k * FLOOR, i, j, k }; };
+/** A move's timing: each step at the manner's pace; climbs at stair pace, falls in free fall. */
+const timing = (place, move) => {
+  if (move.how === "teleport") return { total: 0.8, steps: [0, 0.8] };
+  if (move.how === "direct") { const a = at(place, move.path[0]), b = at(place, move.path[1]), flight = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) / 14 / DEMO; return { total: flight, steps: [0, flight] }; }
+  const steps = [0], speed = SPEED[move.how] || 1.4;
+  for (let k = 1; k < move.path.length; k++) {
+    const a = at(place, move.path[k - 1]), b = at(place, move.path[k]), rise = b.y - a.y, run = Math.hypot(b.x - a.x, b.z - a.z);
+    const arc = flight(a, b);
+    steps.push(steps[k - 1] + (arc ? arc.T : rise > 0 ? rise / 1.2 : rise < 0 ? (run ? Math.sqrt(-2 * rise / 9.8) : -rise / 2) : run / speed));
+  }
+  return { total: steps.at(-1) / DEMO, steps: steps.map((s) => s / DEMO) };
+};
+
+// The timeline: a card per scene, then its events, each as long as its slowest move or long enough to read; hits counted per place.
+const segments = [];
+let clock = 0;
+const hitsSoFar = {};
+for (const [index, scene] of data.scenes.entries()) {
+  const place = data.places[scene.place], positions = { ...scene.starts };
+  hitsSoFar[scene.place] ??= 0;
+  // People coming from another place: the macro view first, in 2D.
+  const migrations = data.migrations.filter((migration) => migration.scene === scene.id);
+  if (migrations.length) { segments.push({ kind: "macro", scene, index, place, start: clock, end: clock + MACRO, positions: { ...positions }, moves: [], hits: hitsSoFar[scene.place], migrations }); clock += MACRO; }
+  segments.push({ kind: "card", scene, index, place, start: clock, end: clock + CARD, positions: { ...positions }, moves: [], hits: hitsSoFar[scene.place] });
+  clock += CARD;
+  for (const [eventIndex, event] of scene.events.entries()) {
+    if (event.hit) hitsSoFar[scene.place]++;
+    const moves = event.moves.map((move) => ({ ...move, time: timing(place, move) }));
+    const length = Math.max(READ, event.hit ? 2.6 : 0, ...moves.map((move) => move.time.total + 0.6));
+    segments.push({ kind: "event", scene, index, eventIndex, event, place, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[scene.place] });
+    for (const move of moves) positions[move.person] = move.path.at(-1);
+    clock += length;
+  }
+}
+const total = clock;
+const placeHits = {};
+for (const scene of data.scenes) for (const event of scene.events) if (event.hit) (placeHits[scene.place] ??= []).push(event.hit);
+const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low < high) { const mid = (low + high + 1) >> 1; if (segments[mid].start <= t) low = mid; else high = mid - 1; } return segments[low]; };
+
+// The macro layout: the place tree as nested circles on the ground (metres); every place of the strand sits on its own circle.
+const macroAt = new Map();
+{
+  const kids = (id) => data.macro.filter((node) => node.parent === id), LEAF = 46;
+  const size = (node) => { const children = kids(node.id); if (!children.length) return (node.r = LEAF); const r = Math.max(...children.map(size)); node.ring = children.length > 1 ? 1.25 * r / Math.sin(Math.PI / children.length) : 0; return (node.r = node.ring + r + 16); };
+  const put = (node, x, z, depth) => { macroAt.set(node.id, { x, z, r: node.r, depth, label: node.label }); kids(node.id).forEach((child, n, all) => { const angle = Math.PI / 2 + (2 * Math.PI * n) / all.length; put(child, x + Math.cos(angle) * node.ring, z + Math.sin(angle) * node.ring, depth + 1); }); };
+  let x = 0;
+  for (const root of data.macro.filter((node) => !node.parent)) { size(root); x += root.r; put(root, x, 0, 0); x += root.r + 40; }
+  for (const spot of macroAt.values()) spot.x -= (x - 40) / 2;
+}
+
+// The 3D stage.
+const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+host.prepend(renderer.domElement);
+window.__stageStarted = true;
+const world = new THREE.Scene(); world.background = new THREE.Color(0x060c12); world.fog = new THREE.Fog(0x060c12, 400, 1600);
+world.add(new THREE.AmbientLight(0xffffff, 0.75)); const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(30, 70, 20); world.add(sun);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 4000), controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = 1600;
+const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
+new ResizeObserver(resize).observe(host);
+const unit = new THREE.BoxGeometry(1, 1, 1), matrix = new THREE.Matrix4(), color = new THREE.Color();
+const mats = {
+  corridor: new THREE.MeshLambertMaterial({ color: 0x7ce6ff, emissive: 0x0b3a48, transparent: true, opacity: 0.85 }),
+  stair: new THREE.MeshLambertMaterial({ color: 0xffb547, emissive: 0x4a2a00, transparent: true, opacity: 0.8 }),
+  cut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.9 }),
+  room: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.18, depthWrite: false }),
+  roomCut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.32, depthWrite: false }),
+  debris: new THREE.MeshBasicMaterial({ color: 0xff8a5c, transparent: true, opacity: 0.95 }),
+};
+
+function label(text, fill = "#ffffff", size = 28) {
+  const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d"), font = `600 ${size}px system-ui, "PingFang SC", sans-serif`;
+  ctx.font = font; const width = Math.ceil(ctx.measureText(text).width) + 16; canvas.width = width; canvas.height = size + 14;
+  ctx.font = font; ctx.textBaseline = "middle"; ctx.fillStyle = "rgba(6,12,18,.65)"; ctx.fillRect(0, 0, width, canvas.height); ctx.fillStyle = fill; ctx.fillText(text, 8, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })); sprite.scale.set(width / canvas.height * 1.3, 1.3, 1); sprite.renderOrder = 10;
+  return sprite;
+}
+function instanced(material, boxes) {
+  const mesh = new THREE.InstancedMesh(unit, material, Math.max(1, boxes.length)); mesh.count = boxes.length;
+  boxes.forEach(([x, y, z, w, h, d], index) => { matrix.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(w, h, d)); mesh.setMatrixAt(index, matrix); });
+  return mesh;
+}
+
+/** The artistic shells: a baked model (positions as base64 Int16 × step, indices as Uint16), stood on its base and centred. */
+const bytes = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0)).buffer, shells = new Map();
+function shellOf(name) {
+  if (!shells.has(name)) {
+    const model = data.models?.[name], geometry = new THREE.BufferGeometry();
+    if (!model) return null;
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(Float32Array.from(new Int16Array(bytes(model.positions)), (value) => value * model.step), 3));
+    geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(bytes(model.indices)), 1));
+    geometry.computeBoundingBox(); const box = geometry.boundingBox;
+    geometry.translate(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2); geometry.computeBoundingBox();
+    shells.set(name, { fill: geometry, edges: new THREE.EdgesGeometry(geometry, 25), size: geometry.boundingBox.getSize(new THREE.Vector3()) });
+  }
+  return shells.get(name);
+}
+
+/** A place: ground tiles and clutter, each building's envelope and floors (static); its skeleton and rooms (rebuilt as damage lands). */
+const built = new Map();
+function buildPlace(id) {
+  if (built.has(id)) return built.get(id);
+  // A place sits on its circle of the place tree: its grid is centred there.
+  const place = data.places[id], spot = macroAt.get(id) ?? { x: 0, z: 0 }, group = new THREE.Group(), cx = place.NX * CELL / 2 - spot.x, cz = place.NZ * CELL / 2 - spot.z;
+  const tiles = new THREE.InstancedMesh(unit, new THREE.MeshBasicMaterial(), place.NX * place.NZ);
+  for (let cell = 0; cell < place.NX * place.NZ; cell++) { const i = cell % place.NX, j = Math.floor(cell / place.NX); matrix.compose(new THREE.Vector3((i + 0.5) * CELL - cx, -0.05, (j + 0.5) * CELL - cz), new THREE.Quaternion(), new THREE.Vector3(CELL * 0.98, 0.1, CELL * 0.98)); tiles.setMatrixAt(cell, matrix); tiles.setColorAt(cell, color.set(GROUND_COLOR[Number(place.ground[cell])] ?? 0x112532)); }
+  group.add(tiles);
+  group.add(instanced(new THREE.MeshLambertMaterial({ color: 0x9fb4c3, transparent: true, opacity: 0.5 }), place.clutter.map((cell) => [(cell % place.NX + 0.5) * CELL - cx, 0.45, (Math.floor(cell / place.NX) + 0.5) * CELL - cz, 1.2, 0.9, 1.2])));
+  for (const lot of place.lots) {
+    const w = lot.nx * CELL, d = lot.nz * CELL, h = lot.floors * FLOOR, x = lot.i0 * CELL + w / 2 - cx, z = lot.j0 * CELL + d / 2 - cz;
+    // The building's artistic shell, stretched to its lot and height, with the walkable skeleton glowing inside; a plain box when no model is shipped.
+    const shell = lot.model ? shellOf(lot.model) : null;
+    if (shell) {
+      const fill = new THREE.Mesh(shell.fill, new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: 0.09, depthWrite: false }));
+      const edges = new THREE.LineSegments(shell.edges, new THREE.LineBasicMaterial({ color: lot.label ? 0xffffff : 0x8fd6ff, transparent: true, opacity: lot.label ? 0.75 : 0.5 }));
+      for (const part of [fill, edges]) { part.scale.set(w / shell.size.x, h / shell.size.y, d / shell.size.z); part.position.set(x, 0, z); group.add(part); }
+      if (lot.role === "hospital") for (const [cw, ch] of [[0.6, 2.4], [2.4, 0.6]]) { const bar = new THREE.Mesh(new THREE.BoxGeometry(cw, ch, 0.3), new THREE.MeshBasicMaterial({ color: 0xff5a6a })); bar.position.set(x, h + 1.6, z); group.add(bar); }
+    } else {
+      const envelope = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), new THREE.LineBasicMaterial({ color: lot.label ? 0xffffff : 0x7ce6ff, transparent: true, opacity: lot.label ? 0.75 : 0.4 }));
+      envelope.position.set(x, h / 2, z); group.add(envelope);
+    }
+    const slabs = [];
+    for (let k = 1; k <= lot.floors; k++) { const y = k * FLOOR, [x0, x1, z0, z1] = [x - w / 2, x + w / 2, z - d / 2, z + d / 2]; slabs.push(x0, y, z0, x1, y, z0, x1, y, z0, x1, y, z1, x1, y, z1, x0, y, z1, x0, y, z1, x0, y, z0); }
+    group.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(slabs, 3)), new THREE.LineBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.14 })));
+    if (lot.label) { const tag = label(lot.label); tag.position.set(x, h + 2.4, z); group.add(tag); }
+  }
+  const entry = { group, cx, cz, dynamic: null, shownHits: -1 };
+  built.set(id, entry);
+  return entry;
+}
+/** The skeletons after the first `count` hits on this place: what stands, what is cut off (red), rooms cut off. */
+function drawSkeletons(id, entry, count) {
+  if (entry.shownHits === count) return;
+  entry.shownHits = count;
+  if (entry.dynamic) entry.group.remove(entry.dynamic);
+  const place = data.places[id], dynamic = new THREE.Group(), lost = place.lots.map(() => new Set()), cutCells = place.lots.map(() => new Set()), cutRooms = place.lots.map(() => new Set());
+  for (const hit of (placeHits[id] ?? []).slice(0, count)) { for (const cell of hit.destroyed) lost[hit.lot].add(cell); cutCells[hit.lot] = new Set(hit.cutOff); cutRooms[hit.lot] = new Set(hit.cutRooms); }
+  const corridors = [], stairs = [], red = [], rooms = [], redRooms = [];
+  place.lots.forEach((lot, n) => {
+    for (let cell = 0; cell < lot.cells.length; cell++) {
+      const type = lot.cells[cell];
+      if (type === "0" || lost[n].has(cell)) continue;
+      const i = cell % lot.nx, j = Math.floor(cell / lot.nx) % lot.nz, k = Math.floor(cell / (lot.nx * lot.nz)), x = (lot.i0 + i + 0.5) * CELL - entry.cx, z = (lot.j0 + j + 0.5) * CELL - entry.cz;
+      if (cutCells[n].has(cell)) red.push(type === "2" ? [x, k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4] : [x, k * FLOOR + 0.2, z, CELL * 0.9, 0.4, CELL * 0.9]);
+      else if (type === "2") stairs.push([x, k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4]);
+      else corridors.push([x, k * FLOOR + 0.15, z, CELL * 0.9, 0.3, CELL * 0.9]);
+    }
+    lot.rooms.forEach(([k, i0, j0, i1, j1], r) => { const w = (i1 - i0 + 1) * CELL - 0.35, d = (j1 - j0 + 1) * CELL - 0.35; (cutRooms[n].has(r) ? redRooms : rooms).push([(lot.i0 + (i0 + i1 + 1) / 2) * CELL - entry.cx, k * FLOOR + 1.25, (lot.j0 + (j0 + j1 + 1) / 2) * CELL - entry.cz, w, 2.4, d]); });
+  });
+  dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.roomCut, redRooms));
+  entry.group.add(dynamic); entry.dynamic = dynamic;
+}
+
+// People: a glowing pawn and a name each; a shadow when off the ground.
+const pawns = new Map();
+for (const [id, person] of Object.entries(data.people)) {
+  const tint = new THREE.Color(person.color), pawn = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.95, 4, 12), new THREE.MeshStandardMaterial({ color: tint, emissive: tint, emissiveIntensity: 0.7, transparent: true })); body.position.y = 0.82; pawn.add(body);
+  const halo = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.8, 24), new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 0.05; pawn.add(halo);
+  const name = label(person.name, person.color, 26); name.position.y = 2.5; pawn.add(name);
+  pawns.set(id, { pawn, body });
+}
+const debris = new THREE.InstancedMesh(unit, mats.debris, 600); debris.count = 0; world.add(debris);
+const blast = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0, depthWrite: false })); world.add(blast);
+
+let shownNotice = false, shownPlace = null, shownSegment = null, pathLines = [], time = 0, speed = 2, playing = true, follow = true, last = performance.now(), shownScene = -1, glide = null;
+for (const id of Object.keys(data.places)) world.add(buildPlace(id).group);
+// The place tree's circles on the ground, and a trace above them for every move between places.
+for (const [id, spot] of macroAt) {
+  const strand = !!data.places[id], ring = new THREE.Mesh(new THREE.RingGeometry(spot.r - 0.8, spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: strand ? 0.6 : 0.3, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(spot.x, -0.3 - spot.depth * 0.05, spot.z); world.add(ring);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x0a1e2b, transparent: true, opacity: 0.45, depthWrite: false }));
+  disc.rotation.x = -Math.PI / 2; disc.position.set(spot.x, -0.5 - spot.depth * 0.05, spot.z); world.add(disc);
+  const tag = label(spot.label, strand ? "#ffffff" : "#9fb4c3", 30); tag.position.set(spot.x, 4, spot.z - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
+}
+const macroSegment = new Map(segments.filter((segment) => segment.kind === "macro").map((segment) => [segment.scene.id, segment]));
+const traces = data.migrations.flatMap((migration) => {
+  const a = macroAt.get(migration.from), b = macroAt.get(migration.to), segment = macroSegment.get(migration.scene);
+  if (!a || !b || !segment) return [];
+  const d = Math.hypot(b.x - a.x, b.z - a.z), points = [];
+  for (let n = 0; n <= 40; n++) { const t = n / 40; points.push(new THREE.Vector3(a.x + (b.x - a.x) * t, 4 + Math.sin(Math.PI * t) * (24 + d * 0.22), a.z + (b.z - a.z) * t)); }
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: data.people[migration.person].color, transparent: true, opacity: 0.35 }));
+  line.visible = false; world.add(line);
+  return [{ migration, line, points, segment }];
+});
+const boxLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.95 })); boxLines.visible = false; world.add(boxLines);
+/** Where the camera rests on a place, and a glide to it: out over both places, across, and down, like a hand on the mouse. */
+const poseFor = (id) => { const spot = macroAt.get(id) ?? { x: 0, z: 0 }, place = data.places[id], span = Math.max(place.NX, place.NZ) * CELL; return { target: new THREE.Vector3(spot.x, 4, spot.z), position: new THREE.Vector3(spot.x + span * 0.45, span * 0.8, spot.z + span * 0.95) }; };
+function glideTo(id, seconds) {
+  const from = { target: controls.target.clone(), position: camera.position.clone() }, to = poseFor(id), d = from.target.distanceTo(to.target);
+  const midTarget = from.target.clone().lerp(to.target, 0.5), mid = { target: midTarget, position: midTarget.clone().add(new THREE.Vector3(d * 0.2, Math.max(140, d * 0.85), d * 0.55)) };
+  glide = { from, mid, to, start: time, seconds };
+}
+function showPaths(segment, entry) {
+  for (const line of pathLines) world.remove(line.object);
+  pathLines = [];
+  for (const move of segment.moves) {
+    const tint = new THREE.Color(data.people[move.person].color), points = (nodes) => nodes.flatMap((node, k) => {
+      const p = at(segment.place, node), out = [], arc = k && move.how !== "direct" ? flight(at(segment.place, nodes[k - 1]), p) : null;
+      if (arc) for (let n = 1; n < 12; n++) { const q = along(at(segment.place, nodes[k - 1]), p, arc, n / 12); out.push(q.x - entry.cx, q.y + 0.35, q.z - entry.cz); }
+      return [...out, p.x - entry.cx, p.y + 0.35, p.z - entry.cz];
+    });
+    const add = (nodes, material, ensemble) => { const object = new THREE.Line(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(points(nodes), 3)), material); world.add(object); pathLines.push({ object, move, ensemble }); };
+    for (const other of move.ensemble) add(other, new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.22, depthWrite: false }), true);
+    if (move.how !== "teleport") add(move.path, new THREE.LineBasicMaterial({ color: tint }), false);
+  }
+}
+function position(place, move, elapsed) {
+  const steps = move.time.steps;
+  if (move.how === "teleport") { const p = at(place, elapsed < 0.4 ? move.path[0] : move.path[1]); return { ...p, fade: Math.min(1, Math.abs(elapsed - 0.4) / 0.4), k: 2 }; }
+  if (elapsed >= steps.at(-1)) return { ...at(place, move.path.at(-1)), k: move.path.length };
+  if (move.how === "direct") { const a = at(place, move.path[0]), b = at(place, move.path[1]), f = elapsed / steps[1], lift = Math.sin(Math.PI * f) * 3; return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f + lift, k: 2 }; }
+  let k = 1; while (k < steps.length - 1 && steps[k] < elapsed) k++;
+  const a = at(place, move.path[k - 1]), b = at(place, move.path[k]), f = Math.min(1, Math.max(0, (elapsed - steps[k - 1]) / Math.max(1e-6, steps[k] - steps[k - 1]))), arc = flight(a, b);
+  if (arc) return { ...along(a, b, arc, f), k, flying: true };
+  return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f, k };
+}
+
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (playing) { time += dt * speed; if (time >= total) time = 0; }
+  const segment = segmentAt(time), place = segment.place, elapsed = time - segment.start, entry = buildPlace(segment.scene.place);
+  if (shownPlace !== segment.scene.place) {
+    if (shownPlace === null) { const pose = poseFor(segment.scene.place); camera.position.copy(pose.position); controls.target.copy(pose.target); }
+    else glideTo(segment.scene.place, segment.kind === "macro" ? MACRO - 0.2 : 2.6);
+    shownPlace = segment.scene.place;
+  }
+  if (glide) {
+    const u = (time - glide.start) / glide.seconds;
+    if (u < 0 || u >= 1) { if (u >= 1) { camera.position.copy(glide.to.position); controls.target.copy(glide.to.target); } glide = null; }
+    else {
+      const e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2, bend = (a, b, c) => a.clone().multiplyScalar((1 - e) ** 2).add(b.clone().multiplyScalar(2 * (1 - e) * e)).add(c.clone().multiplyScalar(e * e));
+      camera.position.copy(bend(glide.from.position, glide.mid.position, glide.to.position)); controls.target.copy(bend(glide.from.target, glide.mid.target, glide.to.target));
+    }
+  }
+  drawSkeletons(segment.scene.place, entry, segment.hits);
+  if (segment !== shownSegment) {
+    shownSegment = segment; showPaths(segment, entry);
+    const hit = segment.kind === "event" && segment.event.hit;
+    $("flash").textContent = hit ? `damage ${Math.round(hit.strength * 100)}% · ${hit.destroyed.length} cells lost · ${hit.cutRooms.length} rooms cut off` : "";
+    $("flash").style.opacity = hit ? 1 : 0;
+    if (hit) { const lot = place.lots[hit.lot], k = (cell) => Math.floor(cell / (lot.nx * lot.nz)); segment.debris = hit.destroyed.map((cell) => new THREE.Vector3((lot.i0 + cell % lot.nx + 0.5) * CELL - entry.cx, k(cell) * FLOOR + 1, (lot.j0 + Math.floor(cell / lot.nx) % lot.nz + 0.5) * CELL - entry.cz)); segment.blast = new THREE.Vector3(hit.point.x - entry.cx, hit.point.y + 1.5, hit.point.z - entry.cz); const [x, y, z] = [hit.box.x, hit.box.y, hit.box.z]; boxLines.position.set((x[0] + x[1]) / 2 - entry.cx, (y[0] + y[1]) / 2, (z[0] + z[1]) / 2 - entry.cz); boxLines.scale.set(x[1] - x[0], y[1] - y[0], z[1] - z[0]); }
+  }
+  // Damage: debris falls in the first second and a half; the blast swells and fades.
+  const pieces = segment.debris ?? [], t = elapsed;
+  debris.count = t < 1.5 ? Math.min(600, pieces.length * 3) : 0;
+  for (let n = 0; n < debris.count; n++) { const base = pieces[Math.floor(n / 3)], y = base.y - 0.5 * 9.8 * t * t * (0.8 + (n % 3) * 0.2), s = Math.max(0.1, 0.9 * (1 - t / 1.5)); matrix.compose(new THREE.Vector3(base.x + ((n % 3) - 1) * t * 1.5, Math.max(0.3, y), base.z + ((n * 7) % 3 - 1) * t), new THREE.Quaternion().setFromEuler(new THREE.Euler(t * 3 + n, t * 2, 0)), new THREE.Vector3(s, s, s)); debris.setMatrixAt(n, matrix); }
+  debris.instanceMatrix.needsUpdate = true;
+  if (segment.blast && t < 1.2) { blast.position.copy(segment.blast); blast.scale.setScalar(1 + t * 8); blast.material.opacity = 0.5 * (1 - t / 1.2); } else blast.material.opacity = 0;
+  mats.cut.opacity = 0.55 + 0.4 * Math.sin(now / 220); mats.roomCut.opacity = 0.2 + 0.18 * Math.sin(now / 220);
+
+  if (segment.index !== shownScene) {
+    shownScene = segment.index;
+    $("crumb").textContent = place.path.join(" › ") + ` · ${place.kind} of ${place.lots.length} buildings`;
+    $("scene").textContent = `Scene ${segment.index + 1} of ${data.scenes.length}` + (segment.scene.label ? ` · ${segment.scene.label}` : "");
+    const status = { stays: "stays on", arrives: "arrives", enters: "enters" };
+    $("people").replaceChildren(...Object.entries(segment.scene.from).map(([person, from]) => { const chip = document.createElement("span"); chip.style.setProperty("--c", data.people[person].color); chip.textContent = `${data.people[person].name} · ${status[from]}`; return chip; }));
+  }
+  // The damage box (Jev's box, back-projected) shows while the blast plays; traces appear as people move between places.
+  boxLines.visible = !!(segment.kind === "event" && segment.event.hit && elapsed < 2.6);
+  for (const trace of traces) {
+    const current = trace.segment === segment, past = trace.segment.start < segment.start;
+    trace.line.visible = current || past;
+    trace.line.geometry.setDrawRange(0, current ? Math.max(2, Math.floor(41 * Math.min(1, elapsed / (MACRO - 0.6)))) : 41);
+    trace.line.material.opacity = current ? 0.95 : 0.3;
+  }
+  $("event").textContent = segment.kind === "macro" ? segment.migrations.map((m) => `${data.people[m.person].name}: ${label2(m.from)} → ${label2(m.to)}`).join("　") : segment.kind === "card" ? (segment.scene.label || segment.scene.events[0]?.text || "") : segment.event.text;
+  $("count").textContent = segment.kind === "macro" ? `between places · scene ${segment.index + 1}/${data.scenes.length}` : segment.kind === "card" ? `scene ${segment.index + 1}/${data.scenes.length}` : `scene ${segment.index + 1}/${data.scenes.length} · event ${segment.eventIndex + 1}/${segment.scene.events.length}`;
+  if (document.activeElement !== $("seek")) $("seek").value = Math.round(time / total * 1000);
+
+  const present = new Set(Object.keys(segment.scene.starts)), movers = [];
+  for (const [id, { pawn, body }] of pawns) {
+    const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
+    const trace = segment.kind === "macro" && traces.find((entry) => entry.segment === segment && entry.migration.person === id);
+    const p = !present.has(id) ? null : move ? position(place, move, elapsed) : node == null ? null : at(place, node);
+    if (!p) { if (pawn.parent) world.remove(pawn); continue; }
+    if (!pawn.parent) world.add(pawn);
+    if (trace && elapsed < MACRO - 0.6) { pawn.position.copy(trace.points[Math.min(40, Math.floor(40 * elapsed / (MACRO - 0.6)))]); continue; }
+    pawn.position.set(p.x - entry.cx, p.y, p.z - entry.cz);
+    body.material.opacity = p.fade ?? 1;
+    if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
+  }
+  for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
+  if (follow && movers.length && !glide) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
+  controls.update(); renderer.render(world, camera); if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
+}
+
+const label2 = (id) => data.macro.find((node) => node.id === id)?.label ?? data.places[id]?.label ?? "elsewhere";
+
+$("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "⏸ Pause" : "▶ Play"; });
+$("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (!follow) controls.target.set(0, 4, 0); });
+for (const button of document.querySelectorAll("[data-speed]")) button.addEventListener("click", () => { speed = Number(button.dataset.speed); for (const other of document.querySelectorAll("[data-speed]")) other.setAttribute("aria-pressed", String(other === button)); });
+$("seek").addEventListener("input", () => { time = Number($("seek").value) / 1000 * total; });
+const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const places = Object.values(data.places), moveCount = data.scenes.reduce((n, s) => n + s.events.reduce((m, e) => m + e.moves.length, 0), 0);
+$("how").innerHTML = [
+  `<b>One strand of the timeline.</b> ${data.scenes.length} scenes in story order. People keep their place and heading from scene to scene along their own world line ("stays on"), or arrive from elsewhere.`,
+  `<b>Places from the place tree.</b> ${places.map((p) => `${esc(p.label)} (${p.kind}, ${p.lots.length} buildings)`).join(", ")}: its building children (named) take the widest lots, generated buildings fill the rest.`,
+  `<b>Buildings as skeletons.</b> Only corridors (a cell is corridor with σ(h + a·axial + c·diagonal + v·above/below + f·facade), Gibbs-sampled), protected stair cores, and rooms as boxes that must open onto a corridor. Every floor is walkable; roofs are reached by the cores, crossed by jumps, left by falls.`,
+  `<b>Percolation.</b> Clutter closes outdoor cells at 10%, never in front of a door, redrawn while it cuts a door off the avenue. Damage is a step down a building's percolation curve inside a box (the red outline: where Jev's box on the view would back-project): occupation drops by the event's strength, read from its embedding along the book's own destruction direction; stair cores are reinforced; whatever can no longer reach the ground floor glows red, and later scenes walk what is left (${data.notes.hits} hits here).`,
+  `<b>Path integral.</b> Each of the ${moveCount} moves is one exact draw from all walks to its destination, weighted e^(−S/T): metres walked, climbs ×${data.lambda}, a turning cost κ=${data.kappa}, T=${data.T} (under the convergence bound). Faint lines are other draws.`,
+  `<b>Sky and the place tree.</b> Moves may launch along a rising cube diagonal of the 14 directions and fly under gravity, roof to roof or down to the street (a launch speed of 7, 10 or 13 m/s, no arc gaining height). A direct move (4 more directions, for people with powers) flies straight to its end; here it stands in where the event's wording shows its actor using a power to move (${data.notes.direct ?? 0} moves). Every place sits on its circle of the place tree; when people move between places the camera glides out, across and down to the next one, and a trace arcs between the circles.`,
+  `<b>Buildings wear artistic models.</b> Each lot draws one of the Kenney CC0 kit models for its kind (towers, skyscrapers, offices, a market, a hospital with its cross) at random, stretched over its skeleton.`,
+  `<b>Stand-ins.</b> Where moves end comes from Jev's typed spot answers in the book's movement run; how hard a fight hits a building is read from the event summary's wording, standing in for a Jev damage question not yet asked.`,
+].map((item) => `<li>${item}</li>`).join("");
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

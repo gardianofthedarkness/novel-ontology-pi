@@ -1,0 +1,187 @@
+# Stage simulation: design record
+
+Status: direction agreed 2026-10-28; partly built (see [What exists](#what-exists)). Companion to [places-holo-stage.md](places-holo-stage.md), which records the experiments.
+
+The stage is being rebuilt for simulation in later phases, not only for animation. What happens is sampled, as in the real world, and the animation shows one sample.
+
+## Principle: shared sight
+
+Every faculty that decides something about the stage decides from the same views the reader sees. This covers Jev, a Pi agent, and the damage and destination faculties. Agent and reader attend to the same picture.
+
+- **One renderer.** Questions are asked over captures of the live viewer: the same scene, buildings, people and labels. There is no special diagram or hidden coordinate system that only the model sees. A move's arrows and a destination's boxes are drawn on that capture.
+- **Every ask is recorded.** It keeps the camera pose, the frame size, a hash of the image and the answer, so it can be replayed, audited and shown back.
+- **Sync both ways.**
+  - **What the model saw:** the reader can open the exact capture and see the box or arrow it picked.
+  - **What the reader looks at:** the model can be asked about the reader's view.
+  - **Disagreement:** both sides point at one picture.
+- **Desktop renderer (assumption).** Captures come from the desktop layout of the viewer, rendered on this Mac, rather than the phone layout. This reads "the mac version" as the desktop viewer and still needs confirming.
+
+## Two scales, one loop
+
+The **macro** view is the places system as it exists: the orbital Places view and Journey.
+- Places are spheres, with containment and connections between them.
+- Trips are arcs between places.
+- People stand at their latest place.
+
+The **micro** view is a place's interior: its grid, its buildings and the people in them.
+
+- **Grids exist only inside a view.** A place's micro layout is generated when the reader or a faculty opens it, from the place tree and a recorded seed, and dropped when out of view.
+  - Persistent state lives on the place: damage, positions and the lots already given out. Grids hold none of it.
+- **Macro is the same 3D world.**
+  - Every place sits on its circle of the place tree (nested circles on the ground), with its buildings on top.
+  - When people move between places, the camera zooms out, shifts across and settles on the next place, as a hand on the mouse would. The reader can orbit at any moment.
+  - A trace arcs between the circles for every move between places.
+  - For a destination in another place, Jev boxes it on a top-down capture of this macro view.
+- **Traces stay in the database.** The redesign moves the place system anyway, so each person's per-scene trace is kept as data: where they entered, moved and left, and every migration between places. The timeline page is notified of place migrations, so a person's move from one place to another shows there too.
+- **The loop between scales:**
+  - A move inside a place is decided and walked at micro scale.
+  - A move to another place is decided at macro scale: the destination is boxed on a capture of the macro view, where places are visible as spheres and links.
+  - The micro engine then walks the person out of one place and into the next.
+- **Places move and change.** Extraction keeps revising the place tree. The macro view always works with whatever tree exists now. A micro layout regenerates only for the subtree that changed, keyed by place id plus a fingerprint of its children.
+
+## Places grow with the story
+
+Buildings are added as the story detects them, not fixed up front.
+
+- **What a place holds at a story moment:**
+  - the architectures named so far on the strand;
+  - generated filler for the rest of its area.
+- **Stable lots.** A newly named building claims a free lot, or takes over a generic one. Lots already given out never move, so earlier scenes replay identically.
+- **The place-system redesign.**
+  - An architecture is the smallest unit of place.
+  - Jev types the groups above it (city, district, street, plaza) on the existing place-tree path.
+  - Jev may add an unnamed architecture under a group when a scene needs one.
+  - Nothing becomes a free-standing entity outside the tree.
+
+## Things the text puts in a place
+
+**What is detected today:**
+- The time-place faculty extracts places (Location entities in the place tree).
+- The stage's architecture faculty types each one as a building kind: a name shortlist, then Jev picks among pictures.
+
+**What is not detected:** buildings and objects that events mention but that are not places, such as a tower seen in passing, a giant metal sphere or an airship.
+
+**Proposed:**
+1. **Detect** the physical structures and objects each event mentions, as words.
+2. **Match the word to the model library** with the open-source embedder the project already runs locally (BAAI/bge-small-zh-v1.5, used by causality).
+   - The match is against each model's names and description in Chinese and English: towers, skyscrapers, offices, a hospital, a station, a church, a market, a keep, a fountain, a windmill.
+   - The nearest model above a threshold is used, drawn at random among that kind's variants.
+3. **One ranking for everything.** The four pure shapes (an oval, a sphere, a box, a diamond) are ranked together with the library's models, and the best match wins, shape or building.
+4. **Jev points where it goes** with a box on a top-down capture of the current view. The capture scales itself to the buildings around the camera's focus, so the box maps to metres.
+5. **Placement rules:**
+   - **A shape floats.** Placed over existing buildings, it rests at the highest point of everything under its box.
+   - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
+   - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.
+     - It is hidden while other volumes are being processed.
+     - It is visible when all timelines are selected.
+   - **Packing:** districts and their circles pack like the ontology bubbles, scaling themselves to make room for their neighbours.
+
+**Variety:** every lot wears an artistic model (the Kenney CC0 kits baked in `architectureModels.json`), drawn per lot from its kind's variants. The walkable skeleton glows inside.
+
+## Moves: 14 directions, and the sky
+
+- **The direction ask** (`src/digger/stage/directions.ts`). For each person in an event (the scene's cast, the event's actors first), Jev picks one of 18 directions relative to the view, or "with" someone already handled in this event, or none. The 18:
+  - **14 cube directions:** 6 axial and 8 diagonals, drawn as arrows at the person on the capture. The up-diagonals launch the person into the air.
+  - **4 direct directions,** for the superhumans novels have: the person goes straight to the destination, ignoring gravity and walls. The question says to choose them only when the text directly says or shows this character using an ability for the move; without that evidence, never.
+- **On the ground:** the path integral over the walkable graph, as now.
+- **In the sky:** a direction with an upward part (up, or the four up-diagonals), with a manner that leaves the ground (jump, fly, thrown, blown), adds airborne edges.
+  - Each is a ballistic arc under gravity, x(t) = x₀ + v·t − ½·g·t²·ŷ.
+  - Its launch speed is bounded by what the person can do.
+  - It lands where the arc first meets a surface: a roof, a street or a ledge.
+  - Arcs are part of the same ensemble: their cost (launch energy, landing impact) enters the action, so the sampler weighs flying against walking.
+  - This is where gravity changes the physics; on the walkable graph it only shows as climb cost and falls.
+- **Capabilities.** Jump speed, flight and teleport are asked once per character, or read from the ontology. They bound the arcs: an esper who flies is not held to a jump's speed.
+
+## Destinations: two views, two boxes
+
+- **Two captures per destination ask:**
+  - **View A:** the reader's current camera.
+  - **View B:** the same target seen from a camera rotated 90° about the vertical axis, to a random side, above ground.
+- **Jev boxes the destination on each view.** Each box is back-projected to a prism through its camera. The destination set Y is the walkable cells inside both prisms.
+  - **Why two views:** the earlier probe found one box is weak on height. A second view at right angles fixes height and depth.
+- **Fallbacks.** When the two prisms miss each other, the boxes are widened. Failing that, one view is used and the ask is recorded as weak.
+- **Leaving the place:** the destination ask runs on the macro view's capture instead (see the loop above).
+
+## Buildings: skeletons
+
+A building is its circulation only: corridors and stairs on 2 m cells and 3 m floors, with rooms as boxes. Details are in `skeleton.ts` and the exploration notes.
+
+- **Corridors:** a cell is corridor with σ(h + a·axial + c·diagonal + v·above/below + f·facade).
+- **Stairs** are protected cores.
+- **The building** is the street door's cluster, redrawn until the door reaches a core.
+- **A room** is a box of free mass that holds a cell beside a corridor, grown with σ(g − α(|R| − m̄)).
+
+## Damage
+
+- **One Jev call per event:** a bounding box on the capture, drawn where the event damages something. No separate building or degree questions.
+- **A 2D-to-3D engine** back-projects the box into the place and guesses the most plausible damaged region: the buildings it covers, on the floors it spans.
+- **Strength from the event's embedding.**
+  - The event's vector (from the causality faculty's sidecar) is projected onto the book's own destruction direction.
+  - That direction is the difference of mean vectors between events that wreck things and events that fight nowhere: one direction in semantic space, read off like a lens.
+  - It follows the family of interpretability work that treats concepts as directions in a representation space. The user pointed to Anthropic's published papers; the exact paper is still to be named.
+- **Damage is a step down the building's percolation curve,** inside the region only:
+  - Occupation drops by strength × 0.6, and reinforced stair cores lose a third of that.
+  - What can no longer reach the ground floor is cut off. A blasted ground floor opens its own way out, so losing the street door alone no longer cuts off a whole building.
+- **What it cuts off:** whatever stands but no longer reaches the street door glows red, and so does any room whose corridors are all cut off.
+- **Damage persists on the place** and is applied in story order. A scene sees a hit only if the hit happened before it (happens-before across strands, not reading order).
+
+## Motion: the path integral
+
+- Every walk from start to its first entry into Y weighs exp(−S/T). The action S adds metres walked, λ × metres climbed and κ(1 − cos θ) per turn.
+- A walk is drawn exactly with the h-transform: solve h = Q·h + b once per (map, Y), then step with Q·h/h.
+- T stays under the certified bound, 0.92 for 2 m steps at λ = 8 and κ = 1. The bound reproduces the research figure for 1 m steps.
+- The mode (the least-action path) is a diagnostic; the sample is what happens.
+
+## Timeline: the per-fork environment
+
+- **People, not places, carry state.** Each person's state is handed along their own world line, so a scene holds only its own cast.
+- **What they carry:** position and heading at the same place. Arriving from elsewhere starts afresh.
+- **Keys:** scenes are keyed by inputs plus their people's histories, so a rerun walks only what changed. Seeds follow the keys.
+
+## What exists
+
+As of 2026-10-28, uncommitted on `claude/place-read-mode`.
+
+| Piece | Where | State |
+|---|---|---|
+| Per-fork environment, `novel stage forks` | `src/digger/stage/environment.ts` | built, tested |
+| Path integral: sampler and temperature bound | `apps/playground/src/data/pathIntegral.ts` | built, matches exact enumeration |
+| Skeleton buildings, rooms, damage, robustness | `apps/playground/src/data/skeleton.ts` | built, tested |
+| Places of skeleton buildings, movement graph, hits | `apps/playground/src/data/skeletonPlace.ts` | built, tested |
+| Floor plans with rooms and doors (stage 1) | `apps/playground/src/data/buildingPlan.ts` | built; superseded by skeletons for the stage |
+| Ground-floor districts | `apps/playground/src/data/placeGroup.ts` | built; superseded by `skeletonPlace` |
+| Strand demo, skeleton version | private claude.ai page, `playground/strand-demo.html` | shown privately |
+| Strand demo, ground-floor version | github.io `stage-strand/` | public, older |
+| Skeleton lab | `playground/skeleton-lab.html` | local |
+
+**Built for the animation:**
+- **Sky arcs:** up-diagonal launches at 7, 10 and 13 m/s, landing no higher than they started, priced by launch effort.
+- **Direct moves.**
+- **The 2D macro view** with migration traces.
+
+**Still stand-ins:**
+- Destinations come from Jev's typed spot answers.
+- The damage region is a box around the event's first actor, standing in for Jev's box. Its strength already comes from the embedding direction, applied from 0.7 up.
+- Direct moves come from words in the event summary that show a power being used to move.
+- Traces and migrations are exported with the demo, not yet stored in the database or sent to the timeline page.
+- Buildings come from a fixed set per place, not detected gradually.
+- There are no sky arcs, no captures and no macro loop yet.
+
+## Build order (proposed)
+
+1. **Capture.** Render the stage from the player itself on the desktop layout: a capture with its camera pose, from the reader's camera and from a rotated one. The reader can open any capture and its answer.
+2. **Two-view destination boxes.** Back-project and intersect, replacing the typed spot answers. Probe the two-view boxes on one strand before a full run.
+3. **The 14-direction ask and sky arcs** in the path integral, with per-character capabilities.
+4. **The macro loop.**
+   - Capture the macro view and box destinations across places.
+   - Walk exits and arrivals.
+   - Grow places with stable lots.
+5. **The Jev damage question,** degree and two boxes, in story order across strands.
+6. **The place-system redesign** (architectures and Jev-typed groups) under step 4.
+
+## Open questions
+
+- **"The mac version":** does it mean the desktop viewer on this Mac, as assumed above, or the macro view?
+- **Cost:** two image asks per destination and one per direction ask. Is the price per book acceptable?
+- **Sky arcs and buildings:** what can be landed on (roofs, balconies, ledges), and whether windows are exits.
+- **Reach of damage:** does damage stay with the place for later books in the universe?
