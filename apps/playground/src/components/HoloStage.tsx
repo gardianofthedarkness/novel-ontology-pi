@@ -27,11 +27,13 @@ interface Props {
   /** Journey: open a place's own stage. */
   onEnterPlace?: (placeId: string) => void;
   initialBeat?: number;
+  /** A new value moves the stage to initialBeat again (read mode's next page, the next clip), unless a replay is running. */
+  seek?: string;
   /** Start playing on open (off for still frames). */
   autoplay?: boolean;
   /** Inside a page (read mode) rather than over the app: no exit, no journey, no keys, and no frames drawn while nothing moves. */
   embedded?: boolean;
-  /** A prepared movement plan (read mode); undefined asks the backend for one. */
+  /** The place's prepared movement plan (novel stage prep, served as api/stage); without one nobody moves. */
   plan?: MovePlan | null;
   /** Replay beats from…to once, squeezed into about `ms`, untouchable meanwhile; a new key starts a new replay. */
   reel?: { key: string; from: number; to: number; ms: number } | null;
@@ -322,7 +324,7 @@ function useTypewriter(text: string, key: string, instant: boolean) {
   return [...text].slice(0, shown).join("");
 }
 
-export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnterPlace, initialBeat = 0, autoplay = true, embedded = false, plan: preparedPlan, reel = null, onReelEnd, onBeat }: Props) {
+export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnterPlace, initialBeat = 0, seek, autoplay = true, embedded = false, plan: preparedPlan, reel = null, onReelEnd, onBeat }: Props) {
   const [index, setIndex] = useState(() => Math.min(Math.max(0, reel?.from ?? initialBeat), Math.max(0, script.beats.length - 1)));
   const [playing, setPlaying] = useState((autoplay || !!reel) && !reducedMotion);
   const [speed, setSpeed] = useState(1);
@@ -336,15 +338,19 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
     setReplaying(true);
     setPlaying(true);
   }, [reelKey]); // eslint-disable-line react-hooks/exhaustive-deps -- a new replay only when its key changes
+  useEffect(() => { if (!reel) setIndex(Math.min(Math.max(0, initialBeat), Math.max(0, script.beats.length - 1))); }, [seek, initialBeat]); // eslint-disable-line react-hooks/exhaustive-deps -- only a new resting point moves the stage
   useEffect(() => { onBeat?.(index); }, [index, onBeat]);
   // Embedded: draw frames only while something moves (a replay, a walk, a drag), so scrolling the text never competes with the hologram.
+  // While the reader drags the stage keeps drawing; the cool-down starts when they let go.
   const [warm, setWarm] = useState(true);
+  const [dragging, setDragging] = useState(false);
   useEffect(() => {
     if (!embedded) return;
     setWarm(true);
+    if (dragging) return;
     const timer = setTimeout(() => setWarm(false), 4000);
     return () => clearTimeout(timer);
-  }, [embedded, index, playing, mode]);
+  }, [embedded, index, playing, mode, dragging]);
   const beat = script.beats[index];
   const cast = useMemo(() => script.actors.slice(0, MAX_TOKENS), [script]);
   const colors = useMemo(() => new Map(script.actors.map((actor) => [actor.id, actor.color])), [script]);
@@ -354,18 +360,10 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
   const extent = useMemo(() => Math.max(600, ...script.places.map((place) => Math.hypot(place.x, place.z) + 220)), [script]);
 
   useEffect(() => { setIndex((current) => Math.min(current, Math.max(0, script.beats.length - 1))); }, [script]);
-  // A movement plan for this place, if the backend has one, and the building's nav grid on the stage.
-  const [plan, setPlan] = useState<MovePlan | null>(preparedPlan ?? null);
+  // The place's prepared movement plan, and the building's nav grid on the stage.
+  const plan = preparedPlan ?? null;
   const [movement, setMovement] = useState<Movement | null>(null);
   const placeId = journey ? null : script.places[0]?.id ?? null;
-  useEffect(() => {
-    if (preparedPlan !== undefined) { setPlan(preparedPlan); return; }
-    setPlan(null);
-    if (!placeId) return;
-    let live = true;
-    fetch(`api/holo-moves?place=${encodeURIComponent(placeId)}`, { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((loaded: MovePlan | null) => { if (live && loaded?.moves) setPlan(loaded); }).catch(() => undefined);
-    return () => { live = false; };
-  }, [placeId, preparedPlan]);
   // The stage building's box (scaled up from the map), what the camera frames and the nav grid fills.
   const kind = script.places[0]?.kind ?? undefined;
   const stageMarks = useMemo(() => placeId ? [stageMark(placeId, kind)] : [], [placeId, kind]);
@@ -377,9 +375,9 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
     setBox(null);
     if (journey || !placeId || !kind) return;
     let live = true;
-    void buildingBox(stageMark(placeId, kind), kind).then((found) => {
+    buildingBox(stageMark(placeId, kind), kind).then((found) => {
       if (live) setBox({ x: BUILDING.x + (found.x - BUILDING.x) * STAGE_SCALE, z: BUILDING.z + (found.z - BUILDING.z) * STAGE_SCALE, width: found.width * STAGE_SCALE, depth: found.depth * STAGE_SCALE, height: found.height * STAGE_SCALE });
-    });
+    }, () => undefined);
     return () => { live = false; };
   }, [journey, placeId, kind]);
   bus.look = box && !journey ? new Vector3(box.x, FLOOR + box.height * 0.36, box.z + 60) : null;
@@ -423,6 +421,8 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
   useEffect(() => {
     if (embedded) return;
     const key = (event: KeyboardEvent) => {
+      // Typing in a field (the Pi console, a search box) keeps its keys.
+      if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])")) return;
       if (event.key === "Escape") onClose();
       else if (event.key === " ") { event.preventDefault(); setPlaying((value) => !value); }
       else if (event.key === "ArrowRight") setIndex((current) => Math.min(script.beats.length - 1, current + 1));
@@ -443,7 +443,7 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
   if (!beat) return <div className="holo" role="dialog" aria-label="Holo stage"><div className="holo-empty"><p>No scene here has records loaded yet.</p><button onClick={onClose}>Close</button></div></div>;
   const kindLabel = place?.kind ? ARCHITECTURE_LABEL[place.kind] : "Place";
   return <div className={`holo holo-${mode}${embedded ? " holo-embedded" : ""}${replaying ? " is-replaying" : ""}`} role={embedded ? "region" : "dialog"} aria-label={`Holo stage: ${script.title}`}>
-    <div className="holo-canvas" onPointerDown={(event) => { dragFrom.current = event.clientX; setWarm(true); }} onPointerMove={(event) => { if (dragFrom.current !== null && mode !== "cutscene") { bus.drag += (event.clientX - dragFrom.current) * -0.004; dragFrom.current = event.clientX; } }} onPointerUp={() => { dragFrom.current = null; }} onPointerLeave={() => { dragFrom.current = null; }}>
+    <div className="holo-canvas" onPointerDown={(event) => { dragFrom.current = event.clientX; setDragging(true); }} onPointerMove={(event) => { if (dragFrom.current !== null && mode !== "cutscene") { bus.drag += (event.clientX - dragFrom.current) * -0.004; dragFrom.current = event.clientX; } }} onPointerUp={() => { dragFrom.current = null; setDragging(false); }} onPointerLeave={() => { dragFrom.current = null; setDragging(false); }} onPointerCancel={() => { dragFrom.current = null; setDragging(false); }}>
       <Canvas frameloop={!embedded || playing || warm ? "always" : "demand"} camera={{ position: [0, FLOOR + 900, 1400], fov: mode === "cutscene" ? 46 : 42, near: 1, far: 20000 }} dpr={[1, 2]} gl={{ antialias: true, preserveDrawingBuffer: true }}>
         <color attach="background" args={["#040a13"]} />
         <fog attach="fog" args={["#040a13", journey ? extent * 1.4 : 900, journey ? extent * 3.2 : 2600]} />
@@ -472,10 +472,13 @@ export function HoloStage({ script, mode, reducedMotion, onMode, onClose, onEnte
         const spot = assumed.length ? movement.plan.starts[beat.sceneId]?.[assumed[0]] : undefined;
         return spot ? <div key={`assumed:${beat.id}`} ref={anchor(`nav:${spot}`, -30)} className="holo-anchor holo-anchor-below"><span className="holo-notechip">? {assumed.length === 1 ? label(assumed[0]) : `${assumed.length} people`} at the centre — the scene does not say where</span></div> : null;
       })()}
-      {journey && script.places.map((entry) => <div key={entry.id} ref={anchor(`place:${entry.id}`, -6)} className="holo-anchor holo-anchor-below"><span className={`holo-placelabel${entry.id === beat.placeId ? " is-here" : ""}`} onClick={() => onEnterPlace?.(entry.id)}>{entry.label}</span></div>)}
+
       {mode === "diorama" && beat.kind === "dialogue" && beat.actors[0] && <div ref={anchor(`bubble:${beat.actors[0]}`, 74)} className="holo-anchor" key={`bubble:${beat.id}`}><div className="holo-bubble" style={{ "--actor": colors.get(beat.actors[0]) } as CSSProperties}><b>{label(beat.actors[0])}</b><p>{typed}<i className="holo-caret" /></p></div></div>}
       {mode === "diorama" && beat.kind === "event" && <div ref={anchor("spot:", 120)} className="holo-anchor" key={`event:${beat.id}`}><div className={`holo-eventcard${beat.conflict ? " is-conflict" : ""}`}><span>{beat.conflict ? <><Clash />CONFLICT</> : "◆ EVENT"}</span><p>{beat.text}</p></div></div>}
     </div>
+    {journey && <nav className="holo-anchors" aria-label="Places on the journey">
+      {script.places.map((entry) => <div key={entry.id} ref={anchor(`place:${entry.id}`, -6)} className="holo-anchor holo-anchor-below"><button type="button" className={`holo-placelabel${entry.id === beat.placeId ? " is-here" : ""}`} aria-current={entry.id === beat.placeId ? "location" : undefined} onClick={() => onEnterPlace?.(entry.id)}>{entry.label}</button></div>)}
+    </nav>}
 
     <header className="holo-top">
       <div className="holo-title">

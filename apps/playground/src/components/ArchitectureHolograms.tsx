@@ -85,6 +85,7 @@ function pyramid(radius: number, height: number) { return new CylinderGeometry(0
 const cross = (y: number) => [block(0.14, 0.52, 0.08, 0, y, 0.1), block(0.52, 0.14, 0.08, 0, y + 0.19, 0.1)];
 
 let loading: Promise<Shapes> | null = null;
+/** The models, loaded once; a failed load (a dropped connection) is forgotten, so the next stage tries again. */
 function loadShapes(): Promise<Shapes> {
   return loading ??= import("../data/architectureModels.json").then(({ default: data }) => {
     const models = data.models as Record<string, BakedModel>;
@@ -95,7 +96,7 @@ function loadShapes(): Promise<Shapes> {
     shapes.set("station", shapeOf(station()));
     shapes.set("village", shapeOf(village(bakedGeometry(models.windmill))));
     return shapes;
-  });
+  }).catch((error: unknown) => { loading = null; throw error; });
 }
 
 /** Load the building models ahead (they are their own chunk), so a replay does not start on an empty stage. */
@@ -173,6 +174,8 @@ const easeOut = (value: number) => 1 - (1 - value) ** 3;
 function PlaceHologram({ mark, kind, shapes, order, reducedMotion }: { mark: FloorMark; kind: ArchitectureKind; shapes: Shapes; order: number; reducedMotion: boolean }) {
   const born = useRef<number | null>(null);
   const tone = mark.proposed ? PROPOSED : EDGE;
+  // Rebuilt only when where and how it stands changes, not for each new mark object of the same place (a live refresh, a period filter).
+  const footprint = [mark.id, mark.x, mark.z, mark.radius, mark.depth ?? 0, !!mark.region, mark.spotX ?? "", mark.spotZ ?? ""].join("|");
   const { group, lift, materials, scan } = useMemo(() => {
     const edge = new LineBasicMaterial({ color: tone, vertexColors: true, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, toneMapped: false });
     const fill = new MeshBasicMaterial({ color: FILL, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, toneMapped: false });
@@ -198,7 +201,7 @@ function PlaceHologram({ mark, kind, shapes, order, reducedMotion }: { mark: Flo
     loop.userData.height = height;
     group.add(loop);
     return { group, lift, materials: { edge, fill, ring }, scan: loop };
-  }, [mark, kind, shapes, tone]);
+  }, [footprint, kind, shapes, tone]); // eslint-disable-line react-hooks/exhaustive-deps -- the footprint is every field of the mark it reads
   useEffect(() => () => { materials.edge.dispose(); materials.fill.dispose(); materials.ring.dispose(); }, [materials]);
   const level = useRef(0);
   useFrame(({ clock }) => {
@@ -225,7 +228,7 @@ export function ArchitectureHolograms({ marks, reducedMotion }: { marks: FloorMa
   useEffect(() => {
     if (!built.length || shapes) return;
     let live = true;
-    void loadShapes().then((loaded) => { if (live) setShapes(loaded); });
+    loadShapes().then((loaded) => { if (live) setShapes(loaded); }, () => undefined);
     return () => { live = false; };
   }, [built.length, shapes]);
   if (!shapes) return null;

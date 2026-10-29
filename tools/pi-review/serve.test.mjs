@@ -382,3 +382,15 @@ test('album assets are served read-only per book, and only when the host resolve
   const without = await start();
   assert.equal((await send(without, 'api/album-asset?id=ill_0001')).status, 404, 'a custom host without a workspace resolver serves nothing');
 });
+
+test('read mode text: a block is found by its file name, a missing one is a 404 rather than another block under its ids', async (context) => {
+  const { bookText } = await import('./serve.mjs');
+  const directory = await mkdtemp(join(tmpdir(), 'book-text-'));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(join(directory, 'b0001.txt'), '第一句。');
+  await writeFile(join(directory, 'b0003.txt'), '第三句。');
+  assert.equal(await bookText(directory, 1), null, 'b0002.txt is missing');
+  const third = await bookText(directory, 2);
+  assert.deepEqual([third.block, third.blocks, third.sentences[0].id.startsWith('b0002_')], [2, 3, true]);
+  assert.equal(await bookText(directory, 3), null);
+});

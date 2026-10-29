@@ -130,7 +130,9 @@ export function ClipReel({ entries, eyebrow, title, books, book, bookHref, onBoo
   const current = entry && beat !== null ? entry.script.beats[beat] : entry && clip ? entry.script.beats[clip.from] : undefined;
   const lines = current && linesOf ? linesOf(current) : [];
   const speaker = current?.actors[0] ? entry?.script.actors.find((actor) => actor.id === current.actors[0])?.label : undefined;
-  const reel = clip && !reducedMotion ? { key: `${clip.id}:${run}`, from: clip.from, to: clip.to, ms: CLIP_MS } : null;
+  // One reel object per clip run: the stage's beat timer restarts only for a new replay, not on every caption update.
+  const reel = useMemo(() => clip && !reducedMotion ? { key: `${clip.id}:${run}`, from: clip.from, to: clip.to, ms: CLIP_MS } : null, [clip, run, reducedMotion]);
+  const reelEnded = useCallback(() => setEnded(true), []);
   const playing = !!reel && !ended;
   const at = books.findIndex((entry) => entry.id === book);
   const nextBook = at >= 0 ? books[at + 1] : undefined;
@@ -156,7 +158,7 @@ export function ClipReel({ entries, eyebrow, title, books, book, bookHref, onBoo
     </header>
     <section className="clips-stage" aria-label="Clip">
       {entry && clip && models ? <HoloStage key={entry.stage} script={entry.script} mode={mode} onMode={setMode} onClose={() => undefined} reducedMotion={reducedMotion} embedded
-        plan={entry.plan} reel={reel} onReelEnd={() => setEnded(true)} onBeat={setBeat} initialBeat={reducedMotion ? clip.to : clip.from} autoplay={false} />
+        plan={entry.plan} reel={reel} onReelEnd={reelEnded} onBeat={setBeat} initialBeat={reducedMotion ? clip.to : clip.from} seek={`${clip.id}:${run}`} autoplay={false} />
         : <div className="clips-idle"><div className="clips-ring" /><p>{clip && !models ? "Opening the book…" : status}</p></div>}
     </section>
     {entry && clip && <section className="clips-caption" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} aria-live="polite">

@@ -20,7 +20,8 @@
 .holo-movechip { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 3px; color: #031019; background: var(--actor); box-shadow: 0 0 12px var(--actor); margin-top: 26px; display: inline-block; }
 .holo-notechip { font-size: 10.5px; font-weight: 650; padding: 1px 7px; border-radius: 3px; color: #cfe9f7; background: #031019d9; border: 1px dashed #5a8fb0; margin-top: 26px; display: inline-block; }
 .holo-notechip.is-revised { color: #ffe6a8; border: 1px solid #ffd36b; box-shadow: 0 0 12px #ffd36b55; }
-.holo-placelabel { pointer-events: auto; cursor: pointer; font-size: 12px; font-weight: 650; letter-spacing: .02em; padding: 2px 8px; color: var(--holo-dim); background: #031019b3; border-bottom: 1px solid var(--holo-line); }
+.holo-placelabel { pointer-events: auto; cursor: pointer; font: inherit; border: 0; font-size: 12px; font-weight: 650; letter-spacing: .02em; padding: 2px 8px; color: var(--holo-dim); background: #031019b3; border-bottom: 1px solid var(--holo-line); }
+.holo-placelabel:focus-visible { outline: 1px solid var(--holo-cyan); outline-offset: 2px; }
 .holo-placelabel.is-here { color: #fff; border-color: var(--holo-cyan); box-shadow: 0 6px 16px -6px var(--holo-cyan); }
 .holo-bubble { width: max-content; max-width: 320px; white-space: normal; padding: 8px 12px 10px; border-radius: 10px; background: #f4fbffef; color: #07131d; box-shadow: 0 0 0 2px var(--actor), 0 8px 28px #000a; }
 .holo-bubble::after { content: ""; position: absolute; left: 50%; bottom: -9px; border: 9px solid transparent; border-bottom: 0; border-top-color: #f4fbffef; transform: translateX(-50%); }

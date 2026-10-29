@@ -81,12 +81,14 @@ export function reelWindow(script: HoloScript, page: Pick<ReadPage, "from" | "to
 /** A book's own id under a universe's book prefix ("3:scene_000008" → "scene_000008"). */
 export const localId = (id: string) => id.slice(id.lastIndexOf(":") + 1);
 
-/** The prepared plan keys moves by stored event id and starts by the book's scene id; the stage's beats are `<scene>:<record>`, scenes maybe book-prefixed. */
+/** The prepared plan keys moves by stored event id and starts by the book's scene id; the stage's beats are `<scene>:<record>`, scenes maybe book-prefixed.
+ * A beat telling several records (the same moment told twice) carries the moves of each, a person's last one standing. */
 export function keyedPlan(plan: MovePlan, script: HoloScript): MovePlan {
   const moves: MovePlan["moves"] = {}, starts: MovePlan["starts"] = {}, notes: NonNullable<MovePlan["notes"]> = {};
   for (const beat of script.beats) {
-    const record = beat.id.slice(beat.sceneId.length + 1), scene = localId(beat.sceneId);
-    if (beat.kind !== "scene" && plan.moves[record]) moves[beat.id] = plan.moves[record];
+    const records = [beat.id.slice(beat.sceneId.length + 1), ...beat.also ?? []], scene = localId(beat.sceneId);
+    const planned = beat.kind === "scene" ? [] : records.flatMap((record) => plan.moves[record] ?? []);
+    if (planned.length) moves[beat.id] = [...new Map(planned.map((move) => [move.actor, move])).values()];
     if (plan.starts[scene]) starts[beat.sceneId] = plan.starts[scene];
     if (plan.notes?.[scene]) notes[beat.sceneId] = plan.notes[scene];
   }
