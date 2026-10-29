@@ -65,6 +65,21 @@ Positions are in the place's own metres: x and z across its grid (2 m cells), y 
     - per building reached: the energy, the units `blasted`, the units `fallen` (each with where it came to rest), and the skeleton cells destroyed, fallen and cut off from the ground.
   - **`hitThings`:** the things the hit broke.
 
+## The world and its damage (engine strand-demo-4, record version 2)
+
+From engine `strand-demo-4`, a run walks one streamed world: the city of the canvas of places and Jev's landscapes, in 32 m chunks. A chunk is laid when people, a target, a thing or a blast first reaches it (apps/playground/src/data/world.ts).
+- **`world` in a record (version 2):** the world's grid (`NX`, `NZ`, `floors`, and `oi`, `oj`, where world cell 0, 0 sits), the chunks reached (`[ci, cj, born]`), and every lot once.
+  - Each lot has its footprint in world cells, its `source`: the building's id in its landscape, `<place>:<n>`, or `anchor:<place>` for a staged building.
+  - Its `manifold`: a fingerprint of that landscape.
+  - The moment it was first reached (`born`: `<scene>|<event>` or `<scene>|start`).
+  - Positions are in world metres. `buildings[place]` gives the place's `anchor` and the indices of the lots within 80 m of it. Scenes carry `index` (story order).
+- **`stage/simulation/world.json`: the world's damage, kept across story lines.**
+  - **What it holds:** every building a line's accepted run broke, as `building` (its `source`), `manifold`, the scene, its story `index`, and what broke: units `blasted` and `fallen` as `[kind, i, j, k]`, and skeleton cells `destroyed` and `fell`.
+  - **How it is kept:** it is rebuilt whenever a run is kept, from each line's accepted run, and the version it replaces goes to `world-history/<version>.json`.
+  - **How a run uses it:** a run of another line applies these in story order the moment the same building stands in its world, and skips it when the landscape's fingerprint has changed. The page draws them as earlier hits, with a notice above the building, and outlines in red the buildings known broken that the run never reached.
+  - Derived from versioned runs, never canon. v1 runs (fixed grids) leave nothing in it.
+- **`runStrand(novelDir, strand, { until: { scene, event } })`:** the line only as far as one event, for a loop that decides events one at a time.
+
 ## Making them again
 
 ```bash
