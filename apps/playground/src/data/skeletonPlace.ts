@@ -209,12 +209,14 @@ export { CORRIDOR, STAIR, cellAt };
  * occupation drops by `strength` × 0.6 (stair cores, reinforced, by a third of that); outside nothing changes.
  * So a strong blast guts the box and cuts off what depended on it, and a glancing one thins it.
  */
-export function degrade(place: SkeletonPlace, index: number, standing: Uint8Array, box: { x: [number, number]; y: [number, number]; z: [number, number] }, strength: number, rng: () => number) {
+export function degrade(place: SkeletonPlace, index: number, standing: Uint8Array, box: { x: [number, number]; y: [number, number]; z: [number, number]; sphere?: { x: number; y: number; z: number; r: number } }, strength: number, rng: () => number) {
   const lot = place.lots[index], after = standing.slice(), destroyed: number[] = [], loss = Math.min(1, Math.max(0, strength)) * 0.6;
   for (let cell = 0; cell < after.length; cell++) {
     if (!after[cell]) continue;
     const { i, j, k } = cellAt(lot.skeleton, cell), x = (lot.i0 + i + 0.5) * SKELETON_CELL, z = (lot.j0 + j + 0.5) * SKELETON_CELL, y = (k + 0.5) * FLOOR_HEIGHT;
     if (x < box.x[0] || x > box.x[1] || y < box.y[0] || y > box.y[1] || z < box.z[0] || z > box.z[1]) continue;
+    // An impact sphere: only the cells inside it.
+    if (box.sphere && Math.hypot(x - box.sphere.x, y - box.sphere.y, z - box.sphere.z) > box.sphere.r) continue;
     if (rng() < (lot.skeleton.cells[cell] === STAIR ? loss / 3 : loss)) { after[cell] = 0; destroyed.push(cell); }
   }
   // Cut off: what can no longer reach the ground floor. A blasted ground floor opens its own way out, so losing the door alone does not cut the building off.
