@@ -492,17 +492,17 @@ function ArrowHead({ color, opacity = 1 }: { color: string; opacity?: number }) 
 
 /** A strand's axis: a near-white cyan core and the design's strong cyan as its glow. */
 const STRAND_GLOW = { core: "#c4ecff", halo: "#36adff" };
-/** Path tones: the blue time string, an amber flashback thread, a character route, a faint move, a spiral's coil (the design's cyan). */
-const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 }, thread: { color: "#ffc46b", arrow: "#ffc46b", opacity: 0.75 }, route: { color: "#ff9a6b", arrow: "#ffb48c", opacity: 0.95 }, link: { color: "#7cc8ff", arrow: "#7cc8ff", opacity: 0.16 }, coil: { color: "#9fd8ff", arrow: "#9fd8ff", opacity: 0.5 } };
+/** Path tones: the blue time string, an amber flashback thread, a character route, a faint move, a spiral's coil (the design's cyan), a group trip (lime). */
+const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 }, thread: { color: "#ffc46b", arrow: "#ffc46b", opacity: 0.75 }, route: { color: "#ff9a6b", arrow: "#ffb48c", opacity: 0.95 }, link: { color: "#7cc8ff", arrow: "#7cc8ff", opacity: 0.16 }, coil: { color: "#9fd8ff", arrow: "#9fd8ff", opacity: 0.5 }, trip: { color: "#b4f57e", arrow: "#c8ff96", opacity: 0.8 } };
 
 function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors, radii }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean; motion: MotionBus; anchors: (string | undefined)[]; radii: Map<string, number> }) {
   const { camera, size } = useThree();
   const tone = PATH_TONES[path.tone ?? "time"];
   // A coil glows by how much its strand matters; minor coils stay faint.
   const weight = path.weight ?? 1;
-  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: tone.color, transparent: true, opacity: (path.preview ? 0.85 : path.tone === "coil" ? 0.12 + 0.6 * weight : tone.opacity) * (path.dim ? 0.15 : 1), depthWrite: false })), [path, tone, weight]);
+  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: tone.color, transparent: true, opacity: (path.preview ? 0.85 : path.tone === "coil" ? 0.12 + 0.6 * weight : tone.opacity) * (path.dim ? 0.15 : 1) * (path.faint ? 0.4 : 1), depthWrite: false })), [path, tone, weight]);
   const arrowGroups = useRef<(Group | null)[]>([]);
-  const arrowCount = path.tone === "link" || path.tone === "coil" || path.strand ? 0 : path.tone === "thread" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
+  const arrowCount = path.tone === "link" || path.tone === "coil" || path.strand ? 0 : path.tone === "thread" || path.tone === "trip" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
   const arrowIndices = useMemo(() => Array.from({ length: arrowCount }, (_, index) => Math.max(1, Math.round((index + 1) * (path.points.length - 1) / arrowCount))), [path, arrowCount]);
   /** A character's route: a bead travels it in story order (resting at the start under reduced motion). */
   const bead = useRef<Mesh>(null);

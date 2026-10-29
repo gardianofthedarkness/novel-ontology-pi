@@ -238,7 +238,11 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     return { ...track, fromPoints };
   }), ...preview.paths], [levelPaths, mainAt, preview.paths, morph]);
   /** With a strand lit, it glows its strongest and every other strand's axis and coil fade. */
-  const shownPaths = useMemo(() => strandFocus ? paths.map((path) => !path.strandId ? path : path.strandId === strandFocus.strandId ? { ...path, weight: 1 } : { ...path, dim: true }) : paths, [paths, strandFocus]);
+  // A lit strand keeps its own paths (and the trips that start or end on it) and fades every other strand's.
+  const shownPaths = useMemo(() => strandFocus ? paths.map((path) => {
+    const owners = path.strandIds ?? (path.strandId ? [path.strandId] : null);
+    return !owners ? path : owners.includes(strandFocus.strandId) ? { ...path, weight: 1 } : { ...path, dim: true };
+  }) : paths, [paths, strandFocus]);
   const edges = connections.edges;
   const visibleConnections = useMemo(() => scope.kind === "library" || scope.kind === "series"
     ? connections.edges.filter(edge => edge.relationType !== "CAUSES")

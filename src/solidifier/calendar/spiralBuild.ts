@@ -9,6 +9,7 @@ import { storyStrands, strandProjection } from "../../digger/timeplace/strandQue
 import { latestStrandAnswers } from "../../digger/timeplace/strandView.js";
 import { compressTime, solveSpiral, spiralTracks, SPIRAL, type SpiralRun, type SpiralTrack } from "../../digger/timeplace/spiral.js";
 import { calendarBooks, loadCalendar } from "./calendar.js";
+import { groupTrips } from "../../digger/timeplace/trips.js";
 
 /**
  * The precomputed spiral timeline of a universe (or a standalone book): per
@@ -33,11 +34,16 @@ export interface SpiralFile {
     runs: (SpiralTrack & { from?: string; into?: string })[];
     /** A character crossing between strands mid-way (scene to scene). */
     links: { from: string; to: string }[];
+    /** Group trips (trips.ts): several people arriving together from one scene at another place. Absent in files built before them. */
+    trips?: SpiralTrip[];
     /** Calendar days on this axis: where each starts and ends. */
     days: { key: string; label: string; from: number; to: number }[];
     metrics: { knots: number; pairs: number; crowding: [number, number]; overlap: [number, number] };
   }[];
 }
+
+/** A group trip as stored: scene, run and people ids qualified like the knots, with the names the view shows. */
+export interface SpiralTrip { from: string; to: string; runs: [string, string]; people: string[]; names: string[]; places: [string, string]; guessed: boolean; nested: boolean; backed: boolean }
 
 export const spiralPath = (scope: Pick<CastScope, "root" | "universeId">) => join(scope.root, "calendar", `${scope.universeId}.spiral.json`);
 export async function loadSpiral(scope: Pick<CastScope, "root" | "universeId">): Promise<SpiralFile | null> {
@@ -48,14 +54,21 @@ export async function loadSpiral(scope: Pick<CastScope, "root" | "universeId">):
 
 const fold = <T extends { id: string }>(records: T[]) => [...new Map(records.map((record) => [record.id, record])).values()];
 
-/** One book's strands as the view draws them: stored story time and places, pending time-place proposals, answered casts. */
+/** One book's strands as the view draws them: stored story time and places, pending time-place proposals, answered casts; and its group trips. */
 async function bookStrands(workspace: string) {
   const bundle = new BundleStore(join(workspace, "ontology"));
   const [scenes, entities, relations] = [fold(await bundle.loadFile<Scene>("scenes.jsonl")), fold(await bundle.loadFile<Entity>("entities.jsonl")), await bundle.loadFile<Relation>("relations.jsonl")];
   const pending = (await listChangeSets(workspace).catch(() => [])).filter((changeset) => changeset.status === "pending_review" && changeset.id.startsWith("cs_timeplace")).flatMap((changeset) => changeset.proposals as unknown as { kind: string; payload: Record<string, unknown> }[]);
   const data = strandProjection({ scenes, entities, relations, pending });
   if (!data.available) return null;
-  return { data, strands: storyStrands(data, (await latestStrandAnswers(workspace)) ?? {}) };
+  const answers = await latestStrandAnswers(workspace);
+  const strands = storyStrands(data, answers ?? {});
+  // Movement events back a trip; each belongs to the scene of its first evidence sentence.
+  const sceneOf = new Map(scenes.flatMap((scene) => scene.sentenceIds.map((id) => [id, scene.id] as const)));
+  const events = (await bundle.loadFile<{ eventType?: string; primaryActors?: string[]; evidence?: { sentenceIds?: string[] } }>("events.jsonl"))
+    .map((event) => ({ eventType: event.eventType, primaryActors: event.primaryActors, sceneId: sceneOf.get(event.evidence?.sentenceIds?.[0] ?? "") ?? null }));
+  const names = new Map(entities.map((entity) => [entity.id, entity.names?.find((form) => form.kind === "canonical")?.text ?? entity.names?.[0]?.text ?? entity.id]));
+  return { data, strands, names, trips: groupTrips(data, { presence: answers?.presence, events, onStrands: (id) => strands.layer.has(id) }) };
 }
 
 /** Build (or rebuild) the spiral timeline from every book's strands and the calendar's days. No model calls. */
@@ -70,7 +83,7 @@ export async function buildSpiral(scope: CastScope, options: { iterations?: numb
   for (const [continuity, members] of lanes) {
     // Positions are global layers until every book is in; then quiet time is compressed.
     type Layered = { id: string; knots: { id: string; x: number }[]; from?: { run: string; x: number }; into?: { run: string; x: number } };
-    const runs = new Map<string, Layered>(), runOf = new Map<string, string>(), links: { from: string; to: string }[] = [];
+    const runs = new Map<string, Layered>(), runOf = new Map<string, string>(), links: { from: string; to: string }[] = [], trips: SpiralTrip[] = [];
     const placed: SpiralFile["continuities"][number]["books"] = [];
     const days = new Map<string, { key: string; label: string; from: number; to: number }>();
     let offset = 0;
@@ -99,6 +112,8 @@ export async function buildSpiral(scope: CastScope, options: { iterations?: numb
         else if (parent.knots.at(-1)!.id === qualify(edge.from)) { if (!parent.into || parent.into.x > x(edge.to)) parent.into = { run: to, x: x(edge.to) }; }
         else links.push({ from: qualify(edge.from), to: qualify(edge.to) });
       }
+      for (const trip of loaded.trips) trips.push({ from: qualify(trip.from), to: qualify(trip.to), runs: [runOf.get(qualify(trip.from))!, runOf.get(qualify(trip.to))!], people: trip.people.map(qualify),
+        names: trip.people.map((id) => loaded.names.get(id) ?? id), places: [data.names[trip.fromPlace] ?? trip.fromPlace, data.names[trip.toPlace] ?? trip.toPlace], guessed: trip.guessed, nested: trip.nested, backed: trip.backed });
       placed.push({ sourceId: book.sourceId, title: book.title, from: offset, to: offset + strands.layers - 1 });
       offset += strands.layers + 2;
     }
@@ -116,7 +131,7 @@ export async function buildSpiral(scope: CastScope, options: { iterations?: numb
     continuities.push({
       id: continuity || null, frame: solution.frame, books: placed,
       runs: spiralTracks(list, solution).map((track) => ({ ...track, ...(runs.get(track.id)!.from ? { from: runs.get(track.id)!.from!.run } : {}), ...(runs.get(track.id)!.into ? { into: runs.get(track.id)!.into!.run } : {}) })),
-      links, days: [...days.values()].sort((first, second) => first.from - second.from),
+      links, trips, days: [...days.values()].sort((first, second) => first.from - second.from),
       metrics: { knots: list.reduce((sum, run) => sum + run.knots.length, 0), pairs: solution.pairs, crowding: [solution.initial.visibility, solution.visibility], overlap: [solution.initial.overlap, solution.overlap] },
     });
   }

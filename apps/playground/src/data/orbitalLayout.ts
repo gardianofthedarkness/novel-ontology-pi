@@ -25,13 +25,17 @@ export interface OrbitalDraw {
 }
 /** tone: "thread" (amber, flashback → told during), "route" (a character's
  * path through places), "link" (faint move between places); default the time string. */
-export interface OrbitalPath { id: string; points: Position3[]; preview?: boolean; fromPoints?: Position3[]; tone?: "thread" | "route" | "link" | "coil";
+export interface OrbitalPath { id: string; points: Position3[]; preview?: boolean; fromPoints?: Position3[]; tone?: "thread" | "route" | "link" | "coil" | "trip";
   /** A story strand's axis: drawn as a glowing cyan tube; tapping it lights the strand. */
   strand?: boolean;
   /** How much a strand matters (0–1, by its scenes): its axis and coil glow stronger, minor ones stay dim. */
   weight?: number;
   /** The strand this path belongs to (its axis and its coil), so another strand's light can fade it. */
   strandId?: string;
+  /** A path between strands (a group trip): lit with either strand, faded by any other. */
+  strandIds?: string[];
+  /** Drawn faint: it rests on a guess (a trip whose place one end borrows). */
+  faint?: boolean;
   /** Faded while another strand is lit. */
   dim?: boolean }
 export interface OrbitalPose { position: Position3; radius: number }
