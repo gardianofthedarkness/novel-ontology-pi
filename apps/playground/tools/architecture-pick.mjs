@@ -1,7 +1,7 @@
 // Prototype: let Jev pick each place's building from pictures of the kinds its
-// name shortlists (src/data/placeArchitecture.ts), or "none".
+// name shortlists (src/ground/stage/placeArchitecture.ts, from the built CLI), or "none".
 //
-//   node apps/playground/tools/architecture-pick.mjs <time-place.json> <candidates dir> <secrets.js of a built CLI> [place label ...]
+//   npm run build && node apps/playground/tools/architecture-pick.mjs <time-place.json> <candidates dir> <secrets.js of a built CLI> [place label ...]
 //
 // <time-place.json> is a TimePlaceProjection (places + scenes); <candidates dir>
 // holds <kind>.png renders (architecture-gallery.html?kinds=<kind>&columns=1&still&bare).
@@ -11,7 +11,9 @@
 import fs from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { architectureCandidates } from "../src/data/placeArchitecture.ts";
+
+// The built module, so any Node 22 runs it (a .ts import needs type stripping).
+const { architectureCandidates } = await import(new URL("../../../dist/src/ground/stage/placeArchitecture.js", import.meta.url).href);
 
 const [projectionFile, candidatesDir, secretsModule, ...only] = process.argv.slice(2);
 const projection = JSON.parse(fs.readFileSync(projectionFile, "utf8"));

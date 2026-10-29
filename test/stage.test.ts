@@ -1,11 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { MockDecisionModel, type DecisionAnswer, type DecisionModel, type DecisionQuestion } from "../src/ground/connectors/jev.js";
 import { pickArchitecture, type ArchitecturePlace } from "../src/digger/stage/architecture.js";
-import { askMovement, type MovementScene } from "../src/digger/stage/movement.js";
+import { askMovement, sceneCallLimit, type MovementScene } from "../src/digger/stage/movement.js";
 import { prepareStage } from "../src/digger/stage/prep.js";
-import { navGrid } from "../apps/playground/src/data/holoNav.js";
+import { navGrid } from "../src/ground/stage/holoNav.js";
 import { describeError } from "../src/ground/errors.js";
+import { initWorkspace } from "../src/ground/workspace/init.js";
+import { stageInputs } from "../src/cli/commands/extract/stageCommands.js";
 
 /** A decision model that records what it was asked and answers from a function. */
 function recording(answer: (state: string, question: DecisionQuestion) => DecisionAnswer["value"]) {
@@ -35,6 +40,14 @@ test("buildings: the name shortlists, Jev picks among pictures under neutral nam
   const again = recording(() => "none");
   const reused = await pickArchitecture(places, { decisions: again.model, pictures, previous: picked });
   assert.deepEqual([again.asked.length, reused.usage.reused], [0, 4]);
+});
+
+test("buildings: a place holding a city is a city all the way up the tree, whatever order the places come in", async () => {
+  const tree = [place("country", "某国", ["city"]), place("city", "学园", ["d7"]), place("d7", "第七学区")];
+  for (const places of [tree, [...tree].reverse()]) {
+    const picks = (await pickArchitecture(places)).places;
+    assert.deepEqual(Object.fromEntries(Object.entries(picks).map(([id, pick]) => [id, pick.kind])), { country: "city", city: "city", d7: "city" }, places.map((entry) => entry.id).join(","));
+  }
 });
 
 const scene: MovementScene = { id: "s1", placeId: "tower", placeLabel: "废弃大楼", kind: "skyscraper", opening: "白井走进废弃大楼。", cast: ["a", "b"],
@@ -70,8 +83,52 @@ test("movement: who moves (named people on an even chance, others only when sure
   assert.deepEqual([short.complete, short.usage.skipped, Object.keys(short.scenes).length], [false, 1, 0]);
 });
 
+test("movement: --max-calls is never exceeded, even when every event has movers and scenes run side by side", async () => {
+  const busy = Array.from({ length: 8 }, (_, index): MovementScene => ({ id: `s${index}`, placeId: "tower", placeLabel: "废弃大楼", kind: "office", opening: "", cast: ["a", "b"],
+    events: Array.from({ length: 5 }, (_, at) => ({ id: `s${index}e${at}`, text: "两人跑上楼。", actors: ["a"] })) }));
+  // Everyone moves in every event: each scene costs the most it can (its opening, then two calls per event).
+  const { model, asked } = recording((_, question) => question.primitive === "noul" ? 1 : question.options![0]);
+  const report = await askMovement(busy, { decisions: model, names: {}, maxCalls: 40 });
+  assert.equal(sceneCallLimit(busy[0]), 11);
+  assert.ok(asked.length <= 40, `${asked.length} calls against a budget of 40`);
+  assert.deepEqual([report.usage.calls, report.complete, Object.keys(report.scenes).length], [asked.length, false, 3]);
+});
+
+test("the stage reads reviewed canon only: present people and recorded participants, never someone only mentioned or named in the evidence", async (context) => {
+  const parent = await mkdtemp(join(tmpdir(), "stage-"));
+  context.after(() => rm(parent, { recursive: true, force: true }));
+  const directory = join(parent, "novel");
+  await initWorkspace(directory);
+  await writeFile(join(directory, "source", "novel.txt"), "第一章\n甲在钟塔。\n");
+  const character = (id: string, name: string) => ({ id, kind: "Character", names: [{ text: name, lang: "zh", kind: "canonical" }], properties: {}, confidence: 0.9 });
+  const lines = (records: unknown[]) => records.map((record) => JSON.stringify(record)).join("\n") + "\n";
+  await writeFile(join(directory, "ontology", "entities.jsonl"), lines([character("char_a", "甲"), character("char_b", "乙"), character("char_c", "丙"), character("char_d", "丁"),
+    { id: "loc_tower", kind: "Location", names: [{ text: "钟塔大厦", lang: "zh", kind: "canonical" }], properties: {}, confidence: 0.9 }]));
+  await writeFile(join(directory, "ontology", "scenes.jsonl"), lines([
+    { id: "s1", chapterIndex: 0, sentenceIds: ["b0001_s0001", "b0001_s0002"], charactersPresent: ["char_a"], charactersMentioned: ["char_b"], locationId: "loc_tower" },
+    { id: "s2", chapterIndex: 1, sentenceIds: ["b0002_s0001"], charactersPresent: ["char_a"], charactersMentioned: [], locationId: null }]));
+  // 乙 is only mentioned; 丙 is named in the evidence (in speech); 丁 is recorded taking part.
+  await writeFile(join(directory, "ontology", "events.jsonl"), lines([
+    { id: "evt_1", summary: "甲在钟塔里对丁说起乙和丙。", primaryActors: ["char_a"], evidence: { text: "甲说：「乙和丙去哪了？」", sentenceIds: ["b0001_s0001"] } },
+    { id: "evt_2", summary: "甲上楼。", primaryActors: ["char_a"], evidence: { text: "甲上楼。", sentenceIds: ["b0002_s0001"] } }]));
+  await writeFile(join(directory, "ontology", "relations.jsonl"), lines([{ id: "rel_1", type: "PARTICIPATES_IN", fromId: "char_d", toId: "evt_1", properties: {}, confidence: 0.9 }]));
+  await mkdir(join(directory, "stage"), { recursive: true });
+  await writeFile(join(directory, "stage", "architecture.json"), JSON.stringify({ version: 1, inputs: "x", model: null, askedAt: "", usage: { calls: 0, reused: 0 }, places: { loc_tower: { label: "钟塔大厦", kind: "skyscraper", shortlist: ["skyscraper"], by: "name", inputs: "" } } }));
+  // s2's place awaits review: it is not staged, so nothing is paid for it.
+  await mkdir(join(directory, "changesets"), { recursive: true });
+  await writeFile(join(directory, "changesets", "cs_timeplace_time-place_1.json"), JSON.stringify({ id: "cs_timeplace_time-place_1", blockId: "time-place", status: "pending_review", reviewNotes: {}, createdAt: new Date().toISOString(),
+    proposals: [{ id: "p1", kind: "add_relation", confidence: 0.9, payload: { id: "rel_2", type: "LOCATED_AT", fromId: "s2", toId: "loc_tower", properties: {}, confidence: 0.9 } }] }));
+  const inputs = await stageInputs(directory);
+  assert.deepEqual(inputs.movementScenes.map((entry) => entry.id), ["s1"]);
+  const [staged] = inputs.movementScenes;
+  assert.deepEqual(staged.cast, ["char_a", "char_d"]);
+  assert.deepEqual(staged.events.map((event) => event.actors), [["char_d", "char_a"]]);
+  assert.deepEqual([inputs.estimate, inputs.limit], [3, 3]);
+});
+
 test("a stage step run too early is reported as waiting on the checklist, not as a bug", () => {
   const report = describeError(new Error("Animation prep waits for every other step: causality (todo). See novel checklist."), ["stage", "prep", "/books/vol-1/novel"]);
   assert.deepEqual([report.aspect, report.code, report.next], ["usage", "STEP_WAITING", ["novel checklist /books/vol-1/novel"]]);
   assert.equal(describeError(new Error("Movement needs each place's building first: run `novel stage architecture /b`."), ["stage", "movement", "/b"]).code, "STEP_WAITING");
+  assert.equal(describeError(new Error("Movement waits for the steps it builds on: strands (todo). See novel checklist."), ["stage", "movement", "/b"]).code, "STEP_WAITING");
 });
