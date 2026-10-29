@@ -113,3 +113,19 @@ test("the direction question: 14 cube directions, 4 direct ones held to evidence
   assert.deepEqual(question.options!.slice(-2), ["with:御坂美琴", "none"]);
   assert.match(question.instructions, /direct-\* direction only when the text directly says or shows that 食蜂操祈 uses a superhuman ability/);
 });
+
+test("objects: only buildings and large visible things are accepted, matched against one ranking of models and shapes", async () => {
+  const { OBJECT_PROMPT_RULES, acceptObjects, detectObjects, matchObject } = await import("../src/digger/stage/objects.js");
+  assert.ok(OBJECT_PROMPT_RULES.some((rule) => /large enough to be seen from that wide view/.test(rule)), "the visibility rule is in the prompt");
+  const events = [{ id: "e1" }, { id: "e2" }];
+  const { objects, rejected } = acceptObjects({ entities: [{ name: "美琴" }], objects: [{ name: "巨大的金属球", kind: "object", size: 6, visible: true, airborne: true, event: 2 }, { name: "硬币", kind: "object", size: 0.03 }, { name: "医院", kind: "building", size: 40, event: 1 }, { name: "安娜", kind: "person", size: 1.5 }, { name: "大楼屋顶", kind: "building", size: 30 }, { name: "指示牌", kind: "object", size: 4, visible: false }] }, events);
+  assert.deepEqual(objects.map((object) => [object.name, object.event, object.airborne]), [["巨大的金属球", "e2", true], ["医院", "e1", false]]);
+  assert.equal(rejected, 4, "the coin is too small, a person is not a thing, a roof is part of its building, a sign is not seen from a wide view");
+  for (const [name, id] of [["摩天大楼", "skyscraper"], ["巨大的金属球", "sphere"], ["白色飞艇", "oval"], ["钻石般的结晶", "diamond"], ["第七学区医院", "hospital"], ["不知名的东西", "box"]]) assert.equal((await matchObject(name)).id, id, name);
+  // A model that answers with a whole extraction: only its objects are taken.
+  const work = { modelId: "test", generate: async () => JSON.stringify({ S1: { events: ["…"], entities: ["…"], objects: [{ name: "游戏中心", kind: "building", size: 20, event: 1 }] } }) };
+  const report = await detectObjects([{ id: "s1", placeLabel: "第七学区", events: [{ id: "e1", text: "美琴在游戏中心前" }] }], { work });
+  assert.deepEqual(report.scenes.s1.objects.map((object) => [object.name, object.match.id]), [["游戏中心", "office"]]);
+  const again = await detectObjects([{ id: "s1", placeLabel: "第七学区", events: [{ id: "e1", text: "美琴在游戏中心前" }] }], { work, previous: report });
+  assert.deepEqual(again.usage, { calls: 0, reused: 1, skipped: 0 });
+});

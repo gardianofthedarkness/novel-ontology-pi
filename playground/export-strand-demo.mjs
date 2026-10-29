@@ -122,8 +122,40 @@ export async function strandDemo(novelDir, options) {
   const placeOf = new Map(chosen.map(scene => [scene.id, scene.placeId])), tree = new Set(chosen.flatMap(scene => places.get(scene.placeId)?.path ?? [scene.placeId]));
   const migrations = chosen.flatMap(scene => (timeline.handoffs.get(scene.id) ?? []).filter(handoff => handoff.from && !handoff.samePlace).map(handoff => ({ scene: scene.id, person: handoff.person, from: placeOf.get(handoff.from), to: scene.placeId })));
   const clean = text => (text ?? '').split('（原文：')[0].trim();
+  // Things the scenes put in their places (novel stage objects): a named building takes a generic lot and lights up when first
+  // mentioned; anything else stands where the event's first actor is (standing in for Jev's box on the top view), floating on
+  // top of whatever is under it.
+  const detected = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
+  const ROLE_FOR = { hospital: 'hospital', skyscraper: 'office', office: 'office', market: 'shop', station: 'station', school: 'office', home: 'shop' };
+  const anonymous = /^(另一栋|另一座|那栋|这栋)?(大)?(楼|大楼|建筑|房子)$/;
+  const lotNames = new Map(), placedObjects = new Map();
+  for (const scene of chosen) {
+    const group = groups.get(scene.placeId), found = detected?.scenes?.[scene.id]?.objects ?? [], run = runs[scene.id];
+    for (const object of found) {
+      const eventIndex = Math.max(0, scene.events.findIndex(event => event.id === object.event));
+      if (object.kind === 'building' && object.match.kind === 'building') {
+        // Anonymous buildings are already standing; one named after another place stands there, not here.
+        if (anonymous.test(object.name) || [...groups.values()].some(other => other.label !== group.label && object.name.includes(other.label))) continue;
+        const lots = group.layout.lots, key = `${scene.placeId}|${object.name}`;
+        if (lotNames.has(key)) continue;
+        const free = lots.findIndex((lot, index) => !lot.label && ![...lotNames.values()].some(entry => entry.place === scene.placeId && entry.lot === index) && lot.role === (ROLE_FOR[object.match.id] ?? lot.role));
+        const index = free >= 0 ? free : lots.findIndex((lot, n) => !lot.label && ![...lotNames.values()].some(entry => entry.place === scene.placeId && entry.lot === n));
+        if (index >= 0) lotNames.set(key, { place: scene.placeId, lot: index, name: object.name, scene: scene.id, event: eventIndex, model: object.match.id });
+        continue;
+      }
+      const actor = scene.events[eventIndex]?.actors?.[0] ?? scene.cast[0], at = run?.events?.[eventIndex]?.at?.[actor]?.[0] ?? run?.starts?.[actor]?.[0];
+      if (at === undefined || at === null) continue;
+      const p = nodePosition(group.layout, at), lot = group.layout.lots.find(entry => p.x >= entry.i0 * 2 && p.x < (entry.i0 + entry.nx) * 2 && p.z >= entry.j0 * 2 && p.z < (entry.j0 + entry.nz) * 2);
+      const size = Math.min(12, Math.max(2, object.size)), base = lot ? lot.floors * 3 : 0;
+      const list = placedObjects.get(scene.id) ?? [];
+      list.push({ name: object.name, shape: object.match.kind === 'shape' ? object.match.id : 'box', size, event: eventIndex, x: Math.round((p.x + 1.5 * (list.length % 3 - 1)) * 10) / 10, z: Math.round(p.z * 10) / 10, y: base + size / 2 + (object.airborne ? 8 : 0), floating: !!lot || object.airborne });
+      placedObjects.set(scene.id, list);
+    }
+  }
+  notes.detected = { buildings: lotNames.size, objects: [...placedObjects.values()].reduce((sum, list) => sum + list.length, 0) };
   const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8')), worn = new Set();
-  const shellOf = (placeId, lot, index) => { const choices = SHELLS[lot.role === 'office' && lot.floors >= 7 ? 'tall' : lot.role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
+  const named = (placeId, index) => [...lotNames.values()].find(entry => entry.place === placeId && entry.lot === index);
+  const shellOf = (placeId, lot, index) => { const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
   const exported = Object.fromEntries([...groups].map(([id, { layout }]) => [id, layout.lots.map((lot, index) => shellOf(id, lot, index))]));
   return {
     models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
@@ -131,12 +163,13 @@ export async function strandDemo(novelDir, options) {
     macro: [...tree].map(id => ({ id, label: name(id), parent: tree.has(places.get(id)?.parentId) ? places.get(id).parentId : null })),
     people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
     places: Object.fromEntries([...groups].map(([id, { label, path, layout }]) => [id, { label, path, kind: layout.kind, NX: layout.NX, NZ: layout.NZ, K: layout.K, ground: [...layout.ground].join(''), clutter: [...layout.clutter.keys()].filter(cell => layout.clutter[cell]), clutterDraws: layout.clutterDraws,
-      lots: layout.lots.map((lot, index) => ({ model: exported[id][index], label: lot.label, role: lot.role, i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) })) }])),
+      lots: layout.lots.map((lot, index) => ({ model: exported[id][index], label: lot.label, detected: named(id, index) ? { name: named(id, index).name, scene: named(id, index).scene, event: named(id, index).event } : null, role: named(id, index) && ROLE_FOR[named(id, index).model] === 'hospital' ? 'hospital' : lot.role, i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) })) }])),
     scenes: chosen.map(scene => {
       const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label;
       return { id: scene.id, place: scene.placeId, label: label && label !== scene.id ? label : null,
         starts: Object.fromEntries(Object.entries(run.starts).map(([person, at]) => [person, at?.[0] ?? null])),
         from: Object.fromEntries((timeline.handoffs.get(scene.id) ?? []).map(handoff => [handoff.person, handoff.from ? (handoff.samePlace ? 'stays' : 'arrives') : 'enters'])),
+        objects: placedObjects.get(scene.id) ?? [],
         events: scene.events.map(event => ({ text: clean(event.text), hit: hits.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean) })) };
     }),
   };

@@ -7,6 +7,11 @@ import { cachedDecisions } from "../../../digger/timeplace/cache.js";
 import { storyStrands, strandProjection } from "../../../digger/timeplace/strandQuestions.js";
 import { latestStrandAnswers } from "../../../digger/timeplace/strandView.js";
 import { forkTimeline, type TimelineScene } from "../../../digger/stage/environment.js";
+import { detectObjects, type ObjectScene, type ObjectsReport } from "../../../digger/stage/objects.js";
+import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
+import { loadEmbedder } from "../../../ground/connectors/embeddings.js";
+import { loadConfig } from "../../config.js";
+import { cachedWork } from "../../../digger/timeplace/cache.js";
 import { castCandidates, namedInText } from "../../../digger/processing/castCandidates.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { architectureFingerprint, architecturePictures, pickArchitecture, type ArchitecturePlace, type ArchitectureReport } from "../../../digger/stage/architecture.js";
@@ -40,7 +45,7 @@ const clip = (text: string, length: number) => [...text].length > length ? `${[.
 const CAST_LIMIT = 8;
 
 interface StoredEvent { id: string; summaryEn?: string; summary?: string; primaryActors?: string[]; evidence?: { text?: string; sentenceIds?: string[] } }
-const stageFile = (novelDir: string, name: "architecture" | "movement" | "plan") => join(novelDir, "stage", `${name}.json`);
+const stageFile = (novelDir: string, name: "architecture" | "movement" | "plan" | "objects") => join(novelDir, "stage", `${name}.json`);
 const readJson = async <T>(path: string): Promise<T | null> => readFile(path, "utf8").then((text) => JSON.parse(text) as T, () => null);
 async function writeReport(path: string, value: unknown) {
   await mkdir(join(path, ".."), { recursive: true, mode: 0o700 });
@@ -207,4 +212,25 @@ export async function stageForks(novelDir: string, options: { fork?: string } = 
   };
 }
 
-export const STAGE_USAGE = "novel stage show <novel-dir> | novel stage forks <novel-dir> [--fork <scene-id>] |novel stage architecture <novel-dir> [--no-jev] [--cache dir] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] | novel stage prep <novel-dir> [--force]";
+/**
+ * `novel stage objects`: the buildings and large visible things each staged
+ * scene puts in its place (objects.ts), matched to what the stage can draw.
+ * Work-model calls, a few scenes per call, bounded by --max-calls; answers
+ * are kept per scene and reused while the scene's events stay the same.
+ */
+export async function stageObjects(novelDir: string, options: StageOptions & { work?: boolean } = {}): Promise<Record<string, unknown>> {
+  const env = options.env ?? process.env, inputs = await stageInputs(novelDir);
+  const scenes: ObjectScene[] = inputs.movementScenes.map((scene) => ({ id: scene.id, placeLabel: scene.placeLabel, events: scene.events.map((event) => ({ id: event.id, text: event.text.split("（原文：")[0] })) }));
+  const work = options.work === false || !env.WORK_LLM_API_KEY?.trim() ? undefined : options.cache ? cachedWork(workModelFromEnv(env), options.cache) : workModelFromEnv(env);
+  let embedder = null;
+  try { const cfg = loadConfig(env); embedder = loadEmbedder({ provider: cfg.embeddings.provider, model: cfg.embeddings.model, dimension: cfg.embeddings.dimension, baseUrl: cfg.embeddings.baseUrl, apiKey: env.EMBEDDING_API_KEY?.trim() || null }); } catch { embedder = null; }
+  const report = await detectObjects(scenes, { work, embedder, previous: await readJson<ObjectsReport>(stageFile(novelDir, "objects")), maxCalls: options.maxCalls });
+  await writeReport(stageFile(novelDir, "objects"), report);
+  const all = Object.values(report.scenes).flatMap((scene) => scene.objects);
+  const byMatch: Record<string, number> = {};
+  for (const object of all) byMatch[object.match.id] = (byMatch[object.match.id] ?? 0) + 1;
+  return { scenes: scenes.length, withObjects: Object.values(report.scenes).filter((scene) => scene.objects.length).length, objects: all.length, rejected: Object.values(report.scenes).reduce((sum, scene) => sum + scene.rejected, 0), byMatch, ranking: report.embedder ? `embedding (${report.embedder})` : "words", usage: report.usage, complete: report.complete, report: stageFile(novelDir, "objects"),
+    ...(work ? {} : { note: "No work model configured (WORK_LLM_API_KEY): nothing was asked; scenes are left for a run with one." }) };
+}
+
+export const STAGE_USAGE = "novel stage objects <novel-dir> [--max-calls N] [--cache dir] [--no-work] | novel stage show <novel-dir> | novel stage forks <novel-dir> [--fork <scene-id>] |novel stage architecture <novel-dir> [--no-jev] [--cache dir] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] | novel stage prep <novel-dir> [--force]";
