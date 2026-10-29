@@ -29,7 +29,7 @@ On the stage demo host, the records currently exist for book 2 (`~/claude-stage-
 
 Every export with `--records` keeps the strand's record as a run of its own, never overwritten. A run carries `run: {id, inputs, engine}`:
 - `inputs`: a hash of what it was made from (the book's ontology files and the stage's answers: architecture, objects, movement, Jev's placements and impacts);
-- `engine`: the simulation engine's version (`ENGINE` in the exporter; the walk's seeds come from the scene keys under it).
+- `engine`, `engineVersion`: the world engine that made the run, by name (`world-engine-N`) and number (`ENGINE_VERSION` in the exporter, raised whenever a change alters what a run comes out as; a stable one is tagged `world-engine-vN` in git). Runs before version 1 name their engine `strand-demo-N` and have no number. The walk's seeds come from the scene keys under its own key (`strand-demo-4`), kept while the walk is unchanged so runs reproduce. The live state (`live.json`) and each growth-log line carry `engine` too.
 
 The same outcome exported again is the same run. Each strand has one **accepted** run: its first, or the one exported with `--accept`. The accepted run is copied to `<strand>.json` and named in `index.json` (`accepted`, beside the list of `runs` with their counts). A newer run stays a candidate until it is accepted, so what other sessions read does not drift with every export. A record from before runs became the strand's first run when the next export ran.
 

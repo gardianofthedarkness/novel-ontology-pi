@@ -132,3 +132,11 @@ test("parents that loop stand unnamed rather than never being built", () => {
   centralBuild(canvas, [{ id: "a", label: "A", scale: "district", parent: "b" }, { id: "b", label: "B", scale: "district", parent: "a" }]);
   assert.deepEqual(Object.keys(canvas.places).sort(), ["a", "b"]);
 });
+
+test("an area the ontology puts nowhere but a pending review proposes a parent for dwells in that parent, not at random; so does a building", () => {
+  const canvas = emptyCanvas(), dwelling = centralBuild(canvas, ontology.map((area) => (area.id === "w15" ? { ...area, proposed: "far" } : area)));
+  assert.equal(canvas.places.w15.parent, "far");
+  assert.equal(dwelling.w15, "far", "still dwelling: the proposal is not canon until reviewed");
+  assert.equal(dwellingFor(canvas, "hospital", "w15"), "w15");
+  assert.equal(dwellingFor(canvas, "hospital", "nowhere"), dwellingFor(canvas, "hospital"), "a proposal outside the build is ignored");
+});

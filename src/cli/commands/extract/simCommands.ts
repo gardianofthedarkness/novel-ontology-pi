@@ -31,6 +31,7 @@ interface KeptRun { strand: string; run: string; fresh: boolean; accepted: strin
 interface StrandData { title: string; notes: { hits?: number; impacts?: { sphere: number; none: number } }; things: unknown[]; places: Record<string, unknown>; scenes: { events: { moves: unknown[] }[] }[] }
 interface Engine {
   ENGINE: string;
+  ENGINE_VERSION: number;
   runStrand(novelDir: string, strand: Omit<SimStrand, "id">, options?: { until?: { scene: string; event: number }; live?: (snapshot: unknown, page: unknown) => unknown; pace?: number }): Promise<StrandData>;
   simulationRecord(data: StrandData, strand: Omit<SimStrand, "title">): { strand: { title: string } };
   simulationInputs(novelDir: string): Promise<string>;
@@ -190,7 +191,7 @@ export async function simRun(novelDir: string, options: { strand?: string; auto?
   }
   await live.finish("done");
   const standIns = runs.some((run) => run.jev.placements.jev < run.jev.placements.of || run.jev.fights.jev + run.jev.fights.none < run.jev.fights.of);
-  return { engine: sim.ENGINE, inputs, runs, note: `Derived view data, never canon. The viewer plays each line's accepted run (play/ beside the app).${standIns ? " Some placements or fights use stand-ins: novel sim pick asks Jev for them." : ""}` };
+  return { engine: sim.ENGINE, engineVersion: sim.ENGINE_VERSION, inputs, runs, note: `Derived view data, never canon. The viewer plays each line's accepted run (play/ beside the app).${standIns ? " Some placements or fights use stand-ins: novel sim pick asks Jev for them." : ""}` };
 }
 
 /** A book's simulation as kept: per story line its accepted run, how many runs, and whether the accepted run was made from the book as it is now. */

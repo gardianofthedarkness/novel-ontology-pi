@@ -96,7 +96,7 @@
         const world = state.world;
         if (world) {
           $("where").textContent = `${world.moment ?? ""}${world.final ? " · end" : ""}`;
-          $("counts").textContent = world.notes ? `chunks ${world.notes.chunks} · buildings ${world.notes.lots} · ${world.notes.nodes} walk nodes${world.notes.applied ? ` · ${world.notes.applied} broken earlier` : ""}` : "";
+          $("counts").textContent = world.notes ? `${state.engine ? `engine v${state.engine} · ` : ""}chunks ${world.notes.chunks} · buildings ${world.notes.lots} · ${world.notes.nodes} walk nodes${world.notes.applied ? ` · ${world.notes.applied} broken earlier` : ""}` : "";
           // A new command counts its pages from 1 again: start over with it.
           if (state.startedAt !== epoch) { epoch = state.startedAt; page = 0; wanted = 0; shownMoment = null; }
           if (world.page > wanted) { wanted = world.page; queue(); }

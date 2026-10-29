@@ -18,7 +18,7 @@ import { access, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } fro
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { compactData, inlineStrand, runStrand } from './export-strand-demo.mjs';
+import { compactData, ENGINE_VERSION, inlineStrand, runStrand } from './export-strand-demo.mjs';
 import { fightWork, pickImpacts, SIZES } from './impact-choices.mjs';
 import { browser, CHROME, pickModels, placementWork, placeThings, serve } from './two-view-things.mjs';
 
@@ -239,7 +239,7 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
   const at = () => new Date().toISOString();
   const recorded = await readFile(join(recording, 'frames.jsonl'), 'utf8').catch(() => '');
   let frame = recorded ? recorded.trimEnd().split('\n').length : 0, encode = null;
-  const state = { version: 2, command, status: 'running', pid: process.pid, startedAt: at(), updatedAt: at(), model, budget, calls: 0, lines: lines.map(line => ({ ...line, status: 'waiting' })), line: null, phase: null, frames: frame, ask: null, log: [] };
+  const state = { version: 2, engine: ENGINE_VERSION, command, status: 'running', pid: process.pid, startedAt: at(), updatedAt: at(), model, budget, calls: 0, lines: lines.map(line => ({ ...line, status: 'waiting' })), line: null, phase: null, frames: frame, ask: null, log: [] };
   let writing = Promise.resolve();
   const queue = work => (writing = writing.then(work).catch(() => {}));
   const write = () => queue(() => { state.updatedAt = at(); return replace(join(folder, 'live.json'), JSON.stringify(state)); });
@@ -283,7 +283,7 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
       // The world's growth, one line a snapshot (live/world-log.jsonl, kept with the book): how much stands and what is new,
       // so how the city was built up, piece by piece, can be checked afterwards. The first line also has the central build
       // (the areas laid out before any scene, and where each place the ontology puts nowhere dwells).
-      const grown = { run, at: at(), command, moment: snapshot.moment, place: snapshot.placeLabel, focus: snapshot.focus, chunks: snapshot.notes.chunks, lots: snapshot.notes.lots, nodes: snapshot.notes.nodes, newChunks: snapshot.notes.chunks - before.chunks, newLots: snapshot.notes.lots - before.lots, broken: snapshot.broken.length, earlier: snapshot.notes.applied, ...(first && snapshot.notes.build ? { build: snapshot.notes.build } : {}) };
+      const grown = { run, at: at(), engine: ENGINE_VERSION, command, moment: snapshot.moment, place: snapshot.placeLabel, focus: snapshot.focus, chunks: snapshot.notes.chunks, lots: snapshot.notes.lots, nodes: snapshot.notes.nodes, newChunks: snapshot.notes.chunks - before.chunks, newLots: snapshot.notes.lots - before.lots, broken: snapshot.broken.length, earlier: snapshot.notes.applied, ...(first && snapshot.notes.build ? { build: snapshot.notes.build } : {}) };
       queue(() => writeFile(join(recording, 'world-log.jsonl'), `${JSON.stringify(grown)}\n`, { flag: 'a', mode: 0o644 }));
       // With the page so far (the player's data as far as this moment), the live player draws it in full (live/page.json).
       return queue(async () => { await replace(join(recording, 'world.json'), JSON.stringify({ ...snapshot, run, at: at() })); if (page) await replace(join(recording, 'page.json'), JSON.stringify({ ...compactData(page), live: { run, moment: snapshot.moment, focus: snapshot.focus, final: snapshot.final } })); }).then(write);

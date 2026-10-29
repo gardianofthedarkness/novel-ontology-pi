@@ -326,7 +326,7 @@ export async function strandDemo(novelDir, options) {
       C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent) });
     };
     const areaScale = id => { const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };
-    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), parent: place.parentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
+    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), parent: place.parentId ?? null, proposed: place.proposedParentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
     for (const scene of chosen) {
@@ -334,7 +334,7 @@ export async function strandDemo(novelDir, options) {
       open.forEach((id, n) => birth(id, n ? open[n - 1] : null));
       if (isOpen(scene.placeId)) { birth(scene.placeId, open.at(-1) ?? null); continue; }
       if (Object.values(canvas.places).some(place => place.units.some(unit => unit.id === scene.placeId))) continue;
-      const host = open.length ? null : C.dwellingFor(canvas, scene.placeId);
+      const host = open.length ? null : C.dwellingFor(canvas, scene.placeId, placeTree.find(place => place.id === scene.placeId)?.proposedParentId);
       if (host) {
         // A building the place tree puts in no larger place dwells at a random spot of the central build until the text names where it is.
         const holder = C.holderFor(canvas, host, scaleOf(scene.placeId) ?? 'building', scene.placeId);
@@ -705,7 +705,7 @@ export async function strandDemo(novelDir, options) {
       }),
     };
   };
-  const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: ENGINE });
+  const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: WALK_SEED });
   const data = assemble(runs);
   if (options.live) options.live(snapshot(true), data);
   return data;
@@ -746,8 +746,16 @@ export function simulationRecord(data, strand) {
   };
 }
 
-/** The simulation engine a run comes from: its walk (seeds come from the scene keys under this version) and its record format. */
-export const ENGINE = 'strand-demo-4';
+/**
+ * The world engine's version: one number, raised whenever a change to the engine changes what a run comes out as (its
+ * world, its walk, its record format), and kept with every run (the record's `run`, the strand index, the live state and
+ * the growth log), so each run says which engine made it. A version pushed as stable is tagged world-engine-v<N> in git.
+ */
+export const ENGINE_VERSION = 1;
+/** The engine's name in run records. */
+export const ENGINE = `world-engine-${ENGINE_VERSION}`;
+/** What the walk's seeds come from (the scene keys under it): kept while the walk itself is unchanged, so its runs reproduce. */
+const WALK_SEED = 'strand-demo-4';
 /** What a run is made from: the book's reviewed ontology and the stage's answers (buildings, objects, movement, Jev's placements and impacts, the live simulation's decisions). */
 const SIMULATION_INPUTS = ['ontology/entities.jsonl', 'ontology/relations.jsonl', 'ontology/scenes.jsonl', 'ontology/events.jsonl', 'stage/architecture.json', 'stage/scale.json', 'stage/landscape.json', 'stage/objects.json', 'stage/movement.json', 'stage/thing-boxes.json', 'stage/impacts.json', 'stage/sim-decisions.json'];
 export async function simulationInputs(novelDir) {
@@ -769,7 +777,7 @@ export async function keepRun(folder, strand, record, { inputs, accept = false, 
   const before = index.strands[strand.id] ?? null, runs = before?.runs ?? [];
   const contentOf = value => createHash('sha256').update(JSON.stringify({ ...value, exportedAt: null, run: null })).digest('hex').slice(0, 12);
   const entryOf = (value, id, extra) => ({ id, file: `runs/${strand.id}/${id}.json`, exportedAt: value.exportedAt, content: contentOf(value), scenes: value.scenes.length, hits: value.scenes.reduce((n, scene) => n + scene.events.filter(event => event.hit).length, 0), things: value.things.length, ...extra });
-  const write = async (entry, value) => { await mkdir(`${folder}/runs/${strand.id}`, { recursive: true }); await writeFile(`${folder}/${entry.file}`, JSON.stringify({ ...value, run: { id: entry.id, inputs: entry.inputs, engine: entry.engine } }, null, 1), { mode: 0o644, flag: 'wx' }); };
+  const write = async (entry, value) => { await mkdir(`${folder}/runs/${strand.id}`, { recursive: true }); await writeFile(`${folder}/${entry.file}`, JSON.stringify({ ...value, run: { id: entry.id, inputs: entry.inputs, engine: entry.engine, engineVersion: entry.engineVersion ?? null } }, null, 1), { mode: 0o644, flag: 'wx' }); };
   // Before runs: the strand's one record becomes its first run, accepted.
   let accepted = before?.accepted ?? null;
   if (before && !before.runs) {
@@ -779,7 +787,7 @@ export async function keepRun(folder, strand, record, { inputs, accept = false, 
   const content = contentOf(record);
   let run = runs.find(entry => entry.content === content);
   const fresh = !run;
-  if (!run) { run = entryOf(record, `${record.exportedAt.replace(/\D/g, '').slice(0, 14)}-${content.slice(0, 6)}`, { inputs, engine: ENGINE }); await write(run, record); runs.push(run); }
+  if (!run) { run = entryOf(record, `${record.exportedAt.replace(/\D/g, '').slice(0, 14)}-${content.slice(0, 6)}`, { inputs, engine: ENGINE, engineVersion: ENGINE_VERSION }); await write(run, record); runs.push(run); }
   if (page && !run.page) { run.page = `runs/${strand.id}/${run.id}.page.json`; await writeFile(`${folder}/${run.page}`, JSON.stringify(page), { mode: 0o644 }); }
   if (accept || !accepted) accepted = run.id;
   const chosen = runs.find(entry => entry.id === accepted);

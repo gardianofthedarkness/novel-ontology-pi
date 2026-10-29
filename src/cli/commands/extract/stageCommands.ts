@@ -22,7 +22,7 @@ import { prepareStage, prepFingerprint, type StagePlan } from "../../../digger/s
 import { pickScales, scaleFingerprint, SCALES, type ScalePlace, type ScaleReport } from "../../../digger/stage/scale.js";
 import { landscapeFingerprint, landscapeProposal, OPEN_SCALES, pickLandscapes, type LandscapePlace, type LandscapeReport } from "../../../digger/stage/landscape.js";
 import { firstLandscape, type Landscape } from "../../../ground/stage/landscape.js";
-import { loadWorkspaceSentences } from "./timeplaceCommands.js";
+import { loadWorkspaceSentences, pendingTreeLinks } from "./timeplaceCommands.js";
 
 /**
  * `novel stage scale|architecture|objects|movement|prep|show` — what read mode replays.
@@ -107,8 +107,12 @@ export async function stageInputs(novelDir: string) {
   const parentOf = new Map<string, string>();
   for (const relation of relations) if (relation.type === "PART_OF" && isLocation(relation.fromId) && isLocation(relation.toId) && !parentOf.has(relation.fromId)) parentOf.set(relation.fromId, relation.toId);
   const treePath = (id: string) => { const path: string[] = [], seen = new Set<string>(); for (let at: string | undefined = id; at && !seen.has(at); at = parentOf.get(at)) { seen.add(at); path.unshift(at); } return path; };
-  const placeTree = [...data.places.map((place) => ({ id: place.id, label: place.label, parentId: place.parentId, path: place.path ?? [place.id], sceneIds: place.sceneIds })),
-    ...entities.filter((entity) => entity.kind === "Location" && !projected.has(entity.id)).map((entity) => ({ id: entity.id, label: names[entity.id] ?? entity.id, parentId: parentOf.get(entity.id) ?? null, path: treePath(entity.id), sceneIds: [] as string[] }))];
+  // A parent the place-tree repair proposed for review (a pending PART_OF), for a place the reviewed tree puts in nothing:
+  // never canon, and no stage step reads it; the simulation's central build lets the place dwell there until review decides.
+  const proposedParent = new Map<string, string>();
+  for (const link of await pendingTreeLinks(novelDir)) if (isLocation(link.fromId) && isLocation(link.toId) && !parentOf.has(link.fromId) && !proposedParent.has(link.fromId)) proposedParent.set(link.fromId, link.toId);
+  const placeTree = [...data.places.map((place) => ({ id: place.id, label: place.label, parentId: place.parentId, proposedParentId: place.parentId ? null : proposedParent.get(place.id) ?? null, path: place.path ?? [place.id], sceneIds: place.sceneIds })),
+    ...entities.filter((entity) => entity.kind === "Location" && !projected.has(entity.id)).map((entity) => ({ id: entity.id, label: names[entity.id] ?? entity.id, parentId: parentOf.get(entity.id) ?? null, proposedParentId: parentOf.has(entity.id) ? null : proposedParent.get(entity.id) ?? null, path: treePath(entity.id), sceneIds: [] as string[] }))];
   const within = (id: string) => placeTree.filter((place) => place.parentId === id).map((place) => place.id);
   // Scale: every place in the tree, with scenes of its own or not (the stage's map draws them all).
   const scalePlaces: ScalePlace[] = placeTree.map((place) => {
