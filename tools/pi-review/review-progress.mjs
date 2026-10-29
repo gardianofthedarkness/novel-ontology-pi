@@ -2,23 +2,35 @@ import { constants } from 'node:fs';
 import { open, readdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
-import { authorize } from './guard.mjs';
+import { authorize, tokenize } from './guard.mjs';
 
 const identifier = value => typeof value === 'string' && /^[\w:./-]{1,512}$/.test(value) ? value : null;
-const fields = new Set(['identity', 'alias', 'actors', 'presence', 'mention', 'location', 'turn', 'dialogue-member', 'relation', 'state']);
+// Fact kinds are schema names (never values): any lowercase field name a review page reports.
+const fieldName = field => typeof field === 'string' && /^[a-z][a-z-]{1,40}$/.test(field);
+const PACKET = /^(cs_[A-Za-z0-9_-]{1,200}|u[mt]_[a-f0-9]{24}|u[ca]_[a-f0-9]{64}|plan_[a-f0-9]{64})$/;
+/** What a packet reviews: a block, a book's story time and places or causality, or a universe/library packet. */
+const packetKind = (id, block) => block ? 'block' : id.startsWith('cs_timeplace_') ? 'time-place' : id.startsWith('cs_causality_') ? 'causality' : { um: 'identity', ut: 'calendar', ua: 'places', uc: 'universe-causality' }[id.slice(0, 2)] ?? (id.startsWith('plan_') ? 'library' : 'book');
 const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
 const caches = new Map();
 const readers = new Map();
 
-export function createReviewTracker(volumes) {
+export function createReviewTracker(volumes, library = null) {
   const sourcePaths = volumes.flatMap(volume => volume.blocks.map(block => block.evidence));
   const scopes = volumes.map(volume => ({ novel: volume.workspace, input: volume.input, skill: '', sourcePaths, blockIds: volume.blocks.map(block => block.id), maxBlocks: volume.maxBlocks }));
+  const roots = new Set([...volumes.map(volume => volume.workspace), ...(library?.directory ? [library.directory] : [])]);
+  // A review the block scopes cannot name (a book's time-place or causality packet, a universe or library packet): the shared form, parsed strictly.
+  const sharedReview = command => {
+    let tokens;
+    try { tokens = tokenize(command); } catch { return null; }
+    return tokens[0] === 'novel' && tokens[1] === 'review' && ['show', 'evidence', 'decide', 'apply'].includes(tokens[2]) && roots.has(tokens[3]) && PACKET.test(tokens[4] ?? '') ? { args: tokens.slice(1) } : null;
+  };
   const pending = new Map();
   const coverage = new Map();
   let latest = null;
   const describe = command => {
     let permitted;
     for (const scope of scopes) { try { permitted = authorize(command, scope); break; } catch {} }
+    permitted ??= sharedReview(command);
     if (!permitted) return null;
     if (permitted.kind === 'read') {
       for (const volume of volumes) {
@@ -32,14 +44,16 @@ export function createReviewTracker(volumes) {
     if (!unified && (args[0] !== 'changeset' || !['facts', 'show', 'decide', 'revise', 'approve', 'hold'].includes(args[1]))) return null;
     const volume = volumes.find(volume => volume.workspace === args[2]);
     const block = volume?.blocks.find(block => `cs_${block.id}` === args[3]);
-    if (!block) return null;
+    if (!block && !(unified && PACKET.test(args[3] ?? ''))) return null;
+    const kind = packetKind(args[3], block);
+    const universeId = args.includes('--universe') ? identifier(args[args.indexOf('--universe') + 1]) : null;
     const phase = unified ? ({ show: 'facts', evidence: 'evidence', decide: 'decide', apply: 'approve' })[args[1]] : args[1] === 'facts' ? args.includes('--fact') ? 'evidence' : args.includes('--summary') ? 'summary' : 'facts' : args[1] === 'show' ? args.includes('--notes') ? 'notes' : args.includes('--summary') ? 'summary' : 'proposals' : args[1];
     const factId = identifier(args[args.indexOf('--fact') + 1]);
     let factIds = args.includes('--fact') && factId ? [factId] : [];
     if (phase === 'decide') {
       try { factIds = JSON.parse(args[args.indexOf('--decisions') + 1]).slice(0, 50).map(decision => identifier(decision.factId)).filter(Boolean); } catch {}
     }
-    return { volume: volume.id, chapterIndex: block.chapterIndex, blockId: block.id, changesetId: `cs_${block.id}`, phase, factIds, fields: [...new Set(factIds.map(id => id.split('/')[1]).filter(field => fields.has(field)))] };
+    return { volume: volume?.id ?? null, chapterIndex: block?.chapterIndex ?? null, blockId: block?.id ?? null, changesetId: args[3], kind, ...(universeId ? { universeId } : {}), phase, factIds, fields: [...new Set(factIds.map(id => id.split('/')[1]).filter(fieldName))] };
   };
   return {
     consume(row) {
@@ -73,7 +87,7 @@ export function createReviewTracker(volumes) {
             latest = { ...latest, revision, totalFacts: inspected?.totalFacts ?? null, inspectedFacts: inspected?.facts.size ?? 0,
               factIds, factPositions: factIds.flatMap(id => inspected?.positions.has(id) ? [inspected.positions.get(id)] : []).sort((first, second) => first - second),
               proposalIds: Array.isArray(page.proposals) ? page.proposals.slice(0, 20).map(proposal => identifier(proposal.id)).filter(Boolean) : [],
-              fields: facts.length ? [...new Set(facts.map(fact => fact.field).filter(field => fields.has(field)))] : focus.fields,
+              fields: facts.length ? [...new Set(facts.map(fact => fact.field).filter(fieldName))] : focus.fields,
               offset: count(page.page?.offset), pageCount: facts.length || (Array.isArray(page.sentences) ? page.sentences.length : Array.isArray(page.proposals) ? page.proposals.length : page.reviewNotes ? Object.keys(page.reviewNotes).length : 0), total: count(page.page?.total),
               accepted: count(page.accepted ?? page.verifiedFacts), rejected: count(page.rejected ?? page.rejectedFacts), held: count(page.held ?? page.explicitHolds ?? page.deferredFacts), unreviewed: count(page.unreviewed) };
           } else if (['facts', 'evidence', 'summary', 'proposals', 'notes'].includes(focus.phase)) latest.status = 'unavailable';
@@ -96,7 +110,7 @@ async function readSessionReviewProgress(metadataDirectory) {
       const handle = await open(join(root, 'job.json'), constants.O_RDONLY | constants.O_NOFOLLOW);
       let manifest;
       try { if ((await handle.stat()).size > 4000000) return null; manifest = JSON.parse(await handle.readFile('utf8')); } finally { await handle.close(); }
-      cache = { path: file.path, offset: 0, pending: '', decoder: new StringDecoder('utf8'), tracker: createReviewTracker(manifest.volumes), progress: null };
+      cache = { path: file.path, offset: 0, pending: '', decoder: new StringDecoder('utf8'), tracker: createReviewTracker(manifest.volumes, manifest.library), progress: null };
       caches.set(root, cache);
       if (caches.size > 8) caches.delete(caches.keys().next().value);
     }

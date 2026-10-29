@@ -1,4 +1,5 @@
 import { readFile, readdir, stat } from "node:fs/promises";
+import { bookUsage, type BookUsage } from "../../../ground/workspace/usage.js";
 import { loadSpiral } from "../../../solidifier/calendar/spiralBuild.js";
 import { join, resolve } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
@@ -40,7 +41,7 @@ import { calendarPacketId } from "../../../solidifier/calendar/review.js";
  */
 export type ChecklistStatus = "done" | "todo" | "review" | "blocked" | "optional";
 export interface ChecklistItem { id: string; title: string; status: ChecklistStatus; dependsOn: string[]; counts: Record<string, number | string | boolean>; next: string[]; note?: string }
-export interface BookChecklist { novelDir: string; title: string; complete: boolean; items: ChecklistItem[]; next: string[] }
+export interface BookChecklist { novelDir: string; title: string; complete: boolean; items: ChecklistItem[]; next: string[]; usage: BookUsage }
 
 const fold = <T extends { id: string }>(records: T[]) => [...new Map(records.map((record) => [record.id, record])).values()];
 const exists = (path: string) => stat(path).then(() => true, () => false);
@@ -71,8 +72,10 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   const bound = await storedSource(novelDir);
   const sourceFiles = await readdir(join(novelDir, "source")).catch(() => [] as string[]);
   const sourceFile = bound?.file ?? (sourceFiles.length === 1 ? sourceFiles[0] : null);
+  // A book the library prepared but nobody set up has no source folder yet: `novel init` adopts it first.
+  const setUp = await exists(join(novelDir, "source"));
   items.push({ id: "source", title: "Stored original source", status: sourceFile ? "done" : "todo", dependsOn: [], counts: { file: sourceFile ?? "none" },
-    next: sourceFile ? [] : [options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>`] });
+    next: sourceFile ? [] : [...(setUp ? [] : [`novel init ${dir}`]), options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>`] });
 
   // Album (EPUB pictures): optional, imported before ingestion when the host allows it.
   const album = await exists(join(novelDir, "assets"));
@@ -183,7 +186,9 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
 
   settle(items);
   const complete = items.every((item) => item.status === "done" || item.status === "optional");
-  return { novelDir, title: manifest.title ?? novelDir, complete, items, next: items.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) };
+  return { novelDir, title: manifest.title ?? novelDir, complete, items, next: items.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)),
+    // Work-model (DeepSeek) tokens this book has spent so far.
+    usage: await bookUsage(novelDir) };
 }
 
 export interface UniverseChecklist { library: string; universeId: string; title: string; complete: boolean; books: { sourceId: string; title: string; continuityId: string | null; readingOrder: number | null; workspace: string | null; extracted: boolean; complete: boolean; firstGap: string | null }[]; items: ChecklistItem[]; next: string[] }

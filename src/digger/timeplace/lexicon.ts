@@ -79,7 +79,7 @@ const RELATIVE_DAYS: Record<string, { amount: number; partOfDay?: TimeValue["par
 };
 const PARTS_OF_DAY: Record<string, NonNullable<TimeValue["partOfDay"]>> = {
   黎明: "dawn", 拂晓: "dawn", 清晨: "dawn", 凌晨: "late-night", 早上: "morning", 早晨: "morning", 上午: "morning", 中午: "noon", 正午: "noon",
-  下午: "afternoon", 傍晚: "evening", 黄昏: "evening", 晚上: "evening", 夜晚: "night", 夜里: "night", 夜间: "night", 深夜: "late-night", 半夜: "late-night", 午夜: "late-night",
+  下午: "afternoon", 傍晚: "evening", 黄昏: "evening", 日落时分: "evening", 日落时: "evening", 晚上: "evening", 夜晚: "night", 夜里: "night", 夜间: "night", 深夜: "late-night", 半夜: "late-night", 午夜: "late-night",
   放学后: "after-school", 白天: "daytime", 夕方: "evening", 放課後: "after-school",
 };
 // Eves are nights: a following "morning" belongs to the next day.

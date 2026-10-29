@@ -17,6 +17,7 @@ test("Chinese numerals and calendar words normalise only what they state", () =>
   assert.equal(parseNumber("十二"), 12);
   assert.deepEqual(mention("十二月二十四日，凌晨0点0分")!.value, { month: 12, day: 24 });
   assert.deepEqual(mention("晚上七点出门", "clock")!.value, { hour: 19, minute: 0, partOfDay: "evening" }, "evening hours are PM");
+  assert.deepEqual(mention("日落时分，街道安静下来", "time-of-day")!.value, { partOfDay: "evening" }, "sunset is evening");
   assert.deepEqual(mention("三天前的事", "relative-span")!.value.offset, { amount: -3, unit: "day" });
   assert.deepEqual(mention("第二天早上", "relative-day")!.value.offset, { amount: 1, unit: "day" });
   assert.deepEqual(mention("25日，下雪了")!.value, { day: 25 });

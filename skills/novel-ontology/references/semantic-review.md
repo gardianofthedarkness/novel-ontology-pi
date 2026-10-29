@@ -28,7 +28,16 @@ proposal, not an identity correction. Cross-book acceptance additionally needs
 
 Batch at most 50 decisions. `accept`, `hold`, `reject` have the same meaning in
 every scope. Omitted assertions default to hold. Decisions stage only; explicit
-apply is required. Show the current review again after source, packet or canonical
+apply is required.
+
+After reading a page, name only what you hold or reject, then accept the rest
+of that page with one entry instead of one accept per fact:
+`[{"factId":"...","verdict":"hold","reason":"..."},{"rest":"accept","offset":<that page's offset>,"reason":"the other facts on this page match their cited sentences"}]`.
+It accepts only facts that page showed, that this batch does not name and that
+nothing decided before; a page you did not read accepts nothing. Facts that
+still need evidence pages, a `temporalReason` or a correction are not accepted
+this way: the reply lists them under `restLeftOnHold` — decide those one by one.
+Several pages can be accepted in one batch (one `rest` entry per offset). Show the current review again after source, packet or canonical
 context changes. Unchanged repeated accepts preserve prior corrections.
 
 Review consequences: identities, dialogue-card members, presence, actors,

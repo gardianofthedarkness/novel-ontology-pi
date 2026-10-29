@@ -107,3 +107,21 @@ test('journal observer handles partial records, appends and truncation without m
     assert.equal((await sessionReviewProgress(metadata)).id, 'new');
   } finally { await fs.rm(home, { recursive: true, force: true }); }
 });
+
+test('every packet the shared gate reviews shows progress: a book time-place packet and a universe identity packet', () => {
+  const tracker = createReviewTracker(volumes, { directory: '/private/library' });
+  tracker.consume(request('time', "novel review show '/private/book-2' cs_timeplace_time-place_1793000000000 --scope book --offset 0 --limit 20"));
+  const time = tracker.consume(result('time', { id: 'cs_timeplace_time-place_1793000000000', revision: 'b'.repeat(64), totalFacts: 186, page: { offset: 0, total: 186 }, facts: [{ id: 'p1/identity', field: 'identity', value: 'PRIVATE-VALUE' }, { id: 'p2/relation', field: 'relation', value: 'PRIVATE-VALUE' }] }));
+  assert.deepEqual([time.kind, time.volume, time.blockId, time.totalFacts, time.inspectedFacts], ['time-place', 2, null, 186, 2]);
+  const packet = `um_${'c'.repeat(24)}`;
+  tracker.consume(request('who', `novel review show '/private/library' ${packet} --scope universe --universe starfall --offset 0 --limit 20`));
+  const who = tracker.consume(result('who', { id: packet, revision: 'd'.repeat(64), totalFacts: 6, page: { offset: 0, total: 6 }, facts: [{ id: 'id_1', field: 'identity-match', value: 'PRIVATE-VALUE' }] }));
+  assert.deepEqual([who.kind, who.universeId, who.volume, who.totalFacts, who.inspectedFacts, who.fields], ['identity', 'starfall', null, 6, 1, ['identity-match']]);
+  tracker.consume(request('decide', `novel review decide '/private/library' ${packet} --scope universe --universe starfall --revision ${'d'.repeat(64)} --decisions '[{"rest":"accept","offset":0,"reason":"PRIVATE-REASON"}]'`));
+  const decided = tracker.consume(result('decide', { id: packet, revision: 'd'.repeat(64), accepted: 5, held: 1, rejected: 0, restAccepted: 5 }));
+  assert.deepEqual([decided.phase, decided.accepted], ['decide', 5]);
+  assert.ok(!JSON.stringify([time, who, decided]).includes('PRIVATE-'));
+  // Outside the assigned roots, or not a packet id: nothing.
+  tracker.consume(request('other', `novel review show '/elsewhere' ${packet} --scope universe --universe starfall`));
+  assert.equal(tracker.consume(result('other', { id: packet })), null);
+});

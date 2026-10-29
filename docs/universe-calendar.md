@@ -31,7 +31,16 @@ after-apply rebuild and the view feed all call it):
 - **A dated period** (stated, or derived from stated words such as "the next
   day") sits on its day, at its clock time ("下午三点" → 15:00) or part of the
   day (morning, evening, …), else across the whole day. A late night told
-  after an evening of the same date is that night past midnight.
+  after an evening of the same date is that night past midnight; so are a
+  derived date's small hours ("凌晨0点" after "平安夜" is the next day). A clock
+  time is when a period starts: it runs until the book's next period starts,
+  at most to the end of its part of the day (15:00 → 17:00 when the next
+  period is at 17:00; 18:30 → 21:00 when nothing follows that evening).
+- **Its part of the day** is the one the book states, even with a clock
+  time ("晚上五点" is evening at 17:00, and runs into the evening rather than
+  ending with the afternoon at 17:30), else the one its clock time falls in:
+  late night 0–5, dawn 5–7, morning 7–11:30, noon 11:30–13:30, afternoon
+  13:30–17:30, evening 17:30–21, night 21–24. Only the day known: none.
 - **An undated period** is a range between its dated neighbours in the book's
   story order — never a made-up time.
 - **Story time is the reference.** A flashback sits at its own date. The
@@ -92,3 +101,9 @@ the third sits inside the second's span. One year question was raised (the
 second volume's dates go back from the first's: the same Christmas told from
 another side) and one real conflict surfaced (a period dated midnight told
 after the evening it precedes).
+
+Live, Pi built the universe calendar and reviewed the year question: same
+year, from the second volume opening on the first one's Christmas Eve and
+picking up its aftermath. Review of that run fixed the one conflict (the
+midnight period was a derived date's small hours, now the next day) and gave
+clock-time periods their length.

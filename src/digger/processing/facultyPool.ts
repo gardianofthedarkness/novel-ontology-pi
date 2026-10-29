@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { WorkModel } from "../../ground/connectors/llm.js";
+import type { WorkModelUsage } from "../../ground/connectors/workModel.js";
 
 export interface FacultyCall {
   faculty: string;
@@ -9,6 +10,27 @@ export interface FacultyCall {
   inputBytes: number;
   queueMs: number;
   durationMs?: number;
+}
+
+/** Work-model (DeepSeek) tokens of one faculty: what extraction actually spends. */
+export interface WorkUsage { calls: number; promptTokens: number; cachedTokens: number; completionTokens: number; unmetered: number }
+/** Usage per faculty, shared by every pool of a run. */
+export type UsageLedger = Record<string, WorkUsage>;
+
+export function usageTotal(ledger: UsageLedger): WorkUsage {
+  const total: WorkUsage = { calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, unmetered: 0 };
+  for (const entry of Object.values(ledger)) for (const key of Object.keys(total) as (keyof WorkUsage)[]) total[key] += entry[key];
+  return total;
+}
+
+function meter(ledger: UsageLedger | undefined, faculty: string, usage: WorkModelUsage | null) {
+  if (!ledger) return;
+  const entry = ledger[faculty] ??= { calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, unmetered: 0 };
+  entry.calls++;
+  if (!usage || usage.promptTokens === null) { entry.unmetered++; return; }
+  entry.promptTokens += usage.promptTokens;
+  entry.cachedTokens += usage.cachedTokens ?? 0;
+  entry.completionTokens += usage.completionTokens ?? 0;
 }
 
 export class FacultyPool {
@@ -25,6 +47,7 @@ export class FacultyPool {
     maxInputBytes?: number;
     timeoutMs?: number;
     onCall?: (call: FacultyCall) => void;
+    usage?: UsageLedger;
   } = {}) {
     if (!Number.isInteger(options.concurrency ?? 4) || (options.concurrency ?? 4) < 1 || (options.concurrency ?? 4) > 16) throw new Error("Faculty concurrency must be an integer from 1 to 16");
   }
@@ -48,7 +71,11 @@ export class FacultyPool {
         const base = { faculty, callId: `${faculty}:${this.metrics.calls}`, system: priority >= 2 ? "system2" as const : "work" as const, inputBytes: bytes, queueMs: Math.round(began - queuedAt) };
         this.observe({ ...base, status: "started" });
         const signal = AbortSignal.timeout(this.options.timeoutMs ?? 45_000);
-        void Promise.resolve().then(() => this.work.generate({ ...request, signal })).then(value => {
+        // A model that reports usage (the HTTP connector) is metered per faculty; others count as unmetered calls.
+        const work = this.work as WorkModel & { generateWithInfo?: (request: Parameters<WorkModel["generate"]>[0]) => Promise<{ text: string; usage: WorkModelUsage }> };
+        void Promise.resolve().then(() => work.generateWithInfo
+          ? work.generateWithInfo({ ...request, signal }).then(result => { meter(this.options.usage, faculty, result.usage); return result.text; })
+          : this.work.generate({ ...request, signal }).then(text => { meter(this.options.usage, faculty, null); return text; })).then(value => {
           this.observe({ ...base, status: "completed", durationMs: Math.round(performance.now() - began) });
           resolve(value);
         }, () => {

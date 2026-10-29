@@ -130,6 +130,7 @@ test("work model: generate returns content and reports usage + latency", async (
   assert.equal(r.model, "mock-model");
   assert.deepEqual(r.usage, {
     promptTokens: 3,
+    cachedTokens: null,
     completionTokens: 1,
     totalTokens: 4,
   });
@@ -172,6 +173,7 @@ test("work model: jsonSchema asks for JSON mode; missing usage maps to nulls", a
   });
   assert.deepEqual(r.usage, {
     promptTokens: null,
+    cachedTokens: null,
     completionTokens: null,
     totalTokens: null,
   });

@@ -31,7 +31,39 @@ test("one clock: periods on their day at their clock time or part of the day; bo
   assert.equal(compareOnCalendar(at("three"), at("next")), -1);
   assert.equal(compareOnCalendar(at("next"), at("half-six")), null, "an evening and 18:30 overlap: the calendar does not order them");
   assert.deepEqual(calendar.books.map((entry) => [entry.sourceId, entry.year, entry.yearBy]), [["b1", 1, "first"], ["b2", 1, "same"]]);
-  assert.ok(calendar.books[0].span!.start < calendar.books[1].span!.start && calendar.books[1].span!.end < calendar.books[0].span!.end, "Book 2 sits inside Book 1's span");
+  assert.ok(calendar.books[0].span!.start < calendar.books[1].span!.start && calendar.books[1].span!.end <= calendar.books[0].span!.end, "Book 2 sits inside Book 1's span");
+});
+
+test("a clock time runs until the next period, at most to the end of its part of the day; small hours after a night roll over", () => {
+  const calendar = placeOnCalendar("u", [book("b1", 1, [
+    period("three", 0, { date: md(12, 25), hour: 15, minute: 0 }),
+    period("five", 1, { date: md(12, 25, true), hour: 17, minute: 0 }),
+    period("half-six", 2, { date: md(12, 25, true), hour: 18, minute: 30 }),
+    period("eve", 3, { date: md(12, 25, true), partOfDay: "night" }),
+    period("midnight", 4, { date: md(12, 25, true), hour: 0, minute: 0 }),
+  ])]);
+  const at = (id: string) => calendar.entries.find((entry) => entry.timeId === id)!;
+  const clock = (minute: number) => { const day = minute % 1440; return `${Math.floor(day / 60)}:${String(day % 60).padStart(2, "0")}`; };
+  assert.deepEqual([at("three"), at("five"), at("half-six")].map((entry) => [clock(entry.span.start), clock(entry.span.end)]), [["15:00", "17:00"], ["17:00", "17:30"], ["18:30", "21:00"]]);
+  assert.equal(compareOnCalendar(at("three"), at("five")), -1);
+  // Derived small hours told after the night are past midnight: the 26th, not a conflict.
+  assert.equal(describeEntry(at("midnight")), "Year 1 · 12-26 · 00:00");
+  assert.equal(compareOnCalendar(at("eve"), at("midnight")), -1);
+  assert.equal(calendar.conflicts.length, 0);
+});
+
+test("each entry knows its part of the day: the stated one wins over the clock (晚上五点 is evening), else the clock's", () => {
+  const calendar = placeOnCalendar("u", [book("b1", 1, [
+    period("evening-five", 0, { date: md(12, 25), hour: 17, minute: 0, partOfDay: "evening" }),
+    period("afternoon-half-six", 1, { date: md(12, 25, true), hour: 18, minute: 30, partOfDay: "afternoon" }),
+    period("ten", 2, { date: md(12, 25, true), hour: 10, minute: 0 }),
+    period("dawn", 3, { date: md(12, 26, true), partOfDay: "dawn" }),
+    period("day-only", 4, { date: md(12, 27, true) }),
+  ])]);
+  const at = (id: string) => calendar.entries.find((entry) => entry.timeId === id)!;
+  assert.deepEqual(["evening-five", "afternoon-half-six", "ten", "dawn", "day-only"].map((id) => at(id).part), ["evening", "afternoon", "morning", "dawn", null]);
+  // A stated evening at 17:00 runs into the evening (to the next period here), not just to the end of the afternoon at 17:30.
+  assert.equal(at("evening-five").span.end - at("evening-five").span.start, 90);
 });
 
 test("undated periods are a range between their dated neighbours; a flashback sits at its own date", () => {

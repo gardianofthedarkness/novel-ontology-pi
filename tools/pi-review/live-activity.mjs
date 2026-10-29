@@ -64,7 +64,7 @@ export function liveActivity({ processing, agent, drafts, changesets, interiors,
   const blockId = construction?.blockId ?? processing.findLast(record => record.event.type === 'block.started')?.event.blockId;
   const terminal = agent.findLast(record => record.type === 'pi.status');
   const command = agent.findLast(record => record.type === 'pi.command');
-  const review = reviewProgress ? Object.fromEntries(['id', 'timestamp', 'volume', 'chapterIndex', 'blockId', 'changesetId', 'phase', 'status', 'sourceStart', 'sourceEnd', 'revision', 'totalFacts', 'inspectedFacts', 'factIds', 'factPositions', 'proposalIds', 'fields', 'offset', 'pageCount', 'total', 'accepted', 'rejected', 'held', 'unreviewed'].filter(key => reviewProgress[key] !== undefined).map(key => [key, reviewProgress[key]])) : null;
+  const review = reviewProgress ? Object.fromEntries(['id', 'timestamp', 'volume', 'chapterIndex', 'blockId', 'changesetId', 'kind', 'universeId', 'phase', 'status', 'sourceStart', 'sourceEnd', 'revision', 'totalFacts', 'inspectedFacts', 'factIds', 'factPositions', 'proposalIds', 'fields', 'offset', 'pageCount', 'total', 'accepted', 'rejected', 'held', 'unreviewed'].filter(key => reviewProgress[key] !== undefined).map(key => [key, reviewProgress[key]])) : null;
   if (review) {
     review.active = terminal?.status === 'working' && review.timestamp >= terminal.timestamp;
     const proposalIds = new Set([...(review.proposalIds ?? []), ...(review.factIds ?? []).map(id => id.split('/')[0])]);

@@ -220,3 +220,28 @@ test("partial library acceptance holds the whole organization and unseen plan pa
   assert.equal(applied.result?.appliedOrganization, false);
   assert.deepEqual((await libraryShow(fixture.directory)).organization, before.organization);
 });
+
+test("accepting the rest of a page accepts only what that page showed and this batch does not name; unread pages and named holds stay held", async context => {
+  const { directory, sentences } = await bookFixture(context);
+  const provenance = { blockId: "b0001", sentenceIds: sentences.map(sentence => sentence.id), patchId: "synthetic" };
+  const entity = (id: string, text: string) => ({ id, kind: "Character" as const, names: [{ text, lang: "zh", kind: "canonical" as const }], properties: {}, confidence: 1 });
+  const packet: ChangeSet = { id: "cs_b0001", blockId: "b0001", status: "pending_review", createdAt: new Date().toISOString(), reviewNotes: {}, reviewSource: sentences,
+    proposals: [["first", "char_a", "甲"], ["door", "char_d", "门"], ["second", "char_b", "乙"], ["fan", "char_f", "扇"]].map(([id, entityId, text]) => ({ id, kind: "upsert_entity" as const, payload: entity(entityId, text), provenance, confidence: 1 })) };
+  await saveChangeSet(directory, packet);
+  const target: ReviewTarget = { directory, packetId: packet.id, scope: "book" };
+  const rest = (offset: number) => ({ rest: "accept", offset, reason: "其余事实与所引原文一致。" });
+  const first = await run("show", target, { limit: 2 });
+  const [kept, held] = first.facts.map(fact => fact.id);
+  await assert.rejects(run("decide", target, { revision: first.revision, decisions: [rest(2)] }), /No page at offset 2 was read/);
+  const decided = await run("decide", target, { revision: first.revision, decisions: [{ factId: held, verdict: "hold", reason: "原文不足以确认。" }, rest(0)] }) as Page & { restAccepted: number };
+  assert.equal(decided.restAccepted, 1);
+  const second = await run("show", target, { offset: 2, limit: 2 });
+  const later = await run("decide", target, { revision: second.revision, decisions: [rest(2), rest(0)] }) as Page & { restAccepted: number; restLeftOnHold?: { factId: string; problem: string }[] };
+  // 乙 never occurs in the source: the gate refuses it, so it stays on hold and is named; the named hold is not flipped.
+  assert.deepEqual(later.restLeftOnHold?.map(entry => entry.factId), ["second/identity"]);
+  assert.match(later.restLeftOnHold![0].problem, /must occur in the original source/);
+  assert.equal(later.restAccepted, 1);
+  const shown = await run("show", target, { limit: 20 }) as unknown as { facts: { id: string; decision: { verdict: string } }[] };
+  assert.deepEqual(Object.fromEntries(shown.facts.map(fact => [fact.id, fact.decision.verdict])), { [kept]: "accept", [held]: "hold", "second/identity": "hold", "fan/identity": "accept" });
+  await assert.rejects(run("decide", target, { revision: first.revision, decisions: [{ rest: "hold", offset: 0, reason: "x" }] }), /only "accept" is allowed/);
+});
