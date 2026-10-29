@@ -322,8 +322,15 @@ export async function strandDemo(novelDir, options) {
       const chain = pathOf(scene.placeId), open = chain.filter(id => id !== scene.placeId && isOpen(id));
       open.forEach((id, n) => birth(id, n ? open[n - 1] : null));
       if (isOpen(scene.placeId)) { birth(scene.placeId, open.at(-1) ?? null); continue; }
-      if (!open.length) { birth(scene.placeId, null); continue; }
       if (Object.values(canvas.places).some(place => place.units.some(unit => unit.id === scene.placeId))) continue;
+      if (!open.length) {
+        // A building the place tree puts in no larger place: an unnamed area of its own round it (a temporary district of
+        // ordinary ground, until the text names where it is), so it stands in a city rather than on bare ground.
+        const area = `tmp:${scene.placeId}`;
+        if (!canvas.places[area]) { C.bear(canvas, { id: area, label: `round ${name(scene.placeId)}`, scale: 'district', parent: null, landscape: 'residential' }); canvas.places[area].temporary = true; }
+        C.addUnit(canvas, area, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) });
+        continue;
+      }
       const holder = C.holderFor(canvas, open.at(-1), scaleOf(scene.placeId) ?? 'building', scene.placeId);
       C.addUnit(canvas, holder, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) });
     }

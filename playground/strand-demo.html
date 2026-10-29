@@ -31,6 +31,10 @@
   body.live .wrap > :not(.layout), body.live .side { display: none; }
   body.live .wrap { padding: 0; max-width: none; }
   body.live .stage { position: fixed; inset: 0; aspect-ratio: auto; border: 0; border-radius: 0; }
+  /* Live mode: Jev's panel for the moment over the world (the event played, then what Jev decided), bottom on a phone. */
+  body.live #trace { position: fixed; z-index: 20; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: max(64px, calc(env(safe-area-inset-bottom) + 64px)); max-height: 34vh; background: #0b1620e6; }
+  @media (min-width: 720px) { body.live #trace { left: auto; bottom: auto; top: max(10px, env(safe-area-inset-top)); width: 380px; max-height: 60vh; } }
+  .trace .moment { font-size: 13px; color: var(--ink); margin-bottom: 6px; }
   .stage canvas { display: block; width: 100% !important; height: 100% !important; }
   .hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
   .flash { position: absolute; right: 10px; top: 8px; font-size: 12px; color: var(--red); font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; }
@@ -780,7 +784,7 @@ const label2 = (id) => data.macro.find((node) => node.id === id)?.label ?? data.
 // The Jev trace: what Jev decided at this moment, in the panel and on the stage. Moves: each person's chance of moving,
 // how and which way, and the three likeliest spots (white: the one used). Things: the model pick, the lettered spots
 // and the solved box (gold). Impacts: the lettered spots (red: the pick) and the size.
-let tracing = new URLSearchParams(location.search).has("trace");
+let tracing = new URLSearchParams(location.search).has("trace") || liveMode;
 const traceGroup = new THREE.Group(); world.add(traceGroup);
 const pct = (p) => `${Math.round((p ?? 0) * 100)}%`, nameOf = (id) => data.people[id]?.name ?? id;
 const SIZES = [4, 8, 16, 32];
@@ -798,7 +802,10 @@ function showTrace(segment) {
   if (!tracing) return;
   const entry = built.get(segment.scene.place), trace = segment.kind === "event" ? segment.event.trace : segment.kind === "card" ? segment.scene.trace : null, rows = [];
   const W = (x, z) => [x - entry.cx, z - entry.cz];
-  if (!trace) { panel.innerHTML = `<h4>Jev</h4><div class="row alt">${segment.kind === "macro" ? "Moving between places: walked by the path integral, no Jev question." : "No Jev decision at this moment."}</div>`; return; }
+  // Live mode: the moment being played heads the panel, so what Jev decided reads against it.
+  const said = segment.kind === "event" ? segment.event.text : segment.kind === "card" ? segment.scene.label ?? segment.scene.events[0]?.text ?? "" : "", moment = liveMode && said ? `<div class="moment">${said.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c])}</div>` : "";
+  if (moment) rows.push(moment);
+  if (!trace) { panel.innerHTML = `<h4>Jev</h4>${moment}<div class="row alt">${segment.kind === "macro" ? "Moving between places: walked by the path integral, no Jev question." : "No Jev decision at this moment."}</div>`; return; }
   // Who goes with whom (Jev's pairs): the companion ends beside the one they go with.
   for (const pair of trace.together ?? []) rows.push(`<div class="row"><b style="color:${data.people[pair.person]?.color}">${nameOf(pair.person)}</b> goes with <b style="color:${data.people[pair.with]?.color}">${nameOf(pair.with)}</b> <span class="alt">(ends beside them)</span></div>`);
   for (const start of trace.starts ?? []) rows.push(`<div class="row"><b style="color:${data.people[start.person]?.color}">${nameOf(start.person)}</b> starts: stated ${pct(start.stated)}${start.used ? "" : " (too unsure: a default start)"} · ${start.to.map(([spot, p]) => `${spot} ${pct(p)}`).join(", ")}</div>`);
@@ -828,6 +835,8 @@ function showTrace(segment) {
   panel.innerHTML = `<h4>Jev · this moment</h4>${rows.join("")}`;
 }
 $("jev").setAttribute("aria-pressed", String(tracing));
+// Live mode: the panel goes over the world (the side column is not shown).
+if (liveMode) document.body.append($("trace"));
 $("jev").addEventListener("click", () => { tracing = !tracing; $("jev").setAttribute("aria-pressed", String(tracing)); if (shownSegment) showTrace(shownSegment); });
 
 $("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "⏸ Pause" : "▶ Play"; });

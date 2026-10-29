@@ -278,8 +278,12 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
      * the live view of the world reads; live.json says which run and moment it is.
      */
     world(snapshot, page = null) {
-      const run = (state.world?.run ?? 0) + 1;
+      const run = (state.world?.run ?? 0) + 1, before = state.world?.notes ?? { chunks: 0, lots: 0 };
       state.world = { run, moment: snapshot.moment, final: snapshot.final, focus: snapshot.focus, notes: snapshot.notes, page: page ? run : state.world?.page ?? null };
+      // The world's growth, one line a snapshot (live/world-log.jsonl, kept with the book): how much stands and what is new,
+      // so how the city was built up, piece by piece, can be checked afterwards.
+      const grown = { run, at: at(), command, moment: snapshot.moment, place: snapshot.placeLabel, focus: snapshot.focus, chunks: snapshot.notes.chunks, lots: snapshot.notes.lots, nodes: snapshot.notes.nodes, newChunks: snapshot.notes.chunks - before.chunks, newLots: snapshot.notes.lots - before.lots, broken: snapshot.broken.length, earlier: snapshot.notes.applied };
+      queue(() => writeFile(join(recording, 'world-log.jsonl'), `${JSON.stringify(grown)}\n`, { flag: 'a', mode: 0o644 }));
       // With the page so far (the player's data as far as this moment), the live player draws it in full (live/page.json).
       return queue(async () => { await replace(join(recording, 'world.json'), JSON.stringify({ ...snapshot, run, at: at() })); if (page) await replace(join(recording, 'page.json'), JSON.stringify({ ...compactData(page), live: { run, moment: snapshot.moment, focus: snapshot.focus, final: snapshot.final } })); }).then(write);
     },
