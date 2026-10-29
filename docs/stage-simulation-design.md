@@ -85,6 +85,20 @@ Buildings are added as the story detects them, not fixed up front.
 - **The library grows from its source.** Novels bring vehicles, aircraft, ships and machines. The library search should include more of the source the models came from (the Kenney CC0 catalog: vehicles, aircraft, space and so on), baked into the same int16 format.
   - The bake tool named in commit `9d988e0` (`tools/architecture-models.mjs`) was never committed; it needs writing again and committing.
 
+**Objects are part of the world** (built for the demo, 2026-10-28):
+- **One thing per named object.** Mentions of one named thing (A.A.A. and Anti-Art Attachment; 巨型姬蜂, 姬蜂型FIVE_Over and FIVE_Over Modelcase) become one thing.
+  - For now the stand-in links names that share a distinctive token: a Latin word, an acronym, or a rare pair of characters.
+  - The current EM faculty should decide these identities, as it does for characters.
+- **Things move with the story.** A thing glides to wherever a later event puts it, across places too.
+- **Big things (10 m or more) carry structure inside, automatically.** The 天桥, a train or a warehouse gets a small skeleton of corridors and rooms that hits break away.
+- **Every thing is part of the walk.**
+  - Its top is walked like a roof: landed on by sky arcs, crossed, left by falls.
+  - A small thing (8 m or less) on the ground is walked around.
+  - Bigger ones are raised structures.
+  - A thing stands beside the actor whose event places it, so no one is walled in.
+- **Damage:** events of strength 0.8 or more damage buildings and the things near them.
+- **No other model datasets for now:** Kenney's current kits only.
+
 **Persistence:** placed objects and each place's damage belong to the place on the strand, not to the scene in view. Once the story puts something there or damages it, it stays, through every camera glide between places, until the timeline is rewound before that moment.
 
 **Library source for now:** Kenney's Car Kit and Space Kit, just for the demo. A searchable open-source model library would be better later.

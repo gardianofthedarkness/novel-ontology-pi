@@ -70,17 +70,29 @@ export const nodeOf = (place: SkeletonPlace, i: number, j: number, k: number) =>
 export const nodePosition = (place: SkeletonPlace, node: number) => { const i = node % place.NX, j = Math.floor(node / place.NX) % place.NZ, k = Math.floor(node / (place.NX * place.NZ)); return { i, j, k, x: (i + 0.5) * SKELETON_CELL, z: (j + 0.5) * SKELETON_CELL, y: k * FLOOR_HEIGHT }; };
 
 /** The movement graph over what stands (`standing` per lot: skeleton cells still there), and the nodes a decision model's spots name. */
-export function placeGraph(place: SkeletonPlace, standing: Uint8Array[]): { graph: MoveGraph; spots: Record<string, number[]> } {
-  const { NX, NZ, K } = place, positions: [number, number, number][] = [], edges: { from: number; to: number; dir: number; cost: number; kind: number }[] = [];
+/** A thing the story put in the place, as the walk sees it: its footprint (cells), the level of its top, and whether it stands on the ground. */
+export interface PlacedThing { i0: number; j0: number; i1: number; j1: number; top: number; grounded: boolean }
+
+/**
+ * The movement graph over what stands (`standing` per lot: skeleton cells still there), and the nodes a decision model's spots name.
+ * Things the story put in the place are part of it: their tops are walked like roofs (landed on by arcs, left by falls), and a
+ * thing on the ground blocks the street cells under it.
+ */
+export function placeGraph(place: SkeletonPlace, standing: Uint8Array[], things: PlacedThing[] = []): { graph: MoveGraph; spots: Record<string, number[]> } {
+  const { NX, NZ } = place, K = Math.max(place.K, ...things.map((thing) => thing.top + 1)), positions: [number, number, number][] = [], edges: { from: number; to: number; dir: number; cost: number; kind: number }[] = [];
   for (let node = 0; node < NX * NZ * K; node++) { const p = nodePosition(place, node); positions.push([p.x, p.z, p.y]); }
   const lotAt = new Int32Array(NX * NZ).fill(-1);
   place.lots.forEach((lot, index) => { for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) lotAt[j * NX + i] = index; });
   const roomOf = place.lots.map((lot) => { const map = new Int32Array(lot.skeleton.cells.length).fill(-1); lot.rooms.forEach((room, r) => { for (let i = room.i0; i <= room.i1; i++) for (let j = room.j0; j <= room.j1; j++) map[cellIndex(lot.skeleton, i, j, room.floor)] = r; }); return map; });
   // What kind of walkable node a grid node is: 0 none, 1 outdoor, 2 circulation, 3 room, 4 roof.
+  const thingAt = new Int32Array(NX * NZ).fill(-1);
+  things.forEach((thing, index) => { for (let j = Math.max(0, thing.j0); j <= Math.min(NZ - 1, thing.j1); j++) for (let i = Math.max(0, thing.i0); i <= Math.min(NX - 1, thing.i1); i++) if (thingAt[j * NX + i] < 0 || things[thingAt[j * NX + i]].top < thing.top) thingAt[j * NX + i] = index; });
   const what = (i: number, j: number, k: number): { type: number; lot: number; local: number } => {
     if (i < 0 || j < 0 || i >= NX || j >= NZ || k < 0 || k >= K) return { type: 0, lot: -1, local: -1 };
-    const index = lotAt[j * NX + i];
-    if (index < 0) return { type: k === 0 && !place.clutter[j * NX + i] ? 1 : 0, lot: -1, local: -1 };
+    const index = lotAt[j * NX + i], thing = thingAt[j * NX + i];
+    // A thing's top is a roof of its own (lot ids from 1000 up); a thing on the ground blocks the street under it.
+    if (thing >= 0 && k === things[thing].top && (index < 0 || k > place.lots[index].floors)) return { type: 4, lot: 1000 + thing, local: -1 };
+    if (index < 0) return { type: k === 0 && !place.clutter[j * NX + i] && !(thing >= 0 && things[thing].grounded) ? 1 : 0, lot: -1, local: -1 };
     const lot = place.lots[index];
     if (k === lot.floors) return { type: 4, lot: index, local: -1 };
     if (k > lot.floors) return { type: 0, lot: -1, local: -1 };
@@ -119,7 +131,7 @@ export function placeGraph(place: SkeletonPlace, standing: Uint8Array[]): { grap
     }
     if (here.type === 4) {
       const lot = place.lots[here.lot], below = what(i, j, k - 1);
-      if (below.type === 2 && lot.skeleton.cells[below.local] === STAIR) add(node, nodeOf(place, i, j, k - 1), 0, 0, 2 + FLOOR_HEIGHT, EDGE.descend, DOWN);
+      if (lot && below.type === 2 && lot.skeleton.cells[below.local] === STAIR) add(node, nodeOf(place, i, j, k - 1), 0, 0, 2 + FLOOR_HEIGHT, EDGE.descend, DOWN);
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const out = what(i + dx, j + dz, k);
         if (out.type === 4 && out.lot === here.lot) continue;
@@ -132,7 +144,7 @@ export function placeGraph(place: SkeletonPlace, standing: Uint8Array[]): { grap
   }
   // Sky arcs: from a roof or the street, launched along a rising cube diagonal at one of a few speeds, flying
   // under gravity until the arc first meets a surface no higher than the launch (so no arc gains height).
-  const surface = (i: number, j: number) => { const index = lotAt[j * NX + i]; return index < 0 ? 0 : place.lots[index].floors * FLOOR_HEIGHT; };
+  const surface = (i: number, j: number) => { const index = lotAt[j * NX + i], thing = thingAt[j * NX + i]; return Math.max(index < 0 ? 0 : place.lots[index].floors * FLOOR_HEIGHT, thing < 0 ? 0 : things[thing].top * FLOOR_HEIGHT); };
   const ELEVATION = Math.atan(1 / Math.SQRT2), G = 9.8;
   for (let k = 0; k < K; k++) for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
     const here = what(i, j, k);

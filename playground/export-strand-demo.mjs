@@ -32,7 +32,7 @@ export async function strandDemo(novelDir, options) {
   const { latestStrandAnswers } = await load('dist/src/digger/timeplace/strandView.js');
   const { forkTimeline, walkTimeline } = await load('dist/src/digger/stage/environment.js');
   const { composePlace, placeGraph, nodePosition, degrade, semanticAxis } = await load('dist/apps/playground/src/data/skeletonPlace.js');
-  const { skeletonStream: stream } = await load('dist/apps/playground/src/data/skeleton.js');
+  const { skeletonStream: stream, generateSkeleton } = await load('dist/apps/playground/src/data/skeleton.js');
   const { solveWalk, sampleWalk, temperatureBound, directionOf } = await load('dist/apps/playground/src/data/pathIntegral.js');
   const inputs = await stageInputs(novelDir), answers = await latestStrandAnswers(novelDir), strands = storyStrands(inputs.data, answers ?? {});
   const staged = new Map(inputs.movementScenes.map(scene => [scene.id, scene])), byIndex = new Map(inputs.data.scenes.map(scene => [scene.id, scene.index]));
@@ -49,9 +49,9 @@ export async function strandDemo(novelDir, options) {
     const members = inputs.data.places.filter(child => child.parentId === placeId && ROLE_OF[inputs.architecture?.places[child.id]?.kind]).map(child => ({ label: name(child.id), role: ROLE_OF[inputs.architecture.places[child.id].kind] }));
     const seed = [...placeId].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7);
     const layout = composePlace({ id: placeId, kind: /[街路巷道]$/.test(label) ? 'street' : 'district', seed, members });
-    groups.set(placeId, { label, path: (place?.path ?? [placeId]).map(name), layout, standing: layout.lots.map(lot => lot.skeleton.cells.map(value => (value ? 1 : 0))), version: 0, built: null });
+    groups.set(placeId, { label, path: (place?.path ?? [placeId]).map(name), layout, things: new Map(), standing: layout.lots.map(lot => lot.skeleton.cells.map(value => (value ? 1 : 0))), version: 0, built: null });
   }
-  const graphOf = placeId => { const group = groups.get(placeId); if (!group.built || group.built.version !== group.version) group.built = { version: group.version, ...placeGraph(group.layout, group.standing) }; return group.built; };
+  const graphOf = placeId => { const group = groups.get(placeId); if (!group.built || group.built.version !== group.version) group.built = { version: group.version, ...placeGraph(group.layout, group.standing, [...group.things.values()]) }; return group.built; };
   const T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 }), kappa = 1, lambda = 8;
   const fields = new Map(), solve = (placeId, key, targets, how) => {
     const group = groups.get(placeId), cacheKey = `${placeId}|${group.version}|${key}|${classOf(how)}`;
@@ -59,7 +59,7 @@ export async function strandDemo(novelDir, options) {
     return fields.get(cacheKey);
   };
   const pick = (list, rng) => list[Math.floor(rng() * list.length)];
-  const report = inputs.movement?.scenes ?? {}, moves = new Map(), hits = new Map(), struck = new Set(), notes = { unreachable: 0, sampled: 0, teleports: 0, solves: 0, hits: 0, destroyed: 0 };
+  const report = inputs.movement?.scenes ?? {}, moves = new Map(), hits = new Map(), hitThings = new Map(), struck = new Set(), notes = { unreachable: 0, sampled: 0, teleports: 0, solves: 0, hits: 0, destroyed: 0 };
   const top = distribution => Object.entries(distribution ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0];
   // How destructive each event is: its embedding (the causality faculty's sidecar) projected onto the book's own
   // destruction direction, learned from events whose summaries say they wreck things against those that fight nowhere.
@@ -68,11 +68,62 @@ export async function strandDemo(novelDir, options) {
   const axis = vectors.size ? semanticAxis(vectors, bookEvents.filter(event => damageDegree(summary(event)) >= 3).map(event => event.id), bookEvents.filter(event => !damageDegree(summary(event))).map(event => event.id)) : null;
   notes.axis = axis ? { positives: axis.positives, negatives: axis.negatives } : null;
   /** A fight's damage, once per event: a box around where its first actor stands (standing in for Jev's box on the view), degraded by the event's strength. */
+  // Things the story mentions (novel stage objects). Mentions of one named thing become one object: names sharing a
+  // distinctive token (a Latin word, an acronym such as A.A.A. for Anti-Art Attachment, a rare pair of characters such as
+  // 姬蜂). A stand-in for the EM faculty, which should decide these identities. Big things (10 m or more) carry structure
+  // inside, a small skeleton that hits can break; every thing joins the walk once placed (its top walkable, the street
+  // under a grounded one blocked) and moves when a later event mentions it elsewhere.
+  const found = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
+  const mentions = chosen.flatMap(scene => (found?.scenes?.[scene.id]?.objects ?? []).filter(object => !(object.kind === 'building' && object.match.kind === 'building')).map(object => ({ scene: scene.id, event: Math.max(0, scene.events.findIndex(entry => entry.id === object.event)), object })));
+  const tokensOf = text => { const latin = text.match(/[A-Za-z]+/g) ?? [], cjk = [...text.replace(/[^一-鿿぀-ヿ]/g, '')], acronym = latin.length >= 2 ? latin.map(word => word[0].toUpperCase()).join('') : ''; return new Set([...latin.map(word => word.toUpperCase()).filter(word => word.length >= 3), ...(acronym.length >= 3 ? [acronym] : []), ...cjk.slice(0, -1).map((char, n) => char + cjk[n + 1])]); };
+  const STOP = new Set(['机器', '装置', '飞行', '巨型', '人行', '通道', '临时', '仓库', '大型', '残骸']), names = [...new Set(mentions.map(entry => entry.object.name))], counts = new Map();
+  for (const text of names) for (const token of tokensOf(text)) counts.set(token, (counts.get(token) ?? 0) + 1);
+  const distinctive = token => (counts.get(token) ?? 0) >= 2 && !STOP.has(token) && counts.get(token) <= Math.max(2, names.length * 0.4);
+  const parent = mentions.map((_, index) => index), root = index => parent[index] === index ? index : (parent[index] = root(parent[index]));
+  for (let a = 0; a < mentions.length; a++) for (let b = a + 1; b < mentions.length; b++) { const ta = tokensOf(mentions[a].object.name); if ([...tokensOf(mentions[b].object.name)].some(token => ta.has(token) && distinctive(token))) parent[root(a)] = root(b); }
+  const entities = [...new Set(mentions.map((_, index) => root(index)))].map((head, n) => {
+    const own = mentions.filter((_, index) => root(index) === head), tally = new Map();
+    for (const entry of own) tally.set(entry.object.name, (tally.get(entry.object.name) ?? 0) + 1);
+    const label = [...tally].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0][0], lead = own.find(entry => entry.object.name === label).object;
+    const size = Math.min(24, Math.max(4, ...own.map(entry => entry.object.size))), shape = lead.match.kind === 'shape' ? lead.match.id : 'box';
+    const height = shape === 'sphere' || shape === 'diamond' ? size : shape === 'oval' ? size * 0.55 : Math.max(1.2, size * 0.35);
+    const struct = size >= 10 ? generateSkeleton('house', 4049 + n, { width: Math.max(4, Math.round(size / 2) * 2), depth: Math.max(4, Math.round(Math.max(size * 0.35, 4) / 2) * 2), floors: Math.max(1, Math.round(height / 3)), cores: 1 }) : null;
+    return { id: `thing_${n + 1}`, name: label, aliases: [...tally.keys()].filter(other => other !== label), shape, size, height, airborne: own.filter(entry => entry.object.airborne).length * 2 > own.length, struct, standing: struct ? struct.cells.map(value => (value ? 1 : 0)) : null, mentions: own.map(entry => ({ scene: entry.scene, event: entry.event })), placed: [] };
+  });
+  /** Place (or move) the things an event mentions, where its first actor stands, resting on whatever is under them. */
+  const placedAt = new Set();
+  const placeThings = (scene, event, at) => {
+    const index = scene.events.findIndex(entry => entry.id === event.id);
+    // Once per event: the first turn of an event is its first actor's.
+    if (placedAt.has(event.id)) return;
+    placedAt.add(event.id);
+    for (const entity of entities) if (entity.mentions.some(entry => entry.scene === scene.id && entry.event === index) && at) {
+      // Beside the actor, in the first direction with open ground; on the actor's own spot when there is none.
+      const group = groups.get(scene.placeId), actor = nodePosition(group.layout, at[0]), lotAt = (x, z) => group.layout.lots.find(entry => x >= entry.i0 * 2 && x < (entry.i0 + entry.nx) * 2 && z >= entry.j0 * 2 && z < (entry.j0 + entry.nz) * 2);
+      const reach = entity.size / 2 + 2, open = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => ({ x: actor.x + dx * reach, z: actor.z + dz * reach })).find(spot => spot.x > 0 && spot.z > 0 && spot.x < group.layout.NX * 2 && spot.z < group.layout.NZ * 2 && !lotAt(spot.x, spot.z) && actor.k === 0);
+      const p = open ?? actor, lot = lotAt(p.x, p.z);
+      const y = (lot ? lot.floors * 3 : 0) + entity.height / 2 + (entity.airborne ? 8 : 0), depth = entity.shape === 'box' ? Math.max(1.2, entity.size * 0.35) : entity.size;
+      for (const other of groups.values()) if (other.things.delete(entity.id)) other.version++;
+      group.things.set(entity.id, { i0: Math.floor((p.x - entity.size / 2) / 2), i1: Math.floor((p.x + entity.size / 2) / 2), j0: Math.floor((p.z - depth / 2) / 2), j1: Math.floor((p.z + depth / 2) / 2), top: Math.round((y + entity.height / 2) / 3), grounded: y - entity.height / 2 < 1.5 && entity.size <= 8 });
+      group.version++;
+      entity.placed.push({ scene: scene.id, event: index, place: scene.placeId, x: Math.round(p.x * 10) / 10, y: Math.round(y * 10) / 10, z: Math.round(p.z * 10) / 10 });
+      entity.at = { place: scene.placeId, x: p.x, y, z: p.z };
+    }
+  };
+  notes.things = { mentions: mentions.length, things: entities.length, withStructure: entities.filter(entity => entity.struct).length };
   const damage = (scene, event, at, seed) => {
     if (struck.has(event.id)) return;
     struck.add(event.id);
     const strength = axis?.strength(event.id) ?? 0;
-    if (strength < 0.7 || !at) return;
+    if (strength < 0.8 || !at) return;
+    // Things near the blast are hit too; a big one loses part of its structure.
+    const near = nodePosition(groups.get(scene.placeId).layout, at[0]), thingHits = [];
+    for (const entity of entities) if (entity.at?.place === scene.placeId && Math.hypot(entity.at.x - near.x, entity.at.z - near.z) <= 4 + entity.size / 2) {
+      const rng = stream(seed, 'thing', entity.id), destroyed = [];
+      if (entity.standing) for (let cell = 0; cell < entity.standing.length; cell++) if (entity.standing[cell] && rng() < strength * 0.6) { entity.standing[cell] = 0; destroyed.push(cell); }
+      thingHits.push({ id: entity.id, destroyed });
+    }
+    if (thingHits.length) hitThings.set(event.id, thingHits);
     const group = groups.get(scene.placeId), p = nodePosition(group.layout, at[0]);
     const distance = lot => Math.hypot(Math.max(0, lot.i0 * 2 - p.x, p.x - (lot.i0 + lot.nx) * 2), Math.max(0, lot.j0 * 2 - p.z, p.z - (lot.j0 + lot.nz) * 2));
     const index = group.layout.lots.map((lot, n) => [n, distance(lot)]).filter(([, d]) => d <= 6).sort((a, b) => a[1] - b[1])[0]?.[0];
@@ -93,6 +144,7 @@ export async function strandDemo(novelDir, options) {
       return [pick(spots[spot], stream(seed)), directionOf(0, -1)];
     },
     act: ({ scene, event, person, at, seed }) => {
+      placeThings(scene, event, at);
       damage(scene, event, at, seed);
       const answer = report[scene.id]?.events?.[event.id]?.[person], spot = top(answer?.to), { graph, spots } = graphOf(scene.placeId);
       if (!answer?.to || !at || !spots[spot]?.length) return { kind: 'stay' };
@@ -143,13 +195,6 @@ export async function strandDemo(novelDir, options) {
         if (index >= 0) lotNames.set(key, { place: scene.placeId, lot: index, name: object.name, scene: scene.id, event: eventIndex, model: object.match.id });
         continue;
       }
-      const actor = scene.events[eventIndex]?.actors?.[0] ?? scene.cast[0], at = run?.events?.[eventIndex]?.at?.[actor]?.[0] ?? run?.starts?.[actor]?.[0];
-      if (at === undefined || at === null) continue;
-      const p = nodePosition(group.layout, at), lot = group.layout.lots.find(entry => p.x >= entry.i0 * 2 && p.x < (entry.i0 + entry.nx) * 2 && p.z >= entry.j0 * 2 && p.z < (entry.j0 + entry.nz) * 2);
-      const size = Math.min(12, Math.max(2, object.size)), base = lot ? lot.floors * 3 : 0;
-      const list = placedObjects.get(scene.id) ?? [];
-      list.push({ name: object.name, shape: object.match.kind === 'shape' ? object.match.id : 'box', size, event: eventIndex, x: Math.round((p.x + 1.5 * (list.length % 3 - 1)) * 10) / 10, z: Math.round(p.z * 10) / 10, y: base + size / 2 + (object.airborne ? 8 : 0), floating: !!lot || object.airborne });
-      placedObjects.set(scene.id, list);
     }
   }
   notes.detected = { buildings: lotNames.size, objects: [...placedObjects.values()].reduce((sum, list) => sum + list.length, 0) };
@@ -159,6 +204,8 @@ export async function strandDemo(novelDir, options) {
   const exported = Object.fromEntries([...groups].map(([id, { layout }]) => [id, layout.lots.map((lot, index) => shellOf(id, lot, index))]));
   return {
     models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
+    things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
+      struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
     title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes, migrations,
     macro: [...tree].map(id => ({ id, label: name(id), parent: tree.has(places.get(id)?.parentId) ? places.get(id).parentId : null })),
     people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
@@ -170,7 +217,7 @@ export async function strandDemo(novelDir, options) {
         starts: Object.fromEntries(Object.entries(run.starts).map(([person, at]) => [person, at?.[0] ?? null])),
         from: Object.fromEntries((timeline.handoffs.get(scene.id) ?? []).map(handoff => [handoff.person, handoff.from ? (handoff.samePlace ? 'stays' : 'arrives') : 'enters'])),
         objects: placedObjects.get(scene.id) ?? [],
-        events: scene.events.map(event => ({ text: clean(event.text), hit: hits.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean) })) };
+        events: scene.events.map(event => ({ text: clean(event.text), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean) })) };
     }),
   };
 }
