@@ -72,7 +72,10 @@ export interface TimePlaceProjection {
   continuities?: { id: string; title: string }[];
   /** The universe calendar (one clock): every period on its day; books are marks on it. */
   calendar?: CalendarView | null;
+  /** The buildings the story names at its places (novel stage objects): one entry per name at a place, with the scenes that name it in reading order. Not canon. */
+  buildings?: PlaceBuilding[];
 }
+export interface PlaceBuilding { id: string; name: string; placeId: string; model: string | null; size: number | null; sceneIds: string[] }
 
 /** Calendar minutes: ordering keys from the backend (`novel calendar`), not real date arithmetic. */
 export interface CalendarSpan { start: number; end: number }

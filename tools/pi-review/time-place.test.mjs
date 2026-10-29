@@ -72,3 +72,10 @@ test('known scene locations remain available to Places when actual story time is
   assert.equal(projection.places[0].id, 'station');
   assert.deepEqual(projection.times, []);
 });
+
+test('the building log keeps one entry per name at a place: the scene place with a building, every scene that names it in reading order', async () => {
+  const { buildingLog } = await import('./time-place.mjs');
+  const rows = [{ id: 's1', index: 0, placeIds: ['loc_city', 'loc_tower'] }, { id: 's2', index: 1, placeIds: ['loc_tower'] }, { id: 's3', index: 2, placeIds: [] }];
+  const log = buildingLog([{ sceneId: 's2', name: '钟塔', model: null, size: 30 }, { sceneId: 's1', name: '钟塔', model: 'skyscraper', size: 30 }, { sceneId: 's3', name: '无处', model: null, size: null }], rows, { loc_city: 'none', loc_tower: 'skyscraper' });
+  assert.deepEqual(log, [{ id: 'loc_tower|钟塔', name: '钟塔', placeId: 'loc_tower', model: 'skyscraper', size: 30, sceneIds: ['s1', 's2'] }], 'a scene with no place names no building on the map');
+});

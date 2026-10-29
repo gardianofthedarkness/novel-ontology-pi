@@ -20,6 +20,12 @@
  * `architecture` is each place's picked building (stage/architecture.json:
  * place id → kind or "none"), a sub-kind of place.
  *
+ * `buildings` are the buildings the story names in staged scenes
+ * (stage/objects.json, stage-reports.mjs). They become a log per place: one
+ * entry per name at a place (the scene's place with a building, as the stage
+ * picks it), with every scene that names it, so the map can show each from
+ * the scene it first appears in. Names are matched exactly; not canon.
+ *
  * `strands` are the answers of the latest strands report (strand-answers.mjs):
  * where "who is present?" was asked, the answered cast replaces the recorded
  * one, and a scene answered as "nobody known, someone else" is marked `alone`
@@ -29,7 +35,26 @@ const nameOf = (entity) => entity?.names?.find((form) => form.kind === 'canonica
 const order = (id) => { const match = /^b(\d+)_s(\d+)$/.exec(id ?? ''); return match ? Number(match[1]) * 1_000_000 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
 const clip = (value, length) => typeof value === 'string' && value.length > length ? `${value.slice(0, length - 1)}…` : value;
 
-export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [], strands = null, architecture = null }) {
+/** One entry per named building at a place, with the scenes that name it in reading order. */
+export function buildingLog(mentions, sceneRows, architecture) {
+  const sceneById = new Map(sceneRows.map((scene) => [scene.id, scene]));
+  const placeOf = (scene) => scene.placeIds.find((id) => architecture?.[id] && architecture[id] !== 'none') ?? scene.placeIds[0];
+  const log = new Map();
+  for (const mention of mentions) {
+    const scene = sceneById.get(mention.sceneId), placeId = scene && placeOf(scene);
+    if (!placeId) continue;
+    const id = `${placeId}|${mention.name}`;
+    const entry = log.get(id) ?? { id, name: mention.name, placeId, model: mention.model, size: mention.size, sceneIds: [] };
+    entry.model ??= mention.model;
+    if (!entry.sceneIds.includes(scene.id)) entry.sceneIds.push(scene.id);
+    log.set(id, entry);
+  }
+  const reading = new Map(sceneRows.map((scene) => [scene.id, scene.index]));
+  for (const entry of log.values()) entry.sceneIds.sort((first, second) => reading.get(first) - reading.get(second));
+  return [...log.values()];
+}
+
+export function timePlaceProjection({ entities: applied, scenes, relations: appliedRelations, events = [], pending = [], strands = null, architecture = null, buildings = null }) {
   const known = new Set(applied.map((entity) => entity.id));
   const proposedEntities = pending.filter((proposal) => proposal.kind === 'upsert_entity' && ['TimePoint', 'Location'].includes(proposal.payload?.kind) && !known.has(proposal.payload.id)).map((proposal) => proposal.payload);
   const proposedIds = new Set(proposedEntities.map((entity) => entity.id));
@@ -109,5 +134,5 @@ export function timePlaceProjection({ entities: applied, scenes, relations: appl
   for (const scene of sceneRows) for (const id of scene.characterIds) characterCounts.set(id, (characterCounts.get(id) ?? 0) + 1);
   const characters = [...characterCounts].sort((first, second) => second[1] - first[1]).slice(0, 40).map(([id, scenes]) => ({ id, label: nameOf(byId.get(id)), scenes }));
   const names = Object.fromEntries([...placeIds, ...characterCounts.keys()].map((id) => [id, nameOf(byId.get(id))]));
-  return { available: timeRows.length > 0, times: timeRows, scenes: sceneRows, places, characters, names };
+  return { available: timeRows.length > 0, times: timeRows, scenes: sceneRows, places, characters, names, ...(buildings ? { buildings: buildingLog(buildings, sceneRows, architecture) } : {}) };
 }

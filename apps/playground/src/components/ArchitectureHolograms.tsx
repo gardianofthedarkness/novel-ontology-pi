@@ -21,6 +21,8 @@ type Shapes = Map<string, Shape>;
 
 const noRaycast = () => undefined;
 const EDGE = "#8fd6ff", PROPOSED = "#ffd36b", FILL = "#2b86c4";
+/** Buildings the story names at a place: warm, so they read apart from the generic skyline. */
+const NAMED_EDGE = "#ffe7b0", NAMED_FILL = "#b97f2c";
 /** World units above the floor where the lowest scene sphere floats; buildings stay under it. */
 const CEILING = 215;
 const RISE_SECONDS = 1.6, SCAN_SECONDS = 7;
@@ -222,15 +224,70 @@ function PlaceHologram({ mark, kind, shapes, order, reducedMotion }: { mark: Flo
   return <primitive object={group} />;
 }
 
+/**
+ * The buildings the story names at a place (placeBuildings.ts): warm arcs
+ * along the front of its disc (row after row outward when many), clear of the
+ * generic skyline at the back. One
+ * standing by the chosen moment is drawn full; one named later stands low
+ * and faint, and rises when the moment reaches it.
+ */
+function NamedBuildings({ mark, shapes, reducedMotion }: { mark: FloorMark; shapes: Shapes; reducedMotion: boolean }) {
+  const named = mark.named ?? [];
+  const layout = [mark.id, mark.x, mark.z, mark.radius, mark.depth ?? 0, !!mark.region, ...named.map((entry) => `${entry.id}:${entry.model}`)].join("|");
+  const { group, parts } = useMemo(() => {
+    const group = new Group();
+    group.position.set(mark.x, -944 + 1.5 * (mark.depth ?? 0) + 1, mark.z);
+    const base = mark.radius * (mark.region ? 0.9 : 0.95), spread = Math.PI * 0.9, across = Math.max(22, Math.min(64, mark.radius * 0.26));
+    const perRow = Math.max(1, Math.floor((spread * base) / (across * 1.2)));
+    const parts = named.map((entry, index) => {
+      const next = random(entry.id), variants = VARIANTS[entry.model as ArchitectureKind] ?? VARIANTS.office;
+      const shape = shapes.get(variants[Math.floor(next() * variants.length)]) ?? shapes.get(VARIANTS.office[0])!;
+      const row = Math.floor(index / perRow), inRow = Math.min(perRow, named.length - row * perRow), ring = base + row * across * 1.4;
+      const angle = Math.PI / 2 + ((index % perRow) - (inRow - 1) / 2) * Math.min(0.42, spread / inRow);
+      const height = Math.max(60, Math.min(CEILING * 0.8, across * 2.2)) * (0.85 + 0.3 * next());
+      const scale = Math.min(across / Math.max(shape.width, shape.depth), height / shape.height);
+      const edge = new LineBasicMaterial({ color: NAMED_EDGE, vertexColors: true, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, toneMapped: false });
+      const fill = new MeshBasicMaterial({ color: NAMED_FILL, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, toneMapped: false });
+      const building = new Group();
+      building.position.set(Math.cos(angle) * ring, 0, Math.sin(angle) * ring);
+      building.rotation.y = -angle + Math.PI / 2;
+      const body = new Mesh(shape.fill, fill), outline = new LineSegments(shape.edges, edge);
+      body.raycast = noRaycast; outline.raycast = noRaycast;
+      building.add(body, outline);
+      group.add(building);
+      return { id: entry.id, building, scale, edge, fill, level: 0, rise: 0 };
+    });
+    return { group, parts };
+  }, [layout, shapes]); // eslint-disable-line react-hooks/exhaustive-deps -- the layout key holds every field of the mark it reads
+  useEffect(() => () => { for (const part of parts) { part.edge.dispose(); part.fill.dispose(); } }, [parts]);
+  const standing = useMemo(() => new Map(named.map((entry) => [entry.id, entry.standing])), [named]);
+  useFrame(() => {
+    const active = mark.active ? 1 : 0.28, ease = reducedMotion ? 1 : 0.1;
+    for (const part of parts) {
+      const up = standing.get(part.id) ?? false;
+      part.level += ((up ? 1 : 0.22) - part.level) * ease;
+      part.rise += ((up ? 1 : 0.35) - part.rise) * ease;
+      part.building.scale.set(part.scale, part.scale * Math.max(0.001, part.rise), part.scale);
+      part.edge.opacity = 0.9 * part.level * active;
+      part.fill.opacity = 0.12 * part.level * active;
+    }
+  });
+  return <primitive object={group} />;
+}
+
 export function ArchitectureHolograms({ marks, reducedMotion }: { marks: FloorMark[]; reducedMotion: boolean }) {
   const built = useMemo(() => marks.filter((mark): mark is FloorMark & { architecture: ArchitectureKind } => !!mark.architecture), [marks]);
+  const storied = useMemo(() => marks.filter((mark) => mark.named?.length), [marks]);
   const [shapes, setShapes] = useState<Shapes | null>(null);
   useEffect(() => {
-    if (!built.length || shapes) return;
+    if ((!built.length && !storied.length) || shapes) return;
     let live = true;
     loadShapes().then((loaded) => { if (live) setShapes(loaded); }, () => undefined);
     return () => { live = false; };
-  }, [built.length, shapes]);
+  }, [built.length, storied.length, shapes]);
   if (!shapes) return null;
-  return <>{built.map((mark, order) => <PlaceHologram key={`${mark.id}:${mark.architecture}`} mark={mark} kind={mark.architecture} shapes={shapes} order={order} reducedMotion={reducedMotion} />)}</>;
+  return <>
+    {built.map((mark, order) => <PlaceHologram key={`${mark.id}:${mark.architecture}`} mark={mark} kind={mark.architecture} shapes={shapes} order={order} reducedMotion={reducedMotion} />)}
+    {storied.map((mark) => <NamedBuildings key={`named:${mark.id}`} mark={mark} shapes={shapes} reducedMotion={reducedMotion} />)}
+  </>;
 }

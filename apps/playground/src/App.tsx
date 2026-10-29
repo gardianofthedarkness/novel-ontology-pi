@@ -136,6 +136,9 @@ export default function App() {
   /** Orbital Places: only the scenes that were at the centre of the Story time spiral (null: no limit). */
   const [atlasFocus, setAtlasFocus] = useState<Set<string> | null>(null);
   const [atlasLevels, setAtlasLevels] = useState<AtlasLevels>(SCENE_LEVEL);
+  /** Orbital Places: the story moment the named buildings are shown at (a period id; null: the end of the story), and whether later ones show faintly. */
+  const [atlasBuildingsAt, setAtlasBuildingsAt] = useState<string | null>(null);
+  const [atlasLaterBuildings, setAtlasLaterBuildings] = useState(false);
   /** Orbital Story time: one spiral line, or strands on a ribbon (remembered per browser). */
   const [storyShape, setStoryShape] = useState<StoryShape>(() => { try { return localStorage.getItem("story-shape") === "strands" ? "strands" : "line"; } catch { return "line"; } });
   const chooseStoryShape = (shape: StoryShape) => { setStoryShape(shape); try { localStorage.setItem("story-shape", shape); } catch { /* per-browser convenience only */ } };
@@ -837,10 +840,10 @@ export default function App() {
       return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook, storyShape) };
     }
     if (!viewTimePlace?.places.length) return null;
-    const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels };
+    const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels, buildingsAt: atlasBuildingsAt, laterBuildings: atlasLaterBuildings };
     const regrouped = atlasWorld(displayWorld, viewTimePlace, filter, loadedBook);
     return { world: regrouped, arrangement: atlasArrangement(viewTimePlace, filter, regrouped, focusBook) };
-  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, loadedBook, focusBook, storyShape]);
+  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, atlasBuildingsAt, atlasLaterBuildings, loadedBook, focusBook, storyShape]);
   /** Live highlights and Pi's touches, in the ids the shown projection uses. */
   const shownEmerging = useMemo(() => emerging ? { times: new Set([...emerging.times].map(universeId.time)), places: new Set([...emerging.places].map(universeId.place)) } : null, [emerging, universeId]);
   const shownTouched = useMemo(() => new Set([...touchedScenes].map(universeId.scene)), [touchedScenes, universeId]);
@@ -923,7 +926,7 @@ export default function App() {
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
             {orbitalMode && stageView === "story" && viewTimePlace?.available && <div className="stage-group" role="group" aria-label="Story shape">{([["line", "Line"], ["strands", "Strands"]] as const).map(([value, label]) => <button key={value} aria-pressed={storyShape === value} title={value === "strands" ? "Scenes that run in parallel side by side (estimated from who is in each scene)" : "Every scene on one line in story order"} onClick={() => chooseStoryShape(value)}>{label}</button>)}</div>}
           </div>
-          {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
+          {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} buildingsAt={atlasBuildingsAt} onBuildingsAt={setAtlasBuildingsAt} laterBuildings={atlasLaterBuildings} onLaterBuildings={setAtlasLaterBuildings} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
           {regroupedOrbit && stageView === "places" && viewTimePlace && <div className="holo-entry" role="toolbar" aria-label="Holo stage">
             {selectedPlace && <button className="is-primary" onClick={() => setHolo({ target: selectedPlace.id, mode: "diorama", beat: 0 })}>▶ Enter {selectedPlace.label}</button>}
             <button onClick={() => setHolo({ target: "journey", mode: "journey", beat: 0 })}>➝ Journey</button>
