@@ -36,8 +36,15 @@ interface Kind { hint: string; era: "modern" | "ancient"; soft: number; radius: 
 export const PEAK = 600;
 /** How many times its footprint's width a building may be tall: a 600 m tower stands on a lot about 80 m across. */
 export const SLENDER = 8;
-/** How much wider a tall core's streets are: busier ground, 1 + H/400 (2.5 times around a 600 m core). */
-export const streetsFor = (patch: Patch) => (patch.type === "skyscrapers" ? 1 + patch.H / 400 : 1);
+/**
+ * Super-tall ground: only where a skyscraper core's mean height (its manifold, H × depth) is at least SUPER_TALL and
+ * within its top 30% do plots and streets widen for the towers; everywhere else, a core is cut like any district, with
+ * its type's own plots and streets (regular buildings keep the density they had before the rule).
+ */
+export const SUPER_TALL = 250;
+export const superTallAt = (patch: Patch, p: Point) => { if (patch.type !== "skyscrapers" || patch.H < SUPER_TALL) return 0; const mean = patch.H * depthOf(patch, p); return mean >= Math.max(SUPER_TALL, 0.7 * patch.H) ? mean : 0; };
+/** How much wider streets are at a point: 1 + h/400 on super-tall ground (h the mean height there; 2.5 times at a 600 m peak), else 1. */
+export const streetsFor = (patch: Patch, p: Point = [patch.x, patch.z]) => { const tall = superTallAt(patch, p); return tall ? 1 + tall / 400 : 1; };
 export const LANDSCAPES: Record<LandscapeType, Kind> = {
   skyscrapers: { soft: 25, era: "modern", cap: 600, hint: "modern skyscrapers: a dense core of high-rise towers", radius: [110, 200], height: [80, 600], lot: [1400, 2600], block: 6000, coverage: 0.95, back: 4, family: "blob", profile: "core", building: (f) => (f >= 20 ? "skyscraper" : "tower") },
   commercial: { soft: 20, era: "modern", cap: 60, hint: "a commercial quarter: shops, malls and offices of a few storeys along busy streets, with a plaza and a boulevard", radius: [90, 170], height: [12, 36], lot: [500, 1300], block: 4500, coverage: 0.95, back: 2, family: "blob", profile: "flat", building: (f) => (f >= 6 ? "office" : "shop") },
@@ -174,13 +181,13 @@ export function drawHeight(patch: Patch, s: number, rng: () => number): number {
 }
 
 /**
- * A lot's size at a point of a patch: the patch's own, or for a skyscraper core as large as the height expected there
- * needs (its footprint wide enough for SLENDER), so the core's plots are the big ones.
+ * A lot's size at a point of a patch: the patch's own, or on super-tall ground as large as the height expected there needs
+ * (its footprint wide enough for SLENDER), so only the super-tall towers stand on the big plots.
  */
 export function lotFor(patch: Patch, p: Point): number {
-  if (patch.type !== "skyscrapers") return patch.lot;
-  // Plots are planned for the tallest towers likely there, a broader plateau than the mean profile.
-  const tall = patch.H * (0.4 + 0.6 * depthOf(patch, p)), side = tall / SLENDER + 2 * LANDSCAPES.skyscrapers.back;
+  const tall = superTallAt(patch, p);
+  if (!tall) return patch.lot;
+  const side = tall / SLENDER + 2 * LANDSCAPES.skyscrapers.back;
   return Math.max(patch.lot, Math.round(side * side));
 }
 
@@ -217,8 +224,10 @@ export function landscapeStyle(landscape: Landscape): FillStyle {
   return {
     // A super-block is cut to the largest lot any of it needs (the core's middle needs the biggest plots).
     blockArea: (superBlock) => { const patch = reaching(superBlock); return !patch ? 5200 : Math.max(LANDSCAPES[patch.type].block, 3 * Math.max(...[superBlock.centre, centroid(superBlock.pts), ...superBlock.pts, ...(contains(superBlock.pts, [patch.x, patch.z]) ? [[patch.x, patch.z] as Point] : [])].filter((p) => insideBy(patch, p) > -fringe(patch)).map((p) => lotFor(patch, p)))); },
-    roadWidth: (superBlock) => { const patch = reaching(superBlock); return patch ? streetsFor(patch) : 1; },
-    lotArea: (block) => { const patch = reaching(block); return patch ? lotFor(patch, block.centre) : null; },
+    // Streets widen round super-tall ground anywhere in the super-block (its middle, its corners, the core's own middle).
+    roadWidth: (superBlock) => { const patch = reaching(superBlock); return patch ? Math.max(...[superBlock.centre, centroid(superBlock.pts), ...superBlock.pts, ...(contains(superBlock.pts, [patch.x, patch.z]) ? [[patch.x, patch.z] as Point] : [])].map((p) => streetsFor(patch, p))) : 1; },
+    // A block touching super-tall ground is cut into its big plots; any other into the type's own.
+    lotArea: (block) => { const patch = reaching(block); return patch ? Math.max(...[block.centre, ...block.pts].map((p) => lotFor(patch, p))) : null; },
     keep: (lot) => { const owner = ownerOfLot(landscape, lot); return !!owner && !openGround(owner, lot.centre); },
     building: (lot, rng) => {
       const owner = ownerOfLot(landscape, lot)!, kind = LANDSCAPES[owner.type];

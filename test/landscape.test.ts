@@ -162,8 +162,14 @@ test("taller cores stand on wider plots with wider streets: no building more tha
   for (const filled of [low, high]) for (const b of filled.fabric.buildings) assert.ok(b.floors * 3 <= SLENDER * Math.max(b.w, b.d) + 6, `${b.lot}: ${b.floors * 3} m on ${Math.round(b.w)} × ${Math.round(b.d)} m`);
   const widest = (filled: typeof low) => Math.max(...filled.fabric.roads.map((road) => road.width)), plots = (filled: typeof low) => mean(filled.fabric.lots.map((lot) => lot.area));
   assert.ok(widest(high) >= 2 * widest(low) * 0.9 && streetsFor(core(600).patches[0]) === 2.5, `wider streets round the 600 m core (${Math.round(widest(low))} m → ${Math.round(widest(high))} m)`);
-  // Plots grow with the core: the big plots near a 600 m core are larger than near a 120 m one.
-  const p90 = (filled: typeof low) => { const list = filled.fabric.lots.filter((lot) => Math.hypot(...lot.centre) < 150).map((lot) => lot.area).sort((a, b) => a - b); return list[Math.floor(0.9 * (list.length - 1))]; };
+  // Only super-tall ground widens: a 120 m core, and the 600 m core's outer ground, keep the type's own plots and streets.
+  const { superTallAt, SUPER_TALL } = await import("../src/ground/stage/landscape.js"), outer: [number, number] = [core(600).patches[0].x + 170, core(600).patches[0].z];
+  assert.ok(superTallAt(core(120).patches[0], [core(120).patches[0].x, core(120).patches[0].z]) === 0 && streetsFor(core(120).patches[0]) === 1, "no super-tall ground under a 120 m core");
+  assert.ok(superTallAt(core(600).patches[0], outer) === 0 && streetsFor(core(600).patches[0], outer) === 1 && SUPER_TALL === 250, "regular streets at the 600 m core's edge");
+  const regular = (filled: typeof low) => mean(filled.fabric.lots.filter((lot) => Math.hypot(...lot.centre) > 150).map((lot) => lot.area));
+  assert.ok(regular(high) < 1.5 * regular(low), `plots away from the super-tall middle stay regular (${Math.round(regular(low))} vs ${Math.round(regular(high))} m²)`);
+  // Plots grow with the core on its super-tall middle: the big plots there are larger than a 120 m core's.
+  const p90 = (filled: typeof low) => Math.max(...filled.fabric.lots.filter((lot) => Math.hypot(...lot.centre) < 80).map((lot) => lot.area));
   assert.ok(p90(high) > 1.3 * p90(low), `bigger plots near the taller core (${Math.round(p90(low))} → ${Math.round(p90(high))} m²)`);
   const tower = high.landmarks.find((mark) => mark.lot.endsWith(":landmark"))!;
   assert.ok(tower.floors * 3 >= 590 && tower.w >= 600 / SLENDER, `a signature tower at the 600 m peak, ${tower.w} m wide`);
