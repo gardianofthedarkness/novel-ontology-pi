@@ -1,6 +1,7 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { jevFromEnv, type DecisionModel } from "../../../ground/connectors/jev.js";
 import { storyStrands } from "../../../digger/timeplace/strandQuestions.js";
 import { forkTimeline, type TimelineScene } from "../../../digger/stage/environment.js";
 import { stageInputs } from "./stageCommands.js";
@@ -16,10 +17,17 @@ import { stageInputs } from "./stageCommands.js";
  * reports, and where none exist it uses its stand-ins. Derived view data,
  * never canon (docs/stage-simulation-records.md). The host plays a book's
  * accepted runs (the viewer's `play/` page).
+ *
+ * `novel sim pick` asks Jev first, on pictures of each story line (headless
+ * Chrome): which model each thing is drawn as, where each placement stands,
+ * where each fight hits and how big (playground/sim-jev.mjs). Answers are
+ * kept in the stage reports the engine reads, so the runs made after it use
+ * them instead of the stand-ins. While either command runs, it writes what it
+ * is doing to stage/simulation/live.json for the host's `play/live` page.
  */
 interface SimStrand { id: string; from: string; to: string; fork: string; title?: string }
 interface KeptRun { strand: string; run: string; fresh: boolean; accepted: string; note?: string }
-interface StrandData { title: string; notes: { hits?: number }; things: unknown[]; places: Record<string, unknown>; scenes: { events: { moves: unknown[] }[] }[] }
+interface StrandData { title: string; notes: { hits?: number; impacts?: { sphere: number; none: number } }; things: unknown[]; places: Record<string, unknown>; scenes: { events: { moves: unknown[] }[] }[] }
 interface Engine {
   ENGINE: string;
   runStrand(novelDir: string, strand: Omit<SimStrand, "id">): Promise<StrandData>;
@@ -27,6 +35,16 @@ interface Engine {
   simulationInputs(novelDir: string): Promise<string>;
   keepRun(folder: string, strand: Omit<SimStrand, "title">, record: unknown, options: { inputs: string; accept?: boolean; page?: unknown }): Promise<KeptRun>;
 }
+interface LiveLine { id: string; title: string }
+interface Live { line(index: number, patch: Record<string, unknown>): Promise<void>; phase(name: string): Promise<void>; finish(status: "done" | "failed", extra?: Record<string, unknown>): Promise<void>; watch(jev: DecisionModel): DecisionModel }
+interface PickCount { asked: number; reused: number; left: number; failed?: number }
+interface Pickers {
+  PICKER_MODEL: string;
+  pickStrand(novelDir: string, strand: Omit<SimStrand, "id" | "title">, options: { jev: DecisionModel; budget: number; live?: Live }): Promise<{ calls: number; models: { picked: number; left: number }; placements: PickCount; fights: PickCount; left: number }>;
+  createLive(novelDir: string, options: { command: string; lines: LiveLine[]; budget?: number | null; model?: string | null }): Promise<Live>;
+}
+/** What `novel sim pick` last left (stage/simulation/picks.json): the book it asked on (`inputs`), the lines, and how many questions it did not get to. */
+interface Picks { inputs: string; lines: string[]; left: number; complete: boolean; pickedAt: string }
 interface SimIndex { version?: number; strands: Record<string, { title?: string; from?: string; to?: string; fork?: string | null; accepted?: string; runs?: { id: string; inputs: string | null; engine: string | null; page?: string; scenes: number; hits: number; things: number; exportedAt: string }[] }> }
 
 /** The repository this CLI runs from (the engine is its playground script, on the compiled modules beside it). */
@@ -41,6 +59,7 @@ async function repository(): Promise<string> {
   }
 }
 const engine = async (): Promise<Engine> => import(pathToFileURL(join(await repository(), "playground", "export-strand-demo.mjs")).href) as Promise<Engine>;
+const pickers = async (): Promise<Pickers> => import(pathToFileURL(join(await repository(), "playground", "sim-jev.mjs")).href) as Promise<Pickers>;
 const simulationFolder = (novelDir: string) => join(novelDir, "stage", "simulation");
 const readIndex = async (novelDir: string): Promise<SimIndex> => readFile(join(simulationFolder(novelDir), "index.json"), "utf8").then((text) => JSON.parse(text) as SimIndex, () => ({ strands: {} }));
 
@@ -79,23 +98,93 @@ async function requireStage(novelDir: string) {
   if (waiting.length) throw new Error(`The simulation waits for every other step: ${waiting.map((item) => `${item.id} (${item.status})`).join(", ")}. See novel checklist.`);
 }
 
+/** The story lines a command works on: `--strand` one, or `--auto N` the first N of `novel sim strands`. */
+async function chooseLines(novelDir: string, options: { strand?: string; auto?: number }) {
+  const lines = await simStrandList(novelDir);
+  const chosen = options.strand ? lines.filter((line) => line.id === options.strand) : lines.slice(0, Math.max(1, options.auto ?? 1));
+  if (options.strand && !chosen.length) throw new Error(`No story line ${options.strand} with a simulated scene. Lines: ${lines.map((line) => line.id).join(", ") || "none"}.`);
+  return chosen.map((line) => ({ ...line, strand: { id: line.id.replace(/[^A-Za-z0-9_-]/g, "_"), from: line.from!, to: line.to!, fork: line.id }, title: line.places.join(" → ") }));
+}
+
+/**
+ * `novel sim pick`: Jev's answers on pictures of the chosen story lines, within `--max-calls` (questions stop being started
+ * once that many calls are spent; what was answered is kept, so running it again continues). Records what it left in
+ * stage/simulation/picks.json, which the checklist reads.
+ */
+export async function simPick(novelDir: string, options: { strand?: string; auto?: number; maxCalls?: number; env?: NodeJS.ProcessEnv } = {}): Promise<Record<string, unknown>> {
+  if (!Number.isInteger(options.maxCalls) || options.maxCalls! < 1) throw new Error("novel sim pick asks Jev: give --max-calls N, the most calls it may spend.");
+  await requireStage(novelDir);
+  const chosen = await chooseLines(novelDir, options), pick = await pickers(), sim = await engine(), budget = options.maxCalls!;
+  const jev = jevFromEnv({ ...(options.env ?? process.env), JEV_MODEL: pick.PICKER_MODEL });
+  const live = await pick.createLive(novelDir, { command: "pick", budget, model: jev.modelId, lines: chosen.map((line) => ({ id: line.strand.id, title: line.title })) });
+  const watched = live.watch(jev), lines = [];
+  let calls = 0;
+  try {
+    for (const [index, line] of chosen.entries()) {
+      await live.line(index, { status: "asking" });
+      const started = Date.now(), result = await pick.pickStrand(novelDir, { from: line.strand.from, to: line.strand.to, fork: line.strand.fork }, { jev: watched, budget: budget - calls, live });
+      calls += result.calls;
+      lines.push({ strand: line.strand.id, title: line.title, ...result, seconds: (Date.now() - started) / 1000 });
+      await live.line(index, { status: result.left ? "unfinished" : "answered", calls: result.calls, left: result.left, placements: result.placements, fights: result.fights });
+    }
+  } catch (error) {
+    await live.finish("failed", { error: String((error as Error).message).slice(0, 300) });
+    throw error;
+  }
+  const left = lines.reduce((sum, line) => sum + line.left, 0);
+  const picks: Picks = { inputs: await sim.simulationInputs(novelDir), lines: chosen.map((line) => line.strand.id), left, complete: left === 0, pickedAt: new Date().toISOString() };
+  await replaceFile(join(simulationFolder(novelDir), "picks.json"), JSON.stringify(picks, null, 1));
+  await live.finish("done", { left });
+  return { model: jev.modelId, calls, budget, lines, left, complete: picks.complete,
+    note: left ? `Stopped at --max-calls with ${left} question(s) left; run it again to continue (answers so far are kept).` : "Every thing, placement and fight on these lines has Jev's answer. Next: novel sim run (the runs use them)." };
+}
+
+/** Whether Jev's answers are complete for the book as it is now: the last pick left nothing and nothing it was made from changed since. */
+export async function simPicksDone(novelDir: string): Promise<{ done: boolean; left: number | null }> {
+  const picks = await readFile(join(simulationFolder(novelDir), "picks.json"), "utf8").then((text) => JSON.parse(text) as Picks, () => null);
+  if (!picks) return { done: false, left: null };
+  const current = await (await engine()).simulationInputs(novelDir);
+  return { done: picks.complete && picks.inputs === current, left: picks.inputs === current ? picks.left : null };
+}
+
+async function replaceFile(file: string, body: string) {
+  const temporary = `${file}.${process.pid}.tmp`;
+  await writeFile(temporary, body, { mode: 0o644 });
+  await rename(temporary, file);
+}
+
+/** How much of a run Jev placed: placements in Jev's cast, fights hitting where Jev chose (or not at all), each of all. */
+const jevShare = (data: StrandData) => {
+  const placed = data.things.flatMap((thing) => (thing as { placed?: { boxed?: boolean }[] }).placed ?? []), hits = data.scenes.flatMap((scene) => scene.events.flatMap((event) => (event as { hit?: { sphere?: unknown } | null }).hit ?? []));
+  return { placements: { jev: placed.filter((spot) => spot.boxed).length, of: placed.length }, fights: { jev: hits.filter((hit) => hit.sphere).length, none: data.notes.impacts?.none ?? 0, of: hits.length + (data.notes.impacts?.none ?? 0) } };
+};
+
 /**
  * `novel sim run`: the engine on the chosen story lines (`--strand` one, `--auto N` the first N of `novel sim strands`), each
  * kept as a run. The first run of a line is its accepted one; a later run is kept beside it and accepted only with --accept.
  */
 export async function simRun(novelDir: string, options: { strand?: string; auto?: number; accept?: boolean } = {}): Promise<Record<string, unknown>> {
   await requireStage(novelDir);
-  const lines = await simStrandList(novelDir);
-  const chosen = options.strand ? lines.filter((line) => line.id === options.strand) : lines.slice(0, Math.max(1, options.auto ?? 1));
-  if (options.strand && !chosen.length) throw new Error(`No story line ${options.strand} with a simulated scene. Lines: ${lines.map((line) => line.id).join(", ") || "none"}.`);
+  const chosen = await chooseLines(novelDir, options);
   const sim = await engine(), inputs = await sim.simulationInputs(novelDir), runs = [];
-  for (const line of chosen) {
-    const started = Date.now(), strand = { id: line.id.replace(/[^A-Za-z0-9_-]/g, "_"), from: line.from!, to: line.to!, fork: line.id };
-    const data = await sim.runStrand(novelDir, { from: strand.from, to: strand.to, fork: strand.fork });
-    const kept = await sim.keepRun(simulationFolder(novelDir), strand, sim.simulationRecord(data, strand), { inputs, accept: options.accept, page: data });
-    runs.push({ ...kept, title: data.title, places: Object.keys(data.places).length, scenes: data.scenes.length, moves: data.scenes.reduce((sum, scene) => sum + scene.events.reduce((count, event) => count + event.moves.length, 0), 0), hits: data.notes.hits ?? 0, things: data.things.length, seconds: (Date.now() - started) / 1000 });
+  const live = await (await pickers()).createLive(novelDir, { command: "run", lines: chosen.map((line) => ({ id: line.strand.id, title: line.title })) });
+  try {
+    for (const [index, line] of chosen.entries()) {
+      await live.line(index, { status: "running" });
+      const started = Date.now(), strand = line.strand;
+      const data = await sim.runStrand(novelDir, { from: strand.from, to: strand.to, fork: strand.fork });
+      const kept = await sim.keepRun(simulationFolder(novelDir), strand, sim.simulationRecord(data, strand), { inputs, accept: options.accept, page: data });
+      const run = { ...kept, title: data.title, places: Object.keys(data.places).length, scenes: data.scenes.length, moves: data.scenes.reduce((sum, scene) => sum + scene.events.reduce((count, event) => count + event.moves.length, 0), 0), hits: data.notes.hits ?? 0, things: data.things.length, jev: jevShare(data), seconds: (Date.now() - started) / 1000 };
+      runs.push(run);
+      await live.line(index, { status: "kept", run: kept.run, accepted: kept.accepted === kept.run, scenes: run.scenes, moves: run.moves, hits: run.hits, things: run.things, jev: run.jev });
+    }
+  } catch (error) {
+    await live.finish("failed", { error: String((error as Error).message).slice(0, 300) });
+    throw error;
   }
-  return { engine: sim.ENGINE, inputs, runs, note: "Derived view data, never canon. The viewer plays each line's accepted run (play/ beside the app)." };
+  await live.finish("done");
+  const standIns = runs.some((run) => run.jev.placements.jev < run.jev.placements.of || run.jev.fights.jev + run.jev.fights.none < run.jev.fights.of);
+  return { engine: sim.ENGINE, inputs, runs, note: `Derived view data, never canon. The viewer plays each line's accepted run (play/ beside the app).${standIns ? " Some placements or fights use stand-ins: novel sim pick asks Jev for them." : ""}` };
 }
 
 /** A book's simulation as kept: per story line its accepted run, how many runs, and whether the accepted run was made from the book as it is now. */
@@ -122,4 +211,4 @@ export async function simCurrent(novelDir: string): Promise<{ current: boolean; 
   return { current: status.lines.length > 0 && status.lines.every((line) => line.playable && (line.current || line.newerCurrent)), lines: status.lines.length };
 }
 
-export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim run <novel-dir> [--auto N] [--strand <id>] [--accept] | novel sim show <novel-dir>";
+export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id>] [--accept] | novel sim show <novel-dir>";

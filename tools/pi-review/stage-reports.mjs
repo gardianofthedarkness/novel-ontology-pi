@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { liveState } from './sim-play.mjs';
 
 /**
  * The stage reports the Places map reads (view inputs, not canon): each
@@ -60,5 +61,9 @@ export async function readSimulation(workspace) {
       things: (event.hitThings ?? []).map(entry => `${id}:${entry.id}`) });
     for (const move of record.migrations ?? []) migrations.push({ scene: move.scene, person: move.person, from: move.from, to: move.to });
   }
-  return strands.length ? { strands, places, things, hits, migrations } : null;
+  if (!strands.length) return null;
+  // Whether a simulation command is running on the book (the live page shows it): its state and command only, so the
+  // snapshot changes when it starts or ends, not with every question.
+  const live = await liveState(workspace);
+  return { strands, places, things, hits, migrations, live: live.status === 'idle' ? null : { status: live.status, command: live.command ?? null } };
 }

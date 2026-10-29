@@ -15,7 +15,13 @@ The engine now runs as a product step; the engine itself is unchanged (`runStran
 - **The player in the app:** the host serves the engine's own page with the book's accepted runs inlined and three.js beside it (`play/?volume=N`, linked as **Simulation** from read mode and clips).
 - **Pi:** `novel sim strands|run|show` are on its allowlist (`--auto` at most 5; never `--accept`, which is the user's), the checklist's stage section has a `simulation` step, and the novel-stage skill has its steps.
 
-Still open from the checklist below: Jev's placement and impact pickers as Pi steps (they need captures), progress and a budget, the simulation as its own section rather than a stage step, and feeding runs back to the timeline and places views.
+## Production, phase 2 (built): Jev's pickers and the live page
+
+- **`novel sim pick <dir> --auto N --max-calls M`** runs the placement and impact pickers (`playground/sim-jev.mjs` over `two-view-things.mjs` and `impact-choices.mjs`) on each line's page in headless Chrome: a model per thing, then each placement, then each fight, within a call budget, every answer kept. The page is made again after models (ghosts take their shape) and after placements (fights see the things where Jev put them). Box questions use Jev 1.14.
+- **The checklist** asks for `pick` until it leaves nothing (`picks.json`, against the book's inputs), then `run`. Pi may run `pick` with `--max-calls` at most 60.
+- **The live page** (`play/live?volume=N`; the player and the app's **Simulation** link lead to it while a command runs) shows each question's pictures as Jev gets them, its answers drawn on them (boxes, the chosen option with how sure), and a picture of what each answer made; **Replay** plays the recording at its recorded pace, 1× to 32×. The player can show each line's newest run (`newest=1`) before the user accepts it.
+
+Still open: character movement in the live page (the movement step's questions are text, asked before the simulation), the simulation as its own section rather than a stage step, and feeding runs back to the timeline and places views.
 
 ## Where it stands: limitations
 

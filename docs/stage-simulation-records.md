@@ -14,8 +14,11 @@ Everything is under `<novel-dir>/stage/`:
 | `simulation/runs/<strand>/<run>.json` | One run of a strand: its full record (below), never overwritten | the exporter with `--records` |
 | `simulation/<strand>.json` | The strand's accepted run, where readers look | the exporter with `--records` |
 | `objects.json` | Buildings and large visible things detected per scene, matched to a model or shape | `novel stage objects` |
-| `thing-boxes.json` | Jev's model pick per thing, and per placement its spot choice, close-up or sky answers and cast | `playground/two-view-things.mjs` |
-| `impacts.json` | Jev's impact choice per fight: the spot (or no damage), the size, the box asked for comparison | `playground/impact-choices.mjs` |
+| `thing-boxes.json` | Jev's model pick per thing, and per placement its spot choice, close-up or sky answers and cast | `novel sim pick` (or `playground/two-view-things.mjs`) |
+| `impacts.json` | Jev's impact choice per fight: the spot (or no damage), the size, the box asked for comparison | `novel sim pick` (or `playground/impact-choices.mjs`) |
+| `simulation/picks.json` | What the last `novel sim pick` left: the inputs it ended on, its lines, questions left; the checklist reads it | `novel sim pick` |
+| `simulation/live.json` | What the last `novel sim pick` or `run` did, or is doing: its lines, phase, calls spent, the question Jev is on | `novel sim pick`, `novel sim run` |
+| `simulation/live/frames.jsonl`, `live/frames/` | The recording: every question Jev was asked (pictures, what it was about, the questions, the answers, how long) and every outcome (a picture of the solved box or the blast), across commands | `novel sim pick` |
 | `scale.json` | Each place's scale: region, city, district, street, building or room (Jev) | `novel stage scale` |
 | `architecture.json`, `movement.json` | Each place's building kind; Jev's typed movement answers | `novel stage architecture`, `novel stage movement` |
 
@@ -63,6 +66,15 @@ Positions are in the place's own metres: x and z across its grid (2 m cells), y 
 ## Making them again
 
 ```bash
+novel sim pick <novel-dir> --auto N --max-calls M
+novel sim run <novel-dir> --auto N
+```
+
+- `pick` asks Jev (model picks, placements, impacts) on pictures of each line, drawn by headless Chrome, and keeps the answers, so a re-run only asks what changed or what the budget left.
+- `run` makes and keeps the runs; no model calls.
+- The scripts underneath still run alone, for trying their options:
+
+```bash
 node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir>
 node playground/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir>
 node playground/export-strand-demo.mjs --set <strands.json> <out.html> --vendor --records [--accept]
@@ -77,5 +89,5 @@ node playground/export-strand-demo.mjs --set <strands.json> <out.html> --vendor 
 
 - **Records are derived view data,** never canon. Nothing reads them back into the ontology, and they never go to review. The canon side of the same things comes from `novel stage objects` and its reviewed packet.
 - **Runs are kept, not replaced.** Accept a run on purpose (`--accept`); never edit or delete one by hand.
-- **They stay with the book:** private, like its text. Public pages get only summaries, names and places, through the exporter's guard against source quotes and private paths.
+- **They stay with the book:** private, like its text. Public pages get only summaries, names and places, through the exporter's guard against source quotes and private paths. The live recording is the same: its pictures and questions show the book's people, places and events, so it is served only by the private viewer, never published.
 - **Read them, don't hand-edit them.** To change a record, change its inputs (Jev's answers, the engine) and export again.

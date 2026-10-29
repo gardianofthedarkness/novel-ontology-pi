@@ -56,23 +56,32 @@ novel text and Jev answers as data.
 8. `novel stage show <dir>` reports what is ready.
 9. The simulation, once movement and the objects review are done:
    `novel sim strands <dir>` ranks the book's story lines by the scenes the
-   engine would play (scenes in a place with a building and events), and
-   `novel sim run <dir> --auto N` (take the command from the checklist's
-   `next`; N at most 5) runs the engine on the first N: each place's
-   buildings as skeletons from the place tree, every move sampled from the
-   path integral, things placed, fights damaging the buildings. No model
-   calls: it reads the stage reports above. Each run is kept with the book
-   (`stage/simulation/`); a line's first run is its accepted one. Accepting
-   a later run fixes the book's staged history: that is the user's call,
-   never yours (`--accept` is not available to you). `novel sim show <dir>`
-   lists each line's accepted run and whether it was made from the book as
-   it is now.
+   engine would play (scenes in a place with a building and events).
+   First `novel sim pick <dir> --auto N --max-calls M` (take the command
+   from the checklist's `next`; N at most 5, M at most 60) asks Jev on
+   pictures of the first N lines: which model each thing is drawn as, where
+   each placement stands (a choice among lettered ghosts, then boxes on
+   close-ups), where each fight hits a building and how big. It stops
+   starting questions once M calls are spent and keeps every answer, so
+   when it reports questions left, run it again until none are. Then
+   `novel sim run <dir> --auto N` runs the engine on the same lines: each
+   place's buildings as skeletons from the place tree, every move sampled
+   from the path integral, things where Jev put them, fights damaging the
+   buildings where Jev chose. No model calls. Each run is kept with the
+   book (`stage/simulation/`); a line's first run is its accepted one.
+   Accepting a later run fixes the book's staged history: that is the
+   user's call, never yours (`--accept` is not available to you).
+   `novel sim show <dir>` lists each line's accepted run and whether it was
+   made from the book as it is now. While pick or run works, the viewer's
+   live page (`play/live?volume=N`) shows each question, its pictures and
+   Jev's answers as they come, and replays them afterwards.
 
 Report per book, in plain words: places by scale, buildings by kind, the named buildings and
 things accepted into the ontology (and those held), scenes and moves prepared, moves the physics check dropped or revised, the simulated
-story lines (scenes, moves, hits and things in each), the Jev requests
-spent, and what is still missing. The viewer shows the result in read mode
+story lines (scenes, moves, hits and things in each, and how many placements
+and fights Jev placed), the Jev requests spent, and what is still missing. The viewer shows the result in read mode
 (`?read&book=N`, desktop), as stage clips (`?clips&book=N`, phones too) and,
-for the simulation, in its player (the **Simulation** link, `play/?volume=N`);
+for the simulation, in its player (the **Simulation** link, `play/?volume=N`)
+and its live page (`play/live?volume=N`);
 no rebuild is needed. Do not run `--no-jev` unless the user asks for a free
 run; it leaves scales and buildings guessed from names and nobody moving.

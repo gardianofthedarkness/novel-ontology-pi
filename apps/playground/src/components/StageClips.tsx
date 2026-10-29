@@ -31,13 +31,14 @@ interface Props {
   clipsHref: (book: number) => string;
   /** The book's simulation player (novel sim run), when it has runs. */
   simulationHref?: string | null;
+  simulationLabel?: string;
 }
 
 /** A clip with the stage it plays on. Clips of one `stage` share one hologram (their place's whole script). */
 export interface ReelEntry { clip: StageClip; stage: string; script: HoloScript; plan: MovePlan }
 
 /** The host's clips: the book's prepared plan (api/stage) cut into clips, with the original sentences (api/book-text) under each beat. */
-export function StageClips({ timePlace, world, volume, requested, title, books, reducedMotion, bookQuery, exitHref, clipsHref, simulationHref }: Props) {
+export function StageClips({ timePlace, world, volume, requested, title, books, reducedMotion, bookQuery, exitHref, clipsHref, simulationHref, simulationLabel = "Simulation" }: Props) {
   const [stage, setStage] = useState<StagePlan | null | "loading">("loading");
   useEffect(() => {
     let live = true;
@@ -78,7 +79,7 @@ export function StageClips({ timePlace, world, volume, requested, title, books, 
   const linesOf = (beat: HoloBeat) => beat.source ? [...new Set([Math.floor(beat.source.from / 1_000_000), Math.floor(beat.source.to / 1_000_000)])].flatMap((number) => blocks.current.get(number) ?? [])
     .filter((sentence) => { const key = sentenceKey(sentence.id); return key >= beat.source!.from && key <= beat.source!.to; }).map((sentence) => sentence.text) : [];
 
-  return <ClipReel entries={entries} eyebrow="STAGE CLIPS" title={title} books={books} book={requested ?? volume} bookHref={clipsHref} exit={{ href: exitHref, label: "← Archive" }} extra={simulationHref ? { href: simulationHref, label: "Simulation" } : undefined} reducedMotion={reducedMotion}
+  return <ClipReel entries={entries} eyebrow="STAGE CLIPS" title={title} books={books} book={requested ?? volume} bookHref={clipsHref} exit={{ href: exitHref, label: "← Archive" }} extra={simulationHref ? { href: simulationHref, label: simulationLabel } : undefined} reducedMotion={reducedMotion}
     status={!ready ? "Opening the book…" : stage ? "No scene of this book has anyone moving yet." : "This book's animation is not prepared yet."} linesOf={linesOf} onShow={onShow} />;
 }
 

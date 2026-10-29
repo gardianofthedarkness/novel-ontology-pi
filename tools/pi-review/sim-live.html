@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulation · live</title>
+<style>
+  :root { --bg: #060c12; --panel: #0d1822; --line: #1d3242; --text: #d8e6ef; --muted: #7f98a8; --accent: #7ce6ff; --gold: #ffd36e; --good: #7dffa4; --bad: #ff5d6c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 12px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  .pill { border-radius: 99px; padding: 2px 10px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.running { color: var(--good); border-color: var(--good); }
+  .pill.failed, .pill.stopped { color: var(--bad); border-color: var(--bad); }
+  .meta { color: var(--muted); font-size: 12px; }
+  .budget { flex: 1 1 180px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; min-width: 120px; }
+  .budget i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  .lines { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .lines span { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font-size: 12px; }
+  .lines span.on { border-color: var(--accent); }
+  .lines b { font-weight: 600; }
+  .tabs { display: flex; gap: 6px; margin: 8px 0; align-items: center; flex-wrap: wrap; }
+  button, .link { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 11px; font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin-bottom: 8px; }
+  .head .subject { font-size: 16px; font-weight: 600; }
+  .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 1px 7px; border-radius: 5px; background: #12324a; color: var(--accent); }
+  .kind.outcome { background: #143a24; color: var(--good); }
+  .pictures { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .pictures:has(> figure:only-child) { grid-template-columns: minmax(0, 720px); }
+  .pictures:has(> figure:nth-child(4)) { grid-template-columns: repeat(auto-fit, minmax(max(260px, 40%), 1fr)); }
+  figure { margin: 0; position: relative; background: #000; border-radius: 8px; overflow: hidden; }
+  figure img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; }
+  figcaption { position: absolute; left: 6px; top: 6px; font-size: 11px; background: #000a; padding: 1px 6px; border-radius: 4px; }
+  .box { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 1px #000a, 0 0 12px #7ce6ff88; pointer-events: none; }
+  .box em { position: absolute; left: -2px; top: -20px; font-style: normal; font-size: 11px; background: var(--accent); color: #001; padding: 0 5px; border-radius: 3px; white-space: nowrap; }
+  .waiting { position: absolute; inset: auto 6px 6px auto; font-size: 12px; background: #000b; padding: 2px 8px; border-radius: 4px; color: var(--gold); }
+  .answers { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; }
+  .answer .key { color: var(--muted); font-size: 12px; }
+  .answer .value { font-size: 22px; font-weight: 700; color: var(--gold); }
+  .answer .conf { color: var(--muted); font-size: 12px; margin-left: 4px; }
+  .bars { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 6px; font-size: 11px; color: var(--muted); align-items: center; min-width: 160px; }
+  .bars i { display: block; height: 5px; background: var(--gold); border-radius: 2px; }
+  .outcome-text { font-size: 16px; color: var(--good); margin-top: 8px; }
+  details { margin-top: 8px; color: var(--muted); font-size: 12px; }
+  details p { margin: 4px 0; }
+  .context p { margin: 2px 0; color: var(--text); font-size: 13px; }
+  .transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+  .transport[hidden] { display: none; }
+  .transport input[type=range] { flex: 1 1 200px; }
+  .log { margin-top: 14px; font-size: 12px; }
+  .log div { display: grid; grid-template-columns: 54px 70px 1fr; gap: 6px; padding: 4px 6px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .log div:hover { background: var(--panel); }
+  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Simulation · live</h1>
+    <span class="pill" id="status">…</span>
+    <span class="meta" id="command"></span>
+    <div class="budget" title="Jev calls spent of the budget"><i id="budget"></i></div>
+    <span class="meta" id="calls"></span>
+  </header>
+  <div class="lines" id="lines"></div>
+  <div class="tabs">
+    <button id="live" class="on">● Live</button>
+    <button id="replay">Replay</button>
+    <a class="link" id="newest" href="./">Play the newest runs</a>
+    <a class="link" id="accepted" href="./">Accepted runs</a>
+  </div>
+  <div class="transport" id="transport" hidden>
+    <button id="first" title="First frame">⏮</button>
+    <button id="back" title="Previous frame">◀</button>
+    <button id="play">▶ Play</button>
+    <button id="next" title="Next frame">▶|</button>
+    <span id="speeds"></span>
+    <input type="range" id="scrub" min="0" max="0" value="0">
+    <span class="meta" id="position"></span>
+  </div>
+  <section class="card" id="frame"><div class="empty">Nothing recorded yet. <code>novel sim pick</code> records every question Jev is asked here, with its pictures and answers.</div></section>
+  <div class="log" id="log"></div>
+  <p class="note">Every question Jev is asked on pictures of the story lines (which model a thing is, where it stands, where a fight hits and how big), Jev's answers drawn on them (boxes as it drew them, choices with how sure it was), and what each answer made: the thing's solved box, the blast's sphere. Replays use the recorded timing, sped up.</p>
+</main>
+<script>
+(() => {
+  const volume = new URLSearchParams(location.search).get('volume') ?? 'active', query = `volume=${encodeURIComponent(volume)}`;
+  const $ = id => document.getElementById(id), make = (tag, props = {}, ...children) => { const node = Object.assign(document.createElement(tag), props); node.append(...children); return node; };
+  $('newest').href = `./?${query}&newest=1`; $('accepted').href = `./?${query}`;
+  const SPEEDS = [1, 2, 4, 8, 16, 32];
+  let state = null, frames = [], mode = 'live', at = 0, speed = 4, playing = false, timer = null, known = -1;
+  const percent = value => `${Math.round(value * 100)}%`;
+  const time = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  // A box answer is drawn on the picture it names (the blast on the plain close-up; a lone picture takes any box).
+  const target = (answer, pictures) => pictures.find(picture => picture.name === answer.key) ?? (answer.key === 'blast' ? pictures.find(picture => picture.name === 'plain') : pictures.length === 1 ? pictures[0] : null);
+
+  function render(frame, pending = false) {
+    const card = $('frame');
+    if (!frame) { card.replaceChildren(make('div', { className: 'empty', textContent: 'Nothing recorded yet.' })); return; }
+    const line = state?.lines?.[frame.line];
+    const head = make('div', { className: 'head' }, make('span', { className: `kind ${frame.kind === 'outcome' ? 'outcome' : ''}`, textContent: frame.kind === 'outcome' ? 'outcome' : `question · ${frame.phase ?? ''}` }), make('span', { className: 'subject', textContent: frame.subject || '—' }),
+      make('span', { className: 'meta', textContent: `frame ${frame.f + 1}${frame.call ? ` · call ${frame.call}` : ''}${frame.ms ? ` · ${(frame.ms / 1000).toFixed(1)} s` : ''} · ${time(frame.at)}${line ? ` · ${line.title}` : ''}` }));
+    const pictures = make('div', { className: 'pictures' });
+    for (const picture of frame.pictures ?? []) {
+      const figure = make('figure', {}, make('img', { src: `live/${picture.file}?${query}`, alt: picture.name, loading: 'eager' }), make('figcaption', { textContent: picture.name }));
+      for (const answer of frame.answers ?? []) if (answer.box && target(answer, frame.pictures) === picture) {
+        const { left, top, right, bottom } = answer.box;
+        figure.append(make('div', { className: 'box', style: `left:${left * 100}%;top:${top * 100}%;width:${(right - left) * 100}%;height:${(bottom - top) * 100}%` }, make('em', { textContent: `${answer.key} ${answer.confidence == null ? '' : percent(answer.confidence)}` })));
+      }
+      if (pending) figure.append(make('span', { className: 'waiting', textContent: 'Jev is answering…' }));
+      pictures.append(figure);
+    }
+    const body = [head, pictures];
+    if (frame.kind === 'outcome') body.push(make('div', { className: 'outcome-text', textContent: frame.text }));
+    if (frame.answers) {
+      const answers = make('div', { className: 'answers' });
+      for (const answer of frame.answers) {
+        const shown = answer.box ? 'box' : String(answer.value);
+        const item = make('div', { className: 'answer' }, make('div', { className: 'key', textContent: answer.key }), make('span', { className: 'value', textContent: shown }), make('span', { className: 'conf', textContent: answer.confidence == null ? '' : `sure ${percent(answer.confidence)}` }));
+        if (answer.top?.length > 1) item.append(make('div', { className: 'bars' }, ...answer.top.flatMap(([option, p]) => [make('span', { textContent: option }), make('i', { style: `width:${Math.max(2, p * 100)}%` }), make('span', { textContent: percent(p) })])));
+        answers.append(item);
+      }
+      body.push(answers);
+    }
+    if (frame.context?.length) body.push(make('details', { className: 'context', open: true }, make('summary', { textContent: 'What it is about' }), ...frame.context.map(text => make('p', { textContent: text }))));
+    if (frame.questions?.length) body.push(make('details', {}, make('summary', { textContent: 'What Jev was asked' }), ...frame.questions.map(question => make('p', { textContent: `${question.key} (${question.primitive}${question.options ? `, ${question.options} options` : ''}): ${question.instructions}` }))));
+    card.replaceChildren(...body);
+  }
+
+  function header() {
+    if (!state) return;
+    const status = state.status === 'idle' ? 'idle' : state.status;
+    $('status').textContent = status; $('status').className = `pill ${status}`;
+    $('command').textContent = state.command ? `novel sim ${state.command}${state.phase ? ` · ${state.phase}` : ''}${state.model ? ` · ${state.model}` : ''}` : 'No simulation command has run on this book yet.';
+    $('calls').textContent = state.budget ? `${state.calls} of ${state.budget} calls` : state.calls ? `${state.calls} calls` : '';
+    $('budget').style.width = state.budget ? percent(Math.min(1, state.calls / state.budget)) : '0';
+    $('lines').replaceChildren(...(state.lines ?? []).map((line, index) => make('span', { className: index === state.line && state.status === 'running' ? 'on' : '' }, make('b', { textContent: line.title }), ` · ${line.status}${line.left ? ` · ${line.left} left` : ''}${line.run ? ` · run ${line.run}${line.accepted ? ' (accepted)' : ''}` : ''}${line.scenes ? ` · ${line.scenes} scenes, ${line.hits} hits, ${line.things} things` : ''}`)));
+  }
+
+  function log() {
+    $('log').replaceChildren(...frames.slice(-60).reverse().map(frame => make('div', { onclick: () => { show('replay'); seek(frame.f); } }, make('span', { textContent: `#${frame.f + 1}` }), make('span', { textContent: frame.kind === 'outcome' ? 'outcome' : frame.phase ?? '' }),
+      make('span', { textContent: `${frame.subject ?? ''} → ${frame.kind === 'outcome' ? frame.text : (frame.answers ?? []).map(answer => `${answer.key} ${answer.box ? 'box' : answer.value}${answer.confidence == null ? '' : ` (${percent(answer.confidence)})`}`).join(', ')}` }))));
+  }
+
+  async function poll() {
+    try {
+      state = await fetch(`live.json?${query}`, { cache: 'no-store' }).then(response => response.json());
+      header();
+      if ((state.frames ?? 0) !== known) {
+        const text = await fetch(`live/frames.jsonl?${query}`, { cache: 'no-store' }).then(response => response.ok ? response.text() : '');
+        frames = text.split('\n').filter(Boolean).map(row => { try { return JSON.parse(row); } catch { return null; } }).filter(Boolean);
+        known = state.frames ?? frames.length;
+        $('scrub').max = Math.max(0, frames.length - 1);
+        log();
+      }
+      if (mode === 'live') {
+        const asking = state.status === 'running' && state.ask && !state.ask.answers && (!frames.length || state.ask.f > frames.at(-1).f);
+        render(asking ? state.ask : frames.at(-1), asking);
+      }
+    } catch {}
+  }
+
+  function seek(index) { at = Math.max(0, Math.min(frames.length - 1, index)); $('scrub').value = at; $('position').textContent = frames.length ? `${at + 1} / ${frames.length}` : ''; render(frames[at]); preload(); }
+  function preload() { for (const frame of frames.slice(at + 1, at + 4)) for (const picture of frame.pictures ?? []) new Image().src = `live/${picture.file}?${query}`; }
+  // The recorded gap to the next frame, sped up; never under 0.15 s or over 6 s.
+  function step() {
+    if (!playing) return;
+    if (at >= frames.length - 1) { pause(); return; }
+    const gap = Date.parse(frames[at + 1].at) - Date.parse(frames[at].at);
+    timer = setTimeout(() => { seek(at + 1); step(); }, Math.max(150, Math.min(6000, (Number.isFinite(gap) ? gap : 2000) / speed)));
+  }
+  function pause() { playing = false; clearTimeout(timer); $('play').textContent = '▶ Play'; }
+  function show(next) {
+    mode = next; pause();
+    $('live').classList.toggle('on', mode === 'live'); $('replay').classList.toggle('on', mode === 'replay'); $('transport').hidden = mode !== 'replay';
+    if (mode === 'replay') seek(frames.length ? Math.min(at, frames.length - 1) : 0); else poll();
+  }
+  $('live').onclick = () => show('live'); $('replay').onclick = () => show('replay');
+  $('play').onclick = () => { if (playing) { pause(); return; } if (at >= frames.length - 1) seek(0); playing = true; $('play').textContent = '⏸ Pause'; step(); };
+  $('first').onclick = () => seek(0); $('back').onclick = () => seek(at - 1); $('next').onclick = () => seek(at + 1);
+  $('scrub').oninput = event => seek(Number(event.target.value));
+  $('speeds').replaceChildren(...SPEEDS.map(value => make('button', { textContent: `${value}×`, className: value === speed ? 'on' : '', onclick: event => { speed = value; for (const button of $('speeds').children) button.classList.toggle('on', button === event.target); } })));
+  poll();
+  setInterval(poll, 1500);
+})();
+</script>
+</body>
+</html>

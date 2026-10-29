@@ -89,6 +89,8 @@ export interface SimulationHitPart { lot: number; destroyed: number[]; fell: num
 export interface PlaceSimulation {
   /** Each strand's accepted run (its id, engine and inputs' hash; null for a record from before runs) and how many runs it has. */
   strands: { id: string; title: string; from: string | null; to: string | null; run?: { id: string; engine: string | null; inputs: string | null } | null; runs?: number }[];
+  /** The last simulation command on the book (novel sim pick|run) and whether it is still running; the host's play/live page shows it. */
+  live?: { status: "running" | "done" | "failed" | "stopped"; command: string | null } | null;
   places: Record<string, { strand: string; label: string; kind: string; grid: { nx: number; nz: number }; lots: SimulationLot[] }>;
   /** Placements in the place's metres (x, z across its grid, y up), with the fitted extent. */
   things: { id: string; name: string; model: string | null; shape: string | null; placements: { scene: string; place: string; x: number; y: number; z: number; w: number; h: number; d: number; turn: number }[] }[];

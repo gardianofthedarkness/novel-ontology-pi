@@ -284,7 +284,7 @@ async function cliFixture(context) {
   const setup = await fixture(context);
   const tools = join(setup.directory, 'tools/pi-review');
   await mkdir(tools, { recursive: true });
-  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs', 'time-place.mjs', 'book-catalog.mjs', 'review-progress.mjs', 'guard.mjs', 'library-live.mjs', 'album.mjs', 'timeplace-access.mjs', 'universe-time-place.mjs', 'strand-answers.mjs', 'stage-reports.mjs', 'sim-play.mjs', 'calendar-view.mjs']) {
+  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs', 'time-place.mjs', 'book-catalog.mjs', 'review-progress.mjs', 'guard.mjs', 'library-live.mjs', 'album.mjs', 'timeplace-access.mjs', 'universe-time-place.mjs', 'strand-answers.mjs', 'stage-reports.mjs', 'sim-play.mjs', 'sim-live.html', 'calendar-view.mjs']) {
     await copyFile(fileURLToPath(new URL(filename, import.meta.url)), join(tools, filename));
   }
   const home = join(setup.directory, 'configured-home');
