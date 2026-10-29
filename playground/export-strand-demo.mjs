@@ -56,11 +56,11 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape } = await load('dist/src/ground/stage/landscape.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape } = await load('dist/src/ground/stage/landscape.js'), W = await load('dist/apps/playground/src/data/world.js');
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf } = await load('dist/src/digger/stage/scale.js');
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
-  const { solveWalk, sampleWalk, temperatureBound, directionOf } = await load('dist/apps/playground/src/data/pathIntegral.js');
+  const { solveWalk, sampleWalk: walkSample, temperatureBound, directionOf } = await load('dist/apps/playground/src/data/pathIntegral.js');
   const inputs = await stageInputs(novelDir), answers = await latestStrandAnswers(novelDir), strands = storyStrands(inputs.data, answers ?? {});
   const staged = new Map(inputs.movementScenes.map(scene => [scene.id, scene])), byIndex = new Map(inputs.data.scenes.map(scene => [scene.id, scene.index]));
   const all = inputs.data.scenes.map(scene => { const stage = staged.get(scene.id); return { id: scene.id, index: scene.index, placeId: stage?.placeId ?? scene.placeIds[0] ?? null, flashback: scene.flashback, cast: stage?.cast ?? answers?.presence.get(scene.id) ?? scene.characterIds, events: stage?.events }; });
@@ -69,34 +69,61 @@ export async function strandDemo(novelDir, options) {
   const timeline = forkTimeline(chosen, strands);
   const places = new Map(inputs.data.places.map(place => [place.id, place])), name = id => inputs.names[id] ?? id;
 
-  // Each place a group of skeleton buildings from the place tree; its standing cells change as fights damage it.
-  const groups = new Map();
+  // One world for every staged place (apps/playground/src/data/world.ts): the city of the canvas and its landscapes, streamed
+  // in by chunks as the story reaches it. A staged building is an anchor on its canvas spot; an open place is its ground.
+  // Each place keeps its name and path; the world's lots, things, standing cells and graph are shared by all of them.
   const ownGrids = new Set(chosen.map(scene => scene.placeId));
-  for (const placeId of ownGrids) {
-    const place = places.get(placeId), label = name(placeId);
-    // Its building children take lots, except those the strand stages as places of their own (drawn once, on their own grid).
-    const members = inputs.data.places.filter(child => child.parentId === placeId && !ownGrids.has(child.id) && ROLE_OF[inputs.architecture?.places[child.id]?.kind]).map(child => ({ label: name(child.id), role: ROLE_OF[inputs.architecture.places[child.id].kind] }));
-    const seed = [...placeId].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7);
-    // How big the place is (Jev's scale) decides how it is built: a building or a room is a site (that building, named, on the
-    // widest lot, wearing its architecture), a street a street, anything larger a district. Without a scale, the architecture
-    // pick and the name stand in.
-    const own = inputs.architecture?.places[placeId]?.kind, scale = inputs.scale?.places[placeId]?.scale ?? null;
-    const kind = stageKindOf(scale) ?? (['skyscraper', 'office', 'home', 'hospital', 'school', 'station', 'church', 'market', 'castle'].includes(own) ? 'site' : /[街路巷道]$/.test(label) ? 'street' : 'district'), site = kind === 'site';
-    const layout = composePlace({ id: placeId, kind, seed, members: site ? [{ label, role: ROLE_OF[own] ?? 'office', floors: own === 'skyscraper' ? [10, 14] : [5, 7] }, ...members] : members });
-    groups.set(placeId, { label, path: (place?.path ?? [placeId]).map(name), scale, layout, things: new Map(), standing: layout.lots.map(lot => lot.skeleton.cells.map(value => (value ? 1 : 0))), structures: [], units: [], version: 0, built: null });
-  }
-  const graphOf = placeId => { const group = groups.get(placeId); if (!group.built || group.built.version !== group.version) group.built = { version: group.version, ...placeGraph(group.layout, group.standing, [...group.things.values()]) }; return group.built; };
+  const kindOf = placeId => { const own = inputs.architecture?.places[placeId]?.kind, scale = inputs.scale?.places[placeId]?.scale ?? null; return stageKindOf(scale) ?? (['skyscraper', 'office', 'home', 'hospital', 'school', 'station', 'church', 'market', 'castle'].includes(own) ? 'site' : /[街路巷道]$/.test(name(placeId)) ? 'street' : 'district'); };
+  const groups = new Map(), shared = { layout: null, things: new Map(), standing: [], structures: [], units: [], version: 0, built: null };
+  const groupOf = own => Object.defineProperties(own, Object.fromEntries(['layout', 'things', 'standing', 'structures', 'units', 'version', 'built'].map(key => [key, { get: () => shared[key], set: value => { shared[key] = value; } }])));
+  let world = null, moment = 'start';
+  /**
+   * The walk graph of the world round a point, as it stands now: one window per neighbourhood (128 m squares, 192 m either
+   * way of their middle), shared by everything asked there until the world changes; a wider one when `half` needs it.
+   */
+  const windows = new Map();
+  const graphOf = (focus = null, half = 0) => {
+    if (shared.built?.version !== shared.version) { shared.built = { version: shared.version }; windows.clear(); fields.clear(); spotCache.clear(); }
+    const f = focus ?? { x: 0, z: 0 }, cx = Math.round(f.x / 128) * 128, cz = Math.round(f.z / 128) * 128, h = Math.max(192, Math.ceil((half + Math.max(Math.abs(f.x - cx), Math.abs(f.z - cz))) / 64) * 64), key = `${cx}|${cz}|${h}`;
+    if (!windows.has(key)) windows.set(key, { version: shared.version, ...W.worldGraph(world, shared.standing, [...shared.things.values()], { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz + h }) });
+    return windows.get(key);
+  };
+  /**
+   * Stream in the world around a point at this moment: new chunks bring their lots (standing whole), and the walk sees them.
+   * It streams 32 m further than asked, so the next small step rarely needs more.
+   */
+  const reach = (x, z, radius, at = moment) => {
+    if (!W.ensure(world, x, z, radius, at)) return;
+    W.ensure(world, x, z, radius + 32, at);
+    while (shared.standing.length < world.lots.length) shared.standing.push(world.lots[shared.standing.length].skeleton.cells.map(value => (value ? 1 : 0)));
+    shared.version++;
+  };
   const T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 }), kappa = 1, lambda = 8;
-  const fields = new Map(), solve = (placeId, key, targets, how) => {
-    const group = groups.get(placeId), cacheKey = `${placeId}|${group.version}|${key}|${classOf(how)}`;
-    if (!fields.has(cacheKey)) fields.set(cacheKey, solveWalk(graphOf(placeId).graph, targets, { T, kappa, lambda, factors: FACTORS[classOf(how)] }));
+  /**
+   * A walk's field, solved on the world round where it goes (its targets and, given `from`, where it starts, with 40 m of
+   * room): small however much of the city is explored. `sampleWalk` on it is wrapped to take and give world ids.
+   */
+  const fields = new Map(), spotCache = new Map(), solve = (placeId, key, targets, how, from = null) => {
+    const points = [...targets, ...(from === null ? [] : [from])].map(id => W.nodePos(world, id)), pad = 40;
+    const box = { x0: Math.min(...points.map(p => p.x)) - pad, x1: Math.max(...points.map(p => p.x)) + pad, z0: Math.min(...points.map(p => p.z)) - pad, z1: Math.max(...points.map(p => p.z)) + pad };
+    const built = graphOf({ x: (box.x0 + box.x1) / 2, z: (box.z0 + box.z1) / 2 }, Math.max(box.x1 - box.x0, box.z1 - box.z0) / 2);
+    const cacheKey = `${built.version}|${key}|${classOf(how)}|${[box.x0, box.x1, box.z0, box.z1].map(Math.round).join(',')}`;
+    if (!fields.has(cacheKey)) { const part = W.windowOf(built.graph, box), field = solveWalk(part.graph, targets.map(id => part.local[id]).filter(n => n >= 0), { T, kappa, lambda, factors: FACTORS[classOf(how)] }); fields.set(cacheKey, { ...field, part }); }
     return fields.get(cacheKey);
   };
+  const sampleWalk = (graph, field, start, heading, rng) => { if (!field.part) return walkSample(graph, field, start, heading, rng); const at = field.part.local[start]; if (at < 0) return null; const path = walkSample(field.part.graph, field, at, heading, rng); return path && path.map(n => field.part.ids[n]); };
   const pick = (list, rng) => list[Math.floor(rng() * list.length)];
   const report = inputs.movement?.scenes ?? {}, moves = new Map(), hits = new Map(), hitThings = new Map(), struck = new Set(), notes = { unreachable: 0, sampled: 0, teleports: 0, solves: 0, hits: 0, destroyed: 0, travel: { routes: 0, metres: 0, crossed: 0, unreachable: 0 } };
   const topSpot = distribution => Object.entries(distribution ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0];
-  /** A spot as Jev named it, in this place: districts name streets and sides; buildings name floors, the roof and the street. */
-  const spotKey = (placeId, spot) => { const group = groups.get(placeId); return placeSpot(group.layout, group.label, graphOf(placeId).spots, spot); };
+  /**
+   * The spots Jev names, near a point (the person, else the place's own anchor), on the world as it stands: its streets,
+   * open ground and plazas, roofs, rooms either side, and the floors and roof of the place's own building. A spot near
+   * someone at the edge of what is explored can be ground just streamed in: that is how a scene drifts.
+   */
+  const NEAR = 40;
+  const spotsFor = (placeId, focus) => { const group = groups.get(placeId), f = focus ?? group.anchor, key = `${placeId}|${Math.round(f.x / 4)}|${Math.round(f.z / 4)}`, built = graphOf(f); if (!spotCache.has(key)) spotCache.set(key, W.spotsNear(world, built, f.x, f.z, NEAR, group.main())); return spotCache.get(key); };
+  const spotKey = (placeId, spot, focus) => W.worldSpot(spotsFor(placeId, focus), spot);
+  const focusOf = at => (at ? W.nodePos(world, at[0]) : undefined);
   // How destructive each event is: its embedding (the causality faculty's sidecar) projected onto the book's own
   // destruction direction, learned from events whose summaries say they wreck things against those that fight nowhere.
   const vectors = new Map((await readFile(`${novelDir}/ontology/embeddings.jsonl`, 'utf8').catch(() => '')).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(row => row.kind === 'event').map(row => [row.id, row.vector]));
@@ -141,14 +168,15 @@ export async function strandDemo(novelDir, options) {
   const traces = new Map(), traceOf = (sceneId, index) => { const key = `${sceneId}|${index}`; if (!traces.has(key)) traces.set(key, {}); return traces.get(key); };
   const top = (distribution, n = 3) => Object.entries(distribution ?? {}).sort((a, b) => b[1] - a[1]).slice(0, n).map(([key, p]) => [key, Math.round(p * 100) / 100]);
   /** Where a spot Jev named is in a place: the middle of its nodes (metres), or null. */
-  const spotAt = (placeId, name) => { const key = spotKey(placeId, name), { graph, spots } = graphOf(placeId), nodes = key ? spots[key] ?? [] : []; if (!nodes.length) return null; const mean = axis => Math.round(nodes.reduce((sum, node) => sum + graph[axis][node], 0) / nodes.length * 10) / 10; return [mean('x'), mean('y'), mean('z')]; };
+  const spotAt = (placeId, name, focus) => { const key = spotKey(placeId, name, focus), { graph } = graphOf(focus ?? groups.get(placeId).anchor), spots = spotsFor(placeId, focus), nodes = key ? spots[key] ?? [] : []; if (!nodes.length) return null; const mean = axis => Math.round(nodes.reduce((sum, node) => sum + graph[axis][node], 0) / nodes.length * 10) / 10; return [mean('x'), mean('y'), mean('z')]; };
   const placeThings = (scene, event, at) => {
     const index = scene.events.findIndex(entry => entry.id === event.id);
     // Once per event: the first turn of an event is its first actor's.
     if (placedAt.has(event.id)) return;
     placedAt.add(event.id);
     for (const entity of entities) if (entity.mentions.some(entry => entry.scene === scene.id && entry.event === index) && at) {
-      const group = groups.get(scene.placeId), box = boxes[`${scene.id}|${index}|${entity.name}`]?.box, round = value => Math.round(value * 10) / 10;
+      // Jev's boxes made on the world (frame 'world'); boxes from the fixed grids of earlier engines no longer fit it.
+      const group = groups.get(scene.placeId), made = boxes[`${scene.id}|${index}|${entity.name}`], box = made?.frame === 'world' ? made.box : null, round = value => Math.round(value * 10) / 10;
       let x, z, cast;
       if (box) {
         [x, z] = [(box.x[0] + box.x[1]) / 2, (box.z[0] + box.z[1]) / 2]; cast = { w: box.x[1] - box.x[0], h: box.y[1] - box.y[0], d: box.z[1] - box.z[0], y0: box.y[0] }; notes.thingBoxes++;
@@ -159,10 +187,11 @@ export async function strandDemo(novelDir, options) {
       }
       else {
         // No box yet: on the ground beside the actor, in the first direction with open ground; on the actor's spot when there is none.
-        const actor = nodePosition(group.layout, at[0]), lotAt = (px, pz) => group.layout.lots.find(entry => px >= entry.i0 * 2 && px < (entry.i0 + entry.nx) * 2 && pz >= entry.j0 * 2 && pz < (entry.j0 + entry.nz) * 2);
-        const reach = entity.size / 2 + 2, open = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => ({ x: actor.x + dx * reach, z: actor.z + dz * reach })).find(spot => spot.x > 0 && spot.z > 0 && spot.x < group.layout.NX * 2 && spot.z < group.layout.NZ * 2 && !lotAt(spot.x, spot.z) && actor.k === 0);
+        const actor = W.nodePos(world, at[0]), lotAt = (px, pz) => world.lots.find(entry => px >= entry.i0 * 2 && px < (entry.i0 + entry.nx) * 2 && pz >= entry.j0 * 2 && pz < (entry.j0 + entry.nz) * 2);
+        const gap = entity.size / 2 + 2, open = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => ({ x: actor.x + dx * gap, z: actor.z + dz * gap })).find(spot => !lotAt(spot.x, spot.z) && actor.k === 0);
         ({ x, z } = open ?? actor); cast = { w: entity.size, h: entity.height, d: entity.shape === 'box' ? Math.max(1.2, entity.size * 0.35) : entity.size, y0: entity.airborne ? 8 : 0 };
       }
+      reach(x, z, Math.max(24, entity.size));
       const fit = fitInCast(entity.shape, cast, entity.model ? library.models[entity.model].size : null), y0 = fit.y0, y1 = y0 + fit.h;
       for (const other of groups.values()) if (other.things.delete(entity.id)) other.version++;
       group.things.set(entity.id, { i0: Math.floor((x - fit.w / 2) / 2), i1: Math.floor((x + fit.w / 2) / 2), j0: Math.floor((z - fit.d / 2) / 2), j1: Math.floor((z + fit.d / 2) / 2), top: Math.round(y1 / 3), grounded: y0 < 1.5 && Math.max(fit.w, fit.d) <= 8 });
@@ -181,20 +210,21 @@ export async function strandDemo(novelDir, options) {
     // Without event embeddings for this book, the wording's degree stands in for the strength.
     const strength = axis ? axis.strength(event.id) ?? 0 : [0, 0, 0, 0.85, 0.95][damageDegree(summary(event))];
     if (strength < 0.8 || !at) return;
-    const chosen = impacts[`${scene.id}|${scene.events.findIndex(entry => entry.id === event.id)}`];
+    const made = impacts[`${scene.id}|${scene.events.findIndex(entry => entry.id === event.id)}`], chosen = made?.none || made?.frame === 'world' ? made : null;
     if (chosen?.pick) traceOf(scene.id, scene.events.findIndex(entry => entry.id === event.id)).impact = { pick: chosen.pick.pick, confidence: chosen.pick.confidence, top: top(chosen.pick.distribution, 4), spots: (chosen.spots ?? []).map(spot => ({ label: spot.label, x: spot.x, y: spot.y, z: spot.z, from: spot.from })),
       size: chosen.size ? { pick: chosen.size.pick, confidence: chosen.size.confidence, top: top(chosen.size.distribution, 4) } : null, sphere: chosen.sphere ?? null, none: !!chosen.none };
     if (chosen?.none) { notes.impacts.none++; return; }
     if (chosen?.sphere) return hitSphere(scene, event, chosen.sphere, strength, seed);
     // Things near the blast are hit too; a big one loses part of its structure.
-    const near = nodePosition(groups.get(scene.placeId).layout, at[0]), thingHits = [];
+    const near = W.nodePos(world, at[0]), thingHits = [];
     for (const entity of entities) if (entity.at?.place === scene.placeId && Math.hypot(entity.at.x - near.x, entity.at.z - near.z) <= 4 + entity.size / 2) {
       const rng = stream(seed, 'thing', entity.id), destroyed = [];
       if (entity.standing) for (let cell = 0; cell < entity.standing.length; cell++) if (entity.standing[cell] && rng() < strength * 0.6) { entity.standing[cell] = 0; destroyed.push(cell); }
       thingHits.push({ id: entity.id, destroyed });
     }
     if (thingHits.length) hitThings.set(event.id, thingHits);
-    const group = groups.get(scene.placeId), p = nodePosition(group.layout, at[0]);
+    const group = groups.get(scene.placeId), p = W.nodePos(world, at[0]);
+    reach(p.x, p.z, 24);
     const distance = lot => Math.hypot(Math.max(0, lot.i0 * 2 - p.x, p.x - (lot.i0 + lot.nx) * 2), Math.max(0, lot.j0 * 2 - p.z, p.z - (lot.j0 + lot.nz) * 2));
     const index = group.layout.lots.map((lot, n) => [n, distance(lot)]).filter(([, d]) => d <= 6).sort((a, b) => a[1] - b[1])[0]?.[0];
     if (index === undefined) return;
@@ -211,6 +241,7 @@ export async function strandDemo(novelDir, options) {
    * nearest standing unit (a wall, a slab, a stair), so it always meets structure.
    */
   const hitSphere = (scene, event, chosen, strength, seed) => {
+    reach(chosen.x, chosen.z, chosen.r + 16);
     const group = groups.get(scene.placeId);
     // A lot's structure and what of it stands now (its skeleton's cells as the walk left them, walls and roof as hits left them).
     const unitsOf = index => { const structure = (group.structures[index] ??= structureOf(group.layout.lots[index])), units = group.units[index] ?? intact(structure); for (let cell = 0; cell < structure.cells; cell++) units[cell] = group.standing[index][cell] && structure.kind[cell] ? 1 : 0; return { structure, units }; };
@@ -255,17 +286,17 @@ export async function strandDemo(novelDir, options) {
   // at its middle.
   const canvasLayout = () => {
     const OPEN = new Set(['region', 'city', 'district', 'street']), scaleOf = id => inputs.scale?.places[id]?.scale ?? null;
-    const isOpen = id => OPEN.has(scaleOf(id)) || (!scaleOf(id) && (groups.get(id)?.layout.kind ?? 'district') !== 'site');
+    const isOpen = id => OPEN.has(scaleOf(id)) || (!scaleOf(id) && (ownGrids.has(id) ? kindOf(id) : 'district') !== 'site');
     const landscapeOf = id => { const type = inputs.landscape?.places[id]?.type; return type && type !== 'none' ? type : null; };
-    const gridRadius = id => Math.round(Math.hypot(groups.get(id).layout.NX, groups.get(id).layout.NZ) * SKELETON_CELL / 2 + 4);
+    // A staged building's lot, with room round it; an open place's own ground is its landscape, filled from its middle.
+    const gridRadius = () => 22;
     const pathOf = id => (places.get(id)?.path ?? [id]).filter(step => tree.has(step));
     const trips = (a, b) => migrations.filter(m => m.from && m.to && (pathOf(m.from).includes(a) && pathOf(m.to).includes(b) || pathOf(m.from).includes(b) && pathOf(m.to).includes(a))).length;
     const canvas = C.emptyCanvas();
     const birth = (id, parent) => {
       if (canvas.places[id]) return;
       const siblings = Object.values(canvas.places).filter(place => place.parent === parent), near = siblings.map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0];
-      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? groups.get(id)?.layout.kind ?? 'district', parent, landscape: landscapeOf(id), toward: near?.at });
-      if (groups.has(id)) C.addUnit(canvas, id, { id: `${id}#grid`, label: name(id), kind: 'street', r: gridRadius(id), at: [0, 0] });
+      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: near?.at });
     };
     for (const scene of chosen) {
       const chain = pathOf(scene.placeId), open = chain.filter(id => id !== scene.placeId && isOpen(id));
@@ -290,12 +321,19 @@ export async function strandDemo(novelDir, options) {
   // never on them (nor on the units and circles built inside it). Derived view data: only nominated buildings are canon.
   const landscapes = Object.values(canvas.places).filter(place => place.landscape).map(place => {
     const [wx, wz] = C.worldOf(canvas, place.id), round = value => Math.round(value * 10) / 10, filled = fillLandscape(place.landscape);
-    const keep = Object.values(canvas.places).filter(child => child.parent === place.id).map(child => ({ at: child.at, r: child.r })).concat(place.units.map(unit => ({ at: unit.at, r: unit.r })));
+    // Not where a child place stands: it has its own ground there.
+    const keep = Object.values(canvas.places).filter(child => child.parent === place.id).map(child => ({ at: child.at, r: child.r }));
     const clear = (x, z, margin = 3) => keep.every(({ at, r }) => Math.hypot(x - at[0], z - at[1]) > r + margin);
-    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => [round(b.x + wx), round(b.z + wz), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]);
-    const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => [round(road.a[0] + wx), round(road.a[1] + wz), round(road.b[0] + wx), round(road.b[1] + wz), road.width]);
-    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), buildings, roads, walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]) };
+    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map((b, n) => ({ id: `${place.id}:${n}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind }));
+    const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
+    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width]),
+      walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })) } };
   });
+  // The world: every staged place an anchor on its canvas spot (a staged building stands there; an open place is its ground).
+  const anchors = [...ownGrids].map(id => { const node = macroOf.get(id), own = kindOf(id) === 'site', kind = inputs.architecture?.places[id]?.kind; return { place: id, label: name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role: ROLE_OF[kind] ?? 'office', floors: kind === 'skyscraper' ? 12 : 6 }; });
+  world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors });
+  shared.layout = { id: 'world', kind: 'world', lots: world.lots };
+  for (const id of ownGrids) groups.set(id, groupOf({ label: name(id), path: (places.get(id)?.path ?? [id]).map(name), scale: inputs.scale?.places[id]?.scale ?? null, kind: kindOf(id), anchor: anchors.find(anchor => anchor.place === id), main: () => { const index = world.lots.findIndex(lot => lot.place === id); return index >= 0 ? index : null; } }));
   notes.landscape = { places: landscapes.length, buildings: landscapes.reduce((sum, entry) => sum + entry.buildings.length, 0), temporary: macro.filter(node => node.temporary).length };
   // Between places, people walk the map: its own path integral over a lattice (macroPath.ts), from where they leave one
   // place's grid to where they enter the next, each boundary crossed costing more the more slanted the crossing. Inside
@@ -305,22 +343,13 @@ export async function strandDemo(novelDir, options) {
   // The lattice's cell grows with the map, so a city-sized canvas stays a few hundred cells across.
   const span = Math.max(...boundaries.map(b => Math.abs(b.x) + b.r), ...boundaries.map(b => Math.abs(b.z) + b.r)) * 2 + 80, macroCell = Math.max(4, Math.ceil(span / 260));
   const lattice = macroLattice(boundaries, { cell: macroCell, margin: 40 }), macroKappa = 2, macroT = 0.6 * temperatureBound({ step: macroCell, kappa: macroKappa, lambda, floorHeight: 3, arcCost: 7 });
-  /** A place's grid on the map: a node's position, and the rectangle the grid covers. */
-  const onMap = (placeId, node) => { const { layout } = groups.get(placeId), spot = macroOf.get(placeId), p = nodePosition(layout, node); return { x: spot.spotX - layout.NX * SKELETON_CELL / 2 + p.x, z: spot.spotZ - layout.NZ * SKELETON_CELL / 2 + p.z }; };
-  const gridOf = placeId => { const { layout } = groups.get(placeId), spot = macroOf.get(placeId), w = layout.NX * SKELETON_CELL / 2, d = layout.NZ * SKELETON_CELL / 2; return { x: [spot.spotX - w, spot.spotX + w], z: [spot.spotZ - d, spot.spotZ + d] }; };
+  /** A node on the map (the world and the map share metres), and the box round a place's anchor where its ground begins. */
+  const onMap = (placeId, node) => { const p = W.nodePos(world, node); return { x: p.x, z: p.z }; };
+  const gridOf = placeId => { const { anchor } = groups.get(placeId), half = 24; return { x: [anchor.x - half, anchor.x + half], z: [anchor.z - half, anchor.z + half] }; };
   const inGrid = (placeId, node) => { const rect = gridOf(placeId), x = lattice.graph.x[node], z = lattice.graph.z[node]; return x >= rect.x[0] && x <= rect.x[1] && z >= rect.z[0] && z <= rect.z[1]; };
   const macroFields = new Map(), macroField = placeId => { if (!macroFields.has(placeId)) macroFields.set(placeId, solveWalk(lattice.graph, latticeWithin(lattice, gridOf(placeId)), { T: macroT, kappa: macroKappa, lambda })); return macroFields.get(placeId); };
-  /** The street cells on the edge of a place's grid: where one walks in or out of it. */
-  const edgeOf = placeId => {
-    const { layout } = groups.get(placeId), { graph } = graphOf(placeId), out = [];
-    for (let j = 0; j < layout.NZ; j++) for (let i = 0; i < layout.NX; i++) {
-      if (i && j && i < layout.NX - 1 && j < layout.NZ - 1) continue;
-      if (layout.lots.some(lot => i >= lot.i0 && i < lot.i0 + lot.nx && j >= lot.j0 && j < lot.j0 + lot.nz)) continue;
-      const node = nodeOf(layout, i, j, 0);
-      if (graph.offsets[node + 1] > graph.offsets[node]) out.push(node);
-    }
-    return out;
-  };
+  /** Open ground within a few metres of a point, streamed in first: where one walks out of or into a place. */
+  const doorsNear = (x, z) => { reach(x, z, 20); const built = graphOf({ x, z }), out = []; for (let id = 0; id < built.type.length; id++) if (built.type[id] === 1 && built.graph.offsets[id + 1] > built.graph.offsets[id]) { const p = W.nodePos(world, id); if (Math.hypot(p.x - x, p.z - z) <= 6) out.push(id); } return out; };
   const where = new Map(), routes = new Map();
   // Who goes together: Jev's pairs at a chance of at least a half, joined into groups. A group's leader is its first
   // member in the walk's order (the people an event names, then the cast; at a start, the handoffs' order), and every
@@ -341,7 +370,7 @@ export async function strandDemo(novelDir, options) {
   };
   /** The free node beside another, on its level: the nearest 0.8–3 m off that nobody in the scene stands on. */
   const besideNode = (placeId, node) => {
-    const { graph } = graphOf(placeId), taken = new Set([...where.values()].filter(entry => entry.place === placeId && entry.at).map(entry => entry.at[0]));
+    const { graph } = graphOf(W.nodePos(world, node)), taken = new Set([...where.values()].filter(entry => entry.at).map(entry => entry.at[0]));
     let best = null, gap = Infinity;
     for (let other = 0; other < graph.nodes; other++) {
       if (other === node || taken.has(other) || graph.y[other] !== graph.y[node] || graph.offsets[other + 1] === graph.offsets[other]) continue;
@@ -362,20 +391,19 @@ export async function strandDemo(novelDir, options) {
     let leave = 0;
     for (let n = 0; n < walk.length; n++) if (inGrid(from, walk[n])) leave = n;
     // Out: to the edge cells nearest where the map path leaves the grid.
-    const exitAt = point(walk[leave]), edges = edgeOf(from).map(node => ({ node, gap: gap(onMap(from, node), exitAt) })).sort((a, b) => a.gap - b.gap);
-    const doors = edges.filter(edge => edge.gap <= (edges[0]?.gap ?? 0) + 6).map(edge => edge.node);
-    const exit = doors.length ? sampleWalk(graphOf(from).graph, solve(from, `edge@${doors.join(',')}`, doors, 'walk'), last.at[0], Math.max(0, last.at[1]), rng) : null;
+    const exitAt = point(walk[leave]), doors = doorsNear(exitAt.x, exitAt.z);
+    const exit = doors.length ? sampleWalk(null, solve(from, `edge@${doors.join(',')}@${last.at[0]}`, doors, 'walk', last.at[0]), last.at[0], Math.max(0, last.at[1]), rng) : null;
     // In: from the edge cell nearest where the map path arrives, to where the scene finds them.
-    const arriveAt = point(walk.at(-1)), door = edgeOf(to).map(node => ({ node, gap: gap(onMap(to, node), arriveAt) })).sort((a, b) => a.gap - b.gap)[0]?.node;
+    const arriveAt = point(walk.at(-1)), door = doorsNear(arriveAt.x, arriveAt.z).map(node => ({ node, gap: gap(onMap(to, node), arriveAt) })).sort((a, b) => a.gap - b.gap)[0]?.node;
     const heading = walk.length > 1 ? directionOf(arriveAt.x - lattice.graph.x[walk.at(-2)], arriveAt.z - lattice.graph.z[walk.at(-2)]) : begin[1];
-    const entry = door === undefined ? null : sampleWalk(graphOf(to).graph, solve(to, `node@${begin[0]}`, [begin[0]], 'walk'), door, heading, rng);
+    const entry = door === undefined ? null : sampleWalk(null, solve(to, `node@${begin[0]}@${door}`, [begin[0]], 'walk', door), door, heading, rng);
     const round = value => Math.round(value * 10) / 10, start = exit ? onMap(from, exit.at(-1)) : exitAt, end = door === undefined ? arriveAt : onMap(to, door);
     const path = smoothPath([start, ...walk.slice(leave + 1, -1).map(point), end].map(p => [p.x, p.z])).map(([x, z]) => [round(x), round(z)]);
     const metres = path.slice(1).reduce((sum, p, n) => sum + Math.hypot(p[0] - path[n][0], p[1] - path[n][1]), 0), crossed = path.slice(1).reduce((sum, p, n) => sum + crossings(boundaries, path[n][0], path[n][1], p[0], p[1]).count, 0);
     routes.set(`${scene.id}|${person}`, { exit, path, entry, metres: Math.round(metres), crossed });
     notes.travel.routes++; notes.travel.metres += Math.round(metres); notes.travel.crossed += crossed;
     if (!entry || entry.length < 2) return begin;
-    const { graph } = graphOf(to), turned = directionOf(graph.x[entry.at(-1)] - graph.x[entry.at(-2)], graph.z[entry.at(-1)] - graph.z[entry.at(-2)]);
+    const a = W.nodePos(world, entry.at(-1)), b = W.nodePos(world, entry.at(-2)), turned = directionOf(a.x - b.x, a.z - b.z);
     return [begin[0], turned >= 0 ? turned : begin[1]];
   };
   const mover = {
@@ -399,15 +427,15 @@ export async function strandDemo(novelDir, options) {
       const leader = leaderOf(eventPairs(scene, event), order, person), led = leader ? went.get(`${scene.id}|${event.id}|${leader}`) : null;
       if (!led || led.node === null || !at) { const outcome = actAlone(args); went.set(`${scene.id}|${event.id}|${person}`, outcome.kind === 'move' ? { node: outcome.to[0], how: moves.get(`${scene.id}|${event.id}|${person}`)?.how } : { node: at?.[0] ?? null }); return outcome; }
       // Going with the leader: to the node beside where the leader ends (or stands, if they stay), the leader's way.
-      const { graph } = graphOf(scene.placeId), [node, heading] = at, rng = stream(seed), target = besideNode(scene.placeId, led.node), how = led.how ?? 'walk';
-      traceMove(scene, event, person);
+      const { graph } = graphOf(focusOf(at)), [node, heading] = at, rng = stream(seed), target = besideNode(scene.placeId, led.node), how = led.how ?? 'walk';
+      traceMove(scene, event, person, focusOf(at));
       (traceOf(scene.id, scene.events.findIndex(entry => entry.id === event.id)).together ??= []).push({ person, with: leader });
       placeThings(scene, event, at);
       damage(scene, event, at, seed);
       const near = Math.hypot(graph.x[target] - graph.x[node], graph.z[target] - graph.z[node]) <= 3 && graph.y[target] === graph.y[node];
       went.set(`${scene.id}|${event.id}|${person}`, { node: near ? node : target, how });
       if (near) return { kind: 'stay' };
-      const path = sampleWalk(graph, solve(scene.placeId, `node@${target}`, [target], how), node, heading, rng);
+      const path = sampleWalk(graph, solve(scene.placeId, `node@${target}@${node}`, [target], how, node), node, heading, rng);
       if (!path) { notes.unreachable++; return { kind: 'stay' }; }
       notes.together = (notes.together ?? 0) + 1;
       const last = path.length > 1 ? directionOf(graph.x[path.at(-1)] - graph.x[path.at(-2)], graph.z[path.at(-1)] - graph.z[path.at(-2)]) : heading;
@@ -418,29 +446,33 @@ export async function strandDemo(novelDir, options) {
   /** Where someone begins on their own. */
   function beginOf({ scene, handoff, carried, seed }) {
       if (carried) return carried;
-      const { spots } = graphOf(scene.placeId), said = report[scene.id]?.starts?.[handoff.person], named = said && said.stated >= 0.5 ? spotKey(scene.placeId, topSpot(said.to)) : null;
+      const { anchor } = groups.get(scene.placeId);
+      reach(anchor.x, anchor.z, 56);
+      const spots = spotsFor(scene.placeId), said = report[scene.id]?.starts?.[handoff.person], named = said && said.stated >= 0.5 ? spotKey(scene.placeId, topSpot(said.to)) : null;
       if (said) (traceOf(scene.id, 'start').starts ??= []).push({ person: handoff.person, stated: said.stated, to: top(said.to, 3).map(([name, p]) => [name, p, spotAt(scene.placeId, name)]), used: !!named });
-      const spot = named && spots[named]?.length ? named : 'avenue', begin = [pick(spots[spot], stream(seed)), directionOf(0, -1)];
+      const spot = named && spots[named]?.length ? named : spots.avenue.length ? 'avenue' : 'north', begin = [pick(spots[spot], stream(seed)), directionOf(0, -1)];
       return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, begin, seed) : begin;
   }
   /** Jev's answer for someone in an event, for the player's trace. */
-  function traceMove(scene, event, person) {
-    const answer = report[scene.id]?.events?.[event.id]?.[person], spot = spotKey(scene.placeId, topSpot(answer?.to));
-    if (answer) (traceOf(scene.id, scene.events.findIndex(entry => entry.id === event.id)).moves ??= []).push({ person, moves: answer.moves ?? null, how: answer.how ?? null, direction: top(answer.direction, 2), to: top(answer.to, 3).map(([name, p]) => [name, p, spotAt(scene.placeId, name)]), chosen: answer.to ? spot : null });
+  function traceMove(scene, event, person, focus) {
+    const answer = report[scene.id]?.events?.[event.id]?.[person], spot = spotKey(scene.placeId, topSpot(answer?.to), focus);
+    if (answer) (traceOf(scene.id, scene.events.findIndex(entry => entry.id === event.id)).moves ??= []).push({ person, moves: answer.moves ?? null, how: answer.how ?? null, direction: top(answer.direction, 2), to: top(answer.to, 3).map(([name, p]) => [name, p, spotAt(scene.placeId, name, focus)]), chosen: answer.to ? spot : null });
   }
   /** What someone does on their own in an event: Jev's move for them, walked. */
   function actAlone({ scene, event, person, at, seed }) {
       placeThings(scene, event, at);
       damage(scene, event, at, seed);
-      const answer = report[scene.id]?.events?.[event.id]?.[person], spot = spotKey(scene.placeId, topSpot(answer?.to)), { graph, spots } = graphOf(scene.placeId);
-      traceMove(scene, event, person);
+      const focus = focusOf(at);
+      if (focus) reach(focus.x, focus.z, 48);
+      const answer = report[scene.id]?.events?.[event.id]?.[person], spot = spotKey(scene.placeId, topSpot(answer?.to), focus), { graph } = graphOf(focus), spots = spotsFor(scene.placeId, focus);
+      traceMove(scene, event, person, focus);
       if (!answer?.to || !at || !spots[spot]?.length) return { kind: 'stay' };
       const [node, heading] = at, rng = stream(seed);
       if (answer.how === 'teleport') { const to = pick(spots[spot], rng); notes.teleports++; moves.set(`${scene.id}|${event.id}|${person}`, { person, how: 'teleport', spot, path: [node, to], ensemble: [] }); return { kind: 'move', to: [to, heading] }; }
       // Already there: somewhere else in the same spot, at least 4 m off or on another level.
       let targets = spots[spot], key = spot;
       if (targets.includes(node)) { targets = targets.filter(other => Math.hypot(graph.x[other] - graph.x[node], graph.z[other] - graph.z[node]) > 4 || graph.y[other] !== graph.y[node]); key = `${spot}@${node}`; }
-      const field = solve(scene.placeId, key, targets, answer.how), path = sampleWalk(graph, field, node, heading, rng);
+      const field = solve(scene.placeId, `${key}@${node}`, targets, answer.how, node), path = sampleWalk(graph, field, node, heading, rng);
       if (!path) { notes.unreachable++; return { kind: 'stay' }; }
       const ensemble = Array.from({ length: 14 }, () => sampleWalk(graph, field, node, heading, rng)).filter(Boolean);
       const last = path.length > 1 ? directionOf(graph.x[path.at(-1)] - graph.x[path.at(-2)], graph.z[path.at(-1)] - graph.z[path.at(-2)]) : heading;
@@ -455,8 +487,13 @@ export async function strandDemo(novelDir, options) {
   }
   // Where each person was last: the place and node a later scene's travel starts from.
   const { start, act } = mover;
-  mover.start = args => { const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
-  mover.act = args => { const outcome = act(args); if (outcome.kind === 'move') where.set(args.person, { place: args.scene.placeId, at: outcome.to }); return outcome; };
+  mover.start = args => { moment = `${args.scene.id}|start`; const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
+  mover.act = args => {
+    moment = `${args.scene.id}|${args.scene.events.findIndex(entry => entry.id === args.event.id)}`;
+    const outcome = act(args);
+    if (outcome.kind === 'move') { where.set(args.person, { place: args.scene.placeId, at: outcome.to }); const end = W.nodePos(world, outcome.to[0]); reach(end.x, end.z, 40); }
+    return outcome;
+  };
   const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: ENGINE });
   notes.solves = fields.size;
   const people = [...new Set(chosen.flatMap(scene => scene.cast))], color = new Map(people.map((id, index) => [id, PALETTE[index % PALETTE.length]]));
@@ -474,10 +511,12 @@ export async function strandDemo(novelDir, options) {
       if (object.room) continue;
       if (object.kind === 'building' && object.match.kind === 'building') {
         if (!newBuildingHere(object.name, group.label, [...groups.values()].map(other => other.label))) continue;
-        const lots = group.layout.lots, key = `${scene.placeId}|${object.name}`;
+        const key = `${scene.placeId}|${object.name}`;
         if (lotNames.has(key)) continue;
-        const free = lots.findIndex((lot, index) => !lot.label && ![...lotNames.values()].some(entry => entry.place === scene.placeId && entry.lot === index) && lot.role === (ROLE_FOR[object.match.id] ?? lot.role));
-        const index = free >= 0 ? free : lots.findIndex((lot, n) => !lot.label && ![...lotNames.values()].some(entry => entry.place === scene.placeId && entry.lot === n));
+        // The nearest free lot of the world round the place's anchor (within 80 m), of the building's role if there is one.
+        const { anchor } = group, gap = lot => Math.hypot((lot.i0 + lot.nx / 2) * 2 - anchor.x, (lot.j0 + lot.nz / 2) * 2 - anchor.z);
+        const near = world.lots.map((lot, index) => ({ lot, index, gap: gap(lot) })).filter(entry => entry.gap <= 80 && !entry.lot.label && !entry.lot.place && ![...lotNames.values()].some(other => other.lot === entry.index)).sort((a, b) => a.gap - b.gap);
+        const index = (near.find(entry => entry.lot.role === ROLE_FOR[object.match.id]) ?? near[0])?.index ?? -1;
         if (index >= 0) lotNames.set(key, { place: scene.placeId, lot: index, name: object.name, scene: scene.id, event: eventIndex, model: object.match.id });
         continue;
       }
@@ -485,27 +524,38 @@ export async function strandDemo(novelDir, options) {
   }
   notes.detected = { buildings: lotNames.size, objects: [...placedObjects.values()].reduce((sum, list) => sum + list.length, 0) };
   const worn = new Set(entities.filter(entity => entity.model && entity.placed.length).map(entity => entity.model));
-  const named = (placeId, index) => [...lotNames.values()].find(entry => entry.place === placeId && entry.lot === index);
+  // One world: a lot is named whichever place named it.
+  const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
   const shellOf = (placeId, lot, index) => { const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
-  const exported = Object.fromEntries([...groups].map(([id, { layout }]) => [id, layout.lots.map((lot, index) => shellOf(id, lot, index))]));
+  const shells = world.lots.map((lot, index) => shellOf('world', lot, index));
+  // The world as the page draws it: one grid over everything explored (oi, oj: the offset of world cell 0, 0 on it), its nodes
+  // as that grid's dense cells, each lot and chunk with the moment it was first reached.
+  const bounds = W.worldBounds(world), NX = bounds.i1 - bounds.i0, NZ = bounds.j1 - bounds.j0, oi = -bounds.i0, oj = -bounds.j0;
+  const K = Math.max(1, ...world.lots.map(lot => lot.floors + 1), ...[...shared.things.values()].map(thing => thing.top + 1));
+  const dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return (k * NZ + (j + oj)) * NX + (i + oi); };
+  const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
+  const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
+    i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
+  notes.world = { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
   return {
     models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
     things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, model: entity.model, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
       struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
     title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
-    migrations: migrations.map(migration => ({ ...migration, route: routes.get(`${migration.scene}|${migration.person}`) ?? null })),
-    macro, landscapes, travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
+    migrations: migrations.map(migration => { const route = routes.get(`${migration.scene}|${migration.person}`); return { ...migration, route: route ? { ...route, exit: route.exit?.map(dense) ?? null, entry: route.entry?.map(dense) ?? null } : null }; }),
+    macro, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
     people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
-    places: Object.fromEntries([...groups].map(([id, { label, path, scale, layout }]) => [id, { label, path, scale, kind: layout.kind, NX: layout.NX, NZ: layout.NZ, K: layout.K, ground: [...layout.ground].join(''), clutter: [...layout.clutter.keys()].filter(cell => layout.clutter[cell]), clutterDraws: layout.clutterDraws,
-      lots: layout.lots.map((lot, index) => ({ model: exported[id][index], label: lot.label, detected: named(id, index) ? { name: named(id, index).name, scene: named(id, index).scene, event: named(id, index).event } : null, role: named(id, index) && ROLE_FOR[named(id, index).model] === 'hospital' ? 'hospital' : lot.role, i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) })) }])),
+    // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
+    world: { NX, NZ, K, oi, oj, lots: worldLots, chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]) },
+    places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, lots: worldLots }])),
     scenes: chosen.map(scene => {
       const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label;
       return { id: scene.id, place: scene.placeId, label: label && label !== scene.id ? label : null,
-        starts: Object.fromEntries(Object.entries(run.starts).map(([person, at]) => [person, at?.[0] ?? null])),
+        starts: Object.fromEntries(Object.entries(run.starts).map(([person, at]) => [person, at ? dense(at[0]) : null])),
         from: Object.fromEntries((timeline.handoffs.get(scene.id) ?? []).map(handoff => [handoff.person, handoff.from ? (handoff.samePlace ? 'stays' : 'arrives') : 'enters'])),
         objects: placedObjects.get(scene.id) ?? [],
         trace: traces.get(`${scene.id}|start`) ?? null,
-        events: scene.events.map((event, index) => ({ text: clean(event.text), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean), trace: traces.get(`${scene.id}|${index}`) ?? null })) };
+        events: scene.events.map((event, index) => ({ text: clean(event.text), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(denseMove), trace: traces.get(`${scene.id}|${index}`) ?? null })) };
     }),
   };
 }
@@ -518,15 +568,19 @@ export async function strandDemo(novelDir, options) {
  */
 export function simulationRecord(data, strand) {
   const CELL = 2, FLOOR = 3, round = value => Math.round(value * 100) / 100;
-  const point = (place, node) => { const i = node % place.NX, j = Math.floor(node / place.NX) % place.NZ, k = Math.floor(node / (place.NX * place.NZ)); return [round((i + 0.5) * CELL), k * FLOOR, round((j + 0.5) * CELL)]; };
+  // A node as a point: on the world's grid, in world metres (oi, oj: where world cell 0, 0 sits on the grid).
+  const point = (place, node) => { const i = node % place.NX - (place.oi ?? 0), j = Math.floor(node / place.NX) % place.NZ - (place.oj ?? 0), k = Math.floor(node / (place.NX * place.NZ)); return [round((i + 0.5) * CELL), k * FLOOR, round((j + 0.5) * CELL)]; };
   const part = part => ({ lot: part.lot, energy: part.energy ?? null, blasted: part.blasted ?? null, fallen: part.fallen ?? null, destroyedCells: part.destroyed, fellCells: part.fell ?? [], cutOffCells: part.cutOff, cutOffRooms: part.cutRooms });
   return {
-    kind: 'stage-simulation', version: 1, exportedAt: data.exportedAt, strand: { ...strand, title: data.title },
+    kind: 'stage-simulation', version: 2, exportedAt: data.exportedAt, strand: { ...strand, title: data.title },
     units: { metres: { cell: CELL, floor: FLOOR }, kinds: { 1: 'corridor', 2: 'stair', 3: 'wall', 4: 'roof' }, tuple: '[kind, i, j, k] on the lot\'s grid; fallen ones add where they came to rest (metres up)' },
     engine: { T: data.T, kappa: data.kappa, lambda: data.lambda, notes: data.notes, travel: data.travel },
     people: data.people,
-    buildings: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, scale: place.scale, kind: place.kind, grid: { NX: place.NX, NZ: place.NZ, floors: place.K },
-      lots: place.lots.map(lot => ({ label: lot.label, detected: lot.detected, role: lot.role, model: lot.model, footprint: { i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz }, floors: lot.floors, skeleton: lot.cells, rooms: lot.rooms })) }])),
+    // The world once (every lot explored, in world cells, with the moment it was first reached); each place lists the lots round its anchor.
+    world: data.world ? { grid: { NX: data.world.NX, NZ: data.world.NZ, floors: data.world.K, oi: data.world.oi, oj: data.world.oj }, chunks: data.world.chunks.map(([ci, cj, born]) => [ci, cj, born]),
+      lots: data.world.lots.map(lot => ({ label: lot.label, detected: lot.detected, role: lot.role, model: lot.model, footprint: { i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz }, floors: lot.floors, height: lot.height, born: lot.born, place: lot.place, skeleton: lot.cells, rooms: lot.rooms })) } : null,
+    buildings: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, scale: place.scale, kind: place.kind, anchor: place.anchor,
+      lots: (data.world?.lots ?? []).flatMap((lot, index) => Math.hypot((lot.i0 + lot.nx / 2) * CELL - place.anchor.x, (lot.j0 + lot.nz / 2) * CELL - place.anchor.z) <= 80 ? [index] : []) }])),
     things: data.things.map(thing => ({ id: thing.id, name: thing.name, aliases: thing.aliases, model: thing.model, shape: thing.shape, size: thing.size, placements: thing.placed })),
     migrations: data.migrations, macro: data.macro,
     // Each open place's landscape by type, and how many buildings fill it: the fill itself is regenerated from the landscape, never kept.
@@ -541,7 +595,7 @@ export function simulationRecord(data, strand) {
 }
 
 /** The simulation engine a run comes from: its walk (seeds come from the scene keys under this version) and its record format. */
-export const ENGINE = 'strand-demo-3';
+export const ENGINE = 'strand-demo-4';
 /** What a run is made from: the book's reviewed ontology and the stage's answers (buildings, objects, movement, Jev's placements and impacts). */
 const SIMULATION_INPUTS = ['ontology/entities.jsonl', 'ontology/relations.jsonl', 'ontology/scenes.jsonl', 'ontology/events.jsonl', 'stage/architecture.json', 'stage/scale.json', 'stage/landscape.json', 'stage/objects.json', 'stage/movement.json', 'stage/thing-boxes.json', 'stage/impacts.json'];
 export async function simulationInputs(novelDir) {
@@ -597,6 +651,9 @@ export async function runStrand(novelDir, { from, to, fork = null, title } = {})
 export function inlineStrand(template, data, { name = 'One Strand', fragment = false, vendor = false } = {}) {
   // `vendor`: three.js served beside the page (vendor/), so the page needs no CDN.
   if (vendor) template = template.replace('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js', './vendor/three.module.js').replace('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/', './vendor/addons/');
+  // The world's lots go once (data.world.lots); each place's copy of them is restored by the page.
+  const once = value => value?.world?.lots ? { ...value, places: Object.fromEntries(Object.entries(value.places).map(([id, place]) => [id, place.world ? { ...place, lots: undefined } : place])) } : value;
+  data = data.strands ? { ...data, strands: data.strands.map(strand => ({ ...strand, data: once(strand.data) })) } : once(data);
   let page = template.replace('<title>One Strand · Holo Stage</title>', () => `<title>${name}</title>`).replace('<script type="application/json" id="strand-data"></script>', () => `<script type="application/json" id="strand-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`);
   // A host that adds its own document wrapper (a claude.ai page) takes the title, import map, styles and body.
   if (fragment) page = [page.match(/<title>[^<]*<\/title>/)[0], '<meta name="claude:viewport-fit-sides" content="cover">', page.match(/<script type="importmap">[\s\S]*?<\/script>/)[0], page.match(/<style>[\s\S]*?<\/style>/)[0], page.match(/<body>([\s\S]*)<\/body>/)[1]].join('\n');

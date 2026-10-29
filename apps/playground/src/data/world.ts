@@ -146,9 +146,11 @@ export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Arra
 
 /**
  * The movement graph over the materialized world and what stands (`standing` per lot), with the things placed in it
- * (in world cells). Every node seen so far keeps its id; one that no longer stands has no edges.
+ * (in world cells). Every node seen so far keeps its id; one that no longer stands has no edges. With a `box` (metres),
+ * only the world inside it is walked: edges stay inside, and nodes outside have none (positions are kept for every id).
  */
-export function worldGraph(world: World, standing: Uint8Array[], things: PlacedThing[] = []): WorldGraph {
+export function worldGraph(world: World, standing: Uint8Array[], things: PlacedThing[] = [], box?: { x0: number; z0: number; x1: number; z1: number }): WorldGraph {
+  const inside = (i: number, j: number) => !box || ((i + 0.5) * SKELETON_CELL >= box.x0 && (i + 0.5) * SKELETON_CELL <= box.x1 && (j + 0.5) * SKELETON_CELL >= box.z0 && (j + 0.5) * SKELETON_CELL <= box.z1);
   const edges: { from: number; to: number; dir: number; cost: number; kind: number }[] = [];
   const roomOf = world.lots.map((lot) => { const map = new Int32Array(lot.skeleton.cells.length).fill(NOT); lot.rooms.forEach((room, r) => { for (let i = room.i0; i <= room.i1; i++) for (let j = room.j0; j <= room.j1; j++) map[cellIndex(lot.skeleton, i, j, room.floor)] = r; }); return map; });
   const thingAt = new Map<number, number>();
@@ -156,7 +158,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   const span = CHUNK;
   const known = (i: number, j: number) => world.chunks.has(chunkKey(Math.floor(i / span), Math.floor(j / span)));
   const what = (i: number, j: number, k: number): { type: number; lot: number; local: number } => {
-    if (k < 0) return { type: 0, lot: NOT, local: NOT };
+    if (k < 0 || !inside(i, j)) return { type: 0, lot: NOT, local: NOT };
     const key = cellKey(i, j), index = world.lotAt.get(key) ?? NOT, thing = thingAt.get(key) ?? NOT;
     if (thing >= 0 && k === things[thing].top && (index < 0 || k > world.lots[index].floors)) return { type: 4, lot: 1000 + thing, local: NOT };
     if (index < 0) return { type: k === 0 && known(i, j) && !world.clutter.has(key) && !(thing >= 0 && things[thing].grounded) ? 1 : 0, lot: NOT, local: NOT };
@@ -169,9 +171,9 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   };
   // Every cell to walk: the open ground of materialized chunks, and every lot's cells on every floor up to its roof.
   const cells: [number, number, number][] = [];
-  for (const [key] of world.chunks) { const ci = Math.floor(key / 65536) - OFF, cj = (key % 65536) - OFF; for (let j = cj * CHUNK; j < (cj + 1) * CHUNK; j++) for (let i = ci * CHUNK; i < (ci + 1) * CHUNK; i++) if (!world.lotAt.has(cellKey(i, j))) cells.push([i, j, 0]); }
-  world.lots.forEach((lot) => { for (let k = 0; k <= lot.floors; k++) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) cells.push([i, j, k]); });
-  for (const thing of things) for (let j = thing.j0; j <= thing.j1; j++) for (let i = thing.i0; i <= thing.i1; i++) cells.push([i, j, thing.top]);
+  for (const [key] of world.chunks) { const ci = Math.floor(key / 65536) - OFF, cj = (key % 65536) - OFF; for (let j = cj * CHUNK; j < (cj + 1) * CHUNK; j++) for (let i = ci * CHUNK; i < (ci + 1) * CHUNK; i++) if (inside(i, j) && !world.lotAt.has(cellKey(i, j))) cells.push([i, j, 0]); }
+  world.lots.forEach((lot) => { if (box && ((lot.i0 + lot.nx) * SKELETON_CELL < box.x0 || lot.i0 * SKELETON_CELL > box.x1 || (lot.j0 + lot.nz) * SKELETON_CELL < box.z0 || lot.j0 * SKELETON_CELL > box.z1)) return; for (let k = 0; k <= lot.floors; k++) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) if (inside(i, j)) cells.push([i, j, k]); });
+  for (const thing of things) for (let j = thing.j0; j <= thing.j1; j++) for (let i = thing.i0; i <= thing.i1; i++) if (inside(i, j)) cells.push([i, j, thing.top]);
   const add = (from: number, to: number, dx: number, dz: number, cost: number, kind: number, dir = directionOf(dx, dz)) => edges.push({ from, to, dir, cost, kind });
   const surface = (i: number, j: number) => { const key = cellKey(i, j), index = world.lotAt.get(key) ?? NOT, thing = thingAt.get(key) ?? NOT; return Math.max(index < 0 ? 0 : world.lots[index].floors * FLOOR_HEIGHT, thing < 0 ? 0 : things[thing].top * FLOOR_HEIGHT); };
   const ELEVATION = Math.atan(1 / Math.SQRT2), G = 9.8;
@@ -211,8 +213,9 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
         for (let level = k; level >= 1; level--) { const across = what(i + 2 * dx, j + 2 * dz, level); if (!world.lotAt.has(cellKey(i + dx, j + dz)) && across.type === 4 && across.lot !== here.lot) { add(node, nodeId(world, i + 2 * dx, j + 2 * dz, level), dx, dz, 2 * SKELETON_CELL + 2, EDGE.jump); break; } }
       }
     }
-    // Sky arcs from a roof or the street, as on a place's grid; landing only on ground already in the world.
-    if (here.type !== 1 && here.type !== 4) continue;
+    // Sky arcs from a roof, as on a place's grid (an arc never gains height, so from the street it only lands on street a
+    // walk reaches anyway); landing only on ground already in the world.
+    if (here.type !== 4) continue;
     const x0 = (i + 0.5) * SKELETON_CELL, z0 = (j + 0.5) * SKELETON_CELL, y0 = k * FLOOR_HEIGHT;
     for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) for (const speed of ARC_SPEEDS) {
       const vh = speed * Math.cos(ELEVATION) / Math.SQRT2, vy = speed * Math.sin(ELEVATION);
@@ -231,8 +234,10 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   // Positions of every node ever seen (those that no longer stand have no edges), and what each is now.
   const count = world.cells.length / 3, positions: [number, number, number][] = new Array(count), type = new Uint8Array(count), lot = new Int32Array(count).fill(NOT), ground = new Uint8Array(count);
   for (let id = 0; id < count; id++) {
-    const { i, j, k } = cellOf(world, id), here = what(i, j, k);
+    const { i, j, k } = cellOf(world, id);
     positions[id] = [(i + 0.5) * SKELETON_CELL, (j + 0.5) * SKELETON_CELL, k * FLOOR_HEIGHT];
+    if (!inside(i, j)) continue;
+    const here = what(i, j, k);
     type[id] = here.type; lot[id] = here.lot; ground[id] = here.type === 1 ? world.ground.get(cellKey(i, j)) ?? GROUND.street : 0;
   }
   return { graph: buildGraph(positions, edges), type, lot, ground };
@@ -290,3 +295,33 @@ export function nodeNear(world: World, built: WorldGraph, x: number, z: number, 
   }
   return best;
 }
+
+/** A chunk's place on the grid from its key. */
+export const chunkOf = (key: number) => ({ ci: Math.floor(key / 65536) - OFF, cj: (key % 65536) - OFF });
+/** The cells everything explored covers (chunks and every lot's footprint): [i0, j0) to [i1, j1). */
+export function worldBounds(world: World): { i0: number; j0: number; i1: number; j1: number } {
+  let [i0, j0, i1, j1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const key of world.chunks.keys()) { const { ci, cj } = chunkOf(key); i0 = Math.min(i0, ci * CHUNK); j0 = Math.min(j0, cj * CHUNK); i1 = Math.max(i1, (ci + 1) * CHUNK); j1 = Math.max(j1, (cj + 1) * CHUNK); }
+  for (const lot of world.lots) { i0 = Math.min(i0, lot.i0); j0 = Math.min(j0, lot.j0); i1 = Math.max(i1, lot.i0 + lot.nx); j1 = Math.max(j1, lot.j0 + lot.nz); }
+  return Number.isFinite(i0) ? { i0, j0, i1, j1 } : { i0: 0, j0: 0, i1: 1, j1: 1 };
+}
+/** A chunk's ground, row by row, one digit a cell (GROUND kinds). */
+export const chunkGround = (world: World, key: number) => { const { ci, cj } = chunkOf(key); let out = ""; for (let j = cj * CHUNK; j < (cj + 1) * CHUNK; j++) for (let i = ci * CHUNK; i < (ci + 1) * CHUNK; i++) out += world.lotAt.has(cellKey(i, j)) ? GROUND.building : world.ground.get(cellKey(i, j)) ?? GROUND.street; return out; };
+
+/**
+ * The part of a graph inside a box (metres): its own small graph, with each node's id there (`local`, -1 outside) and back
+ * (`ids`). A walk is solved on the ground round where it goes, not on the whole explored city.
+ */
+export function windowOf(graph: MoveGraph, box: { x0: number; z0: number; x1: number; z1: number }): { graph: MoveGraph; local: Int32Array; ids: Int32Array } {
+  const local = new Int32Array(graph.nodes).fill(NOT), ids: number[] = [];
+  for (let n = 0; n < graph.nodes; n++) if (graph.x[n] >= box.x0 && graph.x[n] <= box.x1 && graph.z[n] >= box.z0 && graph.z[n] <= box.z1) { local[n] = ids.length; ids.push(n); }
+  const count = ids.length, offsets = new Int32Array(count + 1), to: number[] = [], dir: number[] = [], cost: number[] = [], kind: number[] = [];
+  for (let m = 0; m < count; m++) {
+    const n = ids[m];
+    for (let e = graph.offsets[n]; e < graph.offsets[n + 1]; e++) { const there = local[graph.to[e]]; if (there < 0) continue; to.push(there); dir.push(graph.dir[e]); cost.push(graph.cost[e]); kind.push(graph.kind[e]); }
+    offsets[m + 1] = to.length;
+  }
+  const pick = (values: Float64Array) => Float64Array.from(ids, (n) => values[n]);
+  return { graph: { nodes: count, x: pick(graph.x), z: pick(graph.z), y: pick(graph.y), offsets, to: Int32Array.from(to), dir: Uint8Array.from(dir), cost: Float64Array.from(cost), kind: Uint8Array.from(kind) }, local, ids: Int32Array.from(ids) };
+}
+
