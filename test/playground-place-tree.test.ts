@@ -58,6 +58,16 @@ test("no circles overlap, whatever the tree: siblings apart, children inside, a 
   }
 });
 
+test("the more people travel between two places, the closer they sit", () => {
+  // Invented: a ward with four equal places; many trips between a and b, one between a and c, none to d.
+  const tree: TreePlace[] = [{ id: "ward", parentId: null, sceneIds: [] }, ...["a", "b", "c", "d"].map((id) => ({ id, parentId: "ward", sceneIds: ["s"] }))];
+  const circles = placeTreeCircles(tree, [{ from: "a", to: "b", count: 8 }, { from: "b", to: "a", count: 2 }, { from: "a", to: "c", count: 1 }], { ownRadius: () => 40 });
+  const gap = (p: string, q: string) => { const a = circles.get(p)!, b = circles.get(q)!; return Math.hypot(a.x - b.x, a.y - b.y) - a.r - b.r; };
+  assert.ok(gap("a", "b") < gap("a", "c"), `ten trips sit closer than one (${gap("a", "b").toFixed(1)} < ${gap("a", "c").toFixed(1)})`);
+  assert.ok(gap("a", "c") < gap("a", "d"), `one trip sits closer than none (${gap("a", "c").toFixed(1)} < ${gap("a", "d").toFixed(1)})`);
+  assert.ok(gap("a", "b") >= 0, "and still never overlap");
+});
+
 test("paths read root first, and orbital Places nests the floor and frames a region's columns", () => {
   assert.equal(placePathLabel(places[3], { city: "City", west: "West Ward" }), "City › West Ward › Hospital");
   const data: TimePlaceProjection = {

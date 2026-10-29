@@ -131,7 +131,7 @@ try {
   }
   const manifest = { version: 1, purpose: interactive ? 'Wait for user messages. Process only assigned unapplied blocks using the installed skill; applied prefix remains immutable. Held semantic facts are not verified canon.' : 'Process assigned unapplied source blocks; validate this attempt independently of the already-applied prefix. Processing completion is distinct from held semantic facts.', startedAt: startedAt.toISOString(), deadline: new Date(deadline).toISOString(), limits: job.limits, volumes };
   manifest.portraits = { skill: portraitSkill, command: 'novel album assign <workspace>', check: 'novel album assign <workspace> --check', stage: 'after full-volume extraction and application', visualInput: false };
-  manifest.animation = { skill: stageSkill, commands: ['novel stage architecture <workspace>', 'novel stage objects <workspace> --max-calls N', 'novel stage movement <workspace> --max-calls N', 'novel stage prep <workspace>', 'novel stage show <workspace>'], stage: 'last: prep runs once every other checklist step is done', canon: 'only the objects packet, through review' };
+  manifest.animation = { skill: stageSkill, commands: ['novel stage scale <workspace>', 'novel stage architecture <workspace>', 'novel stage objects <workspace> --max-calls N', 'novel stage movement <workspace> --max-calls N', 'novel stage prep <workspace>', 'novel stage show <workspace>'], stage: 'last: prep runs once every other checklist step is done', canon: 'only the objects packet, through review' };
   if (job.library) {
     const libraryLockPath = `${job.library.directory}.pi-review.lock`;
     const libraryLock = await open(libraryLockPath, 'wx', 0o600);
@@ -218,7 +218,7 @@ try {
     }
     const args = permitted.args;
     if (args[0] === 'album' && args[1] === 'assign' && !args.includes('--check') && !portraitSkillRead) throw new Error('Read the novel-portraits skill before post-extraction assignment');
-    if (args[0] === 'stage' && ['architecture', 'objects', 'movement'].includes(args[1]) && !args.includes('--no-jev') && !stageSkillRead) throw new Error('Read the novel-stage skill before asking Jev for buildings, objects or movement');
+    if (args[0] === 'stage' && ['scale', 'architecture', 'objects', 'movement'].includes(args[1]) && !args.includes('--no-jev') && !stageSkillRead) throw new Error('Read the novel-stage skill before asking Jev for scale, buildings, objects or movement');
     if (args[0] === 'review') {
       const book = !args.includes('--scope') || args[args.indexOf('--scope') + 1] === 'book';
       const packet = book ? await json(`${args[2]}/changesets/${args[3]}.json`) : null;

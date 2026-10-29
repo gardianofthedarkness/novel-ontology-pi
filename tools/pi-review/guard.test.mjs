@@ -244,11 +244,12 @@ test('refusals say what to change; long pages are clamped; help and status forms
 
 test('read mode stage commands run on the assigned book, bounded, and the prep takes no options', () => {
   assert.equal(authorize(`novel stage show ${novel}`, defaultScope).label, 'novel stage show');
+  assert.equal(authorize(`novel stage scale ${novel}`, defaultScope).label, 'novel stage scale');
   assert.equal(authorize(`novel stage architecture ${novel}`, defaultScope).label, 'novel stage architecture');
   assert.equal(authorize(`novel stage movement ${novel} --max-calls 2000`, defaultScope).label, 'novel stage movement');
   assert.equal(authorize(`novel stage prep ${novel}`, defaultScope).label, 'novel stage prep');
   assert.equal(authorize(`novel stage objects ${novel} --max-calls 40`, defaultScope).label, 'novel stage objects');
-  for (const command of [`novel stage movement /tmp/other`, `novel stage movement ${novel} --max-calls 99999`, `novel stage prep ${novel} --force`, `novel stage architecture ${novel} --max-calls 5`, `novel stage movement ${novel} --cache /tmp/x`, `novel stage objects ${novel} --force`, `novel stage objects ${novel} --no-work`, `novel stage delete ${novel}`]) assert.throws(() => authorize(command, defaultScope), command);
+  for (const command of [`novel stage movement /tmp/other`, `novel stage movement ${novel} --max-calls 99999`, `novel stage prep ${novel} --force`, `novel stage architecture ${novel} --max-calls 5`, `novel stage scale ${novel} --max-calls 5`, `novel stage scale /tmp/other`, `novel stage movement ${novel} --cache /tmp/x`, `novel stage objects ${novel} --force`, `novel stage objects ${novel} --no-work`, `novel stage delete ${novel}`]) assert.throws(() => authorize(command, defaultScope), command);
   // Its review packet goes through the shared gate like any other, once the runner lists it.
   assert.equal(authorize(`novel review show ${novel} cs_stage_objects_1 --scope book --offset 0 --limit 20`, { ...defaultScope, stageObjectsChangesetIds: ['cs_stage_objects_1'] }).label, 'novel review show');
   assert.throws(() => authorize(`novel review show ${novel} cs_stage_objects_2 --scope book --offset 0 --limit 20`, { ...defaultScope, stageObjectsChangesetIds: ['cs_stage_objects_1'] }));

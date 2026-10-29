@@ -16,6 +16,7 @@ Everything is under `<novel-dir>/stage/`:
 | `objects.json` | Buildings and large visible things detected per scene, matched to a model or shape | `novel stage objects` |
 | `thing-boxes.json` | Jev's model pick per thing, and per placement its spot choice, close-up or sky answers and cast | `playground/two-view-things.mjs` |
 | `impacts.json` | Jev's impact choice per fight: the spot (or no damage), the size, the box asked for comparison | `playground/impact-choices.mjs` |
+| `scale.json` | Each place's scale: region, city, district, street, building or room (Jev) | `novel stage scale` |
 | `architecture.json`, `movement.json` | Each place's building kind; Jev's typed movement answers | `novel stage architecture`, `novel stage movement` |
 
 On the stage demo host, the records currently exist for book 2 (`~/claude-stage-demo/state/vol-2/novel/stage/simulation/christmas-eve.json`) and book 3 (`~/claude-stage-demo/state/vol-3/novel/stage/simulation/kuroko.json`).
@@ -39,13 +40,18 @@ What the simulation **chose** (lots, skeletons, paths, which cells broke, sphere
 Positions are in the place's own metres: x and z across its grid (2 m cells), y up (3 m floors). A unit is `[kind, i, j, k]` on its lot's grid, with kinds 1 corridor, 2 stair, 3 wall, 4 roof (k is the floor; the roof is k = floors).
 
 - **`strand`:** id, scene range (`from`, `to`), `fork`, title.
-- **`engine`:** the path-integral temperature `T`, turning cost `kappa`, climb weight `lambda`, and the run's counts (`notes`).
+- **`engine`:** the path-integral temperature `T`, turning cost `kappa`, climb weight `lambda`, and the run's counts (`notes`); `travel`: the map's own `T`, `kappa`, lattice `cell` and boundary `crossing` cost (μ, ν).
 - **`people`:** name and colour per person id.
 - **`buildings`:** per place id:
-  - label, path in the place tree, kind (district, street, site), grid size;
+  - label, path in the place tree, `scale` (Jev's region, city, district, street, building or room), the kind it is built as (district, street, site), grid size;
   - its lots: label, detected name, role, model, footprint (`i0`, `j0`, `nx`, `nz`), floors, skeleton (one digit per cell: 0 mass, 1 corridor, 2 stair) and rooms.
 - **`things`:** per thing: name, aliases, model or shape, detected size, and its placements. Each placement has its scene, event, place, base position, and fit: scale, turn, and extent in metres.
-- **`migrations`:** who moved between places, scene by scene.
+- **`migrations`:** who moved between places, scene by scene, and each one's `route`:
+  - `exit`: the walk out of the old place, as its graph's nodes;
+  - `path`: the curve across the place map, as points in map metres;
+  - `entry`: the walk into the new place, as its graph's nodes, ending where the scene finds them;
+  - `metres` across the map, and the place boundaries `crossed`.
+- **`macro`:** the place map: each place's circle (`x`, `z`, `r`), its grid's centre (`spotX`, `spotZ`), and a region's own disc (`own`). Map metres are the stage's world metres: a place's grid is centred on its spot.
 - **`scenes`:** per scene: its place, where each person starts, and its events. Each event has:
   - its summary;
   - its **moves:** person, how (walk, run, fall, jump, teleport, direct), the spot, and the path as points;
