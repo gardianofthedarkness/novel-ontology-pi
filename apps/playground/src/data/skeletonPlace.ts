@@ -25,7 +25,7 @@ export const ARC_SPEEDS = [7, 10, 13], ARC_EFFORT = 2;
 export const GROUND = { building: 0, street: 1, plaza: 2, avenue: 3, north: 4 } as const;
 
 export interface PlaceLot { id: string; label: string | null; role: BuildingRole; i0: number; j0: number; nx: number; nz: number; floors: number; side: "west" | "east"; skeleton: Skeleton; rooms: RoomBox[] }
-export interface SkeletonPlace { id: string; kind: "district" | "street"; NX: number; NZ: number; K: number; ground: Uint8Array; clutter: Uint8Array; clutterDraws: number; lots: PlaceLot[] }
+export interface SkeletonPlace { id: string; kind: "district" | "street" | "site"; NX: number; NZ: number; K: number; ground: Uint8Array; clutter: Uint8Array; clutterDraws: number; lots: PlaceLot[] }
 
 const between = (rng: () => number, low: number, high: number) => low + Math.floor(rng() * (high - low + 1));
 function lotsAlong(rng: () => number, from: number, to: number, min: number, max: number): [number, number][] {
@@ -34,7 +34,8 @@ function lotsAlong(rng: () => number, from: number, to: number, min: number, max
   return out;
 }
 
-export function composePlace(input: { id: string; kind: "district" | "street"; seed: number; members: { label: string; role: BuildingRole }[] }, options: { clutter?: number } = {}): SkeletonPlace {
+/** `site`: a place that is itself one building (its first member, on the widest lot, with its own floor range), among neighbours. */
+export function composePlace(input: { id: string; kind: "district" | "street" | "site"; seed: number; members: { label: string; role: BuildingRole; floors?: [number, number] }[] }, options: { clutter?: number } = {}): SkeletonPlace {
   const { NX, NZ } = PLACE_GRID, rng = skeletonStream("place", input.id, input.seed), rowA = NORTH, rowB = NORTH + ROW + MIDDLE, plazaX = (NX - PLAZA) / 2;
   const ground = new Uint8Array(NX * NZ).fill(GROUND.street);
   const fill = (i0: number, j0: number, w: number, d: number, value: number) => { for (let j = j0; j < j0 + d; j++) for (let i = i0; i < i0 + w; i++) ground[j * NX + i] = value; };
@@ -44,7 +45,7 @@ export function composePlace(input: { id: string; kind: "district" | "street"; s
   const named = new Map([...slots].sort((a, b) => b.w - a.w).slice(0, input.members.length).map((slot, index) => [slot, input.members[index]]));
   const lots = slots.map((slot, index): PlaceLot => {
     const member = named.get(slot), role: BuildingRole = member?.role ?? (input.kind === "street" || slot.w < 7 ? "shop" : rng() < 0.6 ? "office" : "shop");
-    const { kind, floors: [low, high] } = SKELETON_OF[role], floors = between(rng, low, high);
+    const { kind } = SKELETON_OF[role], [low, high] = member?.floors ?? SKELETON_OF[role].floors, floors = between(rng, low, high);
     const skeleton = generateSkeleton(kind, (input.seed * 7919 + index) >>> 0, { width: slot.w * SKELETON_CELL, depth: ROW * SKELETON_CELL, floors, cores: kind === "house" ? 1 : 2 });
     fill(slot.i, slot.j, slot.w, ROW, GROUND.building);
     return { id: `lot_${index + 1}`, label: member?.label ?? null, role, i0: slot.i, j0: slot.j, nx: slot.w, nz: ROW, floors, side: slot.i + slot.w / 2 < NX / 2 ? "west" : "east", skeleton, rooms: furnish(skeleton, 1) };
@@ -70,17 +71,29 @@ export const nodeOf = (place: SkeletonPlace, i: number, j: number, k: number) =>
 export const nodePosition = (place: SkeletonPlace, node: number) => { const i = node % place.NX, j = Math.floor(node / place.NX) % place.NZ, k = Math.floor(node / (place.NX * place.NZ)); return { i, j, k, x: (i + 0.5) * SKELETON_CELL, z: (j + 0.5) * SKELETON_CELL, y: k * FLOOR_HEIGHT }; };
 
 /** The movement graph over what stands (`standing` per lot: skeleton cells still there), and the nodes a decision model's spots name. */
-export function placeGraph(place: SkeletonPlace, standing: Uint8Array[]): { graph: MoveGraph; spots: Record<string, number[]> } {
-  const { NX, NZ, K } = place, positions: [number, number, number][] = [], edges: { from: number; to: number; dir: number; cost: number; kind: number }[] = [];
+/** A thing the story put in the place, as the walk sees it: its footprint (cells), the level of its top, and whether it stands on the ground. */
+export interface PlacedThing { i0: number; j0: number; i1: number; j1: number; top: number; grounded: boolean }
+
+/**
+ * The movement graph over what stands (`standing` per lot: skeleton cells still there), and the nodes a decision model's spots name.
+ * Things the story put in the place are part of it: their tops are walked like roofs (landed on by arcs, left by falls), and a
+ * thing on the ground blocks the street cells under it.
+ */
+export function placeGraph(place: SkeletonPlace, standing: Uint8Array[], things: PlacedThing[] = []): { graph: MoveGraph; spots: Record<string, number[]> } {
+  const { NX, NZ } = place, K = Math.max(place.K, ...things.map((thing) => thing.top + 1)), positions: [number, number, number][] = [], edges: { from: number; to: number; dir: number; cost: number; kind: number }[] = [];
   for (let node = 0; node < NX * NZ * K; node++) { const p = nodePosition(place, node); positions.push([p.x, p.z, p.y]); }
   const lotAt = new Int32Array(NX * NZ).fill(-1);
   place.lots.forEach((lot, index) => { for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) lotAt[j * NX + i] = index; });
   const roomOf = place.lots.map((lot) => { const map = new Int32Array(lot.skeleton.cells.length).fill(-1); lot.rooms.forEach((room, r) => { for (let i = room.i0; i <= room.i1; i++) for (let j = room.j0; j <= room.j1; j++) map[cellIndex(lot.skeleton, i, j, room.floor)] = r; }); return map; });
   // What kind of walkable node a grid node is: 0 none, 1 outdoor, 2 circulation, 3 room, 4 roof.
+  const thingAt = new Int32Array(NX * NZ).fill(-1);
+  things.forEach((thing, index) => { for (let j = Math.max(0, thing.j0); j <= Math.min(NZ - 1, thing.j1); j++) for (let i = Math.max(0, thing.i0); i <= Math.min(NX - 1, thing.i1); i++) if (thingAt[j * NX + i] < 0 || things[thingAt[j * NX + i]].top < thing.top) thingAt[j * NX + i] = index; });
   const what = (i: number, j: number, k: number): { type: number; lot: number; local: number } => {
     if (i < 0 || j < 0 || i >= NX || j >= NZ || k < 0 || k >= K) return { type: 0, lot: -1, local: -1 };
-    const index = lotAt[j * NX + i];
-    if (index < 0) return { type: k === 0 && !place.clutter[j * NX + i] ? 1 : 0, lot: -1, local: -1 };
+    const index = lotAt[j * NX + i], thing = thingAt[j * NX + i];
+    // A thing's top is a roof of its own (lot ids from 1000 up); a thing on the ground blocks the street under it.
+    if (thing >= 0 && k === things[thing].top && (index < 0 || k > place.lots[index].floors)) return { type: 4, lot: 1000 + thing, local: -1 };
+    if (index < 0) return { type: k === 0 && !place.clutter[j * NX + i] && !(thing >= 0 && things[thing].grounded) ? 1 : 0, lot: -1, local: -1 };
     const lot = place.lots[index];
     if (k === lot.floors) return { type: 4, lot: index, local: -1 };
     if (k > lot.floors) return { type: 0, lot: -1, local: -1 };
@@ -119,7 +132,7 @@ export function placeGraph(place: SkeletonPlace, standing: Uint8Array[]): { grap
     }
     if (here.type === 4) {
       const lot = place.lots[here.lot], below = what(i, j, k - 1);
-      if (below.type === 2 && lot.skeleton.cells[below.local] === STAIR) add(node, nodeOf(place, i, j, k - 1), 0, 0, 2 + FLOOR_HEIGHT, EDGE.descend, DOWN);
+      if (lot && below.type === 2 && lot.skeleton.cells[below.local] === STAIR) add(node, nodeOf(place, i, j, k - 1), 0, 0, 2 + FLOOR_HEIGHT, EDGE.descend, DOWN);
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const out = what(i + dx, j + dz, k);
         if (out.type === 4 && out.lot === here.lot) continue;
@@ -132,7 +145,7 @@ export function placeGraph(place: SkeletonPlace, standing: Uint8Array[]): { grap
   }
   // Sky arcs: from a roof or the street, launched along a rising cube diagonal at one of a few speeds, flying
   // under gravity until the arc first meets a surface no higher than the launch (so no arc gains height).
-  const surface = (i: number, j: number) => { const index = lotAt[j * NX + i]; return index < 0 ? 0 : place.lots[index].floors * FLOOR_HEIGHT; };
+  const surface = (i: number, j: number) => { const index = lotAt[j * NX + i], thing = thingAt[j * NX + i]; return Math.max(index < 0 ? 0 : place.lots[index].floors * FLOOR_HEIGHT, thing < 0 ? 0 : things[thing].top * FLOOR_HEIGHT); };
   const ELEVATION = Math.atan(1 / Math.SQRT2), G = 9.8;
   for (let k = 0; k < K; k++) for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
     const here = what(i, j, k);
@@ -157,11 +170,30 @@ export function placeGraph(place: SkeletonPlace, standing: Uint8Array[]): { grap
     const here = what(i, j, k), node = nodeOf(place, i, j, k);
     if (here.type === 1) { const g = place.ground[j * NX + i]; if (g === GROUND.avenue) spots.avenue.push(node); else if (g === GROUND.plaza) spots.plaza.push(node); else if (g === GROUND.north) spots.north.push(node); }
     if (here.type === 3) spots[place.lots[here.lot].side].push(node);
+    // Each building's floors (rooms and corridors) and roof, for answers that name a floor.
+    if (here.type === 2 || here.type === 3) (spots[`lot${here.lot}:floor${k + 1}`] ??= []).push(node);
+    if (here.type === 4 && here.lot < 1000) (spots[`lot${here.lot}:roof`] ??= []).push(node);
     if (here.type === 4) spots.rooftop.push(node);
   }
   return { graph, spots };
 }
 
+
+/**
+ * The spot a decision model names, on this place's graph: its own spots as
+ * they are; the floors, stairs, roof and basement of the place's own building
+ * (the lot named like the place) on that building; doors and streets on the
+ * avenue, back ways on the north lane, open ground on the plaza.
+ */
+export function placeSpot(place: SkeletonPlace, label: string, spots: Record<string, number[]>, spot: string | null | undefined): string | null {
+  if (!spot) return null;
+  if (spots[spot]?.length) return spot;
+  const main = place.lots.findIndex((lot) => lot.label === label), level = /^(?:floor|stairs)-(\d+)$/.exec(spot);
+  if (level && main >= 0) return `lot${main}:floor${Math.min(place.lots[main].floors, Math.max(1, Number(level[1])))}`;
+  if (["roof", "bell-tower", "keep-top", "tower-top"].includes(spot)) return main >= 0 ? `lot${main}:roof` : "rooftop";
+  if (spot === "basement") return main >= 0 ? `lot${main}:floor1` : "avenue";
+  return ({ street: "avenue", "front-door": "avenue", entrance: "avenue", gate: "avenue", road: "avenue", alley: "north", "back-door": "north", "side-door": "east", concourse: "plaza", platform: "plaza", path: "plaza", courtyard: "plaza", garden: "east" } as Record<string, string>)[spot] ?? null;
+}
 /** A hit on a lot at a point (place metres): the lot's new standing cells, what it destroyed and what it cut off (cells and rooms). */
 export function hitLot(place: SkeletonPlace, index: number, standing: Uint8Array, point: { x: number; y: number; z: number }, degree: number, rng: () => number) {
   const lot = place.lots[index], local = { x: point.x - lot.i0 * SKELETON_CELL, y: point.y + FLOOR_HEIGHT / 2, z: point.z - lot.j0 * SKELETON_CELL, degree };

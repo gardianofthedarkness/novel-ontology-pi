@@ -29,6 +29,10 @@ The **micro** view is a place's interior: its grid, its buildings and the people
   - Persistent state lives on the place: damage, positions and the lots already given out. Grids hold none of it.
 - **Macro is the same 3D world.**
   - Every place sits on its circle of the place tree (nested circles on the ground), with its buildings on top.
+  - **The layout is automatic, the production one** (`placeTreeCircles` in `timePlace.ts`; the places map fits the same layout to its canvas). Nothing is placed or sized by hand:
+    - each place reserves a disc as wide as its own content: its grid on the stage, its own scenes on the map;
+    - a region that is itself a place keeps that disc above its children, never on top of them;
+    - siblings pack together (places linked by moves sit closer), and a final settling pass guarantees no two circles at a level overlap.
   - When people move between places, the camera zooms out, shifts across and settles on the next place, as a hand on the mouse would. The reader can orbit at any moment.
   - A trace arcs between the circles for every move between places.
   - For a destination in another place, Jev boxes it on a top-down capture of this macro view.
@@ -67,9 +71,71 @@ Buildings are added as the story detects them, not fixed up front.
    - The match is against each model's names and description in Chinese and English: towers, skyscrapers, offices, a hospital, a station, a church, a market, a keep, a fountain, a windmill.
    - The nearest model above a threshold is used, drawn at random among that kind's variants.
 3. **One ranking for everything.** The four pure shapes (an oval, a sphere, a box, a diamond) are ranked together with the library's models, and the best match wins, shape or building.
-4. **Jev points where it goes** with a box on a top-down capture of the current view. The capture scales itself to the buildings around the camera's focus, so the box maps to metres.
-5. **Placement rules:**
-   - **A shape floats.** Placed over existing buildings, it rests at the highest point of everything under its box.
+4. **Jev picks the model first** (user decision, 2026-10-28: a prior layer instead of the embedding's top match, which stays only as the fallback).
+   - One choice call per thing, on a labelled sheet of every model the stage can draw: the Kenney buildings, plus the basic shapes box, oval, triangle, diamond and donut. A sphere is a kind of oval.
+   - The model is then fitted as large as fits inside the cast its two boxes give:
+     - a model keeps its proportions, scaling evenly and turning 0° or 90°, whichever fits larger;
+     - a basic shape stretches to fill the cast;
+     - a donut stands on edge in a cast taller than it is wide.
+   - **First try** (9 things): plausible picks for 6. The helicopter became an oval, the small room and the long pipe boxes, and the station, a building and the lab wide blocks. The scaffolding and the torii became the market, and the rails a wide block. Confidence was low (0.15–0.54).
+5. **Jev boxes where it goes, in a two-call mini loop** (user decision, 2026-10-28; it replaces the top-down pointing and the floating rule, which the user dropped as over-engineering). Each call is a box question (Jev 1.14: one bounding box as fractions of the picture) plus a yes/no on whether the spot is in the picture at all:
+   1. **The reader's view** of the place at that moment.
+   2. **A side view** of the same moment: turned 90° (left or right, drawn from the placement), lowered to a near-level look, and aimed at the first box, which is drawn in as a beam (everything that box could mean in 3D).
+   - **The 3D box:** the points of the place both pictures show inside their boxes give the centre. The size is each box measured in metres at that depth: view 1's width across; view 2's width along view 1's line of sight, and its height. A thing that starts at the ground stands on it, and one higher up stays where the boxes put it.
+   - **When view 2's box covers most of the beam,** depth along it is marked uncertain and taken as about the width.
+   - **Built as a demo:** the player's capture mode (`?capture`, `window.__stage`) and `playground/two-view-things.mjs` (headless Chrome, `<book>/stage/thing-boxes.json`).
+   - **First try** (book 3's Kuroko strand, 10 placements, 20 calls, 30 s): position and height are right for about half.
+     - The scaffolding, the helicopter in the air, the long pipe, the lab, and the small room up in a building are plausible.
+     - Things with nothing to fix them along the beam (in the air, or generic "building" mentions) get a whole-beam second box.
+     - One box landed on a person's name label.
+   - **Rotation sweep and a fourth call** (user question, 2026-10-29): the side view at six turns in one call (±45°, ±90°, ±135°, one box question per picture), keeping the turn Jev is surest of; when that is still under 0.5 or spans the beam, a top view aimed at the beam (a fourth call) joins the solve.
+     - **Measured on the same 10 scenes:** mean box confidence by turn was −45° 0.21, +45° 0.17, −90° 0.17, −135° 0.16, +90° 0.14, +135° 0.11. No turn stands out.
+     - ±90° spanned the beam least (5 and 7 of 10), as the geometry predicts. Every placement stayed under 0.5, so all 10 asked the top view (confidence 0.09–0.57).
+     - The top view removed the 40–70 m casts: footprints are now 8–34 m. But it brought the helicopter to the ground (from above, nothing shows height), and the torii's three boxes did not meet.
+     - Carving from all eight stills at once, weighted by confidence, was worse (30–57 m casts) and is kept only as a measurement.
+     - Cost: 2 calls per placement plus the model pick, about 6 s per placement.
+   - **Masking front buildings** (user request, 2026-10-29): each still fades the buildings standing between the camera and what it looks at (the beam, or the people present) to a faint outline, skeleton left out; a building the target is inside stays.
+     - **Same 10 scenes, same model picks, all views asked again:** mean side confidence went from 0.16 to 0.18, and the reader's view from 0.25 to 0.26. The top view went from 0.26 to 0.22.
+     - Side boxes spanning the beam went from 43 to 48 of 60, and solved placements from 9 to 8.
+     - The helicopter stayed in the air this time (20.8–34.8 m), but the long pipe grew to 37 × 35 × 34 m. No systematic gain: the differences are within how much Jev's boxes vary from run to run.
+     - **Reading:** a box question locates a thing that is in the picture. Here the thing is not drawn yet, so Jev's confidence stays near 0.2 whatever the view.
+     - Likely better: draw the picked model at a few candidate spots (along the beam, beside the people), labelled, and ask a choice, where Jev reports its confidence.
+   - **Candidates, then zoom, then boxes** (user design, 2026-10-29; now the default, `--method candidates`):
+     1. **Spots from the scene, with no model call.** Anchors: the people (those moving in the event first); the buildings the event names (their roof and front); the open ground, sampled across the place; and things already there.
+        - Each spot is the thing's footprint at its detected size, centred on open ground and mostly clear of buildings, standing on the ground (or on the floor or roof where its anchor is; 10 m up for a thing in the air).
+        - A farthest-point spread keeps 8 spots, the first beside the first person.
+     2. **Choice (call 1):** the reader's view with each spot as a lettered white ghost of the picked model, and "none" as an option.
+     3. **Zoom (call 2):** four close-ups of the chosen spot in one call, a box on each: from the reader's side and from a low look turned 90°, each with only a ring at the spot and with the ghost drawn. The boxes are solved around the spot only, so a beam cannot make depth ambiguous.
+     - **Same 10 scenes:**
+
+       | Option | Confidence | Placed | Largest side ÷ detected size |
+       |---|---|---|---|
+       | Box loop, masked | about 0.18 | 8/10 | often 2–3 |
+       | Candidates, choice only | 0.32 (2 "none") | 10/10 | 1 |
+       | + zoomed boxes, ring | 0.44 / 0.40 | 10/10 | 0.65 |
+       | + zoomed boxes, ghost | **0.55 / 0.47** | 10/10 | 0.6 |
+
+     - The ghost close-ups are the default: Jev is surest of them, and its boxes do not just copy the ghost (they come out at about 0.6 of its size).
+     - Example: the small interrogation-like room went beside 白井黑子 on the floor she stands on (choice 0.68), as an 8 × 7 × 2.5 m room 15 m up.
+   - **Sky** (user request, 2026-10-29): the choice always offers "sky".
+     - **When sky counts:** only when Jev gives it at least twice the probability of "none". Otherwise it is just a way of saying no ground spot fits: two generic "building" mentions picked sky at 0.24–0.28 against "none" at 0.20–0.21.
+     - **Then two turns from two directions of the sky,** high up and looking down so the ground shows, with height poles (10, 20, 40, 60 m) beside the people as a ruler:
+       1. **Find:** the air above the first person, wide. Box confidence was 0.03–0.06: empty sky gives Jev little to box.
+       2. **Lock:** zoomed on what turn 1 found, with the ghost drawn there. Box confidence 0.62–0.74.
+     - **First try:** the transport helicopter picked sky (0.27 against "none" ≤ 0.09) and was locked at 21 × 20 × 20 m, 39–59 m up. A building's weak sky pick (0.12) went back to its ground spot.
+     - **Turn 1 is now a choice on sky ghosts** (user decision, 2026-10-29), the pattern that works on the ground.
+       - The ghosts sit 15, 30 and 50 m up (at least 8 m above a roof) over the people (those moving first), over the place's middle and over the buildings the event names, spread to 8.
+       - One choice on both sky pictures, the same letters in each.
+       - Then the lock turn boxes the chosen ghost from both directions.
+     - **The helicopter again:** Jev picked "over 白井黑子, 30 m up" at probability 0.35, with "none" at 0.06; boxing empty sky had given 0.03–0.06. The lock turn was 0.57 / 0.59, locking it at 22 × 17 × 19 m, 24–43 m up.
+     - Only one thing in this strand is in the air, so this is one example, not a measurement.
+     - **Height by choice, 2D position from above** (user decision, 2026-10-29): the sky ghost choice now only locks the height.
+       - A top-down 2D map follows: orthographic, north up, centred on the chosen ghost and drawn at its height. One box on it reads directly as metres on the ground, the horizontal position and footprint. This replaces the two-direction lock turn.
+       - The helicopter: picked "over 白井黑子, 30 m up" (0.30). The map box (0.61) locked a 21 × 12 m footprint, 30–41 m up.
+     - **Universe:** the height choice also offers "universe", meaning not in this place's sky at all but out in space (a satellite, a ship in orbit). With the same "at least twice none" rule, it goes far above the place (150 m in the demo).
+       - It is meant as a place of its own in the place system once that has one.
+       - The helicopter gave it 0.00; nothing in this strand has tried it yet.
+6. **Placement rules:**
    - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
    - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.
      - It is hidden while other volumes are being processed.
@@ -84,6 +150,24 @@ Buildings are added as the story detects them, not fixed up front.
   - When one matches a building type in the library, existing buildings shrink to make room.
 - **The library grows from its source.** Novels bring vehicles, aircraft, ships and machines. The library search should include more of the source the models came from (the Kenney CC0 catalog: vehicles, aircraft, space and so on), baked into the same int16 format.
   - The bake tool named in commit `9d988e0` (`tools/architecture-models.mjs`) was never committed; it needs writing again and committing.
+
+**Objects are part of the world** (built for the demo, 2026-10-28):
+- **One thing per named object.** Mentions of one named thing (A.A.A. and Anti-Art Attachment; 巨型姬蜂, 姬蜂型FIVE_Over and FIVE_Over Modelcase) become one thing.
+  - For now the stand-in links names that share a distinctive token: a Latin word, an acronym, or a rare pair of characters.
+  - The current EM faculty should decide these identities, as it does for characters.
+- **Things move with the story.** A thing glides to wherever a later event puts it, across places too.
+- **Big things (10 m or more) carry structure inside, automatically.** The 天桥, a train or a warehouse gets a small skeleton of corridors and rooms that hits break away.
+- **Every thing is part of the walk.**
+  - Its top is walked like a roof: landed on by sky arcs, crossed, left by falls.
+  - A small thing (8 m or less) on the ground is walked around.
+  - Bigger ones are raised structures.
+  - A thing stands beside the actor whose event places it, so no one is walled in.
+- **Damage:** events of strength 0.8 or more damage buildings and the things near them.
+- **No other model datasets for now:** Kenney's current kits only.
+
+**Persistence:** placed objects and each place's damage belong to the place on the strand, not to the scene in view. Once the story puts something there or damages it, it stays, through every camera glide between places, until the timeline is rewound before that moment.
+
+**Library source for now:** Kenney's Car Kit and Space Kit, just for the demo. A searchable open-source model library would be better later.
 
 **Variety:** every lot wears an artistic model (the Kenney CC0 kits baked in `architectureModels.json`), drawn per lot from its kind's variants. The walkable skeleton glows inside.
 
@@ -159,8 +243,7 @@ As of 2026-10-28, uncommitted on `claude/place-read-mode`.
 | Places of skeleton buildings, movement graph, hits | `apps/playground/src/data/skeletonPlace.ts` | built, tested |
 | Floor plans with rooms and doors (stage 1) | `apps/playground/src/data/buildingPlan.ts` | built; superseded by skeletons for the stage |
 | Ground-floor districts | `apps/playground/src/data/placeGroup.ts` | built; superseded by `skeletonPlace` |
-| Strand demo, skeleton version | private claude.ai page, `playground/strand-demo.html` | shown privately |
-| Strand demo, ground-floor version | github.io `stage-strand/` | public, older |
+| Strand demo: two strands to pick from (book 2's Christmas Eve, book 3's Kuroko; `#kuroko` opens the second) | github.io `stage-strand/`, `playground/strand-demo.html`, exported with `--set` | public |
 | Skeleton lab | `playground/skeleton-lab.html` | local |
 
 **Built for the animation:**
@@ -173,8 +256,10 @@ As of 2026-10-28, uncommitted on `claude/place-read-mode`.
 - The damage region is a box around the event's first actor, standing in for Jev's box. Its strength already comes from the embedding direction, applied from 0.7 up.
 - Direct moves come from words in the event summary that show a power being used to move.
 - Traces and migrations are exported with the demo, not yet stored in the database or sent to the timeline page.
-- Buildings come from a fixed set per place, not detected gradually.
-- There are no sky arcs, no captures and no macro loop yet.
+- Detected buildings take a place's free lots; shrinking existing buildings and temporary districts are not built.
+- There are no captures yet: the macro view is shown, not captured for Jev.
+
+The full list of stand-ins, and a checklist for running the simulation as its own section of the product (its own CLI, skill, page and progress), is in [stage-simulation-section.md](stage-simulation-section.md).
 
 ## Build order (proposed)
 

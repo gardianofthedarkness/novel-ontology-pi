@@ -15,11 +15,14 @@ import { cosineSimilarity } from "../../ground/connectors/embeddings.js";
  * Coins, phones, weapons in hand, cards, clothes and food never count.
  *
  * Each accepted thing is matched against one ranked library: the building
- * models the stage can draw and four pure shapes (an oval, a sphere, a box,
- * a diamond). The best match wins, building or shape; shapes may float on
- * top of what is under them when placed. With an embedder configured
- * (EMBEDDING_*, the same one causality uses) the ranking is by vector
- * similarity; without one, by the words the library entry is known by.
+ * models the stage can draw and the basic shapes (a box, an oval, a
+ * triangle, a diamond, a donut; a sphere is an oval in a cube-shaped cast).
+ * The best match wins, building or shape.
+ * It is only the fallback: where Jev is asked, it picks the model from a
+ * picture of them all, and its two boxes give the cast the model is fitted
+ * into. With an embedder configured (EMBEDDING_*, the same one causality
+ * uses) the ranking is by vector similarity; without one, by the words the
+ * library entry is known by.
  */
 export interface ObjectScene { id: string; placeLabel: string; events: { id: string; text: string }[] }
 export interface DetectedObject { name: string; kind: "building" | "object"; size: number; airborne: boolean; event: string | null; match: { id: string; kind: "building" | "shape"; score: number; by: "embedding" | "words" } }
@@ -39,10 +42,12 @@ export const OBJECT_LIBRARY: { id: string; kind: "building" | "shape"; words: st
   { id: "castle", kind: "building", words: ["城堡", "堡垒", "要塞", "castle", "fortress", "keep"] },
   { id: "fountain", kind: "building", words: ["喷泉", "水池", "fountain"] },
   { id: "windmill", kind: "building", words: ["风车", "windmill"] },
-  { id: "sphere", kind: "shape", words: ["球", "球体", "圆球", "金属球", "球形", "sphere", "ball", "orb", "globe"] },
-  { id: "oval", kind: "shape", words: ["椭圆", "蛋", "卵", "飞艇", "飞船", "胶囊", "oval", "egg", "ellipsoid", "airship", "capsule"] },
+  // A sphere is a kind of oval: an oval stretched into a cube-shaped cast.
+  { id: "oval", kind: "shape", words: ["椭圆", "蛋", "卵", "飞艇", "飞船", "胶囊", "球", "球体", "圆球", "金属球", "球形", "oval", "egg", "ellipsoid", "airship", "capsule", "sphere", "ball", "orb", "globe"] },
   { id: "box", kind: "shape", words: ["箱", "方块", "长方体", "集装箱", "车", "卡车", "机器", "装置", "柱", "box", "cube", "container", "truck", "machine", "pillar"] },
   { id: "diamond", kind: "shape", words: ["钻石", "菱形", "晶体", "结晶", "水晶", "diamond", "crystal", "gem"] },
+  { id: "triangle", kind: "shape", words: ["三角", "金字塔", "帐篷", "斜坡", "坡道", "楔", "pyramid", "tent", "ramp", "wedge", "triangle"] },
+  { id: "donut", kind: "shape", words: ["环", "圆环", "光环", "甜甜圈", "轮", "轮胎", "ring", "donut", "torus", "halo", "wheel"] },
 ];
 const MIN_SIZE = 4;
 /** Names that are a part of a building, not a thing of their own. */
@@ -88,6 +93,19 @@ export async function matchObject(name: string, embedder?: Embedder | null, vect
   // Nothing in the library's words: a box, the plainest shape.
   const best = ranked[0].score > 0 ? ranked[0].entry : OBJECT_LIBRARY.find((entry) => entry.id === "box")!;
   return { id: best.id, kind: best.kind, score: ranked[0].score > 0 ? Math.min(1, ranked[0].score / 4) : 0, by: "words" };
+}
+
+/** "那栋楼", "另一座建筑": a building the text does not name. */
+const ANONYMOUS = /^(另一栋|另一座|那栋|这栋|那座|这座)?(大)?(楼|大楼|建筑|房子|building)$/i;
+/**
+ * Whether a detected building is a new one standing at this place: not an
+ * unnamed one (those already stand), not the place itself (a site's own
+ * building is already there), not another place of the tree (it stands
+ * there, not here).
+ */
+export function newBuildingHere(name: string, placeLabel: string, otherPlaceLabels: string[]): boolean {
+  if (ANONYMOUS.test(name.trim()) || name === placeLabel || placeLabel.includes(name)) return false;
+  return !otherPlaceLabels.some((label) => label && label !== placeLabel && name.includes(label));
 }
 
 /** Every scene, a few per call, reusing answers whose inputs have not changed, within a call budget. */

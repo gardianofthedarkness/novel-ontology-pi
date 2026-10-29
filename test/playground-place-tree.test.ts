@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { placePathLabel, placeTreeLayout, type StoryPlace, type TimePlaceProjection } from "../apps/playground/src/data/timePlace.js";
+import { placePathLabel, placeTreeCircles, placeTreeLayout, type StoryPlace, type TimePlaceProjection, type TreePlace } from "../apps/playground/src/data/timePlace.js";
 import { atlasArrangement, atlasNodeId, pinNodeId } from "../apps/playground/src/data/orbitalTimePlace.js";
 
 // Invented: a city with two districts; a hospital and a station square in one of them.
@@ -31,6 +31,31 @@ test("the place tree lays out as nested circles: children inside their region, s
   // Without parents every place is a separate top-level circle.
   const flat = placeTreeLayout(places.map((entry) => ({ ...entry, parentId: null, path: [entry.id] })), [], 600);
   assert.ok([...flat.values()].every((point) => !point.region));
+});
+
+test("no circles overlap, whatever the tree: siblings apart, children inside, a region's own disc clear of its children", () => {
+  // Invented trees, deterministic: up to 14 places, parents drawn from earlier ones, some with content of their own.
+  let seed = 7;
+  const random = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let trial = 0; trial < 40; trial++) {
+    const count = 2 + Math.floor(random() * 13);
+    const tree: TreePlace[] = Array.from({ length: count }, (_, index) => ({ id: `p${index}`, parentId: index && random() < 0.7 ? `p${Math.floor(random() * index)}` : null, sceneIds: random() < 0.6 ? ["s"] : [] }));
+    const own = new Map(tree.map((entry) => [entry.id, entry.sceneIds.length ? 20 + random() * 50 : 0]));
+    const links = tree.slice(1).map((entry, index) => ({ from: entry.id, to: `p${Math.floor(random() * (index + 1))}`, count: 1 + Math.floor(random() * 3) }));
+    const circles = placeTreeCircles(tree, links, { ownRadius: (entry) => own.get(entry.id)! });
+    const at = (id: string) => circles.get(id)!;
+    const apart = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+    for (const entry of tree) {
+      const point = at(entry.id), kids = tree.filter((kid) => kid.parentId === entry.id);
+      if (entry.parentId) assert.ok(apart(point, at(entry.parentId)) + point.r <= at(entry.parentId).r + 1e-6, `trial ${trial}: ${entry.id} inside its region`);
+      for (const other of tree) if (other.id < entry.id && other.parentId === entry.parentId) assert.ok(apart(point, at(other.id)) >= point.r + at(other.id).r, `trial ${trial}: ${entry.id} and ${other.id} apart`);
+      if (kids.length && own.get(entry.id)) {
+        const disc = { x: point.spotX, y: point.spotY, r: own.get(entry.id)! };
+        assert.ok(apart(disc, point) + disc.r <= point.r + 1e-6, `trial ${trial}: ${entry.id}'s own disc inside it`);
+        for (const kid of kids) assert.ok(apart(disc, at(kid.id)) >= disc.r + at(kid.id).r, `trial ${trial}: ${entry.id}'s own disc clear of ${kid.id}`);
+      }
+    }
+  }
 });
 
 test("paths read root first, and orbital Places nests the floor and frames a region's columns", () => {
