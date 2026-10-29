@@ -1,7 +1,7 @@
 /* Places · World (components/PlacesWorld.tsx): the canvas of places with its manifolds' fills, and a panel of the place tree. */
 .places-world { position: relative; width: 100%; height: 100%; min-height: 0; background: #060c12; overflow: hidden; }
 .places-world .pw-stage { position: absolute !important; inset: 0; touch-action: none; }
-.pw-panel { position: absolute; right: 12px; top: 64px; bottom: 12px; width: min(340px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow: auto;
+.pw-panel { position: absolute; left: 12px; top: 64px; bottom: 64px; width: min(340px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow: auto;
   background: rgba(10, 20, 30, 0.88); border: 1px solid #1d3242; border-radius: 12px; color: #d8e6ef; font-size: 13px; backdrop-filter: blur(6px); }
 .pw-panel.is-folded { bottom: auto; width: auto; }
 .pw-panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -17,8 +17,9 @@
 .pw-parts { margin: 3px 0 2px 2px !important; font-size: 12px; color: #9fb4c2; }
 .pw-parts li { padding: 1px 0; }
 .pw-building { color: #ffd36e !important; }
+.pw-building.is-on { color: #ffffff !important; text-decoration: underline; }
 .pw-building i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ffd36e; margin-right: 6px; }
 .pw-building span { margin-left: 6px; }
 @media (max-width: 700px) {
-  .pw-panel { top: auto; left: 12px; right: 12px; width: auto; max-height: 46%; }
+  .pw-panel { top: auto; left: 12px; right: 64px; bottom: 104px; width: auto; max-height: 40%; }
 }

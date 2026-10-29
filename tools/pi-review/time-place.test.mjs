@@ -134,3 +134,27 @@ test('a world run is read for its line and things only: its places name world lo
   assert.deepEqual(simulation.hits, []);
   assert.equal(simulation.things[0].name, 'Bus');
 });
+
+test('the places registry reaches the Places page trimmed, and its fills only by an exact version', async (context) => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { placeFill, readPlaces } = await import('./stage-reports.mjs');
+  const workspace = await mkdtemp(join(tmpdir(), 'places-'));
+  context.after(() => rm(workspace, { recursive: true, force: true }));
+  assert.equal(await readPlaces(workspace), null);
+  const folder = join(workspace, 'stage', 'simulation', 'places');
+  await mkdir(join(folder, 'fills'), { recursive: true });
+  await writeFile(join(folder, 'index.json'), JSON.stringify({ builtAt: 'now', runs: [{ strand: 'a', run: 'r1', exportedAt: 't' }],
+    places: [{ id: 'city', label: 'City', scale: 'city', parent: null, x: 1, z: 2, r: 400, depth: 0, open: true, strand: 'a', run: 'r1' }],
+    grounds: [{ place: 'city', version: 'aaaaaaaaaaaa', roads: 3 }, { place: 'city', version: '../../escape', roads: 1 }],
+    manifolds: [{ id: 'm1', place: 'city', patch: 'p0', types: ['park'], era: 'modern', centre: [0, 0], radius: 60, outline: [[60, 0], [0, 'x'], [0, 60]], version: 'bbbbbbbbbbbb', buildings: 9, run: 'r1' }],
+    buildings: [{ id: 'loc_1', name: 'Tower', kind: 'named', place: 'city', x: 3, z: 4, w: 10, d: 12, angle: 0, floors: 9, scene: 's1', run: 'r1' }] }));
+  await writeFile(join(folder, 'fills', 'bbbbbbbbbbbb.json'), '{"version":"bbbbbbbbbbbb","buildings":[]}');
+  const map = await readPlaces(workspace);
+  assert.deepEqual(map.grounds, [{ place: 'city', version: 'aaaaaaaaaaaa', roads: 3 }], 'a ground with a malformed version is left out');
+  assert.deepEqual(map.manifolds[0].outline, [[60, 0], [0, 60]], 'a malformed outline point is left out');
+  assert.deepEqual(map.buildings[0], { id: 'loc_1', name: 'Tower', kind: 'named', place: 'city', x: 3, z: 4, w: 10, d: 12, angle: 0, floors: 9, scene: 's1', run: 'r1' });
+  assert.equal(await placeFill(workspace, 'bbbbbbbbbbbb'), '{"version":"bbbbbbbbbbbb","buildings":[]}');
+  for (const version of ['../index', 'BBBBBBBBBBBB', 'bbbbbbbbbbb', 'bbbbbbbbbbbb.json', null]) assert.equal(await placeFill(workspace, version), null, String(version));
+});

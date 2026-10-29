@@ -63,8 +63,10 @@ function World({ map, fills, selected }: { map: WorldMap; fills: Map<string, Wor
       if (!place.open) continue;
       const lit = place.id === selected;
       ring(place.x, place.z, place.r, lit ? "#ffffff" : "#5d7f96", lit ? 0.9 : 0.35 + 0.15 / (1 + place.depth));
-      const tag = textSprite(place.label, lit ? "#ffffff" : "#cfe3f0", Math.max(6, place.r * 0.06)); tag.position.set(place.x, Math.max(10, place.r * 0.08), place.z - place.r * 0.92); add(tag);
+      const tag = textSprite(place.label, lit ? "#ffffff" : "#cfe3f0", Math.min(24, Math.max(6, place.r * 0.06))); tag.position.set(place.x, Math.min(30, Math.max(10, place.r * 0.08)), place.z - place.r * 0.92); add(tag);
     }
+    // A nominated building stands on a fill building's lot: that fill building is not drawn under it.
+    const borrowed = new Set(map.buildings.map((building) => `${building.place}|${building.x}|${building.z}`));
     // Each manifold: its outline and a faint ground in its type's colour, then its fill's buildings.
     for (const manifold of map.manifolds) {
       const place = at.get(manifold.place); if (!place) continue;
@@ -75,7 +77,7 @@ function World({ map, fills, selected }: { map: WorldMap; fills: Map<string, Wor
         const shape = new Shape(manifold.outline.map(([x, z]) => new Vector2(place.x + x, -(place.z + z))));
         const ground = new Mesh(new ShapeGeometry(shape), new MeshBasicMaterial({ color, transparent: true, opacity: 0.1, side: DoubleSide, depthWrite: false })); ground.rotation.x = -Math.PI / 2; add(ground);
       }
-      const rows = fill?.buildings ?? [];
+      const rows = (fill?.buildings ?? []).filter(([x, z]) => !borrowed.has(`${manifold.place}|${x}|${z}`));
       if (!rows.length) continue;
       const mesh = new InstancedMesh(unit, new MeshLambertMaterial({ color: new Color(color).lerp(new Color("#0b1620"), 0.35) }), rows.length);
       rows.forEach(([x, z, w, d, angle, floors], n) => {
@@ -124,17 +126,26 @@ function Controls({ focus }: { focus: { x: number; z: number; r: number } }) {
   return null;
 }
 
-export function PlacesWorld({ map, bookQuery, bookBar }: Props) {
+export function PlacesWorld({ map: given, bookQuery, bookBar }: Props) {
+  // The live data arrives as a new object on every update: keep one map while its content stays the same, so the scene is
+  // not rebuilt and the camera not sent back on every update.
+  const key = JSON.stringify([given.builtAt, given.places.map((place) => [place.id, place.x, place.z, place.r]), given.manifolds.map((manifold) => manifold.version), given.grounds.map((ground) => ground.version), given.buildings.map((building) => [building.id, building.x, building.z])]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const map = useMemo(() => given, [key]);
   const insets = useChromeInsets(), fills = useFills(map, bookQuery);
   const [selected, setSelected] = useState<string | null>(null), [panelOpen, setPanelOpen] = useState(true);
   const byId = useMemo(() => new Map(map.places.map((place) => [place.id, place])), [map]);
-  // The whole canvas, or the chosen place's circle (a building: its spot, close).
+  // What is filled, framed: every manifold (each its patch's circle, else its place's), or the chosen place's, or a chosen
+  // building's neighbourhood. A place's circle is mostly open ground round its fills, so it frames only without any.
   const focus = useMemo(() => {
-    const building = map.buildings.find((entry) => entry.id === selected), place = byId.get(building?.place ?? selected ?? "");
-    if (building && place) return { x: place.x + building.x, z: place.z + building.z, r: 30 };
-    if (place) return { x: place.x, z: place.z, r: place.r };
-    const tops = map.places.filter((entry) => !entry.parent || !byId.has(entry.parent));
-    const x0 = Math.min(...tops.map((entry) => entry.x - entry.r)), x1 = Math.max(...tops.map((entry) => entry.x + entry.r)), z0 = Math.min(...tops.map((entry) => entry.z - entry.r)), z1 = Math.max(...tops.map((entry) => entry.z + entry.r));
+    const building = map.buildings.find((entry) => entry.id === selected), chosen = byId.get(building?.place ?? selected ?? "");
+    if (building && chosen) return { x: chosen.x + building.x, z: chosen.z + building.z, r: 60 };
+    const circles = map.manifolds.filter((manifold) => !chosen || manifold.place === chosen.id).flatMap((manifold) => {
+      const place = byId.get(manifold.place); if (!place) return [];
+      return [manifold.centre && manifold.radius ? { x: place.x + manifold.centre[0], z: place.z + manifold.centre[1], r: manifold.radius } : { x: place.x, z: place.z, r: Math.min(place.r, 200) }];
+    });
+    const frame = circles.length ? circles : chosen ? [chosen] : map.places.filter((entry) => !entry.parent || !byId.has(entry.parent));
+    const x0 = Math.min(...frame.map((entry) => entry.x - entry.r)), x1 = Math.max(...frame.map((entry) => entry.x + entry.r)), z0 = Math.min(...frame.map((entry) => entry.z - entry.r)), z1 = Math.max(...frame.map((entry) => entry.z + entry.r));
     return Number.isFinite(x0) ? { x: (x0 + x1) / 2, z: (z0 + z1) / 2, r: Math.max(x1 - x0, z1 - z0) / 2 } : { x: 0, z: 0, r: 200 };
   }, [selected, map, byId]);
   const children = (parent: string | null) => map.places.filter((place) => (place.parent && byId.has(place.parent) ? place.parent : null) === parent && place.open);
