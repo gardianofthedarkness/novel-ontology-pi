@@ -249,11 +249,16 @@ export function inlineStrand(template, data, { name = 'One Strand', fragment = f
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { from: { type: 'string' }, to: { type: 'string' }, fork: { type: 'string' }, title: { type: 'string' }, name: { type: 'string' }, fragment: { type: 'boolean' }, vendor: { type: 'boolean' } } });
-  const [novelDir, out] = positionals;
-  if (!novelDir || !out || !values.from || !values.to) throw new Error('Usage: node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text]');
-  const started = Date.now(), data = await strandDemo(novelDir, values);
-  const page = inlineStrand(await readFile(`${repository}/playground/strand-demo.html`, 'utf8'), data, { name: values.name, fragment: values.fragment, vendor: values.vendor });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { from: { type: 'string' }, to: { type: 'string' }, fork: { type: 'string' }, title: { type: 'string' }, name: { type: 'string' }, fragment: { type: 'boolean' }, vendor: { type: 'boolean' }, set: { type: 'string' } } });
+  const usage = 'Usage: node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text] [--name text] [--fragment] [--vendor]\n       node playground/export-strand-demo.mjs --set <strands.json> <out.html> [--name text] [--fragment] [--vendor]   (strands.json: [{ id, label, name, novel, from, to, fork, title }], one page with a strand picker)';
+  const template = await readFile(`${repository}/playground/strand-demo.html`, 'utf8'), started = Date.now();
+  // One page per strand, or one page carrying a set of strands to pick from.
+  const entries = values.set ? JSON.parse(await readFile(values.set, 'utf8')) : [{ ...values, novel: positionals[0] }], out = values.set ? positionals[0] : positionals[1];
+  if (!out || entries.some(entry => !entry.novel || !entry.from || !entry.to) || (values.set && entries.some(entry => !/^[A-Za-z0-9_-]+$/.test(entry.id ?? '') || !entry.label))) throw new Error(usage);
+  const strands = [];
+  for (const entry of entries) strands.push({ id: entry.id, label: entry.label, name: entry.name, data: await strandDemo(entry.novel.replace(/^~(?=\/)/, process.env.HOME), entry) });
+  const page = inlineStrand(template, values.set ? { strands } : strands[0].data, { name: values.name, fragment: values.fragment, vendor: values.vendor });
   await writeFile(out, page, { mode: 0o644 });
-  console.log(JSON.stringify({ out, bytes: Buffer.byteLength(page), scenes: data.scenes.length, events: data.scenes.reduce((n, s) => n + s.events.length, 0), ...data.notes, T: data.T, places: Object.values(data.places).map(p => ({ label: p.label, kind: p.kind, lots: p.lots.length, floors: p.lots.map(l => l.floors).join('/'), clutter: p.clutter.length, draws: p.clutterDraws })), seconds: (Date.now() - started) / 1000 }));
+  const summary = data => ({ scenes: data.scenes.length, events: data.scenes.reduce((n, s) => n + s.events.length, 0), ...data.notes, T: data.T, places: Object.values(data.places).map(p => ({ label: p.label, kind: p.kind, lots: p.lots.length, floors: p.lots.map(l => l.floors).join('/'), clutter: p.clutter.length, draws: p.clutterDraws })) });
+  console.log(JSON.stringify({ out, bytes: Buffer.byteLength(page), ...(values.set ? { strands: strands.map(strand => ({ id: strand.id, ...summary(strand.data) })) } : summary(strands[0].data)), seconds: (Date.now() - started) / 1000 }));
 }

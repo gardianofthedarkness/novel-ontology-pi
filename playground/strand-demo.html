@@ -19,6 +19,10 @@
   .crumb { color: var(--dim); font-size: 13px; min-height: 20px; }
   .lead { color: var(--dim); font-size: 13px; margin: 2px 0 0; max-width: 72ch; }
   .notice { color: var(--red); font-size: 13px; margin: 6px 0 0; }
+  .pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+  .pick[hidden] { display: none; }
+  .pick a { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); font-size: 12px; text-decoration: none; }
+  .pick a[aria-current="true"] { color: var(--accent); border-color: var(--accent); }
   .layout { display: grid; gap: 12px; margin-top: 8px; }
   @media (min-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr) 320px; } }
   .stage { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #071019; aspect-ratio: 1 / 1; touch-action: none; }
@@ -51,6 +55,7 @@
 <body>
 <div class="wrap">
   <div class="eyebrow">ONE STRAND · CONTINUOUS · HOLO STAGE</div>
+  <nav class="pick" id="pick" aria-label="Strands" hidden></nav>
   <h1 id="title">Loading…</h1>
   <p class="lead">One storyline of the novel played as a live simulation. Buildings are generated from the place tree, every move is sampled from a path integral, people keep their positions from scene to scene, and fights damage the buildings. Drag to look around.</p>
   <div class="crumb" id="crumb"></div>
@@ -79,8 +84,16 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-const data = JSON.parse(document.getElementById("strand-data").textContent || "null");
 const $ = (id) => document.getElementById(id);
+// A page may carry several strands: the one named in the address (#id) plays, and picking another loads the page on it.
+const bundle = JSON.parse($("strand-data").textContent || "null"), strands = Array.isArray(bundle?.strands) ? bundle.strands : null;
+const chosen = strands && (strands.find((entry) => entry.id === location.hash.slice(1)) ?? strands[0]), data = strands ? chosen?.data ?? null : bundle;
+if (strands?.length > 1) {
+  for (const entry of strands) { const link = document.createElement("a"); link.href = `#${entry.id}`; link.textContent = entry.label; if (entry === chosen) link.setAttribute("aria-current", "true"); $("pick").append(link); }
+  $("pick").hidden = false;
+  window.addEventListener("hashchange", () => location.reload());
+}
+if (chosen?.name) document.title = chosen.name;
 if (!data) { $("title").textContent = "No strand in this page."; throw new Error("no data"); }
 $("title").textContent = data.title;
 const CELL = 2, FLOOR = 3, DEMO = 3, READ = 2.1, CARD = 2.0, MACRO = 3.8;

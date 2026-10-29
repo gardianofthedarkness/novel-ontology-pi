@@ -181,8 +181,7 @@ As of 2026-10-28, uncommitted on `claude/place-read-mode`.
 | Places of skeleton buildings, movement graph, hits | `apps/playground/src/data/skeletonPlace.ts` | built, tested |
 | Floor plans with rooms and doors (stage 1) | `apps/playground/src/data/buildingPlan.ts` | built; superseded by skeletons for the stage |
 | Ground-floor districts | `apps/playground/src/data/placeGroup.ts` | built; superseded by `skeletonPlace` |
-| Strand demo, skeleton version | private claude.ai page, `playground/strand-demo.html` | shown privately |
-| Strand demo, ground-floor version | github.io `stage-strand/` | public, older |
+| Strand demo: two strands to pick from (book 2's Christmas Eve, book 3's Kuroko; `#kuroko` opens the second) | github.io `stage-strand/`, `playground/strand-demo.html`, exported with `--set` | public |
 | Skeleton lab | `playground/skeleton-lab.html` | local |
 
 **Built for the animation:**
