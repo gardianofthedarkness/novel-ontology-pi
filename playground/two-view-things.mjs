@@ -252,7 +252,8 @@ export async function pickModels({ chrome, jev, stage, models, limit = Infinity,
 export async function placeThings({ chrome, jev, stage, models, placements, save, budget = Infinity, max = Infinity, again = null, use = 'ghost', out = null, log = console.error, after = null }) {
   let calls = 0, asked = 0, reused = 0, failed = 0, left = 0;
   for (const [n, { thing, spot, key, text, inputs }] of placementWork(stage).entries()) {
-    const earlier = placements[key]?.inputs === inputs ? placements[key] : null;
+    // On the streamed world, a box made on a fixed grid of an earlier engine no longer fits it.
+    const world = stage.places[spot.place]?.world, earlier = placements[key]?.inputs === inputs && (!world || placements[key].frame === 'world') ? placements[key] : null;
     if (earlier && !again) { reused++; continue; }
     if (calls >= budget || (!earlier && asked >= max)) { left++; continue; }
     if (earlier) reused++; else asked++;
@@ -260,7 +261,7 @@ export async function placeThings({ chrome, jev, stage, models, placements, save
     const kept = again === 'resolve' && earlier?.method === 'candidates' ? earlier : null;
     const placed = await byCandidates({ chrome, jev, base, key, thing, about: aboutPlacement(stage.places[spot.place], text, thing, models[thing.name]), kept, out, slug, use });
     calls += placed.calls; if (!placed.box) failed++;
-    placements[key] = { inputs, thing: thing.name, detected: thing.size, airborne: thing.airborne, place: spot.place, method: 'candidates', ...placed.record, box: placed.box };
+    placements[key] = { inputs, thing: thing.name, detected: thing.size, airborne: thing.airborne, place: spot.place, method: 'candidates', ...placed.record, box: placed.box, ...(world ? { frame: 'world' } : {}) };
     await save();
     // `after`: told of each placement as it is kept (the live view draws what came out).
     if (after) await after({ kind: 'thing', key, base, thing: thing.name, record: placed.record, box: placed.box });
@@ -297,7 +298,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       calls += done.calls; asked += done.asked; reused += done.reused; failed += done.failed;
     } else for (const [n, { thing, spot, key, text, inputs }] of placementWork(stage).entries()) {
       if (values.max && asked >= Number(values.max)) break;
-      const place = stage.places[spot.place], earlier = placements[key]?.inputs === inputs ? placements[key] : null;
+      const place = stage.places[spot.place], earlier = placements[key]?.inputs === inputs && (!place?.world || placements[key].frame === 'world') ? placements[key] : null;
       if (earlier && !values.resolve && !values.resweep) { reused++; continue; }
       if (earlier) reused++; else asked++;
       const base = { scene: spot.scene, event: spot.event, place: spot.place, hide: [thing.id] }, keep = earlier && (values.resolve || values.resweep);
@@ -334,7 +335,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const carved = await chrome.evaluate(`window.__stage.carve(${JSON.stringify({ place: spot.place, views: [view1, ...swept.map(entry => ({ camera: `${key}#${entry.turn}`, box: entry.box, confidence: entry.confidence })), ...(top ? [{ camera: `${key}#top`, box: top.box, confidence: top.confidence }] : [])] })})`);
       const round = value => Math.round(value * 10) / 10, box = solved && { x: solved.x.map(round), y: solved.y.map(round), z: solved.z.map(round) };
       if (!box) failed++;
-      placements[key] = { inputs, thing: thing.name, place: spot.place, views: [{ ...one, yaw: 0 }, { ...best, yaw: best.turn }], sweep: swept, top, box, carved: carved && { x: carved.x.map(round), y: carved.y.map(round), z: carved.z.map(round) }, hull: solved?.hull, cover: solved?.cover, uncertain: solved?.uncertain ?? null, points: solved?.points ?? 0 };
+      placements[key] = { inputs, thing: thing.name, place: spot.place, ...(place?.world ? { frame: 'world' } : {}), views: [{ ...one, yaw: 0 }, { ...best, yaw: best.turn }], sweep: swept, top, box, carved: carved && { x: carved.x.map(round), y: carved.y.map(round), z: carved.z.map(round) }, hull: solved?.hull, cover: solved?.cover, uncertain: solved?.uncertain ?? null, points: solved?.points ?? 0 };
       if (out) {
         const slug = `${String(n + 1).padStart(2, '0')}-${thing.id}`;
         await writeFile(join(out, `${slug}-1.png`), Buffer.from(first, 'base64'));

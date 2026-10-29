@@ -29,7 +29,7 @@
   .head .subject { font-size: 16px; font-weight: 600; }
   .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 1px 7px; border-radius: 5px; background: #12324a; color: var(--accent); }
   .kind.outcome { background: #143a24; color: var(--good); }
-  .kind.move { background: #3a2f12; color: var(--gold); }
+  .kind.move, .kind.step { background: #3a2f12; color: var(--gold); }
   svg.moves { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .pictures { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
   .pictures:has(> figure:only-child) { grid-template-columns: minmax(0, 720px); }
@@ -87,7 +87,7 @@
   </div>
   <section class="card" id="frame"><div class="empty">Nothing recorded yet. <code>novel sim pick</code> records every question Jev is asked here, with its pictures and answers.</div></section>
   <div class="log" id="log"></div>
-  <p class="note">Every question Jev is asked on pictures of the story lines (which model a thing is, where it stands, where a fight hits and how big), Jev's answers drawn on them (boxes as it drew them, choices with how sure it was), and what each answer made: the thing's solved box, the blast's sphere. Then each event's moves: every person's path from where they stand to where Jev said they go, with the path integral's other draws. Replays use the recorded timing, sped up.</p>
+  <p class="note">Every question Jev is asked on pictures of the story lines (which model a thing is, where it stands, where a fight hits and how big), Jev's answers drawn on them (boxes as it drew them, choices with how sure it was), and what each answer made: the thing's solved box, the blast's sphere. The line is decided event by event: on each event as it begins, Jev says where the people go (the gold pins are the spots), where the things it mentions stand and where its fight hits; then the event is played with those answers (each path with an arrow, the path integral's other draws faint) and the next one begins from there. Replays use the recorded timing, sped up.</p>
 </main>
 <script>
 (() => {
@@ -131,7 +131,7 @@
     const card = $('frame');
     if (!frame) { card.replaceChildren(make('div', { className: 'empty', textContent: 'Nothing recorded yet.' })); return; }
     const line = state?.lines?.[frame.line];
-    const head = make('div', { className: 'head' }, make('span', { className: `kind ${frame.kind === 'ask' || !frame.kind ? '' : frame.kind}`, textContent: frame.kind === 'outcome' ? 'outcome' : frame.kind === 'move' ? 'moves' : `question · ${frame.phase ?? ''}` }), make('span', { className: 'subject', textContent: frame.subject || '—' }),
+    const head = make('div', { className: 'head' }, make('span', { className: `kind ${frame.kind === 'ask' || !frame.kind ? '' : frame.kind}`, textContent: frame.kind === 'outcome' ? 'outcome' : frame.kind === 'move' ? 'moves' : frame.kind === 'step' ? 'event played' : `question · ${(frame.phase ?? '').split(' · ')[0]}` }), make('span', { className: 'subject', textContent: frame.subject || '—' }),
       make('span', { className: 'meta', textContent: `frame ${frame.f + 1}${frame.call ? ` · call ${frame.call}` : ''}${frame.ms ? ` · ${(frame.ms / 1000).toFixed(1)} s` : ''} · ${time(frame.at)}${line ? ` · ${line.title}` : ''}` }));
     const pictures = make('div', { className: 'pictures' });
     for (const picture of frame.pictures ?? []) {
@@ -145,13 +145,15 @@
       pictures.append(figure);
     }
     const body = [head, pictures];
-    if (frame.kind === 'outcome' || frame.kind === 'move') body.push(make('div', { className: 'outcome-text', textContent: frame.text }));
+    if (frame.kind === 'outcome' || frame.kind === 'move' || frame.kind === 'step') body.push(make('div', { className: 'outcome-text', textContent: frame.text }));
+    if (frame.kind === 'step') body.push(make('p', { className: 'meta', textContent: 'The event as the engine played it with Jev\'s answers: each path is one draw of the path integral to the spot Jev chose, the faint lines its other draws. The next event begins from here.' }));
     if (frame.kind === 'move') body.push(make('p', { className: 'meta', textContent: 'Where each person goes, how and which way are Jev\'s answers from the movement step (asked in words, before the simulation); the path is one draw of the path integral, the faint lines its other draws.' }));
     if (frame.answers) {
       const answers = make('div', { className: 'answers' });
       for (const answer of frame.answers) {
-        const shown = answer.box ? 'box' : String(answer.value);
-        const item = make('div', { className: 'answer' }, make('div', { className: 'key', textContent: answer.key }), make('span', { className: 'value', textContent: shown }), make('span', { className: 'conf', textContent: answer.confidence == null ? '' : `sure ${percent(answer.confidence)}` }));
+        const question = frame.questions?.find(entry => entry.key === answer.key), noul = question?.primitive === 'noul' && typeof answer.value === 'number';
+        const shown = answer.box ? 'box' : noul ? `${answer.value >= 0.5 ? 'yes' : 'no'} ${percent(answer.value)}` : String(answer.value);
+        const item = make('div', { className: 'answer' }, make('div', { className: 'key', textContent: question?.label ?? answer.key }), make('span', { className: 'value', textContent: shown }), make('span', { className: 'conf', textContent: answer.confidence == null ? '' : `sure ${percent(answer.confidence)}` }));
         if (answer.top?.length > 1) item.append(make('div', { className: 'bars' }, ...answer.top.flatMap(([option, p]) => [make('span', { textContent: option }), make('i', { style: `width:${Math.max(2, p * 100)}%` }), make('span', { textContent: percent(p) })])));
         answers.append(item);
       }
@@ -173,8 +175,8 @@
   }
 
   function log() {
-    $('log').replaceChildren(...frames.slice(-60).reverse().map(frame => make('div', { onclick: () => { show('replay'); seek(frame.f); } }, make('span', { textContent: `#${frame.f + 1}` }), make('span', { textContent: frame.kind === 'outcome' ? 'outcome' : frame.kind === 'move' ? 'moves' : frame.phase ?? '' }),
-      make('span', { textContent: `${frame.subject ?? ''} → ${frame.kind === 'outcome' || frame.kind === 'move' ? frame.text : (frame.answers ?? []).map(answer => `${answer.key} ${answer.box ? 'box' : answer.value}${answer.confidence == null ? '' : ` (${percent(answer.confidence)})`}`).join(', ')}` }))));
+    $('log').replaceChildren(...frames.slice(-60).reverse().map(frame => make('div', { onclick: () => { show('replay'); seek(frame.f); } }, make('span', { textContent: `#${frame.f + 1}` }), make('span', { textContent: frame.kind === 'outcome' ? 'outcome' : frame.kind === 'move' ? 'moves' : frame.kind === 'step' ? 'event' : (frame.phase ?? '').split(' · ')[0] }),
+      make('span', { textContent: `${frame.subject ?? ''} → ${frame.kind === 'outcome' || frame.kind === 'move' || frame.kind === 'step' ? frame.text : (frame.answers ?? []).map(answer => `${answer.key} ${answer.box ? 'box' : answer.value}${answer.confidence == null ? '' : ` (${percent(answer.confidence)})`}`).join(', ')}` }))));
   }
 
   async function poll() {

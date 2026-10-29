@@ -808,6 +808,16 @@ if (capture) {
     group.position.set(spot.x - entry.cx, 0, spot.z - entry.cz);
     return group;
   }
+  /** A spot people may go to (a node of the place's graph): a gold pin with its name, seen through everything. */
+  function spotPin(place, pin) {
+    const entry = built.get(place), p = at(data.places[place], pin.node), group = new THREE.Group(), color = new THREE.Color("#ffd36e");
+    const stem = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 3.4, 0)]), new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true }));
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true })); head.position.y = 3.4;
+    const tag = label(pin.label, "#ffd36e", 26); tag.position.y = 4.8; tag.material.depthTest = false;
+    group.add(stem, head, tag); group.traverse((part) => { part.renderOrder = 12; });
+    group.position.set(p.x - entry.cx, p.y + 0.2, p.z - entry.cz);
+    return group;
+  }
   /** A spot's marker: a ring and a cross at its base, seen through everything. */
   function spotMarker(place, spot) {
     const entry = built.get(place), group = new THREE.Group(), material = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, side: THREE.DoubleSide }), r = Math.max(1, Math.min(spot.w, spot.d) / 4);
@@ -851,10 +861,10 @@ if (capture) {
   }
   window.__stage = {
     things: (data.things ?? []).map(({ id, name, model, shape, size, height, airborne, placed }) => ({ id, name, model, shape, size, height, airborne, placed })),
-    places: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, kind: place.kind, lots: place.lots.length }])),
+    places: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, kind: place.kind, lots: place.lots.length, world: !!place.world }])),
     scenes: data.scenes.map((scene) => ({ id: scene.id, place: scene.place, events: scene.events.map((event) => event.text) })),
     /** One still: `place` at the start of an event, the reader's camera turned by `yaw` about it; `hide` things, `beams` of earlier boxes, `boxes` and a `solved` 3D box drawn for checking. */
-    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], play = null, at = null, caption = null }) {
+    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null }) {
       // `play`: that many seconds into the event, its hit's effects on (to look at a destruction as it plays).
       // `at`: any moment of the strand, everything playing (to record a scene).
       time = at ?? (eventStart.get(`${scene}|${event}`) ?? 0) + (play ?? 0.02); quiet = play === null && at === null; seeing = at !== null; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
@@ -875,6 +885,8 @@ if (capture) {
       if (marker) { const group = spotMarker(place, marker); extras.push(group); world.add(group); }
       // Impact spheres: red ghosts with their labels, a letter or a size.
       for (const sphere of spheres) { const group = impactGhost(place, sphere); extras.push(group); world.add(group); }
+      // The spots people may go to, pinned and named (the live simulation's movement questions).
+      for (const pin of pins) { const group = spotPin(place, pin); extras.push(group); world.add(group); }
       // Height poles for the sky: from the ground at each spot up to 60 m, marked at 10, 20, 40 and 60 m.
       for (const pole of poles) { const group = heightPole(place, pole); extras.push(group); world.add(group); }
       if (solved) { const entry = built.get(place), box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0x5dff8a })); box.position.set((solved.x[0] + solved.x[1]) / 2 - entry.cx, (solved.y[0] + solved.y[1]) / 2, (solved.z[0] + solved.z[1]) / 2 - entry.cz); box.scale.set(solved.x[1] - solved.x[0], solved.y[1] - solved.y[0], solved.z[1] - solved.z[0]); extras.push(box); world.add(box); }

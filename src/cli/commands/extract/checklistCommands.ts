@@ -234,9 +234,9 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   const simDone = picks.done && sim.current;
   stageItems.push({ id: "simulation", title: "Simulation of the story lines (Jev's placements and hits, then the engine, each run kept; view data)", dependsOn: [...items.map((item) => item.id), "scale", "architecture", "objects", "movement"],
     status: simDone ? "done" : "todo", counts: { lines: sim.lines, picked: picks.done, ...(picks.left === null ? {} : { questionsLeft: picks.left }), current: sim.current },
-    next: simDone ? [] : picks.done ? [`novel sim run ${dir} --auto 3`] : [`novel sim pick ${dir} --auto 3 --max-calls 40`],
+    next: simDone ? [] : picks.done ? [`novel sim run ${dir} --auto 3`] : [`novel sim pick ${dir} --auto 3 --max-calls 60`],
     note: simDone ? undefined : picks.done ? "No model calls: the engine reads the stage reports, Jev's answers included. Each run is kept; a line's first run is its accepted one, and only the user accepts a later one."
-      : `Jev answers on pictures of each story line (which model each thing is, where it stands, where each fight hits and how big), at most --max-calls calls a run; answers are kept, so run it again until nothing is left${picks.left ? ` (${picks.left} question(s) left)` : ""}. Then novel sim run.` });
+      : `The story lines simulated live, event by event: on a picture of each event as it begins, Jev decides where the people go, where the things it mentions stand and where its fight hits and how big. At most --max-calls calls a run (a line takes about one call per event, plus its things and fights); decisions are kept, so run it again until nothing is left${picks.left ? ` (about ${picks.left} left)` : ""}. Then novel sim run.` });
   settle(stageItems, items);
   return { ...result, stage: { items: stageItems, next: stageItems.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) } };
 }

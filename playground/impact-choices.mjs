@@ -38,7 +38,8 @@ export const fightWork = stage => stage.fights.map(fight => ({ fight, key: `${fi
 export async function pickImpacts({ chrome, jev, stage, fights, save, budget = Infinity, again = false, out = null, log = console.error, after = null }) {
   let calls = 0, asked = 0, reused = 0, left = 0;
   for (const [n, { fight, key }] of fightWork(stage).entries()) {
-    const kept = fights[key], slug = `${String(n + 1).padStart(2, '0')}-${fight.scene}-${fight.event}`, place = stage.places[fight.place];
+    // On the streamed world (place.world), an answer made on a fixed grid of an earlier engine no longer fits it ("no damage" does).
+    const place = stage.places[fight.place], kept = fights[key] && (!place?.world || fights[key].frame === 'world' || fights[key].none) ? fights[key] : null, slug = `${String(n + 1).padStart(2, '0')}-${fight.scene}-${fight.event}`;
     if (kept && !again) { reused++; continue; }
     if (!kept && calls >= budget) { left++; continue; }
     if (kept) reused++; else asked++;
@@ -50,7 +51,7 @@ export async function pickImpacts({ chrome, jev, stage, fights, save, budget = I
     ];
     await capture({ id: `${key}#look` });
     const spots = await chrome.evaluate(`window.__stage.impactSpots(${JSON.stringify({ place: fight.place })})`);
-    if (!spots.length) { fights[key] = { spots, unplaced: true }; await save(); continue; }
+    if (!spots.length) { fights[key] = { spots, unplaced: true, ...(place?.world ? { frame: 'world' } : {}) }; await save(); continue; }
     // Call 1: where it hits.
     await capture({ id: `${key}#where`, spheres: spots.map(spot => ({ ...spot, r: 2.5 })) });
     const where = await chrome.still(), letters = spots.map(spot => spot.label);
@@ -62,7 +63,7 @@ export async function pickImpacts({ chrome, jev, stage, fights, save, budget = I
     })();
     if (out) await writeFile(join(out, `${slug}-where.png`), Buffer.from(where, 'base64'));
     if (pick.pick === 'none') {
-      fights[key] = { pick, spots, none: true };
+      fights[key] = { pick, spots, none: true, ...(place?.world ? { frame: 'world' } : {}) };
       await save();
       if (after) await after({ kind: 'fight', key, base, none: true });
       log(`${key} (${fight.text.slice(0, 24)}…): no damage (${pick.confidence?.toFixed(2)})`);
@@ -83,7 +84,7 @@ export async function pickImpacts({ chrome, jev, stage, fights, save, budget = I
     })();
     const across = SIZES[Number(size.pick) - 1] ?? SIZES[1], measured = await chrome.evaluate(`window.__stage.measure(${JSON.stringify({ camera: `${key}#plain`, box: size.box, point: chosen, place: fight.place })})`);
     const boxed = Math.round(Math.max(measured.across, measured.up) * 10) / 10;
-    fights[key] = { pick, spots, chosen: chosen.label, size, sphere: { x: chosen.x, y: chosen.y, z: chosen.z, r: across / 2 }, boxed };
+    fights[key] = { pick, spots, chosen: chosen.label, size, sphere: { x: chosen.x, y: chosen.y, z: chosen.z, r: across / 2 }, boxed, ...(place?.world ? { frame: 'world' } : {}) };
     await save();
     if (after) await after({ kind: 'fight', key, base, focus, chosen: `${chosen.label} on ${chosen.from}`, sphere: fights[key].sphere });
     if (out) for (const { name, still } of stills) await writeFile(join(out, `${slug}-${name}.png`), Buffer.from(still, 'base64'));
