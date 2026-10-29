@@ -90,6 +90,19 @@ export async function matchObject(name: string, embedder?: Embedder | null, vect
   return { id: best.id, kind: best.kind, score: ranked[0].score > 0 ? Math.min(1, ranked[0].score / 4) : 0, by: "words" };
 }
 
+/** "那栋楼", "另一座建筑": a building the text does not name. */
+const ANONYMOUS = /^(另一栋|另一座|那栋|这栋|那座|这座)?(大)?(楼|大楼|建筑|房子|building)$/i;
+/**
+ * Whether a detected building is a new one standing at this place: not an
+ * unnamed one (those already stand), not the place itself (a site's own
+ * building is already there), not another place of the tree (it stands
+ * there, not here).
+ */
+export function newBuildingHere(name: string, placeLabel: string, otherPlaceLabels: string[]): boolean {
+  if (ANONYMOUS.test(name.trim()) || name === placeLabel || placeLabel.includes(name)) return false;
+  return !otherPlaceLabels.some((label) => label && label !== placeLabel && name.includes(label));
+}
+
 /** Every scene, a few per call, reusing answers whose inputs have not changed, within a call budget. */
 export async function detectObjects(scenes: ObjectScene[], options: { work?: WorkModel; embedder?: Embedder | null; previous?: ObjectsReport | null; maxCalls?: number; perCall?: number }): Promise<ObjectsReport> {
   const done: Record<string, SceneObjects> = {}, waiting: ObjectScene[] = [];

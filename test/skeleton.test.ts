@@ -51,3 +51,17 @@ test("a district of skeleton buildings: rooms on upper floors and roofs are walk
   const after = placeGraph(place, standing);
   assert.ok(after.graph.to.length < graph.to.length, "the walk sees less building");
 });
+
+test("a site's own building takes the floors and roof a decision model names; streets and doors land on the ground", async () => {
+  const { composePlace, placeGraph, placeSpot } = await import("../apps/playground/src/data/skeletonPlace.js");
+  const place = composePlace({ id: "loc_4", kind: "site", seed: 3, members: [{ label: "废弃大楼", role: "office", floors: [6, 6] }] });
+  const { spots } = placeGraph(place, place.lots.map((lot) => Uint8Array.from(lot.skeleton.cells)));
+  const main = place.lots.findIndex((lot) => lot.label === "废弃大楼");
+  assert.ok(main >= 0);
+  assert.equal(placeSpot(place, "废弃大楼", spots, "floor-3"), `lot${main}:floor3`);
+  assert.equal(placeSpot(place, "废弃大楼", spots, "stairs-40"), `lot${main}:floor${place.lots[main].floors}`, "a floor above the top is the top");
+  assert.equal(placeSpot(place, "废弃大楼", spots, "roof"), `lot${main}:roof`);
+  assert.equal(placeSpot(place, "废弃大楼", spots, "plaza"), "plaza", "the place's own spots stand as they are");
+  assert.deepEqual(["street", "alley", "courtyard", "the moon", null].map((spot) => placeSpot(place, "废弃大楼", spots, spot)), ["avenue", "north", "plaza", null, null]);
+  assert.equal(placeSpot(place, "别处", spots, "roof"), "rooftop", "without a building of its own, any roof");
+});

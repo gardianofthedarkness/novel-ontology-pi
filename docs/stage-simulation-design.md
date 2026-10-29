@@ -29,6 +29,10 @@ The **micro** view is a place's interior: its grid, its buildings and the people
   - Persistent state lives on the place: damage, positions and the lots already given out. Grids hold none of it.
 - **Macro is the same 3D world.**
   - Every place sits on its circle of the place tree (nested circles on the ground), with its buildings on top.
+  - **The layout is automatic, the production one** (`placeTreeCircles` in `timePlace.ts`; the places map fits the same layout to its canvas). Nothing is placed or sized by hand:
+    - each place reserves a disc as wide as its own content: its grid on the stage, its own scenes on the map;
+    - a region that is itself a place keeps that disc above its children, never on top of them;
+    - siblings pack together (places linked by moves sit closer), and a final settling pass guarantees no two circles at a level overlap.
   - When people move between places, the camera zooms out, shifts across and settles on the next place, as a hand on the mouse would. The reader can orbit at any moment.
   - A trace arcs between the circles for every move between places.
   - For a destination in another place, Jev boxes it on a top-down capture of this macro view.

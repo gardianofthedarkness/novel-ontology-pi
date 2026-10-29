@@ -25,7 +25,7 @@ export const ARC_SPEEDS = [7, 10, 13], ARC_EFFORT = 2;
 export const GROUND = { building: 0, street: 1, plaza: 2, avenue: 3, north: 4 } as const;
 
 export interface PlaceLot { id: string; label: string | null; role: BuildingRole; i0: number; j0: number; nx: number; nz: number; floors: number; side: "west" | "east"; skeleton: Skeleton; rooms: RoomBox[] }
-export interface SkeletonPlace { id: string; kind: "district" | "street"; NX: number; NZ: number; K: number; ground: Uint8Array; clutter: Uint8Array; clutterDraws: number; lots: PlaceLot[] }
+export interface SkeletonPlace { id: string; kind: "district" | "street" | "site"; NX: number; NZ: number; K: number; ground: Uint8Array; clutter: Uint8Array; clutterDraws: number; lots: PlaceLot[] }
 
 const between = (rng: () => number, low: number, high: number) => low + Math.floor(rng() * (high - low + 1));
 function lotsAlong(rng: () => number, from: number, to: number, min: number, max: number): [number, number][] {
@@ -34,7 +34,8 @@ function lotsAlong(rng: () => number, from: number, to: number, min: number, max
   return out;
 }
 
-export function composePlace(input: { id: string; kind: "district" | "street"; seed: number; members: { label: string; role: BuildingRole }[] }, options: { clutter?: number } = {}): SkeletonPlace {
+/** `site`: a place that is itself one building (its first member, on the widest lot, with its own floor range), among neighbours. */
+export function composePlace(input: { id: string; kind: "district" | "street" | "site"; seed: number; members: { label: string; role: BuildingRole; floors?: [number, number] }[] }, options: { clutter?: number } = {}): SkeletonPlace {
   const { NX, NZ } = PLACE_GRID, rng = skeletonStream("place", input.id, input.seed), rowA = NORTH, rowB = NORTH + ROW + MIDDLE, plazaX = (NX - PLAZA) / 2;
   const ground = new Uint8Array(NX * NZ).fill(GROUND.street);
   const fill = (i0: number, j0: number, w: number, d: number, value: number) => { for (let j = j0; j < j0 + d; j++) for (let i = i0; i < i0 + w; i++) ground[j * NX + i] = value; };
@@ -44,7 +45,7 @@ export function composePlace(input: { id: string; kind: "district" | "street"; s
   const named = new Map([...slots].sort((a, b) => b.w - a.w).slice(0, input.members.length).map((slot, index) => [slot, input.members[index]]));
   const lots = slots.map((slot, index): PlaceLot => {
     const member = named.get(slot), role: BuildingRole = member?.role ?? (input.kind === "street" || slot.w < 7 ? "shop" : rng() < 0.6 ? "office" : "shop");
-    const { kind, floors: [low, high] } = SKELETON_OF[role], floors = between(rng, low, high);
+    const { kind } = SKELETON_OF[role], [low, high] = member?.floors ?? SKELETON_OF[role].floors, floors = between(rng, low, high);
     const skeleton = generateSkeleton(kind, (input.seed * 7919 + index) >>> 0, { width: slot.w * SKELETON_CELL, depth: ROW * SKELETON_CELL, floors, cores: kind === "house" ? 1 : 2 });
     fill(slot.i, slot.j, slot.w, ROW, GROUND.building);
     return { id: `lot_${index + 1}`, label: member?.label ?? null, role, i0: slot.i, j0: slot.j, nx: slot.w, nz: ROW, floors, side: slot.i + slot.w / 2 < NX / 2 ? "west" : "east", skeleton, rooms: furnish(skeleton, 1) };
@@ -169,11 +170,30 @@ export function placeGraph(place: SkeletonPlace, standing: Uint8Array[], things:
     const here = what(i, j, k), node = nodeOf(place, i, j, k);
     if (here.type === 1) { const g = place.ground[j * NX + i]; if (g === GROUND.avenue) spots.avenue.push(node); else if (g === GROUND.plaza) spots.plaza.push(node); else if (g === GROUND.north) spots.north.push(node); }
     if (here.type === 3) spots[place.lots[here.lot].side].push(node);
+    // Each building's floors (rooms and corridors) and roof, for answers that name a floor.
+    if (here.type === 2 || here.type === 3) (spots[`lot${here.lot}:floor${k + 1}`] ??= []).push(node);
+    if (here.type === 4 && here.lot < 1000) (spots[`lot${here.lot}:roof`] ??= []).push(node);
     if (here.type === 4) spots.rooftop.push(node);
   }
   return { graph, spots };
 }
 
+
+/**
+ * The spot a decision model names, on this place's graph: its own spots as
+ * they are; the floors, stairs, roof and basement of the place's own building
+ * (the lot named like the place) on that building; doors and streets on the
+ * avenue, back ways on the north lane, open ground on the plaza.
+ */
+export function placeSpot(place: SkeletonPlace, label: string, spots: Record<string, number[]>, spot: string | null | undefined): string | null {
+  if (!spot) return null;
+  if (spots[spot]?.length) return spot;
+  const main = place.lots.findIndex((lot) => lot.label === label), level = /^(?:floor|stairs)-(\d+)$/.exec(spot);
+  if (level && main >= 0) return `lot${main}:floor${Math.min(place.lots[main].floors, Math.max(1, Number(level[1])))}`;
+  if (["roof", "bell-tower", "keep-top", "tower-top"].includes(spot)) return main >= 0 ? `lot${main}:roof` : "rooftop";
+  if (spot === "basement") return main >= 0 ? `lot${main}:floor1` : "avenue";
+  return ({ street: "avenue", "front-door": "avenue", entrance: "avenue", gate: "avenue", road: "avenue", alley: "north", "back-door": "north", "side-door": "east", concourse: "plaza", platform: "plaza", path: "plaza", courtyard: "plaza", garden: "east" } as Record<string, string>)[spot] ?? null;
+}
 /** A hit on a lot at a point (place metres): the lot's new standing cells, what it destroyed and what it cut off (cells and rooms). */
 export function hitLot(place: SkeletonPlace, index: number, standing: Uint8Array, point: { x: number; y: number; z: number }, degree: number, rng: () => number) {
   const lot = place.lots[index], local = { x: point.x - lot.i0 * SKELETON_CELL, y: point.y + FLOOR_HEIGHT / 2, z: point.z - lot.j0 * SKELETON_CELL, degree };

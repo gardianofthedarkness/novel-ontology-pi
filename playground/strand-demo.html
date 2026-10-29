@@ -139,16 +139,9 @@ const placeHits = {};
 for (const scene of data.scenes) for (const event of scene.events) if (event.hit) (placeHits[scene.place] ??= []).push(event.hit);
 const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low < high) { const mid = (low + high + 1) >> 1; if (segments[mid].start <= t) low = mid; else high = mid - 1; } return segments[low]; };
 
-// The macro layout: the place tree as nested circles on the ground (metres); every place of the strand sits on its own circle.
-const macroAt = new Map();
-{
-  const kids = (id) => data.macro.filter((node) => node.parent === id), LEAF = 46;
-  const size = (node) => { const children = kids(node.id); if (!children.length) return (node.r = LEAF); const r = Math.max(...children.map(size)); node.ring = children.length > 1 ? 1.25 * r / Math.sin(Math.PI / children.length) : 0; return (node.r = node.ring + r + 16); };
-  const put = (node, x, z, depth) => { macroAt.set(node.id, { x, z, r: node.r, depth, label: node.label }); kids(node.id).forEach((child, n, all) => { const angle = Math.PI / 2 + (2 * Math.PI * n) / all.length; put(child, x + Math.cos(angle) * node.ring, z + Math.sin(angle) * node.ring, depth + 1); }); };
-  let x = 0;
-  for (const root of data.macro.filter((node) => !node.parent)) { size(root); x += root.r; put(root, x, 0, 0); x += root.r + 40; }
-  for (const spot of macroAt.values()) spot.x -= (x - 40) / 2;
-}
+// The macro layout comes with the data (the place tree's production layout, in metres): a place's grid stands at its spot,
+// the centre of its own disc; its circle holds its children.
+const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label }]));
 
 // The 3D stage.
 const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -274,10 +267,10 @@ for (const id of Object.keys(data.places)) world.add(buildPlace(id).group);
 // The place tree's circles on the ground, and a trace above them for every move between places.
 for (const [id, spot] of macroAt) {
   const strand = !!data.places[id], ring = new THREE.Mesh(new THREE.RingGeometry(spot.r - 0.8, spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: strand ? 0.6 : 0.3, side: THREE.DoubleSide, depthWrite: false }));
-  ring.rotation.x = -Math.PI / 2; ring.position.set(spot.x, -0.3 - spot.depth * 0.05, spot.z); world.add(ring);
+  ring.rotation.x = -Math.PI / 2; ring.position.set(spot.cx, -0.3 - spot.depth * 0.05, spot.cz); world.add(ring);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x0a1e2b, transparent: true, opacity: 0.45, depthWrite: false }));
-  disc.rotation.x = -Math.PI / 2; disc.position.set(spot.x, -0.5 - spot.depth * 0.05, spot.z); world.add(disc);
-  const tag = label(spot.label, strand ? "#ffffff" : "#9fb4c3", 30); tag.position.set(spot.x, 4, spot.z - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
+  disc.rotation.x = -Math.PI / 2; disc.position.set(spot.cx, -0.5 - spot.depth * 0.05, spot.cz); world.add(disc);
+  const tag = label(spot.label, strand ? "#ffffff" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
 }
 const macroSegment = new Map(segments.filter((segment) => segment.kind === "macro").map((segment) => [segment.scene.id, segment]));
 const traces = data.migrations.flatMap((migration) => {

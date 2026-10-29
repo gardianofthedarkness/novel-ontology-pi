@@ -129,3 +129,13 @@ test("objects: only buildings and large visible things are accepted, matched aga
   const again = await detectObjects([{ id: "s1", placeLabel: "第七学区", events: [{ id: "e1", text: "美琴在游戏中心前" }] }], { work, previous: report });
   assert.deepEqual(again.usage, { calls: 0, reused: 1, skipped: 0 });
 });
+
+test("a detected building stands here only when it is new: not unnamed, not the place itself, not another place", async () => {
+  const { newBuildingHere } = await import("../src/digger/stage/objects.js");
+  const others = ["废弃大楼", "学园都市", "警备员化学分析中心"];
+  assert.equal(newBuildingHere("无人车站", "学园都市", others), true);
+  assert.equal(newBuildingHere("那栋楼", "学园都市", others), false, "an unnamed building already stands");
+  assert.equal(newBuildingHere("废弃大楼", "废弃大楼", others), false, "a site's own building is already there");
+  assert.equal(newBuildingHere("化学分析中心", "警备员化学分析中心", others), false, "a shorter name of the place is the place");
+  assert.equal(newBuildingHere("废弃大楼的天台", "学园都市", others), false, "another place's building stands there, not here");
+});

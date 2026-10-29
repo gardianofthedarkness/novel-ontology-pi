@@ -31,8 +31,10 @@ export async function strandDemo(novelDir, options) {
   const { storyStrands } = await load('dist/src/digger/timeplace/strandQuestions.js');
   const { latestStrandAnswers } = await load('dist/src/digger/timeplace/strandView.js');
   const { forkTimeline, walkTimeline } = await load('dist/src/digger/stage/environment.js');
-  const { composePlace, placeGraph, nodePosition, degrade, semanticAxis } = await load('dist/apps/playground/src/data/skeletonPlace.js');
-  const { skeletonStream: stream, generateSkeleton } = await load('dist/apps/playground/src/data/skeleton.js');
+  const { composePlace, placeGraph, placeSpot, nodePosition, degrade, semanticAxis } = await load('dist/apps/playground/src/data/skeletonPlace.js');
+  const { placeTreeCircles } = await load('dist/apps/playground/src/data/timePlace.js');
+  const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
+  const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
   const { solveWalk, sampleWalk, temperatureBound, directionOf } = await load('dist/apps/playground/src/data/pathIntegral.js');
   const inputs = await stageInputs(novelDir), answers = await latestStrandAnswers(novelDir), strands = storyStrands(inputs.data, answers ?? {});
   const staged = new Map(inputs.movementScenes.map(scene => [scene.id, scene])), byIndex = new Map(inputs.data.scenes.map(scene => [scene.id, scene.index]));
@@ -48,7 +50,9 @@ export async function strandDemo(novelDir, options) {
     const place = places.get(placeId), label = name(placeId);
     const members = inputs.data.places.filter(child => child.parentId === placeId && ROLE_OF[inputs.architecture?.places[child.id]?.kind]).map(child => ({ label: name(child.id), role: ROLE_OF[inputs.architecture.places[child.id].kind] }));
     const seed = [...placeId].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7);
-    const layout = composePlace({ id: placeId, kind: /[街路巷道]$/.test(label) ? 'street' : 'district', seed, members });
+    // A place that is itself a building (the architecture pick says so) is a site: that building, named, on the widest lot.
+    const own = inputs.architecture?.places[placeId]?.kind, site = ['skyscraper', 'office', 'home', 'hospital', 'school', 'station', 'church', 'market', 'castle'].includes(own);
+    const layout = composePlace({ id: placeId, kind: site ? 'site' : /[街路巷道]$/.test(label) ? 'street' : 'district', seed, members: site ? [{ label, role: ROLE_OF[own] ?? 'office', floors: own === 'skyscraper' ? [10, 14] : [5, 7] }, ...members] : members });
     groups.set(placeId, { label, path: (place?.path ?? [placeId]).map(name), layout, things: new Map(), standing: layout.lots.map(lot => lot.skeleton.cells.map(value => (value ? 1 : 0))), version: 0, built: null });
   }
   const graphOf = placeId => { const group = groups.get(placeId); if (!group.built || group.built.version !== group.version) group.built = { version: group.version, ...placeGraph(group.layout, group.standing, [...group.things.values()]) }; return group.built; };
@@ -61,6 +65,8 @@ export async function strandDemo(novelDir, options) {
   const pick = (list, rng) => list[Math.floor(rng() * list.length)];
   const report = inputs.movement?.scenes ?? {}, moves = new Map(), hits = new Map(), hitThings = new Map(), struck = new Set(), notes = { unreachable: 0, sampled: 0, teleports: 0, solves: 0, hits: 0, destroyed: 0 };
   const top = distribution => Object.entries(distribution ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0];
+  /** A spot as Jev named it, in this place: districts name streets and sides; buildings name floors, the roof and the street. */
+  const spotKey = (placeId, spot) => { const group = groups.get(placeId); return placeSpot(group.layout, group.label, graphOf(placeId).spots, spot); };
   // How destructive each event is: its embedding (the causality faculty's sidecar) projected onto the book's own
   // destruction direction, learned from events whose summaries say they wreck things against those that fight nowhere.
   const vectors = new Map((await readFile(`${novelDir}/ontology/embeddings.jsonl`, 'utf8').catch(() => '')).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(row => row.kind === 'event').map(row => [row.id, row.vector]));
@@ -114,7 +120,8 @@ export async function strandDemo(novelDir, options) {
   const damage = (scene, event, at, seed) => {
     if (struck.has(event.id)) return;
     struck.add(event.id);
-    const strength = axis?.strength(event.id) ?? 0;
+    // Without event embeddings for this book, the wording's degree stands in for the strength.
+    const strength = axis ? axis.strength(event.id) ?? 0 : [0, 0, 0, 0.85, 0.95][damageDegree(summary(event))];
     if (strength < 0.8 || !at) return;
     // Things near the blast are hit too; a big one loses part of its structure.
     const near = nodePosition(groups.get(scene.placeId).layout, at[0]), thingHits = [];
@@ -139,14 +146,14 @@ export async function strandDemo(novelDir, options) {
     // Carried from this place when they were last here; else where Jev said the scene finds them, else coming in off the avenue.
     start: ({ scene, handoff, carried, seed }) => {
       if (carried) return carried;
-      const { spots } = graphOf(scene.placeId), said = report[scene.id]?.starts?.[handoff.person];
-      const spot = said && said.stated >= 0.5 && spots[top(said.to)]?.length ? top(said.to) : 'avenue';
+      const { spots } = graphOf(scene.placeId), said = report[scene.id]?.starts?.[handoff.person], named = said && said.stated >= 0.5 ? spotKey(scene.placeId, top(said.to)) : null;
+      const spot = named && spots[named]?.length ? named : 'avenue';
       return [pick(spots[spot], stream(seed)), directionOf(0, -1)];
     },
     act: ({ scene, event, person, at, seed }) => {
       placeThings(scene, event, at);
       damage(scene, event, at, seed);
-      const answer = report[scene.id]?.events?.[event.id]?.[person], spot = top(answer?.to), { graph, spots } = graphOf(scene.placeId);
+      const answer = report[scene.id]?.events?.[event.id]?.[person], spot = spotKey(scene.placeId, top(answer?.to)), { graph, spots } = graphOf(scene.placeId);
       if (!answer?.to || !at || !spots[spot]?.length) return { kind: 'stay' };
       const [node, heading] = at, rng = stream(seed);
       if (answer.how === 'teleport') { const to = pick(spots[spot], rng); notes.teleports++; moves.set(`${scene.id}|${event.id}|${person}`, { person, how: 'teleport', spot, path: [node, to], ensemble: [] }); return { kind: 'move', to: [to, heading] }; }
@@ -179,15 +186,13 @@ export async function strandDemo(novelDir, options) {
   // top of whatever is under it.
   const detected = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
   const ROLE_FOR = { hospital: 'hospital', skyscraper: 'office', office: 'office', market: 'shop', station: 'station', school: 'office', home: 'shop' };
-  const anonymous = /^(另一栋|另一座|那栋|这栋)?(大)?(楼|大楼|建筑|房子)$/;
   const lotNames = new Map(), placedObjects = new Map();
   for (const scene of chosen) {
     const group = groups.get(scene.placeId), found = detected?.scenes?.[scene.id]?.objects ?? [], run = runs[scene.id];
     for (const object of found) {
       const eventIndex = Math.max(0, scene.events.findIndex(event => event.id === object.event));
       if (object.kind === 'building' && object.match.kind === 'building') {
-        // Anonymous buildings are already standing; one named after another place stands there, not here.
-        if (anonymous.test(object.name) || [...groups.values()].some(other => other.label !== group.label && object.name.includes(other.label))) continue;
+        if (!newBuildingHere(object.name, group.label, [...groups.values()].map(other => other.label))) continue;
         const lots = group.layout.lots, key = `${scene.placeId}|${object.name}`;
         if (lotNames.has(key)) continue;
         const free = lots.findIndex((lot, index) => !lot.label && ![...lotNames.values()].some(entry => entry.place === scene.placeId && entry.lot === index) && lot.role === (ROLE_FOR[object.match.id] ?? lot.role));
@@ -202,12 +207,22 @@ export async function strandDemo(novelDir, options) {
   const named = (placeId, index) => [...lotNames.values()].find(entry => entry.place === placeId && entry.lot === index);
   const shellOf = (placeId, lot, index) => { const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
   const exported = Object.fromEntries([...groups].map(([id, { layout }]) => [id, layout.lots.map((lot, index) => shellOf(id, lot, index))]));
+  // The macro view is the place tree's own layout (the production one), in metres: each place of the strand reserves a disc as
+  // wide as its grid, a region that is itself a place keeps its grid above its children, and nothing overlaps.
+  const macroLayout = () => {
+    const parentOf = id => tree.has(places.get(id)?.parentId) ? places.get(id).parentId : null, links = new Map();
+    for (const migration of migrations) if (migration.from && migration.to) { const key = `${migration.from}\u0000${migration.to}`; links.set(key, (links.get(key) ?? 0) + 1); }
+    const circles = placeTreeCircles([...tree].map(id => ({ id, parentId: parentOf(id), sceneIds: [] })), [...links].map(([key, count]) => { const [from, to] = key.split('\u0000'); return { from, to, count }; }),
+      { ownRadius: place => groups.has(place.id) ? Math.hypot(groups.get(place.id).layout.NX, groups.get(place.id).layout.NZ) * SKELETON_CELL / 2 + 4 : 0 });
+    const round = value => Math.round(value * 10) / 10;
+    return [...tree].map(id => { const at = circles.get(id); return { id, label: name(id), parent: parentOf(id), x: round(at.x), z: round(at.y), r: round(at.r), depth: at.depth, spotX: round(at.spotX), spotZ: round(at.spotY) }; });
+  };
   return {
     models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
     things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
       struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
     title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes, migrations,
-    macro: [...tree].map(id => ({ id, label: name(id), parent: tree.has(places.get(id)?.parentId) ? places.get(id).parentId : null })),
+    macro: macroLayout(),
     people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
     places: Object.fromEntries([...groups].map(([id, { label, path, layout }]) => [id, { label, path, kind: layout.kind, NX: layout.NX, NZ: layout.NZ, K: layout.K, ground: [...layout.ground].join(''), clutter: [...layout.clutter.keys()].filter(cell => layout.clutter[cell]), clutterDraws: layout.clutterDraws,
       lots: layout.lots.map((lot, index) => ({ model: exported[id][index], label: lot.label, detected: named(id, index) ? { name: named(id, index).name, scene: named(id, index).scene, event: named(id, index).event } : null, role: named(id, index) && ROLE_FOR[named(id, index).model] === 'hospital' ? 'hospital' : lot.role, i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) })) }])),
