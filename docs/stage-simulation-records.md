@@ -79,6 +79,12 @@ From engine `strand-demo-4`, a run walks one streamed world: the city of the can
   - **How a run uses it:** a run of another line applies these in story order the moment the same building stands in its world, and skips it when the landscape's fingerprint has changed. The page draws them as earlier hits, with a notice above the building, and outlines in red the buildings known broken that the run never reached.
   - Derived from versioned runs, never canon. v1 runs (fixed grids) leave nothing in it.
 - **`runStrand(novelDir, strand, { until: { scene, event } })`:** the line only as far as one event, for a loop that decides events one at a time.
+- **`runStrand(…, { live })` and `stage/simulation/live/world.json`:** while `novel sim pick` or `run` plays, the engine snapshots its world at each moment it plays (at most every 0.3 s, and at the end). Each snapshot holds:
+  - every chunk and lot explored, and what of each lot is broken;
+  - where everyone is, and the moment's moves as points;
+  - where the moment is looked at (`focus`: the middle of its people, as wide as they stand apart — what Jev's picture of it frames).
+
+  The live record keeps the last one. The host's `play/world?volume=N` draws it in 3D round where Jev looks and where the people are, never round the camera: ground and buildings load within 112 m of them and go beyond 160 m, the rest of the city stays faint to 480 m, and the camera follows Jev unless you take it.
 
 ## Making them again
 
