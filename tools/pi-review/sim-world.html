@@ -17,7 +17,8 @@
   .empty { position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); }
   .empty[hidden] { display: none; }
   .bar { position: fixed; z-index: 5; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-  .bar a { font-size: 12px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; text-decoration: none; }
+  .bar a, .bar button { font: inherit; font-size: 12px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; text-decoration: none; cursor: pointer; }
+  .bar button[aria-pressed="true"] { border-color: var(--jev); color: var(--jev); }
   .legend { position: fixed; z-index: 5; left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 11px; color: var(--dim); max-width: min(340px, calc(100vw - 24px)); }
   .legend b { color: var(--ink); font-weight: 600; }
 </style>
@@ -31,17 +32,26 @@
   <div class="counts" id="counts"></div>
 </section>
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
-<nav class="bar"><a id="live" href="live">Jev's questions</a><a id="play" href="./">Player</a></nav>
+<nav class="bar"><button id="follow" aria-pressed="true">Follow Jev</button><a id="live" href="live">Jev's questions</a><a id="play" href="./">Player</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
   $("live").href = `live${query}`; $("play").href = `./${query}`;
   // Two frames at most: the one shown, and the next moment's loading behind it until it says it is ready.
-  // A newer moment while one is loading waits for it (only the latest waiting one is loaded then).
-  let shown = null, next = null, page = null, wanted = null, camera = null;
+  // A newer moment while one is loading waits for it (only the latest waiting one is loaded then). While a finger is on
+  // the shown frame, the next one waits too: swapping it out would cut the gesture off.
+  let shown = null, next = null, page = null, wanted = null, camera = null, touching = false, ready = false;
+  const showFollow = (on) => $("follow").setAttribute("aria-pressed", String(on));
+  $("follow").addEventListener("click", () => {
+    const on = $("follow").getAttribute("aria-pressed") !== "true";
+    showFollow(on); if (camera) camera.follow = on;
+    for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "follow", on }, origin);
+  });
   /** The loading frame takes over: it gets the camera the shown one had, fades in, and the old one goes. */
   const swap = () => {
     if (!next) return;
+    if (touching) { ready = true; return; }
+    ready = false;
     if (camera) next.contentWindow.postMessage({ ...camera, type: "camera" }, origin);
     const old = shown; shown = next; next = null;
     setTimeout(() => { shown.classList.remove("waiting"); if (old) setTimeout(() => old.remove(), 400); $("empty").hidden = true; if (wanted && wanted !== page) { page = wanted; load(page); } }, 80);
@@ -49,7 +59,8 @@
   addEventListener("message", (event) => {
     if (event.origin !== origin) return;
     const message = event.data;
-    if (message?.type === "camera" && shown && event.source === shown.contentWindow) camera = message;
+    if (message?.type === "camera" && shown && event.source === shown.contentWindow) { camera = message; showFollow(!!message.follow); }
+    if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; if (!touching && ready) swap(); }
     if (message?.type === "ready" && next && event.source === next.contentWindow) swap();
   });
   const load = (run) => {

@@ -739,13 +739,31 @@ function seeThrough(entry, segment, now, dt, elapsed) {
 if (liveMode) {
   time = segments.at(-1)?.start ?? 0;
   const origin = location.origin;
+  // The camera is the viewer's: the world view hands each new frame the camera the last one had, and whether it follows.
   addEventListener("message", (event) => {
-    if (event.source !== parent || event.origin !== origin || event.data?.type !== "camera") return;
+    if (event.source !== parent || event.origin !== origin) return;
+    if (event.data?.type === "follow") { follow = !!event.data.on; return; }
+    if (event.data?.type !== "camera") return;
     camera.position.fromArray(event.data.position); controls.target.fromArray(event.data.target); controls.update();
-    shownPlace = segmentAt(time).scene.place; glide = null; follow = event.data.follow ?? follow;
+    shownPlace = segmentAt(time).scene.place; glide = null; follow = event.data.follow ?? follow; adopted = true;
   });
+  // A new frame reports its camera only once it has the one handed over (or after 2 s with none), never its default first.
+  let adopted = false;
+  const tellCamera = () => parent.postMessage({ type: "camera", run: data.live.run, position: camera.position.toArray(), target: controls.target.toArray(), follow }, origin);
+  // Turning or zooming is the viewer taking the camera: following stops, and the world view keeps this frame while a
+  // finger is down (it swaps the next moment in when it is lifted, with the camera where it was left).
+  let told = 0, held = 0;
+  const take = () => { follow = false; glide = null; tellCamera(); };
+  // Raw input on the stage, so a touch is caught however the orbit controls take it: a finger or button down holds the
+  // frame, lifting it lets the next moment in; a wheel or pinch takes the camera too.
+  renderer.domElement.addEventListener("pointerdown", () => { held++; take(); parent.postMessage({ type: "touch", active: true }, origin); });
+  const lift = () => { if (!held) return; held = Math.max(0, held - 1); tellCamera(); if (!held) parent.postMessage({ type: "touch", active: false }, origin); };
+  addEventListener("pointerup", lift); addEventListener("pointercancel", lift);
+  renderer.domElement.addEventListener("wheel", take, { passive: true });
+  controls.addEventListener("start", take);
+  controls.addEventListener("change", () => { const now = performance.now(); if (now - told > 100) { told = now; tellCamera(); } });
   let frames = 0;
-  const tell = () => { frames++; if (frames === 3) parent.postMessage({ type: "ready", run: data.live.run }, origin); if (frames > 3 && frames % 20 === 0) parent.postMessage({ type: "camera", run: data.live.run, position: camera.position.toArray(), target: controls.target.toArray(), follow }, origin); requestAnimationFrame(tell); };
+  const tell = () => { frames++; if (frames === 3) parent.postMessage({ type: "ready", run: data.live.run }, origin); if (frames > 3 && frames % 10 === 0 && (adopted || frames > 120)) tellCamera(); requestAnimationFrame(tell); };
   requestAnimationFrame(tell);
 }
 
