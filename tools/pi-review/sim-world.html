@@ -44,7 +44,11 @@
   // every moment since the one shown before it, so none is skipped; a phone keeps the time between for drawing and for
   // the viewer's finger. While a finger is down, or just lifted, the swap waits: it would cut the gesture off.
   const GAP = 5000, SETTLE = 1500;
-  let shown = null, next = null, page = 0, wanted = 0, epoch = null, shownMoment = null, camera = null, touching = false, ready = false, lastLoad = 0, lastTouch = 0, swapTimer = 0, loadTimer = 0;
+  let shown = null, next = null, page = 0, shownPage = 0, wanted = 0, epoch = null, shownMoment = null, camera = null, touching = false, ready = false, lastLoad = 0, lastTouch = 0, swapTimer = 0, loadTimer = 0;
+  /** A frame goes: told first to let its WebGL context go (a phone allows only a few), then emptied and removed. */
+  const retire = (frame) => { try { frame.contentWindow?.postMessage({ type: "dispose" }, origin); } catch {} setTimeout(() => { frame.src = "about:blank"; frame.remove(); }, 100); };
+  /** A frame that could not start its 3D view (or never got ready): dropped, the shown one stays, and the moment is loaded again. */
+  const drop = (frame) => { if (next !== frame) return; next = null; ready = false; page = shownPage; retire(frame); queue(); };
   const showFollow = (on) => $("follow").setAttribute("aria-pressed", String(on));
   $("follow").addEventListener("click", () => {
     const on = $("follow").getAttribute("aria-pressed") !== "true";
@@ -59,9 +63,9 @@
     if (wait > 0) { swapTimer = setTimeout(swap, wait); return; }
     ready = false;
     if (camera) next.contentWindow.postMessage({ ...camera, type: "camera" }, origin);
-    const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment;
+    const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment; shownPage = page;
     shown.classList.remove("waiting"); $("empty").hidden = true;
-    if (old) setTimeout(() => old.remove(), 450);
+    if (old) setTimeout(() => retire(old), 450);
     queue();
   };
   /** Load the newest moment wanted, when none is loading and the last load was long enough ago. */
@@ -79,13 +83,17 @@
     if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; lastTouch = Date.now(); if (!touching) swap(); }
     if (message?.type === "interact" && shown && event.source === shown.contentWindow) lastTouch = Date.now();
     if (message?.type === "ready" && next && event.source === next.contentWindow) { next.moment = message.moment; ready = true; swap(); }
+    if (message?.type === "failed" && next && event.source === next.contentWindow) drop(next);
   });
   const load = (run) => {
     lastLoad = Date.now(); ready = false;
     next = document.createElement("iframe"); next.className = "waiting"; next.title = "The world at this moment";
     next.src = `now${query}${query ? "&" : "?"}run=${run}${shownMoment ? `&from=${encodeURIComponent(shownMoment)}` : ""}`;
-    // A frame that loaded but never says it is ready (its tab not drawing) takes over anyway after a few seconds.
-    const frame = next; frame.addEventListener("load", () => setTimeout(() => { if (next === frame) { ready = true; swap(); } }, 4000));
+    // A frame that loaded but never says it is ready because this tab is hidden (nothing draws) takes over anyway after a few
+    // seconds; in a tab being looked at, a slow one is waited for, and one not ready in 30 s is dropped and loaded again.
+    const frame = next;
+    frame.addEventListener("load", () => setTimeout(() => { if (next === frame && document.hidden) { ready = true; swap(); } }, 4000));
+    setTimeout(() => { if (next === frame && !ready) drop(frame); }, 30000);
     document.body.append(next);
   };
   async function poll() {
@@ -98,7 +106,7 @@
           $("where").textContent = `${world.moment ?? ""}${world.final ? " · end" : ""}`;
           $("counts").textContent = world.notes ? `${state.engine ? `engine v${state.engine} · ` : ""}chunks ${world.notes.chunks} · buildings ${world.notes.lots} · ${world.notes.nodes} walk nodes${world.notes.applied ? ` · ${world.notes.applied} broken earlier` : ""}` : "";
           // A new command counts its pages from 1 again: start over with it.
-          if (state.startedAt !== epoch) { epoch = state.startedAt; page = 0; wanted = 0; shownMoment = null; }
+          if (state.startedAt !== epoch) { epoch = state.startedAt; page = 0; shownPage = 0; wanted = 0; shownMoment = null; }
           if (world.page > wanted) { wanted = world.page; queue(); }
         }
       }

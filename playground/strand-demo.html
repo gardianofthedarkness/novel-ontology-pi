@@ -93,7 +93,9 @@
 </div>
 <script type="application/json" id="strand-data"></script>
 <script>
-  // If the 3D view has not started after 8 s (WebGL blocked, or the 3D library did not load), say so instead of leaving a blank stage.
+  // If the 3D view has not started after 8 s (WebGL blocked, or the 3D library did not load), say so instead of leaving a blank
+  // stage; a frame of the live world view tells it too, so it is dropped (the frame shown stays) and the moment loaded again.
+  setTimeout(() => { if (!window.__stageStarted && parent !== window) parent.postMessage({ type: "failed" }, location.origin); }, 8000);
   setTimeout(() => { if (!window.__stageStarted) { const note = document.createElement("p"); note.className = "notice"; note.textContent = "The 3D view could not start in this browser (WebGL is off, or the 3D library did not load). Try another browser or network."; document.getElementById("crumb")?.after(note); } }, 8000);
 </script>
 <script type="module">
@@ -761,6 +763,9 @@ if (liveMode) {
   addEventListener("message", (event) => {
     if (event.source !== parent || event.origin !== origin) return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
+    // The world view is done with this frame: its WebGL context is let go now (a phone allows only a few at once), not
+    // whenever the removed frame is collected.
+    if (event.data?.type === "dispose") { renderer.dispose(); renderer.forceContextLoss(); return; }
     if (event.data?.type !== "camera") return;
     camera.position.fromArray(event.data.position); controls.target.fromArray(event.data.target); controls.update();
     shownPlace = segmentAt(time).scene.place; glide = null; follow = event.data.follow ?? follow; adopted = true;
