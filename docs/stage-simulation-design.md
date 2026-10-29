@@ -71,7 +71,14 @@ Buildings are added as the story detects them, not fixed up front.
    - The match is against each model's names and description in Chinese and English: towers, skyscrapers, offices, a hospital, a station, a church, a market, a keep, a fountain, a windmill.
    - The nearest model above a threshold is used, drawn at random among that kind's variants.
 3. **One ranking for everything.** The four pure shapes (an oval, a sphere, a box, a diamond) are ranked together with the library's models, and the best match wins, shape or building.
-4. **Jev boxes where it goes, in a two-call mini loop** (user decision, 2026-10-28; it replaces the top-down pointing and the floating rule, which the user dropped as over-engineering). Each call is a box question (Jev 1.14: one bounding box as fractions of the picture) plus a yes/no on whether the spot is in the picture at all:
+4. **Jev picks the model first** (user decision, 2026-10-28: a prior layer instead of the embedding's top match, which stays only as the fallback).
+   - One choice call per thing, on a labelled sheet of every model the stage can draw: the Kenney buildings, plus the basic shapes box, oval, triangle, diamond and donut. A sphere is a kind of oval.
+   - The model is then fitted as large as fits inside the cast its two boxes give:
+     - a model keeps its proportions, scaling evenly and turning 0° or 90°, whichever fits larger;
+     - a basic shape stretches to fill the cast;
+     - a donut stands on edge in a cast taller than it is wide.
+   - **First try** (9 things): plausible picks for 6. The helicopter became an oval, the small room and the long pipe boxes, and the station, a building and the lab wide blocks. The scaffolding and the torii became the market, and the rails a wide block. Confidence was low (0.15–0.54).
+5. **Jev boxes where it goes, in a two-call mini loop** (user decision, 2026-10-28; it replaces the top-down pointing and the floating rule, which the user dropped as over-engineering). Each call is a box question (Jev 1.14: one bounding box as fractions of the picture) plus a yes/no on whether the spot is in the picture at all:
    1. **The reader's view** of the place at that moment.
    2. **A side view** of the same moment: turned 90° (left or right, drawn from the placement), lowered to a near-level look, and aimed at the first box, which is drawn in as a beam (everything that box could mean in 3D).
    - **The 3D box:** the points of the place both pictures show inside their boxes give the centre. The size is each box measured in metres at that depth: view 1's width across; view 2's width along view 1's line of sight, and its height. A thing that starts at the ground stands on it, and one higher up stays where the boxes put it.
@@ -81,7 +88,7 @@ Buildings are added as the story detects them, not fixed up front.
      - The scaffolding, the helicopter in the air, the long pipe, the lab, and the small room up in a building are plausible.
      - Things with nothing to fix them along the beam (in the air, or generic "building" mentions) get a whole-beam second box.
      - One box landed on a person's name label.
-5. **Placement rules:**
+6. **Placement rules:**
    - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
    - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.
      - It is hidden while other volumes are being processed.

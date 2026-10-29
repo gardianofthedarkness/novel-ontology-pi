@@ -16,6 +16,27 @@ const load = path => import(pathToFileURL(`${repository}/${path}`));
 const PALETTE = ['#7ce6ff', '#ff8fb1', '#ffd36e', '#9dff8a', '#c59bff', '#ff9d5c', '#5cf2c8', '#f2f2f2', '#8fb6ff', '#e0ff6e'];
 /** The artistic models (Kenney CC0 kits, baked in apps/playground) a building of each role may wear; one is drawn per lot at random. */
 const SHELLS = { office: ['tower-a', 'tower-b', 'tower-d', 'tower-e', 'tower-f', 'tower-g', 'tower-h', 'tower-i', 'tower-j', 'tower-l', 'tower-m', 'office-c', 'office-h', 'block-wide-a', 'block-wide-b'], tall: ['skyscraper-a', 'skyscraper-b', 'skyscraper-e', 'tower-c', 'tower-k'], shop: ['office-c', 'block-wide-a', 'market'], hospital: ['office-k'], station: ['block-wide-b'] };
+// The basic shapes, at unit size (their extents). A sphere is a kind of oval: an oval in a cube-shaped cast.
+const SHAPES = { box: [1, 1, 1], oval: [1, 0.55, 0.7], triangle: [1, 1, 1], diamond: [1, 1, 1], donut: [1, 0.3, 1] };
+/**
+ * The biggest fit of a model or shape inside a cast (metres): a model keeps its proportions and scales evenly, turned
+ * 0° or 90°, whichever fits larger, resting on the cast's floor (centred in it when the cast is in the air); a basic shape
+ * stretches to fill the cast, and a donut stands on edge when the cast is taller than it is wide.
+ * Returns the form's scale and turn, and its extent in the place's axes.
+ */
+export function fitInCast(form, cast, natural) {
+  if (natural) {
+    const [nw, nh, nd] = natural, fits = [0, 90].map(turn => { const [w, d] = turn ? [nd, nw] : [nw, nd]; return { turn, s: Math.min(cast.w / w, cast.h / nh, cast.d / d), w, d }; }), best = fits.sort((a, b) => b.s - a.s)[0];
+    const h = nh * best.s, lift = cast.y0 > 1.5 ? (cast.h - h) / 2 : 0;
+    return { sx: best.s, sy: best.s, sz: best.s, turn: best.turn, stand: false, w: best.w * best.s, h, d: best.d * best.s, y0: cast.y0 + lift };
+  }
+  if (form === 'donut' && cast.h > Math.max(cast.w, cast.d)) {
+    const along = cast.w >= cast.d, across = Math.max(cast.w, cast.d), thick = Math.min(Math.min(cast.w, cast.d), 0.3 * Math.min(across, cast.h));
+    return { sx: across, sy: cast.h, sz: thick / 0.3, turn: along ? 0 : 90, stand: true, w: along ? across : thick, h: cast.h, d: along ? thick : across, y0: cast.y0 };
+  }
+  const [nw, nh, nd] = SHAPES[form] ?? SHAPES.box;
+  return { sx: cast.w / nw, sy: cast.h / nh, sz: cast.d / nd, turn: 0, stand: false, w: cast.w, h: cast.h, d: cast.d, y0: cast.y0 };
+}
 const ROLE_OF = { hospital: 'hospital', station: 'station', office: 'office', skyscraper: 'office', school: 'office', home: 'shop', market: 'shop' };
 /** Edge-cost factors by kind [walk, climb, descend, jump, fall, sky arc]: a fall is cheap only for someone falling; jumps and arcs for someone running or falling. */
 const FACTORS = { walk: [1, 1, 1, 3, 6, 3], run: [1, 1, 1, 1, 4, 1], fall: [1, 1, 1, 1, 0.15, 1] };
@@ -80,6 +101,9 @@ export async function strandDemo(novelDir, options) {
   // inside, a small skeleton that hits can break; every thing joins the walk once placed (its top walkable, the street
   // under a grounded one blocked) and moves when a later event mentions it elsewhere.
   const found = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
+  // Jev's three calls per thing (playground/two-view-things.mjs): which model it is, then a box on two views of each placement.
+  const twoView = JSON.parse(await readFile(`${novelDir}/stage/thing-boxes.json`, 'utf8').catch(() => 'null')), boxes = twoView?.placements ?? {};
+  const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8'));
   const mentions = chosen.flatMap(scene => (found?.scenes?.[scene.id]?.objects ?? []).filter(object => !(object.kind === 'building' && object.match.kind === 'building')).map(object => ({ scene: scene.id, event: Math.max(0, scene.events.findIndex(entry => entry.id === object.event)), object })));
   const tokensOf = text => { const latin = text.match(/[A-Za-z]+/g) ?? [], cjk = [...text.replace(/[^一-鿿぀-ヿ]/g, '')], acronym = latin.length >= 2 ? latin.map(word => word[0].toUpperCase()).join('') : ''; return new Set([...latin.map(word => word.toUpperCase()).filter(word => word.length >= 3), ...(acronym.length >= 3 ? [acronym] : []), ...cjk.slice(0, -1).map((char, n) => char + cjk[n + 1])]); };
   const STOP = new Set(['机器', '装置', '飞行', '巨型', '人行', '通道', '临时', '仓库', '大型', '残骸']), names = [...new Set(mentions.map(entry => entry.object.name))], counts = new Map();
@@ -91,16 +115,17 @@ export async function strandDemo(novelDir, options) {
     const own = mentions.filter((_, index) => root(index) === head), tally = new Map();
     for (const entry of own) tally.set(entry.object.name, (tally.get(entry.object.name) ?? 0) + 1);
     const label = [...tally].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0][0], lead = own.find(entry => entry.object.name === label).object;
-    const size = Math.min(24, Math.max(4, ...own.map(entry => entry.object.size))), shape = lead.match.kind === 'shape' ? lead.match.id : 'box';
-    const height = shape === 'sphere' || shape === 'diamond' ? size : shape === 'oval' ? size * 0.55 : Math.max(1.2, size * 0.35);
+    // The model Jev picked for it, or else the detection's shape match.
+    const picked = twoView?.models?.[label], model = picked?.kind === 'model' && library.models[picked.id] ? picked.id : null;
+    const matched = lead.match.id === 'sphere' ? 'oval' : lead.match.id, size = Math.min(24, Math.max(4, ...own.map(entry => entry.object.size))), shape = picked?.kind === 'shape' && SHAPES[picked.id] ? picked.id : lead.match.kind === 'shape' && SHAPES[matched] ? matched : 'box';
+    const height = shape === 'diamond' ? size : shape === 'oval' ? size * 0.55 : Math.max(1.2, size * 0.35);
     const struct = size >= 10 ? generateSkeleton('house', 4049 + n, { width: Math.max(4, Math.round(size / 2) * 2), depth: Math.max(4, Math.round(Math.max(size * 0.35, 4) / 2) * 2), floors: Math.max(1, Math.round(height / 3)), cores: 1 }) : null;
-    return { id: `thing_${n + 1}`, name: label, aliases: [...tally.keys()].filter(other => other !== label), shape, size, height, airborne: own.filter(entry => entry.object.airborne).length * 2 > own.length, struct, standing: struct ? struct.cells.map(value => (value ? 1 : 0)) : null, mentions: own.map(entry => ({ scene: entry.scene, event: entry.event })), placed: [] };
+    return { id: `thing_${n + 1}`, name: label, aliases: [...tally.keys()].filter(other => other !== label), model, shape, size, height, airborne: own.filter(entry => entry.object.airborne).length * 2 > own.length, struct, standing: struct ? struct.cells.map(value => (value ? 1 : 0)) : null, mentions: own.map(entry => ({ scene: entry.scene, event: entry.event })), placed: [] };
   });
-  // Where each placement stands, from Jev's two views (playground/two-view-things.mjs): a box on the reader's view, a box on a
-  // view turned 90° showing the first as a beam; where they meet is the thing's position, size and height in metres.
-  const boxes = JSON.parse(await readFile(`${novelDir}/stage/thing-boxes.json`, 'utf8').catch(() => 'null'))?.placements ?? {};
+  // Where each placement stands: the cast from Jev's two views (a box on the reader's view, a box on a low side view showing
+  // the first as a beam), with the thing's model fitted as large as fits inside it.
   notes.thingBoxes = 0;
-  /** Place (or move) the things an event mentions: in their two-view box, or else on the ground beside the event's first actor. */
+  /** Place (or move) the things an event mentions: in their two-view cast, or else on the ground beside the event's first actor. */
   const placedAt = new Set();
   const placeThings = (scene, event, at) => {
     const index = scene.events.findIndex(entry => entry.id === event.id);
@@ -109,18 +134,19 @@ export async function strandDemo(novelDir, options) {
     placedAt.add(event.id);
     for (const entity of entities) if (entity.mentions.some(entry => entry.scene === scene.id && entry.event === index) && at) {
       const group = groups.get(scene.placeId), box = boxes[`${scene.id}|${index}|${entity.name}`]?.box, round = value => Math.round(value * 10) / 10;
-      let x, z, w, d, y0, y1;
-      if (box) { [x, z, w, d, y0, y1] = [(box.x[0] + box.x[1]) / 2, (box.z[0] + box.z[1]) / 2, box.x[1] - box.x[0], box.z[1] - box.z[0], box.y[0], box.y[1]]; notes.thingBoxes++; }
+      let x, z, cast;
+      if (box) { [x, z] = [(box.x[0] + box.x[1]) / 2, (box.z[0] + box.z[1]) / 2]; cast = { w: box.x[1] - box.x[0], h: box.y[1] - box.y[0], d: box.z[1] - box.z[0], y0: box.y[0] }; notes.thingBoxes++; }
       else {
         // No box yet: on the ground beside the actor, in the first direction with open ground; on the actor's spot when there is none.
         const actor = nodePosition(group.layout, at[0]), lotAt = (px, pz) => group.layout.lots.find(entry => px >= entry.i0 * 2 && px < (entry.i0 + entry.nx) * 2 && pz >= entry.j0 * 2 && pz < (entry.j0 + entry.nz) * 2);
         const reach = entity.size / 2 + 2, open = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => ({ x: actor.x + dx * reach, z: actor.z + dz * reach })).find(spot => spot.x > 0 && spot.z > 0 && spot.x < group.layout.NX * 2 && spot.z < group.layout.NZ * 2 && !lotAt(spot.x, spot.z) && actor.k === 0);
-        ({ x, z } = open ?? actor); w = entity.size; d = entity.shape === 'box' ? Math.max(1.2, entity.size * 0.35) : entity.size; y0 = entity.airborne ? 8 : 0; y1 = y0 + entity.height;
+        ({ x, z } = open ?? actor); cast = { w: entity.size, h: entity.height, d: entity.shape === 'box' ? Math.max(1.2, entity.size * 0.35) : entity.size, y0: entity.airborne ? 8 : 0 };
       }
+      const fit = fitInCast(entity.shape, cast, entity.model ? library.models[entity.model].size : null), y0 = fit.y0, y1 = y0 + fit.h;
       for (const other of groups.values()) if (other.things.delete(entity.id)) other.version++;
-      group.things.set(entity.id, { i0: Math.floor((x - w / 2) / 2), i1: Math.floor((x + w / 2) / 2), j0: Math.floor((z - d / 2) / 2), j1: Math.floor((z + d / 2) / 2), top: Math.round(y1 / 3), grounded: y0 < 1.5 && Math.max(w, d) <= 8 });
+      group.things.set(entity.id, { i0: Math.floor((x - fit.w / 2) / 2), i1: Math.floor((x + fit.w / 2) / 2), j0: Math.floor((z - fit.d / 2) / 2), j1: Math.floor((z + fit.d / 2) / 2), top: Math.round(y1 / 3), grounded: y0 < 1.5 && Math.max(fit.w, fit.d) <= 8 });
       group.version++;
-      entity.placed.push({ scene: scene.id, event: index, place: scene.placeId, x: round(x), y: round((y0 + y1) / 2), z: round(z), ...(box ? { w: round(w), h: round(y1 - y0), d: round(d), boxed: true } : {}) });
+      entity.placed.push({ scene: scene.id, event: index, place: scene.placeId, x: round(x), y: round(y0), z: round(z), fit: { sx: Math.round(fit.sx * 1000) / 1000, sy: Math.round(fit.sy * 1000) / 1000, sz: Math.round(fit.sz * 1000) / 1000, turn: fit.turn, stand: fit.stand, w: round(fit.w), h: round(fit.h), d: round(fit.d) }, ...(box ? { boxed: true } : {}) });
       entity.at = { place: scene.placeId, x, y: (y0 + y1) / 2, z };
     }
   };
@@ -210,7 +236,7 @@ export async function strandDemo(novelDir, options) {
     }
   }
   notes.detected = { buildings: lotNames.size, objects: [...placedObjects.values()].reduce((sum, list) => sum + list.length, 0) };
-  const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8')), worn = new Set();
+  const worn = new Set(entities.filter(entity => entity.model && entity.placed.length).map(entity => entity.model));
   const named = (placeId, index) => [...lotNames.values()].find(entry => entry.place === placeId && entry.lot === index);
   const shellOf = (placeId, lot, index) => { const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
   const exported = Object.fromEntries([...groups].map(([id, { layout }]) => [id, layout.lots.map((lot, index) => shellOf(id, lot, index))]));
@@ -226,7 +252,7 @@ export async function strandDemo(novelDir, options) {
   };
   return {
     models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
-    things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
+    things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, model: entity.model, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
       struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
     title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes, migrations,
     macro: macroLayout(),

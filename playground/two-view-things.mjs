@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * Two-view boxes for the things a strand puts in its places: the stage's capture loop, tried on the strand demo.
- *
- * For every placement of a thing, two Jev calls on pictures the reader would see, each a box question (Jev 1.14: one
- * bounding box as fractions of the picture) and a yes/no on whether the spot is in the picture at all:
+ * Jev places the things a strand puts in its places, from pictures the reader would see: the stage's capture loop,
+ * tried on the strand demo. Three calls:
+ *   0. once per thing, which model it is: a choice on a labelled sheet of every model the stage can draw (the Kenney
+ *      buildings) and the basic shapes (box, oval, triangle, diamond, donut; a sphere is an oval in a cube-shaped cast);
+ * then for every placement, a box question (Jev 1.14: one bounding box as fractions of the picture) and a yes/no on
+ * whether the spot is in the picture at all, on
  *   1. the place at that moment from the reader's camera;
  *   2. the same moment from the side: turned 90° (left or right, drawn from the placement) and lowered to a near-level
  *      look, aimed at the first box drawn into it as a beam (everything that box could mean in 3D). From the side the
  *      beam's run and the thing's height read directly.
- * The points of the place both pictures show inside their boxes are the thing's extent: its position, size and height.
+ * The points of the place both pictures show inside their boxes are the cast: its position, size and height. The
+ * exporter fits the picked model into it, as large as fits.
  *
  *   node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh] [--resolve] [--model jev-1.14.0]
  *
@@ -68,6 +71,19 @@ async function browser() {
   };
 }
 
+const SHAPES = ['box', 'oval', 'triangle', 'diamond', 'donut'];
+/** What each model or shape on the sheet is, in words, beside its picture. */
+const hint = key => key.startsWith('skyscraper') ? 'a skyscraper' : key.startsWith('tower') ? 'a slim tower block' : key.startsWith('block-wide') ? 'a wide low block' : key.startsWith('office') ? 'an office building'
+  : ({ market: 'a market hall', keep: 'a castle keep', fountain: 'a fountain', windmill: 'a windmill', box: 'a box: vehicles, containers, machines', oval: 'an egg, capsule or ball: airships, pods, spheres', triangle: 'a triangular prism: roofs, ramps, tents', diamond: 'a diamond: crystals', donut: 'a ring: halos, wheels, rings' })[key] ?? key;
+
+/** Call 0: which model or shape a thing is drawn as, picked from the labelled sheet. */
+async function pickModel(jev, sheet, keys, thing, text) {
+  const [answer] = await jev.decide([`Picture "models" is a sheet of every model and shape a 3D stage can draw, each labelled with its name.`, `A thing a novel mentions: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}.`, `Where it is mentioned: ${text}`].join('\n'),
+    [{ key: 'model', primitive: 'choice', instructions: `Which model or shape on picture "models" should ${thing.name} be drawn as: the one that looks most like it?`, options: keys, optionHints: Object.fromEntries(keys.map(key => [key, `${key}: ${hint(key)}`])) }], { images: { models: sheet } });
+  const top = Object.entries(answer.distribution ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([key, p]) => [key, Math.round(p * 100) / 100]);
+  return { id: answer.value, kind: SHAPES.includes(answer.value) ? 'shape' : 'model', confidence: answer.confidence ?? null, top };
+}
+
 /** One Jev call on one still: where the thing is (a box) and whether its spot is in the picture at all. */
 async function ask(jev, state, still, name) {
   const [where, seen] = await jev.decide(state, [
@@ -87,7 +103,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // Box questions need Jev 1.14; the analysis keeps its own pinned model.
   const jev = jevFromEnv({ ...process.env, JEV_MODEL: values.model }), report = `${novelDir}/stage/thing-boxes.json`, out = values.out ? resolve(values.out) : null;
   const previous = values.fresh ? null : JSON.parse(await readFile(report, 'utf8').catch(() => 'null'));
-  const placements = { ...(previous?.placements ?? {}) }, started = Date.now();
+  const placements = { ...(previous?.placements ?? {}) }, models = { ...(previous?.models ?? {}) }, started = Date.now();
+  const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8')), keys = [...Object.keys(library.models), ...SHAPES];
   if (out) await mkdir(out, { recursive: true });
   const { server, url } = await serve(page, resolve(values.vendor)), chrome = await browser();
   let calls = 0, asked = 0, reused = 0, failed = 0;
@@ -95,6 +112,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     await chrome.open(url);
     const stage = await chrome.evaluate('({ things: window.__stage.things, places: window.__stage.places, scenes: window.__stage.scenes })');
     const work = stage.things.flatMap(thing => thing.placed.map(spot => ({ thing, spot, key: `${spot.scene}|${spot.event}|${thing.name}` })));
+    // Call 0, once per thing: the model, from one sheet of them all.
+    if (stage.things.some(thing => !models[thing.name])) {
+      await chrome.evaluate(`window.__stage.sheet(${JSON.stringify({ models: library.models, entries: keys })})`);
+      const sheet = await chrome.still();
+      if (out) await writeFile(join(out, '00-models.png'), Buffer.from(sheet, 'base64'));
+      for (const thing of stage.things) {
+        if (models[thing.name] || (values.max && calls >= Number(values.max) * 2)) continue;
+        const first = thing.placed[0], text = stage.scenes.find(scene => scene.id === first.scene)?.events[first.event] ?? '';
+        models[thing.name] = await pickModel(jev, sheet, keys, thing, text); calls++;
+        console.error(`${thing.name}: drawn as ${models[thing.name].id} (${models[thing.name].top.map(([key, p]) => `${key} ${p}`).join(', ')})`);
+      }
+    }
     for (const [n, { thing, spot, key }] of work.entries()) {
       if (values.max && asked >= Number(values.max)) break;
       const place = stage.places[spot.place], text = stage.scenes.find(scene => scene.id === spot.scene)?.events[spot.event] ?? '';
@@ -108,7 +137,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         `A still of a 3D model of a place in a novel, used to place one thing the story mentions.`,
         `Place: ${place.path.join(' › ')} (${place.kind} of ${place.lots} buildings). Blue lattices are the buildings' corridors and orange their stairs; gold shapes are things already there; small labelled dots are people.`,
         `Event: ${text}`,
-        `Thing: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}.`,
+        `Thing: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}${models[thing.name] ? `, drawn as ${hint(models[thing.name].id)}` : ''}.`,
       ];
       await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: `${key}#1` })})`);
       const first = await chrome.still();
@@ -136,6 +165,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.error(`${thing.name} (${thing.size} m${thing.airborne ? ', in the air' : ''}) @ ${spot.scene}#${spot.event}: view 1 ${one.label} (spot in view ${one.seen}), view 2 ${two.label} covering ${Math.round((solved?.cover ?? 0) * 100)}% of the beam → ${size}${solved?.uncertain ? ', depth uncertain' : ''}`);
     }
   } finally { await chrome.close(); server.close(); }
-  await writeFile(report, JSON.stringify({ version: 1, model: jev.modelId, askedAt: new Date().toISOString(), placements }, null, 1), { mode: 0o644 });
+  await writeFile(report, JSON.stringify({ version: 1, model: jev.modelId, askedAt: new Date().toISOString(), models, placements }, null, 1), { mode: 0o644 });
   console.log(JSON.stringify({ report, placements: Object.keys(placements).length, asked, reused, failed, calls, seconds: (Date.now() - started) / 1000 }));
 }
