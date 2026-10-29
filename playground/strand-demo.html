@@ -292,20 +292,22 @@ const traces = data.migrations.flatMap((migration) => {
 // Things the story puts in the place: gold hologram shapes where the event happens, floating on what is under them.
 const thingMaterial = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.28, depthWrite: false }), thingEdges = new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.9 });
 const shapeGeometry = (shape, size) => shape === "sphere" ? new THREE.SphereGeometry(size / 2, 20, 14) : shape === "oval" ? new THREE.SphereGeometry(size / 2, 20, 14).scale(1, 0.55, 0.7) : shape === "diamond" ? new THREE.OctahedronGeometry(size / 2) : new THREE.BoxGeometry(size, Math.max(1.2, size * 0.35), Math.max(1.2, size * 0.35));
-let things = new THREE.Group(); world.add(things);
-function showThings(segment, entry) {
-  world.remove(things); things = new THREE.Group(); world.add(things);
-  if (segment.kind !== "event") return;
-  for (const object of segment.scene.objects ?? []) {
-    if (object.event > segment.eventIndex) continue;
-    const geometry = shapeGeometry(object.shape, object.size), mesh = new THREE.Mesh(geometry, thingMaterial), edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), thingEdges), piece = new THREE.Group();
-    piece.add(mesh, edges);
+// Things stay in their place from the moment the story mentions them, whichever place the camera is on.
+const placedThings = [];
+for (const scene of data.scenes) {
+  const entry = built.get(scene.place);
+  for (const object of scene.objects ?? []) {
+    const geometry = shapeGeometry(object.shape, object.size), piece = new THREE.Group();
+    piece.add(new THREE.Mesh(geometry, thingMaterial), new THREE.LineSegments(new THREE.EdgesGeometry(geometry), thingEdges));
     const tag = label(object.name.slice(0, 12), "#ffd36e", 24); tag.position.y = object.size / 2 + 1.6; piece.add(tag);
-    piece.position.set(object.x - entry.cx, object.y, object.z - entry.cz);
-    piece.userData.appearing = object.event === segment.eventIndex;
-    things.add(piece);
+    piece.position.set(object.x - entry.cx, object.y, object.z - entry.cz); piece.visible = false;
+    world.add(piece);
+    placedThings.push({ piece, time: eventStart.get(`${scene.id}|${object.event}`) ?? Infinity });
   }
 }
+// Each place's damage, as of now on the strand: the hits that have happened there so far.
+const hitTimes = {};
+for (const segment of segments) if (segment.kind === "event" && segment.event.hit) (hitTimes[segment.scene.place] ??= []).push(segment.start);
 const boxLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.95 })); boxLines.visible = false; world.add(boxLines);
 /** Where the camera rests on a place, and a glide to it: out over both places, across, and down, like a hand on the mouse. */
 const poseFor = (id) => { const spot = macroAt.get(id) ?? { x: 0, z: 0 }, place = data.places[id], span = Math.max(place.NX, place.NZ) * CELL; return { target: new THREE.Vector3(spot.x, 4, spot.z), position: new THREE.Vector3(spot.x + span * 0.45, span * 0.8, spot.z + span * 0.95) }; };
@@ -356,9 +358,9 @@ function frame(now) {
       camera.position.copy(bend(glide.from.position, glide.mid.position, glide.to.position)); controls.target.copy(bend(glide.from.target, glide.mid.target, glide.to.target));
     }
   }
-  drawSkeletons(segment.scene.place, entry, segment.hits);
+  for (const id of Object.keys(data.places)) drawSkeletons(id, built.get(id), (hitTimes[id] ?? []).filter((at) => at <= time).length);
   if (segment !== shownSegment) {
-    shownSegment = segment; showPaths(segment, entry); showThings(segment, entry);
+    shownSegment = segment; showPaths(segment, entry);
     const hit = segment.kind === "event" && segment.event.hit;
     $("flash").textContent = hit ? `damage ${Math.round(hit.strength * 100)}% · ${hit.destroyed.length} cells lost · ${hit.cutRooms.length} rooms cut off` : "";
     $("flash").style.opacity = hit ? 1 : 0;
@@ -371,7 +373,7 @@ function frame(now) {
   debris.instanceMatrix.needsUpdate = true;
   if (segment.blast && t < 1.2) { blast.position.copy(segment.blast); blast.scale.setScalar(1 + t * 8); blast.material.opacity = 0.5 * (1 - t / 1.2); } else blast.material.opacity = 0;
   // Things sit still where they were put, fitted to their box; new ones grow in.
-  for (const piece of things.children) { const grow = piece.userData.appearing ? Math.min(1, elapsed / 0.7) : 1; piece.scale.setScalar(Math.max(0.01, grow)); }
+  for (const thing of placedThings) { thing.piece.visible = time >= thing.time; if (thing.piece.visible) thing.piece.scale.setScalar(Math.max(0.01, Math.min(1, (time - thing.time) / 0.7))); }
   for (const reveal of reveals) reveal.tag.visible = time >= reveal.time;
   mats.cut.opacity = 0.55 + 0.4 * Math.sin(now / 220); mats.roomCut.opacity = 0.2 + 0.18 * Math.sin(now / 220);
 

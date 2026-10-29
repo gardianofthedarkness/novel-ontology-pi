@@ -85,6 +85,10 @@ Buildings are added as the story detects them, not fixed up front.
 - **The library grows from its source.** Novels bring vehicles, aircraft, ships and machines. The library search should include more of the source the models came from (the Kenney CC0 catalog: vehicles, aircraft, space and so on), baked into the same int16 format.
   - The bake tool named in commit `9d988e0` (`tools/architecture-models.mjs`) was never committed; it needs writing again and committing.
 
+**Persistence:** placed objects and each place's damage belong to the place on the strand, not to the scene in view. Once the story puts something there or damages it, it stays, through every camera glide between places, until the timeline is rewound before that moment.
+
+**Library source for now:** Kenney's Car Kit and Space Kit, just for the demo. A searchable open-source model library would be better later.
+
 **Variety:** every lot wears an artistic model (the Kenney CC0 kits baked in `architectureModels.json`), drawn per lot from its kind's variants. The walkable skeleton glows inside.
 
 ## Moves: 14 directions, and the sky
