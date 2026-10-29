@@ -16,6 +16,8 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`));
 const PALETTE = ['#7ce6ff', '#ff8fb1', '#ffd36e', '#9dff8a', '#c59bff', '#ff9d5c', '#5cf2c8', '#f2f2f2', '#8fb6ff', '#e0ff6e'];
 /** The artistic models (Kenney CC0 kits, baked in apps/playground) a building of each role may wear; one is drawn per lot at random. */
+/** Shells for lots on ancient ground (a village, a castle town, farmland): the old town's buildings. */
+const ANCIENT_SHELLS = ['market', 'keep', 'windmill', 'market'];
 const SHELLS = { office: ['tower-a', 'tower-b', 'tower-d', 'tower-e', 'tower-f', 'tower-g', 'tower-h', 'tower-i', 'tower-j', 'tower-l', 'tower-m', 'office-c', 'office-h', 'block-wide-a', 'block-wide-b'], tall: ['skyscraper-a', 'skyscraper-b', 'skyscraper-e', 'tower-c', 'tower-k'], shop: ['office-c', 'block-wide-a', 'market'], hospital: ['office-k'], station: ['block-wide-b'] };
 // The basic shapes, at unit size (their extents). A sphere is a kind of oval: an oval in a cube-shaped cast.
 const SHAPES = { box: [1, 1, 1], oval: [1, 0.55, 0.7], triangle: [1, 1, 1], diamond: [1, 1, 1], donut: [1, 0.3, 1] };
@@ -56,7 +58,9 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape } = await load('dist/src/ground/stage/landscape.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, insideBy, LANDSCAPES } = await load('dist/src/ground/stage/landscape.js'), W = await load('dist/apps/playground/src/data/world.js');
+  // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
+  const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf } = await load('dist/src/digger/stage/scale.js');
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -162,11 +166,11 @@ export async function strandDemo(novelDir, options) {
     for (const entry of own) tally.set(entry.object.name, (tally.get(entry.object.name) ?? 0) + 1);
     const label = [...tally].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0][0], lead = own.find(entry => entry.object.name === label).object;
     // The model Jev picked for it, or else the detection's shape match.
-    const picked = twoView?.models?.[label], model = picked?.kind === 'model' && library.models[picked.id] ? picked.id : null;
+    const picked = twoView?.models?.[label], model = picked?.kind === 'model' && library.models[picked.id] ? picked.id : picked ? null : library.models[lead.match.id] ? lead.match.id : null;
     const matched = lead.match.id === 'sphere' ? 'oval' : lead.match.id, size = Math.min(24, Math.max(4, ...own.map(entry => entry.object.size))), shape = picked?.kind === 'shape' && SHAPES[picked.id] ? picked.id : lead.match.kind === 'shape' && SHAPES[matched] ? matched : 'box';
     const height = shape === 'diamond' ? size : shape === 'oval' ? size * 0.55 : Math.max(1.2, size * 0.35);
     const struct = size >= 10 ? generateSkeleton('house', 4049 + n, { width: Math.max(4, Math.round(size / 2) * 2), depth: Math.max(4, Math.round(Math.max(size * 0.35, 4) / 2) * 2), floors: Math.max(1, Math.round(height / 3)), cores: 1 }) : null;
-    return { id: `thing_${n + 1}`, name: label, aliases: [...tally.keys()].filter(other => other !== label), model, shape, size, height, airborne: own.filter(entry => entry.object.airborne).length * 2 > own.length, struct, standing: struct ? struct.cells.map(value => (value ? 1 : 0)) : null, mentions: own.map(entry => ({ scene: entry.scene, event: entry.event })), placed: [] };
+    return { id: `thing_${n + 1}`, name: label, aliases: [...tally.keys()].filter(other => other !== label), model, switched: !!picked?.switched, theme: picked?.theme ?? null, shape, size, height, airborne: own.filter(entry => entry.object.airborne).length * 2 > own.length, struct, standing: struct ? struct.cells.map(value => (value ? 1 : 0)) : null, mentions: own.map(entry => ({ scene: entry.scene, event: entry.event })), placed: [] };
   });
   // Where each placement stands: the cast from Jev's two views (a box on the reader's view, a box on a low side view showing
   // the first as a beam), with the thing's model fitted as large as fits inside it.
@@ -202,6 +206,9 @@ export async function strandDemo(novelDir, options) {
         ({ x, z } = open ?? actor); cast = { w: entity.size, h: entity.height, d: entity.shape === 'box' ? Math.max(1.2, entity.size * 0.35) : entity.size, y0: entity.airborne ? 8 : 0 };
       }
       reach(x, z, Math.max(24, entity.size));
+      // At its first placement, a thing takes the theme of the manifold under it (its category's model of that era: a
+      // windmill in a modern district is a wind turbine); a model Jev chose by switching theme stays as it is.
+      if (!entity.placed.length && entity.model && !entity.switched) { entity.theme = themeAt(x, z); entity.model = themedModel(modelThemes, entity.model, entity.theme, entity.id); }
       const fit = fitInCast(entity.shape, cast, entity.model ? library.models[entity.model].size : null), y0 = fit.y0, y1 = y0 + fit.h;
       for (const other of groups.values()) if (other.things.delete(entity.id)) other.version++;
       group.things.set(entity.id, { i0: Math.floor((x - fit.w / 2) / 2), i1: Math.floor((x + fit.w / 2) / 2), j0: Math.floor((z - fit.d / 2) / 2), j1: Math.floor((z + fit.d / 2) / 2), top: Math.round(y1 / 3), grounded: y0 < 1.5 && Math.max(fit.w, fit.d) <= 8 });
@@ -337,16 +344,29 @@ export async function strandDemo(novelDir, options) {
     // Not where a child place stands: it has its own ground there.
     const keep = Object.values(canvas.places).filter(child => child.parent === place.id).map(child => ({ at: child.at, r: child.r }));
     const clear = (x, z, margin = 3) => keep.every(({ at, r }) => Math.hypot(x - at[0], z - at[1]) > r + margin);
-    // A building's id is its place and its order in the fill; `manifold` fingerprints the landscape it was filled from, so
-    // damage kept for it (world.json) applies only while that landscape stands.
-    const manifold = createHash('sha256').update(JSON.stringify(place.landscape)).digest('hex').slice(0, 12);
-    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map((b, n) => ({ id: `${place.id}:${n}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, manifold }));
+    // A building's id is its place and its lot in the fill (stable as the place grows). Its `manifold` is the patch it
+    // stands on: that patch with the older patches that cut its ground, and the fill's recipe, so a newer patch never
+    // changes an older one's buildings (damage kept for them in world.json stays theirs). `era`: that patch's.
+    const patchOf = b => place.landscape.patches.find(patch => patch.id === (filled.owner[b.lot] ?? String(b.lot).split(':')[0])) ?? place.landscape.patches[0];
+    const manifoldOf = patch => createHash('sha256').update(JSON.stringify({ recipe: 1, patch, older: place.landscape.patches.slice(0, place.landscape.patches.indexOf(patch)) })).digest('hex').slice(0, 12);
+    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, manifold: manifoldOf(patch), era: LANDSCAPES[patch.type]?.era ?? 'modern' }; });
     const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
     return { place: place.id, types: place.landscape.patches.map(patch => patch.type), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width]),
       walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })) } };
   });
+  /** The theme of the manifold at a point: the era of the patch reaching it most surely (modern where no landscape does). */
+  const themeAt = (x, z) => {
+    let best = null, depth = -1;
+    for (const place of Object.values(canvas.places)) {
+      if (!place.landscape) continue;
+      const [wx, wz] = C.worldOf(canvas, place.id);
+      if (Math.hypot(x - wx, z - wz) > place.r) continue;
+      for (const patch of place.landscape.patches) { const by = insideBy(patch, [x - wx, z - wz]); if (by > depth) { depth = by; best = patch; } }
+    }
+    return best && LANDSCAPES[best.type]?.era === 'ancient' ? 'ancient' : 'modern';
+  };
   // The world: every staged place an anchor on its canvas spot (a staged building stands there; an open place is its ground).
-  const anchors = [...ownGrids].map(id => { const node = macroOf.get(id), own = kindOf(id) === 'site', kind = inputs.architecture?.places[id]?.kind; return { place: id, label: name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role: ROLE_OF[kind] ?? 'office', floors: kind === 'skyscraper' ? 12 : 6 }; });
+  const anchors = [...ownGrids].map(id => { const node = macroOf.get(id), own = kindOf(id) === 'site', kind = inputs.architecture?.places[id]?.kind; return { place: id, label: name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role: ROLE_OF[kind] ?? 'office', floors: kind === 'skyscraper' ? 12 : 6, era: themeAt(node?.spotX ?? 0, node?.spotZ ?? 0) }; });
   world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors });
   shared.layout = { id: 'world', kind: 'world', lots: world.lots };
   // Damage other story lines left on the world (stage/simulation/world.json, from their accepted runs): applied in story order,
@@ -554,12 +574,14 @@ export async function strandDemo(novelDir, options) {
       notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied } };
   };
   let lastLive = 0;
-  const live = (final = false) => { if (!options.live || (!final && Date.now() - lastLive < 300)) return; lastLive = Date.now(); options.live(snapshot(final)); };
+  const live = (final = false, now = false) => { if (!options.live || (!final && !now && Date.now() - lastLive < 300)) return; lastLive = Date.now(); options.live(snapshot(final)); };
   const { start, act } = mover;
   mover.start = args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
-  mover.act = args => {
+  // `pace` (seconds): each moment held that long before the next is played, so a live view shows every event.
+  const hold = () => new Promise(done => setTimeout(done, options.pace * 1000));
+  mover.act = async args => {
     const now = `${args.scene.id}|${args.scene.events.findIndex(entry => entry.id === args.event.id)}`;
-    if (now !== moment) live();
+    if (now !== moment) { if (options.pace) { live(false, true); await hold(); } else live(); }
     moment = now;
     const outcome = act(args);
     if (outcome.kind === 'move') { where.set(args.person, { place: args.scene.placeId, at: outcome.to }); const end = W.nodePos(world, outcome.to[0]); reach(end.x, end.z, 40); }
@@ -598,7 +620,7 @@ export async function strandDemo(novelDir, options) {
   const worn = new Set(entities.filter(entity => entity.model && entity.placed.length).map(entity => entity.model));
   // One world: a lot is named whichever place named it.
   const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
-  const shellOf = (placeId, lot, index) => { const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
+  const shellOf = (placeId, lot, index) => { if (lot.era === 'ancient' && !named(placeId, index)) { const model = ANCIENT_SHELLS[Math.floor(stream('shell', placeId, index)() * ANCIENT_SHELLS.length)]; worn.add(model); return model; } const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
   const shells = world.lots.map((lot, index) => shellOf('world', lot, index));
   // The world as the page draws it: one grid over everything explored (oi, oj: the offset of world cell 0, 0 on it), its nodes
   // as that grid's dense cells, each lot and chunk with the moment it was first reached.
@@ -607,11 +629,11 @@ export async function strandDemo(novelDir, options) {
   const dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return (k * NZ + (j + oj)) * NX + (i + oi); };
   const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
   const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
-    i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
+    i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
   notes.world = { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
   return {
     models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
-    things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, model: entity.model, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
+    things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, model: entity.model, theme: entity.theme ?? null, switched: entity.switched, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
       struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
     title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
     migrations: migrations.map(migration => { const route = routes.get(`${migration.scene}|${migration.person}`); return { ...migration, route: route ? { ...route, exit: route.exit?.map(dense) ?? null, entry: route.entry?.map(dense) ?? null } : null }; }),
@@ -620,7 +642,7 @@ export async function strandDemo(novelDir, options) {
     // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
     world: { NX, NZ, K, oi, oj, lots: worldLots, earlier,
       ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]) },
-    places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, lots: worldLots }])),
+    places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, theme: anchor.era, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, lots: worldLots }])),
     scenes: chosen.map(scene => {
       const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label, kind = staged.get(scene.id)?.kind ?? null;
       // The spots the movement questions offer for this building, each at a node of the world near a point (the one nearest
@@ -760,9 +782,9 @@ export async function keepWorldDamage(folder) {
  * returns the player's data (what strandDemo makes). The one entry point `novel sim run` uses, so the engine behind it can
  * change (city filling, say) without the command changing.
  */
-export async function runStrand(novelDir, { from, to, fork = null, title } = {}, { until = null, live = null } = {}) {
+export async function runStrand(novelDir, { from, to, fork = null, title } = {}, { until = null, live = null, pace = 0 } = {}) {
   // `live`: called with the world as it stands at each moment played (at most every 0.3 s) and at the end, for the live view.
-  return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}), ...(until ? { until } : {}), ...(live ? { live } : {}) });
+  return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}), ...(until ? { until } : {}), ...(live ? { live } : {}), ...(pace ? { pace } : {}) });
 }
 
 /** The player page with the strand inlined. */

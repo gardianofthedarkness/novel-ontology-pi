@@ -31,7 +31,7 @@ interface KeptRun { strand: string; run: string; fresh: boolean; accepted: strin
 interface StrandData { title: string; notes: { hits?: number; impacts?: { sphere: number; none: number } }; things: unknown[]; places: Record<string, unknown>; scenes: { events: { moves: unknown[] }[] }[] }
 interface Engine {
   ENGINE: string;
-  runStrand(novelDir: string, strand: Omit<SimStrand, "id">, options?: { until?: { scene: string; event: number }; live?: (snapshot: unknown) => unknown }): Promise<StrandData>;
+  runStrand(novelDir: string, strand: Omit<SimStrand, "id">, options?: { until?: { scene: string; event: number }; live?: (snapshot: unknown) => unknown; pace?: number }): Promise<StrandData>;
   simulationRecord(data: StrandData, strand: Omit<SimStrand, "title">): { strand: { title: string } };
   simulationInputs(novelDir: string): Promise<string>;
   keepRun(folder: string, strand: Omit<SimStrand, "title">, record: unknown, options: { inputs: string; accept?: boolean; page?: unknown }): Promise<KeptRun>;
@@ -165,8 +165,12 @@ const jevShare = (data: StrandData) => {
  * `novel sim run`: the engine on the chosen story lines (`--strand` one, `--auto N` the first N of `novel sim strands`), each
  * kept as a run. The first run of a line is its accepted one; a later run is kept beside it and accepted only with --accept.
  */
-export async function simRun(novelDir: string, options: { strand?: string; auto?: number; accept?: boolean } = {}): Promise<Record<string, unknown>> {
-  await requireStage(novelDir);
+/**
+ * `pace` (seconds): each moment held that long, so the live view of the world shows every event as it plays (a run to watch).
+ * `force`: an operator's run on a book whose other steps are not all done (never Pi's: its guard does not allow it).
+ */
+export async function simRun(novelDir: string, options: { strand?: string; auto?: number; accept?: boolean; pace?: number; force?: boolean } = {}): Promise<Record<string, unknown>> {
+  if (!options.force) await requireStage(novelDir);
   const chosen = await chooseLines(novelDir, options);
   const sim = await engine(), inputs = await sim.simulationInputs(novelDir), runs = [];
   const live = await (await pickers()).createLive(novelDir, { command: "run", lines: chosen.map((line) => ({ id: line.strand.id, title: line.title })) });
@@ -174,7 +178,7 @@ export async function simRun(novelDir: string, options: { strand?: string; auto?
     for (const [index, line] of chosen.entries()) {
       await live.line(index, { status: "running" });
       const started = Date.now(), strand = line.strand;
-      const data = await sim.runStrand(novelDir, { from: strand.from, to: strand.to, fork: strand.fork }, { live: (snapshot) => live.world(snapshot) });
+      const data = await sim.runStrand(novelDir, { from: strand.from, to: strand.to, fork: strand.fork }, { live: (snapshot) => live.world(snapshot), ...(options.pace ? { pace: options.pace } : {}) });
       const kept = await sim.keepRun(simulationFolder(novelDir), strand, sim.simulationRecord(data, strand), { inputs, accept: options.accept, page: data });
       const run = { ...kept, title: data.title, places: Object.keys(data.places).length, scenes: data.scenes.length, moves: data.scenes.reduce((sum, scene) => sum + scene.events.reduce((count, event) => count + event.moves.length, 0), 0), hits: data.notes.hits ?? 0, things: data.things.length, jev: jevShare(data), seconds: (Date.now() - started) / 1000 };
       runs.push(run);
@@ -213,4 +217,4 @@ export async function simCurrent(novelDir: string): Promise<{ current: boolean; 
   return { current: status.lines.length > 0 && status.lines.every((line) => line.playable && (line.current || line.newerCurrent)), lines: status.lines.length };
 }
 
-export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id>] [--accept] | novel sim show <novel-dir>";
+export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id>] [--accept] [--pace seconds] [--force] | novel sim show <novel-dir>";
