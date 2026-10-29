@@ -567,7 +567,7 @@ if (capture) {
     places: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, kind: place.kind, lots: place.lots.length }])),
     scenes: data.scenes.map((scene) => ({ id: scene.id, place: scene.place, events: scene.events.map((event) => event.text) })),
     /** One still: `place` at the start of an event, the reader's camera turned by `yaw` about it; `hide` things, `beams` of earlier boxes, `boxes` and a `solved` 3D box drawn for checking. */
-    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [] }) {
+    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null }) {
       time = (eventStart.get(`${scene}|${event}`) ?? 0) + 0.02; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
       for (const extra of extras.splice(0)) world.remove(extra);
       const pose = poseFor(place), offset = pose.position.clone().sub(pose.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
@@ -597,6 +597,13 @@ if (capture) {
         await frames();
       }
       camera.updateMatrixWorld(); cameras.set(id, camera.clone());
+      // A top-down 2D map: straight down, north up, orthographic, so a box on it reads as metres on the ground.
+      if (topdown) {
+        const entry = built.get(place), aspect = host.clientWidth / host.clientHeight, half = topdown.half, map = new THREE.OrthographicCamera(-half * aspect, half * aspect, half, -half, 0.1, 1000);
+        map.up.set(0, 0, -1); map.position.set(topdown.x - entry.cx, 400, topdown.z - entry.cz); map.lookAt(topdown.x - entry.cx, 0, topdown.z - entry.cz); map.updateMatrixWorld();
+        sheetView = { scene: world, camera: map }; await frames();
+        return { id, width: host.clientWidth, height: host.clientHeight, map: { x: topdown.x, z: topdown.z, halfX: half * aspect, halfZ: half } };
+      }
       return { id, width: host.clientWidth, height: host.clientHeight };
     },
     /**

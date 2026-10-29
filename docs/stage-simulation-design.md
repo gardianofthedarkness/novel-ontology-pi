@@ -129,6 +129,12 @@ Buildings are added as the story detects them, not fixed up front.
        - Then the lock turn boxes the chosen ghost from both directions.
      - **The helicopter again:** Jev picked "over 白井黑子, 30 m up" at probability 0.35, with "none" at 0.06; boxing empty sky had given 0.03–0.06. The lock turn was 0.57 / 0.59, locking it at 22 × 17 × 19 m, 24–43 m up.
      - Only one thing in this strand is in the air, so this is one example, not a measurement.
+     - **Height by choice, 2D position from above** (user decision, 2026-10-29): the sky ghost choice now only locks the height.
+       - A top-down 2D map follows: orthographic, north up, centred on the chosen ghost and drawn at its height. One box on it reads directly as metres on the ground, the horizontal position and footprint. This replaces the two-direction lock turn.
+       - The helicopter: picked "over 白井黑子, 30 m up" (0.30). The map box (0.61) locked a 21 × 12 m footprint, 30–41 m up.
+     - **Universe:** the height choice also offers "universe", meaning not in this place's sky at all but out in space (a satellite, a ship in orbit). With the same "at least twice none" rule, it goes far above the place (150 m in the demo).
+       - It is meant as a place of its own in the place system once that has one.
+       - The helicopter gave it 0.00; nothing in this strand has tried it yet.
 6. **Placement rules:**
    - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
    - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.
