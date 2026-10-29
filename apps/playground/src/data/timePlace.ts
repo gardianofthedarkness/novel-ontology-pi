@@ -15,6 +15,8 @@ export interface StoryTime {
   toldFromId: string | null;
   date: { year?: number; month?: number; day?: number; derived: boolean } | null;
   partOfDay: string | null;
+  /** A stated clock time ("下午三点" → 15:00). */
+  clock?: { hour: number; minute: number };
   chapterIndex: number;
   storyIndex: number;
   narrativeIndex: number;
@@ -68,6 +70,61 @@ export interface TimePlaceProjection {
   universe?: { id: string; title: string };
   books?: UniverseBook[];
   continuities?: { id: string; title: string }[];
+  /** The universe calendar (one clock): every period on its day; books are marks on it. */
+  calendar?: CalendarView | null;
+}
+
+/** Calendar minutes: ordering keys from the backend (`novel calendar`), not real date arithmetic. */
+export interface CalendarSpan { start: number; end: number }
+export interface CalendarViewEntry {
+  /** The period (time) id as this projection holds it. */
+  id: string;
+  book: number | null;
+  label: string;
+  year: number | null; month: number | null; day: number | null;
+  /** "15:00" or a part of the day ("evening"). */
+  time: string | null;
+  span: CalendarSpan;
+  /** stated / derived (from stated words) / between (a range between dated neighbours). */
+  placed: "stated" | "derived" | "between";
+  flashback: boolean;
+  scenes: number;
+}
+export interface CalendarView {
+  books: { sourceId: string; volume: number | null; title: string; readingOrder: number | null; year: number | null; yearBy: string | null; span: CalendarSpan | null }[];
+  entries: CalendarViewEntry[];
+  conflicts: string[];
+  /** Years waiting for review (a book whose dates go back from the previous book's). */
+  questions: number;
+}
+
+export const CALENDAR_DAY = 1440;
+/** The day a calendar minute falls on (the backend's ordering key: 31-day months, 12-month years). */
+export function calendarDay(minute: number): { year: number; month: number; day: number } {
+  const index = Math.floor(minute / CALENDAR_DAY);
+  return { year: Math.floor(index / 372), month: Math.floor((index % 372) / 31) + 1, day: (index % 31) + 1 };
+}
+export const calendarDayKey = (day: { year: number; month: number; day: number }) => `${day.year}-${day.month}-${day.day}`;
+/** "Year 1 · 12月25日" (years nobody states are relative: Year 1 is the first dated book). */
+export const calendarDayLabel = (day: { year: number; month: number; day: number }) => `Year ${day.year} · ${day.month}月${day.day}日`;
+/** "15:00", "evening", "all day" — when in its day a period sits. */
+export const calendarTimeLabel = (entry: Pick<CalendarViewEntry, "time" | "span" | "placed">) => entry.placed === "between" ? "undated" : entry.time ? (PART_OF_DAY[entry.time] ?? entry.time) : entry.span.end - entry.span.start >= CALENDAR_DAY ? "that day" : "";
+
+/**
+ * The calendar's days, earliest first, each with its periods in clock order.
+ * An undated period (a range between dated neighbours) is listed under the
+ * day its range starts, marked as undated.
+ */
+export function calendarDays(view: CalendarView): { key: string; label: string; entries: CalendarViewEntry[] }[] {
+  const days = new Map<string, { key: string; label: string; start: number; entries: CalendarViewEntry[] }>();
+  for (const entry of view.entries) {
+    const day = entry.placed === "between" || entry.year === null ? calendarDay(entry.span.start) : { year: entry.year, month: entry.month!, day: entry.day! };
+    const key = calendarDayKey(day);
+    const bucket = days.get(key) ?? { key, label: calendarDayLabel(day), start: Math.floor(entry.span.start / CALENDAR_DAY), entries: [] };
+    bucket.entries.push(entry);
+    days.set(key, bucket);
+  }
+  return [...days.values()].sort((first, second) => first.start - second.start).map(({ key, label, entries }) => ({ key, label, entries: entries.sort((first, second) => (first.placed === "between" ? 1 : 0) - (second.placed === "between" ? 1 : 0) || first.span.start - second.span.start || first.span.end - second.span.end) }));
 }
 
 /** Map one book's ids into a universe projection (identity for a book projection). */

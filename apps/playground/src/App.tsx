@@ -964,7 +964,7 @@ export default function App() {
       <button className="dock-toggle" aria-expanded={dockOpen} onClick={toggleDock} title={dockOpen ? "Fold the processing dock" : "Show the processing dock"}><i className={piBusy(liveActivity) ? "is-busy" : ""} /><span className="dock-label">{dockOpen ? "Hide processing" : phoneLive ? liveLabel : `Processing · ${processingStatus}`}</span><span aria-hidden="true">{dockOpen ? "▾" : "▴"}</span></button>
       <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} faculties={liveActivity?.faculties} telemetryNote={liveActivity?.telemetryNote} />
       {phoneLive && (!libraryAtTop || liveActivity?.review) && <PiReviewProgress review={liveActivity?.review} />}
-      {phoneLive && <PiConsole />}
+      {phoneLive && <PiConsole activity={liveActivity} reducedMotion={reducedMotion} />}
       {identityNotice && <div className="identity-notice" role="status">{identityNotice}</div>}
       <footer className="transport" ref={transportRef}>
         <div className="selection-counter"><span className="eyebrow">RECORD / SELECT</span><div>{String(selected ? selectedIndex + 1 : 0).padStart(2, "0")}<small>/ {String(displayNodes.length).padStart(2, "0")}</small></div></div>

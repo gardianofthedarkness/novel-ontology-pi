@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { foldVariants } from "../src/ground/language/nameForms.js";
-import { nominateMatchCandidates } from "../src/solidifier/matching/entityMatch.js";
 import type { Entity } from "../src/ground/ontology/types.js";
 
 test("variant fold: shinjitai and traditional forms share one key", () => {
@@ -19,21 +18,4 @@ test("variant fold is idempotent", () => {
   for (const s of ["白井黒子", "櫻井", "陸八魔亞瑠", "國木田独歩"]) {
     assert.equal(foldVariants(foldVariants(s)), foldVariants(s));
   }
-});
-
-test("match nomination catches variant pairs beyond the old hand table", () => {
-  const mk = (id: string, text: string): Entity => ({
-    id,
-    kind: "Character",
-    names: [{ text, lang: "zh", kind: "canonical" }],
-    properties: {},
-    confidence: 1,
-  });
-  const pairs = nominateMatchCandidates([
-    mk("char_000001", "櫻井"),
-    mk("char_000002", "樱井"),
-    mk("char_000003", "御坂美琴"),
-  ]);
-  assert.equal(pairs.length, 1);
-  assert.match(pairs[0].reasons.join(" "), /script-variant/);
 });

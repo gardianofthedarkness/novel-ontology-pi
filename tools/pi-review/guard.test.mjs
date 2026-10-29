@@ -249,3 +249,24 @@ test('read mode stage commands run on the assigned book, bounded, and the prep t
   assert.equal(authorize(`novel stage prep ${novel}`, defaultScope).label, 'novel stage prep');
   for (const command of [`novel stage movement /tmp/other`, `novel stage movement ${novel} --max-calls 99999`, `novel stage prep ${novel} --force`, `novel stage architecture ${novel} --max-calls 5`, `novel stage movement ${novel} --cache /tmp/x`, `novel stage delete ${novel}`]) assert.throws(() => authorize(command, defaultScope), command);
 });
+
+test('universal EM: Pi may show and sweep its own book; identity packets review through the shared gate', () => {
+  assert.equal(authorize(`novel em show ${novel}`).label, 'novel em show');
+  assert.equal(authorize(`novel em sweep ${novel} --limit 50`).label, 'novel em sweep');
+  for (const command of [`novel em sweep ${novel} --limit 500`, `novel em sweep /elsewhere`, `novel em merge ${novel}`, `novel match ${novel} --changeset cs_b0001`]) assert.throws(() => authorize(command), command);
+  const packet = `um_${'a'.repeat(24)}`;
+  // A standalone book reviews its own identity packets; a book in a library reviews them at the universe.
+  assert.equal(authorize(`novel review show ${novel} ${packet} --scope book`, { ...defaultScope, reviewProtocol: 'review-v1' }).label, 'novel review show');
+  const library = { directory: '/private/library', bindings: [] };
+  assert.equal(authorize(`novel review show /private/library ${packet} --scope universe --universe toaru`, { ...defaultScope, library, reviewProtocol: 'review-v1' }).label, 'novel review show');
+  assert.throws(() => authorize(`novel review show ${novel} ${packet} --scope book`, { ...defaultScope, library, reviewProtocol: 'review-v1' }));
+});
+
+test('the universe calendar: Pi may show and rebuild the clock of its book or its library universe; year questions review at the universe', () => {
+  const library = { directory: '/private/library', bindings: [] };
+  const scope = { ...defaultScope, library, reviewProtocol: 'review-v1' };
+  assert.equal(authorize(`novel calendar show ${novel}`, scope).label, 'novel calendar show');
+  assert.equal(authorize(`novel calendar build /private/library --universe toaru`, scope).label, 'novel calendar build');
+  for (const command of [`novel calendar build /elsewhere`, `novel calendar show /private/other --universe toaru`, `novel calendar decide ${novel}`]) assert.throws(() => authorize(command, scope), command);
+  assert.equal(authorize(`novel review show /private/library ut_${'b'.repeat(24)} --scope universe --universe toaru`, scope).label, 'novel review show');
+});

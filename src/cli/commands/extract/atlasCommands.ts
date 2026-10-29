@@ -1,4 +1,5 @@
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
+import { libraryCallSink, observeDecisions } from "../../../ground/events/observe.js";
 import { universeBindings } from "../../../solidifier/causality/universe.js";
 import { atlasContext, atlasSweep, atlasView } from "../../../solidifier/atlas/universeAtlas.js";
 
@@ -37,7 +38,7 @@ export async function atlasCommand(args: string[], env: NodeJS.ProcessEnv = proc
     };
   }
   const context = await atlasContext(directory, universeId, config);
-  const result = await atlasSweep(context, { decisions: flags.has("--no-jev") ? undefined : jevFromEnv(env), maxQuestions: flags.has("--max-questions") ? Number(flags.get("--max-questions")) : undefined, propose: flags.has("--propose") });
+  const result = await atlasSweep(context, { decisions: flags.has("--no-jev") ? undefined : observeDecisions(jevFromEnv(env), await libraryCallSink(directory), { faculty: "atlas" }), maxQuestions: flags.has("--max-questions") ? Number(flags.get("--max-questions")) : undefined, propose: flags.has("--propose") });
   const label = (qualified: string) => { const place = context.byQualified.get(qualified); return `${place?.label ?? qualified} (${context.books.find((book) => book.sourceId === place?.sourceId)?.title ?? "?"})`; };
   return {
     universe: context.title, candidates: result.candidates, asked: result.asked, packetId: result.packetId,

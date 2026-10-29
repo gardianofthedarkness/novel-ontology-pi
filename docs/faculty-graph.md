@@ -1,5 +1,9 @@
 # Streaming faculties and bounded adjudication
 
+The whole Digger + Solidifier graph, and what live telemetry shows of it, is in
+[faculty-flow.md](faculty-flow.md). This page covers scheduling inside the
+per-block scene faculties.
+
 ## Current dialogue contract
 
 The default work-model path is `dialogueScope: "card"` (CLI:
@@ -283,6 +287,11 @@ See [the S1 buffer comparison](system1-buffer-benchmark.md) for the opt-in retry
 policy's system-wide cost, latency, escalation rates and negative first result.
 
 ## Alias-at-birth and the EM faculty
+
+> Superseded (2026-10-28) by [universal EM](universal-em.md): the per-scene birth
+> checks and the structural pass are gone; the block's new names are resolved
+> together against the universal recommender before extraction mints.
+
 
 Descriptive candidates ("honey-colored girl") are an identity
 problem at birth, not a cleanup problem afterwards. The identity

@@ -47,7 +47,7 @@ const FORMS = {
   timeplace: 'novel timeplace show <book> | run <book> --propose [--mode M] [--chapter N] [--limit N] | tree <book> --propose [--max-questions N] | strands <book> [--ask] [--max-questions N] [--min-impact N]',
   atlas: 'novel atlas show <library> <universe-id> | novel atlas sweep <library> <universe-id> --propose [--max-questions N]',
   stage: 'novel stage show <book> | architecture <book> [--no-jev] | movement <book> [--max-calls N] [--no-jev] | prep <book>  (read mode; prep only once everything else is done)',
-  match: 'novel match <book> --changeset cs_bNNNN', fix: 'novel fix <operation> <book> … --reason "…"  (references/repair.md)',
+  em: 'novel em show|sweep <book> [--limit 1-200]  (identity matches it raises are reviewed with novel review)', calendar: 'novel calendar show|build <book> | novel calendar show|build <library> --universe <id>  (year questions are reviewed with novel review)', fix: 'novel fix <operation> <book> … --reason "…"  (references/repair.md)',
   graph: 'novel graph build <book>/ontology', album: 'novel album list|portraits <book>', library: 'novel library … <library>  (novel-library skill)',
   help: 'novel help', config: 'novel config',
 };
@@ -112,9 +112,9 @@ function permit(command, scope) {
       flags.set(tokens[index], tokens[index + 1]);
     }
     const kind = flags.get('--scope') ?? 'book';
-    const assigned = kind === 'book' ? tokens[2] === novel && changesetIds.includes(tokens[3]) && !flags.has('--universe')
+    const assigned = kind === 'book' ? tokens[2] === novel && (changesetIds.includes(tokens[3]) || !scope.library && /^um_[a-f0-9]{24}$/.test(tokens[3] ?? '')) && !flags.has('--universe')
       : kind === 'library' ? tokens[2] === scope.library?.directory && /^plan_[a-f0-9]{64}$/.test(tokens[3] ?? '') && !flags.has('--universe')
-      : kind === 'universe' && tokens[2] === scope.library?.directory && /^u[ca]_[a-f0-9]{64}$/.test(tokens[3] ?? '') && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(flags.get('--universe') ?? '');
+      : kind === 'universe' && tokens[2] === scope.library?.directory && /^(u[ca]_[a-f0-9]{64}|u[mt]_[a-f0-9]{24})$/.test(tokens[3] ?? '') && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(flags.get('--universe') ?? '');
     if (!assigned) throw new Error('Review target is outside the assigned scope');
     for (const name of ['--offset', '--limit']) if (flags.has(name) && (!/^\d+$/.test(flags.get(name)) || !Number.isSafeInteger(Number(flags.get(name))) || Number(flags.get(name)) < (name === '--limit' ? 1 : 0) || name === '--limit' && Number(flags.get(name)) > 20)) throw new Error('Review page exceeds its budget');
     if (operation === 'evidence' && (!flags.get('--fact') || flags.get('--fact').length > 2000)) throw new Error('Use --fact from review show');
@@ -241,7 +241,10 @@ function permit(command, scope) {
     const limitIndex = options.indexOf('--limit');
     if (limitIndex >= 0 && (Number(options[limitIndex + 1]) < 1 || Number(options[limitIndex + 1]) > 20)) valid = false;
   }
-  if (verb === 'match') valid = tokens.length === 4 && operation === novel && tokens[2] === '--changeset' && blockIds.map((id) => `cs_${id}`).includes(tokens[3]);
+  // The universe calendar: show or rebuild the clock this book (or the assigned library's universe) reads.
+  if (verb === 'calendar') valid = ['show', 'build'].includes(operation) && (tokens.length === 3 && tokens[2] === novel || tokens.length === 5 && !!scope.library && tokens[2] === scope.library.directory && tokens[3] === '--universe' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(tokens[4]));
+  // Universal EM: show this book's place in the universe's shared character list, or sweep its characters.
+  if (verb === 'em') valid = ['show', 'sweep'].includes(operation) && tokens[2] === novel && (tokens.length === 3 || operation === 'sweep' && tokens.length === 5 && tokens[3] === '--limit' && /^\d+$/.test(tokens[4]) && Number(tokens[4]) >= 1 && Number(tokens[4]) <= 200);
   if (verb === 'changeset' && operation === 'revise') {
     const options = tokens.slice(4);
     valid = tokens[2] === novel && blockIds.map((id) => `cs_${id}`).includes(tokens[3]) && options.length === 4 && new Set([options[0], options[2]]).size === 2 && [options[0], options[2]].every((flag) => ['--edits', '--reason'].includes(flag)) && !!options[1] && !!options[3];
@@ -348,5 +351,5 @@ function permit(command, scope) {
   if (verb === 'inspect') valid = operation === novel && tokens.length === 2;
   if (verb === 'timeline') valid = operation === 'list' && tokens.length === 3 && tokens[2] === novel;
   if (!valid) throw new Error('Command outside this block/workspace CLI allowlist; no shell, direct file writes, credential access, or auto-approve');
-  return { kind: 'cli', args: tokens, label: `novel ${verb}${['album', 'changeset', 'fix', 'graph', 'timeline'].includes(verb) ? ` ${operation}` : ''}` };
+  return { kind: 'cli', args: tokens, label: `novel ${verb}${['album', 'calendar', 'changeset', 'em', 'fix', 'graph', 'timeline'].includes(verb) ? ` ${operation}` : ''}` };
 }
