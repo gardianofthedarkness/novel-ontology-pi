@@ -875,6 +875,20 @@ if (capture) {
     fill.renderOrder = edges.renderOrder = 10; group.add(fill, edges);
     return group;
   }
+  const chunkGround = new Map((data.world?.chunks ?? []).map(([ci, cj, born, ground]) => [`${ci},${cj}`, { ground, at: bornAt(born) }]));
+  /** A cell's ground kind (0 a building, 1 street, 2 plaza, 3 avenue, 4 lane), or null where nothing is explored (yet). */
+  const groundOf = (plan, i, j) => {
+    if (!plan.world) return i >= 0 && j >= 0 && i < plan.NX && j < plan.NZ ? Number(plan.ground[j * plan.NX + i]) : null;
+    const ci = Math.floor(i / 16), cj = Math.floor(j / 16), chunk = chunkGround.get(`${ci},${cj}`);
+    return chunk && chunk.at <= time ? Number(chunk.ground[(j - cj * 16) * 16 + (i - ci * 16)]) : null;
+  };
+  const standingLots = (plan) => (plan.world ? plan.lots.filter((lot) => bornAt(lot.born) <= time) : plan.lots);
+  /** The cells to look over for open ground: a place's whole grid, or 48 m round the people (else the anchor) on the world. */
+  const groundWindow = (plan, points) => {
+    if (!plan.world) return [0, plan.NX, 0, plan.NZ];
+    const xs = points.length ? points.map((p) => p.x) : [plan.anchor.x], zs = points.length ? points.map((p) => p.z) : [plan.anchor.z];
+    return [Math.floor((Math.min(...xs) - 48) / CELL), Math.ceil((Math.max(...xs) + 48) / CELL), Math.floor((Math.min(...zs) - 48) / CELL), Math.ceil((Math.max(...zs) + 48) / CELL)];
+  };
   window.__stage = {
     things: (data.things ?? []).map(({ id, name, model, shape, size, height, airborne, placed }) => ({ id, name, model, shape, size, height, airborne, placed })),
     places: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, kind: place.kind, lots: place.lots.length, world: !!place.world }])),
@@ -937,17 +951,20 @@ if (capture) {
      * air for a thing in the air). Then a spread of `count`: the first beside the first person, each next the farthest
      * from those kept.
      */
+    // On the streamed world: the ground explored by the captured moment (its chunks), the lots standing by then, and the
+    // cells round the people (or the place's anchor) to look for open ground in. On a place's own grid: its grid.
     candidates({ place, thing, count = 8 }) {
-      const entry = built.get(place), plan = data.places[place], segment = segmentAt(time), text = segment.event?.text ?? "", { w, h, d } = thing, spots = [];
-      const lotAt = (x, z) => plan.lots.findIndex((lot) => x >= lot.i0 * CELL && x < (lot.i0 + lot.nx) * CELL && z >= lot.j0 * CELL && z < (lot.j0 + lot.nz) * CELL);
-      const open = (px, pz) => px >= 0 && pz >= 0 && px <= plan.NX * CELL && pz <= plan.NZ * CELL && lotAt(px, pz) < 0;
+      const entry = built.get(place), plan = data.places[place], segment = segmentAt(time), text = segment.event?.text ?? "", { w, h, d } = thing, spots = [], standing = standingLots(plan);
+      const lotAt = (x, z) => standing.findIndex((lot) => x >= lot.i0 * CELL && x < (lot.i0 + lot.nx) * CELL && z >= lot.j0 * CELL && z < (lot.j0 + lot.nz) * CELL);
+      const inside = (px, pz) => (groundOf(plan, Math.floor(px / CELL), Math.floor(pz / CELL)) ?? null) !== null;
+      const open = (px, pz) => inside(px, pz) && groundOf(plan, Math.floor(px / CELL), Math.floor(pz / CELL)) !== 0 && lotAt(px, pz) < 0;
       const clear = (x, z) => open(x, z) && [-0.5, 0, 0.5].flatMap((u) => [-0.5, 0, 0.5].map((v) => open(x + u * w, z + v * d))).filter(Boolean).length >= 5;
-      const lift = thing.airborne ? 10 : 0, add = (x, y0, z, from) => { if (x >= 0 && z >= 0 && x <= plan.NX * CELL && z <= plan.NZ * CELL && (thing.airborne || y0 > 0.5 || clear(x, z))) spots.push({ x, y0, z, from }); };
+      const lift = thing.airborne ? 10 : 0, add = (x, y0, z, from) => { if (inside(x, z) && (thing.airborne || y0 > 0.5 || clear(x, z))) spots.push({ x, y0, z, from }); };
       const movers = new Set((segment.moves ?? []).map((move) => move.person)), people = [...pawns.entries()].filter(([, { pawn }]) => pawn.parent).sort(([a], [b]) => movers.has(b) - movers.has(a));
       for (const [id, { pawn }] of people) { const x = pawn.position.x + entry.cx, z = pawn.position.z + entry.cz, floor = pawn.position.y > 1 ? pawn.position.y : 0, reach = Math.max(w, d) / 2 + 2; for (const [u, v] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) add(x + u * reach, floor + lift, z + v * reach, data.people[id]?.name ?? id); }
-      plan.lots.forEach((lot) => { const name = lot.label ?? lot.detected?.name; if (!name || !text.includes(name)) return; const x = (lot.i0 + lot.nx / 2) * CELL; add(x, lot.floors * FLOOR + lift, (lot.j0 + lot.nz / 2) * CELL, `${name} roof`); add(x, lift, (lot.j0 + lot.nz) * CELL + d / 2 + 2, `${name} front`); });
-      const grounds = { 1: "street", 2: "plaza", 3: "avenue", 4: "lane" }, stride = Math.max(3, Math.round(Math.max(w, d) / 2 / CELL));
-      for (let j = 0; j < plan.NZ; j += stride) for (let i = 0; i < plan.NX; i += stride) { const name = grounds[plan.ground[j * plan.NX + i]]; if (name) add((i + 0.5) * CELL, lift, (j + 0.5) * CELL, name); }
+      standing.forEach((lot) => { const name = lot.label ?? lot.detected?.name; if (!name || !text.includes(name)) return; const x = (lot.i0 + lot.nx / 2) * CELL; add(x, lot.floors * FLOOR + lift, (lot.j0 + lot.nz / 2) * CELL, `${name} roof`); add(x, lift, (lot.j0 + lot.nz) * CELL + d / 2 + 2, `${name} front`); });
+      const grounds = { 1: "street", 2: "plaza", 3: "avenue", 4: "lane" }, stride = Math.max(3, Math.round(Math.max(w, d) / 2 / CELL)), [i0, i1, j0, j1] = groundWindow(plan, people.map(([, { pawn }]) => pawn.position));
+      for (let j = j0; j < j1; j += stride) for (let i = i0; i < i1; i += stride) { const name = grounds[groundOf(plan, i, j)]; if (name) add((i + 0.5) * CELL, lift, (j + 0.5) * CELL, name); }
       for (const item of things) { const now = item.placed.findLast((spot) => spot.time <= time); if (now?.place === place && !hiddenThings.has(item.thing.id)) add(now.x + Math.max(w, d), lift, now.z, `by ${item.thing.name}`); }
       const kept = spots.slice(0, 1);
       while (kept.length < Math.min(count, spots.length)) {
@@ -967,8 +984,8 @@ if (capture) {
       const entry = built.get(place), plan = data.places[place], segment = segmentAt(time), text = segment.event?.text ?? "", { w, h, d } = thing, anchors = [];
       const movers = new Set((segment.moves ?? []).map((move) => move.person));
       for (const [id, { pawn }] of [...pawns.entries()].filter(([, { pawn }]) => pawn.parent).sort(([a], [b]) => movers.has(b) - movers.has(a))) anchors.push({ x: pawn.position.x + entry.cx, z: pawn.position.z + entry.cz, floor: 0, from: `over ${data.people[id]?.name ?? id}` });
-      anchors.push({ x: plan.NX * CELL / 2, z: plan.NZ * CELL / 2, floor: 0, from: "over the middle" });
-      plan.lots.forEach((lot) => { const name = lot.label ?? lot.detected?.name; if (name && text.includes(name)) anchors.push({ x: (lot.i0 + lot.nx / 2) * CELL, z: (lot.j0 + lot.nz / 2) * CELL, floor: lot.floors * FLOOR, from: `over ${name}` }); });
+      anchors.push(plan.world ? { x: plan.anchor.x, z: plan.anchor.z, floor: 0, from: "over the middle" } : { x: plan.NX * CELL / 2, z: plan.NZ * CELL / 2, floor: 0, from: "over the middle" });
+      standingLots(plan).forEach((lot) => { const name = lot.label ?? lot.detected?.name; if (name && text.includes(name)) anchors.push({ x: (lot.i0 + lot.nx / 2) * CELL, z: (lot.j0 + lot.nz / 2) * CELL, floor: lot.floors * FLOOR, from: `over ${name}` }); });
       const spots = anchors.flatMap((anchor) => [30, 15, 50].map((up) => ({ x: anchor.x, z: anchor.z, y0: Math.max(up, anchor.floor + 8), from: `${anchor.from}, ${Math.max(up, anchor.floor + 8)} m up` })));
       const kept = spots.slice(0, 1);
       while (kept.length < Math.min(count, spots.length)) {
@@ -991,7 +1008,7 @@ if (capture) {
     impactSpots({ place, count = 8 }) {
       const entry = built.get(place), plan = data.places[place], segment = segmentAt(time), spots = [];
       const movers = new Set((segment.moves ?? []).map((move) => move.person)), present = [...pawns.entries()].filter(([, { pawn }]) => pawn.parent), fighters = present.filter(([id]) => movers.has(id)).concat(present.filter(([id]) => !movers.has(id)));
-      const lots = plan.lots.map((lot, n) => ({ n, lot, x0: lot.i0 * CELL, x1: (lot.i0 + lot.nx) * CELL, z0: lot.j0 * CELL, z1: (lot.j0 + lot.nz) * CELL, top: lot.floors * FLOOR }));
+      const lots = standingLots(plan).map((lot, n) => ({ n, lot, x0: lot.i0 * CELL, x1: (lot.i0 + lot.nx) * CELL, z0: lot.j0 * CELL, z1: (lot.j0 + lot.nz) * CELL, top: lot.floors * FLOOR }));
       const name = (lot) => lot.label ?? lot.detected?.name ?? "a building";
       const near = (x, z, reach) => lots.map((box) => ({ box, gap: Math.hypot(Math.max(0, box.x0 - x, x - box.x1), Math.max(0, box.z0 - z, z - box.z1)) })).filter(({ gap }) => gap <= reach).sort((a, b) => a.gap - b.gap);
       for (const [id, { pawn }] of fighters) {

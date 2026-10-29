@@ -31,13 +31,13 @@ interface KeptRun { strand: string; run: string; fresh: boolean; accepted: strin
 interface StrandData { title: string; notes: { hits?: number; impacts?: { sphere: number; none: number } }; things: unknown[]; places: Record<string, unknown>; scenes: { events: { moves: unknown[] }[] }[] }
 interface Engine {
   ENGINE: string;
-  runStrand(novelDir: string, strand: Omit<SimStrand, "id">): Promise<StrandData>;
+  runStrand(novelDir: string, strand: Omit<SimStrand, "id">, options?: { until?: { scene: string; event: number }; live?: (snapshot: unknown) => unknown }): Promise<StrandData>;
   simulationRecord(data: StrandData, strand: Omit<SimStrand, "title">): { strand: { title: string } };
   simulationInputs(novelDir: string): Promise<string>;
   keepRun(folder: string, strand: Omit<SimStrand, "title">, record: unknown, options: { inputs: string; accept?: boolean; page?: unknown }): Promise<KeptRun>;
 }
 interface LiveLine { id: string; title: string }
-interface Live { line(index: number, patch: Record<string, unknown>): Promise<void>; phase(name: string): Promise<void>; finish(status: "done" | "failed", extra?: Record<string, unknown>): Promise<void>; watch(jev: DecisionModel): DecisionModel }
+interface Live { line(index: number, patch: Record<string, unknown>): Promise<void>; phase(name: string): Promise<void>; world(snapshot: unknown): Promise<void>; finish(status: "done" | "failed", extra?: Record<string, unknown>): Promise<void>; watch(jev: DecisionModel): DecisionModel }
 interface PickCount { asked: number; reused: number; left: number; failed?: number }
 interface Pickers {
   PICKER_MODEL: string;
@@ -174,7 +174,7 @@ export async function simRun(novelDir: string, options: { strand?: string; auto?
     for (const [index, line] of chosen.entries()) {
       await live.line(index, { status: "running" });
       const started = Date.now(), strand = line.strand;
-      const data = await sim.runStrand(novelDir, { from: strand.from, to: strand.to, fork: strand.fork });
+      const data = await sim.runStrand(novelDir, { from: strand.from, to: strand.to, fork: strand.fork }, { live: (snapshot) => live.world(snapshot) });
       const kept = await sim.keepRun(simulationFolder(novelDir), strand, sim.simulationRecord(data, strand), { inputs, accept: options.accept, page: data });
       const run = { ...kept, title: data.title, places: Object.keys(data.places).length, scenes: data.scenes.length, moves: data.scenes.reduce((sum, scene) => sum + scene.events.reduce((count, event) => count + event.moves.length, 0), 0), hits: data.notes.hits ?? 0, things: data.things.length, jev: jevShare(data), seconds: (Date.now() - started) / 1000 };
       runs.push(run);

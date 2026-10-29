@@ -297,7 +297,10 @@ export async function strandDemo(novelDir, options) {
   const canvasLayout = () => {
     const OPEN = new Set(['region', 'city', 'district', 'street']), scaleOf = id => inputs.scale?.places[id]?.scale ?? null;
     const isOpen = id => OPEN.has(scaleOf(id)) || (!scaleOf(id) && (ownGrids.has(id) ? kindOf(id) : 'district') !== 'site');
-    const landscapeOf = id => { const type = inputs.landscape?.places[id]?.type; return type && type !== 'none' ? type : null; };
+    // Jev's landscape for the place (novel stage landscape); without one yet, the kind of ground its scale suggests, so the
+    // world is never bare: a street of shops, a district or a city of homes. A region is too varied for one.
+    const DEFAULT = { street: 'commercial', district: 'residential', city: 'residential' };
+    const landscapeOf = id => { const type = inputs.landscape?.places[id]?.type; if (type && type !== 'none') return type; const fallback = type === 'none' ? null : DEFAULT[scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')] ?? null; if (fallback) notes.landscapeDefaults = (notes.landscapeDefaults ?? 0) + 1; return fallback; };
     // A staged building's lot, with room round it; an open place's own ground is its landscape, filled from its middle.
     const gridRadius = () => 22;
     const pathOf = id => (places.get(id)?.path ?? [id]).filter(step => tree.has(step));
@@ -524,15 +527,46 @@ export async function strandDemo(novelDir, options) {
       return { kind: 'move', to: [path.at(-1), last >= 0 ? last : heading] };
   }
   // Where each person was last: the place and node a later scene's travel starts from.
+  /**
+   * The world as it stands at a moment, for the live view (options.live): every chunk and lot explored, what of each lot is
+   * broken, where everyone is, the moment's moves as points, and where the moment is looked at (the middle of its people,
+   * as wide as they stand apart) — what Jev's picture of it frames. World metres throughout.
+   */
+  const palette = new Map([...new Set(chosen.flatMap(scene => scene.cast))].map((id, index) => [id, PALETTE[index % PALETTE.length]]));
+  const snapshot = (final = false) => {
+    const [sceneId, eventText] = moment.split('|'), scene = chosen.find(entry => entry.id === sceneId), eventIndex = Number(eventText), event = Number.isInteger(eventIndex) ? scene?.events[eventIndex] : null;
+    const people = [...where.entries()].filter(([, entry]) => entry.at).map(([id, entry]) => { const p = W.nodePos(world, entry.at[0]); return { id, name: name(id), color: palette.get(id) ?? '#ffffff', x: p.x, y: p.y, z: p.z, here: entry.place === scene?.placeId }; });
+    const here = people.filter(person => person.here), centre = here.length ? { x: here.reduce((sum, p) => sum + p.x, 0) / here.length, z: here.reduce((sum, p) => sum + p.z, 0) / here.length } : groups.get(scene?.placeId)?.anchor ?? { x: 0, z: 0 };
+    const focus = { x: Math.round(centre.x * 10) / 10, z: Math.round(centre.z * 10) / 10, r: Math.round(Math.max(16, ...here.map(p => Math.hypot(p.x - centre.x, p.z - centre.z) + 8))) };
+    const point = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
+    const playing = event ? scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: move.with ?? null, path: move.path.map(point) })) : [];
+    const broken = world.lots.flatMap((lot, index) => {
+      const standing = shared.standing[index], units = shared.units[index], structure = shared.structures[index], cells = [];
+      if (standing) for (let cell = 0; cell < lot.skeleton.cells.length; cell++) if (lot.skeleton.cells[cell] && !standing[cell]) cells.push(cell);
+      const lost = units && structure ? [...units.keys()].filter(unit => unit >= structure.cells && structure.kind[unit] && !units[unit]).map(unit => [structure.kind[unit], structure.i[unit], structure.j[unit], structure.k[unit]]) : [];
+      return cells.length || lost.length ? [{ lot: index, cells, units: lost }] : [];
+    });
+    return { kind: 'stage-world-live', final, moment, scene: sceneId ?? null, place: scene?.placeId ?? null, placeLabel: scene ? name(scene.placeId) : null, event: event ? { index: eventIndex, text: event.text.split('（原文：')[0].slice(0, 200) } : null, focus, people, moves: playing,
+      chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }),
+      lots: world.lots.map(lot => ({ i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, label: lot.label, role: lot.role, source: lot.source, place: lot.place, born: lot.born, cells: [...lot.skeleton.cells].join('') })),
+      broken, hits: [...hits.entries()].map(([id, hit]) => ({ event: id, sphere: hit.sphere ?? null, point: hit.point })), earlier: earlier.map(({ lot, strand, scene: from, story: at }) => ({ lot, strand, scene: from, story: at })),
+      landscapes: landscapes.map(entry => ({ place: entry.place, buildings: entry.buildings, ids: entry.source.buildings.map(b => b.id), roads: entry.roads })),
+      notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied } };
+  };
+  let lastLive = 0;
+  const live = (final = false) => { if (!options.live || (!final && Date.now() - lastLive < 300)) return; lastLive = Date.now(); options.live(snapshot(final)); };
   const { start, act } = mover;
-  mover.start = args => { moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
+  mover.start = args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
   mover.act = args => {
-    moment = `${args.scene.id}|${args.scene.events.findIndex(entry => entry.id === args.event.id)}`;
+    const now = `${args.scene.id}|${args.scene.events.findIndex(entry => entry.id === args.event.id)}`;
+    if (now !== moment) live();
+    moment = now;
     const outcome = act(args);
     if (outcome.kind === 'move') { where.set(args.person, { place: args.scene.placeId, at: outcome.to }); const end = W.nodePos(world, outcome.to[0]); reach(end.x, end.z, 40); }
     return outcome;
   };
   const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: ENGINE });
+  live(true);
   notes.solves = fields.size;
   const people = [...new Set(chosen.flatMap(scene => scene.cast))], color = new Map(people.map((id, index) => [id, PALETTE[index % PALETTE.length]]));
   const clean = text => (text ?? '').split('（原文：')[0].trim();
@@ -726,8 +760,9 @@ export async function keepWorldDamage(folder) {
  * returns the player's data (what strandDemo makes). The one entry point `novel sim run` uses, so the engine behind it can
  * change (city filling, say) without the command changing.
  */
-export async function runStrand(novelDir, { from, to, fork = null, title } = {}, { until = null } = {}) {
-  return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}), ...(until ? { until } : {}) });
+export async function runStrand(novelDir, { from, to, fork = null, title } = {}, { until = null, live = null } = {}) {
+  // `live`: called with the world as it stands at each moment played (at most every 0.3 s) and at the end, for the live view.
+  return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}), ...(until ? { until } : {}), ...(live ? { live } : {}) });
 }
 
 /** The player page with the strand inlined. */

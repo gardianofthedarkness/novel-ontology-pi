@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>World · Live</title>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
+<style>
+  :root { color-scheme: dark; --bg: #060c12; --panel: #0b1620e6; --ink: #d9e3ea; --dim: #8aa0b0; --line: #1d3442; --accent: #7ce6ff; --jev: #ffd36e; --red: #ff5a6a; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.45 system-ui, -apple-system, "PingFang SC", sans-serif; overflow: hidden; }
+  #stage { position: fixed; inset: 0; }
+  .hud { position: fixed; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); max-width: min(440px, calc(100vw - 24px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+  .hud h1 { margin: 0; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+  .row { color: var(--dim); font-size: 12px; }
+  .event { font-size: 13px; }
+  .jev { color: var(--jev); font-size: 12px; }
+  .counts { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 11px; }
+  .bar { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .bar a, .bar button { font: inherit; font-size: 12px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; text-decoration: none; cursor: pointer; }
+  .bar button[aria-pressed="true"] { border-color: var(--jev); color: var(--jev); }
+  .legend { position: fixed; left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 11px; color: var(--dim); max-width: min(360px, calc(100vw - 24px)); }
+  .legend b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<section class="hud" aria-live="polite">
+  <h1>World · live</h1>
+  <div class="row" id="where">Waiting for the engine…</div>
+  <div class="event" id="event"></div>
+  <div class="jev" id="jev"></div>
+  <div class="counts" id="counts"></div>
+</section>
+<div class="legend">Drawn round <b>where Jev looks</b> (gold ring) and <b>where the people are</b>, never round the camera: ground and buildings load within 112 m of them and go beyond 160 m; the rest of the city stays faint. Red: broken. Orange: stairs, blue: corridors.</div>
+<nav class="bar"><button id="follow" aria-pressed="true">Follow Jev</button><a id="live" href="live">Jev's questions</a><a id="play" href="./">Player</a></nav>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const $ = (id) => document.getElementById(id), query = location.search;
+$("live").href = `live${query}`; $("play").href = `./${query}`;
+const CELL = 2, FLOOR = 3, LOAD = 112, UNLOAD = 160, FAR = 480;
+const GROUND = [0x0c1822, 0x112532, 0x173444, 0x1d3a4e, 0x0f2230];
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+$("stage").append(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x060c12); scene.fog = new THREE.Fog(0x060c12, 300, 1200);
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 5000), controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.48; camera.position.set(90, 110, 140);
+const resize = () => { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); };
+addEventListener("resize", resize); resize();
+let follow = true;
+$("follow").onclick = () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); };
+controls.addEventListener("start", () => { if (follow) { follow = false; $("follow").setAttribute("aria-pressed", "false"); } });
+
+const box = new THREE.BoxGeometry(1, 1, 1), m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), color = new THREE.Color();
+const mats = {
+  corridor: new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.55 }),
+  stair: new THREE.MeshBasicMaterial({ color: 0xffb547, transparent: true, opacity: 0.8 }),
+  shell: new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: 0.45 }),
+  named: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }),
+  broken: new THREE.LineBasicMaterial({ color: 0xff5a6a, transparent: true, opacity: 0.85 }),
+  faint: new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: 0.07, depthWrite: false }),
+};
+function label(text, fill = "#ffffff", size = 26) {
+  const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d"), font = `600 ${size}px system-ui, "PingFang SC", sans-serif`;
+  ctx.font = font; const w = Math.ceil(ctx.measureText(text).width) + 16; canvas.width = w; canvas.height = size + 12;
+  ctx.font = font; ctx.textBaseline = "middle"; ctx.fillStyle = "rgba(6,12,18,.72)"; ctx.fillRect(0, 0, w, canvas.height); ctx.fillStyle = fill; ctx.fillText(text, 8, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })); sprite.scale.set((w / canvas.height) * 5, 5, 1); sprite.renderOrder = 10; return sprite;
+}
+const dispose = (object) => { object.traverse((part) => { if (part.geometry && part.geometry !== box) part.geometry.dispose(); if (part.material?.map) part.material.map.dispose(); }); scene.remove(object); };
+
+// What the engine has told us, keyed so a later snapshot updates rather than repeats.
+const chunks = new Map(), lots = new Map(), pawns = new Map();
+let world = null, run = 0, interest = [], farAt = null, far = null;
+
+/** A chunk's ground: 16 × 16 tiles coloured by kind. */
+function chunkMesh([ci, cj, , ground]) {
+  const mesh = new THREE.InstancedMesh(box, new THREE.MeshBasicMaterial(), 256);
+  for (let n = 0; n < 256; n++) { m4.compose(new THREE.Vector3((ci * 16 + (n % 16) + 0.5) * CELL, -0.05, (cj * 16 + Math.floor(n / 16) + 0.5) * CELL), q0, new THREE.Vector3(CELL * 0.97, 0.1, CELL * 0.97)); mesh.setMatrixAt(n, m4); mesh.setColorAt(n, color.setHex(GROUND[Number(ground[n])] ?? GROUND[1])); }
+  scene.add(mesh); return mesh;
+}
+/** A lot: its shell's edges (white when named, red when broken) and its walkable skeleton, without what is broken. */
+function lotMesh(lot, broken) {
+  const group = new THREE.Group(), w = lot.nx * CELL, d = lot.nz * CELL, h = lot.height * FLOOR, x = (lot.i0 + lot.nx / 2) * CELL, z = (lot.j0 + lot.nz / 2) * CELL;
+  const shell = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), broken ? mats.broken : lot.label ? mats.named : mats.shell);
+  shell.position.set(x, h / 2, z); group.add(shell);
+  const lost = new Set(broken?.cells ?? []), corridors = [], stairs = [];
+  for (let cell = 0; cell < lot.cells.length; cell++) {
+    const kind = lot.cells[cell]; if (kind === "0" || lost.has(cell)) continue;
+    const i = cell % lot.nx, j = Math.floor(cell / lot.nx) % lot.nz, k = Math.floor(cell / (lot.nx * lot.nz)), px = (lot.i0 + i + 0.5) * CELL, pz = (lot.j0 + j + 0.5) * CELL;
+    (kind === "2" ? stairs : corridors).push([px, k * FLOOR + (kind === "2" ? FLOOR / 2 : 0.15), pz, kind === "2" ? 1.4 : CELL * 0.9, kind === "2" ? FLOOR * 0.95 : 0.3, kind === "2" ? 1.4 : CELL * 0.9]);
+  }
+  for (const [list, material] of [[corridors, mats.corridor], [stairs, mats.stair]]) {
+    if (!list.length) continue;
+    const mesh = new THREE.InstancedMesh(box, material, list.length);
+    list.forEach(([px, py, pz, sx, sy, sz], n) => { m4.compose(new THREE.Vector3(px, py, pz), q0, new THREE.Vector3(sx, sy, sz)); mesh.setMatrixAt(n, m4); });
+    group.add(mesh);
+  }
+  if (lot.label) { const tag = label(lot.label); tag.position.set(x, h + 4, z); group.add(tag); }
+  if (broken) { const tag = label(broken.earlier ? "broken earlier" : "broken", "#ff8a8a", 22); tag.position.set(x, h + (lot.label ? 9 : 4), z); group.add(tag); }
+  scene.add(group); return group;
+}
+const lotCentre = (lot) => ({ x: (lot.i0 + lot.nx / 2) * CELL, z: (lot.j0 + lot.nz / 2) * CELL, r: Math.hypot(lot.nx, lot.nz) * CELL / 2 });
+const nearest = (x, z, r = 0) => Math.max(0, Math.min(...interest.map((p) => Math.hypot(p.x - x, p.z - z) - p.r)) - r);
+
+/** Load and drop by where Jev looks and where the people are, with room between the two radii so nothing flickers. */
+function stream() {
+  if (!interest.length) return;
+  for (const entry of chunks.values()) {
+    const [ci, cj] = entry.data, d = nearest((ci * 16 + 8) * CELL, (cj * 16 + 8) * CELL, 16 * CELL * 0.71);
+    if (!entry.mesh && d < LOAD) entry.mesh = chunkMesh(entry.data);
+    else if (entry.mesh && d > UNLOAD) { dispose(entry.mesh); entry.mesh = null; }
+  }
+  for (const entry of lots.values()) {
+    const c = lotCentre(entry.data), d = nearest(c.x, c.z, c.r);
+    if (entry.group && (d > UNLOAD || entry.stale)) { dispose(entry.group); entry.group = null; entry.stale = false; }
+    if (!entry.group && d < LOAD) entry.group = lotMesh(entry.data, entry.broken);
+  }
+  // The rest of the city, faint, within FAR of them; redrawn when they have moved on.
+  const key = interest.map((p) => `${Math.round(p.x / 48)},${Math.round(p.z / 48)}`).join("|");
+  if (key === farAt || !world) return;
+  farAt = key;
+  if (far) dispose(far);
+  const stood = new Set([...lots.values()].map((entry) => entry.data.source)), list = [];
+  for (const entry of world.landscapes ?? []) entry.buildings.forEach((b, n) => { if (!stood.has(entry.ids[n]) && nearest(b[0], b[1]) < FAR) list.push(b); });
+  far = new THREE.InstancedMesh(box, mats.faint, Math.max(1, list.length)); far.count = list.length;
+  const up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion();
+  list.forEach(([x, z, w, d, angle, floors], n) => { q.setFromAxisAngle(up, -angle); m4.compose(new THREE.Vector3(x, floors * FLOOR / 2, z), q, new THREE.Vector3(w, floors * FLOOR, d)); far.setMatrixAt(n, m4); });
+  scene.add(far);
+}
+
+// Where Jev looks: a gold ring as wide as the moment's people stand apart.
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 96), new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthTest: false }));
+ring.rotation.x = -Math.PI / 2; ring.renderOrder = 9; scene.add(ring);
+const jevTag = label("Jev looks here", "#ffd36e", 24); scene.add(jevTag);
+const hitGroup = new THREE.Group(); scene.add(hitGroup);
+
+/** A new snapshot: what is new is added, what changed is redrawn, people walk this moment's paths. */
+function apply(next) {
+  world = next;
+  for (const data of next.chunks) { const key = `${data[0]},${data[1]}`; if (!chunks.has(key)) chunks.set(key, { data, mesh: null }); }
+  const brokenOf = new Map(next.broken.map((entry) => [entry.lot, entry])), earlier = new Set(next.earlier.map((entry) => entry.lot));
+  next.lots.forEach((data, index) => {
+    const key = data.source ?? `lot${index}`, broken = brokenOf.get(index) ? { ...brokenOf.get(index), earlier: earlier.has(index) } : null, entry = lots.get(key);
+    if (!entry) lots.set(key, { data, broken, group: null });
+    else if (JSON.stringify(entry.broken) !== JSON.stringify(broken)) { entry.broken = broken; entry.stale = true; }
+  });
+  // Pawns: placed, or walking this moment's path over a few seconds.
+  const walking = new Map(next.moves.map((move) => [move.person, move.path]));
+  for (const person of next.people) {
+    let pawn = pawns.get(person.id);
+    if (!pawn) {
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.45, 1.1, 4, 10), new THREE.MeshBasicMaterial({ color: person.color })), tag = label(person.name, person.color, 22);
+      body.position.y = 1; tag.position.y = 3.2; pawn = { group: new THREE.Group(), path: null, started: 0 }; pawn.group.add(body, tag); scene.add(pawn.group); pawns.set(person.id, pawn);
+    }
+    const path = walking.get(person.id);
+    pawn.path = path && path.length > 1 ? path.map(([x, y, z]) => new THREE.Vector3(x, y, z)) : null; pawn.started = performance.now(); pawn.rest = new THREE.Vector3(person.x, person.y, person.z);
+    if (!pawn.path) pawn.group.position.copy(pawn.rest);
+  }
+  interest = [{ x: next.focus.x, z: next.focus.z, r: next.focus.r }, ...next.people.map((p) => ({ x: p.x, z: p.z, r: 0 }))];
+  ring.scale.setScalar(next.focus.r); ring.position.set(next.focus.x, 0.4, next.focus.z); jevTag.position.set(next.focus.x, 6, next.focus.z - next.focus.r);
+  hitGroup.clear();
+  next.hits.forEach((hit, n) => { const s = hit.sphere ?? { ...hit.point, r: 4 }; const ball = new THREE.Mesh(new THREE.SphereGeometry(s.r, 20, 14), new THREE.MeshBasicMaterial({ color: 0xff5a6a, transparent: true, opacity: n === next.hits.length - 1 ? 0.35 : 0.12, depthWrite: false })); ball.position.set(s.x, s.y, s.z); hitGroup.add(ball); });
+  $("where").textContent = `${next.placeLabel ?? "—"} · ${next.moment}${next.final ? " · end" : ""}`;
+  $("event").textContent = next.event?.text ?? "";
+  stream();
+}
+
+async function poll() {
+  try {
+    const state = await fetch(`live.json${query}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+    if (state) $("jev").textContent = state.status === "running" ? `Jev · ${state.phase ?? "working"}${state.ask?.subject ? ` · ${state.ask.subject}` : ""} · ${state.calls ?? 0} calls` : `Jev · ${state.status}`;
+    if (!state?.world || state.world.run !== run) {
+      const next = await fetch(`live/world.json${query}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+      if (next && next.run !== run) { run = next.run; apply(next); }
+    }
+  } finally {
+    const loaded = [...chunks.values()].filter((entry) => entry.mesh).length, standing = [...lots.values()].filter((entry) => entry.group).length;
+    $("counts").textContent = `chunks ${loaded} loaded of ${chunks.size} explored · buildings ${standing} of ${lots.size} · ${world ? `${world.notes.nodes} walk nodes` : ""}`;
+    setTimeout(poll, 1000);
+  }
+}
+poll();
+
+const target = new THREE.Vector3();
+renderer.setAnimationLoop((now) => {
+  for (const pawn of pawns.values()) {
+    if (!pawn.path) continue;
+    const t = Math.min(1, (now - pawn.started) / 3200), f = t * (pawn.path.length - 1), i = Math.min(pawn.path.length - 2, Math.floor(f));
+    pawn.group.position.copy(pawn.path[i]).lerp(pawn.path[i + 1], f - i);
+    if (t >= 1) { pawn.path = null; pawn.group.position.copy(pawn.rest); }
+  }
+  ring.material.opacity = 0.6 + 0.3 * Math.sin(now / 300);
+  if (follow && world) { target.set(world.focus.x, 2, world.focus.z); controls.target.lerp(target, 0.05); const want = target.clone().add(new THREE.Vector3(world.focus.r * 1.6 + 40, world.focus.r * 1.8 + 50, world.focus.r * 2 + 60)); camera.position.lerp(want, 0.03); }
+  controls.update(); renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

@@ -73,6 +73,7 @@
   <div class="tabs">
     <button id="live" class="on">● Live</button>
     <button id="replay">Replay</button>
+    <a class="link" id="world" href="world">The world, live (3D)</a>
     <a class="link" id="newest" href="./">Play the newest runs</a>
     <a class="link" id="accepted" href="./">Accepted runs</a>
   </div>
@@ -93,7 +94,7 @@
 (() => {
   const volume = new URLSearchParams(location.search).get('volume') ?? 'active', query = `volume=${encodeURIComponent(volume)}`;
   const $ = id => document.getElementById(id), make = (tag, props = {}, ...children) => { const node = Object.assign(document.createElement(tag), props); node.append(...children); return node; };
-  $('newest').href = `./?${query}&newest=1`; $('accepted').href = `./?${query}`;
+  $('newest').href = `./?${query}&newest=1`; $('accepted').href = `./?${query}`; $('world').href = `world?${query}`;
   const SPEEDS = [1, 2, 4, 8, 16, 32];
   let state = null, frames = [], mode = 'live', at = 0, speed = 4, playing = false, timer = null, known = -1;
   const percent = value => `${Math.round(value * 100)}%`;

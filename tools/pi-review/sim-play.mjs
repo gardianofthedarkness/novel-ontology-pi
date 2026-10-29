@@ -70,6 +70,21 @@ export async function simulationLivePage() {
   return { html, policy: pagePolicy(html) };
 }
 
+/**
+ * The live view of the world: the engine's world as it stands at the moment being played (chunks, buildings and what is broken,
+ * everyone's place, the moment's moves, where Jev looks), drawn round where Jev looks and where the people are. Static: it
+ * reads live/world.json and live.json.
+ */
+export async function simulationWorldPage() {
+  const html = await readFile(new URL('./sim-world.html', import.meta.url), 'utf8');
+  return { html, policy: pagePolicy(html) };
+}
+
+/** The world as the running command last stood it (live/world.json), or 'null' before any. */
+export async function liveWorld(workspace) {
+  return readFile(resolve(workspace, 'stage', 'simulation', 'live', 'world.json'), 'utf8').catch(() => 'null');
+}
+
 /** How long a running command may go without a word before it counts as stopped (a Jev call never takes this long). */
 const SILENT = 20 * 60000;
 const alive = pid => { if (!Number.isSafeInteger(pid) || pid <= 0) return false; try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };

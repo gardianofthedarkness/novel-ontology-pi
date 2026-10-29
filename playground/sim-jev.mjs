@@ -83,7 +83,8 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
   // The line as the engine makes it now, with every answer so far, in capture mode; with `until` (one of its events), only as
   // far as that event (an engine that cannot stop early makes all of it).
   const load = async (until = null) => {
-    const data = await runStrand(novelDir, strand, until ? { until: { scene: until.scene, event: until.index } } : {});
+    // The world as the engine plays it goes to the live record too (live/world.json), for the live view of the world.
+    const data = await runStrand(novelDir, strand, { ...(until ? { until: { scene: until.scene, event: until.index } } : {}), ...(live ? { live: snapshot => live.world(snapshot) } : {}) });
     await writeFile(join(work, 'index.html'), inlineStrand(template, data, { vendor: true }));
     await chrome.evaluate('delete window.__stage').catch(() => {});
     await chrome.open(url);
@@ -271,6 +272,14 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
         files.push({ name, file });
       }
       return record({ f, kind, at: at(), line: state.line, phase: state.phase, subject, text, ...(context.length ? { context } : {}), pictures: files, ...(answers ? { answers } : {}), ...(moves ? { moves } : {}) });
+    },
+    /**
+     * The world as the engine stands it at a moment (export-strand-demo.mjs's snapshot): written whole to live/world.json, which
+     * the live view of the world reads; live.json says which run and moment it is.
+     */
+    world(snapshot) {
+      state.world = { run: (state.world?.run ?? 0) + 1, moment: snapshot.moment, final: snapshot.final, focus: snapshot.focus, notes: snapshot.notes };
+      return queue(() => replace(join(recording, 'world.json'), JSON.stringify({ ...snapshot, run: state.world.run, at: at() }))).then(write);
     },
     /** What an answer made, as a picture and a line of text. */
     outcome({ subject, text, picture = null, jpeg = false }) { return this.frame({ kind: 'outcome', subject, text, pictures: picture ? [{ name: 'outcome', picture, jpeg }] : [] }); },
