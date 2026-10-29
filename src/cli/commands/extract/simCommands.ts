@@ -40,7 +40,7 @@ interface Live { line(index: number, patch: Record<string, unknown>): Promise<vo
 interface PickCount { asked: number; reused: number; left: number; failed?: number }
 interface Pickers {
   PICKER_MODEL: string;
-  pickStrand(novelDir: string, strand: Omit<SimStrand, "id" | "title">, options: { jev: DecisionModel; budget: number; live?: Live }): Promise<{ calls: number; models: { picked: number; left: number }; placements: PickCount; fights: PickCount; left: number }>;
+  pickStrand(novelDir: string, strand: Omit<SimStrand, "id" | "title">, options: { jev: DecisionModel; budget: number; live?: Live }): Promise<{ calls: number; models: { picked: number; left: number }; placements: PickCount; fights: PickCount; left: number; moved: number }>;
   createLive(novelDir: string, options: { command: string; lines: LiveLine[]; budget?: number | null; model?: string | null }): Promise<Live>;
 }
 /** What `novel sim pick` last left (stage/simulation/picks.json): the book it asked on (`inputs`), the lines, and how many questions it did not get to. */
@@ -125,7 +125,7 @@ export async function simPick(novelDir: string, options: { strand?: string; auto
       const started = Date.now(), result = await pick.pickStrand(novelDir, { from: line.strand.from, to: line.strand.to, fork: line.strand.fork }, { jev: watched, budget: budget - calls, live });
       calls += result.calls;
       lines.push({ strand: line.strand.id, title: line.title, ...result, seconds: (Date.now() - started) / 1000 });
-      await live.line(index, { status: result.left ? "unfinished" : "answered", calls: result.calls, left: result.left, placements: result.placements, fights: result.fights });
+      await live.line(index, { status: result.left ? "unfinished" : "answered", calls: result.calls, left: result.left, placements: result.placements, fights: result.fights, moved: result.moved });
     }
   } catch (error) {
     await live.finish("failed", { error: String((error as Error).message).slice(0, 300) });
