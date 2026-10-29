@@ -194,8 +194,10 @@ As of 2026-10-28, uncommitted on `claude/place-read-mode`.
 - The damage region is a box around the event's first actor, standing in for Jev's box. Its strength already comes from the embedding direction, applied from 0.7 up.
 - Direct moves come from words in the event summary that show a power being used to move.
 - Traces and migrations are exported with the demo, not yet stored in the database or sent to the timeline page.
-- Buildings come from a fixed set per place, not detected gradually.
-- There are no sky arcs, no captures and no macro loop yet.
+- Detected buildings take a place's free lots; shrinking existing buildings and temporary districts are not built.
+- There are no captures yet: the macro view is shown, not captured for Jev.
+
+The full list of stand-ins, and a checklist for running the simulation as its own section of the product (its own CLI, skill, page and progress), is in [stage-simulation-section.md](stage-simulation-section.md).
 
 ## Build order (proposed)
 
