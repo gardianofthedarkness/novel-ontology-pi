@@ -45,8 +45,8 @@ export async function approveBook(directory: string, id: string, env: NodeJS.Pro
   // Named buildings and things (stage objects): the book's reviewed ones join the universe's list of things.
   let things: Awaited<ReturnType<typeof syncThings>> | { error: string } | null = null;
   if (packet.blockId === "stage-objects") try { things = await syncThings(directory, env); } catch (error) { things = { error: error instanceof Error ? error.message : String(error) }; }
-  // Named buildings and things add no events, scenes, story time or causes: the causality sweep has nothing new to read.
-  if (packet.blockId !== "stage-objects") try { await markCausalitySweepPending(directory); } catch {}
+  // Named buildings and things, and places' landscapes, add no events, scenes, story time or causes: the causality sweep has nothing new to read.
+  if (packet.blockId !== "stage-objects" && packet.blockId !== "stage-landscape") try { await markCausalitySweepPending(directory); } catch {}
   // Story time changed: the universe calendar (the one clock) is rebuilt. No model calls.
   let calendar: { entries: number; questions: number } | { error: string } | null = null;
   if (packet.proposals.some((proposal) => proposal.kind === "upsert_entity" && (proposal.payload as { kind?: string }).kind === "TimePoint" || proposal.kind === "add_relation" && (proposal.payload as Relation).type === "OCCURS_DURING")) {

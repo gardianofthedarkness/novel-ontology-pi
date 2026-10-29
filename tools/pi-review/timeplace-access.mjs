@@ -45,3 +45,24 @@ export async function stageObjectsChangesetIds(workspace) {
   }
   return ids;
 }
+
+/**
+ * Stage-landscape packets Pi may review through the same gate: pending
+ * `cs_stage_landscape_*` changesets written by `novel stage landscape`,
+ * carrying their original sentences, and holding only Location records whose
+ * one change is their `landscape` property (what the place's ground looks
+ * like from above).
+ */
+const landscapePacketId = /^cs_stage_landscape_\d+$/;
+const landscapeFact = proposal => proposal.kind === 'upsert_entity' && proposal.payload?.kind === 'Location' && Array.isArray(proposal.payload?.properties?.landscape?.patches);
+
+export async function stageLandscapeChangesetIds(workspace) {
+  const names = await readdir(`${workspace}/changesets`).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
+  const ids = [];
+  for (const name of names.filter(name => name.endsWith('.json') && landscapePacketId.test(name.slice(0, -5)))) {
+    const packet = JSON.parse(await readFile(`${workspace}/changesets/${name}`, 'utf8'));
+    if (packet.id !== name.slice(0, -5) || packet.blockId !== 'stage-landscape' || !packet.reviewSource?.length || !packet.proposals?.length || !packet.proposals.every(landscapeFact)) continue;
+    ids.push(packet.id);
+  }
+  return ids;
+}

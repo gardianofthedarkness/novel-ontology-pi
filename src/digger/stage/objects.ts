@@ -33,7 +33,8 @@ import type { CastBook } from "../../solidifier/identity/cast.js";
  * library entry is known by.
  */
 export interface ObjectScene { id: string; placeLabel: string; events: { id: string; text: string }[] }
-export interface DetectedObject { name: string; kind: "building" | "object"; size: number; airborne: boolean; event: string | null; match: { id: string; kind: "building" | "shape"; score: number; by: "embedding" | "words" } }
+/** `room`: a room or space inside a building (a ward, a lab, a cell); it is placed inside a building, never on a lot of its own. */
+export interface DetectedObject { name: string; kind: "building" | "object"; room?: boolean; size: number; airborne: boolean; event: string | null; match: { id: string; kind: "building" | "shape"; score: number; by: "embedding" | "words" } }
 export interface SceneObjects { inputs: string; objects: DetectedObject[]; rejected: number }
 export interface ObjectsReport {
   version: 1; model: string | null; embedder: string | null; askedAt: string; complete: boolean; usage: { calls: number; reused: number; skipped: number }; scenes: Record<string, SceneObjects>;
@@ -64,8 +65,10 @@ export const OBJECT_LIBRARY: { id: string; kind: "building" | "shape"; words: st
 const MIN_SIZE = 4;
 /** Names that are a part of a building, not a thing of their own. */
 const PART = /(屋顶|顶楼|墙面|墙壁|墙|门|楼梯|台阶|柱子|走廊|窗户?|roof|wall|door|stairs?|window)$/i;
+/** Furniture and fittings are never things of a scene, however large: a backstop for the prompt's rule. */
+export const FURNITURE = /(桌子?|餐桌|书桌|办公桌|椅子?|长椅|凳子?|床铺?|病床|沙发|柜子?|衣柜|书架|货架|架子|柜台|吧台|台灯|灯具|desk|table|chair|bench|stool|bed|sofa|couch|cabinet|cupboard|shelf|shelves|counter|lamp)$/i;
 /** Bumped when the question changes, so earlier answers are asked again. */
-export const OBJECTS_VERSION = 3;
+export const OBJECTS_VERSION = 4;
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 export const objectSceneInputs = (scene: ObjectScene) => hash([OBJECTS_VERSION, scene.id, scene.placeLabel, scene.events.map((event) => [event.id, event.text])]);
@@ -75,7 +78,9 @@ export const OBJECT_PROMPT_RULES = [
   "Count a thing only if it is large enough to be seen from that wide view: bigger than a person, about 3 m or more (a building, a tower, a bridge, a vehicle the size of a car or bigger, an aircraft, a giant sphere or machine, a statue, a big tree).",
   "Never count small things: coins, phones, weapons in hand, projectiles, cards, clothes, food, tools, body parts. Never count people, animals the size of people, places that are only named areas, or abstract things (light, sound, power).",
   "Parts of a building (a roof, a wall, a door, a staircase, a pillar) and streets or alleys are not separate things: count the building once, by its name.",
-  "For each thing give: name (as the passage calls it), kind (building or object), size (its largest dimension in metres, an honest rough guess; a phone is 0.15, a car 4, a house 10), visible (true only if a wide view of the whole place would show it), airborne (true if it is in the sky or floating), event (the number of the line that mentions it).",
+  "Never count furniture or fittings, however large: tables, desks, chairs, benches, beds, sofas, cabinets, shelves, counters, lamps.",
+  "A room or space inside a building (a ward, a lab, a security room, a cell, an office, a hall) is kind building with room true; when the passage also names the building it is in, count that building separately.",
+  "For each thing give: name (as the passage calls it), kind (building or object), room (true only for a room or space inside a building), size (its largest dimension in metres, an honest rough guess; a phone is 0.15, a car 4, a house 10), visible (true only if a wide view of the whole place would show it), airborne (true if it is in the sky or floating), event (the number of the line that mentions it).",
 ];
 
 /** What a reply may carry: we accept only its objects, and only those that pass the visibility rule. */
@@ -84,11 +89,11 @@ export function acceptObjects(reply: unknown, events: { id: string }[]): { objec
   const objects: Omit<DetectedObject, "match">[] = [];
   let rejected = 0;
   for (const raw of list) {
-    const item = raw as { name?: unknown; kind?: unknown; size?: unknown; visible?: unknown; airborne?: unknown; event?: unknown };
+    const item = raw as { name?: unknown; kind?: unknown; room?: unknown; size?: unknown; visible?: unknown; airborne?: unknown; event?: unknown };
     const name = typeof item.name === "string" ? item.name.trim() : "", kind = item.kind === "building" ? "building" : item.kind === "object" ? "object" : null, size = Number(item.size);
-    if (!name || !kind || !(size >= MIN_SIZE) || item.visible === false || PART.test(name)) { rejected++; continue; }
+    if (!name || !kind || !(size >= MIN_SIZE) || item.visible === false || PART.test(name) || FURNITURE.test(name)) { rejected++; continue; }
     const line = Number(item.event), event = Number.isInteger(line) && line >= 1 && line <= events.length ? events[line - 1].id : null;
-    objects.push({ name: name.slice(0, 40), kind, size: Math.round(size), airborne: item.airborne === true, event });
+    objects.push({ name: name.slice(0, 40), kind, ...(kind === "building" && item.room === true ? { room: true } : {}), size: Math.round(size), airborne: item.airborne === true, event });
   }
   return { objects, rejected };
 }

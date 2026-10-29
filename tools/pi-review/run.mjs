@@ -1,4 +1,4 @@
-import { stageObjectsChangesetIds, timePlaceChangesetIds } from './timeplace-access.mjs';
+import { stageLandscapeChangesetIds, stageObjectsChangesetIds, timePlaceChangesetIds } from './timeplace-access.mjs';
 import { progressLine } from './run-outcome.mjs';
 import { cliFailure } from './cli-failure.mjs';
 import { spawn } from 'node:child_process';
@@ -186,7 +186,7 @@ try {
     const unquote = (token) => token.replace(/^['"]|['"]$/g, '');
     const named = (scope) => command.split(/\s+/).map(unquote).some((token) => token === scope.novel || token === scope.library?.directory || token.startsWith(`${scope.novel}/`));
     const refusals = [];
-    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); scope.timePlaceChangesetIds = await timePlaceChangesetIds(scope.novel); scope.stageObjectsChangesetIds = await stageObjectsChangesetIds(scope.novel); permitted = authorize(command, scope); break; } catch (error) { refusals.push({ scope, message: error.message }); } }
+    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); scope.timePlaceChangesetIds = await timePlaceChangesetIds(scope.novel); scope.stageObjectsChangesetIds = await stageObjectsChangesetIds(scope.novel); scope.stageLandscapeChangesetIds = await stageLandscapeChangesetIds(scope.novel); permitted = authorize(command, scope); break; } catch (error) { refusals.push({ scope, message: error.message }); } }
     if (!permitted) {
       const strays = command.split(/\s+/).map(unquote).filter((token) => /^\/(Users|private|tmp|var|home)\//.test(token) && !scopes.some((scope) => token === scope.novel || token === scope.input || token === scope.library?.directory || token.startsWith(`${scope.novel}/`) || scope.sourcePaths.includes(token)));
       refusal = refusals.find((entry) => named(entry.scope))?.message

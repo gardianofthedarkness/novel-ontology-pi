@@ -41,6 +41,9 @@
   .people { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 12px; color: var(--dim); }
   .people span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--c); }
   .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .trace { font-size: 12px; line-height: 1.5; max-height: 260px; overflow: auto; }
+  .trace h4 { margin: 6px 0 2px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted, #8fa6b4); }
+  .trace .row { margin: 2px 0; } .trace b { font-weight: 600; } .trace .alt { color: var(--muted, #8fa6b4); }
   button { font: inherit; color: var(--ink); background: #10202c; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; min-height: 36px; }
   button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
   button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -70,9 +73,11 @@
         <button id="play" aria-label="Play or pause">⏸ Pause</button>
         <button data-speed="1" aria-pressed="false">1×</button><button data-speed="2" aria-pressed="true">2×</button><button data-speed="4" aria-pressed="false">4×</button>
         <button id="follow" aria-pressed="true">Follow</button>
+        <button id="jev" aria-pressed="false" title="Show what Jev decided at this moment">Jev trace</button>
         <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Position in the strand">
         <span class="count" id="count"></span>
       </div>
+      <div class="card trace" id="trace" hidden></div>
       <div class="card legend"><span><i style="background:#7ce6ff"></i>corridor</span><span><i style="background:#ffb547"></i>stair core</span><span><i style="background:#3d6a8a"></i>room</span><span><i style="background:#9fb4c3"></i>clutter</span><span><i style="background:#ff4d5e"></i>cut off by damage</span></div>
       <details class="card"><summary>How this is made</summary><ul id="how"></ul></details>
     </div>
@@ -180,19 +185,22 @@ const placeHits = {};
 for (const scene of data.scenes) for (const event of scene.events) if (event.hit) (placeHits[scene.place] ??= []).push(event.hit);
 const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low < high) { const mid = (low + high + 1) >> 1; if (segments[mid].start <= t) low = mid; else high = mid - 1; } return segments[low]; };
 
-// The macro layout comes with the data (the place tree's production layout, in metres): a place's grid stands at its spot,
-// the centre of its own disc; its circle holds its children.
-const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale }]));
+// The macro layout comes with the data (the canvas of places, in metres): a place's grid stands at its spot, the centre of
+// its own disc (a staged building's on a lot of the place holding it); its circle holds its children. A temporary area (an
+// unnamed district or street of a place, holding what is known only to lie in it) is drawn fainter.
+const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale, temporary: !!node.temporary }]));
 
 // The 3D stage.
 const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 host.prepend(renderer.domElement);
 window.__stageStarted = true;
-const world = new THREE.Scene(); world.background = new THREE.Color(0x060c12); world.fog = new THREE.Fog(0x060c12, 400, 1600);
+// How far the map reaches (a city's canvas can be kilometres across): the fog, the camera's range and its far plane follow it.
+const mapReach = Math.max(800, ...data.macro.map((node) => Math.max(Math.abs(node.x), Math.abs(node.z)) + node.r));
+const world = new THREE.Scene(); world.background = new THREE.Color(0x060c12); world.fog = new THREE.Fog(0x060c12, 400, Math.max(1600, mapReach * 1.6));
 world.add(new THREE.AmbientLight(0xffffff, 0.75)); const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(30, 70, 20); world.add(sun);
-const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 4000), controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = 1600;
+const camera = new THREE.PerspectiveCamera(42, 1, 0.5, Math.max(4000, mapReach * 4)), controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = Math.max(1600, mapReach * 1.8);
 const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
 new ResizeObserver(resize).observe(host);
 const unit = new THREE.BoxGeometry(1, 1, 1), matrix = new THREE.Matrix4(), color = new THREE.Color();
@@ -378,11 +386,32 @@ let shownNotice = false, shownPlace = null, shownSegment = null, pathLines = [],
 for (const id of Object.keys(data.places)) world.add(buildPlace(id).group);
 // The place tree's circles on the ground, and a trace above them for every move between places.
 for (const [id, spot] of macroAt) {
-  const strand = !!data.places[id], ring = new THREE.Mesh(new THREE.RingGeometry(spot.r - 0.8, spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: strand ? 0.6 : 0.3, side: THREE.DoubleSide, depthWrite: false }));
+  const strand = !!data.places[id], ring = new THREE.Mesh(new THREE.RingGeometry(spot.r - 0.8, spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: strand ? 0.6 : spot.temporary ? 0.18 : 0.3, side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2; ring.position.set(spot.cx, -0.3 - spot.depth * 0.05, spot.cz); world.add(ring);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x0a1e2b, transparent: true, opacity: 0.45, depthWrite: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.set(spot.cx, -0.5 - spot.depth * 0.05, spot.cz); world.add(disc);
-  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}` : spot.label, strand ? "#ffffff" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
+  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}` : spot.label, strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
+}
+// Each open place's landscape around the staged grids (src/ground/stage/landscape.ts): faint hologram blocks and roads,
+// generated from the place's landscape, never on a staged grid; only the buildings the story names are canon. Kept
+// faint so it never hides the people.
+{
+  const fill = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: 0.045, depthWrite: false }), edge = new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: 0.2, depthWrite: false });
+  const block = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), outline = new THREE.EdgesGeometry(block).attributes.position.array, m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v = new THREE.Vector3();
+  const buildings = (data.landscapes ?? []).flatMap((entry) => entry.buildings), lines = [];
+  if (buildings.length) {
+    const mesh = new THREE.InstancedMesh(block, fill, buildings.length);
+    buildings.forEach(([x, z, w, d, angle, floors], i) => { q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w, floors * FLOOR, d)); mesh.setMatrixAt(i, m); for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); lines.push(v.x, v.y, v.z); } });
+    world.add(mesh);
+  }
+  for (const [ax, az, bx, bz] of (data.landscapes ?? []).flatMap((entry) => entry.walls ?? [])) lines.push(ax, 0, az, bx, 0, bz, ax, 6, az, bx, 6, bz);
+  if (lines.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3)); world.add(new THREE.LineSegments(geometry, edge)); }
+  const roads = (data.landscapes ?? []).flatMap((entry) => entry.roads);
+  if (roads.length) {
+    const strips = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshBasicMaterial({ color: 0x1d4a60, transparent: true, opacity: 0.35, depthWrite: false }), roads.length);
+    roads.forEach(([ax, az, bx, bz, width], i) => { q.setFromAxisAngle(up, -Math.atan2(bz - az, bx - ax)); m.compose(new THREE.Vector3((ax + bx) / 2, -0.2, (az + bz) / 2), q, new THREE.Vector3(Math.hypot(bx - ax, bz - az), 1, width)); strips.setMatrixAt(i, m); });
+    world.add(strips);
+  }
 }
 /** Where a traveller is, so long into the move between places: on a leg in a place's grid, or on the map's curve. */
 function travelAt(travel, elapsed) {
@@ -421,6 +450,8 @@ function hologram(model, shape, stand = false) {
 // Things the story mentions: one piece per thing (mentions of one named thing are one thing), shown from its first mention,
 // gliding to wherever a later event puts it, in any place. A big thing carries structure inside; hits break it away.
 let hiddenThings = new Set(), sheetView = null, hitsBefore = null, quiet = capture;
+// See-through while playing (and while recording a scene), never on Jev's stills, which mask what they need themselves.
+let seeing = !capture;
 const things = (data.things ?? []).map((thing) => {
   const piece = new THREE.Group(), frame = new THREE.Group(), depth = thing.shape === "box" ? Math.max(1.2, thing.size * 0.35) : thing.size;
   const forms = { flat: hologram(thing.model, thing.shape), standing: thing.shape === "donut" && !thing.model ? hologram(null, "donut", true) : null };
@@ -515,7 +546,7 @@ function frame(now) {
   const settling = !quiet && segment.kind === "event" && segment.event.hit && elapsed < 3.2 ? segment.event.hit : null;
   for (const id of Object.keys(data.places)) drawSkeletons(id, built.get(id), (hitTimes[id] ?? []).filter((at) => at <= time && (hitsBefore === null || at < hitsBefore)).length, id === segment.scene.place ? settling : null);
   if (segment !== shownSegment) {
-    shownSegment = segment; showPaths(segment, entry);
+    shownSegment = segment; showPaths(segment, entry); showTrace(segment);
     const hit = segment.kind === "event" && segment.event.hit;
     $("flash").textContent = hit ? `damage ${Math.round(hit.strength * 100)}% · ${hit.destroyed.length} cells lost · ${hit.cutRooms.length} rooms cut off` : "";
     $("flash").style.opacity = hit ? 1 : 0;
@@ -588,10 +619,104 @@ function frame(now) {
   }
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
   if (follow && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
+  if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
 
+/**
+ * See through what stands between the camera and the people (and a hit as it plays). In a dense block every shell in
+ * the way would bury them, so a building the line of sight passes through fades to a faint outline (6% of its drawn
+ * opacity) with its skeleton left out, and one within a few metres of the line dims to a third. Checked a few times a
+ * second; a building stays faded a moment after the line clears it, so nothing flickers as people walk past corners;
+ * fading is eased.
+ */
+const SEE = { front: 0.06, near: 0.35, margin: 6, every: 120, hold: 700 };
+/** For checking: which buildings of each built place are seen through now (in front) or dimmed (beside the line of sight). */
+window.__seen = () => Object.fromEntries([...built].map(([id, entry]) => [id, { front: [...entry.masked], near: [...(entry.near ?? [])], fade: entry.lots.map((lot) => Math.round((lot.fade ?? 1) * 100) / 100) }]));
+const sightHit = new THREE.Vector3();
+function seeThrough(entry, segment, now, dt, elapsed) {
+  if (now - (entry.sawAt ?? 0) > SEE.every) {
+    entry.sawAt = now;
+    const targets = [...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => pawn.position.clone().setY(pawn.position.y + 1));
+    const sphere = segment.kind === "event" && elapsed < 2.6 ? segment.event.hit?.sphere : null;
+    if (sphere) targets.push(new THREE.Vector3(sphere.x - entry.cx, sphere.y, sphere.z - entry.cz));
+    const eye = camera.position, near = new Set();
+    entry.frontUntil ??= new Map();
+    entry.lots.forEach(({ box }, n) => {
+      const wide = box.clone().expandByScalar(SEE.margin);
+      for (const target of targets) {
+        if (box.containsPoint(target)) continue;
+        const length = target.distanceTo(eye), ray = new THREE.Ray(eye.clone(), target.clone().sub(eye).normalize());
+        if (ray.intersectBox(box, sightHit) && sightHit.distanceTo(eye) < length) { entry.frontUntil.set(n, now + SEE.hold); break; }
+        if (!wide.containsPoint(target) && ray.intersectBox(wide, sightHit) && sightHit.distanceTo(eye) < length) near.add(n);
+      }
+    });
+    const front = new Set([...entry.frontUntil].filter(([, until]) => until > now).map(([n]) => n));
+    // The skeletons are redrawn only when the set in front changes.
+    if (front.size !== entry.masked.size || [...front].some((n) => !entry.masked.has(n))) { entry.masked = front; entry.shownHits = -1; }
+    entry.near = near;
+  }
+  entry.lots.forEach((lot, n) => {
+    const goal = entry.masked.has(n) ? SEE.front : entry.near?.has(n) ? SEE.near : 1;
+    lot.fade = (lot.fade ?? 1) + (goal - (lot.fade ?? 1)) * Math.min(1, dt * 6);
+    for (const { part, opacity } of lot.parts) if (!part.isSprite) part.material.opacity = opacity * lot.fade;
+  });
+}
+
 const label2 = (id) => data.macro.find((node) => node.id === id)?.label ?? data.places[id]?.label ?? "elsewhere";
+
+// The Jev trace: what Jev decided at this moment, in the panel and on the stage. Moves: each person's chance of moving,
+// how and which way, and the three likeliest spots (white: the one used). Things: the model pick, the lettered spots
+// and the solved box (gold). Impacts: the lettered spots (red: the pick) and the size.
+let tracing = new URLSearchParams(location.search).has("trace");
+const traceGroup = new THREE.Group(); world.add(traceGroup);
+const pct = (p) => `${Math.round((p ?? 0) * 100)}%`, nameOf = (id) => data.people[id]?.name ?? id;
+const SIZES = [4, 8, 16, 32];
+function marker(x, y, z, color, text, bright, size = 1.6) {
+  const group = new THREE.Group(), ring = new THREE.Mesh(new THREE.RingGeometry(size * 0.7, size, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: bright ? 0.95 : 0.45, side: THREE.DoubleSide, depthTest: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(x, y + 0.1, z); ring.renderOrder = 9; group.add(ring);
+  if (text) { const tag = label(text, bright ? "#ffffff" : "#c7d6e0", bright ? 26 : 22); tag.position.set(x, y + 2.6, z); tag.scale.multiplyScalar(bright ? 0.9 : 0.7); group.add(tag); }
+  return group;
+}
+function wireBox(x0, y0, z0, x1, y1, z1, color, opacity) { const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0)), new THREE.LineBasicMaterial({ color, transparent: true, opacity })); box.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return box; }
+function showTrace(segment) {
+  traceGroup.clear();
+  const panel = $("trace");
+  panel.hidden = !tracing;
+  if (!tracing) return;
+  const entry = built.get(segment.scene.place), trace = segment.kind === "event" ? segment.event.trace : segment.kind === "card" ? segment.scene.trace : null, rows = [];
+  const W = (x, z) => [x - entry.cx, z - entry.cz];
+  if (!trace) { panel.innerHTML = `<h4>Jev</h4><div class="row alt">${segment.kind === "macro" ? "Moving between places: walked by the path integral, no Jev question." : "No Jev decision at this moment."}</div>`; return; }
+  // Who goes with whom (Jev's pairs): the companion ends beside the one they go with.
+  for (const pair of trace.together ?? []) rows.push(`<div class="row"><b style="color:${data.people[pair.person]?.color}">${nameOf(pair.person)}</b> goes with <b style="color:${data.people[pair.with]?.color}">${nameOf(pair.with)}</b> <span class="alt">(ends beside them)</span></div>`);
+  for (const start of trace.starts ?? []) rows.push(`<div class="row"><b style="color:${data.people[start.person]?.color}">${nameOf(start.person)}</b> starts: stated ${pct(start.stated)}${start.used ? "" : " (too unsure: a default start)"} · ${start.to.map(([spot, p]) => `${spot} ${pct(p)}`).join(", ")}</div>`);
+  if (trace.moves?.length) {
+    rows.push("<h4>Moves</h4>");
+    const moving = trace.moves.filter((move) => (move.moves ?? 0) >= 0.3 && move.to.length), staying = trace.moves.length - moving.length;
+    for (const move of moving) {
+      const color = data.people[move.person]?.color ?? "#ffffff";
+      rows.push(`<div class="row"><b style="color:${color}">${nameOf(move.person)}</b> moves ${pct(move.moves)} · ${move.how ?? ""} · ${move.direction.map(([way, p]) => `${way} ${pct(p)}`).join(" / ")}<br><span class="alt">to</span> ${move.to.map(([spot, p], n) => (n === 0 ? `<b>${spot} ${pct(p)}</b>` : `<span class="alt">${spot} ${pct(p)}</span>`)).join(", ")}</div>`);
+      move.to.forEach(([spot, p, at], n) => { if (at) { const [x, z] = W(at[0], at[2]); traceGroup.add(marker(x, at[1], z, color, `${spot} ${pct(p)}`, n === 0)); } });
+    }
+    if (staying) rows.push(`<div class="row alt">${staying} ${moving.length ? "more " : ""}stay put (Jev's chance they move under 30%, or no destination asked).</div>`);
+  }
+  for (const thing of trace.things ?? []) {
+    rows.push(`<h4>Thing · ${thing.thing}</h4><div class="row">model <b>${thing.model?.id ?? "—"}</b> ${thing.model ? pct(thing.model.confidence) : ""} <span class="alt">${(thing.model?.top ?? []).slice(1).map(([id, p]) => `${id} ${pct(p)}`).join(", ")}</span></div>`);
+    if (thing.choice) rows.push(`<div class="row">spot <b>${thing.choice.pick}</b> ${pct(thing.choice.confidence)} of ${thing.spots.length} lettered <span class="alt">${thing.choice.top.slice(1).map(([key, p]) => `${key} ${pct(p)}`).join(", ")}</span></div>`);
+    if (thing.box) rows.push(`<div class="row">solved box ${Math.round(thing.box.x[1] - thing.box.x[0])} × ${Math.round(thing.box.y[1] - thing.box.y[0])} × ${Math.round(thing.box.z[1] - thing.box.z[0])} m</div>`);
+    for (const spot of thing.spots) { const [x, z] = W(spot.x, spot.z), chosen = spot.label === thing.chosen; traceGroup.add(wireBox(x - spot.w / 2, spot.y0, z - spot.d / 2, x + spot.w / 2, spot.y0 + spot.h, z + spot.d / 2, chosen ? 0xffd36e : 0x8fd6ff, chosen ? 0.9 : 0.35)); const tag = label(spot.label, chosen ? "#ffd36e" : "#c7d6e0", 26); tag.position.set(x, spot.y0 + spot.h + 2, z); traceGroup.add(tag); }
+    if (thing.box) { const b = thing.box; traceGroup.add(wireBox(b.x[0] - entry.cx, b.y[0], b.z[0] - entry.cz, b.x[1] - entry.cx, b.y[1], b.z[1] - entry.cz, 0xffd36e, 1)); }
+  }
+  if (trace.impact) {
+    const impact = trace.impact, size = impact.size ? SIZES[Number(impact.size.pick) - 1] : null;
+    rows.push(`<h4>Impact</h4><div class="row">${impact.none ? "<b>no damage</b>" : `spot <b>${impact.pick}</b> ${pct(impact.confidence)}`} of ${impact.spots.length} lettered <span class="alt">${impact.top.slice(1).map(([key, p]) => `${key} ${pct(p)}`).join(", ")}</span></div>`);
+    if (impact.size) rows.push(`<div class="row">size <b>${size} m</b> ${pct(impact.size.confidence)} <span class="alt">${impact.size.top.slice(1).map(([key, p]) => `${SIZES[Number(key) - 1]} m ${pct(p)}`).join(", ")}</span></div>`);
+    for (const spot of impact.spots) { const [x, z] = W(spot.x, spot.z), chosen = spot.label === impact.pick; const ball = new THREE.Mesh(new THREE.SphereGeometry(chosen ? 3 : 2, 14, 10), new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: chosen ? 0.95 : 0.4, depthTest: false })); ball.position.set(x, spot.y, z); ball.renderOrder = 9; traceGroup.add(ball); const tag = label(chosen ? `${spot.label} ${pct(impact.confidence)}` : spot.label, chosen ? "#ff8f9a" : "#c7d6e0", 24); tag.position.set(x, spot.y + 5, z); tag.scale.multiplyScalar(chosen ? 1.1 : 0.8); traceGroup.add(tag); }
+  }
+  panel.innerHTML = `<h4>Jev · this moment</h4>${rows.join("")}`;
+}
+$("jev").setAttribute("aria-pressed", String(tracing));
+$("jev").addEventListener("click", () => { tracing = !tracing; $("jev").setAttribute("aria-pressed", String(tracing)); if (shownSegment) showTrace(shownSegment); });
 
 $("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "⏸ Pause" : "▶ Play"; });
 $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (!follow) controls.target.set(0, 4, 0); });
@@ -609,6 +734,9 @@ $("how").innerHTML = [
   `<b>Between places.</b> People walk: out of the old place along its own path integral, across the map along one draw of the map's path integral (metres, plus a cost for every place boundary crossed, more the more slanted the crossing: ${data.travel ? `μ=${data.travel.crossing.mu} m, ν=${data.travel.crossing.nu}` : "μ, ν"}), and into the new place to where the scene finds them. The camera rises once they are out and comes down as they arrive; their traces stay on the ground (${data.notes.travel?.routes ?? 0} routes, ${data.notes.travel?.metres ?? 0} m).`,
   `<b>Buildings wear artistic models.</b> Each lot draws one of the Kenney CC0 kit models for its kind (towers, skyscrapers, offices, a market, a hospital with its cross) at random, stretched over its skeleton.`,
   `<b>Things the story mentions.</b> Each scene's buildings and large visible things are detected from its events (novel stage objects: a work-model call per few scenes, only things big enough to see from a wide view) and matched against one ranking of building models and pure shapes. A named building takes a lot and lights up in gold when first mentioned. Other things are gold hologram shapes fitted to a box in 3D: Jev boxes the thing on the reader's view of the place, then on a view turned 90° about the place that shows the first box as a beam, and where the two boxes meet is its position, size and height (things not yet asked stand on the ground beside the event's first actor); mentions of one named thing are one thing (A.A.A. and Anti-Art Attachment, the 姬蜂 FIVE_Over), which glides to wherever a later event puts it. Big things carry structure inside that hits break away, and every thing is part of the walk: people land on and cross its top, and small ones on the ground are walked around.`,
+  `<b>Jev trace.</b> The Jev trace button (or <code>?trace</code> in the address) shows what Jev decided at each moment: for each person, the chance they move, how and which way, and the three likeliest spots (rings; white: the one used); for each thing, the model pick, the lettered spots it chose among and the box solved from its close-ups (gold); for each impact, the lettered spots (red: the pick) and the size. Moves between places are walked by the path integral, with no Jev question.`,
+  `<b>Who goes together.</b> Jev is asked, for each pair of people, whether they arrive together and, per event, whether a mover and anyone else present go together and end up beside each other (leading, carrying or dragging counts). A companion then ends on the free spot beside the one they go with, the same way; answers asked before this question existed fall back to two people the event names going to the same spot.`,
+  `<b>Seeing through.</b> While it plays, a building between the camera and the people (or a hit as it plays) fades to a faint outline with its skeleton left out, and one within a few metres of the line of sight dims, so people stay visible in dense blocks.`,
   `<b>Stand-ins.</b> Where moves end comes from Jev's typed spot answers in the book's movement run; how hard a fight hits a building is read from the event summary's wording, standing in for a Jev damage question not yet asked.`,
 ].map((item) => `<li>${item}</li>`).join("");
 // Capture mode: the stage's questions see what the reader sees. A still is the place at a moment of the strand from the
@@ -698,7 +826,7 @@ if (capture) {
     async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], play = null, at = null, caption = null }) {
       // `play`: that many seconds into the event, its hit's effects on (to look at a destruction as it plays).
       // `at`: any moment of the strand, everything playing (to record a scene).
-      time = at ?? (eventStart.get(`${scene}|${event}`) ?? 0) + (play ?? 0.02); quiet = play === null && at === null; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
+      time = at ?? (eventStart.get(`${scene}|${event}`) ?? 0) + (play ?? 0.02); quiet = play === null && at === null; seeing = at !== null; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
       // Just before this event's own hit: the buildings as they stood.
       hitsBefore = beforeHit ? time - 0.02 : null; for (const entry of built.values()) entry.shownHits = -1;
       for (const extra of extras.splice(0)) world.remove(extra);
@@ -721,7 +849,8 @@ if (capture) {
       if (solved) { const entry = built.get(place), box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0x5dff8a })); box.position.set((solved.x[0] + solved.x[1]) / 2 - entry.cx, (solved.y[0] + solved.y[1]) / 2, (solved.z[0] + solved.z[1]) / 2 - entry.cz); box.scale.set(solved.x[1] - solved.x[0], solved.y[1] - solved.y[0], solved.z[1] - solved.z[0]); extras.push(box); world.add(box); }
       outline(boxes);
       if (caption) { const ctx = overlay.getContext("2d"), w = overlay.width, h = overlay.height; overlay.hidden = false; ctx.font = "600 17px system-ui, 'PingFang SC', sans-serif"; const lines = []; let line = ""; for (const char of caption) { if (ctx.measureText(line + char).width > w - 40) { lines.push(line); line = ""; } line += char; } lines.push(line); const top = h - 14 - lines.length * 24; ctx.fillStyle = "rgba(6,12,18,.78)"; ctx.fillRect(0, top - 10, w, h - top + 10); ctx.fillStyle = "#e8f1f6"; lines.forEach((text, n) => ctx.fillText(text, 20, top + 14 + n * 24)); }
-      for (const entry of built.values()) if (entry.masked.size) see(entry, new Set());
+      // Jev's stills start from every building as drawn (see-through while recording takes over again on its own).
+      for (const entry of built.values()) { if (entry.masked.size || entry.near?.size) see(entry, new Set()); entry.near = new Set(); entry.frontUntil = new Map(); entry.lots.forEach((lot) => { lot.fade = 1; }); }
       await frames();
       // See through the buildings in front of what the still looks at: the beam of an earlier box, or else the people there.
       if (mask) {

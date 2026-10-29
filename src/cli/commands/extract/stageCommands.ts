@@ -17,9 +17,11 @@ import { loadEmbedder } from "../../../ground/connectors/embeddings.js";
 import { loadConfig } from "../../config.js";
 import { cachedWork } from "../../../digger/timeplace/cache.js";
 import { architectureFingerprint, architecturePictures, pickArchitecture, type ArchitecturePlace, type ArchitectureReport } from "../../../digger/stage/architecture.js";
-import { askMovement, movementFingerprint, sceneCallEstimate, sceneCallLimit, sceneInputs, type MovementReport, type MovementScene } from "../../../digger/stage/movement.js";
+import { askMovement, movementFingerprint, pairsCallLimit, sceneCallEstimate, sceneCallLimit, sceneInputs, type MovementReport, type MovementScene } from "../../../digger/stage/movement.js";
 import { prepareStage, prepFingerprint, type StagePlan } from "../../../digger/stage/prep.js";
 import { pickScales, scaleFingerprint, SCALES, type ScalePlace, type ScaleReport } from "../../../digger/stage/scale.js";
+import { landscapeFingerprint, landscapeProposal, OPEN_SCALES, pickLandscapes, type LandscapePlace, type LandscapeReport } from "../../../digger/stage/landscape.js";
+import { firstLandscape, type Landscape } from "../../../ground/stage/landscape.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 
 /**
@@ -59,7 +61,7 @@ const clip = (text: string, length: number) => [...text].length > length ? `${[.
 const CAST_LIMIT = 8;
 
 interface StoredEvent { id: string; summaryEn?: string; summary?: string; primaryActors?: string[]; evidence?: { text?: string; sentenceIds?: string[] } }
-const stageFile = (novelDir: string, name: "scale" | "architecture" | "movement" | "plan" | "objects") => join(novelDir, "stage", `${name}.json`);
+const stageFile = (novelDir: string, name: "scale" | "landscape" | "architecture" | "movement" | "plan" | "objects") => join(novelDir, "stage", `${name}.json`);
 const readJson = async <T>(path: string): Promise<T | null> => readFile(path, "utf8").then((text) => JSON.parse(text) as T, () => null);
 async function writeReport(path: string, value: unknown) {
   await mkdir(join(path, ".."), { recursive: true, mode: 0o700 });
@@ -130,15 +132,28 @@ export async function stageInputs(novelDir: string) {
       events: moving.map((event) => ({ ...event, actors: event.actors.filter((id) => castSet.has(id)) })) });
   }
   const movement = await readJson<MovementReport>(stageFile(novelDir, "movement"));
-  const movementCurrent = !!movement?.complete && movement.inputs === movementFingerprint(movementScenes, names);
+  // Current once every scene also has who goes together (asked after the other questions; older answers get only that).
+  const movementCurrent = !!movement?.complete && movement.inputs === movementFingerprint(movementScenes, names) && movementScenes.every((scene) => movement.scenes[scene.id]?.pairs);
   const objects = await readJson<ObjectsReport>(stageFile(novelDir, "objects"));
   const objectsCurrent = !!objects?.complete && movementScenes.every((scene) => objects.scenes[scene.id]?.inputs === objectSceneInputs(objectScene(scene)));
   const plan = await readJson<StagePlan>(stageFile(novelDir, "plan"));
   const planCurrent = architectureCurrent && movementCurrent && plan?.inputs === prepFingerprint(architecture!.inputs, movement!.inputs);
   // What movement would still ask: the usual cost, and the most it can cost (what --max-calls must allow to finish in one run).
   const toAsk = movementScenes.filter((scene) => movement?.scenes[scene.id]?.inputs !== sceneInputs(scene, names));
-  return { data, places, scalePlaces, scale, scaleCurrent, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, objects, objectsCurrent, plan, planCurrent, answers,
-    estimate: Math.ceil(toAsk.reduce((sum, scene) => sum + sceneCallEstimate(scene), 0)), limit: toAsk.reduce((sum, scene) => sum + sceneCallLimit(scene), 0) };
+  const toPair = movementScenes.filter((scene) => movement?.scenes[scene.id]?.inputs === sceneInputs(scene, names) && !movement.scenes[scene.id].pairs);
+  // Landscape: every city, district and street by its scale, with what the text shows of it.
+  const objectsAt = new Map<string, string[]>();
+  for (const [sceneId, found] of Object.entries(objects?.scenes ?? {})) objectsAt.set(sceneId, found.objects.filter((object) => object.kind === "building" && !object.room).map((object) => object.name));
+  const sentenceList = [...sentences.entries()];
+  const landscapePlaces: LandscapePlace[] = data.places.filter((place) => OPEN_SCALES.has(scale?.places[place.id]?.scale ?? "")).map((place) => {
+    const label = names[place.id] ?? place.label, naming = sentenceList.filter(([, sentence]) => sentence.text.includes(label) && sentence.text.length >= label.length + 8).slice(0, 3);
+    return { id: place.id, label, scale: scale!.places[place.id].scale, path: place.path ?? [place.id], contains: inside(place.id), scenes: place.sceneIds.map((id) => (sceneLabel.get(id) ?? "").split("（原文：")[0]).filter((text) => text && !/^scene_\d+$/.test(text)).map((text) => clip(text, 110)),
+      buildings: [...new Set(place.sceneIds.flatMap((id) => objectsAt.get(id) ?? []))], sentences: naming.map(([, sentence]) => clip(sentence.text, 110)), sentenceIds: naming.map(([id]) => id) };
+  });
+  const landscape = await readJson<LandscapeReport>(stageFile(novelDir, "landscape"));
+  const landscapeCurrent = !!landscape?.complete && landscape.inputs === landscapeFingerprint(landscapePlaces);
+  return { data, places, scalePlaces, scale, scaleCurrent, landscapePlaces, landscape, landscapeCurrent, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, objects, objectsCurrent, plan, planCurrent, answers,
+    estimate: Math.ceil(toAsk.reduce((sum, scene) => sum + sceneCallEstimate(scene), 0) + toPair.reduce((sum, scene) => sum + pairsCallLimit(scene) * 0.5, 0)), limit: toAsk.reduce((sum, scene) => sum + sceneCallLimit(scene), 0) + toPair.reduce((sum, scene) => sum + pairsCallLimit(scene), 0) };
 }
 
 /** A staged scene as object detection reads it: its place and its events' summaries (without the quoted source). */
@@ -157,6 +172,49 @@ async function requireAnalysis(novelDir: string, step: string, needs: string[] |
   const waiting = (await bookChecklist(novelDir, { stage: false })).items.filter((item) => (needs === "all" || needs.includes(item.id)) && !["done", "optional"].includes(item.status));
   if (waiting.length && !force) throw new Error(`${step} waits for ${needs === "all" ? "every other step" : "the steps it builds on"}: ${waiting.map((item) => `${item.id} (${item.status})`).join(", ")}. See novel checklist.`);
   return waiting;
+}
+
+/** A stage-landscape packet still awaiting review (one at a time). */
+export const landscapePacketsOpen = async (novelDir: string) => (await listChangeSets(novelDir)).filter((changeset) => changeset.id.startsWith("cs_stage_landscape_") && ["pending_review", "held", "revision_requested"].includes(changeset.status));
+
+/**
+ * `novel stage landscape`: one Jev choice per city, district and street (by its scale) of what its ground looks like
+ * from above; kept per place and asked again only when what the text shows of it changes. Each place's landscape (its
+ * first patch, at its centre) is then proposed into the ontology as the place's `landscape` property, through the
+ * shared review gate; the buildings it is filled with never are.
+ */
+export async function stageLandscape(novelDir: string, options: StageOptions = {}): Promise<Record<string, unknown>> {
+  const inputs = await stageInputs(novelDir);
+  if (!inputs.scaleCurrent) throw new Error(`Landscape needs each place's scale first: run \`novel stage scale ${novelDir}\`.`);
+  const report = await pickLandscapes(inputs.landscapePlaces, { decisions: decisionsFor(options), names: inputs.names, previous: inputs.landscape });
+  const types: Record<string, number> = {};
+  for (const pick of Object.values(report.places)) types[pick.type] = (types[pick.type] ?? 0) + 1;
+  // Into the ontology, through the shared review gate: a place whose landscape is new or of another type.
+  const open = await landscapePacketsOpen(novelDir);
+  let ontology: Record<string, unknown>;
+  if (open.length) ontology = { packet: open[0].id, note: `A stage-landscape packet awaits review (${open[0].id}): review it (novel review show ${novelDir} ${open[0].id} --scope book --offset 0 --limit 20) before anything more is proposed.` };
+  else {
+    const entities = new Map(fold(await new BundleStore(join(novelDir, "ontology")).loadFile<Entity>("entities.jsonl")).map((entity) => [entity.id, entity]));
+    const proposed = new Set(report.proposed ?? []), sentences = await loadWorkspaceSentences(novelDir);
+    const proposals = inputs.landscapePlaces.flatMap((place) => {
+      const pick = report.places[place.id], entity = entities.get(place.id), kept = entity?.properties.landscape as Landscape | undefined;
+      if (!pick || pick.type === "none" || !entity || !place.sentenceIds?.length || kept?.patches?.[0]?.type === pick.type) return [];
+      const proposal = landscapeProposal(entity, firstLandscape(place.id, pick.type), place.sentenceIds);
+      return proposed.has(proposal.id) ? [] : [proposal];
+    });
+    let packet: string | null = null;
+    if (proposals.length) {
+      packet = `cs_stage_landscape_${Date.now()}`;
+      await saveChangeSet(novelDir, { id: packet, blockId: "stage-landscape", proposals, status: "pending_review", reviewSource: timePlaceReviewSource(proposals, sentences), createdAt: new Date().toISOString(),
+        reviewNotes: { "stage-landscape": `Stage landscape: ${proposals.length} place(s) with what its ground looks like from above (${Object.entries(types).map(([type, count]) => `${type} ${count}`).join(", ")}), each kept as the place's landscape property (its first patch, at its centre; the buildings it is filled with are never canon). Accept one only if its sentences show that kind of place (its era, what stands there).` } });
+      report.proposed = [...proposed, ...proposals.map((proposal) => proposal.id)];
+    }
+    ontology = { packet, proposals: proposals.length, ...(packet ? { next: `novel review show ${novelDir} ${packet} --scope book --offset 0 --limit 20` } : {}) };
+  }
+  await writeReport(stageFile(novelDir, "landscape"), report);
+  const unsure = Object.values(report.places).filter((pick) => (pick.confidence ?? 1) < 0.5).map((pick) => `${pick.label}: ${pick.type} (${pick.confidence})`);
+  return { places: inputs.landscapePlaces.length, types, ...(unsure.length ? { unsure } : {}), usage: report.usage, complete: report.complete, report: stageFile(novelDir, "landscape"), ontology,
+    ...(report.complete ? {} : { note: "Without Jev nothing is asked; places not asked before are left for a run with Jev." }) };
 }
 
 export interface StageOptions { jev?: boolean; cache?: string; maxCalls?: number; force?: boolean; env?: NodeJS.ProcessEnv }
@@ -214,6 +272,7 @@ export async function stagePrep(novelDir: string, options: StageOptions = {}): P
 export async function stageShow(novelDir: string): Promise<Record<string, unknown>> {
   const inputs = await stageInputs(novelDir);
   return {
+    landscape: { places: inputs.landscapePlaces.length, picked: Object.keys(inputs.landscape?.places ?? {}).length, current: inputs.landscapeCurrent, picks: Object.fromEntries(Object.values(inputs.landscape?.places ?? {}).map((pick) => [pick.label, pick.type])) },
     scale: { places: inputs.scalePlaces.length, picked: Object.keys(inputs.scale?.places ?? {}).length, current: inputs.scaleCurrent, picks: Object.fromEntries(Object.values(inputs.scale?.places ?? {}).map((pick) => [pick.label, `${pick.scale} (${pick.by})`])) },
     architecture: { places: inputs.places.length, picked: Object.keys(inputs.architecture?.places ?? {}).length, current: inputs.architectureCurrent, picks: Object.fromEntries(Object.values(inputs.architecture?.places ?? {}).map((pick) => [pick.label, `${pick.kind} (${pick.by})`])) },
     // Named buildings and things: detected per staged scene, proposed for review, and those now in the ontology.
@@ -324,4 +383,4 @@ export async function stageObjects(novelDir: string, options: StageOptions & { w
     ...(work ? {} : { note: "No work model configured (WORK_LLM_API_KEY): nothing was asked; scenes are left for a run with one." }) };
 }
 
-export const STAGE_USAGE = "novel stage objects <novel-dir> [--max-calls N] [--cache dir] [--no-work] [--no-jev] [--force] | novel stage show <novel-dir> | novel stage lines <novel-dir> [--line <scene-id>] | novel stage scale <novel-dir> [--no-jev] [--cache dir] | novel stage architecture <novel-dir> [--no-jev] [--cache dir] [--force] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] [--force] | novel stage prep <novel-dir> [--force]";
+export const STAGE_USAGE = "novel stage objects <novel-dir> [--max-calls N] [--cache dir] [--no-work] [--no-jev] [--force] | novel stage show <novel-dir> | novel stage lines <novel-dir> [--line <scene-id>] | novel stage scale <novel-dir> [--no-jev] [--cache dir] | novel stage landscape <novel-dir> [--no-jev] [--cache dir] | novel stage architecture <novel-dir> [--no-jev] [--cache dir] [--force] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] [--force] | novel stage prep <novel-dir> [--force]";

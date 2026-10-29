@@ -64,7 +64,7 @@ import { approveBook } from "../solidifier/merge/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
 import { SIM_USAGE, simPick, simRun, simShow, simStrands } from "./commands/extract/simCommands.js";
-import { STAGE_USAGE, stageArchitecture, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
+import { STAGE_USAGE, stageArchitecture, stageLandscape, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
   listChangeSets,
@@ -564,8 +564,8 @@ async function main(): Promise<void> {
 
   if (cmd === "stage") {
     const novelDir = positional[2];
-    if (!["show", "lines", "objects", "scale", "architecture", "movement", "prep"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${STAGE_USAGE}`);
-    const valued = sub === "movement" || sub === "objects" ? ["--max-calls", "--cache"] : sub === "architecture" || sub === "scale" ? ["--cache"] : sub === "lines" ? ["--line"] : [], switches = sub === "prep" ? ["--force"] : sub === "scale" ? ["--no-jev"] : sub === "show" || sub === "lines" ? [] : sub === "objects" ? ["--no-work", "--no-jev", "--force"] : ["--no-jev", "--force"];
+    if (!["show", "lines", "objects", "scale", "landscape", "architecture", "movement", "prep"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${STAGE_USAGE}`);
+    const valued = sub === "movement" || sub === "objects" ? ["--max-calls", "--cache"] : sub === "architecture" || sub === "scale" || sub === "landscape" ? ["--cache"] : sub === "lines" ? ["--line"] : [], switches = sub === "prep" ? ["--force"] : sub === "scale" || sub === "landscape" ? ["--no-jev"] : sub === "show" || sub === "lines" ? [] : sub === "objects" ? ["--no-work", "--no-jev", "--force"] : ["--no-jev", "--force"];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];
@@ -576,7 +576,7 @@ async function main(): Promise<void> {
     const maxCalls = flag(positional, "--max-calls");
     if (maxCalls !== undefined && (!/^\d+$/.test(maxCalls) || Number(maxCalls) < 1)) throw new Error("--max-calls must be a positive integer.");
     const options = { jev: !positional.includes("--no-jev"), cache: flag(positional, "--cache"), maxCalls: maxCalls === undefined ? undefined : Number(maxCalls), force: positional.includes("--force") };
-    out(await (sub === "show" ? stageShow(novelDir) : sub === "objects" ? stageObjects(novelDir, { ...options, work: !positional.includes("--no-work") }) : sub === "lines" ? stageLines(novelDir, { line: flag(positional, "--line") }) : sub === "scale" ? stageScale(novelDir, options) : sub === "architecture" ? stageArchitecture(novelDir, options) : sub === "movement" ? stageMovement(novelDir, options) : stagePrep(novelDir, options)), pretty);
+    out(await (sub === "show" ? stageShow(novelDir) : sub === "objects" ? stageObjects(novelDir, { ...options, work: !positional.includes("--no-work") }) : sub === "lines" ? stageLines(novelDir, { line: flag(positional, "--line") }) : sub === "scale" ? stageScale(novelDir, options) : sub === "landscape" ? stageLandscape(novelDir, options) : sub === "architecture" ? stageArchitecture(novelDir, options) : sub === "movement" ? stageMovement(novelDir, options) : stagePrep(novelDir, options)), pretty);
     return;
   }
 

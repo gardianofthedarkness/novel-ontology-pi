@@ -13,7 +13,7 @@ import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/a
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { loadWorkspaceSentences, placeScales, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
-import { objectsPacketsOpen, stageInputs } from "./stageCommands.js";
+import { landscapePacketsOpen, objectsPacketsOpen, stageInputs } from "./stageCommands.js";
 import { simCurrent, simPicksDone } from "./simCommands.js";
 import { castScope, loadCast } from "../../../solidifier/identity/cast.js";
 import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js";
@@ -207,6 +207,12 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   stageItems.push({ id: "scale", title: "Scale of places (region to room, for read mode)", dependsOn: ["time-place", "place-tree"],
     status: stage.scaleCurrent ? "done" : "todo", counts: { places: stage.scalePlaces.length, picked: Object.keys(stage.scale?.places ?? {}).length, current: stage.scaleCurrent },
     next: stage.scaleCurrent ? [] : [`novel stage scale ${dir}`], note: stage.scaleCurrent ? undefined : `About ${stage.scalePlaces.length} Jev choice(s), one per place; a view input, no review.` });
+  // What each city, district and street looks like from above: into the ontology through review (the place's landscape property).
+  const landscapeOpen = await landscapePacketsOpen(novelDir);
+  stageItems.push({ id: "landscape", title: "Landscape of open places (what cities, districts and streets look like from above; into the ontology, reviewed)", dependsOn: ["scale"],
+    status: landscapeOpen.length ? "review" : stage.landscapeCurrent ? "done" : "todo", counts: { places: stage.landscapePlaces.length, picked: Object.keys(stage.landscape?.places ?? {}).length, proposed: stage.landscape?.proposed?.length ?? 0, awaitingReview: landscapeOpen.length, current: stage.landscapeCurrent },
+    next: landscapeOpen.length ? landscapeOpen.map((changeset) => reviewCommand(changeset.id)) : stage.landscapeCurrent ? [] : [`novel stage landscape ${dir}`],
+    note: landscapeOpen.length ? "Review it like any packet: accept a place's landscape only if its sentences show that kind of place." : stage.landscapeCurrent ? undefined : `About ${stage.landscapePlaces.length} Jev choice(s), one per city, district or street; it proposes a review packet.` });
   stageItems.push({ id: "architecture", title: "Buildings of places (a sub-kind of place, for read mode)", dependsOn: ["time-place", "place-tree"],
     status: stage.architectureCurrent ? "done" : "todo", counts: { places: stage.places.length, picked: Object.keys(stage.architecture?.places ?? {}).length, current: stage.architectureCurrent },
     next: stage.architectureCurrent ? [] : [`novel stage architecture ${dir}`], note: stage.architectureCurrent ? undefined : `About ${stage.places.length} Jev picture choice(s), one per place; a view input, no review.` });

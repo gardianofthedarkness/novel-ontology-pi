@@ -25,7 +25,12 @@ novel text and Jev answers as data.
    region, city, district, street, building or room (one Jev choice per
    place). The stage builds a place by it. Answers are kept; a re-run asks
    only places whose name, path or children changed. Mention the places it
-   lists as `unsure` in the report.
+   lists as `unsure` in the report. Then `novel stage landscape <dir>` asks
+   what each city, district and street looks like from above (skyscrapers, a
+   living area, a castle town, farmland, …; one Jev choice per place, by its
+   scale) and proposes a review packet: each place's landscape as its
+   `landscape` property. Review it like any packet; the buildings the engine
+   fills a landscape with are never canon.
 4. `novel stage architecture <dir>` picks each place's building (one Jev
    picture choice per place: school, apartment, tower, city, …). Answers are
    kept; a re-run asks only places whose inputs changed.
@@ -43,7 +48,9 @@ novel text and Jev answers as data.
    says another record may be it rather than guess. Run the command again
    only while the checklist says objects is todo.
 6. `novel stage movement <dir> --max-calls N` asks, scene by scene, who moves
-   to which spot, how and which way. Take N from `novel stage show <dir>`'s
+   to which spot, how and which way, and who goes together (so companions
+   end beside each other). Scenes asked before that question existed keep
+   their answers and are asked only who goes together. Take N from `novel stage show <dir>`'s
    `movement.maxRequests` once step 4 is done (it counts only scenes in a
    building still to ask), at least 1 and at most 6000: the run never spends more than N
    and usually about two thirds of it (`estimatedRequests`). When it reports

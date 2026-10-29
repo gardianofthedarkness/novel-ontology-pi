@@ -56,7 +56,7 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt } = await load('dist/apps/playground/src/data/structure.js');
-  const { placeTreeCircles } = await load('dist/apps/playground/src/data/timePlace.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape } = await load('dist/src/ground/stage/landscape.js');
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf } = await load('dist/src/digger/stage/scale.js');
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -94,7 +94,7 @@ export async function strandDemo(novelDir, options) {
   };
   const pick = (list, rng) => list[Math.floor(rng() * list.length)];
   const report = inputs.movement?.scenes ?? {}, moves = new Map(), hits = new Map(), hitThings = new Map(), struck = new Set(), notes = { unreachable: 0, sampled: 0, teleports: 0, solves: 0, hits: 0, destroyed: 0, travel: { routes: 0, metres: 0, crossed: 0, unreachable: 0 } };
-  const top = distribution => Object.entries(distribution ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const topSpot = distribution => Object.entries(distribution ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0];
   /** A spot as Jev named it, in this place: districts name streets and sides; buildings name floors, the roof and the street. */
   const spotKey = (placeId, spot) => { const group = groups.get(placeId); return placeSpot(group.layout, group.label, graphOf(placeId).spots, spot); };
   // How destructive each event is: its embedding (the causality faculty's sidecar) projected onto the book's own
@@ -113,7 +113,7 @@ export async function strandDemo(novelDir, options) {
   // Jev's three calls per thing (playground/two-view-things.mjs): which model it is, then a box on two views of each placement.
   const twoView = JSON.parse(await readFile(`${novelDir}/stage/thing-boxes.json`, 'utf8').catch(() => 'null')), boxes = twoView?.placements ?? {};
   const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8'));
-  const mentions = chosen.flatMap(scene => (found?.scenes?.[scene.id]?.objects ?? []).filter(object => !(object.kind === 'building' && object.match.kind === 'building')).map(object => ({ scene: scene.id, event: Math.max(0, scene.events.findIndex(entry => entry.id === object.event)), object })));
+  const mentions = chosen.flatMap(scene => (found?.scenes?.[scene.id]?.objects ?? []).filter(object => !object.room && !(object.kind === 'building' && object.match.kind === 'building')).map(object => ({ scene: scene.id, event: Math.max(0, scene.events.findIndex(entry => entry.id === object.event)), object })));
   const tokensOf = text => { const latin = text.match(/[A-Za-z]+/g) ?? [], cjk = [...text.replace(/[^一-鿿぀-ヿ]/g, '')], acronym = latin.length >= 2 ? latin.map(word => word[0].toUpperCase()).join('') : ''; return new Set([...latin.map(word => word.toUpperCase()).filter(word => word.length >= 3), ...(acronym.length >= 3 ? [acronym] : []), ...cjk.slice(0, -1).map((char, n) => char + cjk[n + 1])]); };
   const STOP = new Set(['机器', '装置', '飞行', '巨型', '人行', '通道', '临时', '仓库', '大型', '残骸']), names = [...new Set(mentions.map(entry => entry.object.name))], counts = new Map();
   for (const text of names) for (const token of tokensOf(text)) counts.set(token, (counts.get(token) ?? 0) + 1);
@@ -136,6 +136,12 @@ export async function strandDemo(novelDir, options) {
   notes.thingBoxes = 0;
   /** Place (or move) the things an event mentions: in their two-view cast, or else on the ground beside the event's first actor. */
   const placedAt = new Set();
+  // What Jev decided, per event, for the player's trace: who moves where with what chance, which way and how; the things
+  // placed (model pick, lettered spots, the choice and the boxes); the impacts (lettered spots, the pick, the size).
+  const traces = new Map(), traceOf = (sceneId, index) => { const key = `${sceneId}|${index}`; if (!traces.has(key)) traces.set(key, {}); return traces.get(key); };
+  const top = (distribution, n = 3) => Object.entries(distribution ?? {}).sort((a, b) => b[1] - a[1]).slice(0, n).map(([key, p]) => [key, Math.round(p * 100) / 100]);
+  /** Where a spot Jev named is in a place: the middle of its nodes (metres), or null. */
+  const spotAt = (placeId, name) => { const key = spotKey(placeId, name), { graph, spots } = graphOf(placeId), nodes = key ? spots[key] ?? [] : []; if (!nodes.length) return null; const mean = axis => Math.round(nodes.reduce((sum, node) => sum + graph[axis][node], 0) / nodes.length * 10) / 10; return [mean('x'), mean('y'), mean('z')]; };
   const placeThings = (scene, event, at) => {
     const index = scene.events.findIndex(entry => entry.id === event.id);
     // Once per event: the first turn of an event is its first actor's.
@@ -144,7 +150,13 @@ export async function strandDemo(novelDir, options) {
     for (const entity of entities) if (entity.mentions.some(entry => entry.scene === scene.id && entry.event === index) && at) {
       const group = groups.get(scene.placeId), box = boxes[`${scene.id}|${index}|${entity.name}`]?.box, round = value => Math.round(value * 10) / 10;
       let x, z, cast;
-      if (box) { [x, z] = [(box.x[0] + box.x[1]) / 2, (box.z[0] + box.z[1]) / 2]; cast = { w: box.x[1] - box.x[0], h: box.y[1] - box.y[0], d: box.z[1] - box.z[0], y0: box.y[0] }; notes.thingBoxes++; }
+      if (box) {
+        [x, z] = [(box.x[0] + box.x[1]) / 2, (box.z[0] + box.z[1]) / 2]; cast = { w: box.x[1] - box.x[0], h: box.y[1] - box.y[0], d: box.z[1] - box.z[0], y0: box.y[0] }; notes.thingBoxes++;
+        const placement = boxes[`${scene.id}|${index}|${entity.name}`], model = twoView?.models?.[entity.name];
+        (traceOf(scene.id, index).things ??= []).push({ thing: entity.name, model: model ? { id: model.id, confidence: model.confidence, top: model.top } : null, method: placement.method, chosen: placement.chosen ?? null,
+          choice: placement.choice ? { pick: placement.choice.pick, confidence: placement.choice.confidence, top: top(placement.choice.distribution, 4) } : null,
+          spots: (placement.spots ?? []).map(spot => ({ label: spot.label, x: spot.x, z: spot.z, y0: spot.y0 ?? 0, w: spot.w, h: spot.h, d: spot.d, from: spot.from })), casts: placement.casts ?? null, box });
+      }
       else {
         // No box yet: on the ground beside the actor, in the first direction with open ground; on the actor's spot when there is none.
         const actor = nodePosition(group.layout, at[0]), lotAt = (px, pz) => group.layout.lots.find(entry => px >= entry.i0 * 2 && px < (entry.i0 + entry.nx) * 2 && pz >= entry.j0 * 2 && pz < (entry.j0 + entry.nz) * 2);
@@ -170,6 +182,8 @@ export async function strandDemo(novelDir, options) {
     const strength = axis ? axis.strength(event.id) ?? 0 : [0, 0, 0, 0.85, 0.95][damageDegree(summary(event))];
     if (strength < 0.8 || !at) return;
     const chosen = impacts[`${scene.id}|${scene.events.findIndex(entry => entry.id === event.id)}`];
+    if (chosen?.pick) traceOf(scene.id, scene.events.findIndex(entry => entry.id === event.id)).impact = { pick: chosen.pick.pick, confidence: chosen.pick.confidence, top: top(chosen.pick.distribution, 4), spots: (chosen.spots ?? []).map(spot => ({ label: spot.label, x: spot.x, y: spot.y, z: spot.z, from: spot.from })),
+      size: chosen.size ? { pick: chosen.size.pick, confidence: chosen.size.confidence, top: top(chosen.size.distribution, 4) } : null, sphere: chosen.sphere ?? null, none: !!chosen.none };
     if (chosen?.none) { notes.impacts.none++; return; }
     if (chosen?.sphere) return hitSphere(scene, event, chosen.sphere, strength, seed);
     // Things near the blast are hit too; a big one loses part of its structure.
@@ -232,24 +246,65 @@ export async function strandDemo(novelDir, options) {
   // The macro view: the strand's places and their ancestors in the place tree; and who migrated between places, scene by scene.
   const placeOf = new Map(chosen.map(scene => [scene.id, scene.placeId])), tree = new Set(chosen.flatMap(scene => places.get(scene.placeId)?.path ?? [scene.placeId]));
   const migrations = chosen.flatMap(scene => (timeline.handoffs.get(scene.id) ?? []).filter(handoff => handoff.from && !handoff.samePlace).map(handoff => ({ scene: scene.id, person: handoff.person, from: placeOf.get(handoff.from), to: scene.placeId })));
-  // The macro view is the place tree's own layout (the production one), in metres: each place of the strand reserves a disc as
-  // wide as its grid, a region that is itself a place keeps its grid above its children, nothing overlaps, and places
-  // people travel between more sit closer.
-  const macroLayout = () => {
-    const parentOf = id => tree.has(places.get(id)?.parentId) ? places.get(id).parentId : null, links = new Map();
-    for (const migration of migrations) if (migration.from && migration.to) { const key = `${migration.from}\u0000${migration.to}`; links.set(key, (links.get(key) ?? 0) + 1); }
-    const circles = placeTreeCircles([...tree].map(id => ({ id, parentId: parentOf(id), sceneIds: [] })), [...links].map(([key, count]) => { const [from, to] = key.split('\u0000'); return { from, to, count }; }),
-      { ownRadius: place => groups.has(place.id) ? Math.hypot(groups.get(place.id).layout.NX, groups.get(place.id).layout.NZ) * SKELETON_CELL / 2 + 4 : 0 });
-    const round = value => Math.round(value * 10) / 10;
-    return [...tree].map(id => { const at = circles.get(id); return { id, label: name(id), scale: inputs.scale?.places[id]?.scale ?? null, parent: parentOf(id), x: round(at.x), z: round(at.y), r: round(at.r), depth: at.depth, spotX: round(at.spotX), spotZ: round(at.spotY), ...(at.own ? { own: round(at.own) } : {}) }; });
+  // The macro view is the canvas of places (src/ground/stage/placeCanvas.ts), built from the bottom up in story order: each
+  // open place (a city, district or street by Jev's scale) is a circle of its own, born when a scene first needs it, outermost
+  // first, as large as what is built in it; a staged building is a unit with its grid on a lot of the nearest open place
+  // above it, and one known only to lie in a city gets an unnamed temporary area of that city. A newborn circle takes the
+  // free spot toward the sibling it has the most travel with, so places people travel between more sit closer. Each open
+  // place's ground is its landscape (Jev's, stage/landscape.json), filled from its centre; a staged open place keeps its grid
+  // at its middle.
+  const canvasLayout = () => {
+    const OPEN = new Set(['region', 'city', 'district', 'street']), scaleOf = id => inputs.scale?.places[id]?.scale ?? null;
+    const isOpen = id => OPEN.has(scaleOf(id)) || (!scaleOf(id) && (groups.get(id)?.layout.kind ?? 'district') !== 'site');
+    const landscapeOf = id => { const type = inputs.landscape?.places[id]?.type; return type && type !== 'none' ? type : null; };
+    const gridRadius = id => Math.round(Math.hypot(groups.get(id).layout.NX, groups.get(id).layout.NZ) * SKELETON_CELL / 2 + 4);
+    const pathOf = id => (places.get(id)?.path ?? [id]).filter(step => tree.has(step));
+    const trips = (a, b) => migrations.filter(m => m.from && m.to && (pathOf(m.from).includes(a) && pathOf(m.to).includes(b) || pathOf(m.from).includes(b) && pathOf(m.to).includes(a))).length;
+    const canvas = C.emptyCanvas();
+    const birth = (id, parent) => {
+      if (canvas.places[id]) return;
+      const siblings = Object.values(canvas.places).filter(place => place.parent === parent), near = siblings.map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0];
+      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? groups.get(id)?.layout.kind ?? 'district', parent, landscape: landscapeOf(id), toward: near?.at });
+      if (groups.has(id)) C.addUnit(canvas, id, { id: `${id}#grid`, label: name(id), kind: 'street', r: gridRadius(id), at: [0, 0] });
+    };
+    for (const scene of chosen) {
+      const chain = pathOf(scene.placeId), open = chain.filter(id => id !== scene.placeId && isOpen(id));
+      open.forEach((id, n) => birth(id, n ? open[n - 1] : null));
+      if (isOpen(scene.placeId)) { birth(scene.placeId, open.at(-1) ?? null); continue; }
+      if (!open.length) { birth(scene.placeId, null); continue; }
+      if (Object.values(canvas.places).some(place => place.units.some(unit => unit.id === scene.placeId))) continue;
+      const holder = C.holderFor(canvas, open.at(-1), scaleOf(scene.placeId) ?? 'building', scene.placeId);
+      C.addUnit(canvas, holder, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) });
+    }
+    const round = value => Math.round(value * 10) / 10, depthOf = id => { let depth = 0; for (let at = canvas.places[id]; at?.parent; at = canvas.places[at.parent]) depth++; return depth; };
+    const nodes = [];
+    for (const place of Object.values(canvas.places)) {
+      const [x, z] = C.worldOf(canvas, place.id), grid = place.units.find(unit => unit.id === `${place.id}#grid`);
+      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}) });
+      for (const unit of place.units) if (unit.kind === 'building') nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]) });
+    }
+    return { nodes, canvas };
   };
-  const macro = macroLayout(), macroOf = new Map(macro.map(node => [node.id, node]));
+  const { nodes: macro, canvas } = canvasLayout(), macroOf = new Map(macro.map(node => [node.id, node]));
+  // Each open place's landscape, filled (src/ground/stage/landscape.ts), in map metres: what stands around the staged grids,
+  // never on them (nor on the units and circles built inside it). Derived view data: only nominated buildings are canon.
+  const landscapes = Object.values(canvas.places).filter(place => place.landscape).map(place => {
+    const [wx, wz] = C.worldOf(canvas, place.id), round = value => Math.round(value * 10) / 10, filled = fillLandscape(place.landscape);
+    const keep = Object.values(canvas.places).filter(child => child.parent === place.id).map(child => ({ at: child.at, r: child.r })).concat(place.units.map(unit => ({ at: unit.at, r: unit.r })));
+    const clear = (x, z, margin = 3) => keep.every(({ at, r }) => Math.hypot(x - at[0], z - at[1]) > r + margin);
+    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => [round(b.x + wx), round(b.z + wz), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]);
+    const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => [round(road.a[0] + wx), round(road.a[1] + wz), round(road.b[0] + wx), round(road.b[1] + wz), road.width]);
+    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), buildings, roads, walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]) };
+  });
+  notes.landscape = { places: landscapes.length, buildings: landscapes.reduce((sum, entry) => sum + entry.buildings.length, 0), temporary: macro.filter(node => node.temporary).length };
   // Between places, people walk the map: its own path integral over a lattice (macroPath.ts), from where they leave one
   // place's grid to where they enter the next, each boundary crossed costing more the more slanted the crossing. Inside
   // the two places they walk each place's own graph: out to the edge of the grid where the map path leaves it, and in from
   // where it arrives to where the scene finds them.
   const boundaries = macro.flatMap(node => [{ x: node.x, z: node.z, r: node.r }, ...(node.own ? [{ x: node.spotX, z: node.spotZ, r: node.own }] : [])]);
-  const lattice = macroLattice(boundaries, { cell: 4, margin: 40 }), macroKappa = 2, macroT = 0.6 * temperatureBound({ step: 4, kappa: macroKappa, lambda, floorHeight: 3, arcCost: 7 });
+  // The lattice's cell grows with the map, so a city-sized canvas stays a few hundred cells across.
+  const span = Math.max(...boundaries.map(b => Math.abs(b.x) + b.r), ...boundaries.map(b => Math.abs(b.z) + b.r)) * 2 + 80, macroCell = Math.max(4, Math.ceil(span / 260));
+  const lattice = macroLattice(boundaries, { cell: macroCell, margin: 40 }), macroKappa = 2, macroT = 0.6 * temperatureBound({ step: macroCell, kappa: macroKappa, lambda, floorHeight: 3, arcCost: 7 });
   /** A place's grid on the map: a node's position, and the rectangle the grid covers. */
   const onMap = (placeId, node) => { const { layout } = groups.get(placeId), spot = macroOf.get(placeId), p = nodePosition(layout, node); return { x: spot.spotX - layout.NX * SKELETON_CELL / 2 + p.x, z: spot.spotZ - layout.NZ * SKELETON_CELL / 2 + p.z }; };
   const gridOf = placeId => { const { layout } = groups.get(placeId), spot = macroOf.get(placeId), w = layout.NX * SKELETON_CELL / 2, d = layout.NZ * SKELETON_CELL / 2; return { x: [spot.spotX - w, spot.spotX + w], z: [spot.spotZ - d, spot.spotZ + d] }; };
@@ -267,6 +322,36 @@ export async function strandDemo(novelDir, options) {
     return out;
   };
   const where = new Map(), routes = new Map();
+  // Who goes together: Jev's pairs at a chance of at least a half, joined into groups. A group's leader is its first
+  // member in the walk's order (the people an event names, then the cast; at a start, the handoffs' order), and every
+  // other member ends beside the leader. Answers from before pairs were asked fall back to two people the event names
+  // going to the same spot.
+  const TOGETHER = 0.5;
+  const leaderOf = (pairs, order, person) => {
+    const group = new Set([person]);
+    for (let grew = true; grew;) { grew = false; for (const [a, b, p] of pairs) if (p >= TOGETHER && group.has(a) !== group.has(b)) { group.add(a); group.add(b); grew = true; } }
+    const first = order.find(id => group.has(id));
+    return first && first !== person ? first : null;
+  };
+  const eventPairs = (scene, event) => {
+    const asked = report[scene.id]?.pairs?.[event.id];
+    if (asked) return asked;
+    const answers = report[scene.id]?.events?.[event.id] ?? {}, named = event.actors.filter(id => answers[id]?.to);
+    return named.flatMap((a, i) => named.slice(i + 1).filter(b => topSpot(answers[a].to) === topSpot(answers[b].to)).map(b => [a, b, TOGETHER]));
+  };
+  /** The free node beside another, on its level: the nearest 0.8–3 m off that nobody in the scene stands on. */
+  const besideNode = (placeId, node) => {
+    const { graph } = graphOf(placeId), taken = new Set([...where.values()].filter(entry => entry.place === placeId && entry.at).map(entry => entry.at[0]));
+    let best = null, gap = Infinity;
+    for (let other = 0; other < graph.nodes; other++) {
+      if (other === node || taken.has(other) || graph.y[other] !== graph.y[node] || graph.offsets[other + 1] === graph.offsets[other]) continue;
+      const d = Math.hypot(graph.x[other] - graph.x[node], graph.z[other] - graph.z[node]);
+      if (d >= 0.8 && d <= 3 && d < gap) { best = other; gap = d; }
+    }
+    return best ?? node;
+  };
+  // Where each person begins in a scene and ends in an event, for their companions.
+  const begun = new Map(), went = new Map();
   /** One person's way from the place they were last in to where the scene finds them: out, across the map, in. */
   const travel = (scene, person, begin, seed) => {
     const last = where.get(person), from = last?.place, to = scene.placeId, rng = stream(seed, 'route');
@@ -297,15 +382,58 @@ export async function strandDemo(novelDir, options) {
     // Carried from this place when they were last here; else where Jev said the scene finds them, else coming in off the avenue
     // (walking there from the place they were last in).
     start: ({ scene, handoff, carried, seed }) => {
-      if (carried) return carried;
-      const { spots } = graphOf(scene.placeId), said = report[scene.id]?.starts?.[handoff.person], named = said && said.stated >= 0.5 ? spotKey(scene.placeId, top(said.to)) : null;
-      const spot = named && spots[named]?.length ? named : 'avenue', begin = [pick(spots[spot], stream(seed)), directionOf(0, -1)];
-      return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, begin, seed) : begin;
+      // Together at the opening: beside the leader, wherever the leader begins.
+      const order = (timeline.handoffs.get(scene.id) ?? []).map(entry => entry.person), leader = leaderOf(report[scene.id]?.startPairs ?? [], order, handoff.person), ahead = leader && begun.get(`${scene.id}|${leader}`);
+      if (ahead) {
+        (traceOf(scene.id, 'start').together ??= []).push({ person: handoff.person, with: leader });
+        const begin = [besideNode(scene.placeId, ahead[0]), ahead[1]];
+        begun.set(`${scene.id}|${handoff.person}`, begin);
+        return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, begin, seed) : begin;
+      }
+      const begin = beginOf({ scene, handoff, carried, seed });
+      begun.set(`${scene.id}|${handoff.person}`, begin);
+      return begin;
     },
-    act: ({ scene, event, person, at, seed }) => {
+    act: args => {
+      const { scene, event, person, at, seed } = args, order = [...scene.cast.filter(id => event.actors.includes(id)), ...scene.cast.filter(id => !event.actors.includes(id))];
+      const leader = leaderOf(eventPairs(scene, event), order, person), led = leader ? went.get(`${scene.id}|${event.id}|${leader}`) : null;
+      if (!led || led.node === null || !at) { const outcome = actAlone(args); went.set(`${scene.id}|${event.id}|${person}`, outcome.kind === 'move' ? { node: outcome.to[0], how: moves.get(`${scene.id}|${event.id}|${person}`)?.how } : { node: at?.[0] ?? null }); return outcome; }
+      // Going with the leader: to the node beside where the leader ends (or stands, if they stay), the leader's way.
+      const { graph } = graphOf(scene.placeId), [node, heading] = at, rng = stream(seed), target = besideNode(scene.placeId, led.node), how = led.how ?? 'walk';
+      traceMove(scene, event, person);
+      (traceOf(scene.id, scene.events.findIndex(entry => entry.id === event.id)).together ??= []).push({ person, with: leader });
       placeThings(scene, event, at);
       damage(scene, event, at, seed);
-      const answer = report[scene.id]?.events?.[event.id]?.[person], spot = spotKey(scene.placeId, top(answer?.to)), { graph, spots } = graphOf(scene.placeId);
+      const near = Math.hypot(graph.x[target] - graph.x[node], graph.z[target] - graph.z[node]) <= 3 && graph.y[target] === graph.y[node];
+      went.set(`${scene.id}|${event.id}|${person}`, { node: near ? node : target, how });
+      if (near) return { kind: 'stay' };
+      const path = sampleWalk(graph, solve(scene.placeId, `node@${target}`, [target], how), node, heading, rng);
+      if (!path) { notes.unreachable++; return { kind: 'stay' }; }
+      notes.together = (notes.together ?? 0) + 1;
+      const last = path.length > 1 ? directionOf(graph.x[path.at(-1)] - graph.x[path.at(-2)], graph.z[path.at(-1)] - graph.z[path.at(-2)]) : heading;
+      moves.set(`${scene.id}|${event.id}|${person}`, { person, how, spot: `with:${leader}`, with: leader, path, ensemble: [] });
+      return { kind: 'move', to: [path.at(-1), last >= 0 ? last : heading] };
+    },
+  };
+  /** Where someone begins on their own. */
+  function beginOf({ scene, handoff, carried, seed }) {
+      if (carried) return carried;
+      const { spots } = graphOf(scene.placeId), said = report[scene.id]?.starts?.[handoff.person], named = said && said.stated >= 0.5 ? spotKey(scene.placeId, topSpot(said.to)) : null;
+      if (said) (traceOf(scene.id, 'start').starts ??= []).push({ person: handoff.person, stated: said.stated, to: top(said.to, 3).map(([name, p]) => [name, p, spotAt(scene.placeId, name)]), used: !!named });
+      const spot = named && spots[named]?.length ? named : 'avenue', begin = [pick(spots[spot], stream(seed)), directionOf(0, -1)];
+      return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, begin, seed) : begin;
+  }
+  /** Jev's answer for someone in an event, for the player's trace. */
+  function traceMove(scene, event, person) {
+    const answer = report[scene.id]?.events?.[event.id]?.[person], spot = spotKey(scene.placeId, topSpot(answer?.to));
+    if (answer) (traceOf(scene.id, scene.events.findIndex(entry => entry.id === event.id)).moves ??= []).push({ person, moves: answer.moves ?? null, how: answer.how ?? null, direction: top(answer.direction, 2), to: top(answer.to, 3).map(([name, p]) => [name, p, spotAt(scene.placeId, name)]), chosen: answer.to ? spot : null });
+  }
+  /** What someone does on their own in an event: Jev's move for them, walked. */
+  function actAlone({ scene, event, person, at, seed }) {
+      placeThings(scene, event, at);
+      damage(scene, event, at, seed);
+      const answer = report[scene.id]?.events?.[event.id]?.[person], spot = spotKey(scene.placeId, topSpot(answer?.to)), { graph, spots } = graphOf(scene.placeId);
+      traceMove(scene, event, person);
       if (!answer?.to || !at || !spots[spot]?.length) return { kind: 'stay' };
       const [node, heading] = at, rng = stream(seed);
       if (answer.how === 'teleport') { const to = pick(spots[spot], rng); notes.teleports++; moves.set(`${scene.id}|${event.id}|${person}`, { person, how: 'teleport', spot, path: [node, to], ensemble: [] }); return { kind: 'move', to: [to, heading] }; }
@@ -324,8 +452,7 @@ export async function strandDemo(novelDir, options) {
       }
       moves.set(`${scene.id}|${event.id}|${person}`, { person, how: answer.how, spot, path, ensemble });
       return { kind: 'move', to: [path.at(-1), last >= 0 ? last : heading] };
-    },
-  };
+  }
   // Where each person was last: the place and node a later scene's travel starts from.
   const { start, act } = mover;
   mover.start = args => { const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
@@ -343,6 +470,8 @@ export async function strandDemo(novelDir, options) {
     const group = groups.get(scene.placeId), found = detected?.scenes?.[scene.id]?.objects ?? [], run = runs[scene.id];
     for (const object of found) {
       const eventIndex = Math.max(0, scene.events.findIndex(event => event.id === object.event));
+      // A room is inside a building: it never takes a lot of its own.
+      if (object.room) continue;
       if (object.kind === 'building' && object.match.kind === 'building') {
         if (!newBuildingHere(object.name, group.label, [...groups.values()].map(other => other.label))) continue;
         const lots = group.layout.lots, key = `${scene.placeId}|${object.name}`;
@@ -365,7 +494,7 @@ export async function strandDemo(novelDir, options) {
       struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
     title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
     migrations: migrations.map(migration => ({ ...migration, route: routes.get(`${migration.scene}|${migration.person}`) ?? null })),
-    macro, travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
+    macro, landscapes, travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
     people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
     places: Object.fromEntries([...groups].map(([id, { label, path, scale, layout }]) => [id, { label, path, scale, kind: layout.kind, NX: layout.NX, NZ: layout.NZ, K: layout.K, ground: [...layout.ground].join(''), clutter: [...layout.clutter.keys()].filter(cell => layout.clutter[cell]), clutterDraws: layout.clutterDraws,
       lots: layout.lots.map((lot, index) => ({ model: exported[id][index], label: lot.label, detected: named(id, index) ? { name: named(id, index).name, scene: named(id, index).scene, event: named(id, index).event } : null, role: named(id, index) && ROLE_FOR[named(id, index).model] === 'hospital' ? 'hospital' : lot.role, i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) })) }])),
@@ -375,7 +504,8 @@ export async function strandDemo(novelDir, options) {
         starts: Object.fromEntries(Object.entries(run.starts).map(([person, at]) => [person, at?.[0] ?? null])),
         from: Object.fromEntries((timeline.handoffs.get(scene.id) ?? []).map(handoff => [handoff.person, handoff.from ? (handoff.samePlace ? 'stays' : 'arrives') : 'enters'])),
         objects: placedObjects.get(scene.id) ?? [],
-        events: scene.events.map(event => ({ text: clean(event.text), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean) })) };
+        trace: traces.get(`${scene.id}|start`) ?? null,
+        events: scene.events.map((event, index) => ({ text: clean(event.text), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean), trace: traces.get(`${scene.id}|${index}`) ?? null })) };
     }),
   };
 }
@@ -399,19 +529,21 @@ export function simulationRecord(data, strand) {
       lots: place.lots.map(lot => ({ label: lot.label, detected: lot.detected, role: lot.role, model: lot.model, footprint: { i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz }, floors: lot.floors, skeleton: lot.cells, rooms: lot.rooms })) }])),
     things: data.things.map(thing => ({ id: thing.id, name: thing.name, aliases: thing.aliases, model: thing.model, shape: thing.shape, size: thing.size, placements: thing.placed })),
     migrations: data.migrations, macro: data.macro,
+    // Each open place's landscape by type, and how many buildings fill it: the fill itself is regenerated from the landscape, never kept.
+    landscapes: (data.landscapes ?? []).map(entry => ({ place: entry.place, types: entry.types, buildings: entry.buildings.length })),
     scenes: data.scenes.map(scene => {
       const place = data.places[scene.place];
       return { id: scene.id, place: scene.place, label: scene.label, starts: Object.fromEntries(Object.entries(scene.starts).map(([person, node]) => [person, node == null ? null : point(place, node)])),
-        events: scene.events.map((event, index) => ({ index, text: event.text, moves: event.moves.map(move => ({ person: move.person, how: move.how, spot: move.spot, path: move.path.map(node => point(place, node)) })),
+        events: scene.events.map((event, index) => ({ index, text: event.text, moves: event.moves.map(move => ({ person: move.person, how: move.how, spot: move.spot, ...(move.with ? { with: move.with } : {}), path: move.path.map(node => point(place, node)) })),
           hit: event.hit && { sphere: event.hit.sphere ?? null, strength: event.hit.strength, parts: [event.hit, ...(event.hit.more ?? [])].map(part) }, hitThings: event.hitThings })) };
     }),
   };
 }
 
 /** The simulation engine a run comes from: its walk (seeds come from the scene keys under this version) and its record format. */
-export const ENGINE = 'strand-demo-2';
+export const ENGINE = 'strand-demo-3';
 /** What a run is made from: the book's reviewed ontology and the stage's answers (buildings, objects, movement, Jev's placements and impacts). */
-const SIMULATION_INPUTS = ['ontology/entities.jsonl', 'ontology/relations.jsonl', 'ontology/scenes.jsonl', 'ontology/events.jsonl', 'stage/architecture.json', 'stage/objects.json', 'stage/movement.json', 'stage/thing-boxes.json', 'stage/impacts.json'];
+const SIMULATION_INPUTS = ['ontology/entities.jsonl', 'ontology/relations.jsonl', 'ontology/scenes.jsonl', 'ontology/events.jsonl', 'stage/architecture.json', 'stage/scale.json', 'stage/landscape.json', 'stage/objects.json', 'stage/movement.json', 'stage/thing-boxes.json', 'stage/impacts.json'];
 export async function simulationInputs(novelDir) {
   const hash = createHash('sha256');
   for (const name of SIMULATION_INPUTS) hash.update(`${name}\n${await readFile(`${novelDir}/${name}`, 'utf8').catch(() => '')}\n`);

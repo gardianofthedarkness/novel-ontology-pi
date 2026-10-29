@@ -54,10 +54,11 @@ Positions are in the place's own metres: x and z across its grid (2 m cells), y 
   - `path`: the curve across the place map, as points in map metres;
   - `entry`: the walk into the new place, as its graph's nodes, ending where the scene finds them;
   - `metres` across the map, and the place boundaries `crossed`.
-- **`macro`:** the place map: each place's circle (`x`, `z`, `r`), its grid's centre (`spotX`, `spotZ`), and a region's own disc (`own`). Map metres are the stage's world metres: a place's grid is centred on its spot.
+- **`macro`:** the place map, the canvas of places (engine `strand-demo-3` on): each place's circle (`x`, `z`, `r`), its grid's centre (`spotX`, `spotZ`), a staged open place's grid disc (`own`), its `parent` on the canvas and `depth`. A staged building stands on a lot of the open place holding it; an unnamed temporary area (`temporary`, id `tmp:<place>:<first unit>`) holds what is known only to lie in a city. Map metres are the stage's world metres: a place's grid is centred on its spot.
+- **`landscapes`:** each open place's landscape types and how many buildings fill it. The fill is regenerated from the landscape (stage/landscape.json), never kept.
 - **`scenes`:** per scene: its place, where each person starts, and its events. Each event has:
   - its summary;
-  - its **moves:** person, how (walk, run, fall, jump, teleport, direct), the spot, and the path as points;
+  - its **moves:** person, how (walk, run, fall, jump, teleport, direct), the spot, the path as points, and `with` when the person went along with someone (ending beside them);
   - its **hit**, if any:
     - the impact `sphere` (centre and radius), and the event's `strength`;
     - per building reached: the energy, the units `blasted`, the units `fallen` (each with where it came to rest), and the skeleton cells destroyed, fallen and cut off from the ground.
