@@ -22,6 +22,9 @@
  * side and top views again; --resolve re-renders the views of answers already given and solves them again, with no Jev
  * calls. Every still sees through the buildings in front of what it looks at (the beam, or the people there).
  *
+ * --method candidates places by candidates instead (see byCandidates); --use choice|marker|ghost picks which of its casts
+ * the exporter gets (default ghost: the surest). The run ends with a comparison of its options over the same placements.
+ *
  * The page is the strand exporter's single-strand output with --vendor; <dir> holds its three.js files. Writes
  * <novel-dir>/stage/thing-boxes.json (read by the exporter) and, under --out, each still Jev saw and a check still per
  * view with both boxes and the solved 3D box drawn in. Answers are reused unless --fresh. Needs a Jev key (novel jev
@@ -99,6 +102,53 @@ async function askMany(jev, state, stills, name) {
   return stills.map(({ turn }, n) => ({ turn, box: answers[n].box, confidence: answers[n].confidence ?? 0, label: `x ${pct(answers[n].box.left)}–${pct(answers[n].box.right)}%, y ${pct(answers[n].box.top)}–${pct(answers[n].box.bottom)}%` }));
 }
 
+/**
+ * Placing by candidates: spots from the scene, a choice among them, then boxes on zoomed stills of the chosen spot.
+ *   Call 1: the reader's view with every spot drawn as a lettered white ghost of the thing; Jev picks one, or none.
+ *   Call 2: four close-ups of the chosen spot in one call, a box on each: from the reader's side and from a low look
+ *           turned 90°, each once with only a ring at the spot's base and once with the ghost drawn there.
+ * Three casts come out: the chosen spot at the thing's usual size (choice), the ring close-ups' boxes solved around the
+ * spot (marker), and the ghost close-ups' boxes solved around it (ghost).
+ */
+async function byCandidates({ chrome, jev, base, key, thing, about, kept, out, slug, use }) {
+  const w = thing.size, h = thing.height, d = thing.shape === 'box' && !thing.model ? Math.max(1.2, thing.size * 0.35) : thing.size, form = { model: thing.model, shape: thing.shape };
+  const capture = options => chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, mask: true, ...options })})`);
+  let calls = 0;
+  await capture({ id: `${key}#look` });
+  const spots = await chrome.evaluate(`window.__stage.candidates(${JSON.stringify({ place: base.place, thing: { w, h, d, airborne: thing.airborne } })})`);
+  if (!spots.length) return { calls, record: { spots }, box: null };
+  await capture({ id: `${key}#spots`, ghosts: spots, form });
+  const picture = await chrome.still(), letters = spots.map(spot => spot.label);
+  const choice = kept?.choice ?? await (async () => {
+    calls++;
+    const [answer] = await jev.decide([...about, `Picture "spots": the place as the reader sees it at this moment, with ${letters.length} white ghosts of ${thing.name}, each lettered: the spots it might take.`].join('\n'),
+      [{ key: 'spot', primitive: 'choice', instructions: `Which lettered ghost in picture "spots" stands where this event puts ${thing.name}? Answer none if no ghost is close.`, options: [...letters, 'none'], optionHints: Object.fromEntries([...spots.map(spot => [spot.label, `${spot.label}: the ghost lettered ${spot.label}, by ${spot.from}`]), ['none', 'none: no ghost is close to where it goes']]) }], { images: { spots: picture } });
+    return { pick: answer.value, confidence: answer.confidence ?? null, distribution: answer.distribution ?? {} };
+  })();
+  // "None" still zooms on the likeliest lettered spot, flagged.
+  const likeliest = Object.entries(choice.distribution).filter(([letter]) => letter !== 'none').sort((a, b) => b[1] - a[1])[0]?.[0], chosen = spots.find(spot => spot.label === choice.pick) ?? spots.find(spot => spot.label === likeliest) ?? spots[0];
+  const views = [['near', 0, null, 'marker'], ['side', 90, 12, 'marker'], ['near_ghost', 0, null, 'ghost'], ['side_ghost', 90, 12, 'ghost']], stills = [];
+  for (const [name, turn, elevation, kind] of views) {
+    await capture({ id: `${key}#${name}`, focus: chosen, yaw: turn * Math.PI / 180, ...(elevation === null ? {} : { elevation }), ...(kind === 'marker' ? { marker: chosen } : { ghosts: [{ ...chosen, label: '' }], form }) });
+    stills.push({ name, still: await chrome.still() });
+  }
+  const zoom = kept?.zoom ?? await (async () => {
+    calls++;
+    const answers = await jev.decide([...about, `Pictures ${stills.map(({ name }) => `"${name}"`).join(', ')}: close-ups of the spot picked for ${thing.name} at this moment. "near" and "near_ghost" look from the reader's side; "side" and "side_ghost" from the side, turned 90° and low. In "near" and "side" a white ring marks the spot's base; in "near_ghost" and "side_ghost" a white ghost shows the thing there at its usual size.`].join('\n'),
+      stills.map(({ name }) => ({ key: name, primitive: 'box', instructions: `${thing.name} in picture "${name}": the space it takes up where this event puts it, its whole extent at its true size.` })), { images: Object.fromEntries(stills.map(({ name, still }) => [name, still])) });
+    return Object.fromEntries(stills.map(({ name }, n) => [name, { box: answers[n].box, confidence: answers[n].confidence ?? 0 }]));
+  })();
+  const around = { x: chosen.x, z: chosen.z, r: Math.max(9, 1.6 * Math.max(w, d, h)) }, round = value => Math.round(value * 10) / 10, cast = solved => solved && { x: solved.x.map(round), y: solved.y.map(round), z: solved.z.map(round) };
+  const solveFrom = (a, b) => chrome.evaluate(`window.__stage.solve(${JSON.stringify({ place: base.place, around, views: [{ camera: `${key}#${a}`, box: zoom[a].box }, { camera: `${key}#${b}`, box: zoom[b].box }] })})`);
+  const casts = { choice: { x: [chosen.x - w / 2, chosen.x + w / 2].map(round), y: [chosen.y0, chosen.y0 + h].map(round), z: [chosen.z - d / 2, chosen.z + d / 2].map(round) }, marker: cast(await solveFrom('near', 'side')), ghost: cast(await solveFrom('near_ghost', 'side_ghost')) };
+  if (out) {
+    await writeFile(join(out, `${slug}-spots.png`), Buffer.from(picture, 'base64'));
+    for (const { name, still } of stills) await writeFile(join(out, `${slug}-${name}.png`), Buffer.from(still, 'base64'));
+    for (const variant of ['marker', 'ghost']) if (casts[variant]) { await capture({ id: 'check', focus: chosen, solved: casts[variant], boxes: [{ box: zoom[variant === 'marker' ? 'near' : 'near_ghost'].box, color: '#7ce6ff' }] }); await writeFile(join(out, `${slug}-check-${variant}.png`), Buffer.from(await chrome.still(), 'base64')); }
+  }
+  return { calls, record: { spots, choice, chosen: chosen.label, zoom, casts }, box: casts[use] ?? casts.choice };
+}
+
 /** One Jev call on one still: where the thing is (a box) and whether its spot is in the picture at all. */
 async function ask(jev, state, still, name) {
   const [where, seen] = await jev.decide(state, [
@@ -110,7 +160,7 @@ async function ask(jev, state, still, name) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, reask: { type: 'boolean' }, resweep: { type: 'boolean' }, resolve: { type: 'boolean' }, low: { type: 'string', default: '0.5' }, model: { type: 'string', default: 'jev-1.14.0' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, reask: { type: 'boolean' }, resweep: { type: 'boolean' }, resolve: { type: 'boolean' }, low: { type: 'string', default: '0.5' }, method: { type: 'string', default: 'boxes' }, use: { type: 'string', default: 'ghost' }, model: { type: 'string', default: 'jev-1.14.0' } } });
   const [page, novelDir] = positionals.map(path => resolve(path));
   if (!page || !novelDir || !values.vendor) throw new Error('Usage: node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh]');
   const load = path => import(pathToFileURL(`${repository}/${path}`));
@@ -153,6 +203,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         `Event: ${text}`,
         `Thing: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}${models[thing.name] ? `, drawn as ${hint(models[thing.name].id)}` : ''}.`,
       ];
+      if (values.method === 'candidates') {
+        const slug = `${String(n + 1).padStart(2, '0')}-${thing.id}`, kept = values.resolve && earlier?.method === 'candidates' ? earlier : null;
+        const placed = await byCandidates({ chrome, jev, base, key, thing, about, kept, out, slug, use: values.use });
+        calls += placed.calls; if (!placed.box) failed++;
+        placements[key] = { inputs, thing: thing.name, detected: thing.size, airborne: thing.airborne, place: spot.place, method: 'candidates', ...placed.record, box: placed.box };
+        const round = value => Math.round(value * 10) / 10, size = cast => cast ? `${round(cast.x[1] - cast.x[0])}×${round(cast.z[1] - cast.z[0])}×${round(cast.y[1] - cast.y[0])} m at y ${cast.y[0]}` : 'none';
+        const { choice, zoom, casts } = placed.record;
+        console.error(`${thing.name} (${thing.size} m${thing.airborne ? ', air' : ''}) @ ${spot.scene}#${spot.event}: ${placed.record.spots.length} spots, picked ${choice?.pick} (${choice?.confidence?.toFixed(2)}) → zoom ${Object.entries(zoom ?? {}).map(([name, answer]) => `${name} ${answer.confidence.toFixed(2)}`).join(' ')} → choice ${size(casts?.choice)} | marker ${size(casts?.marker)} | ghost ${size(casts?.ghost)}`);
+        continue;
+      }
       // Call 1: the reader's view.
       await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, mask: true, id: `${key}#1` })})`);
       const first = await chrome.still();
@@ -201,6 +261,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.error(`${thing.name} @ ${spot.scene}#${spot.event}: turns ${turns} → kept ${best.turn}°${top ? `, top view ${top.confidence?.toFixed(2)}` : ''} → ${size}${solved?.uncertain ? ', depth uncertain' : ''}; carved from all → ${carved ? `${round(carved.x[1] - carved.x[0])}×${round(carved.z[1] - carved.z[0])}×${round(carved.y[1] - carved.y[0])} m at y ${round(carved.y[0])}–${round(carved.y[1])}` : 'nothing'}`);
     }
   } finally { await chrome.close(); server.close(); }
+  // Placing by candidates: how each option did over the same placements.
+  const tried = Object.values(placements).filter(entry => entry.method === 'candidates' && entry.casts);
+  if (tried.length) {
+    const sizeOf = cast => Math.max(cast.x[1] - cast.x[0], cast.z[1] - cast.z[0], cast.y[1] - cast.y[0]);
+    const median = list => { const sorted = list.slice().sort((a, b) => a - b); return sorted.length ? Math.round(sorted[Math.floor(sorted.length / 2)] * 100) / 100 : null; };
+    const mean = list => Math.round(list.reduce((sum, value) => sum + value, 0) / Math.max(1, list.length) * 100) / 100;
+    const rows = ['choice', 'marker', 'ghost'].map(variant => { const done = tried.filter(entry => entry.casts[variant]); return `${variant}: solved ${done.length}/${tried.length}, largest side ÷ detected size (median) ${median(done.map(entry => sizeOf(entry.casts[variant]) / entry.detected))}, in the air ${done.filter(entry => entry.casts[variant].y[0] > 3).length}`; });
+    console.error(`candidates: choice confidence ${mean(tried.map(entry => entry.choice.confidence ?? 0))} (none picked ${tried.filter(entry => entry.choice.pick === 'none').length}); zoom box confidence near ${mean(tried.map(entry => entry.zoom.near.confidence))}, side ${mean(tried.map(entry => entry.zoom.side.confidence))}, near_ghost ${mean(tried.map(entry => entry.zoom.near_ghost.confidence))}, side_ghost ${mean(tried.map(entry => entry.zoom.side_ghost.confidence))}; ${rows.join('; ')}`);
+  }
   // How sure Jev is by turn, over the same scenes: mean box confidence, how often its box spans the beam, how often it was kept.
   const byTurn = Object.fromEntries(TURNS.map(turn => { const entries = Object.values(placements).map(entry => entry.sweep?.find(side => side.turn === turn)).filter(Boolean); return [turn, { confidence: Math.round(entries.reduce((sum, side) => sum + side.confidence, 0) / Math.max(1, entries.length) * 100) / 100, spans: entries.filter(side => side.uncertain).length, kept: Object.values(placements).filter(entry => entry.views?.[1]?.turn === turn).length, of: entries.length }]; }));
   console.error(`by turn (mean confidence, boxes spanning the beam, kept): ${Object.entries(byTurn).map(([turn, row]) => `${turn > 0 ? '+' : ''}${turn}° ${row.confidence} ${row.spans}/${row.of} ${row.kept}`).join(' | ')}; top views asked: ${Object.values(placements).filter(entry => entry.top).length}`);

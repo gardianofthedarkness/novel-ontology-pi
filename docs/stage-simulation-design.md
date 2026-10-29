@@ -100,6 +100,23 @@ Buildings are added as the story detects them, not fixed up front.
      - The helicopter stayed in the air this time (20.8–34.8 m), but the long pipe grew to 37 × 35 × 34 m. No systematic gain: the differences are within how much Jev's boxes vary from run to run.
      - **Reading:** a box question locates a thing that is in the picture. Here the thing is not drawn yet, so Jev's confidence stays near 0.2 whatever the view.
      - Likely better: draw the picked model at a few candidate spots (along the beam, beside the people), labelled, and ask a choice, where Jev reports its confidence.
+   - **Candidates, then zoom, then boxes** (user design, 2026-10-29; now the default, `--method candidates`):
+     1. **Spots from the scene, with no model call.** Anchors: the people (those moving in the event first); the buildings the event names (their roof and front); the open ground, sampled across the place; and things already there.
+        - Each spot is the thing's footprint at its detected size, centred on open ground and mostly clear of buildings, standing on the ground (or on the floor or roof where its anchor is; 10 m up for a thing in the air).
+        - A farthest-point spread keeps 8 spots, the first beside the first person.
+     2. **Choice (call 1):** the reader's view with each spot as a lettered white ghost of the picked model, and "none" as an option.
+     3. **Zoom (call 2):** four close-ups of the chosen spot in one call, a box on each: from the reader's side and from a low look turned 90°, each with only a ring at the spot and with the ghost drawn. The boxes are solved around the spot only, so a beam cannot make depth ambiguous.
+     - **Same 10 scenes:**
+
+       | Option | Confidence | Placed | Largest side ÷ detected size |
+       |---|---|---|---|
+       | Box loop, masked | about 0.18 | 8/10 | often 2–3 |
+       | Candidates, choice only | 0.32 (2 "none") | 10/10 | 1 |
+       | + zoomed boxes, ring | 0.44 / 0.40 | 10/10 | 0.65 |
+       | + zoomed boxes, ghost | **0.55 / 0.47** | 10/10 | 0.6 |
+
+     - The ghost close-ups are the default: Jev is surest of them, and its boxes do not just copy the ghost (they come out at about 0.6 of its size).
+     - Example: the small interrogation-like room went beside 白井黑子 on the floor she stands on (choice 0.68), as an 8 × 7 × 2.5 m room 15 m up.
 6. **Placement rules:**
    - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
    - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.

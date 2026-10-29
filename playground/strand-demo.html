@@ -502,6 +502,26 @@ if (capture) {
   const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const bounds = (id) => { const place = data.places[id]; return { x: [-8, place.NX * CELL + 8], y: [0, 70], z: [-8, place.NZ * CELL + 8] }; };
   const ndc = ({ left, right, top, bottom }) => ({ x: [left * 2 - 1, right * 2 - 1], y: [1 - bottom * 2, 1 - top * 2] });
+  const ghostFill = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }), ghostEdges = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 });
+  /** A candidate spot: the thing's model or shape in white, fitted to the spot (a model keeps its proportions), its letter above. */
+  function spotGhost(place, form, spot) {
+    const entry = built.get(place), group = new THREE.Group(), body = hologram(form.model, form.shape);
+    body.traverse((part) => { if (part.isMesh) part.material = ghostFill; else if (part.isLineSegments) part.material = ghostEdges; });
+    const natural = form.model ? shellOf(form.model).size : null;
+    if (natural) body.scale.setScalar(Math.min(spot.w / natural.x, spot.h / natural.y, spot.d / natural.z)); else body.scale.set(spot.w, spot.h, spot.d);
+    group.add(body);
+    if (spot.label) { const tag = label(spot.label, "#ffffff", 44); tag.scale.multiplyScalar(1.6); tag.position.y = spot.h + 2.6; group.add(tag); } group.position.set(spot.x - entry.cx, spot.y0, spot.z - entry.cz);
+    return group;
+  }
+  /** A spot's marker: a ring and a cross at its base, seen through everything. */
+  function spotMarker(place, spot) {
+    const entry = built.get(place), group = new THREE.Group(), material = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, side: THREE.DoubleSide }), r = Math.max(1, Math.min(spot.w, spot.d) / 4);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.8, r, 32), material); ring.rotation.x = -Math.PI / 2;
+    for (const [w, d] of [[r * 2.6, r * 0.18], [r * 0.18, r * 2.6]]) { const bar = new THREE.Mesh(new THREE.PlaneGeometry(w, d), material); bar.rotation.x = -Math.PI / 2; group.add(bar); }
+    group.add(ring); group.renderOrder = 11; group.traverse((part) => { part.renderOrder = 11; });
+    group.position.set(spot.x - entry.cx, spot.y0 + 0.2, spot.z - entry.cz);
+    return group;
+  }
   /** Fade the given lots of a place to a faint outline, their skeletons left out; the others as drawn. */
   function see(entry, front) {
     entry.masked = front; entry.shownHits = -1;
@@ -535,33 +555,68 @@ if (capture) {
     return group;
   }
   window.__stage = {
-    things: (data.things ?? []).map(({ id, name, shape, size, height, airborne, placed }) => ({ id, name, shape, size, height, airborne, placed })),
+    things: (data.things ?? []).map(({ id, name, model, shape, size, height, airborne, placed }) => ({ id, name, model, shape, size, height, airborne, placed })),
     places: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, kind: place.kind, lots: place.lots.length }])),
     scenes: data.scenes.map((scene) => ({ id: scene.id, place: scene.place, events: scene.events.map((event) => event.text) })),
     /** One still: `place` at the start of an event, the reader's camera turned by `yaw` about it; `hide` things, `beams` of earlier boxes, `boxes` and a `solved` 3D box drawn for checking. */
-    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false }) {
+    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null }) {
       time = (eventStart.get(`${scene}|${event}`) ?? 0) + 0.02; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
       for (const extra of extras.splice(0)) world.remove(extra);
       const pose = poseFor(place), offset = pose.position.clone().sub(pose.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
       // Aimed at an earlier box: look at the middle of its beam's run through the place, far enough back to see all of it.
       if (aim) { const { from, to } = reach(place, aim), length = from.distanceTo(to); pose.target.copy(from).lerp(to, 0.5); offset.setLength(Math.min(400, Math.max(40, length * 1.15 / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)))))); }
+      // Zoomed on a spot: its neighbourhood (a few times the thing's size, at least 18 m across) fills the still.
+      if (focus) { const entry = built.get(place), radius = Math.max(9, 1.6 * Math.max(focus.w, focus.d, focus.h)); pose.target.set(focus.x - entry.cx, focus.y0 + focus.h / 2, focus.z - entry.cz); offset.setLength(radius / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))); }
       // A lower look (degrees above level): from the side, a beam's run and a thing's height read directly.
       if (elevation !== null) { const length = offset.length(), level = new THREE.Vector3(offset.x, 0, offset.z).normalize(), up = THREE.MathUtils.degToRad(elevation); offset.copy(level.multiplyScalar(Math.cos(up) * length)).setY(Math.max(2 - pose.target.y, Math.sin(up) * length)); }
       camera.position.copy(pose.target).add(offset); controls.target.copy(pose.target); controls.update();
       for (const view of beams) { const group = beam(place, view); extras.push(group); world.add(group); }
+      // Candidate spots as white ghosts of the thing, each with its letter; a spot as a small marker at its base.
+      for (const ghost of ghosts) { const group = spotGhost(place, form, ghost); extras.push(group); world.add(group); }
+      if (marker) { const group = spotMarker(place, marker); extras.push(group); world.add(group); }
       if (solved) { const entry = built.get(place), box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0x5dff8a })); box.position.set((solved.x[0] + solved.x[1]) / 2 - entry.cx, (solved.y[0] + solved.y[1]) / 2, (solved.z[0] + solved.z[1]) / 2 - entry.cz); box.scale.set(solved.x[1] - solved.x[0], solved.y[1] - solved.y[0], solved.z[1] - solved.z[0]); extras.push(box); world.add(box); }
       outline(boxes);
       for (const entry of built.values()) if (entry.masked.size) see(entry, new Set());
       await frames();
       // See through the buildings in front of what the still looks at: the beam of an earlier box, or else the people there.
       if (mask) {
-        const entry = built.get(place), targets = aim ? (({ from, to }) => Array.from({ length: 9 }, (_, n) => from.clone().lerp(to, n / 8)))(reach(place, aim)) : [...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => pawn.position.clone().setY(pawn.position.y + 1));
+        const entry = built.get(place), local = (spot) => new THREE.Vector3(spot.x - entry.cx, spot.y0 + spot.h / 2, spot.z - entry.cz);
+        const targets = focus ? [local(focus)] : ghosts.length ? ghosts.map(local) : aim ? (({ from, to }) => Array.from({ length: 9 }, (_, n) => from.clone().lerp(to, n / 8)))(reach(place, aim)) : [...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => pawn.position.clone().setY(pawn.position.y + 1));
         const front = new Set(entry.lots.flatMap(({ box }, n) => targets.some((target) => { if (box.containsPoint(target)) return false; const hit = new THREE.Ray(camera.position.clone(), target.clone().sub(camera.position).normalize()).intersectBox(box, new THREE.Vector3()); return hit && hit.distanceTo(camera.position) < target.distanceTo(camera.position); }) ? [n] : []));
         see(entry, front);
         await frames();
       }
       camera.updateMatrixWorld(); cameras.set(id, camera.clone());
       return { id, width: host.clientWidth, height: host.clientHeight };
+    },
+    /**
+     * Where a thing might go, from the scene at this moment (call after a capture of that moment): beside the people
+     * (those moving in the event first), on and in front of the buildings the event names, on the place's open ground,
+     * beside things already there, and across the open ground. Each spot is a footprint of the thing's size, centred on
+     * open ground and mostly clear of buildings, standing on the ground (or on a roof or floor where the anchor is; in the
+     * air for a thing in the air). Then a spread of `count`: the first beside the first person, each next the farthest
+     * from those kept.
+     */
+    candidates({ place, thing, count = 8 }) {
+      const entry = built.get(place), plan = data.places[place], segment = segmentAt(time), text = segment.event?.text ?? "", { w, h, d } = thing, spots = [];
+      const lotAt = (x, z) => plan.lots.findIndex((lot) => x >= lot.i0 * CELL && x < (lot.i0 + lot.nx) * CELL && z >= lot.j0 * CELL && z < (lot.j0 + lot.nz) * CELL);
+      const open = (px, pz) => px >= 0 && pz >= 0 && px <= plan.NX * CELL && pz <= plan.NZ * CELL && lotAt(px, pz) < 0;
+      const clear = (x, z) => open(x, z) && [-0.5, 0, 0.5].flatMap((u) => [-0.5, 0, 0.5].map((v) => open(x + u * w, z + v * d))).filter(Boolean).length >= 5;
+      const lift = thing.airborne ? 10 : 0, add = (x, y0, z, from) => { if (x >= 0 && z >= 0 && x <= plan.NX * CELL && z <= plan.NZ * CELL && (thing.airborne || y0 > 0.5 || clear(x, z))) spots.push({ x, y0, z, from }); };
+      const movers = new Set((segment.moves ?? []).map((move) => move.person)), people = [...pawns.entries()].filter(([, { pawn }]) => pawn.parent).sort(([a], [b]) => movers.has(b) - movers.has(a));
+      for (const [id, { pawn }] of people) { const x = pawn.position.x + entry.cx, z = pawn.position.z + entry.cz, floor = pawn.position.y > 1 ? pawn.position.y : 0, reach = Math.max(w, d) / 2 + 2; for (const [u, v] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) add(x + u * reach, floor + lift, z + v * reach, data.people[id]?.name ?? id); }
+      plan.lots.forEach((lot) => { const name = lot.label ?? lot.detected?.name; if (!name || !text.includes(name)) return; const x = (lot.i0 + lot.nx / 2) * CELL; add(x, lot.floors * FLOOR + lift, (lot.j0 + lot.nz / 2) * CELL, `${name} roof`); add(x, lift, (lot.j0 + lot.nz) * CELL + d / 2 + 2, `${name} front`); });
+      const grounds = { 1: "street", 2: "plaza", 3: "avenue", 4: "lane" }, stride = Math.max(3, Math.round(Math.max(w, d) / 2 / CELL));
+      for (let j = 0; j < plan.NZ; j += stride) for (let i = 0; i < plan.NX; i += stride) { const name = grounds[plan.ground[j * plan.NX + i]]; if (name) add((i + 0.5) * CELL, lift, (j + 0.5) * CELL, name); }
+      for (const item of things) { const now = item.placed.findLast((spot) => spot.time <= time); if (now?.place === place && !hiddenThings.has(item.thing.id)) add(now.x + Math.max(w, d), lift, now.z, `by ${item.thing.name}`); }
+      const kept = spots.slice(0, 1);
+      while (kept.length < Math.min(count, spots.length)) {
+        let best = null, far = -1;
+        for (const spot of spots) { const gap = Math.min(...kept.map((k) => Math.hypot(spot.x - k.x, spot.y0 - k.y0, spot.z - k.z))); if (gap > far) { far = gap; best = spot; } }
+        if (far < 2) break;
+        kept.push(best);
+      }
+      return kept.map((spot, n) => ({ label: "ABCDEFGH"[n], x: spot.x, y0: spot.y0, z: spot.z, w, h, d, from: spot.from }));
     },
     /** A sheet of every model and shape a thing can be drawn as, each labelled with its key (Jev picks one from it). */
     async sheet({ models, entries, columns = 8 }) {
@@ -609,8 +664,9 @@ if (capture) {
      * When view 2's box spans most of the beam, depth along the beam is uncertain and taken as about the width. A third
      * still from above pins the footprint: the hull of all three is then the cast's footprint, and nothing is uncertain.
      */
-    solve({ place, views, step = 1 }) {
-      const entry = built.get(place), b = bounds(place), checks = views.map((view) => ({ cam: cameras.get(view.camera), rect: ndc(view.box) })), p = new THREE.Vector3(), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity], sum = [0, 0, 0];
+    solve({ place, views, step = 1, around = null }) {
+      // Around a spot (zoomed stills), only its neighbourhood counts.
+      const entry = built.get(place), b = around ? { x: [around.x - around.r, around.x + around.r], y: [0, 70], z: [around.z - around.r, around.z + around.r] } : bounds(place), checks = views.map((view) => ({ cam: cameras.get(view.camera), rect: ndc(view.box) })), p = new THREE.Vector3(), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity], sum = [0, 0, 0];
       let points = 0;
       for (let x = b.x[0]; x <= b.x[1]; x += step) for (let z = b.z[0]; z <= b.z[1]; z += step) for (let y = b.y[0]; y <= b.y[1]; y += step) {
         if (!checks.every(({ cam, rect }) => { p.set(x - entry.cx, y, z - entry.cz).project(cam); return p.z > -1 && p.z < 1 && p.x >= rect.x[0] && p.x <= rect.x[1] && p.y >= rect.y[0] && p.y <= rect.y[1]; })) continue;
@@ -625,7 +681,7 @@ if (capture) {
       const [one, two] = measured;
       // How much of the beam view 2's box covers: the beam's run through the place, projected into view 2.
       const run = reach(place, views[0]), cover = (() => { const [a, c] = [run.from.clone().project(checks[1].cam), run.to.clone().project(checks[1].cam)], span = Math.max(1e-6, Math.abs(a.x - c.x)); return Math.min(1, (checks[1].rect.x[1] - checks[1].rect.x[0]) / span); })();
-      const above = checks.length > 2, uncertain = !above && cover > 0.8, deep = uncertain ? one.across : two.across;
+      const above = checks.length > 2, uncertain = !above && !around && cover > 0.8, deep = uncertain ? one.across : two.across;
       const height = Math.max(1, (two.up - one.across * Math.sin(two.down)) / Math.cos(two.down));
       const ex = above ? hi[0] + step - lo[0] : Math.min(hi[0] + step - lo[0], Math.abs(one.right.x) * one.across + Math.abs(two.right.x) * deep), ez = above ? hi[2] + step - lo[2] : Math.min(hi[2] + step - lo[2], Math.abs(one.right.z) * one.across + Math.abs(two.right.z) * deep);
       const grounded = lo[1] <= 1.5, y0 = grounded ? 0 : Math.max(lo[1], centre[1] - height / 2);
