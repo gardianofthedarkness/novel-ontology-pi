@@ -26,7 +26,7 @@ test("the checklist lists each faculty in dependency order with its next command
   const { directory, packet } = await workspace(context);
   const statusOf = async () => Object.fromEntries((await bookChecklist(directory)).items.map((item) => [item.id, item.status]));
   // Nothing applied yet: extraction is the gap; everything after it waits.
-  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", identities: "blocked", causality: "blocked", "time-place": "blocked", calendar: "blocked", "place-tree": "blocked", strands: "blocked", graph: "blocked", architecture: "blocked", movement: "blocked", stage: "blocked" });
+  assert.deepEqual(await statusOf(), { source: "done", album: "optional", blocks: "todo", identities: "blocked", causality: "blocked", "time-place": "blocked", calendar: "blocked", "place-tree": "blocked", strands: "blocked", graph: "blocked", scale: "blocked", architecture: "blocked", movement: "blocked", stage: "blocked" });
   await saveChangeSet(directory, packet("cs_b0001", "b0001", "approved"));
   await markCausalitySweepPending(directory);
   const after = await bookChecklist(directory);
@@ -65,6 +65,7 @@ test("the checklist lists each faculty in dependency order with its next command
 test("read mode's stage: buildings after the place tree, movement after them and the full extraction, the animation prep after everything", async (context) => {
   const { directory } = await workspace(context);
   const items = new Map((await bookChecklist(directory)).items.map((item) => [item.id, item]));
+  assert.deepEqual(items.get("scale")!.dependsOn, ["time-place", "place-tree"]);
   assert.deepEqual(items.get("architecture")!.dependsOn, ["time-place", "place-tree"]);
   assert.deepEqual(items.get("movement")!.dependsOn, ["blocks", "strands", "architecture"]);
   // The prep waits for every other step, causality and its reviews included.

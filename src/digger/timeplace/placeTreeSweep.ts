@@ -3,6 +3,7 @@ import type { Entity, Relation, Scene } from "../../ground/ontology/types.js";
 import { isAncestor, parentMap, treeViolation } from "../../ground/ontology/placeTree.js";
 import type { ChangeProposal } from "../../solidifier/merge/changeset.js";
 import type { Sentence } from "../intake/sectioning.js";
+import type { RepairMemory } from "./placeTreeRepair.js";
 
 /**
  * Place-tree sweep (time-place faculty, phase 2): the standing pass that
@@ -21,7 +22,8 @@ import type { Sentence } from "../intake/sectioning.js";
  * when several parents are judged, the deepest wins. Without Jev only
  * name-prefix pairs are proposed.
  */
-export interface PlaceTreeMemory { distinct: { pair: string; evidence: number }[] }
+/** Pairs asked (asked again only with more evidence), and places the repair asked (placeTreeRepair.ts; asked again when what they read changes). */
+export interface PlaceTreeMemory { distinct: { pair: string; evidence: number }[]; repairs?: RepairMemory[] }
 export interface PlaceTreeCandidate { childId?: string; parentId?: string; a: string; b: string; sentenceIds: string[]; signals: string[] }
 export interface PlaceTreeVerdict { a: string; b: string; choice: "A_IN_B" | "B_IN_A" | "NEITHER"; probability: number; sentenceIds: string[]; signals: string[] }
 export interface PlaceTreeResult { candidates: number; asked: number; verdicts: PlaceTreeVerdict[]; proposals: ChangeProposal[]; memory: PlaceTreeMemory; notes: string[] }
@@ -97,7 +99,7 @@ export async function sweepPlaceTree(input: { entities: Entity[]; relations: Rel
   const places = input.entities.filter((entity) => entity.kind === "Location" && !entity.properties?.generic);
   const byId = new Map(places.map((place) => [place.id, place]));
   const notes: string[] = [];
-  const memory: PlaceTreeMemory = { distinct: [...(input.memory?.distinct ?? [])] };
+  const memory: PlaceTreeMemory = { ...input.memory, distinct: [...(input.memory?.distinct ?? [])] };
   const candidates = nominatePlacePairs({ places, relations: input.relations, scenes: input.scenes, sentences: input.sentences, memory: input.memory });
   const verdicts: PlaceTreeVerdict[] = [];
   let asked = 0;

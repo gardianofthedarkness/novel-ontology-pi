@@ -118,7 +118,11 @@ A **Read mode** link in the top bar opens the same page with `?read`.
 
 ### Where the data comes from
 
-Two Jev faculties and a last step, each a report under `<book>/stage/`. These are view inputs: no review packet, never canon. The steps are `novel stage architecture|movement|prep`, run in the order `novel checklist` gives.
+Three Jev faculties and a last step, each a report under `<book>/stage/`. These are view inputs: no review packet, never canon. The steps are `novel stage scale|architecture|movement|prep`, run in the order `novel checklist` gives.
+
+- **scale:** how big each place in the place tree is: region, city, district, street, building or room.
+  - One Jev choice per place, from its name, other names, its path in the tree and the places inside it. Tested against packages and embeddings in [stage-simulation-design.md](stage-simulation-design.md); Jev was right on 64 of 66 places.
+  - The stage builds a place by it: a building or a room as a site, a street as a street, anything larger as a district.
 
 - **architecture:** each place's building, a sub-kind of place.
   - Runs after story time and the place tree, beside strands and causality.

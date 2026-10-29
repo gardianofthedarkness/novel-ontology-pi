@@ -36,9 +36,10 @@ the earliest unblocked item; for a library, finish books in reading order.
 | causality | after story time and strands: the sweep is not pending and no causal packet waits | `novel causality sweep <dir>` | `cs_causality_*`, after reading `causality.md` |
 | time-place | every scene was processed (a period, or processed without one) | `novel timeplace run <dir> --propose` | `cs_timeplace_*` |
 | calendar | the universe calendar is current and no `ut_` year question waits | rebuilt on every story-time apply; `novel calendar build <dir>` | `ut_*` (`--scope universe --universe <id>`) |
-| place-tree | no unasked place pair remains | `novel timeplace tree <dir> --propose` | `cs_timeplace_place-tree_*` |
+| place-tree | no unasked place pair remains, and (once `novel stage scale` has run) no place without a larger parent waits for the repair | `novel timeplace tree <dir> --propose` | `cs_timeplace_place-tree_*` |
 | strands | nothing is worth asking, or the latest asked report is newer than the casts and story time it read | `novel timeplace strands <dir> --ask` | — (a report the story view draws; no packet) |
 | graph | `graph.lbug` is newer than the bundle | `novel graph build <dir>/ontology` | — |
+| scale | every place in the place tree has a scale (region, city, district, street, building or room), from its current name, path and children | `novel stage scale <dir>` (one Jev choice per place) | — (a report the stage builds places by; no packet) |
 | architecture | every place a scene happens in has a building picked, from its current name and path | `novel stage architecture <dir>` (one Jev picture choice per place) | — (a report read mode draws; no packet) |
 | movement | every scene in a building was asked who moves where, from its current cast and events | `novel stage movement <dir>` (bounded by `--max-calls`; answers are kept, so run it again to continue) | — (a report; no packet) |
 | stage | the animation prep is newer than both reports; only once everything else is done | `novel stage prep <dir>` (no model calls) | — |
@@ -62,7 +63,7 @@ the earliest unblocked item; for a library, finish books in reading order.
   not on every sweep.
 - **Re-run the checklist after each step.** If a step leaves its item
   unchanged, stop and report it as stuck with the reason. Do not loop.
-- **Paid steps** (ingest, the sweeps, time-place runs, strands with `--ask`, stage architecture and movement) spend model and Jev
+- **Paid steps** (ingest, the sweeps, time-place runs, strands with `--ask`, stage scale, architecture and movement) spend model and Jev
   calls. Respect the job's limits and the user's budget. Report what each
   step spent.
 - **When done**, report each item's status and counts. Separate verified,

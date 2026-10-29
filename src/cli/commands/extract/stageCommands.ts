@@ -17,13 +17,16 @@ import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { architectureFingerprint, architecturePictures, pickArchitecture, type ArchitecturePlace, type ArchitectureReport } from "../../../digger/stage/architecture.js";
 import { askMovement, movementFingerprint, sceneCallEstimate, sceneInputs, type MovementReport, type MovementScene } from "../../../digger/stage/movement.js";
 import { prepareStage, prepFingerprint, type StagePlan } from "../../../digger/stage/prep.js";
+import { pickScales, scaleFingerprint, SCALES, type ScalePlace, type ScaleReport } from "../../../digger/stage/scale.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 
 /**
- * `novel stage architecture|movement|prep|show` — what read mode replays.
- * Two faculties and a last step, each writing a report under <book>/stage/
+ * `novel stage scale|architecture|movement|prep|show` — what read mode replays.
+ * Three faculties and a last step, each writing a report under <book>/stage/
  * (view inputs: no review packet, nothing written to canon):
  *
+ *   scale         how big each place in the tree is, region to room (Jev),
+ *                 which decides how the stage builds it;
  *   architecture  each place's building, a sub-kind of place (names
  *                 shortlist, Jev picks among pictures) — after story time
  *                 and the place tree, beside strands and causality;
@@ -45,7 +48,7 @@ const clip = (text: string, length: number) => [...text].length > length ? `${[.
 const CAST_LIMIT = 8;
 
 interface StoredEvent { id: string; summaryEn?: string; summary?: string; primaryActors?: string[]; evidence?: { text?: string; sentenceIds?: string[] } }
-const stageFile = (novelDir: string, name: "architecture" | "movement" | "plan" | "objects") => join(novelDir, "stage", `${name}.json`);
+const stageFile = (novelDir: string, name: "scale" | "architecture" | "movement" | "plan" | "objects") => join(novelDir, "stage", `${name}.json`);
 const readJson = async <T>(path: string): Promise<T | null> => readFile(path, "utf8").then((text) => JSON.parse(text) as T, () => null);
 async function writeReport(path: string, value: unknown) {
   await mkdir(join(path, ".."), { recursive: true, mode: 0o700 });
@@ -86,6 +89,13 @@ export async function stageInputs(novelDir: string) {
     const sceneId = sceneOf.get(event.evidence?.sentenceIds?.[0] ?? "");
     if (sceneId) eventsByScene.set(sceneId, [...eventsByScene.get(sceneId) ?? [], event]);
   }
+  // Scale: every place in the tree, with scenes of its own or not (the stage's map draws them all).
+  const scalePlaces: ScalePlace[] = data.places.map((place) => {
+    const forms = byId.get(place.id)?.names ?? [], canonical = names[place.id] ?? place.label;
+    return { id: place.id, label: place.label, aliases: [...new Set(forms.map((form) => form.text).filter((text) => text && text !== canonical))], path: place.path ?? [place.id], contains: inside(place.id) };
+  });
+  const scale = await readJson<ScaleReport>(stageFile(novelDir, "scale"));
+  const scaleCurrent = scale?.inputs === scaleFingerprint(scalePlaces);
   const kindOf = (placeId: string) => { const kind = architecture?.places[placeId]?.kind; return kind && kind !== "none" ? kind : null; };
   const movementScenes: MovementScene[] = [];
   for (const scene of data.scenes) {
@@ -111,7 +121,7 @@ export async function stageInputs(novelDir: string) {
   const movementCurrent = !!movement?.complete && movement.inputs === movementFingerprint(movementScenes, names);
   const plan = await readJson<StagePlan>(stageFile(novelDir, "plan"));
   const planCurrent = architectureCurrent && movementCurrent && plan?.inputs === prepFingerprint(architecture!.inputs, movement!.inputs);
-  return { data, places, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, plan, planCurrent,
+  return { data, places, scalePlaces, scale, scaleCurrent, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, plan, planCurrent,
     estimate: Math.ceil(movementScenes.reduce((sum, scene) => sum + (movement?.scenes[scene.id]?.inputs === sceneInputs(scene, names) ? 0 : sceneCallEstimate(scene)), 0)) };
 }
 
@@ -127,6 +137,17 @@ async function latestStrandCasts(novelDir: string): Promise<Record<string, strin
 
 export interface StageOptions { jev?: boolean; cache?: string; maxCalls?: number; force?: boolean; env?: NodeJS.ProcessEnv }
 const decisionsFor = (options: StageOptions): DecisionModel | undefined => options.jev === false ? undefined : options.cache ? cachedDecisions(jevFromEnv(options.env ?? process.env), options.cache) : jevFromEnv(options.env ?? process.env);
+
+/** `novel stage scale`: one Jev choice per place in the tree, region to room; kept per place and reused while its name, path and children stay the same. */
+export async function stageScale(novelDir: string, options: StageOptions = {}): Promise<Record<string, unknown>> {
+  const inputs = await stageInputs(novelDir);
+  const report = await pickScales(inputs.scalePlaces, { decisions: decisionsFor(options), names: inputs.names, previous: inputs.scale });
+  await writeReport(stageFile(novelDir, "scale"), report);
+  const scales: Record<string, number> = {};
+  for (const pick of Object.values(report.places)) scales[pick.scale] = (scales[pick.scale] ?? 0) + 1;
+  const unsure = Object.values(report.places).filter((pick) => pick.by === "jev" && (pick.confidence ?? 1) < 0.6).map((pick) => `${pick.label}: ${pick.scale} (${pick.confidence})`);
+  return { places: inputs.scalePlaces.length, scales: Object.fromEntries([...SCALES, "none"].filter((scale) => scales[scale]).map((scale) => [scale, scales[scale]])), byJev: Object.values(report.places).filter((pick) => pick.by === "jev").length, ...(unsure.length ? { unsure } : {}), usage: report.usage, report: stageFile(novelDir, "scale") };
+}
 
 export async function stageArchitecture(novelDir: string, options: StageOptions = {}): Promise<Record<string, unknown>> {
   const inputs = await stageInputs(novelDir);
@@ -165,6 +186,7 @@ export async function stagePrep(novelDir: string, options: StageOptions = {}): P
 export async function stageShow(novelDir: string): Promise<Record<string, unknown>> {
   const inputs = await stageInputs(novelDir);
   return {
+    scale: { places: inputs.scalePlaces.length, picked: Object.keys(inputs.scale?.places ?? {}).length, current: inputs.scaleCurrent, picks: Object.fromEntries(Object.values(inputs.scale?.places ?? {}).map((pick) => [pick.label, `${pick.scale} (${pick.by})`])) },
     architecture: { places: inputs.places.length, picked: Object.keys(inputs.architecture?.places ?? {}).length, current: inputs.architectureCurrent, picks: Object.fromEntries(Object.values(inputs.architecture?.places ?? {}).map((pick) => [pick.label, `${pick.kind} (${pick.by})`])) },
     movement: { scenes: inputs.movementScenes.length, asked: Object.keys(inputs.movement?.scenes ?? {}).length, current: inputs.movementCurrent, estimatedRequests: inputs.estimate },
     plan: { current: inputs.planCurrent, ...(inputs.plan ? { preparedAt: inputs.plan.preparedAt, ...inputs.plan.counts } : {}) },
@@ -233,4 +255,4 @@ export async function stageObjects(novelDir: string, options: StageOptions & { w
     ...(work ? {} : { note: "No work model configured (WORK_LLM_API_KEY): nothing was asked; scenes are left for a run with one." }) };
 }
 
-export const STAGE_USAGE = "novel stage objects <novel-dir> [--max-calls N] [--cache dir] [--no-work] | novel stage show <novel-dir> | novel stage forks <novel-dir> [--fork <scene-id>] |novel stage architecture <novel-dir> [--no-jev] [--cache dir] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] | novel stage prep <novel-dir> [--force]";
+export const STAGE_USAGE = "novel stage objects <novel-dir> [--max-calls N] [--cache dir] [--no-work] | novel stage show <novel-dir> | novel stage forks <novel-dir> [--fork <scene-id>] | novel stage scale <novel-dir> [--no-jev] [--cache dir] | novel stage architecture <novel-dir> [--no-jev] [--cache dir] | novel stage movement <novel-dir> [--no-jev] [--max-calls N] [--cache dir] | novel stage prep <novel-dir> [--force]";

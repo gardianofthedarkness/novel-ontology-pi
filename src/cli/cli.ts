@@ -63,7 +63,7 @@ import { reviewCommand } from "./commands/extract/reviewCommands.js";
 import { approveBook } from "../solidifier/merge/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
-import { STAGE_USAGE, stageArchitecture, stageForks, stageMovement, stageObjects, stagePrep, stageShow } from "./commands/extract/stageCommands.js";
+import { STAGE_USAGE, stageArchitecture, stageForks, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
   listChangeSets,
@@ -108,8 +108,8 @@ const COMMANDS: Record<string, string> = {
     "The universe's places: one per cluster of book places, with its path through the universe place tree.",
   "novel timeplace strands <novel-dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]":
     "Story strands from stored story time: parallel scenes, splits and meetings checked against places; plans \"who is present?\" questions only where a borrowed cast creates a strand link (free), and asks them with --ask (work model, 4 scenes per call), at most --max-questions (default 30), only in chapters of at least --min-impact scenes (default 8); report only, no canon writes",
-  "novel stage show|forks|objects|architecture|movement|prep <novel-dir> [--no-jev] [--no-work] [--max-calls N] [--cache dir] [--force] [--fork scene-id]":
-    "Read mode's stage (view inputs, never canon, no review): `objects` lists the buildings and large visible things each staged scene puts in its place, matched to what the stage can draw (work model, a few scenes per call, within --max-calls); `forks` shows the timeline as the simulation walks it, fork by fork (each scene's own cast and where each person comes from; --fork lists one fork's scenes; no model calls); `architecture` picks each place's building, a sub-kind of place (name shortlist, then Jev picks among pictures); `movement` asks Jev who moves where inside each scene's building and how (needs the whole file extracted and the buildings picked; --max-calls bounds a run, answers are kept and later runs continue); `prep` is the animation prep, last of all once every other checklist step is done: each chain checked physically, one movement plan per place (no model calls). Answers are reused while their inputs stay the same.",
+  "novel stage show|forks|objects|scale|architecture|movement|prep <novel-dir> [--no-jev] [--no-work] [--max-calls N] [--cache dir] [--force] [--fork scene-id]":
+    "Read mode's stage (view inputs, never canon, no review): `objects` lists the buildings and large visible things each staged scene puts in its place, matched to what the stage can draw (work model, a few scenes per call, within --max-calls); `forks` shows the timeline as the simulation walks it, fork by fork (each scene's own cast and where each person comes from; --fork lists one fork's scenes; no model calls); `scale` asks Jev how big each place in the tree is (region, city, district, street, building or room), which decides how the stage builds it; `architecture` picks each place's building, a sub-kind of place (name shortlist, then Jev picks among pictures); `movement` asks Jev who moves where inside each scene's building and how (needs the whole file extracted and the buildings picked; --max-calls bounds a run, answers are kept and later runs continue); `prep` is the animation prep, last of all once every other checklist step is done: each chain checked physically, one movement plan per place (no model calls). Answers are reused while their inputs stay the same.",
   "novel timeplace show <novel-dir>":
     "Applied time periods in story order, places as paths through the place tree, and the tree's links.",
   "novel causality sweep <novel-dir> [--limit N]":
@@ -541,8 +541,8 @@ async function main(): Promise<void> {
 
   if (cmd === "stage") {
     const novelDir = positional[2];
-    if (!["show", "forks", "objects", "architecture", "movement", "prep"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${STAGE_USAGE}`);
-    const valued = sub === "movement" || sub === "objects" ? ["--max-calls", "--cache"] : sub === "architecture" ? ["--cache"] : sub === "forks" ? ["--fork"] : [], switches = sub === "prep" ? ["--force"] : sub === "show" || sub === "forks" ? [] : sub === "objects" ? ["--no-work"] : ["--no-jev"];
+    if (!["show", "forks", "objects", "scale", "architecture", "movement", "prep"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${STAGE_USAGE}`);
+    const valued = sub === "movement" || sub === "objects" ? ["--max-calls", "--cache"] : sub === "architecture" || sub === "scale" ? ["--cache"] : sub === "forks" ? ["--fork"] : [], switches = sub === "prep" ? ["--force"] : sub === "show" || sub === "forks" ? [] : sub === "objects" ? ["--no-work"] : ["--no-jev"];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];
@@ -553,7 +553,7 @@ async function main(): Promise<void> {
     const maxCalls = flag(positional, "--max-calls");
     if (maxCalls !== undefined && (!/^\d+$/.test(maxCalls) || Number(maxCalls) < 1)) throw new Error("--max-calls must be a positive integer.");
     const options = { jev: !positional.includes("--no-jev"), cache: flag(positional, "--cache"), maxCalls: maxCalls === undefined ? undefined : Number(maxCalls), force: positional.includes("--force") };
-    out(await (sub === "show" ? stageShow(novelDir) : sub === "objects" ? stageObjects(novelDir, { ...options, work: !positional.includes("--no-work") }) : sub === "forks" ? stageForks(novelDir, { fork: flag(positional, "--fork") }) : sub === "architecture" ? stageArchitecture(novelDir, options) : sub === "movement" ? stageMovement(novelDir, options) : stagePrep(novelDir, options)), pretty);
+    out(await (sub === "show" ? stageShow(novelDir) : sub === "objects" ? stageObjects(novelDir, { ...options, work: !positional.includes("--no-work") }) : sub === "forks" ? stageForks(novelDir, { fork: flag(positional, "--fork") }) : sub === "scale" ? stageScale(novelDir, options) : sub === "architecture" ? stageArchitecture(novelDir, options) : sub === "movement" ? stageMovement(novelDir, options) : stagePrep(novelDir, options)), pretty);
     return;
   }
 

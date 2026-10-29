@@ -289,9 +289,15 @@ export interface PlaceSpot {
 }
 
 /** Compact, deterministic circle packing around the origin: overlapping
- * circles push apart, linked ones pull together, everything falls inward. */
+ * circles push apart, linked ones pull together, everything falls inward.
+ * The more trips between two places, the closer they sit: their gap is
+ * gap / (1 + trips / 2) where others keep the whole gap, and their link pulls
+ * with log(1 + trips). */
 function packCircles(nodes: { id: string; r: number }[], links: { from: string; to: string; count: number }[], gap: number): Map<string, { x: number; y: number }> {
   const mean = nodes.reduce((sum, node) => sum + node.r, 0) / Math.max(1, nodes.length);
+  const pair = (a: string, b: string) => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`), trips = new Map<string, number>();
+  for (const link of links) trips.set(pair(link.from, link.to), (trips.get(pair(link.from, link.to)) ?? 0) + link.count);
+  const spacing = (a: { id: string }, b: { id: string }) => gap / (1 + (trips.get(pair(a.id, b.id)) ?? 0) / 2);
   const items = nodes.map((node, index) => ({ ...node, x: Math.cos(index * 2.399963) * (mean + gap) * 1.3 * Math.sqrt(index), y: Math.sin(index * 2.399963) * (mean + gap) * 1.3 * Math.sqrt(index) }));
   const byId = new Map(items.map((item) => [item.id, item]));
   for (let step = 0; step < 300; step++) {
@@ -301,7 +307,7 @@ function packCircles(nodes: { id: string; r: number }[], links: { from: string; 
       const from = byId.get(link.from), to = byId.get(link.to);
       if (!from || !to) continue;
       const dx = to.x - from.x, dy = to.y - from.y, distance = Math.max(1, Math.hypot(dx, dy));
-      const pull = (distance - (from.r + to.r + gap * 2)) * 0.01 * Math.min(3, link.count) * cooling;
+      const pull = (distance - (from.r + to.r + spacing(from, to))) * 0.015 * Math.log1p(link.count) * cooling;
       if (pull <= 0) continue;
       from.x += dx / distance * pull; from.y += dy / distance * pull; to.x -= dx / distance * pull; to.y -= dy / distance * pull;
     }
@@ -309,7 +315,7 @@ function packCircles(nodes: { id: string; r: number }[], links: { from: string; 
       const a = items[first], b = items[second];
       let dx = b.x - a.x, dy = b.y - a.y;
       if (!dx && !dy) { dx = 0.5; dy = 0.3; }
-      const distance = Math.hypot(dx, dy), least = a.r + b.r + gap;
+      const distance = Math.hypot(dx, dy), least = a.r + b.r + spacing(a, b);
       if (distance >= least) continue;
       const push = (least - distance) / 2;
       a.x -= dx / distance * push; a.y -= dy / distance * push; b.x += dx / distance * push; b.y += dy / distance * push;
@@ -322,7 +328,7 @@ function packCircles(nodes: { id: string; r: number }[], links: { from: string; 
       const a = items[first], b = items[second];
       let dx = b.x - a.x, dy = b.y - a.y;
       if (!dx && !dy) { dx = 0.5; dy = 0.3; }
-      const distance = Math.hypot(dx, dy), least = a.r + b.r + gap / 2;
+      const distance = Math.hypot(dx, dy), least = a.r + b.r + spacing(a, b) / 2;
       if (distance >= least) continue;
       overlap = true;
       const push = (least - distance) / 2 + 0.01;
@@ -344,8 +350,9 @@ export type TreePlace = Pick<StoryPlace, "id" | "parentId" | "sceneIds">;
 /**
  * The place tree as nested circles, unscaled (around the origin, in the
  * units of `ownRadius`): each place that contains others is a region whose
- * circle packs its children; places linked by moves sit closer; no two
- * circles at one level overlap. A place's own content (its own scenes on the
+ * circle packs its children; the more moves between two places (lifted to
+ * the level where they are siblings), the closer they sit; no two circles at
+ * one level overlap. A place's own content (its own scenes on the
  * map, its own grid on the stage) is a disc of `ownRadius`; a region with
  * content of its own keeps that disc above its children, never on top of
  * them, and its spot is that disc's centre.

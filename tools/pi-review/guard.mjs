@@ -46,7 +46,7 @@ const FORMS = {
   causality: 'novel causality candidates <book> [--unit ID] [--chapter N] [--limit 1-20] | sweep <book> [--limit 1-20] | evidence <book> <from> <to> | propose <book> <from> <to> --reason "…"',
   timeplace: 'novel timeplace show <book> | run <book> --propose [--mode M] [--chapter N] [--limit N] | tree <book> --propose [--max-questions N] | strands <book> [--ask] [--max-questions N] [--min-impact N]',
   atlas: 'novel atlas show <library> <universe-id> | novel atlas sweep <library> <universe-id> --propose [--max-questions N]',
-  stage: 'novel stage show <book> | architecture <book> [--no-jev] | movement <book> [--max-calls N] [--no-jev] | prep <book>  (read mode; prep only once everything else is done)',
+  stage: 'novel stage show <book> | scale <book> [--no-jev] | architecture <book> [--no-jev] | movement <book> [--max-calls N] [--no-jev] | prep <book>  (read mode; prep only once everything else is done)',
   em: 'novel em show|sweep <book> [--limit 1-200]  (identity matches it raises are reviewed with novel review)', calendar: 'novel calendar show|build <book> | novel calendar show|build <library> --universe <id>  (year questions are reviewed with novel review)', fix: 'novel fix <operation> <book> … --reason "…"  (references/repair.md)',
   graph: 'novel graph build <book>/ontology', album: 'novel album list|portraits <book>', library: 'novel library … <library>  (novel-library skill)',
   help: 'novel help', config: 'novel config',
@@ -332,16 +332,16 @@ function permit(command, scope) {
     return { kind: 'cli', args: tokens, label: `novel timeplace ${operation}` };
   }
   if (verb === 'stage') {
-    // Read mode's stage: reports for the view (buildings, movement, animation prep), never canon or review packets; bounded options, no file outputs.
+    // Read mode's stage: reports for the view (place scale, buildings, movement, animation prep), never canon or review packets; bounded options, no file outputs.
     const flags = new Map();
     for (let index = 3; index < tokens.length; index++) {
       const name = tokens[index];
-      if (flags.has(name) || !['--max-calls', '--no-jev'].includes(name)) throw new Error('Stage options are bounded: novel stage architecture <book> [--no-jev] | movement <book> [--max-calls N] [--no-jev]');
+      if (flags.has(name) || !['--max-calls', '--no-jev'].includes(name)) throw new Error('Stage options are bounded: novel stage scale|architecture <book> [--no-jev] | movement <book> [--max-calls N] [--no-jev]');
       flags.set(name, name === '--no-jev' ? true : tokens[++index]);
     }
     const calls = !flags.has('--max-calls') || /^\d+$/.test(flags.get('--max-calls') ?? '') && Number(flags.get('--max-calls')) >= 1 && Number(flags.get('--max-calls')) <= 6000;
-    valid = tokens[2] === novel && (['show', 'prep'].includes(operation) ? tokens.length === 3 : operation === 'architecture' ? [...flags.keys()].every(name => name === '--no-jev') : operation === 'movement' && calls);
-    if (!valid) throw new Error('Stage commands work on the assigned book: novel stage show|prep <book>, novel stage architecture <book> [--no-jev], novel stage movement <book> [--max-calls N≤6000] [--no-jev]');
+    valid = tokens[2] === novel && (['show', 'prep'].includes(operation) ? tokens.length === 3 : ['scale', 'architecture'].includes(operation) ? [...flags.keys()].every(name => name === '--no-jev') : operation === 'movement' && calls);
+    if (!valid) throw new Error('Stage commands work on the assigned book: novel stage show|prep <book>, novel stage scale|architecture <book> [--no-jev], novel stage movement <book> [--max-calls N≤6000] [--no-jev]');
     return { kind: 'cli', args: tokens, label: `novel stage ${operation}` };
   }
   if (verb === 'recall') valid = operation === novel && tokens.length === 3 && blockIds.includes(tokens[2]);

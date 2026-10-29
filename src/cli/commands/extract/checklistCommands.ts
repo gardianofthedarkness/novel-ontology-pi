@@ -6,11 +6,12 @@ import { storedSource } from "../../../ground/workspace/source.js";
 import { libraryShow } from "../../../ground/workspace/library.js";
 import { cutBlocks } from "../../../digger/intake/blocks.js";
 import { nominatePlacePairs, type PlaceTreeMemory } from "../../../digger/timeplace/placeTreeSweep.js";
+import { flagForRepair } from "../../../digger/timeplace/placeTreeRepair.js";
 import { readCausalityMemory } from "../../../solidifier/causality/faculty.js";
 import { loadUniverseContext, universeBindings, universeCandidates } from "../../../solidifier/causality/universe.js";
 import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/atlas/universeAtlas.js";
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
-import { loadWorkspaceSentences, strandInputs } from "./timeplaceCommands.js";
+import { loadWorkspaceSentences, placeScales, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
 import { stageInputs } from "./stageCommands.js";
 import { castScope, loadCast } from "../../../solidifier/identity/cast.js";
@@ -123,10 +124,13 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   const places = entities.filter((entity) => entity.kind === "Location");
   const parents = new Set(relations.filter((relation) => relation.type === "PART_OF").map((relation) => relation.fromId));
   const treeReview = pending((id, blockId) => id.startsWith("cs_timeplace_") && blockId === "place-tree");
-  let unsettled = 0;
+  let unsettled = 0, unrepaired = 0;
   if (places.length > 1 && !treeReview.length && sourceFile) {
-    const memory = JSON.parse(await readFile(join(novelDir, "timeplace", "place-tree.json"), "utf8").catch(() => '{"distinct":[]}')) as PlaceTreeMemory;
-    unsettled = nominatePlacePairs({ places: places.filter((place) => !place.properties?.generic), relations, scenes, sentences: await loadWorkspaceSentences(novelDir), memory }).length;
+    const memory = JSON.parse(await readFile(join(novelDir, "timeplace", "place-tree.json"), "utf8").catch(() => '{"distinct":[]}')) as PlaceTreeMemory, sentences = await loadWorkspaceSentences(novelDir);
+    unsettled = nominatePlacePairs({ places: places.filter((place) => !place.properties?.generic), relations, scenes, sentences, memory }).length;
+    // With place scales, places left without a larger parent wait for the repair until asked with what they read now.
+    const scales = await placeScales(novelDir), asked = new Map((memory.repairs ?? []).map((entry) => [entry.place, entry.inputs]));
+    if (scales) unrepaired = flagForRepair({ entities, relations, scenes, sentences, scales }).filter((flag) => asked.get(flag.id) !== flag.inputs).length;
   }
   const swept = await exists(join(novelDir, "timeplace", "place-tree.json"));
   // The universe calendar: every book's story time on one clock; years it had to infer are reviewed.
@@ -141,10 +145,10 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
     note: "Rebuilt after every story-time apply; a book whose dates go back from the previous book's is asked: same year, or a later one?" });
 
   items.push({ id: "place-tree", title: "Place tree (which place is inside which)", dependsOn: ["time-place"],
-    status: treeReview.length ? "review" : unsettled ? "todo" : "done",
-    counts: { places: places.length, withParent: parents.size, candidatePairs: unsettled, swept, awaitingReview: treeReview.length },
-    next: treeReview.length ? treeReview.map((changeset) => reviewCommand(changeset.id)) : unsettled ? [`novel timeplace tree ${dir} --propose`] : [],
-    note: unsettled && swept ? "New pairs, or asked pairs with more evidence since, are waiting." : undefined });
+    status: treeReview.length ? "review" : unsettled || unrepaired ? "todo" : "done",
+    counts: { places: places.length, withParent: parents.size, candidatePairs: unsettled, placesToRepair: unrepaired, swept, awaitingReview: treeReview.length },
+    next: treeReview.length ? treeReview.map((changeset) => reviewCommand(changeset.id)) : unsettled || unrepaired ? [`novel timeplace tree ${dir} --propose`] : [],
+    note: unrepaired ? `${unrepaired} place(s) have no larger parent by their scale; the sweep repairs them.` : unsettled && swept ? "New pairs, or asked pairs with more evidence since, are waiting." : undefined });
 
   const newest = Math.max(0, ...await Promise.all(["entities", "relations", "events", "scenes"].map((name) => stat(join(novelDir, "ontology", `${name}.jsonl`)).then((info) => info.mtimeMs, () => 0))));
 
@@ -187,6 +191,9 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
 
   // Read mode's stage: each place's building, then who moves where in its scenes (Jev, view inputs, no review), then the animation prep, last.
   const stage = await stageInputs(novelDir);
+  items.push({ id: "scale", title: "Scale of places (region to room, for read mode)", dependsOn: ["time-place", "place-tree"],
+    status: stage.scaleCurrent ? "done" : "todo", counts: { places: stage.scalePlaces.length, picked: Object.keys(stage.scale?.places ?? {}).length, current: stage.scaleCurrent },
+    next: stage.scaleCurrent ? [] : [`novel stage scale ${dir}`], note: stage.scaleCurrent ? undefined : `About ${stage.scalePlaces.length} Jev choice(s), one per place; a view input, no review.` });
   items.push({ id: "architecture", title: "Buildings of places (a sub-kind of place, for read mode)", dependsOn: ["time-place", "place-tree"],
     status: stage.architectureCurrent ? "done" : "todo", counts: { places: stage.places.length, picked: Object.keys(stage.architecture?.places ?? {}).length, current: stage.architectureCurrent },
     next: stage.architectureCurrent ? [] : [`novel stage architecture ${dir}`], note: stage.architectureCurrent ? undefined : `About ${stage.places.length} Jev picture choice(s), one per place; a view input, no review.` });
