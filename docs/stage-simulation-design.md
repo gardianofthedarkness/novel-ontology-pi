@@ -94,6 +94,12 @@ Buildings are added as the story detects them, not fixed up front.
      - The top view removed the 40–70 m casts: footprints are now 8–34 m. But it brought the helicopter to the ground (from above, nothing shows height), and the torii's three boxes did not meet.
      - Carving from all eight stills at once, weighted by confidence, was worse (30–57 m casts) and is kept only as a measurement.
      - Cost: 2 calls per placement plus the model pick, about 6 s per placement.
+   - **Masking front buildings** (user request, 2026-10-29): each still fades the buildings standing between the camera and what it looks at (the beam, or the people present) to a faint outline, skeleton left out; a building the target is inside stays.
+     - **Same 10 scenes, same model picks, all views asked again:** mean side confidence went from 0.16 to 0.18, and the reader's view from 0.25 to 0.26. The top view went from 0.26 to 0.22.
+     - Side boxes spanning the beam went from 43 to 48 of 60, and solved placements from 9 to 8.
+     - The helicopter stayed in the air this time (20.8–34.8 m), but the long pipe grew to 37 × 35 × 34 m. No systematic gain: the differences are within how much Jev's boxes vary from run to run.
+     - **Reading:** a box question locates a thing that is in the picture. Here the thing is not drawn yet, so Jev's confidence stays near 0.2 whatever the view.
+     - Likely better: draw the picked model at a few candidate spots (along the beam, beside the people), labelled, and ask a choice, where Jev reports its confidence.
 6. **Placement rules:**
    - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
    - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.

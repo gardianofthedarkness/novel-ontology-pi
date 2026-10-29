@@ -18,8 +18,9 @@
  *
  *   node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh] [--resweep] [--resolve] [--low 0.5] [--model jev-1.14.0]
  *
- * --resweep keeps the models and the reader's-view boxes and asks the side and top views again; --resolve re-renders the
- * views of answers already given and solves them again, with no Jev calls.
+ * --reask keeps the models and asks every view again; --resweep keeps the models and the reader's-view boxes and asks the
+ * side and top views again; --resolve re-renders the views of answers already given and solves them again, with no Jev
+ * calls. Every still sees through the buildings in front of what it looks at (the beam, or the people there).
  *
  * The page is the strand exporter's single-strand output with --vendor; <dir> holds its three.js files. Writes
  * <novel-dir>/stage/thing-boxes.json (read by the exporter) and, under --out, each still Jev saw and a check still per
@@ -109,7 +110,7 @@ async function ask(jev, state, still, name) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, resweep: { type: 'boolean' }, resolve: { type: 'boolean' }, low: { type: 'string', default: '0.5' }, model: { type: 'string', default: 'jev-1.14.0' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, reask: { type: 'boolean' }, resweep: { type: 'boolean' }, resolve: { type: 'boolean' }, low: { type: 'string', default: '0.5' }, model: { type: 'string', default: 'jev-1.14.0' } } });
   const [page, novelDir] = positionals.map(path => resolve(path));
   if (!page || !novelDir || !values.vendor) throw new Error('Usage: node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh]');
   const load = path => import(pathToFileURL(`${repository}/${path}`));
@@ -117,7 +118,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // Box questions need Jev 1.14; the analysis keeps its own pinned model.
   const jev = jevFromEnv({ ...process.env, JEV_MODEL: values.model }), report = `${novelDir}/stage/thing-boxes.json`, out = values.out ? resolve(values.out) : null;
   const previous = values.fresh ? null : JSON.parse(await readFile(report, 'utf8').catch(() => 'null'));
-  const placements = { ...(previous?.placements ?? {}) }, models = { ...(previous?.models ?? {}) }, started = Date.now();
+  const placements = values.reask ? {} : { ...(previous?.placements ?? {}) }, models = { ...(previous?.models ?? {}) }, started = Date.now();
   const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8')), keys = [...Object.keys(library.models), ...SHAPES];
   if (out) await mkdir(out, { recursive: true });
   const { server, url } = await serve(page, resolve(values.vendor)), chrome = await browser();
@@ -153,7 +154,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         `Thing: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}${models[thing.name] ? `, drawn as ${hint(models[thing.name].id)}` : ''}.`,
       ];
       // Call 1: the reader's view.
-      await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: `${key}#1` })})`);
+      await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, mask: true, id: `${key}#1` })})`);
       const first = await chrome.still();
       const one = keep ? earlier.views[0] : await ask(jev, [...about, `Picture "view": the place as the reader sees it at this moment.`].join('\n'), first, thing.name);
       if (!keep) calls++;
@@ -161,7 +162,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       // Call 2: the side view at every turn, in one call; each turn solved with view 1.
       const sides = [];
       for (const turn of TURNS) {
-        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: `${key}#${turn}`, yaw: turn * Math.PI / 180, elevation: 12, aim: view1, beams: [view1] })})`);
+        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, mask: true, id: `${key}#${turn}`, yaw: turn * Math.PI / 180, elevation: 12, aim: view1, beams: [view1] })})`);
         sides.push({ turn, still: await chrome.still() });
       }
       const swept = values.resolve && earlier?.sweep ? earlier.sweep : await askMany(jev, [...about, `Pictures ${TURNS.map(picture).join(', ')}: the same moment seen from the side and from low down, turned by the angle in each name (m: left, p: right, in degrees) from the reader's view. The orange beam is everything a box drawn on the reader's view could mean in 3D; ${thing.name} lies inside the beam.`].join('\n'), sides, thing.name);
@@ -173,7 +174,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       // Call 3, only when still unsure: the view from above, aimed at the beam.
       let top = null;
       if (best.confidence < Number(values.low) || best.uncertain) {
-        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: `${key}#top`, elevation: 84, aim: view1, beams: [view1] })})`);
+        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, mask: true, id: `${key}#top`, elevation: 84, aim: view1, beams: [view1] })})`);
         const above = await chrome.still();
         top = values.resolve && earlier?.top ? earlier.top : await ask(jev, [...about, `Picture "view": the same moment seen from above. The orange beam is everything a box drawn on the reader's view could mean in 3D; ${thing.name} lies inside the beam.`].join('\n'), above, thing.name);
         if (!(values.resolve && earlier?.top)) calls++;
@@ -190,9 +191,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         await writeFile(join(out, `${slug}-1.png`), Buffer.from(first, 'base64'));
         for (const { turn, still } of sides) await writeFile(join(out, `${slug}-side${turn}.png`), Buffer.from(still, 'base64'));
         // Check stills: the reader's view and the kept side view, each with its box (cyan) and the solved 3D box (green).
-        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: 'check-1', boxes: [{ box: one.box, color: '#7ce6ff' }], solved: box })})`);
+        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, mask: true, id: 'check-1', boxes: [{ box: one.box, color: '#7ce6ff' }], solved: box })})`);
         await writeFile(join(out, `${slug}-check-1.png`), Buffer.from(await chrome.still(), 'base64'));
-        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: 'check-2', yaw: best.turn * Math.PI / 180, elevation: 12, aim: view1, beams: [view1], boxes: [{ box: best.box, color: '#7ce6ff' }], solved: box })})`);
+        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, mask: true, id: 'check-2', yaw: best.turn * Math.PI / 180, elevation: 12, aim: view1, beams: [view1], boxes: [{ box: best.box, color: '#7ce6ff' }], solved: box })})`);
         await writeFile(join(out, `${slug}-check-2.png`), Buffer.from(await chrome.still(), 'base64'));
       }
       const size = box ? `${round(box.x[1] - box.x[0])}×${round(box.z[1] - box.z[0])}×${round(box.y[1] - box.y[0])} m at y ${box.y[0]}–${box.y[1]}` : 'no overlap';
