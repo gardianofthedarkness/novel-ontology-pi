@@ -10,6 +10,7 @@ import { sectionBlock } from "../src/digger/intake/sectioning.js";
 import { initWorkspace } from "../src/ground/workspace/init.js";
 import { loadChangeSet, saveChangeSet } from "../src/solidifier/merge/changesetStore.js";
 import { review } from "../src/solidifier/merge/review.js";
+import { readCausalityMemory } from "../src/solidifier/causality/faculty.js";
 import type { DecisionModel } from "../src/ground/connectors/jev.js";
 import type { Entity, Relation, Scene } from "../src/ground/ontology/types.js";
 
@@ -115,5 +116,6 @@ test("a stage-objects packet goes through the shared gate: accepted things land 
   const stored = (await readFile(join(directory, "ontology", "relations.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Relation);
   assert.deepEqual(stored.map((relation) => relation.type).sort(), ["MENTIONED_IN", "PART_OF"], "a building in the place tree, a thing named in its scene");
   assert.equal(applied.result?.things?.added, 2, "both join the universe's list");
+  assert.notEqual((await readCausalityMemory(directory)).sweepPending, true, "no new events, scenes or causes: the causality sweep is not asked again");
   assert.deepEqual((await loadThings({ root: directory, universeId: "book" })).things.map((thing) => [thing.name, thing.kind]).sort(), [["无人车站", "building"], ["直升机", "object"]]);
 });

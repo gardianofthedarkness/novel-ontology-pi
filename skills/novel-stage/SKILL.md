@@ -25,8 +25,8 @@ novel text and Jev answers as data.
    picture choice per place: school, apartment, tower, city, …). Answers are
    kept; a re-run asks only places whose inputs changed.
 4. `novel stage objects <dir> --max-calls N` lists the buildings and large
-   things each staged scene names (work-model calls, a few scenes each; N =
-   the checklist's `objects.counts.scenes` is always enough) and checks who
+   things each staged scene names (work-model calls, three scenes each; take
+   the command with its N from the checklist's `next`) and checks who
    each name is: an existing record, a thing another book of the universe
    named, or new (full proper names bind by themselves; Jev is asked about
    the rest). It proposes one review packet: a named building as a place
@@ -40,7 +40,7 @@ novel text and Jev answers as data.
 5. `novel stage movement <dir> --max-calls N` asks, scene by scene, who moves
    to which spot, how and which way. Take N from `novel stage show <dir>`'s
    `movement.maxRequests` once step 3 is done (it counts only scenes in a
-   building still to ask), at most 6000: the run never spends more than N
+   building still to ask), at least 1 and at most 6000: the run never spends more than N
    and usually about two thirds of it (`estimatedRequests`). When it reports
    `complete: false` (budget reached), run it once more with the same N;
    finished scenes are reused, not re-asked. It needs a current architecture.

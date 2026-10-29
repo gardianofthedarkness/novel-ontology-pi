@@ -16,6 +16,7 @@ import { identityPool, personRef, recommend } from "../src/solidifier/identity/r
 import { resolveNewNames, type NewName } from "../src/solidifier/identity/em.js";
 import { openIdentityPackets, runIdentityAfterApply } from "../src/solidifier/identity/afterApply.js";
 import { reviewAdapter } from "../src/solidifier/merge/reviewAdapters.js";
+import { review as reviewCommand } from "../src/solidifier/merge/review.js";
 import { newChangeSet } from "../src/solidifier/merge/changeset.js";
 
 // Invented names: 林晓月 (full name), 晓月 (her short form), 双辫少女 (a description of her), 陈默 (someone else).
@@ -145,6 +146,8 @@ test("after apply: a less confident match is raised for review; accept merges, r
   assert.equal(summary.merged.length, 0);
   assert.equal(summary.review?.proposals, 1);
   const [packet] = await openIdentityPackets({ root: dir });
+  // A standalone book reviews its identity packets through the shared command, book scope (the checklist's next command).
+  assert.equal(((await reviewCommand("show", { directory: dir, packetId: packet.id, scope: "book" }, {}, {})) as { facts: { field: string }[] }).facts[0].field, "identity-match");
   const adapter = await reviewAdapter({ directory: dir, packetId: packet.id, scope: "book" }, {});
   assert.equal(adapter.facts[0].field, "identity-match");
   assert.ok(adapter.facts[0].evidence.length >= 2, "both sides' own words");

@@ -133,6 +133,11 @@ export async function stageInputs(novelDir: string) {
 
 /** A staged scene as object detection reads it: its place and its events' summaries (without the quoted source). */
 const objectScene = (scene: MovementScene): ObjectScene => ({ id: scene.id, placeLabel: scene.placeLabel, events: scene.events.map((event) => ({ id: event.id, text: event.text.split("（原文：")[0] })) });
+/** The named buildings and things reviewed into the book (stage objects): how many of each, and their names (at most 40). */
+async function objectsInOntology(novelDir: string): Promise<{ buildings: number; things: number; names: string[] }> {
+  const records = fold(await new BundleStore(join(novelDir, "ontology")).loadFile<Entity>("entities.jsonl")).filter((entity) => entity.properties.source === "stage-objects");
+  return { buildings: records.filter((entity) => entity.kind === "Location").length, things: records.filter((entity) => entity.kind === "Item").length, names: records.slice(0, 40).map((entity) => entity.names[0]?.text ?? entity.id) };
+}
 /** A stage-objects packet still awaiting review (one at a time). */
 export const objectsPacketsOpen = async (novelDir: string) => (await listChangeSets(novelDir)).filter((changeset) => changeset.id.startsWith("cs_stage_objects_") && ["pending_review", "held", "revision_requested"].includes(changeset.status));
 
@@ -189,6 +194,9 @@ export async function stageShow(novelDir: string): Promise<Record<string, unknow
   const inputs = await stageInputs(novelDir);
   return {
     architecture: { places: inputs.places.length, picked: Object.keys(inputs.architecture?.places ?? {}).length, current: inputs.architectureCurrent, picks: Object.fromEntries(Object.values(inputs.architecture?.places ?? {}).map((pick) => [pick.label, `${pick.kind} (${pick.by})`])) },
+    // Named buildings and things: detected per staged scene, proposed for review, and those now in the ontology.
+    objects: { scenes: inputs.movementScenes.length, detected: Object.keys(inputs.objects?.scenes ?? {}).length, current: inputs.objectsCurrent, proposed: inputs.objects?.proposed?.length ?? 0, awaitingReview: (await objectsPacketsOpen(novelDir)).map((changeset) => changeset.id),
+      inOntology: await objectsInOntology(novelDir) },
     movement: { scenes: inputs.movementScenes.length, asked: Object.keys(inputs.movement?.scenes ?? {}).length, current: inputs.movementCurrent, estimatedRequests: inputs.estimate, maxRequests: inputs.limit },
     plan: { current: inputs.planCurrent, ...(inputs.plan ? { preparedAt: inputs.plan.preparedAt, ...inputs.plan.counts } : {}) },
   };
