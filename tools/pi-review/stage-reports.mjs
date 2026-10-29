@@ -48,15 +48,19 @@ export async function readSimulation(workspace) {
     // The strand's accepted run (versioned records: index.json lists every run; <strand>.json is the accepted one).
     const run = record.run && typeof record.run.id === 'string' ? { id: record.run.id, engine: record.run.engine ?? null, inputs: record.run.inputs ?? null } : null;
     strands.push({ id, title: record.strand?.title ?? entry.title ?? id, from: record.strand?.from ?? null, to: record.strand?.to ?? null, run, runs: Array.isArray(entry.runs) ? entry.runs.length : 1 });
+    // A world run (record version 2) keeps the world once, its places naming their lots by index into it, in world cells:
+    // its buildings are the Places page's world (the places registry), not per-place grids, so only its line and things
+    // are read here.
+    const worldRun = record.version >= 2 || Object.values(record.buildings).some(place => Array.isArray(place?.lots) && place.lots.some(lot => typeof lot === 'number'));
     for (const [placeId, place] of Object.entries(record.buildings)) {
-      if (places[placeId] || !Array.isArray(place?.lots)) continue;
+      if (worldRun || places[placeId] || !Array.isArray(place?.lots)) continue;
       places[placeId] = { strand: id, label: place.label, kind: place.kind, grid: { nx: place.grid?.NX ?? 32, nz: place.grid?.NZ ?? 24 },
         lots: place.lots.map(lot => ({ name: lot.detected?.name ?? lot.label ?? null, since: lot.detected?.scene ?? null, label: lot.label ?? null, role: lot.role ?? null, model: lot.model, i0: lot.footprint.i0, j0: lot.footprint.j0, nx: lot.footprint.nx, nz: lot.footprint.nz, floors: lot.floors,
           skeleton: typeof lot.skeleton === 'string' && /^[0-9]*$/.test(lot.skeleton) ? lot.skeleton : '', rooms: Array.isArray(lot.rooms) ? lot.rooms.filter(room => Array.isArray(room) && room.length === 5 && room.every(Number.isInteger)) : [] })) };
     }
     for (const thing of record.things ?? []) things.push({ id: `${id}:${thing.id}`, name: thing.name, model: thing.model ?? null, shape: thing.shape ?? null,
       placements: (thing.placements ?? []).map(placement => ({ scene: placement.scene, place: placement.place, x: placement.x, y: placement.y ?? 0, z: placement.z, w: placement.fit?.w ?? 4, h: placement.fit?.h ?? 4, d: placement.fit?.d ?? 4, turn: placement.fit?.turn ?? 0 })) });
-    for (const scene of record.scenes) for (const event of scene.events ?? []) if (event.hit?.sphere) hits.push({ scene: scene.id, place: scene.place, event: event.index, ...event.hit.sphere, strength: event.hit.strength,
+    if (!worldRun) for (const scene of record.scenes) for (const event of scene.events ?? []) if (event.hit?.sphere) hits.push({ scene: scene.id, place: scene.place, event: event.index, ...event.hit.sphere, strength: event.hit.strength,
       lots: (event.hit.parts ?? []).map(part => ({ lot: part.lot, destroyed: cells(part.destroyedCells), fell: cells(part.fellCells), cutOff: cells(part.cutOffCells), cutRooms: cells(part.cutOffRooms), blasted: units(part.blasted), fallen: units(part.fallen) })),
       things: (event.hitThings ?? []).map(entry => `${id}:${entry.id}`) });
     for (const move of record.migrations ?? []) migrations.push({ scene: move.scene, person: move.person, from: move.from, to: move.to });
