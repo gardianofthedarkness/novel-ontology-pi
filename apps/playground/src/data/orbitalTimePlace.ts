@@ -5,6 +5,7 @@ import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.
 import { storyStrands, type StrandCheck, type StrandEdge } from "./storyStrands.js";
 import { dateLine, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
 import { ARCHITECTURE_LABEL, architectureOf, type ArchitectureKind } from "./placeArchitecture.js";
+import { buildingsAt, migrationsAt, simulationAt, type NamedBuilding, type SimulatedPlace } from "./placeBuildings.js";
 
 /**
  * Orbital Story time and Places (time-place phase 1, view only). Each is the
@@ -77,6 +78,10 @@ export interface FloorMark {
   id: string; x: number; z: number; radius: number; active: boolean; depth?: number; region?: boolean; proposed?: boolean;
   /** The building the place's name names (a hologram on its disc), and where its own scenes attach. */
   architecture?: ArchitectureKind; spotX?: number; spotZ?: number;
+  /** Buildings the story names here (placeBuildings.ts): standing by the chosen moment, or later (faint). */
+  named?: { id: string; model: string | null; standing: boolean }[];
+  /** The place as the stage simulation recorded it (lots, things, hits) by the chosen moment: drawn instead of the generic building. */
+  simulation?: SimulatedPlace;
 }
 
 
@@ -466,6 +471,9 @@ export interface AtlasFilter {
   /** Scene spheres, event and dialogue records. With records on, scenes become
    * transparent envelopes around them (or vanish when scenes are off). */
   levels?: AtlasLevels;
+  /** Named buildings as of this period (null: the end of the story); later ones are left out, or drawn faint with `laterBuildings`. */
+  buildingsAt?: string | null;
+  laterBuildings?: boolean;
 }
 export interface AtlasLevels { scene: boolean; event: boolean; dialogue: boolean }
 export const SCENE_LEVEL: AtlasLevels = { scene: true, event: false, dialogue: false };
@@ -532,18 +540,30 @@ export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter,
     const spot = map.get(scene.placeIds[0]);
     if (spot) anchors.set(atlasNodeId(scene.id), [spot.x / 3, (FLOOR_Y + 260) / 3 + rank * step, spot.z / 3]);
   });
-  // Each place's building, worked out once for its floor mark and its pin.
+  // Each place's building, worked out once for its floor mark and its pin; and the buildings the story names there by the chosen moment.
   const buildings = new Map(data.places.map((place) => [place.id, architectureOf(place.label, place.architecture)]));
+  const named = data.buildings?.length ? buildingsAt(data, filter.buildingsAt ?? null) : new Map<string, NamedBuilding[]>();
+  const shownNamed = (placeId: string) => (named.get(placeId) ?? []).filter((building) => building.standing || filter.laterBuildings);
+  // Simulated places (the stage simulation records): what had happened there by the moment (its lots always stand); later things and hits only with laterBuildings.
+  const simulated = new Map([...(data.simulation ? simulationAt(data, filter.buildingsAt ?? null) : new Map<string, SimulatedPlace>())].map(([id, place]) => [id, filter.laterBuildings ? place
+    : { ...place, things: place.things.filter((thing) => thing.standing), hits: place.hits.filter((hit) => hit.standing) }]));
   const floor: FloorMark[] = data.places.flatMap((place): FloorMark[] => {
     const point = layout.get(place.id);
     // In a universe, the reader's book's places stay bright; the others' recede.
     const inBook = !universe || focusBook === null || focusBook === undefined || !!place.books?.includes(focusBook) || data.scenes.some((scene) => scene.book === focusBook && scene.placeIds.some((id) => (placePaths.get(id) ?? [id]).includes(place.id)));
     const architecture = buildings.get(place.id) ?? undefined;
-    return point ? [{ id: place.id, x: (point.x - 300) * SCALE, z: (point.y - 300) * SCALE, radius: Math.max(40, point.r * SCALE), active: shown.has(place.id) && inBook, depth: point.depth, region: point.region, proposed: !!place.parentProposed, architecture, spotX: (point.spotX - 300) * SCALE, spotZ: (point.spotY - 300) * SCALE }] : [];
+    const story = shownNamed(place.id).map(({ id, model, standing }) => ({ id, model, standing })), simulation = simulated.get(place.id);
+    return point ? [{ id: place.id, x: (point.x - 300) * SCALE, z: (point.y - 300) * SCALE, radius: Math.max(40, point.r * SCALE), active: shown.has(place.id) && inBook, depth: point.depth, region: point.region, proposed: !!place.parentProposed, architecture, spotX: (point.spotX - 300) * SCALE, spotZ: (point.spotY - 300) * SCALE, ...(story.length ? { named: story } : {}), ...(simulation ? { simulation } : {}) }] : [];
   }).sort((first, second) => (first.depth ?? 0) - (second.depth ?? 0));
   const pins: OrbitalDraw[] = data.places.flatMap((place): OrbitalDraw[] => {
-    const spot = map.get(place.id), building = buildings.get(place.id);
-    return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: place.proposed ? "proposed" : "canon", parent: null, lane: "canon", chrono: 0, summary: `${building ? `${ARCHITECTURE_LABEL[building]} · ` : ""}${(place.path?.length ?? 1) > 1 ? `${placePathLabel(place, data.names)} · ` : ""}${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it)${(place.totalScenes ?? 0) > place.sceneIds.length ? ` · ${place.totalScenes} inside` : ""}${place.parentProposed ? " · inside-link proposed" : ""} · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
+    const spot = map.get(place.id), building = buildings.get(place.id), here = shownNamed(place.id);
+    const standing = here.filter((entry) => entry.standing), later = here.filter((entry) => !entry.standing);
+    const list = (entries: NamedBuilding[]) => `${entries.slice(0, 10).map((entry) => `${entry.name} (${entry.sinceLabel}${entry.reviewed ? ", reviewed" : ""})`).join("、")}${entries.length > 10 ? ` +${entries.length - 10} more` : ""}`;
+    const sim = simulated.get(place.id), count = (value: number, noun: string) => `${value} ${noun}${value === 1 ? "" : "s"}`;
+    const lost = sim ? sim.lots.reduce((sum, lot) => sum + lot.damage, 0) / Math.max(1, sim.lots.length) : 0;
+    const story = sim ? ` · simulated (${sim.title}): ${count(sim.lots.length, "building")} (${sim.lots.filter((lot) => lot.named).map((lot) => lot.name).join("、") || "none named"}), ${count(sim.things.filter((thing) => thing.standing).length, "thing")}, ${count(sim.hits.filter((hit) => hit.standing).length, "hit")}${filter.buildingsAt ? " by then" : ""}, ${Math.round(lost * 100)}% of the buildings destroyed (stage simulation records, not reviewed)`
+      : here.length ? ` · named in the story${filter.buildingsAt ? " by then" : ""}: ${list(standing) || "none yet"}${later.length ? ` · later: ${list(later)}` : ""} (stage objects${here.every((entry) => entry.reviewed) ? ", reviewed into the ontology" : here.some((entry) => entry.reviewed) ? "; those marked reviewed are in the ontology, the rest are not reviewed" : ", not reviewed"})` : "";
+    return spot ? [{ node: { id: pinNodeId(place.id), label: place.label, viewKind: "Place", kind: "location", state: place.proposed ? "proposed" : "canon", parent: null, lane: "canon", chrono: 0, summary: `${building ? `${ARCHITECTURE_LABEL[building]} · ` : ""}${(place.path?.length ?? 1) > 1 ? `${placePathLabel(place, data.names)} · ` : ""}${place.sceneIds.length} scene${place.sceneIds.length === 1 ? "" : "s"} here (${place.statedScenes} name it)${(place.totalScenes ?? 0) > place.sceneIds.length ? ` · ${place.totalScenes} inside` : ""}${place.parentProposed ? " · inside-link proposed" : ""} · ${place.characterIds.length} character${place.characterIds.length === 1 ? "" : "s"}${story}`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] }, position: [spot.x, FLOOR_Y + 30, spot.z], radius: 30, role: "nebula", prominence: shown.has(place.id) ? 1 : 0.2 }] : [];
   });
   const withRecords = levels.event || levels.dialogue;
   /** Records sit inside their scene, whose sphere (scaled like the main
@@ -609,6 +629,14 @@ export function atlasArrangement(data: TimePlaceProjection, filter: AtlasFilter,
         if (spot) result.push({ id: `drop:${draw.node.id}`, tone: "link", points: [draw.position, [spot.x, FLOOR_Y + 4, spot.z]] });
       }
       if (main.length > 1) result.unshift({ id: "story-order", points: main.map((draw) => draw.position) });
+      // Who moved between places together by the moment (the simulation records' migrations): an arc over the map, faint when it comes later.
+      for (const move of data.simulation ? migrationsAt(data, filter.buildingsAt ?? null) : []) {
+        const from = map.get(move.from), to = map.get(move.to);
+        if (!from || !to || move.from === move.to || (!move.standing && !filter.laterBuildings)) continue;
+        const lift = Math.max(160, 0.3 * Math.hypot(to.x - from.x, to.z - from.z)), top: Position3 = [(from.x + to.x) / 2, FLOOR_Y + lift, (from.z + to.z) / 2];
+        const points = Array.from({ length: 13 }, (_, step): Position3 => { const t = step / 12, u = 1 - t; return [u * u * from.x + 2 * u * t * top[0] + t * t * to.x, u * u * FLOOR_Y + 2 * u * t * top[1] + t * t * FLOOR_Y, u * u * from.z + 2 * u * t * top[2] + t * t * to.z]; });
+        result.push({ id: `migration:${move.scene}:${move.from}:${move.to}`, tone: "thread", points, ...(move.standing ? {} : { dim: true }) });
+      }
       if (selectedId && characters.has(selectedId)) {
         const route = pathOf(selectedId, draws);
         if (route.length > 1) result.push({ id: `route:${selectedId}`, tone: "route", points: route });

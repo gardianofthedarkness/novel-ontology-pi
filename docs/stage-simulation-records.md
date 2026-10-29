@@ -10,15 +10,34 @@ Everything is under `<novel-dir>/stage/`:
 
 | File | What it holds | Made by |
 |---|---|---|
-| `simulation/index.json` | The strands recorded for this book: file, scene range, fork, title, export time, scene/hit/thing counts | the exporter with `--records` |
-| `simulation/<strand>.json` | One strand's full record (below) | the exporter with `--records` |
+| `simulation/index.json` | The strands recorded for this book: file, scene range, fork, title, the accepted run and every run (below) | the exporter with `--records` |
+| `simulation/runs/<strand>/<run>.json` | One run of a strand: its full record (below), never overwritten | the exporter with `--records` |
+| `simulation/<strand>.json` | The strand's accepted run, where readers look | the exporter with `--records` |
 | `objects.json` | Buildings and large visible things detected per scene, matched to a model or shape | `novel stage objects` |
-| `thing-boxes.json` | Jev's model pick per thing, and per placement its spot choice, close-up or sky answers and cast | `playground/two-view-things.mjs` |
-| `impacts.json` | Jev's impact choice per fight: the spot (or no damage), the size, the box asked for comparison | `playground/impact-choices.mjs` |
+| `thing-boxes.json` | Jev's model pick per thing, and per placement its spot choice, close-up or sky answers and cast | `novel sim pick` (or `playground/two-view-things.mjs`) |
+| `impacts.json` | Jev's impact choice per fight: the spot (or no damage), the size, the box asked for comparison | `novel sim pick` (or `playground/impact-choices.mjs`) |
+| `simulation/picks.json` | What the last `novel sim pick` left: the inputs it ended on, its lines, questions left; the checklist reads it | `novel sim pick` |
+| `simulation/live.json` | What the last `novel sim pick` or `run` did, or is doing: its lines, phase, calls spent, the question Jev is on | `novel sim pick`, `novel sim run` |
+| `sim-decisions.json` | The live simulation's decisions per event (`<scene>|<event index>`): where the people go (Jev on a picture of the event as it began, the movement step's answer shape), and the chain of every answer before it, so a changed answer has the events after it asked again | `novel sim pick` |
+| `simulation/live/frames.jsonl`, `live/frames/` | The recording: every question Jev was asked (pictures, what it was about, the questions, the answers, how long), every outcome (a picture of the solved box or the blast) and every event played (its end, each move's path and the path integral's other draws on it), in story order, across commands | `novel sim pick` |
 | `scale.json` | Each place's scale: region, city, district, street, building or room (Jev) | `novel stage scale` |
 | `architecture.json`, `movement.json` | Each place's building kind; Jev's typed movement answers | `novel stage architecture`, `novel stage movement` |
 
 On the stage demo host, the records currently exist for book 2 (`~/claude-stage-demo/state/vol-2/novel/stage/simulation/christmas-eve.json`) and book 3 (`~/claude-stage-demo/state/vol-3/novel/stage/simulation/kuroko.json`).
+
+## Runs
+
+Every export with `--records` keeps the strand's record as a run of its own, never overwritten. A run carries `run: {id, inputs, engine}`:
+- `inputs`: a hash of what it was made from (the book's ontology files and the stage's answers: architecture, objects, movement, Jev's placements and impacts);
+- `engine`: the simulation engine's version (`ENGINE` in the exporter; the walk's seeds come from the scene keys under it).
+
+The same outcome exported again is the same run. Each strand has one **accepted** run: its first, or the one exported with `--accept`. The accepted run is copied to `<strand>.json` and named in `index.json` (`accepted`, beside the list of `runs` with their counts). A newer run stays a candidate until it is accepted, so what other sessions read does not drift with every export. A record from before runs became the strand's first run when the next export ran.
+
+## What is ontology and what is not
+
+What the book **says** about its buildings and large things is ontology, reviewed like any fact: `novel stage objects` proposes a named building as a place inside its scene's place (Location, PART_OF), a large thing as an Item named in its scenes (MENTIONED_IN), after the identity check (universal EM's rules, against this book and the universe's list of things, `<library>/cast/<universe>.things.json`). Pi reviews that packet before the animation prep.
+
+What the simulation **chose** (lots, skeletons, paths, which cells broke, sphere sizes, fitted placements) stays in these runs: permanent and versioned, never canon. Destruction as a fact ("this event destroyed that building") has no relation in the ontology yet; until it does, it lives only in the runs.
 
 ## A strand's record
 
@@ -36,21 +55,52 @@ Positions are in the place's own metres: x and z across its grid (2 m cells), y 
   - `path`: the curve across the place map, as points in map metres;
   - `entry`: the walk into the new place, as its graph's nodes, ending where the scene finds them;
   - `metres` across the map, and the place boundaries `crossed`.
-- **`macro`:** the place map: each place's circle (`x`, `z`, `r`), its grid's centre (`spotX`, `spotZ`), and a region's own disc (`own`). Map metres are the stage's world metres: a place's grid is centred on its spot.
+- **`macro`:** the place map, the canvas of places (engine `strand-demo-3` on): each place's circle (`x`, `z`, `r`), its grid's centre (`spotX`, `spotZ`), a staged open place's grid disc (`own`), its `parent` on the canvas and `depth`. A staged building stands on a lot of the open place holding it; an unnamed temporary area (`temporary`, id `tmp:<place>:<first unit>`) holds what is known only to lie in a city. Map metres are the stage's world metres: a place's grid is centred on its spot.
+- **`landscapes`:** each open place's landscape types and how many buildings fill it. The fill is regenerated from the landscape (stage/landscape.json), never kept.
 - **`scenes`:** per scene: its place, where each person starts, and its events. Each event has:
   - its summary;
-  - its **moves:** person, how (walk, run, fall, jump, teleport, direct), the spot, and the path as points;
+  - its **moves:** person, how (walk, run, fall, jump, teleport, direct), the spot, the path as points, and `with` when the person went along with someone (ending beside them);
   - its **hit**, if any:
     - the impact `sphere` (centre and radius), and the event's `strength`;
     - per building reached: the energy, the units `blasted`, the units `fallen` (each with where it came to rest), and the skeleton cells destroyed, fallen and cut off from the ground.
   - **`hitThings`:** the things the hit broke.
 
+## The world and its damage (engine strand-demo-4, record version 2)
+
+From engine `strand-demo-4`, a run walks one streamed world: the city of the canvas of places and Jev's landscapes, in 32 m chunks. A chunk is laid when people, a target, a thing or a blast first reaches it (apps/playground/src/data/world.ts).
+- **`world` in a record (version 2):** the world's grid (`NX`, `NZ`, `floors`, and `oi`, `oj`, where world cell 0, 0 sits), the chunks reached (`[ci, cj, born]`), and every lot once.
+  - Each lot has its footprint in world cells, its `source`: the building's id in its landscape, `<place>:<n>`, or `anchor:<place>` for a staged building.
+  - Its `manifold`: a fingerprint of that landscape.
+  - The moment it was first reached (`born`: `<scene>|<event>` or `<scene>|start`).
+  - Positions are in world metres. `buildings[place]` gives the place's `anchor` and the indices of the lots within 80 m of it. Scenes carry `index` (story order).
+- **`stage/simulation/world.json`: the world's damage, kept across story lines.**
+  - **What it holds:** every building a line's accepted run broke, as `building` (its `source`), `manifold`, the scene, its story `index`, and what broke: units `blasted` and `fallen` as `[kind, i, j, k]`, and skeleton cells `destroyed` and `fell`.
+  - **How it is kept:** it is rebuilt whenever a run is kept, from each line's accepted run, and the version it replaces goes to `world-history/<version>.json`.
+  - **How a run uses it:** a run of another line applies these in story order the moment the same building stands in its world, and skips it when the landscape's fingerprint has changed. The page draws them as earlier hits, with a notice above the building, and outlines in red the buildings known broken that the run never reached.
+  - Derived from versioned runs, never canon. v1 runs (fixed grids) leave nothing in it.
+- **`runStrand(novelDir, strand, { until: { scene, event } })`:** the line only as far as one event, for a loop that decides events one at a time.
+- **`runStrand(…, { live })` and `stage/simulation/live/world.json`:** while `novel sim pick` or `run` plays, the engine snapshots its world at each moment it plays (at most every 0.3 s, and at the end). Each snapshot holds:
+  - every chunk and lot explored, and what of each lot is broken;
+  - where everyone is, and the moment's moves as points;
+  - where the moment is looked at (`focus`: the middle of its people, as wide as they stand apart — what Jev's picture of it frames).
+
+  The live record keeps the last one. The host's `play/world?volume=N` draws it in 3D round where Jev looks and where the people are, never round the camera: ground and buildings load within 112 m of them and go beyond 160 m, the rest of the city stays faint to 480 m, and the camera follows Jev unless you take it.
+
 ## Making them again
+
+```bash
+novel sim pick <novel-dir> --auto N --max-calls M
+novel sim run <novel-dir> --auto N
+```
+
+- `pick` asks Jev (model picks, placements, impacts) on pictures of each line, drawn by headless Chrome, and keeps the answers, so a re-run only asks what changed or what the budget left.
+- `run` makes and keeps the runs; no model calls.
+- The scripts underneath still run alone, for trying their options:
 
 ```bash
 node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir>
 node playground/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir>
-node playground/export-strand-demo.mjs --set <strands.json> <out.html> --vendor --records
+node playground/export-strand-demo.mjs --set <strands.json> <out.html> --vendor --records [--accept]
 ```
 
 - The first two ask Jev (model picks and placements; impacts) and keep their answers, so a re-run only asks what changed.
@@ -60,6 +110,7 @@ node playground/export-strand-demo.mjs --set <strands.json> <out.html> --vendor 
 
 ## Rules
 
-- **Records are derived view data,** never canon. Nothing reads them back into the ontology, and they never go to review.
-- **They stay with the book:** private, like its text. Public pages get only summaries, names and places, through the exporter's guard against source quotes and private paths.
+- **Records are derived view data,** never canon. Nothing reads them back into the ontology, and they never go to review. The canon side of the same things comes from `novel stage objects` and its reviewed packet.
+- **Runs are kept, not replaced.** Accept a run on purpose (`--accept`); never edit or delete one by hand.
+- **They stay with the book:** private, like its text. Public pages get only summaries, names and places, through the exporter's guard against source quotes and private paths. The live recording is the same: its pictures and questions show the book's people, places and events, so it is served only by the private viewer, never published.
 - **Read them, don't hand-edit them.** To change a record, change its inputs (Jev's answers, the engine) and export again.

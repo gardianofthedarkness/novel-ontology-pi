@@ -72,6 +72,31 @@ export interface TimePlaceProjection {
   continuities?: { id: string; title: string }[];
   /** The universe calendar (one clock): every period on its day; books are marks on it. */
   calendar?: CalendarView | null;
+  /** The buildings the story names at its places (novel stage objects): one entry per name at a place, with the scenes that name it in reading order. Not canon. */
+  buildings?: PlaceBuilding[];
+  /** The stage simulation records (docs/stage-simulation-records.md), trimmed: each simulated place's lots, the things placed, the hits and who moved. Not canon. */
+  simulation?: PlaceSimulation;
+}
+/** A named building at a place: from the stage objects report (a model's reading, not reviewed) or, once reviewed, the ontology record it is (`entityId`). */
+export interface PlaceBuilding { id: string; name: string; placeId: string; model: string | null; size: number | null; sceneIds: string[]; entityId?: string; reviewed?: boolean }
+/**
+ * A lot of a simulated place, on its grid of 2 m cells: named when the story names it (from `since`, a scene id; null: from the
+ * start). Its skeleton has one digit per cell, floor by floor (0 mass, 1 corridor, 2 stair); a room is [floor, i0, j0, i1, j1].
+ */
+export interface SimulationLot { name: string | null; since: string | null; label: string | null; role: string | null; model: string; i0: number; j0: number; nx: number; nz: number; floors: number; skeleton: string; rooms: number[][] }
+/** What one hit took from a lot: skeleton cells destroyed, fallen, and cut off from the ground (with its rooms), and the structural units [kind, i, j, k] blasted or fallen (a fallen one also has where it came to rest). */
+export interface SimulationHitPart { lot: number; destroyed: number[]; fell: number[]; cutOff: number[]; cutRooms: number[]; blasted: number[][]; fallen: number[][] }
+export interface PlaceSimulation {
+  /** Each strand's accepted run (its id, engine and inputs' hash; null for a record from before runs) and how many runs it has. */
+  strands: { id: string; title: string; from: string | null; to: string | null; run?: { id: string; engine: string | null; inputs: string | null } | null; runs?: number }[];
+  /** The last simulation command on the book (novel sim pick|run) and whether it is still running; the host's play/live page shows it. */
+  live?: { status: "running" | "done" | "failed" | "stopped"; command: string | null } | null;
+  places: Record<string, { strand: string; label: string; kind: string; grid: { nx: number; nz: number }; lots: SimulationLot[] }>;
+  /** Placements in the place's metres (x, z across its grid, y up), with the fitted extent. */
+  things: { id: string; name: string; model: string | null; shape: string | null; placements: { scene: string; place: string; x: number; y: number; z: number; w: number; h: number; d: number; turn: number }[] }[];
+  /** An impact: its sphere (metres), strength, what each lot it reached lost, and the things it broke. */
+  hits: { scene: string; place: string; event: number; x: number; y: number; z: number; r: number; strength: number; lots: SimulationHitPart[]; things: string[] }[];
+  migrations: { scene: string; person: string; from: string; to: string }[];
 }
 
 /** Calendar minutes: ordering keys from the backend (`novel calendar`), not real date arithmetic. */

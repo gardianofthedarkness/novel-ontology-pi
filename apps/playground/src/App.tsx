@@ -136,6 +136,9 @@ export default function App() {
   /** Orbital Places: only the scenes that were at the centre of the Story time spiral (null: no limit). */
   const [atlasFocus, setAtlasFocus] = useState<Set<string> | null>(null);
   const [atlasLevels, setAtlasLevels] = useState<AtlasLevels>(SCENE_LEVEL);
+  /** Orbital Places: the story moment the named buildings are shown at (a period id; null: the end of the story), and whether later ones show faintly. */
+  const [atlasBuildingsAt, setAtlasBuildingsAt] = useState<string | null>(null);
+  const [atlasLaterBuildings, setAtlasLaterBuildings] = useState(false);
   /** Orbital Story time: one spiral line, or strands on a ribbon (remembered per browser). */
   const [storyShape, setStoryShape] = useState<StoryShape>(() => { try { return localStorage.getItem("story-shape") === "strands" ? "strands" : "line"; } catch { return "line"; } });
   const chooseStoryShape = (shape: StoryShape) => { setStoryShape(shape); try { localStorage.setItem("story-shape", shape); } catch { /* per-browser convenience only */ } };
@@ -837,10 +840,10 @@ export default function App() {
       return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook, storyShape) };
     }
     if (!viewTimePlace?.places.length) return null;
-    const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels };
+    const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels, buildingsAt: atlasBuildingsAt, laterBuildings: atlasLaterBuildings };
     const regrouped = atlasWorld(displayWorld, viewTimePlace, filter, loadedBook);
     return { world: regrouped, arrangement: atlasArrangement(viewTimePlace, filter, regrouped, focusBook) };
-  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, loadedBook, focusBook, storyShape]);
+  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, atlasBuildingsAt, atlasLaterBuildings, loadedBook, focusBook, storyShape]);
   /** Live highlights and Pi's touches, in the ids the shown projection uses. */
   const shownEmerging = useMemo(() => emerging ? { times: new Set([...emerging.times].map(universeId.time)), places: new Set([...emerging.places].map(universeId.place)) } : null, [emerging, universeId]);
   const shownTouched = useMemo(() => new Set([...touchedScenes].map(universeId.scene)), [touchedScenes, universeId]);
@@ -892,6 +895,10 @@ export default function App() {
   const libraryCaption = shownWorld?.library?.events.at(-1)?.type.replaceAll(".", " / ") ?? "Waiting for organization";
 
   // The same page with ?read toggled (other parameters and the fragment kept), so read mode opens as its own link.
+  /** The book's simulation player (novel sim run), served beside the app by the host; only once the book has runs. While Jev is picking (novel sim pick), its live page. */
+  const simulationLive = timePlace?.simulation?.live?.status === "running";
+  const simulationHref = phoneLive && timePlace?.simulation?.strands.length ? `${location.pathname.replace(/[^/]*$/, "")}play/${simulationLive ? "live" : ""}?volume=${loadedBook ?? "active"}` : null;
+  const simulationLabel = simulationLive ? "● Simulation live" : "Simulation";
   const withRead = (on: boolean) => { const params = new URLSearchParams(location.search); if (on) params.set("read", "1"); else params.delete("read"); return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
   const withClips = (book: number | null) => { const params = new URLSearchParams(location.search); params.delete("read"); if (book === null) params.delete("clips"); else { params.set("clips", "1"); params.set("book", String(book)); } return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
   if (!world) {
@@ -901,8 +908,8 @@ export default function App() {
   }
 
   if (clipsMode) return <StageClips timePlace={timePlace} world={shownWorld} volume={loadedBook} requested={requestedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion}
-    books={books.length ? books.map((book) => ({ id: book.id, label: bookName(book) })) : loadedBook !== null ? [{ id: loadedBook, label: liveCollection }] : []} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withClips(null)} clipsHref={withClips} />;
-  if (readMode) return <ReadMode timePlace={timePlace} world={shownWorld} volume={loadedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withRead(false)} />;
+    books={books.length ? books.map((book) => ({ id: book.id, label: bookName(book) })) : loadedBook !== null ? [{ id: loadedBook, label: liveCollection }] : []} bookQuery={bookQuery(phoneLive ? loadedBook : null)} simulationHref={simulationHref} simulationLabel={simulationLabel} exitHref={withClips(null)} clipsHref={withClips} />;
+  if (readMode) return <ReadMode simulationHref={simulationHref} simulationLabel={simulationLabel} timePlace={timePlace} world={shownWorld} volume={loadedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withRead(false)} />;
 
   return (
     <div className={`app orbital-active ${orbitalMode ? "mode-orbital" : "mode-traditional"}${stageView !== "narrative" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}${dockOpen ? " dock-open" : " dock-closed"}`}>
@@ -923,7 +930,7 @@ export default function App() {
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
             {orbitalMode && stageView === "story" && viewTimePlace?.available && <div className="stage-group" role="group" aria-label="Story shape">{([["line", "Line"], ["strands", "Strands"]] as const).map(([value, label]) => <button key={value} aria-pressed={storyShape === value} title={value === "strands" ? "Scenes that run in parallel side by side (estimated from who is in each scene)" : "Every scene on one line in story order"} onClick={() => chooseStoryShape(value)}>{label}</button>)}</div>}
           </div>
-          {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
+          {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} buildingsAt={atlasBuildingsAt} onBuildingsAt={setAtlasBuildingsAt} laterBuildings={atlasLaterBuildings} onLaterBuildings={setAtlasLaterBuildings} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
           {regroupedOrbit && stageView === "places" && viewTimePlace && <div className="holo-entry" role="toolbar" aria-label="Holo stage">
             {selectedPlace && <button className="is-primary" onClick={() => setHolo({ target: selectedPlace.id, mode: "diorama", beat: 0 })}>▶ Enter {selectedPlace.label}</button>}
             <button onClick={() => setHolo({ target: "journey", mode: "journey", beat: 0 })}>➝ Journey</button>

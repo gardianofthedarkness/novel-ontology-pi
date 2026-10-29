@@ -13,7 +13,8 @@ import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/a
 import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
 import { loadWorkspaceSentences, placeScales, strandInputs } from "./timeplaceCommands.js";
 import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
-import { stageInputs } from "./stageCommands.js";
+import { landscapePacketsOpen, objectsPacketsOpen, stageInputs } from "./stageCommands.js";
+import { simCurrent, simPicksDone } from "./simCommands.js";
 import { castScope, loadCast } from "../../../solidifier/identity/cast.js";
 import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js";
 import { calendarStale, loadCalendar } from "../../../solidifier/calendar/calendar.js";
@@ -188,7 +189,7 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
     status: causalReview.length ? "review" : sweepPending ? "todo" : "done",
     counts: { causalLinks: relations.filter((relation) => relation.type === "CAUSES" || relation.type === "CAUSED_BY").length, awaitingReview: causalReview.length, sweepPending },
     next: causalReview.length ? causalReview.map((changeset) => reviewCommand(changeset.id)) : sweepPending ? [`novel causality sweep ${dir}`] : [],
-    note: "Read references/causality.md before reviewing causal packets." });
+    note: `${sweepPending && !causalReview.length ? "Run the sweep again until it reports complete: it settles once enough top-ranked pairs in a row hold no link (its missesToSettle), not after every pair is asked. " : ""}Read references/causality.md before reviewing causal packets.` });
 
   // Graph: the queryable graph rebuilt after canon changed.
   const graph = await stat(join(novelDir, "ontology", "graph.lbug")).catch(() => null);
@@ -206,17 +207,38 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   stageItems.push({ id: "scale", title: "Scale of places (region to room, for read mode)", dependsOn: ["time-place", "place-tree"],
     status: stage.scaleCurrent ? "done" : "todo", counts: { places: stage.scalePlaces.length, picked: Object.keys(stage.scale?.places ?? {}).length, current: stage.scaleCurrent },
     next: stage.scaleCurrent ? [] : [`novel stage scale ${dir}`], note: stage.scaleCurrent ? undefined : `About ${stage.scalePlaces.length} Jev choice(s), one per place; a view input, no review.` });
+  // What each city, district and street looks like from above: into the ontology through review (the place's landscape property).
+  const landscapeOpen = await landscapePacketsOpen(novelDir);
+  stageItems.push({ id: "landscape", title: "Landscape of open places (what cities, districts and streets look like from above; into the ontology, reviewed)", dependsOn: ["scale"],
+    status: landscapeOpen.length ? "review" : stage.landscapeCurrent ? "done" : "todo", counts: { places: stage.landscapePlaces.length, picked: Object.keys(stage.landscape?.places ?? {}).length, proposed: stage.landscape?.proposed?.length ?? 0, awaitingReview: landscapeOpen.length, current: stage.landscapeCurrent },
+    next: landscapeOpen.length ? landscapeOpen.map((changeset) => reviewCommand(changeset.id)) : stage.landscapeCurrent ? [] : [`novel stage landscape ${dir}`],
+    note: landscapeOpen.length ? "Review it like any packet: accept a place's landscape only if its sentences show that kind of place." : stage.landscapeCurrent ? undefined : `About ${stage.landscapePlaces.length} Jev choice(s), one per city, district or street; it proposes a review packet.` });
   stageItems.push({ id: "architecture", title: "Buildings of places (a sub-kind of place, for read mode)", dependsOn: ["time-place", "place-tree"],
     status: stage.architectureCurrent ? "done" : "todo", counts: { places: stage.places.length, picked: Object.keys(stage.architecture?.places ?? {}).length, current: stage.architectureCurrent },
     next: stage.architectureCurrent ? [] : [`novel stage architecture ${dir}`], note: stage.architectureCurrent ? undefined : `About ${stage.places.length} Jev picture choice(s), one per place; a view input, no review.` });
+  // Named buildings and large things: into the ontology through review (a building is a place of the tree, a thing an Item), after the identity check.
+  const objectsOpen = await objectsPacketsOpen(novelDir);
+  stageItems.push({ id: "objects", title: "Named buildings and large things (into the ontology, reviewed)", dependsOn: ["architecture"],
+    status: objectsOpen.length ? "review" : stage.objectsCurrent ? "done" : "todo", counts: { scenes: stage.movementScenes.length, detected: Object.keys(stage.objects?.scenes ?? {}).length, proposed: stage.objects?.proposed?.length ?? 0, awaitingReview: objectsOpen.length, current: stage.objectsCurrent },
+    next: objectsOpen.length ? objectsOpen.map((changeset) => reviewCommand(changeset.id)) : stage.objectsCurrent ? [] : [`novel stage objects ${dir} --max-calls ${Math.max(1, Math.ceil(stage.movementScenes.length / 3))}`],
+    note: objectsOpen.length ? "Review it like any packet: accept a building or thing only if its sentences show it, where it is and that it is the one named." : stage.objectsCurrent ? undefined : "Work-model calls (a few scenes each) and Jev for names that are not full proper names; it proposes a review packet." });
   stageItems.push({ id: "movement", title: "Movement in scenes (who goes where, how, for read mode)", dependsOn: ["blocks", "strands", "architecture"],
     status: stage.movementCurrent ? "done" : "todo", counts: { scenes: stage.movementScenes.length, asked: Object.keys(stage.movement?.scenes ?? {}).length, estimatedRequests: stage.estimate, maxRequests: stage.limit, current: stage.movementCurrent },
-    next: stage.movementCurrent ? [] : [`novel stage movement ${dir} --max-calls ${stage.limit}`], note: stage.movementCurrent ? undefined : `About ${stage.estimate} Jev request(s), at most ${stage.limit}; answers are kept and reused, so a stopped run continues. A view input, no review.` });
-  stageItems.push({ id: "stage", title: "Animation prep (read mode)", dependsOn: [...items.map((item) => item.id), "scale", "architecture", "movement"],
+    next: stage.movementCurrent ? [] : [`novel stage movement ${dir} --max-calls ${Math.max(1, stage.limit)}`], note: stage.movementCurrent ? undefined : `About ${stage.estimate} Jev request(s), at most ${stage.limit}; answers are kept and reused, so a stopped run continues. A view input, no review.` });
+  stageItems.push({ id: "stage", title: "Animation prep (read mode)", dependsOn: [...items.map((item) => item.id), "scale", "architecture", "objects", "movement"],
     status: stage.planCurrent ? "done" : "todo", counts: { prepared: !!stage.plan, current: stage.planCurrent, moves: stage.plan?.counts.moves ?? 0 },
-    next: stage.planCurrent ? [] : [`novel stage prep ${dir}`], note: "Last of all: waits for every analysis step and review. No model calls." });
+    next: stage.planCurrent ? [] : [`novel stage prep ${dir}`], note: "Last of all: waits for every analysis step and review, the stage objects packet included. No model calls." });
+  // The simulation (the engine: skeleton buildings, the path-integral walk, placed things, damage) on the book's story lines:
+  // Jev's answers on pictures of them first (things, placements, fights), then the runs, each kept.
+  const [sim, picks] = await Promise.all([simCurrent(novelDir), simPicksDone(novelDir)]);
+  const simDone = picks.done && sim.current;
+  stageItems.push({ id: "simulation", title: "Simulation of the story lines (Jev's placements and hits, then the engine, each run kept; view data)", dependsOn: [...items.map((item) => item.id), "scale", "architecture", "objects", "movement"],
+    status: simDone ? "done" : "todo", counts: { lines: sim.lines, picked: picks.done, ...(picks.left === null ? {} : { questionsLeft: picks.left }), current: sim.current },
+    next: simDone ? [] : picks.done ? [`novel sim run ${dir} --auto 3`] : [`novel sim pick ${dir} --auto 3 --max-calls 60`],
+    note: simDone ? undefined : picks.done ? "No model calls: the engine reads the stage reports, Jev's answers included. Each run is kept; a line's first run is its accepted one, and only the user accepts a later one."
+      : `The story lines simulated live, event by event: on a picture of each event as it begins, Jev decides where the people go, where the things it mentions stand and where its fight hits and how big. At most --max-calls calls a run (a line takes about one call per event, plus its things and fights); decisions are kept, so run it again until nothing is left${picks.left ? ` (about ${picks.left} left)` : ""}. Then novel sim run.` });
   settle(stageItems, items);
-  return { ...result, stage: { items: stageItems, next: stageItems.filter((item) => item.status === "todo").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) } };
+  return { ...result, stage: { items: stageItems, next: stageItems.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) } };
 }
 
 export interface UniverseChecklist { library: string; universeId: string; title: string; complete: boolean; books: { sourceId: string; title: string; continuityId: string | null; readingOrder: number | null; workspace: string | null; extracted: boolean; complete: boolean; firstGap: string | null }[]; items: ChecklistItem[]; next: string[] }

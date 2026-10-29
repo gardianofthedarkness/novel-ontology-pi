@@ -79,7 +79,7 @@ const strings = (value: unknown): value is string[] => Array.isArray(value) && v
 const kinds = new Set(["Character", "Location", "Organization", "Item", "Concept", "TimePoint"]);
 const relationKinds: Record<string, [string[], string[]]> = {
   CAUSES: [["Event", "DialogueCard"], ["Event", "DialogueCard"]], CAUSED_BY: [["Event", "DialogueCard"], ["Event", "DialogueCard"]], PRECEDES: [["Event"], ["Event"]],
-  PARTICIPATES_IN: [["Character"], ["Event"]], PRESENT_IN: [["Character"], ["Scene"]], MENTIONED_IN: [["Character"], ["Scene"]], LOCATED_AT: [["Scene"], ["Location"]],
+  PARTICIPATES_IN: [["Character"], ["Event"]], PRESENT_IN: [["Character"], ["Scene"]], MENTIONED_IN: [["Character", "Item"], ["Scene"]], LOCATED_AT: [["Scene"], ["Location"]],
   KNOWS: [["Character"], ["Character"]], SPEAKS_TO: [["Character"], ["Character"]], ADDRESSES: [["Character"], ["Character"]], OWNS: [["Character"], ["Item"]], MEMBER_OF: [["Character"], ["Organization"]],
   STATE_BEFORE: [["Character"], ["Event"]], STATE_AFTER: [["Character"], ["Event"]], FORKS_FROM: [["Branch"], ["Event"]],
   OCCURS_DURING: [["Scene"], ["TimePoint"]], PART_OF: [["Location"], ["Location"]],

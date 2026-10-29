@@ -51,12 +51,21 @@ const NEW_PERSON = "NEW_PERSON";
 const confidenceOf = (answer: DecisionAnswer | undefined) => answer?.confidence ?? (typeof answer?.value === "string" ? answer.distribution?.[answer.value] : undefined) ?? 0;
 const nameForms = (name: NewName): CastForm[] => [{ text: name.name, kind: name.descriptive || isDescription(name.name) ? "description" : "canonical" }, ...name.aliases.map((text): CastForm => ({ text, kind: isDescription(text) ? "description" : "alias" }))];
 
+/** What the names are of: people (extraction) or the buildings and large things the stage objects faculty finds. */
+export type IdentitySubject = "person" | "thing";
+const SUBJECT = {
+  person: { called: "someone is called", fresh: NEW_PERSON, kind: "person", apart: "Appearing in the same scene as someone, or talking to them, does not make two people the same." },
+  thing: { called: "a building or large thing is called", fresh: "NEW_THING", kind: "thing", apart: "Being at the same place or in the same scene does not make two things the same; only the text naming one thing two ways does." },
+} as const;
+
 export async function resolveNewNames(input: {
   names: NewName[];
   pool: PoolEntry[];
   candidates: (name: NewName) => Recommendation[];
   decisions?: DecisionModel | null;
+  subject?: IdentitySubject;
 }): Promise<Resolution[]> {
+  const subject = SUBJECT[input.subject ?? "person"], fresh = subject.fresh;
   const resolutions = new Map<string, Resolution>();
   // 1. Full proper names, unique in the pool (this book and the universe).
   const owners = new Map<string, Set<PoolEntry>>();
@@ -79,20 +88,20 @@ export async function resolveNewNames(input: {
     const state = `PASSAGE:\n${group[0].name.passage}\n\nCANDIDATES (who these names could be):\n${listed.map((entry) => `- ${entry.label} — names: ${entry.forms.slice(0, 6).join(" / ")} — ${entry.where}`).join("\n")}`;
     const questions: DecisionQuestion[] = group.map(({ name, options }) => ({
       key: `who:${name.key}`, primitive: "choice",
-      instructions: `In the passage, someone is called "${name.name}"${name.aliases.length ? ` (also: ${name.aliases.join(", ")})` : ""}. Is this one of the listed candidates under another name, a short form or a description? Choose that candidate's exact label. Choose ${NEW_PERSON} if it is a different or newly introduced person, or if the passage does not establish who it is. Appearing in the same scene as someone, or talking to them, does not make two people the same.`,
-      options: [...new Set([...options.map((option) => option.entry.label), NEW_PERSON])],
+      instructions: `In the passage, ${subject.called} "${name.name}"${name.aliases.length ? ` (also: ${name.aliases.join(", ")})` : ""}. Is this one of the listed candidates under another name, a short form or a description? Choose that candidate's exact label. Choose ${fresh} if it is a different or newly introduced ${subject.kind}, or if the passage does not establish which it is. ${subject.apart}`,
+      options: [...new Set([...options.map((option) => option.entry.label), fresh])],
     }));
     let answers: DecisionAnswer[] = [];
     try { answers = input.decisions ? await input.decisions.decide(state, questions) : []; } catch { answers = []; }
     for (const { name, options } of group) {
       const answer = answers.find((entry) => entry.key === `who:${name.key}`);
-      const value = typeof answer?.value === "string" ? answer.value : NEW_PERSON;
+      const value = typeof answer?.value === "string" ? answer.value : fresh;
       const entry = options.find((option) => option.entry.label === value)?.entry;
       const confidence = confidenceOf(answer);
       if (!input.decisions || !answer) resolutions.set(name.key, { key: name.key, name: name.name, to: null, method: "new", confidence: 0, note: `"${name.name}": identity check unavailable; kept new for review`, ...(options[0] ? { possible: { entry: options[0].entry, confidence: 0 } } : {}) });
       else if (entry && confidence >= EM_AUTO) resolutions.set(name.key, { key: name.key, name: name.name, to: entry, method: "jev", confidence, note: `"${name.name}" is ${entry.label} (Jev ${confidence.toFixed(2)})` });
       else if (entry && confidence >= EM_REVIEW) resolutions.set(name.key, { key: name.key, name: name.name, to: null, method: "new", confidence, possible: { entry, confidence }, note: `"${name.name}" may be ${entry.label} (Jev ${confidence.toFixed(2)}); kept new and raised for review` });
-      else resolutions.set(name.key, { key: name.key, name: name.name, to: null, method: "new", confidence, note: `"${name.name}": new person (Jev ${value === NEW_PERSON ? "NEW_PERSON" : value} ${confidence.toFixed(2)})` });
+      else resolutions.set(name.key, { key: name.key, name: name.name, to: null, method: "new", confidence, note: `"${name.name}": new ${subject.kind} (Jev ${value} ${confidence.toFixed(2)})` });
     }
   }
   // 3. Names bound to another new name follow it (cycles stop at the first name seen).

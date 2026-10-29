@@ -27,8 +27,8 @@ export const SCALE_HINTS: Record<PlaceScale, string> = {
   district: "district: a part of a city: a ward, school district, downtown, neighbourhood, or a side of one",
   street: "street: a street, road, alley, tunnel, square, or the open space in front of something",
   building: "building: one building or site: a shop, station, school, hospital, airport, port, office tower, house, ship",
-  room: "room: a room or a spot inside a building: an office, a ward, backstage, a table",
-  none: "none: not a place, or none of these",
+  room: "room: a room or space inside a building: an office, a ward, a lab, a cell, backstage",
+  none: "none: not a place (furniture, a thing, an event), or none of these",
 };
 
 /** A place as the faculty reads it: its name, other names, its path in the place tree (ids, root first) and the places inside it (ids). */

@@ -1,4 +1,4 @@
-import { timePlaceChangesetIds } from './timeplace-access.mjs';
+import { stageLandscapeChangesetIds, stageObjectsChangesetIds, timePlaceChangesetIds } from './timeplace-access.mjs';
 import { progressLine } from './run-outcome.mjs';
 import { cliFailure } from './cli-failure.mjs';
 import { spawn } from 'node:child_process';
@@ -23,7 +23,7 @@ import { createLibraryAccess } from './library-access.mjs';
 import { createCausalityAccess } from './causality-access.mjs';
 import { embeddingEnvironment } from './embedding-env.mjs';
 import { createUniverseCausalityAccess } from './universe-causality-access.mjs';
-import { requireSharedReviewSkills, sharedReviewReceipt } from './shared-review.mjs';
+import { bookPacketFile, requireSharedReviewSkills, sharedReviewReceipt } from './shared-review.mjs';
 
 const job = await loadJob(process.argv[2]);
 const interactive = process.argv[3] === '--interactive';
@@ -131,7 +131,7 @@ try {
   }
   const manifest = { version: 1, purpose: interactive ? 'Wait for user messages. Process only assigned unapplied blocks using the installed skill; applied prefix remains immutable. Held semantic facts are not verified canon.' : 'Process assigned unapplied source blocks; validate this attempt independently of the already-applied prefix. Processing completion is distinct from held semantic facts.', startedAt: startedAt.toISOString(), deadline: new Date(deadline).toISOString(), limits: job.limits, volumes };
   manifest.portraits = { skill: portraitSkill, command: 'novel album assign <workspace>', check: 'novel album assign <workspace> --check', stage: 'after full-volume extraction and application', visualInput: false };
-  manifest.animation = { skill: stageSkill, commands: ['novel stage scale <workspace>', 'novel stage architecture <workspace>', 'novel stage movement <workspace> --max-calls N', 'novel stage prep <workspace>', 'novel stage show <workspace>'], stage: 'last: prep runs once every other checklist step is done', canon: false };
+  manifest.animation = { skill: stageSkill, commands: ['novel stage scale <workspace>', 'novel stage architecture <workspace>', 'novel stage objects <workspace> --max-calls N', 'novel stage movement <workspace> --max-calls N', 'novel stage prep <workspace>', 'novel sim pick <workspace> --auto N --max-calls N', 'novel sim run <workspace> --auto N', 'novel stage show <workspace>', 'novel sim show <workspace>'], stage: 'last: prep runs once every other checklist step is done', canon: 'only the objects packet, through review' };
   if (job.library) {
     const libraryLockPath = `${job.library.directory}.pi-review.lock`;
     const libraryLock = await open(libraryLockPath, 'wx', 0o600);
@@ -186,7 +186,7 @@ try {
     const unquote = (token) => token.replace(/^['"]|['"]$/g, '');
     const named = (scope) => command.split(/\s+/).map(unquote).some((token) => token === scope.novel || token === scope.library?.directory || token.startsWith(`${scope.novel}/`));
     const refusals = [];
-    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); scope.timePlaceChangesetIds = await timePlaceChangesetIds(scope.novel); permitted = authorize(command, scope); break; } catch (error) { refusals.push({ scope, message: error.message }); } }
+    for (const scope of scopes) { try { scope.causalityChangesetIds = await causalityAccess.changesetIds(scope.novel); scope.timePlaceChangesetIds = await timePlaceChangesetIds(scope.novel); scope.stageObjectsChangesetIds = await stageObjectsChangesetIds(scope.novel); scope.stageLandscapeChangesetIds = await stageLandscapeChangesetIds(scope.novel); permitted = authorize(command, scope); break; } catch (error) { refusals.push({ scope, message: error.message }); } }
     if (!permitted) {
       const strays = command.split(/\s+/).map(unquote).filter((token) => /^\/(Users|private|tmp|var|home)\//.test(token) && !scopes.some((scope) => token === scope.novel || token === scope.input || token === scope.library?.directory || token.startsWith(`${scope.novel}/`) || scope.sourcePaths.includes(token)));
       refusal = refusals.find((entry) => named(entry.scope))?.message
@@ -218,7 +218,7 @@ try {
     }
     const args = permitted.args;
     if (args[0] === 'album' && args[1] === 'assign' && !args.includes('--check') && !portraitSkillRead) throw new Error('Read the novel-portraits skill before post-extraction assignment');
-    if (args[0] === 'stage' && ['scale', 'architecture', 'movement'].includes(args[1]) && !args.includes('--no-jev') && !stageSkillRead) throw new Error('Read the novel-stage skill before asking Jev for scale, buildings or movement');
+    if (args[0] === 'stage' && ['scale', 'architecture', 'objects', 'movement'].includes(args[1]) && !args.includes('--no-jev') && !stageSkillRead) throw new Error('Read the novel-stage skill before asking Jev for scale, buildings, objects or movement');
     if (args[0] === 'review') {
       const book = !args.includes('--scope') || args[args.indexOf('--scope') + 1] === 'book';
       const packet = book ? await json(`${args[2]}/changesets/${args[3]}.json`) : null;
@@ -228,7 +228,9 @@ try {
         const checkpoint = `${jobRoot}/checkpoints/review-${Date.now()}-${calls}`;
         await mkdir(checkpoint, { recursive: true, mode: 0o700 });
         if (scope === 'book') {
-          await cp(`${args[2]}/changesets/${args[3]}.json`, `${checkpoint}/packet.json`);
+          // A book's packet, or a standalone book's identity packet (universal EM: its own shared list under cast/, which an accepted match changes).
+          await cp(bookPacketFile(args[2], args[3]), `${checkpoint}/packet.json`);
+          if (/^um_/.test(args[3])) await cp(`${args[2]}/cast`, `${checkpoint}/cast`, { recursive: true });
           await cp(`${args[2]}/ontology`, `${checkpoint}/ontology`, { recursive: true, filter: path => !path.split('/').at(-1).startsWith('graph.lbug') });
         } else {
           await cp(`${args[2]}/catalog.json`, `${checkpoint}/catalog.json`);
@@ -255,7 +257,7 @@ try {
     const volume = volumes.find((volume) => args.includes(volume.workspace) || args.includes(`${volume.workspace}/ontology`));
     if (volume) { volumeId = volume.id; await writeFile(`${cwd}/active-volume.json`, JSON.stringify({ volume: volumeId }), { mode: 0o600 }); }
     if (args[0] === 'album' && args[1] === 'import') await verifyAlbumAccess(volume.album, volume.input);
-    const mutations = args[0] === 'review' && ['decide', 'apply'].includes(args[1]) || args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'causality' && ['propose', 'sweep'].includes(args[1]) || args[0] === 'timeplace' && ['run', 'tree'].includes(args[1]) || args[0] === 'atlas' && args[1] === 'sweep' || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise', 'decide'].includes(args[1]);
+    const mutations = args[0] === 'review' && ['decide', 'apply'].includes(args[1]) || args[0] === 'init' || args[0] === 'ingest' || args[0] === 'recall' || args[0] === 'causality' && ['propose', 'sweep'].includes(args[1]) || args[0] === 'timeplace' && ['run', 'tree'].includes(args[1]) || args[0] === 'stage' && args[1] === 'objects' || args[0] === 'sim' && ['pick', 'run'].includes(args[1]) || args[0] === 'atlas' && args[1] === 'sweep' || args[0] === 'fix' && args[1] !== 'corrections' || args[0] === 'changeset' && ['approve', 'revise', 'decide'].includes(args[1]);
     if (volume && mutations && volume.id > 1 && (await jobState()).some((state) => state.volume < volume.id && !state.applied)) throw new Error('Earlier volumes must pass their merge gates before later-volume mutations');
     if (args[0] === 'ingest') {
       const states = (await jobState()).filter((state) => state.volume === volume.id);

@@ -148,6 +148,33 @@ test("the stage reads reviewed canon only: present people and recorded participa
   assert.deepEqual([inputs.estimate, inputs.limit], [3, 3]);
 });
 
+test("movement asks who goes together: at the opening for each pair of the cast, per event for each mover and anyone else present; older answers keep theirs and only get the pairs", async () => {
+  const pair: MovementScene = { ...scene, events: [{ id: "e1", text: "白井拉着大叔跑上三楼。", actors: ["a", "b"] }] };
+  const { model, asked } = recording((state, question) => {
+    if (question.key.startsWith("stated_")) return 0.9;
+    if (question.key.startsWith("start_")) return "floor-1";
+    if (question.key.startsWith("together_")) return 0.8;
+    if (question.key === "moves_0") return 0.9;
+    if (question.key === "moves_1") return 0.2;
+    if (question.key.startsWith("with_")) return 0.9;
+    if (question.key.startsWith("to_")) return "floor-3";
+    if (question.key.startsWith("how_")) return "run";
+    return "up";
+  });
+  const report = await askMovement([pair], { decisions: model, names: { a: "白井", b: "大叔" } });
+  assert.deepEqual(report.scenes.s1.startPairs, [["a", "b", 0.8]]);
+  assert.deepEqual(report.scenes.s1.pairs, { e1: [["a", "b", 0.9]] }, "the mover and the one dragged along, though Jev did not say 大叔 moves");
+  assert.equal(asked.length, 3, "the pairs ride along in the opening and the where-and-how requests");
+  // Answers from before pairs were asked: kept as they were, only the pairs asked.
+  const older = structuredClone(report);
+  delete older.scenes.s1.pairs; delete older.scenes.s1.startPairs;
+  older.scenes.s1.events.e1.a.to = { "floor-2": 1 };
+  const topUp = recording((state, question) => (question.key.startsWith("together_") || question.key.startsWith("with_") ? 0.7 : "floor-9"));
+  const again = await askMovement([pair], { decisions: topUp.model, names: { a: "白井", b: "大叔" }, previous: older });
+  assert.ok(topUp.asked.flatMap((call) => call.questions.map((question) => question.key)).every((key) => /^(together|with)_/.test(key)), "nothing but pairs asked");
+  assert.deepEqual([again.scenes.s1.events.e1.a.to, again.scenes.s1.pairs, again.usage.calls], [{ "floor-2": 1 }, { e1: [["a", "b", 0.7]] }, 2]);
+});
+
 test("a stage step run too early is reported as waiting on the checklist, not as a bug", () => {
   const report = describeError(new Error("Animation prep waits for every other step: causality (todo). See novel checklist."), ["stage", "prep", "/books/vol-1/novel"]);
   assert.deepEqual([report.aspect, report.code, report.next], ["usage", "STEP_WAITING", ["novel checklist /books/vol-1/novel"]]);

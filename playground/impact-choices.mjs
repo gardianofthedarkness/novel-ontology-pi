@@ -13,7 +13,8 @@
  *
  *   node playground/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--fresh] [--model jev-1.14.0]
  *
- * Writes <novel-dir>/stage/impacts.json, saved after every fight. Answers are reused unless --fresh.
+ * Writes <novel-dir>/stage/impacts.json, saved after every fight. Answers are reused unless --fresh. `novel sim pick`
+ * runs the same choices (pickImpacts) on the book's story lines.
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -22,23 +23,26 @@ import { parseArgs } from 'node:util';
 import { browser, serve } from './two-view-things.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SIZES = [4, 8, 16, 32];
+export const SIZES = [4, 8, 16, 32];
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, fresh: { type: 'boolean' }, model: { type: 'string', default: 'jev-1.14.0' } } });
-const [page, novelDir] = positionals.map(path => resolve(path));
-if (!page || !novelDir || !values.vendor) throw new Error('Usage: node playground/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--fresh]');
-const { jevFromEnv } = await import(pathToFileURL(`${repository}/dist/src/ground/connectors/jev.js`));
-const jev = jevFromEnv({ ...process.env, JEV_MODEL: values.model }), report = `${novelDir}/stage/impacts.json`, out = values.out ? resolve(values.out) : null;
-const fights = values.fresh ? {} : (JSON.parse(await readFile(report, 'utf8').catch(() => 'null'))?.fights ?? {});
-const save = () => writeFile(report, JSON.stringify({ version: 1, model: jev.modelId, askedAt: new Date().toISOString(), sizes: SIZES, fights }, null, 1), { mode: 0o644 });
-if (out) await mkdir(out, { recursive: true });
-const { server, url } = await serve(page, resolve(values.vendor)), chrome = await browser(), started = Date.now();
-let calls = 0;
-try {
-  await chrome.open(url);
-  const stage = await chrome.evaluate('({ fights: window.__stage.fights, places: window.__stage.places })');
-  for (const [n, fight] of stage.fights.entries()) {
-    const key = `${fight.scene}|${fight.event}`, kept = fights[key], slug = `${String(n + 1).padStart(2, '0')}-${fight.scene}-${fight.event}`, place = stage.places[fight.place];
+/** Every fight on a strand's stage (the page's window.__stage.fights, or the same made from its data), keyed as its answer is kept. */
+export const fightWork = stage => stage.fights.map(fight => ({ fight, key: `${fight.scene}|${fight.event}` }));
+
+/**
+ * Jev's choices for every fight on a strand's stage not answered yet (with `again`, answered ones are shown again and kept
+ * as answered, for their stills): `fights` (by key) is filled in and saved after each, and `after` told of it (the live view
+ * draws what came out). A fight with no spot to hit is kept
+ * as such, so the stand-in stays. No fight is started once `budget` calls are spent. Returns the calls made and the fights
+ * asked, reused and left.
+ */
+export async function pickImpacts({ chrome, jev, stage, fights, save, budget = Infinity, again = false, out = null, log = console.error, after = null }) {
+  let calls = 0, asked = 0, reused = 0, left = 0;
+  for (const [n, { fight, key }] of fightWork(stage).entries()) {
+    // On the streamed world (place.world), an answer made on a fixed grid of an earlier engine no longer fits it ("no damage" does).
+    const place = stage.places[fight.place], kept = fights[key] && (!place?.world || fights[key].frame === 'world' || fights[key].none) ? fights[key] : null, slug = `${String(n + 1).padStart(2, '0')}-${fight.scene}-${fight.event}`;
+    if (kept && !again) { reused++; continue; }
+    if (!kept && calls >= budget) { left++; continue; }
+    if (kept) reused++; else asked++;
     const base = { scene: fight.scene, event: fight.event, place: fight.place, mask: true, beforeHit: true }, capture = options => chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, ...options })})`);
     const about = [
       `A still of a 3D model of a place in a novel, just before a fight breaks part of a building.`,
@@ -47,7 +51,7 @@ try {
     ];
     await capture({ id: `${key}#look` });
     const spots = await chrome.evaluate(`window.__stage.impactSpots(${JSON.stringify({ place: fight.place })})`);
-    if (!spots.length) continue;
+    if (!spots.length) { fights[key] = { spots, unplaced: true, ...(place?.world ? { frame: 'world' } : {}) }; await save(); continue; }
     // Call 1: where it hits.
     await capture({ id: `${key}#where`, spheres: spots.map(spot => ({ ...spot, r: 2.5 })) });
     const where = await chrome.still(), letters = spots.map(spot => spot.label);
@@ -59,9 +63,10 @@ try {
     })();
     if (out) await writeFile(join(out, `${slug}-where.png`), Buffer.from(where, 'base64'));
     if (pick.pick === 'none') {
-      fights[key] = { pick, spots, none: true };
+      fights[key] = { pick, spots, none: true, ...(place?.world ? { frame: 'world' } : {}) };
       await save();
-      console.error(`${key} (${fight.text.slice(0, 24)}…): no damage (${pick.confidence?.toFixed(2)})`);
+      if (after) await after({ kind: 'fight', key, base, none: true });
+      log(`${key} (${fight.text.slice(0, 24)}…): no damage (${pick.confidence?.toFixed(2)})`);
       continue;
     }
     const chosen = spots.find(spot => spot.label === pick.pick) ?? spots[0], focus = { x: chosen.x, y0: chosen.y - 1, z: chosen.z, w: 2, h: 2, d: 2 };
@@ -79,15 +84,35 @@ try {
     })();
     const across = SIZES[Number(size.pick) - 1] ?? SIZES[1], measured = await chrome.evaluate(`window.__stage.measure(${JSON.stringify({ camera: `${key}#plain`, box: size.box, point: chosen, place: fight.place })})`);
     const boxed = Math.round(Math.max(measured.across, measured.up) * 10) / 10;
-    fights[key] = { pick, spots, chosen: chosen.label, size, sphere: { x: chosen.x, y: chosen.y, z: chosen.z, r: across / 2 }, boxed };
+    fights[key] = { pick, spots, chosen: chosen.label, size, sphere: { x: chosen.x, y: chosen.y, z: chosen.z, r: across / 2 }, boxed, ...(place?.world ? { frame: 'world' } : {}) };
     await save();
+    if (after) await after({ kind: 'fight', key, base, focus, chosen: `${chosen.label} on ${chosen.from}`, sphere: fights[key].sphere });
     if (out) for (const { name, still } of stills) await writeFile(join(out, `${slug}-${name}.png`), Buffer.from(still, 'base64'));
-    console.error(`${key} (${fight.text.slice(0, 24)}…): ${chosen.label} on ${chosen.from} (${pick.confidence?.toFixed(2)}) → size ${size.pick}: ${across} m (${size.confidence?.toFixed(2)}); the box measures ${boxed} m (${size.boxConfidence?.toFixed(2)})`);
+    log(`${key} (${fight.text.slice(0, 24)}…): ${chosen.label} on ${chosen.from} (${pick.confidence?.toFixed(2)}) → size ${size.pick}: ${across} m (${size.confidence?.toFixed(2)}); the box measures ${boxed} m (${size.boxConfidence?.toFixed(2)})`);
   }
-} finally { await chrome.close(); server.close(); }
-await save();
-// The run, in brief: how sure the choices were, how often none, and the box against the choice.
-const asked = Object.values(fights), hit = asked.filter(entry => !entry.none), mean = list => Math.round(list.reduce((sum, value) => sum + (value ?? 0), 0) / Math.max(1, list.length) * 100) / 100;
-const ratios = hit.map(entry => entry.boxed / (entry.sphere.r * 2)).sort((a, b) => a - b);
-console.error(`fights ${asked.length}: no damage ${asked.length - hit.length}; where confidence ${mean(asked.map(entry => entry.pick.confidence))}; size confidence ${mean(hit.map(entry => entry.size.confidence))}, sizes ${SIZES.map((size, i) => `${size} m ×${hit.filter(entry => entry.size.pick === `${i + 1}`).length}`).join(', ')}; box confidence ${mean(hit.map(entry => entry.size.boxConfidence))}, box ÷ chosen size (median) ${ratios.length ? Math.round(ratios[Math.floor(ratios.length / 2)] * 100) / 100 : '-'}`);
-console.log(JSON.stringify({ report, fights: asked.length, none: asked.length - hit.length, calls, seconds: (Date.now() - started) / 1000 }));
+  return { calls, asked, reused, left };
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, fresh: { type: 'boolean' }, model: { type: 'string', default: 'jev-1.14.0' } } });
+  const [page, novelDir] = positionals.map(path => resolve(path));
+  if (!page || !novelDir || !values.vendor) throw new Error('Usage: node playground/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--fresh]');
+  const { jevFromEnv } = await import(pathToFileURL(`${repository}/dist/src/ground/connectors/jev.js`));
+  const jev = jevFromEnv({ ...process.env, JEV_MODEL: values.model }), report = `${novelDir}/stage/impacts.json`, out = values.out ? resolve(values.out) : null;
+  const fights = values.fresh ? {} : (JSON.parse(await readFile(report, 'utf8').catch(() => 'null'))?.fights ?? {});
+  const save = () => writeFile(report, JSON.stringify({ version: 1, model: jev.modelId, askedAt: new Date().toISOString(), sizes: SIZES, fights }, null, 1), { mode: 0o644 });
+  if (out) await mkdir(out, { recursive: true });
+  const { server, url } = await serve(page, resolve(values.vendor)), chrome = await browser(), started = Date.now();
+  let calls = 0;
+  try {
+    await chrome.open(url);
+    const stage = await chrome.evaluate('({ fights: window.__stage.fights, places: window.__stage.places })');
+    ({ calls } = await pickImpacts({ chrome, jev, stage, fights, save, again: true, out }));
+  } finally { await chrome.close(); server.close(); }
+  await save();
+  // The run, in brief: how sure the choices were, how often none, and the box against the choice.
+  const asked = Object.values(fights).filter(entry => entry.pick), hit = asked.filter(entry => !entry.none), mean = list => Math.round(list.reduce((sum, value) => sum + (value ?? 0), 0) / Math.max(1, list.length) * 100) / 100;
+  const ratios = hit.map(entry => entry.boxed / (entry.sphere.r * 2)).sort((a, b) => a - b);
+  console.error(`fights ${asked.length}: no damage ${asked.length - hit.length}; where confidence ${mean(asked.map(entry => entry.pick.confidence))}; size confidence ${mean(hit.map(entry => entry.size.confidence))}, sizes ${SIZES.map((size, i) => `${size} m ×${hit.filter(entry => entry.size.pick === `${i + 1}`).length}`).join(', ')}; box confidence ${mean(hit.map(entry => entry.size.boxConfidence))}, box ÷ chosen size (median) ${ratios.length ? Math.round(ratios[Math.floor(ratios.length / 2)] * 100) / 100 : '-'}`);
+  console.log(JSON.stringify({ report, fights: asked.length, none: asked.length - hit.length, calls, seconds: (Date.now() - started) / 1000 }));
+}

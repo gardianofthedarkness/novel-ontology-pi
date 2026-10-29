@@ -11,6 +11,7 @@ import { bookCatalog } from './book-catalog.mjs';
 import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
+import { liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationPage, simulationVendor, simulationWorldPage } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -196,6 +197,38 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         const asset = await bounded(async () => resolveAlbumAsset(await resolveWorkspace(volume), url.searchParams.get('id')));
         if (!asset) { send(404); return; }
         send(200, await readFile(asset.filename), { 'Content-Type': asset.type });
+        return;
+      }
+      if (scopedPath === '/play/' || scopedPath === '/play/live' || scopedPath === '/play/world' || scopedPath === '/play/live.json' || scopedPath.startsWith('/play/live/')) {
+        // The stage simulation: the player (the selected book's accepted runs, or with newest=1 its latest; novel sim run) in the
+        // engine's own page, and the live page with what a running novel sim pick|run is doing and the replay of Jev's questions.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const page = scopedPath === '/play/' ? await bounded(async () => simulationPage(await resolveWorkspace(volume), { newest: url.searchParams.get('newest') === '1', live: `live?volume=${volume}` })) : null;
+        if (scopedPath === '/play/live' || scopedPath === '/play/' && !page) {
+          // Before a book has runs, its player is the live page (what novel sim pick is doing).
+          const page = await simulationLivePage();
+          send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy });
+          return;
+        }
+        // The live view of the world: the engine's world as it stands at the moment being played (live/world.json).
+        if (scopedPath === '/play/world') { const page = await simulationWorldPage(); send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy }); return; }
+        if (scopedPath === '/play/live/world.json') { send(200, await bounded(async () => liveWorld(await resolveWorkspace(volume))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath === '/play/live.json') { send(200, JSON.stringify(await bounded(async () => liveState(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath === '/play/live/frames.jsonl') { send(200, await bounded(async () => liveFrames(await resolveWorkspace(volume))), { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath.startsWith('/play/live/')) {
+          const picture = await bounded(async () => livePicture(await resolveWorkspace(volume), scopedPath.slice('/play/live/'.length)));
+          if (!picture) { send(404); return; }
+          send(200, picture.body, { 'Content-Type': picture.type, 'Cache-Control': 'private, max-age=86400' });
+          return;
+        }
+        send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy });
+        return;
+      }
+      if (scopedPath.startsWith('/play/vendor/')) {
+        const body = await simulationVendor(scopedPath.slice('/play/vendor/'.length));
+        if (!body) { send(404); return; }
+        send(200, body, { 'Content-Type': types['.js'] });
         return;
       }
       if (scopedPath === '/api/book-text' || scopedPath === '/api/stage') {

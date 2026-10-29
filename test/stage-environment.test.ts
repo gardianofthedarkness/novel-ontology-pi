@@ -118,9 +118,10 @@ test("objects: only buildings and large visible things are accepted, matched aga
   const { OBJECT_PROMPT_RULES, acceptObjects, detectObjects, matchObject } = await import("../src/digger/stage/objects.js");
   assert.ok(OBJECT_PROMPT_RULES.some((rule) => /large enough to be seen from that wide view/.test(rule)), "the visibility rule is in the prompt");
   const events = [{ id: "e1" }, { id: "e2" }];
-  const { objects, rejected } = acceptObjects({ entities: [{ name: "美琴" }], objects: [{ name: "巨大的金属球", kind: "object", size: 6, visible: true, airborne: true, event: 2 }, { name: "硬币", kind: "object", size: 0.03 }, { name: "医院", kind: "building", size: 40, event: 1 }, { name: "安娜", kind: "person", size: 1.5 }, { name: "大楼屋顶", kind: "building", size: 30 }, { name: "指示牌", kind: "object", size: 4, visible: false }] }, events);
-  assert.deepEqual(objects.map((object) => [object.name, object.event, object.airborne]), [["巨大的金属球", "e2", true], ["医院", "e1", false]]);
-  assert.equal(rejected, 4, "the coin is too small, a person is not a thing, a roof is part of its building, a sign is not seen from a wide view");
+  const { objects, rejected } = acceptObjects({ entities: [{ name: "美琴" }], objects: [{ name: "巨大的金属球", kind: "object", size: 6, visible: true, airborne: true, event: 2 }, { name: "硬币", kind: "object", size: 0.03 }, { name: "医院", kind: "building", size: 40, event: 1 }, { name: "安娜", kind: "person", size: 1.5 }, { name: "大楼屋顶", kind: "building", size: 30 }, { name: "指示牌", kind: "object", size: 4, visible: false }, { name: "长长的餐桌", kind: "object", size: 5 }, { name: "保安室", kind: "building", room: true, size: 6, event: 1 }] }, events);
+  assert.deepEqual(objects.map((object) => [object.name, object.event, object.airborne, !!object.room]), [["巨大的金属球", "e2", true, false], ["医院", "e1", false, false], ["保安室", "e1", false, true]]);
+  assert.equal(rejected, 5, "the coin is too small, a person is not a thing, a roof is part of its building, a sign is not seen from a wide view, a table is furniture");
+  assert.ok(OBJECT_PROMPT_RULES.some((rule) => /Never count furniture/.test(rule)) && OBJECT_PROMPT_RULES.some((rule) => /room true/.test(rule)), "furniture is filtered and rooms are marked in the prompt");
   for (const [name, id] of [["摩天大楼", "skyscraper"], ["巨大的金属球", "oval"], ["白色飞艇", "oval"], ["钻石般的结晶", "diamond"], ["第七学区医院", "hospital"], ["不知名的东西", "box"], ["巨大的光环", "donut"], ["金字塔", "triangle"]]) assert.equal((await matchObject(name)).id, id, name);
   // A model that answers with a whole extraction: only its objects are taken.
   const work = { modelId: "test", generate: async () => JSON.stringify({ S1: { events: ["…"], entities: ["…"], objects: [{ name: "游戏中心", kind: "building", size: 20, event: 1 }] } }) };

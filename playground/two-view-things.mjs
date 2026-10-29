@@ -40,7 +40,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+export const CHROME = process.env.NOVEL_CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 /** The page and its three.js files on a local port, for the headless browser. */
 export async function serve(page, vendor) {
@@ -82,9 +82,9 @@ export async function browser() {
 const SHAPES = ['box', 'oval', 'triangle', 'diamond', 'donut'];
 /** What each model or shape on the sheet is, in words, beside its picture. */
 const hint = key => key.startsWith('skyscraper') ? 'a skyscraper' : key.startsWith('tower') ? 'a slim tower block' : key.startsWith('block-wide') ? 'a wide low block' : key.startsWith('office') ? 'an office building'
-  : ({ market: 'a market hall', keep: 'a castle keep', fountain: 'a fountain', windmill: 'a windmill', box: 'a box: vehicles, containers, machines', oval: 'an egg, capsule or ball: airships, pods, spheres', triangle: 'a triangular prism: roofs, ramps, tents', diamond: 'a diamond: crystals', donut: 'a ring: halos, wheels, rings' })[key] ?? key;
+  : ({ market: 'a market hall', keep: 'a castle keep', fountain: 'a fountain', windmill: 'an old windmill with sails', 'wind-turbine': 'a modern wind turbine: a tall mast with three long blades', 'wind-turbine-scifi': 'a futuristic turbine', wagon: 'a wooden cart or wagon', 'crate-wood': 'a wooden crate', 'crate-scifi': 'a metal sci-fi crate', 'barrel-scifi': 'a sci-fi barrel or canister', 'chest-scifi': 'a sci-fi storage chest', 'computer-scifi': 'a sci-fi console or terminal', 'switch-theme': 'none of these fits: it belongs to another era or style (ask again among the other themes\' models)', box: 'a box: vehicles, containers, machines', oval: 'an egg, capsule or ball: airships, pods, spheres', triangle: 'a triangular prism: roofs, ramps, tents', diamond: 'a diamond: crystals', donut: 'a ring: halos, wheels, rings' })[key] ?? key;
 
-/** Call 0: which model or shape a thing is drawn as, picked from the labelled sheet. */
+/** Call 0: which model or shape a thing is drawn as, picked from the labelled sheet (`keys` may end with switching theme). */
 async function pickModel(jev, sheet, keys, thing, text) {
   const [answer] = await jev.decide([`Picture "models" is a sheet of every model and shape a 3D stage can draw, each labelled with its name.`, `A thing a novel mentions: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}.`, `Where it is mentioned: ${text}`].join('\n'),
     [{ key: 'model', primitive: 'choice', instructions: `Which model or shape on picture "models" should ${thing.name} be drawn as: the one that looks most like it?`, options: keys, optionHints: Object.fromEntries(keys.map(key => [key, `${key}: ${hint(key)}`])) }], { images: { models: sheet } });
@@ -209,6 +209,81 @@ async function ask(jev, state, still, name) {
   return { box: where.box, confidence: where.confidence ?? null, seen: Math.round(seen.value * 100) / 100, label: `x ${pct(where.box.left)}–${pct(where.box.right)}%, y ${pct(where.box.top)}–${pct(where.box.bottom)}%` };
 }
 
+/** Every placement on a strand's stage (the page's window.__stage, or the same made from its data), keyed as its answer is kept, with what the answer was asked from. */
+export function placementWork(stage) {
+  return stage.things.flatMap(thing => thing.placed.map(spot => {
+    const key = `${spot.scene}|${spot.event}|${thing.name}`, text = stage.scenes.find(scene => scene.id === spot.scene)?.events[spot.event] ?? '';
+    return { thing, spot, key, text, inputs: createHash('sha256').update(JSON.stringify([key, spot.place, text, thing.size, thing.airborne])).digest('hex').slice(0, 16) };
+  }));
+}
+
+/** What every question about one placement says first: the picture, the place, the event and the thing. */
+const aboutPlacement = (place, text, thing, model) => [
+  `A still of a 3D model of a place in a novel, used to place one thing the story mentions.`,
+  `Place: ${place.path.join(' › ')} (${place.kind} of ${place.lots} buildings). Blue lattices are the buildings' corridors and orange their stairs; gold shapes are things already there; small labelled dots are people.`,
+  `Event: ${text}`,
+  `Thing: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}${model ? `, drawn as ${hint(model.id)}` : ''}.`,
+];
+
+/** Call 0 for every placed thing without one in `models` (by name, filled in): which model or shape it is drawn as, from one sheet of them all. At most `limit` calls; returns the calls made. */
+export async function pickModels({ chrome, jev, stage, models, limit = Infinity, out = null, log = console.error }) {
+  const waiting = stage.things.filter(thing => thing.placed.length && !models[thing.name]);
+  if (!waiting.length || limit <= 0) return 0;
+  // Themes (modelThemes.json): a thing is offered the models of its place's theme (the era of the manifold there: modern
+  // or ancient) and the shapes, with switching theme as the last option; switching asks again among the other themes'.
+  const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8')), themes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
+  const { themedKeys, otherKeys, SWITCH_THEME } = await import(pathToFileURL(`${repository}/dist/apps/playground/src/data/modelThemes.js`).href), all = Object.keys(library.models), sheets = new Map();
+  const sheetOf = async (name, keys) => {
+    if (!sheets.has(name)) { await chrome.evaluate(`window.__stage.sheet(${JSON.stringify({ models: Object.fromEntries(keys.filter(key => library.models[key]).map(key => [key, library.models[key]])), entries: keys })})`); const still = await chrome.still(); sheets.set(name, still); if (out) await writeFile(join(out, `00-models-${name}.png`), Buffer.from(still, 'base64')); }
+    return sheets.get(name);
+  };
+  let calls = 0;
+  for (const thing of waiting) {
+    if (calls >= limit) break;
+    const first = thing.placed[0], text = stage.scenes.find(scene => scene.id === first.scene)?.events[first.event] ?? '', theme = stage.places[first.place]?.theme ?? 'modern';
+    const own = [...themedKeys(themes, all, theme), ...SHAPES];
+    let answer = await pickModel(jev, await sheetOf(theme, own), [...own, SWITCH_THEME], thing, text); calls++;
+    if (answer.id === SWITCH_THEME && calls < limit) {
+      const other = [...otherKeys(themes, all, theme), ...SHAPES];
+      answer = { ...await pickModel(jev, await sheetOf(`not-${theme}`, other), other, thing, text), switched: true }; calls++;
+    }
+    if (answer.id === SWITCH_THEME) continue;
+    models[thing.name] = { ...answer, theme: answer.switched ? themes.models[answer.id]?.theme ?? null : theme };
+    log(`${thing.name}: drawn as ${models[thing.name].id}${answer.switched ? ' (switched theme)' : ''} on ${theme} ground (${models[thing.name].top.map(([key, p]) => `${key} ${p}`).join(', ')})`);
+  }
+  return calls;
+}
+
+/**
+ * Every placement on a strand's stage placed by candidates (byCandidates), unless answered already for the same inputs;
+ * `again` 'resolve' solves answered ones again from what Jev said, 'resweep' asks them again. `placements` (by key) is filled
+ * in and saved after each, and `after` told of it. No placement is started once `budget` calls are spent, nor more than `max`
+ * new ones. Returns the calls made and the placements asked, reused, failed (no box came out) and left.
+ */
+export async function placeThings({ chrome, jev, stage, models, placements, save, budget = Infinity, max = Infinity, again = null, use = 'ghost', out = null, log = console.error, after = null }) {
+  let calls = 0, asked = 0, reused = 0, failed = 0, left = 0;
+  for (const [n, { thing, spot, key, text, inputs }] of placementWork(stage).entries()) {
+    // On the streamed world, a box made on a fixed grid of an earlier engine no longer fits it.
+    const world = stage.places[spot.place]?.world, earlier = placements[key]?.inputs === inputs && (!world || placements[key].frame === 'world') ? placements[key] : null;
+    if (earlier && !again) { reused++; continue; }
+    if (calls >= budget || (!earlier && asked >= max)) { left++; continue; }
+    if (earlier) reused++; else asked++;
+    const base = { scene: spot.scene, event: spot.event, place: spot.place, hide: [thing.id] }, slug = `${String(n + 1).padStart(2, '0')}-${thing.id}`;
+    const kept = again === 'resolve' && earlier?.method === 'candidates' ? earlier : null;
+    const placed = await byCandidates({ chrome, jev, base, key, thing, about: aboutPlacement(stage.places[spot.place], text, thing, models[thing.name]), kept, out, slug, use });
+    calls += placed.calls; if (!placed.box) failed++;
+    placements[key] = { inputs, thing: thing.name, detected: thing.size, airborne: thing.airborne, place: spot.place, method: 'candidates', ...placed.record, box: placed.box, ...(world ? { frame: 'world' } : {}) };
+    await save();
+    // `after`: told of each placement as it is kept (the live view draws what came out).
+    if (after) await after({ kind: 'thing', key, base, thing: thing.name, record: placed.record, box: placed.box });
+    const round = value => Math.round(value * 10) / 10, size = cast => cast ? `${round(cast.x[1] - cast.x[0])}×${round(cast.z[1] - cast.z[0])}×${round(cast.y[1] - cast.y[0])} m at y ${cast.y[0]}` : 'none';
+    const { choice, zoom, casts } = placed.record;
+    const confidences = answers => Object.entries(answers ?? {}).map(([name, answer]) => `${name} ${answer.confidence.toFixed(2)}`).join(' ');
+    log(`${thing.name} (${thing.size} m${thing.airborne ? ', air' : ''}) @ ${spot.scene}#${spot.event}: ${placed.record.spots.length} spots, picked ${choice?.pick} (${choice?.confidence?.toFixed(2)}) → ${placed.record.chosen === 'sky' ? `sky ghost ${placed.record.sky.picked} of ${placed.record.skySpots.length} (${placed.record.sky.choice.pick}, ${placed.record.sky.choice.confidence?.toFixed(2)})${placed.record.universe ? ' → the universe' : ` → map ${placed.record.sky.topdown.confidence.toFixed(2)} → picked ${size(casts?.skyChoice)} | locked ${size(casts?.topdown)}`}` : `zoom ${confidences(zoom)} → choice ${size(casts?.choice)} | marker ${size(casts?.marker)} | ghost ${size(casts?.ghost)}`}`);
+  }
+  return { calls, asked, reused, failed, left };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, reask: { type: 'boolean' }, resweep: { type: 'boolean' }, resolve: { type: 'boolean' }, low: { type: 'string', default: '0.5' }, method: { type: 'string', default: 'candidates' }, use: { type: 'string', default: 'ghost' }, model: { type: 'string', default: 'jev-1.14.0' } } });
   const [page, novelDir] = positionals.map(path => resolve(path));
@@ -219,7 +294,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const jev = jevFromEnv({ ...process.env, JEV_MODEL: values.model }), report = `${novelDir}/stage/thing-boxes.json`, out = values.out ? resolve(values.out) : null;
   const previous = values.fresh ? null : JSON.parse(await readFile(report, 'utf8').catch(() => 'null'));
   const placements = values.reask ? {} : { ...(previous?.placements ?? {}) }, models = { ...(previous?.models ?? {}) }, started = Date.now();
-  const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8')), keys = [...Object.keys(library.models), ...SHAPES];
   if (out) await mkdir(out, { recursive: true });
   const { server, url } = await serve(page, resolve(values.vendor)), chrome = await browser();
   let calls = 0, asked = 0, reused = 0, failed = 0;
@@ -228,45 +302,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     await chrome.open(url);
     const stage = await chrome.evaluate('({ things: window.__stage.things, places: window.__stage.places, scenes: window.__stage.scenes })');
-    const work = stage.things.flatMap(thing => thing.placed.map(spot => ({ thing, spot, key: `${spot.scene}|${spot.event}|${thing.name}` })));
     // Call 0, once per thing: the model, from one sheet of them all.
-    if (stage.things.some(thing => !models[thing.name])) {
-      await chrome.evaluate(`window.__stage.sheet(${JSON.stringify({ models: library.models, entries: keys })})`);
-      const sheet = await chrome.still();
-      if (out) await writeFile(join(out, '00-models.png'), Buffer.from(sheet, 'base64'));
-      for (const thing of stage.things) {
-        if (models[thing.name] || (values.max && calls >= Number(values.max) * 2)) continue;
-        const first = thing.placed[0], text = stage.scenes.find(scene => scene.id === first.scene)?.events[first.event] ?? '';
-        models[thing.name] = await pickModel(jev, sheet, keys, thing, text); calls++;
-        console.error(`${thing.name}: drawn as ${models[thing.name].id} (${models[thing.name].top.map(([key, p]) => `${key} ${p}`).join(', ')})`);
-      }
-    }
-    for (const [n, { thing, spot, key }] of work.entries()) {
+    calls += await pickModels({ chrome, jev, stage, models, limit: values.max ? Number(values.max) * 2 : Infinity, out });
+    if (values.method === 'candidates') {
+      const done = await placeThings({ chrome, jev, stage, models, placements, save, max: values.max ? Number(values.max) : Infinity, again: values.resolve ? 'resolve' : values.resweep ? 'resweep' : null, use: values.use, out });
+      calls += done.calls; asked += done.asked; reused += done.reused; failed += done.failed;
+    } else for (const [n, { thing, spot, key, text, inputs }] of placementWork(stage).entries()) {
       if (values.max && asked >= Number(values.max)) break;
-      const place = stage.places[spot.place], text = stage.scenes.find(scene => scene.id === spot.scene)?.events[spot.event] ?? '';
-      const inputs = createHash('sha256').update(JSON.stringify([key, spot.place, text, thing.size, thing.airborne])).digest('hex').slice(0, 16);
-      const earlier = placements[key]?.inputs === inputs ? placements[key] : null;
+      const place = stage.places[spot.place], earlier = placements[key]?.inputs === inputs && (!place?.world || placements[key].frame === 'world') ? placements[key] : null;
       if (earlier && !values.resolve && !values.resweep) { reused++; continue; }
       if (earlier) reused++; else asked++;
       const base = { scene: spot.scene, event: spot.event, place: spot.place, hide: [thing.id] }, keep = earlier && (values.resolve || values.resweep);
-      const about = [
-        `A still of a 3D model of a place in a novel, used to place one thing the story mentions.`,
-        `Place: ${place.path.join(' › ')} (${place.kind} of ${place.lots} buildings). Blue lattices are the buildings' corridors and orange their stairs; gold shapes are things already there; small labelled dots are people.`,
-        `Event: ${text}`,
-        `Thing: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}${models[thing.name] ? `, drawn as ${hint(models[thing.name].id)}` : ''}.`,
-      ];
-      if (values.method === 'candidates') {
-        const slug = `${String(n + 1).padStart(2, '0')}-${thing.id}`, kept = values.resolve && earlier?.method === 'candidates' ? earlier : null;
-        const placed = await byCandidates({ chrome, jev, base, key, thing, about, kept, out, slug, use: values.use });
-        calls += placed.calls; if (!placed.box) failed++;
-        placements[key] = { inputs, thing: thing.name, detected: thing.size, airborne: thing.airborne, place: spot.place, method: 'candidates', ...placed.record, box: placed.box };
-        await save();
-        const round = value => Math.round(value * 10) / 10, size = cast => cast ? `${round(cast.x[1] - cast.x[0])}×${round(cast.z[1] - cast.z[0])}×${round(cast.y[1] - cast.y[0])} m at y ${cast.y[0]}` : 'none';
-        const { choice, zoom, casts } = placed.record;
-        const confidences = answers => Object.entries(answers ?? {}).map(([name, answer]) => `${name} ${answer.confidence.toFixed(2)}`).join(' ');
-        console.error(`${thing.name} (${thing.size} m${thing.airborne ? ', air' : ''}) @ ${spot.scene}#${spot.event}: ${placed.record.spots.length} spots, picked ${choice?.pick} (${choice?.confidence?.toFixed(2)}) → ${placed.record.chosen === 'sky' ? `sky ghost ${placed.record.sky.picked} of ${placed.record.skySpots.length} (${placed.record.sky.choice.pick}, ${placed.record.sky.choice.confidence?.toFixed(2)})${placed.record.universe ? ' → the universe' : ` → map ${placed.record.sky.topdown.confidence.toFixed(2)} → picked ${size(casts?.skyChoice)} | locked ${size(casts?.topdown)}`}` : `zoom ${confidences(zoom)} → choice ${size(casts?.choice)} | marker ${size(casts?.marker)} | ghost ${size(casts?.ghost)}`}`);
-        continue;
-      }
+      const about = aboutPlacement(place, text, thing, models[thing.name]);
       // Call 1: the reader's view.
       await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, mask: true, id: `${key}#1` })})`);
       const first = await chrome.still();
@@ -299,7 +346,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const carved = await chrome.evaluate(`window.__stage.carve(${JSON.stringify({ place: spot.place, views: [view1, ...swept.map(entry => ({ camera: `${key}#${entry.turn}`, box: entry.box, confidence: entry.confidence })), ...(top ? [{ camera: `${key}#top`, box: top.box, confidence: top.confidence }] : [])] })})`);
       const round = value => Math.round(value * 10) / 10, box = solved && { x: solved.x.map(round), y: solved.y.map(round), z: solved.z.map(round) };
       if (!box) failed++;
-      placements[key] = { inputs, thing: thing.name, place: spot.place, views: [{ ...one, yaw: 0 }, { ...best, yaw: best.turn }], sweep: swept, top, box, carved: carved && { x: carved.x.map(round), y: carved.y.map(round), z: carved.z.map(round) }, hull: solved?.hull, cover: solved?.cover, uncertain: solved?.uncertain ?? null, points: solved?.points ?? 0 };
+      placements[key] = { inputs, thing: thing.name, place: spot.place, ...(place?.world ? { frame: 'world' } : {}), views: [{ ...one, yaw: 0 }, { ...best, yaw: best.turn }], sweep: swept, top, box, carved: carved && { x: carved.x.map(round), y: carved.y.map(round), z: carved.z.map(round) }, hull: solved?.hull, cover: solved?.cover, uncertain: solved?.uncertain ?? null, points: solved?.points ?? 0 };
       if (out) {
         const slug = `${String(n + 1).padStart(2, '0')}-${thing.id}`;
         await writeFile(join(out, `${slug}-1.png`), Buffer.from(first, 'base64'));
