@@ -114,3 +114,23 @@ test('the simulation records reach the map trimmed: lots with their skeletons an
   assert.deepEqual(simulation.things[0].placements[0], { scene: 's1', place: 'loc_1', x: 1, y: 2, z: 3, w: 12, h: 4, d: 8, turn: 0 });
   assert.equal(simulation.migrations.length, 1);
 });
+
+test('a world run is read for its line and things only: its places name world lots by index, which the per-place map cannot draw', async (context) => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { readSimulation } = await import('./stage-reports.mjs');
+  const workspace = await mkdtemp(join(tmpdir(), 'simulation-world-'));
+  context.after(() => rm(workspace, { recursive: true, force: true }));
+  await mkdir(join(workspace, 'stage', 'simulation'), { recursive: true });
+  await writeFile(join(workspace, 'stage', 'simulation', 'index.json'), JSON.stringify({ version: 2, strands: { w: { file: 'w.json', title: 'W' } } }));
+  await writeFile(join(workspace, 'stage', 'simulation', 'w.json'), JSON.stringify({ version: 2, strand: { id: 'w', title: 'Street', from: 's1', to: 's1' },
+    world: { lots: [{ footprint: { i0: 15, j0: 268, nx: 6, nz: 8 }, floors: 6 }] }, buildings: { loc_1: { label: 'Street', kind: 'street', anchor: { x: 1, z: 2 }, lots: [0] } },
+    things: [{ id: 'thing_1', name: 'Bus', placements: [{ scene: 's1', place: 'loc_1', x: 1, z: 2 }] }],
+    scenes: [{ id: 's1', place: 'loc_1', events: [{ index: 0, hit: { sphere: { x: 1, y: 1, z: 1, r: 2 }, parts: [{ lot: 0 }] } }] }] }));
+  const simulation = await readSimulation(workspace);
+  assert.deepEqual(simulation.strands.map(strand => strand.id), ['w']);
+  assert.deepEqual(simulation.places, {});
+  assert.deepEqual(simulation.hits, []);
+  assert.equal(simulation.things[0].name, 'Bus');
+});
