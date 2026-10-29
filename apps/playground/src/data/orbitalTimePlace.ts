@@ -1,9 +1,9 @@
 import type { CausalLink, CausalSummary, WorldEdge, WorldNode } from "../types.js";
 import type { CausalArrow } from "./causalProjection.js";
 import type { Position3 } from "./spatialLayout.js";
-import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
+import { helixPoint, nebulaRadius, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
 import { storyStrands, type StrandCheck, type StrandEdge } from "./storyStrands.js";
-import { dateLine, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
+import { calendarDay, calendarDayKey, dateLine, sceneDays, type SpiralView, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
 
 /**
  * Orbital Story time and Places (time-place phase 1, view only). Each is the
@@ -47,6 +47,17 @@ export interface OrbitalArrangement {
   extraDraws?: OrbitalDraw[];
   /** Flat marks on the floor (world units): the 2D map. */
   floor?: FloorMark[];
+  /** Giant calendar pins behind the story (world units): where each calendar day starts. */
+  pins?: CalendarPin[];
+  /** Rulers on the same backdrop showing how story time is compressed (a stored spiral). */
+  meters?: TimeMeter[];
+  /** Smaller marks on the same backdrop where each part of a calendar day starts. */
+  parts?: DayPartMark[];
+  /** A tap on a strand's axis (path id, sample index): the scenes it lights (that strand on the tapped calendar day, or all
+   * of it when that stretch has no date), with a line saying what is lit, in the strand's colour. */
+  strandPeriod?: (pathId: string, index: number) => { ids: string[]; strandId: string; label: string; book?: number } | null;
+  /** A lit strand's cast (strandCast) for its scene ids, nearest the tap first. */
+  strandCast?: (scenes: string[], draws: OrbitalDraw[]) => StrandCast;
   /** Main sphere size factor and camera direction for this arrangement. */
   radiusScale?: number;
   direction?: Position3;
@@ -71,6 +82,14 @@ export interface OrbitalArrangement {
   /** Per-sphere start delays (ms) for that glide, e.g. the line shredding into strands in story order. */
   morphDelays?: (draws: OrbitalDraw[]) => Map<string, number>;
 }
+/** A calendar day behind the story like a backdrop: a big date high up and far back where the day's first scene sits, a faint pole down to the floor. */
+export interface CalendarPin { id: string; x: number; z: number; top: number; card: number; label: string; detail: string }
+/** A small mark under the dates where a part of a calendar day starts in a book's stretch (world units): its label sits at
+ * y, a thin line runs down to the time meter's ruler at foot. */
+export interface DayPartMark { id: string; x: number; y: number; foot: number; z: number; label: string }
+/** A ruler on the date backdrop over one book's stretch (world units): a tick per story moment, bunching where quiet time
+ * is compressed, and where the pace changes, how much ("time ×0.4"). */
+export interface TimeMeter { id: string; y: number; z: number; ticks: number[]; zones: { x: number; label: string }[] }
 /** A place's disc on the floor; a region (a place containing others) is a wider, fainter disc under its children. */
 export interface FloorMark { id: string; x: number; z: number; radius: number; active: boolean; depth?: number; region?: boolean; proposed?: boolean }
 
@@ -149,6 +168,14 @@ export function continuityLanes(data: TimePlaceProjection): (scene: StoryScene) 
 }
 export const bookNodeId = (volume: number) => `book:${volume}`;
 export const spiralNodeId = (sceneId: string) => `spiral:${sceneId}`;
+export const tripNodeId = (trip: { from: string; to: string }) => `trip:${trip.from}>${trip.to}`;
+const TRIP_SAMPLES = 16;
+/** A group trip's arc: up over the spiral from the scene they leave to the scene they arrive at (world units). */
+function tripArc(from: Position3, to: Position3): Position3[] {
+  const lift = Math.max(420, 0.35 * Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]));
+  const top: Position3 = [(from[0] + to[0]) / 2, Math.max(from[1], to[1]) + lift, (from[2] + to[2]) / 2];
+  return Array.from({ length: TRIP_SAMPLES + 1 }, (_, index) => { const t = index / TRIP_SAMPLES, u = 1 - t; return [0, 1, 2].map((axis) => u * u * from[axis] + 2 * u * t * top[axis] + t * t * to[axis]) as Position3; });
+}
 export const sceneOfSpiral = (id: string) => id.startsWith("spiral:") ? id.slice(7) : null;
 
 function causalContainers(world: RegroupedWorld): void {
@@ -289,10 +316,179 @@ function strandLayout(data: TimePlaceProjection, lanes: Map<number, StoryScene[]
   };
   return { anchors, layer, continues, edges, checks, curve };
 }
+/**
+ * Rough calendar marks for the story axis: in each book's stretch of a
+ * continuity, a pin where each calendar day's first (non-flashback) scene
+ * sits. Days that would stand behind an earlier day's pin (a day only seen
+ * out of order) get none. Layout anchors in, world units out (the orbit draws
+ * anchors ×3).
+ */
+/** How far behind the story the calendar stands, and how far apart two dates must start to keep their own labels (layout units). */
+const PIN_BACK = 2000, PIN_SPACING = 1400;
+export function calendarPins(data: TimePlaceProjection, anchors: Map<string, Position3>, laneOf: (scene: StoryScene) => number): CalendarPin[] {
+  const entries = new Map((data.calendar?.entries ?? []).filter((entry) => entry.placed !== "between" && entry.year !== null).map((entry) => [entry.id, entry]));
+  if (!entries.size) return [];
+  type First = { lane: number; book: number | null; day: { year: number; month: number; day: number }; start: number; x: number };
+  const firsts = new Map<string, First>();
+  /** How high each book's stretch of strands reaches: its pins rise that far. */
+  const tops = new Map<string, number>();
+  for (const scene of data.scenes) {
+    const anchor = anchors.get(spiralNodeId(scene.id));
+    if (!anchor) continue;
+    const stretch = `${laneOf(scene)}|${scene.book ?? ""}`;
+    tops.set(stretch, Math.max(tops.get(stretch) ?? -Infinity, anchor[1]));
+    const entry = scene.flashback ? undefined : scene.times.map((time) => entries.get(time.id)).find(Boolean);
+    if (!entry) continue;
+    const day = { year: entry.year!, month: entry.month!, day: entry.day! };
+    const key = `${laneOf(scene)}|${scene.book ?? ""}|${calendarDayKey(day)}`;
+    const known = firsts.get(key);
+    if (!known || anchor[0] < known.x) firsts.set(key, { lane: laneOf(scene), book: scene.book ?? null, day, start: Math.floor(entry.span.start / 1440), x: anchor[0] });
+  }
+  const pins: CalendarPin[] = [];
+  const stretches = new Map<string, First[]>();
+  for (const first of firsts.values()) stretches.set(`${first.lane}|${first.book ?? ""}`, [...(stretches.get(`${first.lane}|${first.book ?? ""}`) ?? []), first]);
+  for (const [stretch, days] of stretches) {
+    let last = -Infinity, kept: { pin: CalendarPin; first: First } | null = null;
+    for (const first of days.sort((a, b) => a.start - b.start)) {
+      if (first.x <= last) continue;
+      last = first.x;
+      // Days that start closer than one date's width share a label ("12月24–25日").
+      if (kept && first.x - kept.first.x < PIN_SPACING) {
+        kept.pin.label = `${kept.first.day.month}月${kept.first.day.day}–${first.day.month === kept.first.day.month ? "" : `${first.day.month}月`}${first.day.day}日`;
+        continue;
+      }
+      const date = calendarDay(first.start * 1440);
+      const pin: CalendarPin = { id: `calendar:${first.lane}:${first.book ?? ""}:${calendarDayKey(date)}`, x: (first.x - SPIRAL.step / 2) * 3, z: (first.lane * SPIRAL.laneGap - SPIRAL.radius - PIN_BACK) * 3, top: ((tops.get(stretch) ?? 0) + 220) * 3,
+        // The date floats above the book's strands, far behind the scenes: a backdrop, not a record.
+        card: ((tops.get(stretch) ?? 0) + 520) * 3,
+        label: `${first.day.month}月${first.day.day}日`, detail: `Year ${first.day.year}${first.book !== null ? ` · Book ${first.book}` : ""}` };
+      pins.push(pin);
+      kept = { pin, first };
+    }
+  }
+  return pins;
+}
+
+/** How a part of the day reads on the backdrop. */
+const PART_LABEL: Record<string, string> = { "late-night": "late night", dawn: "dawn", morning: "morning", noon: "noon", daytime: "daytime", afternoon: "afternoon", "after-school": "after school", evening: "evening", night: "night" };
+/** Part labels: their height, the first row's drop under the dates' lettering, the second row's further drop, the gap kept
+ * between labels in a row and the width a letter takes (world units). */
+export const PART = { height: 600, drop: 380, row: 640, gap: 160, letter: 180 };
+/**
+ * The parts of the day on the date backdrop: in each book's stretch, a small
+ * mark where each part of each calendar day starts (its first non-flashback
+ * scene), under the dates and above the time meter, the same depth as the
+ * dates. Small hours at 00:00 read "midnight". Every part keeps its own mark:
+ * one too close to the last in its row drops to a second row, and only when
+ * both rows are taken does it join the last label ("evening–night").
+ */
+export function dayPartMarks(data: TimePlaceProjection, anchors: Map<string, Position3>, laneOf: (scene: StoryScene) => number): DayPartMark[] {
+  const entries = new Map((data.calendar?.entries ?? []).filter((entry) => entry.placed !== "between" && entry.year !== null && entry.part).map((entry) => [entry.id, entry]));
+  if (!entries.size) return [];
+  const tops = new Map<string, number>(), firsts = new Map<string, { stretch: string; lane: number; x: number; label: string }>();
+  for (const scene of data.scenes) {
+    const anchor = anchors.get(spiralNodeId(scene.id));
+    if (!anchor) continue;
+    const stretch = `${laneOf(scene)}|${scene.book ?? ""}`;
+    tops.set(stretch, Math.max(tops.get(stretch) ?? -Infinity, anchor[1]));
+    const entry = scene.flashback ? undefined : scene.times.map((time) => entries.get(time.id)).find(Boolean);
+    if (!entry) continue;
+    const key = `${stretch}|${entry.year}-${entry.month}-${entry.day}|${entry.part}`, known = firsts.get(key);
+    if (!known || anchor[0] < known.x) firsts.set(key, { stretch, lane: laneOf(scene), x: anchor[0], label: entry.part === "late-night" && entry.time === "00:00" ? "midnight" : PART_LABEL[entry.part!] ?? entry.part! });
+  }
+  const marks: DayPartMark[] = [];
+  const byStretch = new Map<string, { lane: number; x: number; label: string }[]>();
+  for (const first of firsts.values()) byStretch.set(first.stretch, [...(byStretch.get(first.stretch) ?? []), first]);
+  const half = (label: string) => (label.length * PART.letter) / 2 + PART.gap;
+  for (const [stretch, firstsHere] of byStretch) {
+    // Under the dates (pin cards rise 520 above the stretch's top; their lettering hangs about 615 below the card centre).
+    const card = ((tops.get(stretch) ?? 0) + 520) * 3;
+    const rows: ({ mark: DayPartMark; first: string; right: number } | null)[] = [null, null];
+    for (const first of firstsHere.sort((a, b) => a.x - b.x)) {
+      const x = (first.x - SPIRAL.step / 2) * 3;
+      const row = rows.findIndex((last) => !last || last.right < x - half(first.label));
+      if (row < 0) {
+        const last = rows[0]!.right > rows[1]!.right ? rows[1]! : rows[0]!;
+        last.mark.label = last.first === first.label ? last.first : `${last.first}–${first.label}`;
+        continue;
+      }
+      const mark: DayPartMark = { id: `part:${stretch}:${marks.length}`, x, y: card - 615 - PART.drop - row * PART.row, foot: card - 615 - METER.under, z: (first.lane * SPIRAL.laneGap - SPIRAL.radius - PIN_BACK) * 3, label: first.label };
+      marks.push(mark);
+      rows[row] = { mark, first: first.label, right: x + half(first.label) };
+    }
+  }
+  return marks;
+}
+
+/**
+ * The stored spiral (precomputed offline by `novel calendar build`): scene
+ * spheres on the knots, all in the design's cyan: each strand's axis (its
+ * skeleton, tappable) and coil glow by how much the strand matters (the
+ * square root of its share of the busiest strand's scenes), so main strands
+ * stand out and minor ones stay dim; all on the floor box it was solved in. Drawn as solved at one uniform scale (a quiet
+ * story layer is one step); no optimisation happens here.
+ */
+function storedSpiral(spiral: SpiralView) {
+  const along = SPIRAL.step / spiral.scale.dx, across = along, laneGap = Math.max(SPIRAL.laneGap, (spiral.scale.width + 2 * spiral.scale.dx * 10) * along);
+  const xs = spiral.runs.flatMap((run) => run.knots.map((knot) => knot.x)), middle = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const layout = (x: number, y: number, z: number, lane: number): Position3 => [(x - middle) * along, y * across, z * across + lane * laneGap];
+  const anchors = new Map<string, Position3>(), layer = new Map<string, number>();
+  for (const run of spiral.runs) for (const knot of run.knots) { anchors.set(knot.id, layout(knot.x, knot.q[0], knot.q[1], run.lane)); layer.set(knot.id, knot.x / spiral.scale.dx); }
+  const world = (point: Position3) => point.map((value) => value * 3) as Position3;
+  const busiest = Math.max(1, ...spiral.runs.map((run) => run.knots.length)), weight = (run: SpiralView["runs"][number]) => Math.sqrt(run.knots.length / busiest);
+  const tracks = spiral.runs.filter((run) => run.track.length > 1).map((run): OrbitalPath => ({ id: `spiral-track:${run.id}`, tone: "coil", strandId: run.id, weight: weight(run), points: run.track.map(([x, y, z]) => world(layout(x, y, z, run.lane))) }));
+  const axes = spiral.runs.filter((run) => run.axis.length > 1).map((run): OrbitalPath => ({ id: `spiral-axis:${run.id}`, strand: true, strandId: run.id, weight: weight(run), points: run.axis.map(([x, y, z]) => world(layout(x, y, z, run.lane))) }));
+  return { anchors, layer, tracks, axes, links: spiral.links, built: spiral.builtAt, bottom: -120, layout, depth: world([0, 0, spiral.scale.width * across])[2] };
+}
+
 const spiralPoint = (rank: number, total: number): Position3 => {
   const angle = rank / SPIRAL.perTurn * Math.PI * 2;
   return [(rank - (total - 1) / 2) * SPIRAL.step, Math.cos(angle) * SPIRAL.radius, Math.sin(angle) * SPIRAL.radius];
 };
+
+/**
+ * The time meter of a stored spiral. The build compresses quiet story time
+ * (spiral.ts compressTime), so each book's stretch gets a ruler on the date
+ * backdrop, just under the dates: a tick per story moment (every fifth
+ * taller), packed closer where time is compressed, and a note where the pace
+ * changes. A step's pace is its length over a full step (scale.dx), averaged
+ * over five moments; a note appears where that moves by 0.2 or more and has
+ * settled (the next six moments within 0.2, noted at their middle value), well
+ * clear of the last note.
+ */
+function timeMeters(data: TimePlaceProjection, spiral: SpiralView, layout: (x: number, y: number, z: number, lane: number) => Position3): TimeMeter[] {
+  const bookOf = new Map(data.scenes.map((scene) => [scene.id, scene.book ?? null]));
+  const stretches = new Map<string, { lane: number; book: number | null; xs: Set<number>; top: number }>();
+  for (const run of spiral.runs) for (const knot of run.knots) {
+    const book = bookOf.get(knot.id) ?? null, key = `${run.lane}|${book ?? ""}`;
+    const stretch = stretches.get(key) ?? { lane: run.lane, book, xs: new Set<number>(), top: -Infinity };
+    stretch.xs.add(knot.x);
+    stretch.top = Math.max(stretch.top, layout(knot.x, knot.q[0], knot.q[1], run.lane)[1]);
+    stretches.set(key, stretch);
+  }
+  return [...stretches.values()].flatMap((stretch): TimeMeter[] => {
+    const xs = [...stretch.xs].sort((first, second) => first - second);
+    if (xs.length < 2) return [];
+    const ticks = xs.map((x) => layout(x, 0, 0, stretch.lane)[0] * 3);
+    const pace = xs.slice(1).map((x, index) => (x - xs[index]) / spiral.scale.dx);
+    const smooth = pace.map((_, index) => { const window = pace.slice(Math.max(0, index - 2), index + 3); return Math.round(10 * window.reduce((sum, value) => sum + value, 0) / window.length) / 10; });
+    const zones: TimeMeter["zones"] = [];
+    let current = Infinity, last = -Infinity;
+    smooth.forEach((value, index) => {
+      if (Math.abs(value - current) < 0.2 || ticks[index] - last < METER.gap) return;
+      // Noted once it has settled: the next six moments within 0.2 of each other, at their middle value.
+      const ahead = smooth.slice(index, index + 6).sort((first, second) => first - second);
+      if (ahead.at(-1)! - ahead[0] >= 0.2) return;
+      const level = ahead[Math.floor(ahead.length / 2)];
+      zones.push({ x: ticks[index], label: level >= 0.95 ? "time ×1" : `time ×${level.toFixed(1)}` });
+      current = level; last = ticks[index];
+    });
+    // Just under the dates (pin cards rise 520 above the stretch's top; their lettering hangs about 615 below the card centre).
+    return [{ id: `meter:${stretch.lane}:${stretch.book ?? ""}`, y: (stretch.top + 520) * 3 - 615 - METER.under, z: (stretch.lane * SPIRAL.laneGap - SPIRAL.radius - PIN_BACK) * 3, ticks, zones }];
+  });
+}
+/** The meter's notes keep this far apart; the ruler sits this far under the dates' lettering, below both rows of the parts of the day (world units). */
+const METER = { gap: 3200, under: 1640 };
 
 /**
  * Curved causal arcs that do not collide. Every arc bends outward, away from
@@ -302,6 +498,21 @@ const spiralPoint = (rank: number, total: number): Position3 => {
  * Links inside one scene stay small, inside its bubble; links between scenes
  * arc out past the spiral.
  */
+/** The lowest lane whose spans this one stays a gap apart from (interval colouring); taken lanes grow as needed. */
+function takeLane(taken: { low: number; high: number }[][], low: number, high: number, gap: number): number {
+  let lane = taken.findIndex((spans) => spans.every((other) => high + gap < other.low || low - gap > other.high));
+  if (lane < 0) { lane = taken.length; taken.push([]); }
+  taken[lane].push({ low, high });
+  return lane;
+}
+/** The direction an arc between two points bends: outward, away from the time axis (perpendicular when they face each other across it). */
+function outward(from: Position3, to: Position3): Position3 {
+  const radial = (point: Position3) => { const length = Math.hypot(point[1], point[2]) || 1; return [0, point[1] / length, point[2] / length]; };
+  const sum = radial(from).map((value, axis) => value + radial(to)[axis]);
+  const length = Math.hypot(...sum);
+  return (length > 0.2 ? sum.map((value) => value / length) : [0, -radial(from)[2], radial(from)[1]]) as Position3;
+}
+
 export function routeCausalArcs(arrows: CausalArrow[], draws: OrbitalDraw[]): CausalArrow[] {
   const at = new Map(draws.filter((draw) => draw.role === "main" || draw.role === "preview").map((draw) => [draw.node.id, draw]));
   const key = (draw: OrbitalDraw) => draw.order ?? draw.node.chrono;
@@ -313,23 +524,83 @@ export function routeCausalArcs(arrows: CausalArrow[], draws: OrbitalDraw[]): Ca
   }).sort((first, second) => (first.high - first.low) - (second.high - second.low) || first.low - second.low);
   const lanes = new Map<string, { low: number; high: number }[][]>();
   const routed = new Map<string, CausalArrow>();
-  const radial = (point: Position3) => { const length = Math.hypot(point[1], point[2]) || 1; return [0, point[1] / length, point[2] / length]; };
   for (const span of spans) {
     const taken = lanes.get(span.group) ?? [];
     lanes.set(span.group, taken);
-    const gap = span.local ? 0.002 : 0.5;
-    let lane = taken.findIndex((spans) => spans.every((other) => span.high + gap < other.low || span.low - gap > other.high));
-    if (lane < 0) { lane = taken.length; taken.push([]); }
-    taken[lane].push({ low: span.low, high: span.high });
-    const sum = radial(span.from.position).map((value, axis) => value + radial(span.to.position)[axis]);
-    const length = Math.hypot(...sum);
-    // Endpoints on opposite sides of the spiral: bend perpendicular to them.
-    const out = length > 0.2 ? sum.map((value) => value / length) : [0, -radial(span.from.position)[2], radial(span.from.position)[1]];
+    const lane = takeLane(taken, span.low, span.high, span.local ? 0.002 : 0.5);
+    const out = outward(span.from.position, span.to.position);
     const chord = Math.hypot(...span.to.position.map((value, axis) => value - span.from.position[axis]));
     const reach = span.local ? 16 + 0.5 * chord + 7 * lane : SPIRAL.radius * 3 * 0.55 + 110 * lane + 0.08 * Math.abs(span.to.position[0] - span.from.position[0]);
     routed.set(span.arrow.id, { ...span.arrow, bend: out.map((value) => value * reach) as Position3 });
   }
   return arrows.map((arrow) => routed.get(arrow.id) ?? arrow);
+}
+
+/** A lit strand's cast: records to add, characters to move (or add) next to it, and their participation arcs. */
+export interface StrandCast { draws: OrbitalDraw[]; moves: Map<string, Position3>; arcs: CausalArrow[]; ids: string[] }
+/** At most this many records and characters (the scenes nearest the tap first); the characters' rows above and behind the lit
+ * stretch (world units, the lift a share of the stretch's length), so a camera looking down sees them clear of the strand. */
+const CAST = { records: 120, characters: 24, lift: [1500, 0.3, 6000], spacing: 340, row: 260, forward: -500 };
+/**
+ * A lit strand's cast, drawn next to it: the events and dialogues inside its
+ * lit scenes (a small ring inside each scene), and the characters taking part
+ * in them, gathered in two staggered rows just above the lit stretch, each
+ * near the scenes it is in (a universe-wide view would otherwise leave them
+ * far away). Each character joins each record it takes part in by a dim arc
+ * routed like the causal arcs: bent outward, a character's arcs in lanes so
+ * overlapping ones do not run together. `scenes` are spiral node ids,
+ * nearest the tap first.
+ */
+export function strandCast(world: Pick<RegroupedWorld, "interiors">, scenes: string[], draws: OrbitalDraw[]): StrandCast {
+  const drawn = new Map(draws.map((draw) => [draw.node.id, draw]));
+  const added: OrbitalDraw[] = [], at = new Map<string, OrbitalDraw>(), cast = new Map<string, { node: WorldNode; records: Set<string> }>();
+  for (const sceneId of scenes) {
+    const scene = drawn.get(sceneId), interior = world.interiors[sceneId];
+    if (!scene || !interior) continue;
+    const nodes = new Map(interior.nodes.map((node) => [node.id, node]));
+    const takers = new Map<string, Set<string>>();
+    const join = (record: string, character: string) => { if (nodes.get(character)?.kind === "character") takers.set(record, (takers.get(record) ?? new Set()).add(character)); };
+    for (const edge of interior.edges) if (edge.relationType === "PARTICIPATES_IN") join(edge.to, edge.from);
+    for (const node of interior.nodes) if (node.kind === "dialogue") for (const id of [...(node.dialogue?.participantIds ?? []), ...(node.dialogue?.speakerId ? [node.dialogue.speakerId] : [])]) join(node.id, id);
+    const inside = interior.nodes.filter((node) => (node.kind === "event" || node.kind === "dialogue") && takers.has(node.id)).sort((first, second) => first.chrono - second.chrono || first.id.localeCompare(second.id));
+    if (!inside.length) continue;
+    if (at.size && at.size + inside.length > CAST.records) break;
+    inside.forEach((node, index) => {
+      const local = helixPoint(inside.length > 1 ? index / (inside.length - 1) : 0.5, 0, 1, scene.radius * 2.4);
+      const record = drawn.get(node.id) ?? { node, position: scene.position.map((value, axis) => value + local[axis]) as Position3, radius: node.kind === "dialogue" ? 4 : 5, role: "connection" as const, previewParentId: sceneId, order: (scene.order ?? scene.node.chrono) + (index + 1) / (inside.length + 1) };
+      if (!drawn.has(node.id)) added.push(record);
+      at.set(node.id, record);
+      for (const character of takers.get(node.id)!) { const entry = cast.get(character) ?? { node: nodes.get(character)!, records: new Set<string>() }; entry.records.add(node.id); cast.set(character, entry); }
+    });
+  }
+  if (!at.size) return { draws: [], moves: new Map(), arcs: [], ids: [] };
+  // The characters in most of these records, each placed over the middle of its records, spread so none overlap.
+  const chosen = [...cast.entries()].sort((first, second) => second[1].records.size - first[1].records.size || first[0].localeCompare(second[0])).slice(0, CAST.characters);
+  const lit = [...at.values()].map((record) => record.position);
+  const stretch = Math.max(...lit.map((point) => point[0])) - Math.min(...lit.map((point) => point[0]));
+  const top = Math.max(...lit.map((point) => point[1])) + Math.min(CAST.lift[2], Math.max(CAST.lift[0], CAST.lift[1] * stretch)), depth = lit.reduce((sum, point) => sum + point[2], 0) / lit.length + CAST.forward;
+  const wanted = chosen.map(([id, entry]) => ({ id, entry, x: [...entry.records].reduce((sum, record) => sum + at.get(record)!.position[0], 0) / entry.records.size })).sort((first, second) => first.x - second.x || first.id.localeCompare(second.id));
+  const xs: number[] = [];
+  wanted.forEach((entry, index) => xs.push(index < 2 ? entry.x : Math.max(entry.x, xs[index - 2] + CAST.spacing)));
+  const shift = wanted.reduce((sum, entry, index) => sum + entry.x - xs[index], 0) / Math.max(1, wanted.length);
+  const moves = new Map<string, Position3>();
+  wanted.forEach((entry, index) => {
+    const position: Position3 = [xs[index] + shift, top + (index % 2) * CAST.row, depth];
+    if (drawn.has(entry.id)) moves.set(entry.id, position);
+    else added.push({ node: entry.entry.node, position, radius: nebulaRadius(entry.entry.node, 0.5), prominence: 0.5, role: "nebula" });
+  });
+  // Arcs: a character's arcs nest in lanes by how far apart their ends are along time (shortest lowest), all bent outward.
+  const arcs: CausalArrow[] = [];
+  wanted.forEach((entry, index) => {
+    const from: Position3 = [xs[index] + shift, top + (index % 2) * CAST.row, depth], taken: { low: number; high: number }[][] = [];
+    const ends = [...entry.entry.records].map((record) => ({ record, to: at.get(record)!.position })).sort((first, second) => Math.abs(first.to[0] - from[0]) - Math.abs(second.to[0] - from[0]) || first.record.localeCompare(second.record));
+    for (const end of ends) {
+      const lane = takeLane(taken, Math.min(from[0], end.to[0]), Math.max(from[0], end.to[0]), CAST.spacing / 4);
+      const reach = 120 + 70 * lane + 0.06 * Math.abs(end.to[0] - from[0]);
+      arcs.push({ id: `cast:${entry.id}:${end.record}`, from: entry.id, to: end.record, links: [], projected: false, state: "canon", participation: true, bend: outward(from, end.to).map((value) => value * reach) as Position3 });
+    }
+  });
+  return { draws: added, moves, arcs, ids: [...at.keys(), ...wanted.map((entry) => entry.id)] };
 }
 
 /** A scene's records that some stored causal link starts or ends at, in order. */
@@ -341,7 +612,7 @@ const causalRecords = (nodes: WorldNode[], ends: ReadonlySet<string>) => nodes
  * bubble around the events and dialogue its causal arrows start or end at
  * (entering the scene shows all its records); an amber thread from each
  * flashback scene to the scene it was told after. */
-export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWorld, focusBook?: number | null, shape: StoryShape = "line"): OrbitalArrangement {
+export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWorld, focusBook?: number | null, shape: StoryShape = "line", focusDay?: string | null, aspect = 1.6): OrbitalArrangement {
   const order = storyOrderScenes(data);
   // A universe: one spiral per continuity, side by side (alternate lines do not share a clock).
   const laneOf = continuityLanes(data);
@@ -350,14 +621,33 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
   const anchors = new Map<string, Position3>();
   /** Story position of a spiral sphere: its rank on the line, or its strand layer. */
   const position = new Map<string, number>();
-  const strands = shape === "strands" && data.available ? strandLayout(data, lanes) : null;
-  if (strands) for (const [id, point] of strands.anchors) { anchors.set(spiralNodeId(id), point); position.set(spiralNodeId(id), strands.layer.get(id)!); }
+  // A precomputed spiral is drawn as stored; without one, strands are laid out here as before.
+  const stored = shape === "strands" && data.available && data.spiral?.runs.length ? storedSpiral(data.spiral) : null;
+  const strands = !stored && shape === "strands" && data.available ? strandLayout(data, lanes) : null;
+  if (stored) {
+    for (const [id, point] of stored.anchors) { anchors.set(spiralNodeId(id), point); position.set(spiralNodeId(id), stored.layer.get(id)!); }
+    // Scenes newer than the last build wait on a faint line under the spiral, in story order, until it is rebuilt.
+    const known = [...stored.layer.values()], last = known.length ? Math.max(...known) : 0;
+    order.filter((scene) => !stored.anchors.has(scene.id)).forEach((scene, rank) => { const point = stored.layout((last + 2 + rank) * (data.spiral!.scale.dx), 0, 0, laneOf(scene)); anchors.set(spiralNodeId(scene.id), [point[0], stored.bottom, point[2]]); position.set(spiralNodeId(scene.id), last + 2 + rank); });
+  }
+  else if (strands) for (const [id, point] of strands.anchors) { anchors.set(spiralNodeId(id), point); position.set(spiralNodeId(id), strands.layer.get(id)!); }
   else for (const [lane, scenes] of lanes) scenes.forEach((scene, rank) => { const point = spiralPoint(rank, scenes.length); anchors.set(spiralNodeId(scene.id), [point[0], point[1], point[2] + lane * SPIRAL.laneGap]); position.set(spiralNodeId(scene.id), rank); });
   const universe = data.scope === "universe";
   const reading = [...data.scenes].sort((first, second) => first.index - second.index);
   const sceneById = new Map(data.scenes.map((scene) => [scene.id, scene]));
   /** A book's scenes on the spiral (universe ids carry the book). */
   const bookPositions = (volume: number, draws: OrbitalDraw[]) => { const points = draws.filter((draw) => draw.role === "main" && sceneById.get(sceneOfSpiral(draw.node.id) ?? "")?.book === volume).map((draw) => draw.position); return points.length ? points : null; };
+  /** The scenes of the chosen calendar day, in every book (the calendar, not a file, is what the view focuses). */
+  const dayOf = sceneDays(data);
+  const dayPositions = (draws: OrbitalDraw[]) => { if (!focusDay) return null; const points = draws.filter((draw) => draw.role === "main" && dayOf.get(sceneOfSpiral(draw.node.id) ?? "") === focusDay).map((draw) => draw.position); return points.length ? points : null; };
+  /** On a stored spiral a book or the opening frame shows a stretch of time from its first scene about as long as the floor
+   * box is deep, longer on a wide screen: the whole book across a phone would squeeze the cross-section to a thread. */
+  const windowed = (points: Position3[] | null) => {
+    if (!stored || !points?.length) return points;
+    const start = Math.min(...points.map((point) => point[0])), reach = stored.depth * Math.max(0.8, 1.3 * aspect);
+    return points.filter((point) => point[0] <= start + reach);
+  };
+  const focusFrame = (draws: OrbitalDraw[]) => dayPositions(draws) ?? (universe && focusBook !== null && focusBook !== undefined ? windowed(bookPositions(focusBook, draws)) : null);
   const toldAfter = new Map<string, string>();
   for (let index = 1; index < reading.length; index++) {
     const scene = reading[index], previous = reading[index - 1];
@@ -388,23 +678,55 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
     node: { id: portal.id, label: portal.label, viewKind: "Other volume", kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono: 0, summary: `${portal.links} cross-volume causal link${portal.links === 1 ? "" : "s"} with this book (universe ledger) · ${portal.before ? "read before" : "read after"} this volume`, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] },
     position: [portal.before ? -reach : reach, 0, 0], radius: 70, role: "preview", order: portal.before ? -1 : order.length + 1,
   });
+  // Group trips on a stored spiral: a lime arc over the spiral from the scene they leave to the scene they arrive at, and a marker at its top.
+  const trips = stored ? (data.spiral!.trips ?? []).filter((trip) => anchors.has(spiralNodeId(trip.from)) && anchors.has(spiralNodeId(trip.to))) : [];
+  const rankOf = new Map(order.map((scene, rank) => [scene.id, rank]));
+  for (const trip of trips) {
+    const [a, b] = [trip.from, trip.to].map((id) => anchors.get(spiralNodeId(id))!.map((value) => value * 3) as Position3);
+    const who = `${trip.names.slice(0, 3).join("、")}${trip.names.length > 3 ? ` +${trip.names.length - 3}` : ""}`;
+    records.push({ node: { id: tripNodeId(trip), label: `${who} → ${trip.places[1]}`, viewKind: "Group trip", kind: "bigEvent", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0],
+      summary: `${trip.names.join("、")} travel together from ${trip.places[0]} to ${trip.places[1]}${dayOf.get(trip.from) || dayOf.get(trip.to) ? ` · ${[dayOf.get(trip.from), dayOf.get(trip.to)].map((day) => day ? day.split("-").slice(1).join("/") : "?").join(" → ")}` : ""}${trip.guessed ? " · a place at one end is borrowed from an earlier scene (a guess)" : ""}${trip.nested ? " · one place lies inside the other: perhaps only the place named more closely" : ""}${trip.backed ? " · an extracted movement event backs it" : ""} · worked out from places and who is present; not reviewed` },
+      position: tripArc(a, b)[TRIP_SAMPLES >> 1], radius: 26, role: "preview", order: rankOf.get(trip.to) ?? 0 });
+  }
+  const pins = calendarPins(data, anchors, laneOf);
+  const meters = stored ? timeMeters(data, data.spiral!, stored.layout) : [];
+  const parts = dayPartMarks(data, anchors, laneOf);
+  const pinNote = pins.length ? ` · tall pins behind: where each calendar day starts (the universe calendar)${parts.length ? ", and under them where each part of the day starts" : ""}` : "";
   return {
-    anchors, radiusScale: 0.42, causal: true,
+    // On a stored spiral the scenes are beads on the coils: a little smaller so the coils read.
+    anchors, radiusScale: stored ? 0.34 : 0.42, causal: true,
     // Strands: seen from the side, coils stacked like the rows of a braid.
-    ...(strands ? { direction: [0, 0.22, 1] as Position3 } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
-    morphKey: `${strands ? "strands" : "line"}:${[...anchors].map(([id, point]) => `${id}@${point.map(Math.round).join("/")}`).join(",")}`,
+    // The stored spiral spreads over the floor, so the camera looks down on it; stacked strands are seen from the front.
+    ...(stored ? { direction: [0, 1.1, 1] as Position3 } : strands ? { direction: [0, 0.22, 1] as Position3 } : {}), ...(stored ? { strandPeriod: (pathId: string, index: number) => {
+      const run = data.spiral!.runs.find((entry) => `spiral-axis:${entry.id}` === pathId);
+      if (!run?.knots.length) return null;
+      const x = run.axis[Math.max(0, Math.min(index, run.axis.length - 1))][0];
+      const nearest = run.knots.reduce((best, knot) => Math.abs(knot.x - x) < Math.abs(best.x - x) ? knot : best);
+      const day = dayOf.get(nearest.id), knots = (day ? run.knots.filter((knot) => dayOf.get(knot.id) === day) : run.knots).slice().sort((first, second) => Math.abs(first.x - x) - Math.abs(second.x - x));
+      const [, month, date] = day ? day.split("-") : [];
+      return { ids: knots.map((knot) => spiralNodeId(knot.id)), strandId: run.id, book: sceneById.get(nearest.id)?.book, label: `${day ? `${month}月${date}日 · ` : ""}${knots.length} scene${knots.length === 1 ? "" : "s"} on this strand` };
+    }, ...(world ? { strandCast: (scenes: string[], draws: OrbitalDraw[]) => strandCast(world, scenes, draws) } : {}) } : {}), extraDraws: records, envelope: records.some((draw) => draw.previewParentId) ? "shell" : undefined,
+    morphKey: `${stored ? "spiral" : strands ? "strands" : "line"}:${[...anchors].map(([id, point]) => `${id}@${point.map(Math.round).join("/")}`).join(",")}`,
+    // The calendar behind the story: a giant pin where each day starts.
+    pins, meters, parts,
     // Shredding: in story order, each scene peels off the one line onto its strand.
     morphDelays: (draws) => { const last = Math.max(1, ...position.values()); return new Map(draws.map((draw) => [draw.node.id, Math.round(((position.get(draw.previewParentId ?? draw.node.id) ?? 0) / last) * SHRED_MS)])); },
-    timeKey: strands
-      ? { label: "STORY STRANDS →", detail: `Story time as strands, estimated from who is in each scene (a guess where a scene names no one): each coil follows the same characters · S-curves: strands splitting and meeting · a faint rung: scenes nothing orders, side by side at one moment · amber: a flashback, threaded to where it is told · orange arcs: causes between the records inside the bubbles, judged in this order · place check: ${strandSummary(strands.checks)}` }
+    timeKey: stored
+      ? { label: "STORY SPIRAL →", detail: `Story time as a precomputed spiral (built ${stored.built.slice(0, 16).replace("T", " ")})${trips.length ? `: lime arcs are group trips, ${trips.length} where several people arrive together from another place (faint where a place is a guess, or one place lies inside the other); ` : ": "}each strand a glowing cyan axis, brighter the more scenes it holds (tap one to light it for that day and gather its characters), with a coil that winds once per few scenes, tight where scenes are dense and almost straight where there are none,; forks and merges joined smoothly; busy strands low in the middle and the rest spread over the floor before they stack up; quiet time is compressed (the ruler under the dates: a tick per story moment, packed closer where time is squeezed, its notes the pace)${anchors.size > stored.anchors.size ? ` · ${anchors.size - stored.anchors.size} newer scene${anchors.size - stored.anchors.size === 1 ? "" : "s"} wait under it until \`novel calendar build\`` : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
+      : strands
+      ? { label: "STORY STRANDS →", detail: `Story time as strands, estimated from who is in each scene (a guess where a scene names no one): each coil follows the same characters · S-curves: strands splitting and meeting · a faint rung: scenes nothing orders, side by side at one moment · amber: a flashback, threaded to where it is told · orange arcs: causes between the records inside the bubbles, judged in this order · place check: ${strandSummary(strands.checks)}${pinNote}` }
       : data.available
-      ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told` }
+      ? { label: "STORY TIME →", detail: `Every scene in story order (estimated) · inside each bubble, the records its stored causes join (orange arcs)${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""} · amber: a flashback, threaded to where it is told${pinNote}` }
       : { label: "READING ORDER →", detail: `Story time not computed yet (run the time-place faculty): scenes in reading order · orange arcs: stored causes${world?.portals?.length ? " · violet arcs: causes to and from other volumes" : ""}` },
-    initialFrame: (draws) => (universe && focusBook !== null && focusBook !== undefined ? bookPositions(focusBook, draws) : null) ?? draws.filter((draw) => draw.role === "main" && (position.get(draw.node.id) ?? draw.node.chrono) < SPIRAL.perTurn * 1.5).map((draw) => draw.position),
-    ...(universe ? { bookFrame: (draws: OrbitalDraw[]) => focusBook === null || focusBook === undefined ? null : bookPositions(focusBook, draws), bookKey: `story:${focusBook ?? ""}`, renderDistance: renderReach(order) } : {}),
+    initialFrame: (draws) => focusFrame(draws) ?? (stored ? windowed(draws.filter((draw) => draw.role === "main").map((draw) => draw.position))! : draws.filter((draw) => draw.role === "main" && (position.get(draw.node.id) ?? draw.node.chrono) < SPIRAL.perTurn * 1.5).map((draw) => draw.position)),
+    // The camera flies to the chosen day (or, with none, the book being read) whenever the choice changes.
+    ...(universe || focusDay ? { bookFrame: focusFrame, bookKey: focusDay ? `story:day:${focusDay}` : `story:${focusBook ?? ""}` } : {}),
+    ...(universe ? { renderDistance: renderReach(order) } : {}),
     // A selected scene is framed with its neighbours on the spiral (about half a turn); a book marker frames its book.
     focusFor: (selectedId, draws) => {
       if (selectedId.startsWith("book:")) return bookPositions(Number(selectedId.slice(5)), draws);
+      const trip = trips.find((entry) => tripNodeId(entry) === selectedId);
+      if (trip) return draws.filter((draw) => draw.role === "main" && (draw.node.id === spiralNodeId(trip.from) || draw.node.id === spiralNodeId(trip.to))).map((draw) => draw.position);
       const self = draws.find((draw) => draw.role === "main" && draw.node.id === selectedId);
       if (!self) return null;
       const here = position.get(self.node.id) ?? self.node.chrono;
@@ -416,6 +738,12 @@ export function spiralArrangement(data: TimePlaceProjection, world?: RegroupedWo
       if (!main.length) return [];
       const at = new Map(main.map((draw) => [draw.node.id, draw.position]));
       const threads = [...toldAfter].flatMap(([flashback, teller]): OrbitalPath[] => at.get(flashback) && at.get(teller) ? [{ id: `told:${flashback}`, tone: "thread", points: [at.get(teller)!, at.get(flashback)!] }] : []);
+      if (stored) {
+        // As stored: cyan coils around coloured axes; faint links where a character crosses strands mid-way.
+        const crossings = stored.links.flatMap((link): OrbitalPath[] => { const from = at.get(spiralNodeId(link.from)), to = at.get(spiralNodeId(link.to)); return from && to ? [{ id: `spiral-cross:${link.from}:${link.to}`, tone: "link", points: [from, to] }] : []; });
+        const arcs = trips.flatMap((trip): OrbitalPath[] => { const from = at.get(spiralNodeId(trip.from)), to = at.get(spiralNodeId(trip.to)); return from && to ? [{ id: `spiral-trip:${trip.from}:${trip.to}`, tone: "trip", points: tripArc(from, to), strandIds: [...trip.runs], faint: trip.guessed || trip.nested }] : []; });
+        return [...stored.tracks, ...stored.axes, ...crossings, ...arcs, ...threads];
+      }
       if (strands) {
         // The skeleton: one curve per strand run along its coil, S-curves where strands split and meet.
         const runOf = new Map<string, string>();

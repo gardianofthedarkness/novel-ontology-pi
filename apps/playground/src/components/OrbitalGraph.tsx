@@ -12,7 +12,7 @@ import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
 import type { FacultyAnchor } from "../data/facultyEffects";
-import type { FloorMark } from "../data/orbitalTimePlace";
+import { PART, type CalendarPin, type DayPartMark, type FloorMark, type TimeMeter } from "../data/orbitalTimePlace";
 import { useAlbumTexture } from "./useAlbumTexture";
 import { containedImageSize } from "../data/albumImage";
 
@@ -323,6 +323,126 @@ function FloorMap({ marks }: { marks: FloorMark[] }) {
   })}</>;
 }
 
+/** A calendar pin's date: large soft lettering (no card), the year and book small beneath. */
+function pinTexture(label: string, detail: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024; canvas.height = 300;
+  const context = canvas.getContext("2d")!;
+  context.textAlign = "center";
+  context.shadowColor = "rgba(120, 170, 255, 0.55)";
+  context.shadowBlur = 28;
+  context.fillStyle = "rgba(214, 228, 255, 0.82)";
+  context.font = "700 170px sans-serif";
+  context.fillText(label, 512, 180);
+  context.shadowBlur = 0;
+  context.fillStyle = "rgba(160, 186, 232, 0.75)";
+  context.font = "400 58px sans-serif";
+  context.fillText(detail, 512, 270);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
+/** A time meter's note ("time ×0.4"): small soft lettering under the ruler, left-aligned at its tick. */
+function meterTexture(label: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512; canvas.height = 120;
+  const context = canvas.getContext("2d")!;
+  context.shadowColor = "rgba(54, 173, 255, 0.6)";
+  context.shadowBlur = 16;
+  context.fillStyle = "rgba(159, 216, 255, 0.85)";
+  context.font = "500 64px sans-serif";
+  context.fillText(label, 8, 84);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+/** Tick heights (every fifth story moment taller), a note's width and how far under the ruler it hangs (world units). */
+const METER_DRAW = { tick: 140, fifth: 300, note: 2200, below: 300 };
+/** The time meters on the date backdrop: a ruler per book with a tick per story moment (packed where quiet time is
+ * compressed) and the pace where it changes. Outside the fog like the dates, never raycast. */
+function TimeMeters({ meters }: { meters: TimeMeter[] }) {
+  const rulers = useMemo(() => meters.map((meter) => {
+    const positions = [meter.ticks[0], meter.y, meter.z, meter.ticks.at(-1)!, meter.y, meter.z];
+    meter.ticks.forEach((x, index) => positions.push(x, meter.y, meter.z, x, meter.y + (index % 5 ? METER_DRAW.tick : METER_DRAW.fifth), meter.z));
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    const ruler = new LineSegments(geometry, new LineBasicMaterial({ color: "#9fd8ff", transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false, fog: false }));
+    ruler.renderOrder = -1;
+    return { id: meter.id, ruler };
+  }), [meters]);
+  useEffect(() => () => { for (const entry of rulers) { entry.ruler.geometry.dispose(); entry.ruler.material.dispose(); } }, [rulers]);
+  return <>
+    {rulers.map((entry) => <primitive key={entry.id} object={entry.ruler} raycast={noRaycast} />)}
+    {meters.flatMap((meter) => meter.zones.map((zone) => <MeterNote key={`${meter.id}:${zone.x}`} label={zone.label} position={[zone.x + METER_DRAW.note / 2, meter.y - METER_DRAW.below, meter.z]} />))}
+  </>;
+}
+function MeterNote({ label, position }: { label: string; position: Position3 }) {
+  const texture = useMemo(() => meterTexture(label), [label]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return <sprite raycast={noRaycast} renderOrder={-1} position={position} scale={[METER_DRAW.note, METER_DRAW.note * 120 / 512, 1]}><spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} fog={false} /></sprite>;
+}
+
+/** A part of the day's label ("evening"): smaller than the dates, centred on its mark, as wide as its text. */
+function partTexture(label: string) {
+  const canvas = document.createElement("canvas");
+  const font = "600 76px sans-serif", measure = canvas.getContext("2d")!;
+  measure.font = font;
+  canvas.width = Math.ceil(measure.measureText(label).width) + 48; canvas.height = 140;
+  const context = canvas.getContext("2d")!;
+  context.textAlign = "center";
+  context.shadowColor = "rgba(120, 170, 255, 0.5)";
+  context.shadowBlur = 18;
+  context.fillStyle = "rgba(207, 231, 247, 0.85)";
+  context.font = font;
+  context.fillText(label, canvas.width / 2, 96);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+/** The parts of the day on the date backdrop: a small label where each part starts, a thin line down to the time meter's
+ * ruler. Outside the fog like the dates, never raycast. */
+function DayPartMarks({ marks }: { marks: DayPartMark[] }) {
+  const lines = useMemo(() => {
+    const positions = marks.flatMap((mark) => [mark.x, mark.foot, mark.z, mark.x, mark.y - PART.height / 2, mark.z]);
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    const segments = new LineSegments(geometry, new LineBasicMaterial({ color: "#a9c4ff", transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false, fog: false }));
+    segments.renderOrder = -1;
+    return segments;
+  }, [marks]);
+  useEffect(() => () => { lines.geometry.dispose(); lines.material.dispose(); }, [lines]);
+  return <>
+    <primitive object={lines} raycast={noRaycast} />
+    {marks.map((mark) => <DayPartLabel key={mark.id} label={mark.label} position={[mark.x, mark.y, mark.z]} />)}
+  </>;
+}
+function DayPartLabel({ label, position }: { label: string; position: Position3 }) {
+  const texture = useMemo(() => partTexture(label), [label]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  const image = texture.image as HTMLCanvasElement;
+  return <sprite raycast={noRaycast} renderOrder={-1} position={position} scale={[PART.height * image.width / image.height, PART.height, 1]}><spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} fog={false} /></sprite>;
+}
+
+/** Giant calendar pins behind the story: a big date high up and far back
+ * where a calendar day starts, a faint pole down to the floor. Never raycast,
+ * labelled or framed: a backdrop, not records. */
+function CalendarPins({ pins }: { pins: CalendarPin[] }) {
+  return <>{pins.map((pin) => <CalendarPinMesh key={pin.id} pin={pin} />)}</>;
+}
+function CalendarPinMesh({ pin }: { pin: CalendarPin }) {
+  const texture = useMemo(() => pinTexture(pin.label, pin.detail), [pin.label, pin.detail]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  // World-sized lettering far back: it reads as distant scenery and scales with the view like the strands do.
+  // Outside the render-distance fog, which would hide anything this far behind the story.
+  const floor = -944, width = 4200, tall = width * 300 / 1024, base = pin.card - tall * 0.45, height = Math.max(200, base - floor);
+  return <group position={[pin.x, 0, pin.z]}>
+    <mesh raycast={noRaycast} renderOrder={-1} position={[0, floor + height / 2, 0]}><cylinderGeometry args={[22, 22, height, 10]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.18} depthWrite={false} toneMapped={false} fog={false} /></mesh>
+    <mesh raycast={noRaycast} renderOrder={-1} position={[0, floor + 1, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[90, 140, 40]} /><meshBasicMaterial color="#a9c4ff" transparent opacity={0.25} depthWrite={false} toneMapped={false} fog={false} /></mesh>
+    <sprite raycast={noRaycast} renderOrder={-1} position={[0, pin.card, 0]} scale={[width, tall, 1]}><spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} fog={false} /></sprite>
+  </group>;
+}
+
 /**
  * Render distance, the way a block game does it: around the point the
  * camera looks at, things stay clear; with distance they fade into the
@@ -370,26 +490,34 @@ function ArrowHead({ color, opacity = 1 }: { color: string; opacity?: number }) 
   return <mesh raycast={noRaycast} position={[0, -0.5, 0]}><coneGeometry args={[0.34, 1, 10]} /><meshBasicMaterial color={color} transparent={opacity < 1} opacity={opacity} toneMapped={false} /></mesh>;
 }
 
-/** Path tones: the blue time string, an amber flashback thread, a character route, a faint move. */
-const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 }, thread: { color: "#ffc46b", arrow: "#ffc46b", opacity: 0.75 }, route: { color: "#ff9a6b", arrow: "#ffb48c", opacity: 0.95 }, link: { color: "#7cc8ff", arrow: "#7cc8ff", opacity: 0.16 } };
+/** A strand's axis: a near-white cyan core and the design's strong cyan as its glow. */
+const STRAND_GLOW = { core: "#c4ecff", halo: "#36adff" };
+/** Path tones: the blue time string, an amber flashback thread, a character route, a faint move, a spiral's coil (the design's cyan), a group trip (lime). */
+const PATH_TONES = { time: { color: "#51b7ff", arrow: "#75ceff", opacity: 0.6 }, thread: { color: "#ffc46b", arrow: "#ffc46b", opacity: 0.75 }, route: { color: "#ff9a6b", arrow: "#ffb48c", opacity: 0.95 }, link: { color: "#7cc8ff", arrow: "#7cc8ff", opacity: 0.16 }, coil: { color: "#9fd8ff", arrow: "#9fd8ff", opacity: 0.5 }, trip: { color: "#b4f57e", arrow: "#c8ff96", opacity: 0.8 } };
 
 function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors, radii }: { path: OrbitalPath; morph: OrbitalMorph | null; reducedMotion: boolean; motion: MotionBus; anchors: (string | undefined)[]; radii: Map<string, number> }) {
   const { camera, size } = useThree();
   const tone = PATH_TONES[path.tone ?? "time"];
-  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: tone.color, transparent: true, opacity: path.preview ? 0.85 : tone.opacity, depthWrite: false })), [path, tone]);
+  // A coil glows by how much its strand matters; minor coils stay faint.
+  const weight = path.weight ?? 1;
+  const line = useMemo(() => new Line(new BufferGeometry().setFromPoints(path.points.map((point) => new Vector3(...point))), new LineBasicMaterial({ color: tone.color, transparent: true, opacity: (path.preview ? 0.85 : path.tone === "coil" ? 0.12 + 0.6 * weight : tone.opacity) * (path.dim ? 0.15 : 1) * (path.faint ? 0.4 : 1), depthWrite: false })), [path, tone, weight]);
   const arrowGroups = useRef<(Group | null)[]>([]);
-  const arrowCount = path.tone === "link" ? 0 : path.tone === "thread" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
+  const arrowCount = path.tone === "link" || path.tone === "coil" || path.strand ? 0 : path.tone === "thread" || path.tone === "trip" ? 1 : path.tone === "route" ? Math.min(16, path.points.length - 1) : path.preview ? 3 : Math.max(1, Math.min(8, path.points.length - 1));
   const arrowIndices = useMemo(() => Array.from({ length: arrowCount }, (_, index) => Math.max(1, Math.round((index + 1) * (path.points.length - 1) / arrowCount))), [path, arrowCount]);
   /** A character's route: a bead travels it in story order (resting at the start under reduced motion). */
   const bead = useRef<Mesh>(null);
-  // WebGL lines are one pixel wide; a route also gets a thin tube so it reads at a glance.
-  const tube = useMemo(() => {
-    if (path.tone !== "route" || path.points.length < 2) return null;
+  // WebGL lines are one pixel wide; a route, and a strand's axis, also get a thin tube so they read at a glance.
+  // A strand's axis is a bright core inside a soft additive halo, both as strong as the strand matters.
+  const [tube, halo] = useMemo(() => {
+    if ((path.tone !== "route" && !path.strand) || path.points.length < 2) return [null, null];
     const curve = new CurvePath<Vector3>();
     for (let index = 1; index < path.points.length; index++) curve.add(new LineCurve3(new Vector3(...path.points[index - 1]), new Vector3(...path.points[index])));
-    return new TubeGeometry(curve, Math.min(400, 24 * (path.points.length - 1)), 7, 6, false);
-  }, [path]);
-  useEffect(() => () => tube?.dispose(), [tube]);
+    if (!path.strand) return [new TubeGeometry(curve, Math.min(400, 24 * (path.points.length - 1)), 7, 6, false), null];
+    // A strand axis is already finely sampled: one tube segment per sample keeps its bends.
+    const radius = 12 + 26 * weight, segments = Math.min(1200, path.points.length - 1);
+    return [new TubeGeometry(curve, segments, radius, 8, false), new TubeGeometry(curve, segments, radius * 3.2, 10, false)];
+  }, [path, weight]);
+  useEffect(() => () => { tube?.dispose(); halo?.dispose(); }, [tube, halo]);
   useEffect(() => () => { line.geometry.dispose(); line.material.dispose(); }, [line]);
   useFrame(() => {
     const attribute = line.geometry.attributes.position;
@@ -427,7 +555,8 @@ function AnimatedTimePath({ path, morph, reducedMotion, motion, anchors, radii }
   });
   return <>
     <primitive object={line} raycast={noRaycast} />
-    {tube && <mesh geometry={tube} raycast={noRaycast}><meshBasicMaterial color={tone.color} transparent opacity={0.8} depthWrite={false} toneMapped={false} /></mesh>}
+    {tube && <mesh geometry={tube} raycast={noRaycast}><meshBasicMaterial color={path.strand ? STRAND_GLOW.core : tone.color} transparent opacity={path.dim ? 0.08 : path.strand ? 0.3 + 0.65 * weight : 0.8} depthWrite={false} toneMapped={false} /></mesh>}
+    {halo && !path.dim && <mesh geometry={halo} raycast={noRaycast}><meshBasicMaterial color={STRAND_GLOW.halo} transparent opacity={0.03 + 0.12 * weight} blending={AdditiveBlending} depthWrite={false} toneMapped={false} /></mesh>}
     {path.tone === "route" && <mesh ref={bead} raycast={noRaycast}><sphereGeometry args={[34, 16, 12]} /><meshBasicMaterial color={tone.arrow} toneMapped={false} /></mesh>}
     {arrowIndices.map((pointIndex, index) => <group key={`${index}:${pointIndex}`} ref={(element) => { arrowGroups.current[index] = element; }}>
       <ArrowHead color={tone.arrow} />
@@ -455,6 +584,8 @@ function VisibleConnections({ edges, bus, color = "#d8bdff", opacity = 0.8 }: { 
 }
 
 const CROSS_VOLUME_COLOR = "#c9a7ff";
+/** A character's part in an event or dialogue (a lit strand's cast): no direction, so no head or bead. */
+const PARTICIPATION_COLOR = "#cfe7f7";
 const CAUSAL_COLOR = { canon: "#ff8f5a", proposed: "#ffc777", held: "#91c3e0" } as const;
 const CAUSAL_SAMPLES = 24;
 
@@ -462,18 +593,18 @@ const CAUSAL_SAMPLES = 24;
  * Dashed = projected onto containing spheres; solid = event to event. */
 function CausalArc({ arrow, bus, radii, reducedMotion }: { arrow: CausalArrow; bus: LabelBus; radii: Map<string, number>; reducedMotion: boolean }) {
   const { camera, size } = useThree();
-  // Cross-volume causes (universe ledger) in violet, book causes in orange.
+  // Cross-volume causes (universe ledger) in violet, book causes in orange; a character's part in a lit strand's records, dim.
   const crossVolume = arrow.links.some((link) => link.universeId);
   const line = useMemo(() => {
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(new Float32Array((CAUSAL_SAMPLES + 1) * 3), 3));
-    const color = crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state];
-    const opacity = arrow.state === "canon" ? 0.9 : 0.6;
+    const color = arrow.participation ? PARTICIPATION_COLOR : crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state];
+    const opacity = arrow.participation ? 0.24 : arrow.state === "canon" ? 0.9 : 0.6;
     const material = arrow.projected
       ? new LineDashedMaterial({ color, dashSize: 26, gapSize: 18, transparent: true, opacity, depthWrite: false, toneMapped: false })
       : new LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false, toneMapped: false });
     return new Line(geometry, material);
-  }, [arrow.state, arrow.projected, crossVolume]);
+  }, [arrow.state, arrow.projected, arrow.participation, crossVolume]);
   useEffect(() => () => { line.geometry.dispose(); (line.material as LineBasicMaterial).dispose(); }, [line]);
   const head = useRef<Group>(null);
   /** A bead flowing cause → effect, so direction reads without the arrowhead. */
@@ -512,8 +643,8 @@ function CausalArc({ arrow, bus, radii, reducedMotion }: { arrow: CausalArrow; b
   });
   return <>
     <primitive object={line} raycast={noRaycast} />
-    <group ref={bead}><mesh raycast={noRaycast}><sphereGeometry args={[1, 10, 8]} /><meshBasicMaterial color="#ffd9c2" transparent opacity={arrow.state === "canon" ? 0.95 : 0.6} toneMapped={false} /></mesh></group>
-    <group ref={head}><ArrowHead color={crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state]} opacity={arrow.state === "canon" ? 0.95 : 0.65} /></group>
+    {!arrow.participation && <group ref={bead}><mesh raycast={noRaycast}><sphereGeometry args={[1, 10, 8]} /><meshBasicMaterial color="#ffd9c2" transparent opacity={arrow.state === "canon" ? 0.95 : 0.6} toneMapped={false} /></mesh></group>}
+    {!arrow.participation && <group ref={head}><ArrowHead color={crossVolume ? CROSS_VOLUME_COLOR : CAUSAL_COLOR[arrow.state]} opacity={arrow.state === "canon" ? 0.95 : 0.65} /></group>}
   </>;
 }
 
@@ -761,7 +892,7 @@ function ActivityBounds({ draws, bus }: { draws: OrbitalDraw[]; bus: LabelBus })
   return <group ref={bounds} userData={{ orbitalActivityBounds: true }}><mesh raycast={noRaycast}><boxGeometry args={[1, 1, 1]} /><meshBasicMaterial color="#36adff" wireframe transparent opacity={0.5} toneMapped={false} depthTest={false} depthWrite={false} /></mesh></group>;
 }
 
-function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, opening = false, enclosure, hoverCard, motion, onReveal, onExtremeBack, onCenter }: { onCenter?: (ids: string[]) => void; draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; /** Opening sequence: labels wait until records have arrived. */ opening?: boolean; enclosure?: Enclosure; hoverCard?: { current: HTMLDivElement | null }; motion?: MotionBus; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
+function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, opening = false, enclosure, hoverCard, motion, onReveal, onExtremeBack, onCenter, focusIds }: { onCenter?: (ids: string[]) => void; /** With a focus (a lit strand), its characters' names come before scene labels and dimmed labels come last. */ focusIds?: ReadonlySet<string> | null; draws: OrbitalDraw[]; bus: LabelBus; selectedId: string | null; revealedId: string | null; transitioning: boolean; /** Opening sequence: labels wait until records have arrived. */ opening?: boolean; enclosure?: Enclosure; hoverCard?: { current: HTMLDivElement | null }; motion?: MotionBus; onReveal: (id: string | null) => void; onExtremeBack: () => void }) {
   const { camera, scene, size, gl } = useThree();
   const byId = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw])), [draws]);
   const revealed = useRef(revealedId); revealed.current = revealedId;
@@ -809,7 +940,7 @@ function OrbitalProjection({ draws, bus, selectedId, revealedId, transitioning, 
         if (pixels >= (revealed.current === draw.node.id ? 46 : 64) && (!closest || score > closest.score)) closest = { id: draw.node.id, pixels, score };
       }
       if (opening || (draw.role === "connection" || draw.role === "preview" && pixels < 3) && selectedId !== draw.node.id) return;
-      candidates.push({ draw, position: point, pixels, priority: selectedId === draw.node.id ? 0 : draw.role === "preview" ? 1 : draw.role === "main" ? 2 : 3 });
+      candidates.push({ draw, position: point, pixels, priority: selectedId === draw.node.id ? 0 : focusIds && !focusIds.has(draw.node.id) ? 4 : draw.role === "preview" || focusIds && draw.role === "nebula" ? 1 : draw.role === "main" ? 2 : 3 });
     });
     if (sampleCentre) {
       centre.current.at = performance.now();
@@ -899,6 +1030,12 @@ interface Props {
   faculties?: FacultyAnchor[];
   /** A flat map on the floor (orbital Places); world units. */
   floor?: FloorMark[];
+  /** Giant calendar pins behind the story (orbital Story time); world units. */
+  pins?: CalendarPin[];
+  /** Rulers on the same backdrop: how story time is compressed. */
+  meters?: TimeMeter[];
+  /** Smaller marks on the same backdrop: where each part of a calendar day starts. */
+  parts?: DayPartMark[];
   /** Minecraft-style render distance (world units) around where the camera looks. */
   renderDistance?: number;
   /** Camera direction for automatic framing (default: a slight side view). */
@@ -935,7 +1072,7 @@ interface Props {
   onBlank?: (event: MouseEvent) => void;
 }
 
-export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
+export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGraph({ draws, paths, edges, causal = [], backdrop, bus, selectedId, touchedIds = [], autoFrame = true, revealedId, levelKey, reducedMotion, morph, onSelect, onEnter, onReveal, onBack, motion, hoverEdges = [], hoverCard, onHover, onBlank, heartbeatId, faculties = [], floor = [], pins = [], meters = [], parts = [], renderDistance, frameDirection, frameSpan, onCenter, viewToken, focusIds }, ref) {
   const nodes = useMemo(() => draws.map((draw) => ({ id: draw.node.id, label: draw.node.label, size: draw.radius, fill: recordColor(draw.node), fx: draw.position[0], fy: draw.position[1], fz: draw.position[2], data: { glyph: { draw, morph, reducedMotion, selected: selectedId === draw.node.id, touched: touchedIds.includes(draw.node.id), dimmed: !!focusIds && !focusIds.has(draw.node.id), transparent: revealedId === draw.node.id || !!draw.envelope || draws.some((entry) => entry.role === "connection" && entry.previewParentId === draw.node.id), motion } as GlyphData } })), [draws, morph, reducedMotion, revealedId, selectedId, touchedIds, motion, focusIds]);
   const theme = useMemo(() => ({ ...darkTheme, canvas: { background: "#050b15", fog: null } }), []);
   const radii = useMemo(() => new Map(draws.map((draw) => [draw.node.id, draw.radius])), [draws]);
@@ -950,6 +1087,9 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <ambientLight intensity={0.85} /><directionalLight position={[800, 1200, 1800]} intensity={1.5} color="#c4eaff" />
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
     {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
+    {pins.length > 0 && <CalendarPins pins={pins} />}
+    {meters.length > 0 && <TimeMeters meters={meters} />}
+    {parts.length > 0 && <DayPartMarks marks={parts} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} radii={radii} />)}
     <VisibleConnections edges={edges} bus={bus} />
@@ -964,7 +1104,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     <PointerParallax graphRef={ref as { current: GraphCanvasRef | null }} enabled={!reducedMotion} />
     {causal.map((arrow) => <CausalArc key={arrow.id} arrow={arrow} bus={bus} radii={radii} reducedMotion={reducedMotion} />)}
     <ActivityBounds draws={draws.filter(draw => touchedIds.includes(draw.node.id))} bus={bus} />
-    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} revealedId={revealedId} transitioning={!!morph} opening={!!morph?.delays} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} onCenter={onCenter} />
+    <OrbitalProjection key={levelKey} draws={draws} bus={bus} selectedId={selectedId} focusIds={focusIds} revealedId={revealedId} transitioning={!!morph} opening={!!morph?.delays} enclosure={enclosure} hoverCard={hoverCard} motion={motion} onReveal={onReveal} onExtremeBack={onBack} onCenter={onCenter} />
     <ScaleNavigation graphRef={ref as { current: GraphCanvasRef | null }} reducedMotion={reducedMotion} />
     <OrbitalFraming graphRef={ref as { current: GraphCanvasRef | null }} draws={draws} selectedId={selectedId} enclosure={enclosure} levelKey={levelKey} reducedMotion={reducedMotion} enabled={autoFrame} direction={frameDirection} span={frameSpan} resetToken={viewToken} />
   </GraphCanvas>;

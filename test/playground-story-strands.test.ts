@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { storyStrands } from "../apps/playground/src/data/storyStrands.js";
-import { shapeChange, spiralArrangement, spiralNodeId, strandSummary } from "../apps/playground/src/data/orbitalTimePlace.js";
+import { shapeChange, spiralArrangement, spiralNodeId, strandCast, strandSummary } from "../apps/playground/src/data/orbitalTimePlace.js";
+import type { OrbitalDraw } from "../apps/playground/src/data/orbitalLayout.js";
+import type { WorldNode } from "../apps/playground/src/types.js";
 import type { StoryScene, TimePlaceProjection } from "../apps/playground/src/data/timePlace.js";
 
 // Invented: Ming and Lan leave the station together (s1), then the story cuts
@@ -110,4 +112,85 @@ test("a universe lays its books' strands in reading order", () => {
 test("the place check names only what happened", () => {
   assert.equal(strandSummary([]), "no splits · no meetings");
   assert.equal(strandSummary([{ kind: "split", sceneId: "a", status: "same place" }, { kind: "apart", sceneId: "b", status: "chapter ends apart", count: 2 }]), "splits: 1 at one place (doubtful) · no meetings · 1 chapter ends with strands apart");
+});
+
+test("the calendar, not a file, focuses Story time: a chosen day frames every scene that day", () => {
+  const day = (id: string, date: number) => ({ id, book: null, label: id, year: 1, month: 6, day: date, time: null, span: { start: 0, end: 0 }, placed: "stated" as const, flashback: false, scenes: 1 });
+  const dated: TimePlaceProjection = { ...data,
+    scenes: data.scenes.map((entry) => ({ ...entry, times: [{ id: entry.index < 4 ? "t_first" : "t_second", via: "anchor" as const }] })),
+    calendar: { books: [], conflicts: [], questions: 0, entries: [day("t_first", 1), day("t_second", 2)] } };
+  const draws = (arrangement: ReturnType<typeof spiralArrangement>) => [...arrangement.anchors!].map(([id, point]) => ({ node: { id }, position: point, role: "main" }) as never);
+  const second = spiralArrangement(dated, undefined, null, "strands", "1-6-2");
+  assert.equal(second.bookFrame!(draws(second))!.length, 4, "the four scenes on 6月2日");
+  assert.equal(second.bookKey, "story:day:1-6-2");
+  assert.equal(spiralArrangement(dated, undefined, null, "strands", "1-6-9").bookFrame!(draws(second)), null, "a day with no scenes frames nothing");
+  assert.equal(spiralArrangement(dated, undefined, null, "strands").bookFrame, undefined, "a single book with no day chosen keeps its own arrival frame");
+});
+
+test("a precomputed spiral is drawn as stored: knots, cyan coils, glowing axes; newer scenes wait below it", () => {
+  const knot = (id: string, k: number, lane = 0) => ({ id, x: k * 9, q: [lane * 50, 10] as [number, number] });
+  const stored: TimePlaceProjection = { ...data, spiral: { builtAt: "2026-10-28T20:00:00Z", scale: { dx: 9, knot: 14, width: 900, height: 300 }, links: [], days: [],
+    runs: [
+      { id: "ming", lane: 0, knots: [knot("s1", 0), knot("m1", 1), knot("m2", 3), knot("s6", 5), knot("s7", 7)], track: [[0, 0, 10], [9, 3, 12], [27, 1, 9]], axis: [[0, 0, 0], [27, 0, 0]] },
+      { id: "lan", lane: 0, knots: [knot("l1", 2, 1), knot("l2", 4, 1)], track: [[18, 50, 10], [36, 50, 10]], axis: [[18, 50, 0], [36, 50, 0]] },
+    ] } };
+  const arrangement = spiralArrangement(stored, undefined, null, "strands");
+  assert.equal(arrangement.timeKey.label, "STORY SPIRAL →");
+  const at = (id: string) => arrangement.anchors!.get(spiralNodeId(id))!;
+  assert.ok(at("l1")[1] > at("m1")[1], "the cross-section as solved");
+  assert.ok(at("fb")[1] < at("s1")[1] - 100, "a scene not in the stored spiral waits below it");
+  assert.ok(Math.abs((at("m1")[0] - at("s1")[0]) - 40) < 1e-6, "a quiet story layer is one step along time");
+  const draws = [...arrangement.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never);
+  const paths = arrangement.paths!(draws, null);
+  const tracks = paths.filter((path) => path.id.startsWith("spiral-track:")), axes = paths.filter((path) => path.strand);
+  assert.deepEqual(tracks.map((track) => track.tone), ["coil", "coil"], "every coil in the design's cyan");
+  assert.deepEqual(axes.map((axis) => [axis.strandId, Number(axis.weight!.toFixed(3))]), [["ming", 1], ["lan", Number(Math.sqrt(2 / 5).toFixed(3))]], "an axis glows by how much its strand matters: the busiest strand fully, a minor one less");
+  const lit = arrangement.strandPeriod!("spiral-axis:lan", 0)!;
+  assert.deepEqual(lit.ids, ["l1", "l2"].map(spiralNodeId), "a tap on an axis lights that strand's scenes");
+  assert.equal(lit.strandId, "lan");
+  // A phone opens on a stretch of time about as long as the floor box is deep, not the whole book.
+  const later: TimePlaceProjection = { ...stored, spiral: { ...stored.spiral!, runs: [...stored.spiral!.runs, { id: "late", lane: 0, knots: [knot("s8", 600)], track: [], axis: [] }] } };
+  const framed = (aspect: number) => { const arranged = spiralArrangement(later, undefined, null, "strands", null, aspect); return arranged.initialFrame!([...arranged.anchors!].map(([id, point]) => ({ node: { id, chrono: 0 }, position: point.map((value) => value * 3), role: "main" }) as never)).length; };
+  assert.equal(framed(0.46), 7, "the late scene (and the newer one waiting after it) is left for the reader to fly to");
+  assert.equal(framed(6), 9, "a very wide screen opens on more time");
+});
+
+test("the time meter: a tick per story moment on the date backdrop, packed where quiet time is compressed, with the pace noted", () => {
+  // 80 quiet moments (0.4 of a step each), then 80 busy ones (full steps).
+  const xs = Array.from({ length: 160 }, (_, k) => k < 80 ? k * 0.4 * 9 : 79 * 0.4 * 9 + (k - 79) * 9);
+  const projection: TimePlaceProjection = { ...data, spiral: { builtAt: "2026-10-28T23:00:00Z", scale: { dx: 9, knot: 14, width: 900, height: 300 }, links: [], days: [],
+    runs: [{ id: "one", lane: 0, knots: xs.map((x, k) => ({ id: `k${k}`, x, q: [60, 0] as [number, number] })), track: xs.map((x) => [x, 60, 0] as [number, number, number]), axis: xs.map((x) => [x, 60, 0] as [number, number, number]) }] } };
+  const meters = spiralArrangement(projection, undefined, null, "strands").meters!;
+  assert.equal(meters.length, 1);
+  const [meter] = meters, gaps = meter.ticks.slice(1).map((x, k) => x - meter.ticks[k]);
+  assert.equal(meter.ticks.length, 160, "a tick per story moment");
+  assert.ok(Math.abs(gaps[10] / gaps[150] - 0.4) < 1e-9, "ticks bunch where time is compressed");
+  assert.deepEqual(meter.zones.map((zone) => zone.label), ["time ×0.4", "time ×1"], "the pace, noted where it changes");
+  const pins = spiralArrangement(projection, undefined, null, "strands").pins ?? [];
+  for (const pin of pins) assert.ok(meter.y < pin.card && Math.abs(meter.z - pin.z) < 1e-6, "on the date backdrop, under the dates");
+});
+
+test("a lit strand's cast: its records, its characters gathered above it, dim arcs routed in lanes", () => {
+  // Invented: Ming and Lan take part in the bridge scene's events; Ming alone speaks at the port; Ren (not drawn yet) joins the bridge.
+  const node = (id: string, kind: WorldNode["kind"], chrono = 0, extra: Partial<WorldNode> = {}) => ({ id, kind, label: id, chrono, state: "canon", ...extra }) as WorldNode;
+  const world = { interiors: {
+    "spiral:bridge": { nodes: [node("ev_meet", "event", 1), node("ev_cross", "event", 2), node("ming", "character"), node("lan", "character"), node("ren", "character"), node("loc_bridge", "location")],
+      edges: [{ id: "e1", from: "ming", to: "ev_meet", relationType: "PARTICIPATES_IN" }, { id: "e2", from: "lan", to: "ev_meet", relationType: "PARTICIPATES_IN" }, { id: "e3", from: "ren", to: "ev_cross", relationType: "PARTICIPATES_IN" }] },
+    "spiral:port": { nodes: [node("dl_call", "dialogue", 1, { dialogue: { participantIds: ["ming"], speakerId: "ming" } }), node("ev_idle", "event", 2), node("ming", "character")], edges: [] },
+  } } as never;
+  const draw = (id: string, role: OrbitalDraw["role"], position: [number, number, number]): OrbitalDraw => ({ node: node(id, role === "main" ? "scene" : "character"), position, radius: 30, role });
+  const draws = [draw("spiral:bridge", "main", [0, 100, 0]), draw("spiral:port", "main", [4000, 100, 0]), draw("ming", "nebula", [90000, 0, 0]), draw("lan", "nebula", [-90000, 0, 0])];
+  const cast = strandCast(world, ["spiral:bridge", "spiral:port"], draws);
+  assert.deepEqual(cast.draws.filter((entry) => entry.role === "connection").map((entry) => entry.node.id).sort(), ["dl_call", "ev_cross", "ev_meet"], "events and dialogues someone takes part in; not an event nobody is in");
+  assert.ok(cast.draws.some((entry) => entry.node.id === "ren" && entry.role === "nebula"), "a character not drawn yet joins beside the strand");
+  for (const id of ["ming", "lan"]) {
+    const [x, y] = cast.moves.get(id)!;
+    assert.ok(y > 1000 && x > -2000 && x < 6000, `${id} moves from far away to just above the lit stretch`);
+  }
+  assert.ok(cast.moves.get("ming")![0] > cast.moves.get("lan")![0], "Ming sits over the middle of the scenes she is in (both), Lan over the bridge");
+  assert.deepEqual(cast.arcs.map((arc) => `${arc.from}>${arc.to}`).sort(), ["lan>ev_meet", "ming>dl_call", "ming>ev_meet", "ren>ev_cross"]);
+  assert.ok(cast.arcs.every((arc) => arc.participation && arc.bend), "dim participation arcs, bent like the causal arcs");
+  const ming = cast.arcs.filter((arc) => arc.from === "ming").map((arc) => Math.hypot(...arc.bend!));
+  assert.notEqual(Math.round(ming[0]), Math.round(ming[1]), "one character's overlapping arcs take different lanes");
+  assert.deepEqual(new Set(cast.ids), new Set(["ev_meet", "ev_cross", "dl_call", "ming", "lan", "ren"]));
 });

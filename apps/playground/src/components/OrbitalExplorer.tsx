@@ -141,14 +141,38 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
    * as not yet on the orbit. */
   const albumInfo = useMemo(() => albumEntries(level.sourceNodes, albumPictures), [albumPictures, level.sourceNodes]);
   const connections = useMemo(() => nestedEntityConnections(level, baseDraws, selectedId), [level, baseDraws, selectedId]);
+  /** A tapped story strand: its scenes for that day (and the records inside them) stay bright; everything else recedes. */
+  const [strandFocus, setStrandFocus] = useState<{ ids: ReadonlySet<string>; scenes: string[]; label: string; strandId: string } | null>(null);
+  useEffect(() => setStrandFocus(null), [scope.key]);
+  const strandTap = useCallback((pathId: string, index: number) => {
+    const found = arranged?.strandPeriod?.(pathId, index);
+    if (!found) return;
+    const ids = new Set(found.ids);
+    for (const draw of baseDraws) if (draw.previewParentId && ids.has(draw.previewParentId)) ids.add(draw.node.id);
+    setSelectedId(null);
+    setStrandFocus({ ids, scenes: found.ids, label: found.label, strandId: found.strandId });
+    // Another book's strand: load that book, whose records hold the strand's events, dialogues and characters.
+    if (found.book !== undefined && bookId !== null && found.book !== bookId) onSourceVolume?.(found.book);
+  }, [arranged, baseDraws, bookId, onSourceVolume]);
+  /** The lit strand's cast: its scenes' events and dialogues, its characters moved beside it, dim arcs between them. */
+  const cast = useMemo(() => strandFocus && arranged?.strandCast ? arranged.strandCast(strandFocus.scenes, baseDraws) : null, [strandFocus, arranged, baseDraws]);
+  // A newly lit strand: fly to its lit scenes and the characters gathered over them.
+  useEffect(() => {
+    if (!cast?.ids.length) return;
+    const ids = new Set(cast.ids), at = new Map(baseDraws.map((draw) => [draw.node.id, draw.position]));
+    const span = [...ids].flatMap((id) => { const point = cast.moves.get(id) ?? cast.draws.find((draw) => draw.node.id === id)?.position ?? at.get(id); return point ? [point] : []; });
+    if (span.length) framePositions(graphRef, span, 1.15, !reducedMotion, { direction: arranged?.direction });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cast]);
   /** A selection with links keeps itself and what it links to bright; everything else recedes. */
   const focusIds = useMemo(() => {
+    if (strandFocus) return new Set([...strandFocus.ids, ...(cast?.ids ?? [])]);
     if (!selectedId || followingActivity || !connections.edges.length) return null;
     const linked = new Set([selectedId, ...connections.edges.flatMap((edge) => [edge.from, edge.to])]);
     // Spheres that hold a linked record (a scene inside an event group) stay bright too.
     for (const draw of baseDraws) if (draw.entry?.members.some((id) => linked.has(id))) linked.add(draw.node.id);
     return linked;
-  }, [selectedId, followingActivity, connections.edges, baseDraws]);
+  }, [strandFocus, cast, selectedId, followingActivity, connections.edges, baseDraws]);
   const causalLinks = useMemo(() => scope.kind === "library" || scope.kind === "series" || !showCausal ? [] : worldCausalLinks(world), [world, scope.kind, showCausal]);
   const causal = useMemo(() => {
     if (scope.kind === "library" || scope.kind === "series") return libraryCausalProjection(level, baseDraws, world.library);
@@ -177,13 +201,13 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
    * and the morph glides both in from their last drawn poses. */
   const [joinView, setJoinView] = useState<{ moves: Map<string, Position3>; preimages: OrbitalDraw[] } | null>(null);
   const draws = useMemo(() => {
-    const all = [...baseDraws, ...connections.draws, ...pictureDraws, ...portraitDraws, ...(joinView?.preimages ?? [])];
-    if (!joinView?.moves.size) return all;
+    const all = [...baseDraws, ...connections.draws, ...pictureDraws, ...portraitDraws, ...(joinView?.preimages ?? []), ...(cast?.draws ?? [])];
+    if (!joinView?.moves.size && !cast?.moves.size) return all;
     return all.map((draw) => {
-      const target = joinView.moves.get(draw.node.id);
+      const target = joinView?.moves.get(draw.node.id) ?? cast?.moves.get(draw.node.id);
       return target ? { ...draw, position: target } : draw;
     });
-  }, [baseDraws, connections.draws, pictureDraws, portraitDraws, joinView]);
+  }, [baseDraws, connections.draws, pictureDraws, portraitDraws, joinView, cast]);
   const levelPaths = useMemo(() => arranged?.paths ? arranged.paths(layout.draws, selectedId) : layout.paths, [arranged, layout.draws, layout.paths, selectedId]);
   /** Main spheres by position, to tell which path points sit on a sphere (strand curves sample many points between them). */
   const mainAt = useMemo(() => new Map(layout.draws.filter((draw) => draw.role === "main").map((draw) => [draw.position.join(), draw])), [layout.draws]);
@@ -213,6 +237,12 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     }
     return { ...track, fromPoints };
   }), ...preview.paths], [levelPaths, mainAt, preview.paths, morph]);
+  /** With a strand lit, it glows its strongest and every other strand's axis and coil fade. */
+  // A lit strand keeps its own paths (and the trips that start or end on it) and fades every other strand's.
+  const shownPaths = useMemo(() => strandFocus ? paths.map((path) => {
+    const owners = path.strandIds ?? (path.strandId ? [path.strandId] : null);
+    return !owners ? path : owners.includes(strandFocus.strandId) ? { ...path, weight: 1 } : { ...path, dim: true };
+  }) : paths, [paths, strandFocus]);
   const edges = connections.edges;
   const visibleConnections = useMemo(() => scope.kind === "library" || scope.kind === "series"
     ? connections.edges.filter(edge => edge.relationType !== "CAUSES")
@@ -245,6 +275,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     const first = bookFlight.current === undefined;
     bookFlight.current = key;
     if (first) return; // arrival already frames the book (initialFrame)
+    if (strandFocus) return; // a lit strand loaded its book: the camera stays on the strand and its cast
     const span = arranged?.bookFrame?.(layout.draws);
     if (!span?.length) return;
     let attempts = 0;
@@ -252,7 +283,7 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
     const fly = () => { if (!graphRef.current?.getControls?.() && ++attempts < 40) { timer = setTimeout(fly, 50); return; } setSelectedId(null); framePositions(graphRef, span, 1.15, !reducedMotion, { direction: arranged?.direction }); };
     timer = setTimeout(fly, 60);
     return () => clearTimeout(timer);
-  }, [arranged, layout.draws, followingActivity, reducedMotion]);
+  }, [arranged, layout.draws, followingActivity, reducedMotion, strandFocus]);
   /** Another book's world: start at its overview, except when returning to
    * the book whose reading bookmark was just restored after following Pi. */
   const shownBook = useRef(bookId);
@@ -482,6 +513,19 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       addRipple(motion, { kind: "blank", origin, start: now() });
     }
     setHover(null);
+    // A tap near a strand's axis (16 px on screen, at any zoom) lights that strand for the day tapped; elsewhere it clears.
+    if (controls && surface) {
+      const camera = controls.camera, x = event.clientX - surface.left, y = event.clientY - surface.top;
+      let best: { id: string; index: number; distance: number } | null = null;
+      for (const path of paths) if (path.strand) path.points.forEach((point, index) => {
+        const at = new Vector3(...point).project(camera);
+        if (at.z > 1) return;
+        const distance = Math.hypot(((at.x + 1) / 2) * surface.width - x, ((1 - at.y) / 2) * surface.height - y);
+        if (distance < 16 && (!best || distance < best.distance)) best = { id: path.id, index, distance };
+      });
+      if (best) { strandTap((best as { id: string }).id, (best as { index: number }).index); return; }
+    }
+    setStrandFocus(null);
     if (!followingActivity && selectedId) setSelectedId(null);
   };
   useEffect(() => {
@@ -626,8 +670,9 @@ export function OrbitalExplorer({ world, book = null, bookId = null, bookBar = n
       if (!event.metaKey && !event.ctrlKey && ["+", "=", "-", "_"].includes(event.key)) { event.preventDefault(); zoomBy(event.key === "+" || event.key === "=" ? -80 : 80); }
       if (event.key === "Enter" && selected) { event.preventDefault(); if (event.shiftKey) enter(selected); else inspect(selected); }
     }}>
-      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={paths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={showRelations ? causal.arrows : []} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} viewToken={viewToken} focusIds={focusIds} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} renderDistance={arranged?.renderDistance} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
+      <div className="graph-canvas"><OrbitalGraph ref={graphRef} draws={draws} paths={shownPaths} edges={showRelations && !(arranged?.pathReplacesLinks && level.nebula.some((node) => node.id === selectedId)) ? visibleConnections : []} causal={[...(showRelations ? causal.arrows : []), ...(cast?.arcs ?? [])]} backdrop={backdrop} bus={bus} selectedId={selectedId} touchedIds={touchedIds} autoFrame={!followingActivity && !restoreRequest} revealedId={revealedId} levelKey={scope.key} viewToken={viewToken} focusIds={focusIds} reducedMotion={reducedMotion} morph={morph} onSelect={inspect} onEnter={enter} onReveal={reveal} onBack={back} motion={motion} hoverEdges={hoverEdges} hoverCard={hoverCard} onHover={setHover} onBlank={blankClick} heartbeatId={heartbeatId} faculties={working}  floor={arranged?.floor} pins={arranged?.pins} meters={arranged?.meters} parts={arranged?.parts} renderDistance={arranged?.renderDistance} frameDirection={arranged?.direction} frameSpan={arranged?.initialFrame?.(layout.draws)} onCenter={scope.kind === "volume" ? onCenter : undefined} /></div>
       {intro && <div className="orbital-intro-skip" aria-hidden="true">Tap anywhere to skip</div>}
+      {strandFocus && <div className="strand-focus" role="status"><i aria-hidden="true" />{strandFocus.label}<button type="button" onClick={() => setStrandFocus(null)} aria-label="Show every strand again">×</button></div>}
       <div className="labels-layer faculty-chips">{working.map((anchor) => <button key={anchor.id} type="button" className="faculty-chip" data-faculty-anchor={anchor.id} onClick={openFacultyStrip} aria-label={`Working here: ${anchor.faculties.join(", ")}. Open faculty activity`}>{facultyChipText(anchor)}</button>)}</div>
       <div className="labels-layer orbital-labels">{draws.filter((draw) => draw.role !== "preimage" && draw.envelope !== "hidden").map((draw) => <button key={draw.node.id} className={`node-label orbital-label role-${draw.role} k-${draw.node.kind} s-${draw.node.state}${selectedId === draw.node.id ? " is-selected" : ""}${touchedIds.includes(draw.node.id) ? " latest-touch" : ""}${draw.role === "nebula" && (draw.prominence ?? 1) < 0.35 && selectedId !== draw.node.id ? " is-faint" : ""}${hoveredId === draw.node.id ? " is-hovered" : ""}${focusIds && !focusIds.has(draw.node.id) ? " is-dim" : ""}`} style={{ visibility: "hidden" }} aria-label={`Inspect ${draw.role === "preview" ? "revealed " : ""}${draw.node.kind} ${draw.node.label}`} aria-pressed={selectedId === draw.node.id} title={draw.role === "preview" ? canEnterOrbitalScope(parent?.entry?.scope) ? "Double-click or Shift Enter to enter this revealed level" : "Inspect this record in place; no deeper timeline" : draw.entry?.scope ? "Click to inspect and zoom. Zoom reveals contents in place." : "Click to inspect"} ref={(element) => { if (element) bus.targets.set(draw.node.id, element); else bus.targets.delete(draw.node.id); }} onClick={() => inspect(draw)} onDoubleClick={() => enter(draw)} onPointerEnter={() => setHover(draw.node.id)} onPointerLeave={() => { if (motion.hoveredId === draw.node.id) setHover(null); }} onKeyDown={(event) => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); enter(draw); } }}>
         <span className="node-code">{draw.role === "preview" && !arranged?.envelope ? "REVEALED / " : ""}{(draw.node.viewKind ?? draw.node.library?.type ?? draw.node.kind).toUpperCase()}{draw.node.state !== "canon" ? ` · ${draw.node.state}` : ""}</span><b>{draw.node.label}</b>{draw.node.cluster && <span>{draw.node.cluster.ids.length} records · orbital group</span>}{showRelations && !!causal.insideBy.get(draw.node.id) && <span className="causal-inside">{causal.insideBy.get(draw.node.id)} causal inside</span>}

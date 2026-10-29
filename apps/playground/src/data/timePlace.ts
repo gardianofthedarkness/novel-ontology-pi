@@ -69,6 +69,8 @@ export interface TimePlaceProjection {
   continuities?: { id: string; title: string }[];
   /** The universe calendar (one clock): every period on its day; books are marks on it. */
   calendar?: CalendarView | null;
+  /** The spiral timeline precomputed by `novel calendar build`: drawn as stored, never optimised here. */
+  spiral?: SpiralView | null;
 }
 
 /** Calendar minutes: ordering keys from the backend (`novel calendar`), not real date arithmetic. */
@@ -81,12 +83,19 @@ export interface CalendarViewEntry {
   year: number | null; month: number | null; day: number | null;
   /** "15:00" or a part of the day ("evening"). */
   time: string | null;
+  /** The part of the day it is in (the stated one, else its clock time's); null when only the day is known. */
+  part?: string | null;
   span: CalendarSpan;
   /** stated / derived (from stated words) / between (a range between dated neighbours). */
   placed: "stated" | "derived" | "between";
   flashback: boolean;
   scenes: number;
 }
+/** One strand of the precomputed spiral: its knots (scenes, view ids) and its coil track and axis as solved (x along time, q across). */
+export interface SpiralViewRun { id: string; lane: number; knots: { id: string; x: number; q: [number, number] }[]; track: [number, number, number][]; axis: [number, number, number][] }
+/** Several people arriving together at a scene from one earlier scene at another place (worked out at build time, not reviewed). */
+export interface SpiralViewTrip { from: string; to: string; lane: number; runs: [string, string]; names: string[]; places: [string, string]; guessed: boolean; nested: boolean; backed: boolean }
+export interface SpiralView { builtAt: string; scale: { dx: number; knot: number; width: number; height: number }; runs: SpiralViewRun[]; links: { from: string; to: string; lane: number }[]; trips?: SpiralViewTrip[]; days: { key: string; label: string; from: number; to: number; lane: number }[] }
 export interface CalendarView {
   books: { sourceId: string; volume: number | null; title: string; readingOrder: number | null; year: number | null; yearBy: string | null; span: CalendarSpan | null }[];
   entries: CalendarViewEntry[];
@@ -112,6 +121,17 @@ export const calendarTimeLabel = (entry: Pick<CalendarViewEntry, "time" | "span"
  * An undated period (a range between dated neighbours) is listed under the
  * day its range starts, marked as undated.
  */
+/** The calendar day each scene starts on (its first placed, dated period), by day key. */
+export function sceneDays(data: Pick<TimePlaceProjection, "scenes" | "calendar">): Map<string, string> {
+  const entries = new Map((data.calendar?.entries ?? []).filter((entry) => entry.placed !== "between" && entry.year !== null).map((entry) => [entry.id, entry]));
+  const days = new Map<string, string>();
+  for (const scene of data.scenes) {
+    const entry = scene.times.map((time) => entries.get(time.id)).find(Boolean);
+    if (entry) days.set(scene.id, calendarDayKey({ year: entry.year!, month: entry.month!, day: entry.day! }));
+  }
+  return days;
+}
+
 export function calendarDays(view: CalendarView): { key: string; label: string; entries: CalendarViewEntry[] }[] {
   const days = new Map<string, { key: string; label: string; start: number; entries: CalendarViewEntry[] }>();
   for (const entry of view.entries) {

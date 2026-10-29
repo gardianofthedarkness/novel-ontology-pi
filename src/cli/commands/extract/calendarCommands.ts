@@ -1,5 +1,6 @@
 import { castScope, rootCastScope, STANDALONE, type CastScope } from "../../../solidifier/identity/cast.js";
 import { buildCalendar, dayOf, describeEntry, loadCalendar, type CalendarFile } from "../../../solidifier/calendar/calendar.js";
+import { buildSpiral, loadSpiral } from "../../../solidifier/calendar/spiralBuild.js";
 import { calendarPacketId } from "../../../solidifier/calendar/review.js";
 
 export const CALENDAR_USAGE = "novel calendar show|build <novel-dir> | novel calendar show|build <library-dir> --universe <id>";
@@ -28,5 +29,7 @@ export async function calendarCommand(args: string[], env: NodeJS.ProcessEnv = p
   if (!["show", "build"].includes(sub ?? "") || !target || target.startsWith("--") || rest.length || (flag !== undefined && (flag !== "--universe" || !universeId))) throw new Error(`Usage: ${CALENDAR_USAGE}`);
   const scope = flag ? await rootCastScope(target, universeId, env) : await castScope(target, env);
   const calendar = sub === "build" ? await buildCalendar(scope) : await loadCalendar(scope) ?? await buildCalendar(scope);
-  return readable(scope, calendar);
+  // The spiral timeline is solved offline with the calendar, so the view only draws stored geometry.
+  const spiral = sub === "build" ? await buildSpiral(scope) : await loadSpiral(scope);
+  return { ...readable(scope, calendar), spiral: spiral ? { builtAt: spiral.builtAt, continuities: spiral.continuities.map((entry) => ({ books: entry.books.length, strands: entry.runs.length, scenes: entry.metrics.knots, crowding: entry.metrics.crowding.map((value) => Number(value.toFixed(4))), overlap: entry.metrics.overlap.map((value) => `${(100 * value).toFixed(1)}%`) })) } : { next: `novel calendar build ${scope.root}${scope.standalone ? "" : ` --universe ${scope.universeId}`}` } };
 }

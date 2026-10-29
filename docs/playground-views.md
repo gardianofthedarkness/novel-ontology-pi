@@ -12,7 +12,10 @@ The viewer has two **modes** and the same three **views** in each:
   Places`. Deep links: `?mode=traditional` and `?view=story` or
   `?view=places` (the defaults, 3D and Narrative, need no parameter).
 - One navigation row: back (Esc), where you are (click a crumb to go up),
-  and the book picker. Round view controls at the right edge: zoom, reset
+  and the book picker (in Story time, the calendar picker: a day, not a
+  file, is the focus — the view flies to every book's scenes that day, and
+  the book whose records load follows only when the one being read has no
+  scene that day). Round view controls at the right edge: zoom, reset
   view, connections, and `?` (how to move, the legend, counts, motion).
 - The processing dock (pipeline, Pi review, record bar) folds to one status
   line at the bottom left; the choice is remembered per browser.
@@ -82,8 +85,8 @@ usual spheres, motion, inspector and entering:
   - **Hand-off to Places:** the view keeps track of which stretch of the
     spiral sits at its centre. Switching to Places then shows just those
     scenes ("From Story time: N scenes · Show all").
-- **Story time · Strands** (orbital switch `Line | Strands`, remembered per
-  browser): each strand is its own coil, the busiest where the line was and
+- **Story time · Strands** (the only shape once story time exists; before it,
+  scenes stand on one line in reading order): each strand is its own coil, the busiest where the line was and
   the others stacked above it (all above the floor); S-curves cross between coils where strands split and meet, and a faint
   rung joins the scenes of one moment. A scene comes after another only with
   evidence (a shared character, a flashback, stated times), so scenes the
@@ -91,12 +94,12 @@ usual spheres, motion, inspector and entering:
   Estimated from who is in each scene (scenes without a recorded cast borrow
   a nearby scene's); about 0.87 of scene pairs agree with a hand-read gold on
   two volumes. A universe gives each book its own strands, books in reading
-  order along the axis.
-  - **Shredding**: switching to Strands, or new evidence that moves scenes,
-    glides every sphere from where it was to its coil, staggered in story
-    order, with the curves bending along. A switch frames the new shape (at
-    once with reduced motion); new evidence moves the camera only while
-    following Pi. Back to Line weaves them together the same way.
+  order along the axis. Giant calendar dates stand high up and far behind,
+  where each day starts in each book's stretch (rough marks).
+  - **Shredding**: when story time first arrives, or new evidence moves
+    scenes, every sphere glides from where it was to its coil, staggered in
+    story order, with the curves bending along; new evidence moves the camera
+    only while following Pi.
   - **Time and place check each other** (time key): each split is at
     different places, at one place (doubtful) or unplaced; each meeting joins
     a strand's place, meets at a new place, or is unplaced; chapters that end
