@@ -670,7 +670,15 @@ function frame(now) {
     if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
   }
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
-  if (follow && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
+  // Live mode: following is following Jev's focus — the camera and where it looks glide together toward the moment's
+  // focus (a whole place away too), and the distance eases toward one that frames it, so each new frame carries on smoothly.
+  if (liveMode && follow && !glide && data.live.focus) {
+    const f = data.live.focus, ease = 1 - Math.exp(-dt * 1.6), shift = new THREE.Vector3(f.x, 2, f.z).sub(controls.target).multiplyScalar(ease);
+    controls.target.add(shift); camera.position.add(shift);
+    const away = camera.position.clone().sub(controls.target), distance = away.length(), framed = Math.min(Math.max(distance, 40 + 2 * f.r), 160 + 4 * f.r);
+    if (Math.abs(framed - distance) > 0.5) camera.position.copy(controls.target).add(away.setLength(distance + (framed - distance) * ease));
+  }
+  else if (follow && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
   // The world as explored by now: chunks and the faint city's copies of buildings since stood up.
   if (liveMode && now - lastCull > 400) { lastCull = now; cullByInterest(entry); }
   for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.at <= time && chunk.near !== false;
