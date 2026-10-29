@@ -98,6 +98,10 @@ const capture = new URLSearchParams(location.search).has("capture");
 // A page may carry several strands: the one named in the address (#id) plays, and picking another loads the page on it.
 const bundle = JSON.parse($("strand-data").textContent || "null"), strands = Array.isArray(bundle?.strands) ? bundle.strands : null;
 const chosen = strands && (strands.find((entry) => entry.id === location.hash.slice(1)) ?? strands[0]), data = strands ? chosen?.data ?? null : bundle;
+// One streamed world (the engine's world.ts): every staged place is it, its lots shared (inlined once). Hits and skeletons
+// are the world's, whichever place a scene is at.
+if (data?.world) for (const place of Object.values(data.places)) if (place.world) place.lots = data.world.lots;
+const keyOf = (id) => (data?.places[id]?.world ? "world" : id);
 if (strands?.length > 1) {
   for (const entry of strands) { const link = document.createElement("a"); link.href = `#${entry.id}`; link.textContent = entry.label; if (entry === chosen) link.setAttribute("aria-current", "true"); $("pick").append(link); }
   $("pick").hidden = false;
@@ -121,7 +125,7 @@ const along = (a, b, arc, f) => { const t = f * arc.T; return { x: a.x + (b.x - 
 const SPEED = { walk: 1.4, run: 3.6, sneak: 0.8, "climb up": 1.1, "go down": 1.4, fall: 1.6, dragged: 1.2 };
 const GROUND_COLOR = [0x0c1822, 0x112532, 0x173444, 0x15293a, 0x112532];
 
-const at = (place, node) => { const i = node % place.NX, j = Math.floor(node / place.NX) % place.NZ, k = Math.floor(node / (place.NX * place.NZ)); return { x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, y: k * FLOOR, i, j, k }; };
+const at = (place, node) => { const i = node % place.NX - (place.oi ?? 0), j = Math.floor(node / place.NX) % place.NZ - (place.oj ?? 0), k = Math.floor(node / (place.NX * place.NZ)); return { x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, y: k * FLOOR, i, j, k }; };
 /** A move's timing: each step at the manner's pace; climbs at stair pace, falls in free fall. */
 const timing = (place, move) => {
   if (move.how === "teleport") return { total: 0.8, steps: [0, 0.8] };
@@ -158,23 +162,23 @@ let clock = 0;
 const hitsSoFar = {};
 for (const [index, scene] of data.scenes.entries()) {
   const place = data.places[scene.place], positions = { ...scene.starts };
-  hitsSoFar[scene.place] ??= 0;
+  hitsSoFar[keyOf(scene.place)] ??= 0;
   // People coming from another place: the macro view first, in 2D.
   const migrations = data.migrations.filter((migration) => migration.scene === scene.id);
   if (migrations.length) {
     // The camera rises once the first of them is out of the old place's grid, and comes down on the new place as the last arrives at its edge.
     const travels = migrations.map(travelOf), length = Math.max(MACRO, ...travels.map((travel) => travel.total + 0.6));
     const glideFrom = Math.min(...travels.map((travel) => travel.exitEnd)), glideTo = Math.max(...travels.map((travel) => travel.mapEnd));
-    segments.push({ kind: "macro", scene, index, place, start: clock, end: clock + length, positions: { ...positions }, moves: [], hits: hitsSoFar[scene.place], migrations, travels, glide: { from: glideFrom, seconds: Math.max(1.5, glideTo - glideFrom) } });
+    segments.push({ kind: "macro", scene, index, place, start: clock, end: clock + length, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)], migrations, travels, glide: { from: glideFrom, seconds: Math.max(1.5, glideTo - glideFrom) } });
     clock += length;
   }
-  segments.push({ kind: "card", scene, index, place, start: clock, end: clock + CARD, positions: { ...positions }, moves: [], hits: hitsSoFar[scene.place] });
+  segments.push({ kind: "card", scene, index, place, start: clock, end: clock + CARD, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)] });
   clock += CARD;
   for (const [eventIndex, event] of scene.events.entries()) {
-    if (event.hit) hitsSoFar[scene.place]++;
+    if (event.hit) hitsSoFar[keyOf(scene.place)]++;
     const moves = event.moves.map((move) => ({ ...move, time: timing(place, move) }));
     const length = Math.max(READ, event.hit ? 2.6 : 0, ...moves.map((move) => move.time.total + 0.6));
-    segments.push({ kind: "event", scene, index, eventIndex, event, place, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[scene.place] });
+    segments.push({ kind: "event", scene, index, eventIndex, event, place, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[keyOf(scene.place)] });
     for (const move of moves) positions[move.person] = move.path.at(-1);
     clock += length;
   }
@@ -182,7 +186,10 @@ for (const [index, scene] of data.scenes.entries()) {
 const total = clock;
 const eventStart = new Map(segments.filter((segment) => segment.kind === "event").map((segment) => [`${segment.scene.id}|${segment.eventIndex}`, segment.start]));
 const placeHits = {};
-for (const scene of data.scenes) for (const event of scene.events) if (event.hit) (placeHits[scene.place] ??= []).push(event.hit);
+for (const scene of data.scenes) for (const event of scene.events) if (event.hit) (placeHits[keyOf(scene.place)] ??= []).push(event.hit);
+// When the world first reached each chunk and lot: its event's start (a scene's opening for `<scene>|start`).
+const sceneStart = new Map(segments.filter((segment) => segment.kind === "card").map((segment) => [segment.scene.id, segment.start]));
+const bornAt = (key) => { if (key === undefined || key === null) return 0; const [scene, event] = String(key).split("|"); return event === "start" ? sceneStart.get(scene) ?? 0 : eventStart.get(key) ?? sceneStart.get(scene) ?? 0; };
 const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low < high) { const mid = (low + high + 1) >> 1; if (segments[mid].start <= t) low = mid; else high = mid - 1; } return segments[low]; };
 
 // The macro layout comes with the data (the canvas of places, in metres): a place's grid stands at its spot, the centre of
@@ -251,12 +258,25 @@ function shellOf(name) {
 const built = new Map(), reveals = [];
 function buildPlace(id) {
   if (built.has(id)) return built.get(id);
-  // A place sits on its circle of the place tree: its grid is centred there.
-  const place = data.places[id], spot = macroAt.get(id) ?? { x: 0, z: 0 }, group = new THREE.Group(), cx = place.NX * CELL / 2 - spot.x, cz = place.NZ * CELL / 2 - spot.z;
-  const tiles = new THREE.InstancedMesh(unit, new THREE.MeshBasicMaterial(), place.NX * place.NZ);
-  for (let cell = 0; cell < place.NX * place.NZ; cell++) { const i = cell % place.NX, j = Math.floor(cell / place.NX); matrix.compose(new THREE.Vector3((i + 0.5) * CELL - cx, -0.05, (j + 0.5) * CELL - cz), new THREE.Quaternion(), new THREE.Vector3(CELL * 0.98, 0.1, CELL * 0.98)); tiles.setMatrixAt(cell, matrix); tiles.setColorAt(cell, color.set(GROUND_COLOR[Number(place.ground[cell])] ?? 0x112532)); }
+  if (data.places[id]?.world && built.has("world")) { built.set(id, built.get("world")); return built.get("world"); }
+  // A place sits on its circle of the place tree: its grid is centred there. The world sits in world metres.
+  const place = data.places[id], spot = macroAt.get(id) ?? { x: 0, z: 0 }, group = new THREE.Group(), cx = place.world ? 0 : place.NX * CELL / 2 - spot.x, cz = place.world ? 0 : place.NZ * CELL / 2 - spot.z;
+  const chunks = [];
+  if (place.world) {
+    // The world's ground, chunk by chunk (16 × 16 cells), each shown from the moment it was first reached.
+    for (const [ci, cj, born, ground] of data.world.chunks) {
+      const tiles = new THREE.InstancedMesh(unit, new THREE.MeshBasicMaterial(), 256);
+      for (let n = 0; n < 256; n++) { matrix.compose(new THREE.Vector3((ci * 16 + (n % 16) + 0.5) * CELL, -0.05, (cj * 16 + Math.floor(n / 16) + 0.5) * CELL), new THREE.Quaternion(), new THREE.Vector3(CELL * 0.98, 0.1, CELL * 0.98)); tiles.setMatrixAt(n, matrix); tiles.setColorAt(n, color.set(GROUND_COLOR[Number(ground[n])] ?? 0x112532)); }
+      group.add(tiles); chunks.push({ mesh: tiles, at: bornAt(born) });
+    }
+    const clutter = [];
+    for (let n = 0; n < data.world.clutter.length; n += 2) clutter.push([(data.world.clutter[n] + 0.5) * CELL, 0.45, (data.world.clutter[n + 1] + 0.5) * CELL, 1.2, 0.9, 1.2]);
+    group.add(instanced(new THREE.MeshLambertMaterial({ color: 0x9fb4c3, transparent: true, opacity: 0.5 }), clutter));
+  }
+  const tiles = new THREE.InstancedMesh(unit, new THREE.MeshBasicMaterial(), place.world ? 0 : place.NX * place.NZ);
+  for (let cell = 0; cell < (place.world ? 0 : place.NX * place.NZ); cell++) { const i = cell % place.NX, j = Math.floor(cell / place.NX); matrix.compose(new THREE.Vector3((i + 0.5) * CELL - cx, -0.05, (j + 0.5) * CELL - cz), new THREE.Quaternion(), new THREE.Vector3(CELL * 0.98, 0.1, CELL * 0.98)); tiles.setMatrixAt(cell, matrix); tiles.setColorAt(cell, color.set(GROUND_COLOR[Number(place.ground[cell])] ?? 0x112532)); }
   group.add(tiles);
-  group.add(instanced(new THREE.MeshLambertMaterial({ color: 0x9fb4c3, transparent: true, opacity: 0.5 }), place.clutter.map((cell) => [(cell % place.NX + 0.5) * CELL - cx, 0.45, (Math.floor(cell / place.NX) + 0.5) * CELL - cz, 1.2, 0.9, 1.2])));
+  if (!place.world) group.add(instanced(new THREE.MeshLambertMaterial({ color: 0x9fb4c3, transparent: true, opacity: 0.5 }), place.clutter.map((cell) => [(cell % place.NX + 0.5) * CELL - cx, 0.45, (Math.floor(cell / place.NX) + 0.5) * CELL - cz, 1.2, 0.9, 1.2])));
   // Each lot's drawn parts and its box, so a still can see through the buildings in front of what it looks at.
   const lots = [], start = () => group.children.length;
   for (const lot of place.lots) {
@@ -281,8 +301,9 @@ function buildPlace(id) {
     const parts = group.children.slice(first).filter((part) => part.material).map((part) => ({ part, opacity: part.material.opacity }));
     lots.push({ parts, box: new THREE.Box3(new THREE.Vector3(x - w / 2, 0, z - d / 2), new THREE.Vector3(x + w / 2, h + 3, z + d / 2)) });
   }
-  const entry = { group, cx, cz, dynamic: null, shownHits: -1, lots, masked: new Set() };
+  const entry = { group, cx, cz, dynamic: null, shownHits: -1, lots, masked: new Set(), chunks, bornAt: place.world ? place.lots.map((lot) => bornAt(lot.born)) : null };
   built.set(id, entry);
+  if (place.world) built.set("world", entry);
   return entry;
 }
 /** The skeletons after the first `count` hits on this place: what stands, what is cut off (red), rooms cut off. */
@@ -302,14 +323,14 @@ function unitBox(lot, entry, [kind, i, j, k]) {
  * animation is still bringing down.
  */
 function drawSkeletons(id, entry, count, settling = null) {
-  const key = `${count}|${settling ? 1 : 0}`;
+  const reached = entry.bornAt ? entry.bornAt.filter((at) => at <= time).length : 0, key = `${count}|${settling ? 1 : 0}|${reached}`;
   if (entry.shownHits === key) return;
   entry.shownHits = key;
   if (entry.dynamic) entry.group.remove(entry.dynamic);
   const place = data.places[id], dynamic = new THREE.Group(), lost = place.lots.map(() => new Set()), cutCells = place.lots.map(() => new Set()), cutRooms = place.lots.map(() => new Set());
   // A hit may reach several buildings (an impact sphere): each lot it reaches loses its own cells.
   const gone = place.lots.map(() => new Set()), structural = new Set(), rubble = [];
-  for (const hit of (placeHits[id] ?? []).slice(0, count)) for (const part of [hit, ...(hit.more ?? [])]) {
+  for (const hit of (placeHits[keyOf(id)] ?? []).slice(0, count)) for (const part of [hit, ...(hit.more ?? [])]) {
     for (const cell of [...part.destroyed, ...(part.fell ?? [])]) lost[part.lot].add(cell);
     cutCells[part.lot] = new Set(part.cutOff); cutRooms[part.lot] = new Set(part.cutRooms);
     if (!part.blasted) continue;
@@ -320,13 +341,14 @@ function drawSkeletons(id, entry, count, settling = null) {
   const corridors = [], stairs = [], red = [], rooms = [], redRooms = [], walls = [], roofs = [];
   // A hit building's walls and roof, unit by unit; its artistic shell gives way to them.
   place.lots.forEach((lot, n) => {
-    for (const { part } of entry.lots[n].parts) if (!part.isSprite) part.visible = !structural.has(n);
-    if (!structural.has(n) || entry.masked.has(n)) return;
+    const unborn = entry.bornAt && entry.bornAt[n] > time;
+    for (const { part } of entry.lots[n].parts) part.visible = !unborn && (part.isSprite || !structural.has(n));
+    if (unborn || !structural.has(n) || entry.masked.has(n)) return;
     for (let k = 0; k < lot.floors; k++) for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if ((i === 0 || j === 0 || i === lot.nx - 1 || j === lot.nz - 1) && !gone[n].has(`3|${i}|${j}|${k}`)) walls.push(unitBox(lot, entry, [3, i, j, k]));
     for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if (!gone[n].has(`4|${i}|${j}|${lot.floors}`)) roofs.push(unitBox(lot, entry, [4, i, j, lot.floors]));
   });
   place.lots.forEach((lot, n) => {
-    if (entry.masked.has(n)) return;
+    if (entry.masked.has(n) || (entry.bornAt && entry.bornAt[n] > time)) return;
     for (let cell = 0; cell < lot.cells.length; cell++) {
       const type = lot.cells[cell];
       if (type === "0" || lost[n].has(cell)) continue;
@@ -392,17 +414,23 @@ for (const [id, spot] of macroAt) {
   disc.rotation.x = -Math.PI / 2; disc.position.set(spot.cx, -0.5 - spot.depth * 0.05, spot.cz); world.add(disc);
   const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}` : spot.label, strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
 }
+let decor = () => {};
 // Each open place's landscape around the staged grids (src/ground/stage/landscape.ts): faint hologram blocks and roads,
 // generated from the place's landscape, never on a staged grid; only the buildings the story names are canon. Kept
 // faint so it never hides the people.
 {
   const fill = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: 0.045, depthWrite: false }), edge = new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: 0.2, depthWrite: false });
   const block = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), outline = new THREE.EdgesGeometry(block).attributes.position.array, m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v = new THREE.Vector3();
-  const buildings = (data.landscapes ?? []).flatMap((entry) => entry.buildings), lines = [];
+  const buildings = (data.landscapes ?? []).flatMap((entry) => entry.buildings), ids = (data.landscapes ?? []).flatMap((entry) => entry.ids ?? entry.buildings.map(() => null)), lines = [];
+  // A building the world has stood up as a lot: from that moment its real lot is drawn instead, so its faint copy goes
+  // (and has no outline, which could not be taken away).
+  const reached = new Map((data.world?.lots ?? []).filter((lot) => lot.source).map((lot) => [lot.source, bornAt(lot.born)]));
   if (buildings.length) {
-    const mesh = new THREE.InstancedMesh(block, fill, buildings.length);
-    buildings.forEach(([x, z, w, d, angle, floors], i) => { q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w, floors * FLOOR, d)); mesh.setMatrixAt(i, m); for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); lines.push(v.x, v.y, v.z); } });
+    const mesh = new THREE.InstancedMesh(block, fill, buildings.length), shown = [];
+    buildings.forEach(([x, z, w, d, angle, floors], i) => { q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w, floors * FLOOR, d)); mesh.setMatrixAt(i, m); shown.push(m.clone()); if (reached.has(ids[i])) return; for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); lines.push(v.x, v.y, v.z); } });
     world.add(mesh);
+    const hidden = new THREE.Matrix4().makeScale(0, 0, 0), gone = new Set();
+    decor = (now) => { let changed = false; ids.forEach((id, i) => { const at = reached.get(id); if (at === undefined) return; const off = at <= now; if (off === gone.has(i)) return; mesh.setMatrixAt(i, off ? hidden : shown[i]); if (off) gone.add(i); else gone.delete(i); changed = true; }); if (changed) mesh.instanceMatrix.needsUpdate = true; };
   }
   for (const [ax, az, bx, bz] of (data.landscapes ?? []).flatMap((entry) => entry.walls ?? [])) lines.push(ax, 0, az, bx, 0, bz, ax, 6, az, bx, 6, bz);
   if (lines.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3)); world.add(new THREE.LineSegments(geometry, edge)); }
@@ -487,11 +515,11 @@ function drawStructure(item, count) {
 }
 // Each place's damage, as of now on the strand: the hits that have happened there so far.
 const hitTimes = {};
-for (const segment of segments) if (segment.kind === "event" && segment.event.hit) (hitTimes[segment.scene.place] ??= []).push(segment.start);
+for (const segment of segments) if (segment.kind === "event" && segment.event.hit) (hitTimes[keyOf(segment.scene.place)] ??= []).push(segment.start);
 const sphereLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1, 2)), new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.8 })); sphereLines.visible = false; world.add(sphereLines);
 const boxLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.95 })); boxLines.visible = false; world.add(boxLines);
 /** Where the camera rests on a place, and a glide to it: out over both places, across, and down, like a hand on the mouse. */
-const poseFor = (id) => { const spot = macroAt.get(id) ?? { x: 0, z: 0 }, place = data.places[id], span = Math.max(place.NX, place.NZ) * CELL; return { target: new THREE.Vector3(spot.x, 4, spot.z), position: new THREE.Vector3(spot.x + span * 0.45, span * 0.8, spot.z + span * 0.95) }; };
+const poseFor = (id) => { const spot = macroAt.get(id) ?? { x: 0, z: 0 }, place = data.places[id], span = place.world ? 64 : Math.max(place.NX, place.NZ) * CELL; return { target: new THREE.Vector3(spot.x, 4, spot.z), position: new THREE.Vector3(spot.x + span * 0.45, span * 0.8, spot.z + span * 0.95) }; };
 function glideTo(id, seconds, start = time) { glide = { to: poseFor(id), start, seconds }; }
 /** The glide's way, from wherever the camera is when it starts: out over both places, across, and down. */
 function glideFrom(glide) {
@@ -544,7 +572,7 @@ function frame(now) {
     }
   }
   const settling = !quiet && segment.kind === "event" && segment.event.hit && elapsed < 3.2 ? segment.event.hit : null;
-  for (const id of Object.keys(data.places)) drawSkeletons(id, built.get(id), (hitTimes[id] ?? []).filter((at) => at <= time && (hitsBefore === null || at < hitsBefore)).length, id === segment.scene.place ? settling : null);
+  for (const id of new Map(Object.keys(data.places).map((id) => [keyOf(id), id])).values()) drawSkeletons(id, built.get(id), (hitTimes[keyOf(id)] ?? []).filter((at) => at <= time && (hitsBefore === null || at < hitsBefore)).length, keyOf(id) === keyOf(segment.scene.place) ? settling : null);
   if (segment !== shownSegment) {
     shownSegment = segment; showPaths(segment, entry); showTrace(segment);
     const hit = segment.kind === "event" && segment.event.hit;
@@ -619,6 +647,9 @@ function frame(now) {
   }
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
   if (follow && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
+  // The world as explored by now: chunks and the faint city's copies of buildings since stood up.
+  for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.at <= time;
+  decor(time);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
@@ -746,7 +777,7 @@ if (capture) {
   document.body.classList.add("capture"); playing = false; follow = false;
   const overlay = $("overlay"), cameras = new Map(), extras = [];
   const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const bounds = (id) => { const place = data.places[id]; return { x: [-8, place.NX * CELL + 8], y: [0, 70], z: [-8, place.NZ * CELL + 8] }; };
+  const bounds = (id) => { const place = data.places[id]; return place.world ? { x: [place.anchor.x - 64, place.anchor.x + 64], y: [0, 70], z: [place.anchor.z - 64, place.anchor.z + 64] } : { x: [-8, place.NX * CELL + 8], y: [0, 70], z: [-8, place.NZ * CELL + 8] }; };
   const ndc = ({ left, right, top, bottom }) => ({ x: [left * 2 - 1, right * 2 - 1], y: [1 - bottom * 2, 1 - top * 2] });
   const ghostFill = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }), ghostEdges = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 });
   /** A candidate spot: the thing's model or shape in white, fitted to the spot (a model keeps its proportions), its letter above. */

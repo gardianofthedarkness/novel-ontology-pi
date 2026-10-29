@@ -680,6 +680,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const meta = { id, from: entry.from, to: entry.to, fork: entry.fork ?? null };
     kept.push(await keepRun(folder, meta, simulationRecord(strand.data, meta), { inputs: await simulationInputs(novel), accept: values.accept }));
   }
-  const summary = data => ({ scenes: data.scenes.length, events: data.scenes.reduce((n, s) => n + s.events.length, 0), ...data.notes, T: data.T, places: Object.values(data.places).map(p => ({ label: p.label, kind: p.kind, lots: p.lots.length, floors: p.lots.map(l => l.floors).join('/'), clutter: p.clutter.length, draws: p.clutterDraws })) });
+  const summary = data => ({ scenes: data.scenes.length, events: data.scenes.reduce((n, s) => n + s.events.length, 0), ...data.notes, T: data.T, places: Object.values(data.places).map(p => ({ label: p.label, kind: p.kind })), world: data.world ? { chunks: data.world.chunks.length, lots: data.world.lots.length, grid: [data.world.NX, data.world.NZ, data.world.K] } : null });
   console.log(JSON.stringify({ out, bytes: Buffer.byteLength(page), ...(values.set ? { strands: strands.map(strand => ({ id: strand.id, ...summary(strand.data) })) } : summary(strands[0].data)), ...(kept.length ? { runs: kept } : {}), seconds: (Date.now() - started) / 1000 }));
 }
