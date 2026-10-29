@@ -117,6 +117,13 @@ Buildings are added as the story detects them, not fixed up front.
 
      - The ghost close-ups are the default: Jev is surest of them, and its boxes do not just copy the ghost (they come out at about 0.6 of its size).
      - Example: the small interrogation-like room went beside 白井黑子 on the floor she stands on (choice 0.68), as an 8 × 7 × 2.5 m room 15 m up.
+   - **Sky** (user request, 2026-10-29): the choice always offers "sky".
+     - **When sky counts:** only when Jev gives it at least twice the probability of "none". Otherwise it is just a way of saying no ground spot fits: two generic "building" mentions picked sky at 0.24–0.28 against "none" at 0.20–0.21.
+     - **Then two turns from two directions of the sky,** high up and looking down so the ground shows, with height poles (10, 20, 40, 60 m) beside the people as a ruler:
+       1. **Find:** the air above the first person, wide. Box confidence was 0.03–0.06: empty sky gives Jev little to box.
+       2. **Lock:** zoomed on what turn 1 found, with the ghost drawn there. Box confidence 0.62–0.74.
+     - **First try:** the transport helicopter picked sky (0.27 against "none" ≤ 0.09) and was locked at 21 × 20 × 20 m, 39–59 m up. A building's weak sky pick (0.12) went back to its ground spot.
+     - **Weak point:** turn 1. Sky candidates (lettered ghosts at a few heights over the people, picked by a choice) would follow the pattern that works on the ground.
 6. **Placement rules:**
    - **A recognised building makes room.** Placed on top of, or over part of, an existing building, the places engine shrinks the existing architectures, everywhere, to give it space.
    - **Outside the current circle,** a building gives birth to a temporary, unnamed district: a new circle.
