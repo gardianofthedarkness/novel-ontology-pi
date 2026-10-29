@@ -31,10 +31,13 @@ export async function playableRuns(workspace, { newest = false } = {}) {
   return runs;
 }
 
-/** The Content-Security-Policy for a page that admits exactly its own inline scripts, by hash (a JSON data block is never run). */
-function pagePolicy(html) {
+/**
+ * The Content-Security-Policy for a page that admits exactly its own inline scripts, by hash (a JSON data block is never run).
+ * `framed`: the page may be framed by this same origin (the live player inside the world view), by nothing else.
+ */
+function pagePolicy(html, { framed = false } = {}) {
   const hashes = [...html.matchAll(/<script(?![^>]*type="application\/json")[^>]*>([\s\S]*?)<\/script>/g)].map(match => `'sha256-${createHash('sha256').update(match[1]).digest('base64')}'`);
-  return `default-src 'self'; script-src 'self' ${hashes.join(' ')}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'`;
+  return `default-src 'self'; script-src 'self' ${hashes.join(' ')}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; frame-ancestors ${framed ? "'self'" : "'none'"}; base-uri 'none'`;
 }
 
 /**
@@ -91,7 +94,7 @@ export async function simulationNowPage(workspace) {
   const { inlineStrand } = await import(pathToFileURL(`${repo}/playground/export-strand-demo.mjs`).href);
   const template = await readFile(`${repo}/playground/strand-demo.html`, 'utf8');
   const html = inlineStrand(template, page, { name: 'World · now', vendor: true });
-  return { html, policy: pagePolicy(html), run: page.live?.run ?? null };
+  return { html, policy: pagePolicy(html, { framed: true }), run: page.live?.run ?? null };
 }
 
 /** The world as the running command last stood it (live/world.json), or 'null' before any. */

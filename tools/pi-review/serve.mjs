@@ -212,7 +212,7 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
           return;
         }
         // The live view of the world: the engine's world as it stands at the moment being played (live/world.json).
-        if (scopedPath === '/play/now') { const page = await bounded(async () => simulationNowPage(await resolveWorkspace(volume))); if (!page) { send(404); return; } send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy, 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath === '/play/now') { const page = await bounded(async () => simulationNowPage(await resolveWorkspace(volume))); if (!page) { send(404); return; } send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy, 'Cache-Control': 'no-store', 'X-Frame-Options': 'SAMEORIGIN' }); return; }
         if (scopedPath === '/play/world') { const page = await simulationWorldPage(); send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy }); return; }
         if (scopedPath === '/play/live/world.json') { send(200, await bounded(async () => liveWorld(await resolveWorkspace(volume))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
         if (scopedPath === '/play/live.json') { send(200, JSON.stringify(await bounded(async () => liveState(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
