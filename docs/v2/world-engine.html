@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>World Engine v2</title>
+<style>
+:root {
+  --bg: #f4f1ea; --surface: #fffdf8; --sunk: #ece7dc; --ink: #1d2430; --muted: #5d6573; --line: #d9d2c4;
+  --accent: #0f766e; --accent-soft: #d5ece8; --link: #0e5f8a;
+  --built: #0f766e; --built-bg: #dcefeb; --tested: #3f4fb8; --tested-bg: #e1e4f7; --live: #9a5b00; --live-bg: #f6e7cc;
+  --gap: #b4233c; --gap-bg: #f7dde2; --plan: #6b3fa0; --plan-bg: #ece2f6;
+  --flow: #e9f2f1; --code: #f0ebe0;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1419; --surface: #161d25; --sunk: #1d2630; --ink: #e6e9ee; --muted: #9aa5b4; --line: #2b3642;
+    --accent: #4fd1c0; --accent-soft: #163734; --link: #7cc4f0;
+    --built: #5fd4c3; --built-bg: #143532; --tested: #a3b0ff; --tested-bg: #22284d; --live: #f2b45a; --live-bg: #3a2a10;
+    --gap: #ff8a9e; --gap-bg: #3d1820; --plan: #c9a6f5; --plan-bg: #2d1f42;
+    --flow: #17282a; --code: #1f2833;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1419; --surface: #161d25; --sunk: #1d2630; --ink: #e6e9ee; --muted: #9aa5b4; --line: #2b3642;
+  --accent: #4fd1c0; --accent-soft: #163734; --link: #7cc4f0;
+  --built: #5fd4c3; --built-bg: #143532; --tested: #a3b0ff; --tested-bg: #22284d; --live: #f2b45a; --live-bg: #3a2a10;
+  --gap: #ff8a9e; --gap-bg: #3d1820; --plan: #c9a6f5; --plan-bg: #2d1f42;
+  --flow: #17282a; --code: #1f2833;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+h1, h2, h3 { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Songti SC", serif; text-wrap: balance; line-height: 1.25; }
+code, .mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.86em; }
+code { background: var(--code); padding: 0.05em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--link); }
+.bar {
+  position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line);
+  padding: max(10px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+.bar .brand { font-family: "Iowan Old Style", Palatino, Georgia, serif; font-size: 1.1rem; font-weight: 600; }
+.bar .brand span { color: var(--accent); }
+.bar select { margin-left: auto; font: inherit; font-size: 0.9rem; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); max-width: 100%; }
+.shell { display: grid; grid-template-columns: 1fr; max-width: 1180px; margin: 0 auto; }
+nav.side { display: none; }
+@media (min-width: 960px) {
+  .shell { grid-template-columns: 250px minmax(0, 1fr); gap: 8px; }
+  nav.side { display: block; position: sticky; top: 58px; align-self: start; padding: 24px 0 24px 20px; max-height: calc(100vh - 58px); overflow: auto; }
+  .bar select { display: none; }
+}
+nav.side ol { list-style: none; margin: 0; padding: 0; counter-reset: page; }
+nav.side li a {
+  display: grid; grid-template-columns: 26px 1fr; gap: 4px; padding: 7px 10px; border-radius: 8px; text-decoration: none; color: var(--muted); font-size: 0.92rem;
+}
+nav.side li a b { font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+nav.side li a:hover { background: var(--sunk); color: var(--ink); }
+nav.side li a[aria-current="page"] { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+main { min-width: 0; padding-block: 24px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+section.page { max-width: 820px; }
+section.page[hidden] { display: none !important; }
+.kicker { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; color: var(--accent); font-weight: 600; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.3rem); margin: 6px 0 10px; }
+h2 { font-size: 1.35rem; margin: 36px 0 12px; padding-top: 4px; border-top: 1px solid var(--line); padding-top: 22px; }
+.lede { font-size: 1.08rem; color: var(--muted); max-width: 66ch; margin: 0 0 20px; }
+p { max-width: 68ch; }
+.blocks { display: grid; gap: 14px; }
+article.block { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+article.block header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; justify-content: space-between; }
+article.block h3 { margin: 0; font-size: 1.12rem; }
+article.block p { margin: 8px 0 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.built { color: var(--built); background: var(--built-bg); }
+.chip.tested { color: var(--tested); background: var(--tested-bg); }
+.chip.live { color: var(--live); background: var(--live-bg); }
+.chip.gap { color: var(--gap); background: var(--gap-bg); }
+.chip.plan { color: var(--plan); background: var(--plan-bg); }
+dl.facts { display: grid; grid-template-columns: 1fr; gap: 2px 14px; margin: 12px 0 0; font-size: 0.93rem; }
+@media (min-width: 620px) { dl.facts { grid-template-columns: 118px minmax(0, 1fr); } }
+dl.facts dt { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 3px; }
+dl.facts dd { margin: 0 0 6px; min-width: 0; }
+ul.tight { margin: 6px 0 0; padding-left: 1.2em; }
+ul.tight li { margin: 2px 0; }
+.table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; min-width: 560px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--sunk); }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 620px) {
+  .table-wrap { overflow: visible; border: 0; background: none; }
+  table, tbody, tr, td { display: block; min-width: 0; width: 100%; }
+  thead { display: none; }
+  tr { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+  td { border: 0; padding: 3px 0; white-space: normal; }
+  td.num { white-space: normal; }
+  td::before { content: attr(data-label); display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  td:first-child { font-weight: 600; }
+  td:first-child::before { content: none; }
+}
+.flow { display: grid; gap: 8px; margin: 16px 0; }
+.flow .stage { background: var(--flow); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.flow .stage b { display: block; }
+.flow .stage span { color: var(--muted); font-size: 0.9rem; }
+.flow .arrow { text-align: center; color: var(--accent); font-size: 1.1rem; line-height: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 0.9rem; color: var(--muted); margin: 10px 0 0; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.stat b { display: block; font-family: "Iowan Old Style", Palatino, Georgia, serif; font-size: 1.6rem; line-height: 1.1; }
+.stat span { color: var(--muted); font-size: 0.85rem; }
+.note { background: var(--accent-soft); border-radius: 10px; padding: 12px 16px; margin: 14px 0; max-width: 68ch; }
+.pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 40px; flex-wrap: wrap; }
+.pager a { display: inline-block; text-decoration: none; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); max-width: 100%; }
+.pager a small { display: block; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.pager a[hidden] { visibility: hidden; display: inline-block !important; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="brand">World Engine <span>v2</span></div>
+  <select id="jump" aria-label="Go to page"></select>
+</div>
+<div class="shell">
+<nav class="side" aria-label="Pages"><ol id="toc"></ol></nav>
+<main>
+
+<!-- ============================== 1 ============================== -->
+<section class="page" id="overview" data-title="Overview">
+<div class="kicker">Page 1 · Overview</div>
+<h1>The world engine, block by block</h1>
+<p class="lede">A book is read into a world first: who is where, when, in which building, above or under the ground. Dialogue, movement, things, fights and identity are then decided inside that world. This is the second version of the CLI, and these pages go through every block built so far, what it decides and how, how it is tested, and what is missing.</p>
+<div class="stats">
+  <div class="stat"><b>~60</b><span>modules in the world engine</span></div>
+  <div class="stat"><b>77</b><span>vol 1 scenes the world loop has read</span></div>
+  <div class="stat"><b>42</b><span>baked 3D models (Kenney, KayKit)</span></div>
+  <div class="stat"><b>6%</b><span>of a recorded pick was Jev; the rest was replays and Chrome</span></div>
+</div>
+<h2>The pipeline</h2>
+<div class="flow">
+  <div class="stage"><b>1 · Extraction (the Digger)</b><span>sentences, scenes, sentence kinds (dialogue, monologue, fact), events as actions and movements, names and identity at birth</span></div>
+  <div class="arrow">↓</div>
+  <div class="stage"><b>2 · Base layer</b><span>what the faculties found before any review: scenes, events, exchanges, monologues, facts, states, roster</span></div>
+  <div class="arrow">↓</div>
+  <div class="stage"><b>3 · World loop</b><span>scene by scene: presence, place, time, dialogue nodes, under the world's laws; what is unsure goes to Pi</span></div>
+  <div class="arrow">↓</div>
+  <div class="stage"><b>4 · Places and ground</b><span>canvas of places, scale, landscape manifold, city fill, buildings, the underground</span></div>
+  <div class="arrow">↓</div>
+  <div class="stage"><b>5 · The engine</b><span>the world grid, births, gatherings, movement, things, fights and destruction, played event by event</span></div>
+  <div class="arrow">↓</div>
+  <div class="stage"><b>6 · Pickers, live view, Pi</b><span>Jev decides each event on the world as it stands; the live page shows every question; Pi runs it all</span></div>
+</div>
+<h2>How to read the status</h2>
+<div class="legend">
+  <span class="chip built">Built</span> in the code
+  <span class="chip tested">Tested</span> has automated tests
+  <span class="chip live">Seen live</span> ran on vol 1 on the host
+  <span class="chip gap">Gap</span> known missing or wrong
+  <span class="chip plan">Proposed</span> v2 design, not built
+</div>
+<div class="note"><b>Branch.</b> All of this lives on <code>v2</code> on origin. Work lands there directly, with no pull requests; <code>main</code> stays the v1 CLI. The design going forward is in <code>docs/v2/world-engine-v2.md</code>, summarised on page 11.</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 2 ============================== -->
+<section class="page" id="extraction" data-title="Extraction">
+<div class="kicker">Page 2 · Feeding the world</div>
+<h1>Extraction: what the world is built from</h1>
+<p class="lede">The Digger turns a book into sentences, scenes, exchanges, monologues, facts, events and names. Since the world-first redesign, nothing here decides presence, place or time: the world does.</p>
+<div class="blocks">
+<article class="block"><header><h3>Sectioning</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Code only: chapters into paragraphs into sentences, each with a stable id (<code>b0001_s0042</code>) and offsets. Every later answer cites these ids.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Code, no model</dd><dt>Files</dt><dd><code>src/digger/intake/sectioning.ts</code> (108 lines)</dd></dl></article>
+
+<article class="block"><header><h3>Scene tiling</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Jev points at where each scene starts over 80-sentence batches (20 sentences of look-back); a scene ends where the next starts, so scenes tile the block exactly. A seam question decides whether a scene runs on into the next batch.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice over sentence ids, chained batch by batch</dd><dt>Files</dt><dd><code>src/digger/autostep/segmentation.ts</code> (tileScenes)</dd><dt>Tests</dt><dd>5 in <code>test/segmentation.test.ts</code></dd><dt>Gaps</dt><dd>Still a chain of requests. A per-sentence version needs a stitch rule first (page 11).</dd></dl></article>
+
+<article class="block"><header><h3>Sentence kinds: dialogues, monologues, facts</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip gap">Not run on vol 1</span></div></header>
+<p>Every sentence is spoken, thought, fact, action or narration, and Jev says whether the people talking change there. An exchange runs as long as the same people talk, narration and actions between their lines inside it, and ends when they change or after 8 quiet sentences. A run of thought is a monologue; a run of facts is the world's background knowledge.</p>
+<dl class="facts"><dt>Decides with</dt><dd>One structured document per 100 sentences (kinds defined once, sentences keyed by id); questions <code>dlg_kind:&lt;id&gt;</code>, <code>dlg_turn:&lt;id&gt;</code>; windows at once</dd><dt>Measured</dt><dd>300 sentences: 0.25 s and 3 requests, against 4.1 s and 37 chained requests for start and end selection; median exchange 11 sentences (6 before)</dd><dt>Files</dt><dd><code>segmentation.ts</code> (classifySentences, spansOfKinds), <code>src/digger/processing/facultyGraph.ts</code></dd><dt>Tests</dt><dd>7 in <code>test/segmentation.test.ts</code>, plus the faculty graph, cards, ingest and draft tests</dd><dt>Gaps</dt><dd>vol 1 must be extracted again (paid) before the world sees it.</dd></dl></article>
+
+<article class="block"><header><h3>Dialogue and monologue cards</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
+<p>Each exchange becomes a card of who takes part; each monologue a card whose member is the one thinking. Only characters named near the span are asked about (at most 32), so unrelated people never become facts to review.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice per candidate (participates, not, unknown); a work-model adjudication when Jev is unsure</dd><dt>Files</dt><dd><code>src/digger/processing/dialogueCards.ts</code> (148 lines)</dd><dt>Tests</dt><dd>9 in <code>test/dialogue-cards.test.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>Events as actions and movements</h3><div class="chips"><span class="chip built">Built</span><span class="chip gap">Not run on vol 1</span></div></header>
+<p>The work model reads one scene at a time and lists 3 to 5 events: what a person does or what physically happens, who goes where and how (walks, runs, climbs, jumps, falls, flies, enters, leaves, carries someone, fights, breaks something), saying where when the text does. Speech and thought are exchanges and monologues now, not events.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Work model, one call per scene; ids and validation in code</dd><dt>Files</dt><dd><code>src/digger/extraction/extraction.ts</code> (772 lines)</dd></dl></article>
+
+<article class="block"><header><h3>Names and identity at birth</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Before anything is minted, every new character name of a block meets the universal recommender (this book, the universe's other books, the block's other names). A full proper name owned by one candidate binds in code; any other name gets one Jev choice over its candidates.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice per name over at most 12 candidates, one request per scene passage; binds at 0.92, raised for review from 0.6</dd><dt>Files</dt><dd><code>src/digger/processing/blockIdentity.ts</code>, <code>src/solidifier/identity/em.ts</code>, <code>recommender.ts</code></dd><dt>Tests</dt><dd>11 in <code>test/universal-em.test.ts</code></dd><dt>Gaps</dt><dd>Candidates are text repeated per question; one request per scene. Page 11 makes it one structured request per block.</dd></dl></article>
+
+<article class="block"><header><h3>Base layer</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>What the faculties found before any review: scenes with their text and summary, events with their actors, exchanges and monologues with their text, facts with their scene, states (what people hold and learn), and the roster of names. Nothing reviewed is taken: the world decides presence, place and time.</p>
+<dl class="facts"><dt>Files</dt><dd><code>experiments/world-first/base.mjs</code> → <code>base/scenes.json</code>, <code>roster.json</code>, <code>states.json</code>, <code>facts.json</code></dd></dl></article>
+</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 3 ============================== -->
+<section class="page" id="world-loop" data-title="World loop">
+<div class="kicker">Page 3 · World first</div>
+<h1>The world loop</h1>
+<p class="lede">Scene by scene in reading order, Jev reads each scene in a composed context and says who is there, where, and when; the world keeps what the text cannot break.</p>
+<div class="blocks">
+<article class="block"><header><h3>Composed context</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Every decision gets the same shape: the world as it stands (who is where since when), what the book has told of the world (its latest facts), the story so far, this scene in full, and the decision's own part. Over its 10,000-character budget, the oldest story goes first, then the oldest facts, then the least recently placed people, then the middle of a very long scene.</p>
+<dl class="facts"><dt>Files</dt><dd><code>experiments/world-first/compose.mjs</code> (38 lines)</dd><dt>Tests</dt><dd>2 in <code>world-first.test.mjs</code></dd><dt>Gaps</dt><dd>Plain text; page 11 makes it a JSON document.</dd></dl></article>
+
+<article class="block"><header><h3>Presence, place and time</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>One call for who is in the scene (up to 14 candidates: named, event actors, the scene before's people) and where (the place before, places the text names, places the candidates are at, or a new one); one for when it is against the scene before, among the times the laws allow, with the time words of its text. A fragment scene costs nothing and carries the scene before on.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev nouls and choices, about 2 calls a scene (vol 1: 140 calls for 77 scenes)</dd><dt>Files</dt><dd><code>experiments/world-first/run.mjs</code> (289 lines)</dd></dl></article>
+
+<article class="block"><header><h3>The world's laws</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<ul class="tight">
+<li><b>Nobody vanishes:</b> a person stays where last placed until a scene places them elsewhere.</li>
+<li><b>Nobody is in two places at once</b> on the one clock; a scene sharing someone with the scene before can only come after it or be a flashback.</li>
+<li><b>A flashback is the past:</b> it logs what people did then and moves nobody now.</li>
+<li><b>Actors are there:</b> an event's actor the world lacks joins when Jev thought it likely, else is flagged.</li>
+<li><b>Things are held by one person; knowledge flows</b> only through being there or hearing it in a dialogue.</li>
+</ul>
+<dl class="facts"><dt>Files</dt><dd><code>world.mjs</code> (119 lines), <code>laws.mjs</code> (46 lines)</dd></dl></article>
+
+<article class="block"><header><h3>Dialogue nodes</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Each exchange is a node on the scene's timeline: live (two face to face), group (three or more, one box), remote (phone, message, telepathy: one party elsewhere) or public (one voice to everyone). Jev says the kind and the two parties; the world adds a missing live party unless that breaks the two-places law. A monologue costs nothing and moves no one.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev, one call per node (a second for a remote node's local party)</dd><dt>Files</dt><dd><code>dialogue.mjs</code> (43 lines)</dd></dl></article>
+
+<article class="block"><header><h3>Building kinds for new spots</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>When the world makes a new indoor spot, Jev says which kind of building it is (school, home, mall, office and so on); the kind sets the building's role and floors on the stage.</p>
+<dl class="facts"><dt>Files</dt><dd><code>run.mjs</code> (BUILDINGS), <code>apps/playground/src/data/skeletonPlace.ts</code>, <code>world.ts</code> (ROLE_SIZE, ROLE_KIND)</dd></dl></article>
+
+<article class="block"><header><h3>Review pool and Pi</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>What a scene leaves unsure or against a law becomes a pool item; every few items make a batch sent to Pi while the world goes on. Pi answers from the original text (<code>novel source grep|similar</code>); between scenes the world turns answers into pins and replays from the start (at most 6 replays; the cache keeps unchanged scenes free). A landscape answer is pinned for the stage without a replay.</p>
+<dl class="facts"><dt>Files</dt><dd><code>pool.mjs</code>, <code>src/cli/commands/extract/worldCommands.ts</code>, <code>sourceCommands.ts</code></dd><dt>Tests</dt><dd><code>test/world-review.test.ts</code> (3), <code>world-first.test.mjs</code></dd></dl></article>
+
+<article class="block"><header><h3>Identity in the world</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span><span class="chip gap">Gap</span></div></header>
+<p>No review waits: EM's confident matches merge automatically with a flag, unless the world has the two in two places at once. Epithets ("刺猬头少年") are bound to the named person Jev says they are. At each chapter's end, two people whose scenes run 80% alike over 6 or more scenes are asked about again.</p>
+<dl class="facts"><dt>Files</dt><dd><code>identity.mjs</code> (94 lines), <code>run.mjs</code> (tracesAlike)</dd><dt>Gaps</dt><dd>A title of a person can stay a second person (seen: a character and her rank title moved as two). Undoing a merge when Pi answers "different" is not built.</dd></dl></article>
+
+<article class="block"><header><h3>Solidifier, world first</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
+<p>Lineage instead of in-book causality: what led to an event, from the world alone (events before it sharing its actors, events at its place, dialogues its actors heard). Plus EM from world evidence: two identities never in a scene together, with overlapping names and a shared companion.</p>
+<dl class="facts"><dt>Files</dt><dd><code>solidify.mjs</code> (84 lines), <code>compare.mjs</code> (61 lines: against the old extraction)</dd></dl></article>
+</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 4 ============================== -->
+<section class="page" id="places" data-title="Places and ground">
+<div class="kicker">Page 4 · Places and ground</div>
+<h1>Places, landscapes and the city</h1>
+<p class="lede">Every place the story names is a circle on one canvas, sized by what is built inside it. Open places get a ground (a landscape); the city is filled with roads, blocks, lots and buildings from a recipe, the same every time.</p>
+<div class="blocks">
+<article class="block"><header><h3>Canvas of places</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Places are born when the story first needs them, smallest first: a building brings its district and city into being around it. A circle grows to enclose its ground, named buildings and children; a growing circle pushes its siblings aside whole.</p>
+<dl class="facts"><dt>Files</dt><dd><code>src/ground/stage/placeCanvas.ts</code> (199 lines)</dd><dt>Tests</dt><dd>12 in <code>test/place-canvas.test.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>Scale</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>How big a place is on the ladder region › city › district › street › building › room. Jev was right on 64 of 66 places of the vols 1–4 snapshot; the name's generic part on 44 to 54.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice per place (name, path in the place tree, places inside)</dd><dt>Files</dt><dd><code>src/digger/stage/scale.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>Architecture</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
+<p>Which building a place is: the name shortlists up to four kinds, then Jev picks among their pictures under neutral option names, so the pictures decide, not the words.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice on pictures</dd><dt>Files</dt><dd><code>src/digger/stage/architecture.ts</code>, <code>src/ground/stage/placeArchitecture.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>Landscape manifold</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>The ground of each open place (city, district, street) by type: skyscrapers, commercial, residential, industrial, harbour, park, stadium, village, castle, farm. Each type is a family of shapes (a patch with an outline and a height profile) drawn from a seed. A place without Jev's answer gets its ground by terrain rules (its ancestors, its scale): <code>groundFor</code> says which (Jev, agent, terrain, scale, none).</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice per open place; unsure answers (under 0.5) go to Pi as landscape items</dd><dt>Files</dt><dd><code>src/ground/stage/landscape.ts</code> (324 lines), <code>src/digger/stage/landscape.ts</code></dd><dt>Tests</dt><dd>13 in <code>test/landscape.test.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>City fill</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>A city's whole circle covered from a recipe seeded by its id, so nothing is stored: arterial roads as Voronoi super-blocks, blocks split until small enough (each split a road), lots with a road along one side. Runs keep only what they change (a named building borrowing a lot, growth).</p>
+<dl class="facts"><dt>Files</dt><dd><code>src/ground/stage/cityFill.ts</code> (277 lines)</dd><dt>Tests</dt><dd>6 in <code>test/city-fill.test.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>District boxes</h3><div class="chips"><span class="chip built">Built</span><span class="chip gap">Trial only</span></div></header>
+<p>Jev places each district in its city from above, in story order: the city so far, the districts placed, this district in its current box; it keeps the box or draws a better one, over up to three turns.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev box on a map picture</dd><dt>Files</dt><dd><code>playground/landscape-boxes.mjs</code> (115 lines); writes nothing to the book yet</dd></dl></article>
+
+<article class="block"><header><h3>Buildings on the grid</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Each lot is a building with a circulation skeleton: corridors, stair cores and box rooms on every floor, its roof above. Walking: 8 directions outdoors and on roofs, 4 inside, stairs a floor at a time, street doors, roof jumps across an alley, falls. Roles (school, home, mall, office) set size and floors.</p>
+<dl class="facts"><dt>Files</dt><dd><code>skeletonPlace.ts</code> (246), <code>skeleton.ts</code> (197), <code>buildingPlan.ts</code> (343)</dd><dt>Tests</dt><dd><code>test/skeleton.test.ts</code>, <code>test/holo-nav.test.ts</code> (7)</dd></dl></article>
+</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 5 ============================== -->
+<section class="page" id="underground" data-title="Underground">
+<div class="kicker">Page 5 · Below the street</div>
+<h1>The underground</h1>
+<p class="lede">Halls carved in the ground that the soil or rock around them holds up, not buildings. They are generated with each landscape; the subway follows its own logic; and an area's underground only comes alive once someone goes down there.</p>
+<div class="blocks">
+<article class="block"><header><h3>Ground bands and halls</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
+<p>Soil to 12 m, weathered rock to 40 m, hard rock below, each with the span it can hold. Hall kinds: subway tunnel, station and passage; underground mall; storm-water tank and channel; deep lab, military and quantum facilities. Pillars stand where a roof would span too far.</p>
+<dl class="facts"><dt>Files</dt><dd><code>src/ground/stage/underground.ts</code> (249 lines)</dd><dt>Docs</dt><dd><code>docs/underground-design.md</code></dd></dl></article>
+
+<article class="block"><header><h3>Three depth choices</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
+<p>Jev picks one of three overlapping intervals, so it is never asked to tell many levels apart: shallow (0–25 m: basements, car parks, malls), subway (5–20 m, by kind) and deep (20–110 m). A box on the chosen interval's picture finds the hall. Measured over six cities, the box lands in the right hall 94–96% (shallow), 99% (subway), about 99% (deep).</p>
+<dl class="facts"><dt>Tests</dt><dd>precision over six cities, at least 90% each, in <code>test/world.test.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>The subway</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
+<p>Lines through the centres of the city's areas, not along its streets; tunnels run between station ends. Every station has four entrances: a 5 m passage from each end out 30 m to either side, stairs up at its far end to the nearest pavement, and an entrance kiosk on the street.</p>
+<dl class="facts"><dt>Files</dt><dd><code>underground.ts</code> (subwayOf), <code>world.ts</code> (hall ways), <code>strand-demo.html</code> (kiosks and steps)</dd><dt>Gaps</dt><dd>Built after the last live run; not yet seen on the host.</dd></dl></article>
+
+<article class="block"><header><h3>Basements and car parks</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Buildings get 1, 2 or 3 basement levels by height (2, 10, 20 floors and up), car parks with pillars, and stairs down from their cores.</p>
+<dl class="facts"><dt>Files</dt><dd><code>world.ts</code> (basementsOf, carParkPillar)</dd></dl></article>
+
+<article class="block"><header><h3>The wake hook</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>Each hall belongs to the smallest area its middle lies in. That area's underground (its halls, its ways up, its collapse) is laid only once a character goes down there; until then it is drawn but never walked.</p>
+<dl class="facts"><dt>Files</dt><dd><code>playground/export-strand-demo.mjs</code> (awake, bornUnder, hallUnder)</dd></dl></article>
+
+<article class="block"><header><h3>Collapse after a blast</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip gap">Gap</span></div></header>
+<p>A confined blast widens the roof's span (twice the distance to the nearest support); past what the band holds, the roof caves in to a dome, a choke, or (soil halls only) a dent in the street of up to 3 m. Deep halls fill partly with dirt and never break the ground. People buried by a cave-in climb out to the nearest open cell of their hall.</p>
+<dl class="facts"><dt>Files</dt><dd><code>underground.ts</code> (collapse), <code>export-strand-demo.mjs</code> (underHit, buried)</dd><dt>Gaps</dt><dd>Flooding is left for later.</dd></dl></article>
+</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 6 ============================== -->
+<section class="page" id="identity" data-title="Buildings and identity">
+<div class="kicker">Page 6 · One of each</div>
+<h1>Buildings and identity</h1>
+<p class="lede">The same person or building named several ways must be one thing in the world, or the two-places law misfires and the city fills with copies.</p>
+<div class="blocks">
+<article class="block"><header><h3>Building EM</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>For every building a scene mentions, Jev answers which it is: the building the scene happens in, one of the book's named buildings so far, the subway, another building of its own, or not a building here; and whether its name is a proper name. Answers join mentions, spots and named places into one building each. A named building joins only at 60% or more, so weak answers never chain buildings together; a district's own name is never a building.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice and noul per mention, in the scene's composed context</dd><dt>Files</dt><dd><code>experiments/world-first/buildings.mjs</code> (91 lines) → <code>stage/world/buildings.json</code></dd><dt>Tests</dt><dd><code>world-first.test.mjs</code> (identitiesOf)</dd></dl></article>
+
+<article class="block"><header><h3>One building, one lot</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>In the engine each identity gets one real lot, never a box. When it has several, the lot with the least total travel for everyone who has been there in the book is kept, and every scene and trace at the others moves onto it; Jev's view of it is redirected there.</p>
+<dl class="facts"><dt>Files</dt><dd><code>export-strand-demo.mjs</code> (buildingsEM, keptOf)</dd></dl></article>
+
+<article class="block"><header><h3>Universal EM</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>One character list for the universe: at birth (page 2) and after apply, where every pair suspected of being one person is asked "same" and "distinct" in one batch.</p>
+<dl class="facts"><dt>Files</dt><dd><code>src/solidifier/identity/em.ts</code> (resolveNewNames, checkPairs), <code>recommender.ts</code>, <code>cast.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>The universe's things</h3><div class="chips"><span class="chip built">Built</span></div></header>
+<p>Named buildings and large things in one shared list beside the characters, so the second book to name a thing names the same thing.</p>
+<dl class="facts"><dt>Files</dt><dd><code>src/solidifier/identity/things.ts</code> (123 lines)</dd><dt>Gaps</dt><dd>No vehicles, mechs or carried objects as movable things yet (page 11).</dd></dl></article>
+</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 7 ============================== -->
+<section class="page" id="engine" data-title="The engine">
+<div class="kicker">Page 7 · The simulation</div>
+<h1>The engine</h1>
+<p class="lede">One world for every staged place, streamed in as the story reaches it, and people walked through it event by event. Saved answers replay fast: scenes 1–5 of vol 1 (51 chunks, 361 buildings, the underground) in 1.8 s; the whole first line in 9.8 s.</p>
+<div class="blocks">
+<article class="block"><header><h3>The world grid</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>The canvas with every open place's landscape filled, cut into chunks of 32 m on a 2 m grid with 3 m floors. A chunk is materialized the first moment someone, something or a blast comes near, and remembers when, so a run shows the world being explored. Nodes are never renumbered as it grows.</p>
+<dl class="facts"><dt>Files</dt><dd><code>apps/playground/src/data/world.ts</code> (464 lines)</dd><dt>Tests</dt><dd>9 in <code>test/world.test.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>Births: where someone starts</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>The first time someone is seen, Jev boxes where they are on a picture of their level: the map around the place, a slice of a floor (to pick a room), or one of the three underground choices. A person in a room whose floor the text does not give gets a random floor of their building (the same every run) and a close-up slice of it.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev box on a map picture drawn in plain Node (no browser)</dd><dt>Files</dt><dd><code>export-strand-demo.mjs</code>, <code>playground/world-map.mjs</code> (93 lines)</dd></dl></article>
+
+<article class="block"><header><h3>Meetings and gatherings</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>A live dialogue brings its two parties within talking distance (the same floor, 4 m); a group dialogue is one box Jev draws, everyone held inside it, on their floor or interval.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev box on the floor or map picture</dd></dl></article>
+
+<article class="block"><header><h3>Movement: spots and paths</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Where each move ends comes from Jev's spot answers; the way there is drawn from a path integral: every walk weighs exp(−S/T), S adding metres, climbs (×λ), falls and a turning cost (κ). A walk is one exact draw (the h-transform), plus a small ensemble to show the spread. Between places, people walk the map's own lattice, crossing place boundaries squarely.</p>
+<dl class="facts"><dt>Files</dt><dd><code>pathIntegral.ts</code> (128), <code>macroPath.ts</code> (77), <code>src/ground/stage/holoNav.ts</code> (240)</dd><dt>Tests</dt><dd><code>test/path-integral.test.ts</code> (3), <code>test/macro-path.test.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>Who goes together</h3><div class="chips"><span class="chip built">Built</span><span class="chip gap">Not in the live picker</span></div></header>
+<p>Pairs Jev rates at 0.5 or more are joined into groups; a group's leader walks and the others end beside it. The v1 movement step (<code>novel stage movement</code>) asks these pairs; the live picker does not, and treats two people the event names going to the same spot as together.</p>
+<dl class="facts"><dt>Files</dt><dd><code>export-strand-demo.mjs</code> (leaderOf), <code>src/digger/stage/movement.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>Things in their places</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>Large things the scenes mention (3 m or more) are matched to a model: Jev picks it on a labelled sheet of every model and basic shape. Each placement is boxed on the reader's view, then on a low side view at six turns in one request, keeping the surest; a third view only when still unsure.</p>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice (model) and boxes on rendered pictures</dd><dt>Files</dt><dd><code>playground/two-view-things.mjs</code> (382 lines), <code>src/digger/stage/objects.ts</code> (296 lines)</dd></dl></article>
+
+<article class="block"><header><h3>Fights and destruction</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>Where a fight hits: lettered red spheres at likely impact points, Jev picks one or "no damage"; how big: concentric spheres 4, 8, 16 and 32 m across. Every building the sphere reaches loses structural units; its standing cells step down their percolation curve. A fight underground is centred on its fighter and caves in halls (page 5). Damage other story lines left on the world is applied in story order.</p>
+<dl class="facts"><dt>Files</dt><dd><code>playground/impact-choices.mjs</code> (119 lines), <code>export-strand-demo.mjs</code>, <code>structure.ts</code></dd></dl></article>
+
+<article class="block"><header><h3>Runs and records</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
+<p>Each run is kept with its book as a versioned record (what it was made from, the engine version, the accepted run); the host plays the accepted runs. Derived view data, never canon.</p>
+<dl class="facts"><dt>Files</dt><dd><code>export-strand-demo.mjs</code> (keepRun, ENGINE_VERSION 3), <code>src/cli/commands/extract/simCommands.ts</code></dd><dt>Tests</dt><dd><code>playground/strand-records.test.mjs</code></dd></dl></article>
+</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 8 ============================== -->
+<section class="page" id="live" data-title="Pickers, live view, Pi">
+<div class="kicker">Page 8 · Deciding and watching</div>
+<h1>Pickers, the live view and Pi</h1>
+<p class="lede">Jev decides each event on the world as it stands; every answer is saved as it comes, chained to the ones before, so a stopped run continues and a changed answer is followed by fresh ones.</p>
+<div class="blocks">
+<article class="block"><header><h3>novel sim pick</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span><span class="chip gap">Slow</span></div></header>
+<p>Walks a story line forward event by event in headless Chrome: on a picture of each event as it begins, Jev decides where the people go, where the things stand and where the fight hits; the engine plays it and the next event begins from what it made. Pi may spend at most 60 calls a command.</p>
+<dl class="facts"><dt>Measured</dt><dd>A recorded pick: 449 s, of which Jev 28 s. Before each event question, 2–6 s replaying the engine from the line's start and reopening the page in Chrome; a 222 s stretch before the first event question is not yet accounted for.</dd><dt>Files</dt><dd><code>playground/sim-jev.mjs</code> (333 lines)</dd></dl></article>
+
+<article class="block"><header><h3>novel sim run</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>Plays a line with the answers it has, no model calls; <code>--pace 0.5–5</code> seconds a moment so the live view shows every moment as the engine plays it.</p></article>
+
+<article class="block"><header><h3>The live recorder</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip gap">Newest part not on the host</span></div></header>
+<p>Every question Jev is asked, with its exact prompt, its pictures and its answers, and every outcome; the engine's own questions (births, meetings, gatherings) go through it too. A structured state shows as its JSON.</p>
+<dl class="facts"><dt>Files</dt><dd><code>sim-jev.mjs</code> (createLive) → <code>stage/simulation/live.json</code>, <code>live/frames.jsonl</code></dd></dl></article>
+
+<article class="block"><header><h3>The world view and the live page</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>The world view draws the world in 3D as it is played, with an Underground switch; "Jev's questions" opens the live page as a drawer over it. The live page lists each request with its exact prompt folded.</p>
+<dl class="facts"><dt>Files</dt><dd><code>tools/pi-review/sim-world.html</code>, <code>sim-live.html</code>, <code>sim-play.mjs</code></dd></dl></article>
+
+<article class="block"><header><h3>The host and Pi</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
+<p>A host serves a book's pages through a tunnel for the phone, and runs Pi (the main agent) with a console. A guard allows only the commands' allowed forms and quotes the allowed form back when it refuses. Live tests run from a separate fully built checkout.</p>
+<dl class="facts"><dt>Files</dt><dd><code>tools/pi-review/guard.mjs</code> (382 lines, 19 tests), <code>pi-console.mjs</code>, <code>~/claude-world-first/host.mjs</code> (outside the repo)</dd><dt>Gaps</dt><dd>The host is stopped, on a build older than the station stairs and the folded prompts.</dd></dl></article>
+</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 9 ============================== -->
+<section class="page" id="models" data-title="Models and player">
+<div class="kicker">Page 9 · What you see</div>
+<h1>3D models and the player</h1>
+<div class="blocks">
+<article class="block"><header><h3>Baked models</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>42 models as bare geometry (positions and triangles): Kenney's City Kit Commercial, Fantasy Town and Castle kits, and KayKit's City Builder Bits (school, dormitory, apartment, mall) and Space Base Bits (lab, military, quantum facility, subway tunnels), all CC0. A thing is drawn in the theme of the ground under it.</p>
+<dl class="facts"><dt>Files</dt><dd><code>apps/playground/tools/bake-geometry.mjs</code>, <code>architecture-models.mjs</code>, <code>modern-kit-models.mjs</code> → <code>architectureModels.json</code>; <code>modelThemes.json</code></dd></dl></article>
+
+<article class="block"><header><h3>The player</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
+<p>One page: the world, its people and their traces over time, blasts as red spheres, the underground seen through a see-through ground (halls, pillars, piles, dents; kiosks and steps at stations). three.js ships beside the page, never from a CDN, because the CDN fails on the phone.</p>
+<dl class="facts"><dt>Files</dt><dd><code>playground/strand-demo.html</code> (1,278 lines)</dd></dl></article>
+</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 10 ============================== -->
+<section class="page" id="measurements" data-title="Measurements">
+<div class="kicker">Page 10 · Measured 2026-10-30</div>
+<h1>What structured input changes</h1>
+<p class="lede">Jev reads a state that can be a JSON object; questions point into it; a request has no limit on questions, only on size (64k tokens), and is billed per input token. Every test below ran on vol 1 with Jev 1.14.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Step</th><th>Before</th><th>Structured</th><th>What changed</th></tr></thead>
+<tbody>
+<tr><td>Sentence kinds, 300 sentences</td><td class="num">1.1 s · 8 requests</td><td class="num">0.25 s · 3 requests</td><td>86% same kinds; quoted lines now spoken, not thought</td></tr>
+<tr><td>Dialogue exchanges, 300 sentences</td><td class="num">4.1 s · 37 chained</td><td class="num">0.25 s · 3 at once</td><td>14 exchanges both; median 6 → 11 sentences</td></tr>
+<tr><td>Movement, 36 events</td><td class="num">22.8 s on pictures</td><td class="num">4.4 s · no Chrome</td><td>end-spot confidence 0.25 → 0.93; moves agree 91%, way 96%</td></tr>
+<tr><td>A whole scene in one request</td><td class="num">4.2 s · 36 requests</td><td class="num">0.6 s · 4 requests</td><td>less sure (0.46 against 0.92): keep the chain</td></tr>
+<tr><td>Units, then destinations</td><td>—</td><td class="num">3.5 s units · 0.9 s destinations</td><td>12 movers in 11 units; one destination per unit</td></tr>
+</tbody></table></div>
+<h2>Where the time goes</h2>
+<p>A recorded pick of 36 events took 449 s. Jev answered in 28 s of it. Before each event question the loop replayed the engine from the line's start (1.5 s by scene 4) and reopened the 3D page in headless Chrome (3.7 s) to draw the picture it asks on. A full-line load measures about 15 s (engine 9.8 s, Chrome 5 s), so most of the 222 s before the first event question is something else, to be timed.</p>
+<h2>Readings worth keeping</h2>
+<ul class="tight">
+<li>On a rendered picture Jev read pinned spots barely better than chance (0.25 with 8 spots); with spots listed by id and description it followed the text: the rooftop when she jumps onto a five-storey building, the plaza when he runs across it carrying the girl, staying put when people only talk.</li>
+<li>Units got the clear cases right (carrying, grabbing and jumping) and two wrong: a unit kept after one member leaves the other behind, and a person paired with her own title (an identity miss).</li>
+<li>Per-unit destinations as parallel requests (0.9 s) were no faster than one request holding them all (1.0 s); parallel requests earn their place when each unit needs its own picture for a box.</li>
+</ul>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 11 ============================== -->
+<section class="page" id="design" data-title="v2 design">
+<div class="kicker">Page 11 · Going forward</div>
+<h1>The v2 design</h1>
+<p class="lede">The full text is <code>docs/v2/world-engine-v2.md</code>. In short: every Jev request reads a document, and the world, not pictures, carries what the engine already knows.</p>
+<div class="blocks">
+<article class="block"><header><h3>Rules for every request</h3><div class="chips"><span class="chip plan">Proposed</span></div></header>
+<ul class="tight">
+<li>The state is a JSON document: definitions once, items keyed by id, the decision's part last.</li>
+<li>Questions are short and point into it; a short label per option, not its definition again.</li>
+<li>One request per decision step; independent steps at once.</li>
+<li>Pictures only where the picture is the evidence: boxes and the model catalog.</li>
+<li>Chains where answers depend on the last; fan out where they do not.</li>
+</ul></article>
+
+<article class="block"><header><h3>Movement: units, ways, destinations</h3><div class="chips"><span class="chip plan">Proposed</span></div></header>
+<p>Per event: (1) one request for who moves and who or what each moves with (people and movable things), joined into units; (2) each unit's way; (3) each unit's destination, all at once: a choice over the place's spots on the structured state, or a box on that unit's own picture when it goes to a room, a roof or underground (one request per such unit, in parallel); (4) the engine plays the event and each person's spot, from the engine, is the next event's state. Identities are settled before units.</p></article>
+
+<article class="block"><header><h3>Things that move</h3><div class="chips"><span class="chip plan">Proposed</span></div></header>
+<p>Vehicles, mechs and other nominated objects listed per scene by the objects step, kept in the roster beside the characters, and able to join a unit.</p></article>
+
+<article class="block"><header><h3>Identity as structured requests</h3><div class="chips"><span class="chip plan">Proposed</span></div></header>
+<p>At birth and universal: candidates once by id (names, where, passages), each name a choice over ids plus a new person, every scene of a block in one request, blocks in parallel; pairs as a document. More candidates fit than today's 12.</p></article>
+
+<article class="block"><header><h3>World loop and pick loop</h3><div class="chips"><span class="chip plan">Proposed</span></div></header>
+<p>The composed context as a document; presence and time in one request (the time questions for each place option asked at once); building EM a request per scene. The pick loop draws pictures only for boxes, things and fights, and the engine plays forward without replays.</p></article>
+
+<article class="block"><header><h3>Order of work</h3><div class="chips"><span class="chip plan">Proposed</span></div></header>
+<ol class="tight">
+<li>Movement on structured states in the pick loop; the model catalog in one request; time the stretch before the first event.</li>
+<li>Units of people, ways and per-unit destinations.</li>
+<li>Identity as structured requests; identities before units.</li>
+<li>Movable things in the objects step, the roster and units.</li>
+<li>The world loop's context as a document; presence and time together; building EM per scene.</li>
+<li>Scene tiling test with a stitch rule.</li>
+<li>The engine playing forward without replays.</li>
+</ol></article>
+</div>
+<div class="pager"></div>
+</section>
+
+<!-- ============================== 12 ============================== -->
+<section class="page" id="status" data-title="Status and gaps">
+<div class="kicker">Page 12 · Where it stands</div>
+<h1>Status and known gaps</h1>
+<div class="table-wrap"><table>
+<thead><tr><th>Area</th><th>State</th><th>What is missing</th></tr></thead>
+<tbody>
+<tr><td>Extraction</td><td><span class="chip built">Built</span> <span class="chip tested">Tested</span></td><td>vol 1 not yet extracted with sentence kinds and action events (a paid rerun)</td></tr>
+<tr><td>World loop</td><td><span class="chip live">Seen live</span></td><td>context as a document; presence and time in one request</td></tr>
+<tr><td>Identity</td><td><span class="chip live">Seen live</span> <span class="chip gap">Gap</span></td><td>titles of a person can stay a second person; undoing a merge on "different"</td></tr>
+<tr><td>Places and ground</td><td><span class="chip live">Seen live</span></td><td>district boxes are a trial only</td></tr>
+<tr><td>Underground</td><td><span class="chip built">Built</span> <span class="chip tested">Tested</span></td><td>flooding; station stairs not yet seen live</td></tr>
+<tr><td>Engine movement</td><td><span class="chip live">Seen live</span> <span class="chip gap">Gap</span></td><td>pairs not asked by the live picker; some moves unreachable when doors are destroyed</td></tr>
+<tr><td>Things</td><td><span class="chip live">Seen live</span> <span class="chip gap">Gap</span></td><td>no movable things (vehicles, mechs, carried objects)</td></tr>
+<tr><td>Pick loop</td><td><span class="chip live">Seen live</span> <span class="chip gap">Slow</span></td><td>Chrome and a replay before every event; 222 s not accounted for</td></tr>
+<tr><td>Host</td><td><span class="chip gap">Stopped</span></td><td>on a build older than the station stairs and folded prompts</td></tr>
+</tbody></table></div>
+<div class="pager"></div>
+</section>
+
+</main>
+</div>
+<script>
+(() => {
+  const pages = [...document.querySelectorAll('section.page')];
+  const toc = document.getElementById('toc'), jump = document.getElementById('jump');
+  // Each cell carries its column's name, shown above it when a narrow screen stacks a row as a card.
+  document.querySelectorAll('table').forEach(table => { const heads = [...table.querySelectorAll('thead th')].map(th => th.textContent); table.querySelectorAll('tbody tr').forEach(row => [...row.children].forEach((cell, i) => cell.setAttribute('data-label', heads[i] || ''))); });
+  // Pages switch on tap, not through the address: a viewer that shows this file as a snapshot ignores hash changes.
+  const go = (id, event) => { if (event) event.preventDefault(); show(id); try { history.replaceState(null, '', '#' + id); } catch (error) { /* a snapshot has no history */ } };
+  pages.forEach((page, i) => {
+    const li = document.createElement('li'), a = document.createElement('a');
+    a.href = '#' + page.id; a.innerHTML = '<b>' + (i + 1) + '</b><span></span>'; a.lastChild.textContent = page.dataset.title;
+    a.addEventListener('click', event => go(page.id, event));
+    li.appendChild(a); toc.appendChild(li);
+    const option = document.createElement('option'); option.value = page.id; option.textContent = (i + 1) + ' · ' + page.dataset.title; jump.appendChild(option);
+    const pager = page.querySelector('.pager');
+    const link = (target, label) => { const el = document.createElement('a'); if (!target) { el.hidden = true; el.innerHTML = '&nbsp;'; return el; } el.href = '#' + target.id; el.innerHTML = '<small>' + label + '</small>'; el.appendChild(document.createTextNode(target.dataset.title)); el.addEventListener('click', event => go(target.id, event)); return el; };
+    pager.appendChild(link(pages[i - 1], 'Previous')); pager.appendChild(link(pages[i + 1], 'Next'));
+  });
+  function show(id) {
+    const current = pages.find(page => page.id === id) || pages[0];
+    pages.forEach(page => { page.hidden = page !== current; });
+    toc.querySelectorAll('a').forEach(a => { if (a.getAttribute('href') === '#' + current.id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    jump.value = current.id; document.title = current.dataset.title + ' · World Engine v2'; window.scrollTo(0, 0);
+  }
+  jump.addEventListener('change', () => go(jump.value));
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  show(location.hash.slice(1));
+})();
+</script>
+</body>
+</html>

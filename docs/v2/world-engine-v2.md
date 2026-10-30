@@ -1,0 +1,152 @@
+# World engine v2
+
+The world engine is the second version of this CLI: a book is read into a world first (who is where, when, in which
+building, above or under the ground), and everything else (dialogue, movement, things, fights, identity) is decided inside
+that world. This document is its design going forward. The reader's version, with every feature block built so far, is
+[world-engine.html](world-engine.html).
+
+- **Branch:** `v2` on origin. Work lands on it directly, with no pull requests; `main` stays the v1 CLI.
+- **Live tests** run from v2 builds (a separate fully built checkout, as before).
+- **Earlier designs it builds on:** [world-first-design.md](../world-first-design.md), [underground-design.md](../underground-design.md),
+  [stage-simulation-design.md](../stage-simulation-design.md), [places-holo-stage.md](../places-holo-stage.md),
+  [city-fill-design.md](../city-fill-design.md).
+
+## 1. The principle: structured input
+
+Jev reads a **state** that can be text, a JSON object or an array. Questions can name parts of it by path, each choice
+option can carry its own criterion, and a noul question takes what counts as yes and as no. A request has no limit on its
+number of questions, only on its size (64k tokens a request and 32k for the state with one question, Jev 1.14), and
+billing is per input token. So the state is paid once a request, however many questions read it.
+
+The rules for every Jev request in v2:
+
+1. **The state is a document.** A JSON object: definitions once (what each kind or option means), items keyed by id (the
+   passage's sentences, the place's spots, the candidates, the units), the decision's own part last.
+2. **Questions are short and point into it** (`passage.<id>`, `spots`, `candidates.<id>`, `units.<n>`), with a short
+   label per option, not its definition repeated.
+3. **One request per decision step**, holding every question of that step. Steps that do not depend on each other run at
+   once (windows of a block, units of an event, blocks of a book).
+4. **Pictures only where the picture is the evidence:** box questions (where a thing stands, where a blast hits, where
+   someone starts on a floor, where a group gathers) and the model catalog. What the engine knows as data goes as data.
+5. **Chains stay where answers depend on the last one** (event by event inside a scene); fan out where they do not.
+
+Measured on 2026-10-30 (vol 1, Jev 1.14):
+
+| Step | Before | Structured | Notes |
+|---|---|---|---|
+| Sentence kinds, 300 sentences | 1.1 s, 8 requests (text, definitions in every question) | 0.25 s, 3 requests at once | 86% same kinds; quoted lines now read as spoken, not thought |
+| Dialogue exchanges, 300 sentences | 4.1 s, 37 chained requests (start and end selection) | 0.25 s, 3 requests | 14 exchanges both; median 6 → 11 sentences; mostly the same exchanges |
+| Movement, 36 events (211 questions per kind) | 22.8 s of Jev on rendered pictures, plus 2–6 s of replay and Chrome reload per event | 4.4 s, no Chrome | confidence in the end spot 0.25 → 0.93 (8 spots); moves agree 91%, way 96% |
+| One request per scene (36 events → 4) | — | 0.6 s | far less sure (0.46 against 0.92): the chain of events stays |
+
+A recorded pick of 36 events took 449 s; Jev answered in 28 s of it. The rest was the pick loop replaying the engine from
+the line's start and reopening the 3D page in headless Chrome before each event (and a 222 s stretch before the first
+event question, not yet accounted for: a full-line load measures about 15 s).
+
+## 2. Extraction (the Digger)
+
+### 2.1 Sentence kinds — built
+Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
+there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by
+id, the 8 before as context), windows asked at once. From the kinds:
+- a **dialogue exchange** runs as long as the same people talk, narration and actions between the lines inside it; it
+  ends where the people change or after 8 sentences with no one speaking;
+- a **monologue** is a run of thought (two asides allowed): a card of its own, its member the one thinking;
+- **facts** (background knowledge of the world) go to the changeset's `faculty:facts` note, the base layer's
+  `facts.json`, and every later scene's context.
+
+Why sentence kinds came back after 2026-10-22: the retired design joined a sentence to the one before only when it
+continued the same speaker's turn with no narration between, so it found turns (median one sentence). The new stitch keeps
+an exchange open through narration and replies.
+
+### 2.2 Events as actions and movements — built
+The scene prompt asks for what a person does or what physically happens: who goes where and how (walks, runs, climbs,
+jumps, falls, flies, enters, leaves, goes up or down, carries someone, fights, strikes, breaks something), saying where
+they go when the text does. Speech and thought are no longer events: they are exchanges and monologues.
+
+### 2.3 Things that move — proposed (new)
+Vehicles, mechs and other nominated objects become movable things: the objects step lists them per scene with their kind
+(vehicle, mech, carried object), they enter the roster beside the characters, and they can join a unit (§4).
+
+### 2.4 Scene tiling — candidate
+The same pattern could tile scenes (a noul per sentence: does a new scene start here, in one document per window). The
+2026-10-22 note says per-sentence scene starts fragmented scenes; a stitch rule (a start needs a change of place, time or
+viewpoint, and a minimum length) must be tested on vol 1 before it replaces start selection.
+
+## 3. The world loop
+
+Built: scene by scene, Jev says who is there and where, and when against the scene before; the world keeps its laws
+(nobody vanishes, nobody is in two places at once, a flashback moves nobody now), adds or flags event actors, settles
+dialogue nodes (live, group, remote, public), and sends what is unsure to the review pool (Pi). v2 changes:
+- **The composed context becomes a document:** `{ world: {person: {at, since}}, facts: [...], story: [...], scene: {...},
+  focus: {...} }`, trimmed the same way when over budget.
+- **Presence and time in one request** where possible: the time questions for each place option asked at once
+  (speculative fan-out), the one for the chosen place kept.
+- **Building EM batched per scene:** every building mention of a scene in one request, the book's named buildings in the
+  state once by id.
+
+## 4. Movement: units, ways, destinations (the user's design)
+
+Per event, in story order (the chain stays):
+
+1. **Units.** One request: for each person (and each movable thing in the scene), does it move, and who or what it moves
+   with as one unit (carrying or carried, dragged, holding on, riding together; chasing or following is not together).
+   The units are the joined groups. A unit of one is a person on their own.
+2. **Way.** Per unit: which way it goes (up, down, same level, out of the building, into the building; for people with
+   powers, the direct directions).
+3. **Destination.** Per unit, all at once:
+   - a **choice over the place's spots** on the structured state (the place, its spots by id with what each is, where each
+     unit stands now, the scene's text, the events so far, this event) when the destination is one of the spots;
+   - a **box on that unit's own picture** (its floor slice, its level underground, the map around it) when the
+     destination is a room, a roof or a place the spots do not name. A box needs a picture and each unit's picture
+     differs, so each such unit is its own request, sent in parallel.
+4. **The engine plays the event** with those answers (one destination per unit; its members end beside each other), and
+   the world as it stands (each person's spot, from the engine's nodes) is the next event's `now`.
+
+What changes in the pick loop: no Chrome reload and no full-line replay per event for movement. Pictures are drawn only
+for box destinations, things and fights. The engine plays forward event by event instead of replaying from the start.
+
+Measured (36 recorded events, 211 person slots): 12 movers in 11 units, 10 with more than one member; the units question
+took 3.5 s in all, destinations 0.9 s as parallel requests per unit and 1.0 s as one request. Right: she grabs 食蜂 and
+jumps to the rooftop (one unit, one destination); 上条 carrying the girl across the plaza. Wrong: a unit kept after one
+member leaves the other behind; a person paired with another name of herself (an EM miss). So: ask the pair question
+with criteria for leaving, and settle identities before units.
+
+Today's state: the v1 movement faculty (`novel stage movement`) asks pairs per event and the engine joins them into
+groups with a leader; the live picker (`novel sim pick`) does not ask pairs, and treats two people the event names going
+to the same spot as together.
+
+## 5. Identity (EM)
+
+Five matchers today: universal EM at birth (per block, the recommender's candidates), universal EM after apply (pairs:
+same and distinct), world identity (`identity.mjs`: confident matches merged unless the world has them in two places at
+once; epithets), traces alike (two people whose scenes run alike, at a chapter's end), and building EM (`buildings.mjs`).
+v2 makes each a structured request:
+- **Candidates once, by id:** `{ candidates: {id: {names, where, passages}}, passages: {scene: text}, names: {key: {name,
+  aliases, scene}} }`; each name's question is a choice over candidate ids plus `NEW_PERSON`. Descriptions are no longer
+  repeated per question, so more candidates fit (beyond today's 12).
+- **One request per block** (every scene's names together) instead of one per scene; blocks in parallel.
+- **Pairs as a document** (`pairs: [{a, b}]`, each side's dossier once), same and distinct per pair.
+- **Units ask after identities**, so one person under two names never makes a unit with herself.
+
+## 6. Live, host and Pi
+- The live page shows each request's exact state (a structured state as its JSON) and pictures, folded on the world page.
+- `novel sim pick` asks movement on structured states (pictures only for boxes); `novel sim run --pace` plays it.
+- Pi runs the commands the guard allows (`sim pick --max-calls ≤ 60`, `sim run --pace 0.5–5`), from v2 builds.
+
+## 7. Order of work
+1. Movement on structured states in the pick loop (each person's spot now from the engine); the model catalog's
+   one-question calls as one request; time the stretch before the first event question.
+2. Units of people, ways and per-unit destinations (spots by choice, boxes for rooms, roofs and underground).
+3. Identity as structured requests (at birth and universal); identities before units.
+4. Movable things (vehicles, mechs, nominated objects) in the objects step, the roster and units.
+5. The world loop's context as a document; presence and time in one request; building EM per scene.
+6. Scene tiling test with a stitch rule.
+7. The engine playing forward without replays.
+
+## 8. Open questions
+- When a destination is a spot choice and when a box: by the unit's way (a floor, a roof, underground → box), or always
+  ask both and keep the surer?
+- The way's vocabulary: the five ways, or the fourteen cube directions the v1 movement faculty had.
+- Jev reads Chinese less well than English (its docs say so): keep confidence gates, and the review pool for what falls
+  under them.

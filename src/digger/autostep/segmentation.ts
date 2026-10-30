@@ -23,11 +23,16 @@ import type { Sentence } from "../intake/sectioning.js";
  * batch's last sentence at 0.95 confidence and the block collapses
  * into one scene; asked to choose starts, it finds the real joints.)
  *
- * Dialogue exchanges use start+end selection (they do not tile: most
- * of a novel is not dialogue). Spans from overlapping batches that
- * overlap by >= 3 sentences are the same exchange and merge; smaller
- * overlaps trim. Each exchange links to the ONE scene it sits in, or
- * the TWO scenes it straddles when a conversation crosses a scene cut.
+ * Dialogue exchanges (since 2026-10-30) come from what each sentence is
+ * (classifySentences: spoken, thought, fact, action or narration, and
+ * whether the people talking change), asked as one structured document
+ * a window. Per-sentence answers work here because of the stitch: an
+ * exchange stays open through narration and replies and ends only when
+ * the people change or after a long silence, so it finds conversations,
+ * not lines (start and end selection, which it replaced, measured 16x
+ * slower on vol 1 for mostly the same exchanges). Each exchange links
+ * to the ONE scene it sits in, or the TWO scenes it straddles when a
+ * conversation crosses a scene cut.
  */
 
 export type DecideFn = (
