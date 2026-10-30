@@ -2,6 +2,20 @@
 
 A redesign of what lies under the world (user, 2026-10-30): **underground places are halls, not buildings.** A hall is a void carved in soil or rock, and it stands or falls by the ground around it. A building stands or falls by its own walls and slabs. So gravity, damage and collapse follow different logic underground, and walking, generation and drawing change with them. This replaces the first version (four flat levels of walkable cells, built 2026-10-29 in `world.ts`). Nothing here is built yet.
 
+## 0. Decisions (user, 2026-10-30)
+
+1. **Subway:** lines with stations (§5.1). The user didn't object to the recommendation.
+2. **Depths:** as in §2.2, but **Jev never picks among many depth levels: too many layers make it unsure.**
+   - It picks one of two overlapping depth intervals; its box then picks the hall (§6.1).
+   - The intervals are chosen, and generation keeps the halls within one interval apart in plan, so that a box finds its hall at least 90% of the time.
+3. **Cave-ins reach the street only as a dent, never total destruction.**
+   - **A hook:** the underground of an area is simulated only once someone has gone down into it. The area is the smallest place larger than a building that holds it (§4.8).
+   - **A shallow hall** broken hard enough dents the ground over it: the open ground drops, and the buildings around it stand.
+   - **A deeper hall** is only partly filled by fallen dirt, and never changes the ground above.
+4. **Flooding:** later (§4.6).
+5. **The red impact sphere was gone:** no fight had been picked. `novel sim pick` (where each fight hits, and how big) was never run in the world-first pipeline, so every hit fell back to the stand-in box. It runs again before the live run.
+6. **3D models:** the CC0 packs found are downloaded and baked into the modern kit (§5.6).
+
 ## 1. What was wrong with the first version
 
 - **Levels were planes.** Each of SUBWAY, UNDER, WATER and DEEP was one 2 m-cell layer of walkable nodes, 3 m tall, with nothing around it. A storm-water tank 18 m high, a subway box, and a lab cavern all looked and behaved like the same flat floor.
@@ -40,15 +54,19 @@ A **hall** is a void in the ground: its footprint, its floor depth and its heigh
 
 | Kind | Shape | Floor depth | Height | Span and pillars |
 |---|---|---|---|---|
-| Subway tunnel | twin bores, 6 m wide, along a line | −15 m | 6 m | narrow, lined, no pillars |
-| Subway platform | a box 120 × 20 m at a station | −15 m | 7 m | pillars every 8 m along its middle |
-| Station concourse | a box over the platform, with escalators down | −7 m | 5 m | pillars on an 8 m grid |
-| Underground mall (地下街) | a long hall under a commercial street, 20 m wide, from a concourse | −7 m | 4.5 m | pillars on an 8 m grid, shops partitioned along both sides |
+| Subway tunnel | twin bores, 6 m wide, along a line | −12 m | 6 m | narrow, lined, no pillars |
+| Station | a platform hall 120 × 20 m with a concourse 30 × 20 m at each end, on one level | −12 m | 7 m | pillars every 8 m along its middle |
+| Underground mall (地下街) | a long hall under a commercial street, 20 m wide, from a station's concourse | −7 m | 4.5 m | pillars on an 8 m grid, shops partitioned along both sides |
 | Basement | under a building, 1 to 3 floors (house 1; 10 floors or more 2; 20 or more 3); a car park in offices and malls | −3 m a floor | 3 m a floor | the building's own structure, inside a retaining wall |
 | Storm-water channel | a 10 m bore | −50 m | 10 m | unlined, in hard rock |
 | Storm-water tank | a hall about 100 × 70 m | −40 m | 18 m | pillars on a 10 m grid, as in 首都圏外郭放水路 |
 | Storm-water shaft | a vertical silo, 30 m across, where a channel meets the tank or a river | from the surface down to −50 m | — | lined |
 | Deep facility | a cavern complex: a main hall and side halls (military: a command hall and blast doors; experiment lab: halls of lab rooms; quantum: a shielded hall and a ring tunnel) | −80 to −100 m | 8–12 m | hard rock, little lining |
+
+**Stations are one level.** A station's concourse is not stacked over its platform: it lies at the platform's ends, on its level, so no two halls of a station overlap in plan (§6.1).
+- **Station hall:** −12 m floor, 7 m high, a platform 120 × 20 m with a concourse 30 × 20 m at each end, pillars every 8 m.
+- **Malls:** at −7 m.
+- **Tunnels:** at −12 m, the stations' level.
 
 **Basements are the exception.** They are part of their building: the building's structural units continue down, inside a retaining wall that the soil presses on. When a basement fails, the building above loses its footing (§4.5).
 
@@ -118,23 +136,37 @@ Over the failed roof the void works upward one 2 m layer at a time.
 
 Like a building's settle, every step only lowers the ground's potential energy and never adds support, so one pass reaches the lowest stable shape.
 
-### 4.5 Sinkholes, and buildings over a hall
+### 4.5 Dents, not sinkholes (user decision)
 
-**A sinkhole:** where a cave-in reaches the surface, the street cells over its open area drop by the void left (its volume over its area).
-- They are no longer walkable: a hole, with a rubble slope at its edges.
-- Shallow halls in soil (the concourse at −7 m, the mall, a subway box) can do this from one blast that breaks their lining, because soil has no arch. That is how a road falls into the subway.
+**Shallow halls:** halls whose roof is in the soil band (malls, stations, tunnels, basements).
+- When a cave-in from one reaches the surface, the open ground over its open area drops as a dent: by the void left (volume over area), at most 3 m.
+- The dented cells stay walkable, as a slope down and up.
+- Buildings around the dent stand on their footings: no total destruction.
 
-**A building over it:** a building whose ground cells lie in the sinkhole loses its footing there.
-- Its units over the hole rest on nothing.
-- The building gravity already built (`structure.ts`, settle) brings them down into the hole as rubble.
+**Deeper halls:** the cave-in always stops below. The dome closes, or the fallen dirt partly fills the hall; then a choke if it fills to the cave's base, else a heap on the floor. The ground above never changes.
 
-**A failed basement:** the building above loses its footing over the basement's failed cells, in the same way.
+**A failed basement** dents its own floor slab: its units over the failed cells fall onto the basement floor. The building above keeps its footing, so the user's no-total-destruction rule holds.
 
 ### 4.6 Water
 
 A breach between a storm-water hall and another hall can flood the lower one, with water filling to the breach's level.
 - Flooded cells cost a lot to walk (swimming), and nothing falls in water.
 - **Proposed as a later stage:** the first build marks breaches but does not flood.
+
+### 4.8 The hook: an underground comes alive only once someone goes down
+
+**Every hall belongs to an area:** the smallest place larger than a building that holds its middle (a street or a district circle on the canvas).
+
+**Before anyone goes down:**
+- Before any character first stands on a node of a hall in that area (born there or moved there), its underground is not simulated.
+- A blast above it breaks what stands on the surface as before, and nothing underground.
+- Nothing underground is computed for it, so a city of halls costs nothing until the story goes down.
+
+**After:**
+- Blasts in that area reach its halls: from the surface into a shallow roof, or inside a hall.
+- The cave-in and dent rules (§4.4–4.5) run.
+- The area stays active for the rest of the run.
+- The run's record keeps when each area came alive.
 
 ### 4.7 Jev and the impacts underground
 
@@ -201,7 +233,41 @@ Like a building's shell, a model is drawn, never walked.
 
 ## 6. Jev's choices
 
-**Births and moves name the hall, not a level:**
+### 6.1 Two overlapping depth intervals, and the box
+
+**Jev's height question:** for someone first seen, or a move underground, the options are the street, a building's floors, a roof, **just under the street**, or **deep underground**. Never a list of hall kinds or depths.
+
+**The two intervals:**
+
+| Interval | Depths | Holds |
+|---|---|---|
+| Just under the street | 0 to −25 m | basements, malls, stations and tunnels, the top of a storm-water tank |
+| Deep underground | −20 to −110 m | the tank, the storm-water channels, deep facilities |
+
+**They overlap** between −20 and −25 m. A hall whose depth a reader cannot tell (the tank, 22 to 40 m down) belongs to both, so either answer finds it.
+
+**Matching a box to a hall:**
+1. The box is drawn on a picture of that interval: every hall in it seen from above, by kind.
+2. The hall is the one in the interval under the box's middle.
+3. With several under it (rare), the one under the most of the box.
+4. With none under it, the nearest within 30 m.
+5. Then a hall of the other interval under the box.
+6. Otherwise, no one goes underground: the box is read on the street.
+
+**The target:** a box finds a single hall of its interval at least 90% of the time.
+
+**Generation keeps halls of one interval apart in plan:**
+- stations and tunnels follow the arterials, and malls follow other commercial streets, meeting a station at its end;
+- basements lie under lots, never under roads;
+- deep facilities keep 20 m off the storm-water channels and the tank.
+
+A test measures it on generated cities: for random boxes 4–30 m across over the halls of each interval, the share that find exactly one hall. It reports the figure per landscape type, and fails under 90%. If a third interval would ever be needed, the measure says so.
+
+### 6.2 Births and moves
+
+**The hall a move names:** in movement, the spots are just under the street and deep underground, each as one spot. The hall is found as in §6.1, from the scene's map box or the nearest of the scene's area.
+
+**Within the interval, the hall can be:**
 - the subway platform;
 - the station concourse;
 - the underground mall;
@@ -241,6 +307,8 @@ Underground damage is kept like a building's, per run, in story order (`stage/si
 A later scene sees the cave-in and the sinkhole if the hit came before it.
 
 ## 9. Building EM (the same pass, user 2026-10-30)
+
+This EM runs over mentions of buildings, before the run; the merge rules are the user's.
 
 The user's report: the same building is placed several times.
 - **Example:** 飞镖酒吧 stands as the nominated place's real building, as a yellow box where Jev boxed a mention of it, and as further boxes in other scenes.
@@ -285,7 +353,7 @@ The user's report: the same building is placed several times.
    - underground damage kept per run.
 5. **The engine version rises to 3.** The record's node packing changes (the level offset).
 
-## 11. Questions for the user
+## 11. Questions for the user (answered 2026-10-30, §0)
 
 1. **Subway:** lines along the arterials with stations, instead of a tunnel under every road (§5.1)?
 2. **Depths:** the depths in §2.2 (concourse and mall −7 m, platform −15 m, tank −40 m, channels −50 m, deep facilities −80 to −100 m)?
