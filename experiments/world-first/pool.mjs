@@ -6,7 +6,7 @@
 // keeps unchanged scenes free. A pin the laws reject (someone pinned into a scene while elsewhere at that time) sends its
 // item back to the pool, for the next batch.
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -37,16 +37,29 @@ export async function pool(novelDir, items, { size = 8, console: consoleDir = nu
   await writePool(novelDir, items.filter(item => !known.has(item.id)));
   const open = (await loadPool(novelDir)).filter(item => item.status === 'open'), batches = [];
   for (let start = 0; start + size <= open.length; start += size) batches.push(await makeBatch(novelDir, open.slice(start, start + size)));
-  for (const batch of batches) if (consoleDir) await tellAgent(consoleDir, novelDir, batch);
+  if (consoleDir) await sendUnsent(novelDir, consoleDir);
   return batches;
 }
+
+/** Every batch not yet in the agent's queue goes there (stage/world/sent.json remembers which did); failures are kept, to retry. */
+export async function sendUnsent(novelDir, consoleDir) {
+  const folder = join(novelDir, 'stage', 'world'), sentFile = join(folder, 'sent.json');
+  const sent = JSON.parse(await readFile(sentFile, 'utf8').catch(() => '{}')), ids = (await readdir(join(folder, 'batches')).catch(() => [])).filter(name => name.endsWith('.json')).map(name => name.slice(0, -5));
+  for (const id of ids.filter(id => !sent[id]?.status || sent[id].error)) sent[id] = await tellAgent(consoleDir, novelDir, { id, items: JSON.parse(await readFile(join(folder, 'batches', `${id}.json`), 'utf8')).items });
+  await writeFile(sentFile, JSON.stringify(sent, null, 1), { mode: 0o600 });
+  return sent;
+}
+/** The console takes a UUID per message: one made from the batch id, so sending a batch again is the same message. */
+const uuidOf = id => { const hex = createHash('sha256').update(id).digest('hex'); return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`; };
 
 /** The batch to the main agent: a message in its console's queue (the host's own way in), naming the commands to use. */
 async function tellAgent(consoleDir, novelDir, batch) {
   const { createPiConsole } = await import(pathToFileURL(`${repository}/tools/pi-review/pi-console.mjs`).href);
-  const piConsole = createPiConsole({ directory: consoleDir });
+  // The host's own window: the console takes messages only until the host expires (links.json beside its runtime folder).
+  const links = JSON.parse(await readFile(join(consoleDir, '..', '..', 'links.json'), 'utf8').catch(() => '{}'));
+  const piConsole = createPiConsole({ directory: consoleDir, expiresAt: links.expiresAt ?? Date.now() + 3600_000 });
   const text = `World batch ${batch.id} (${batch.items.length} questions) waits in the world-first book ${novelDir}. Read it with: novel world batch ${novelDir} ${batch.id}. Check each question against the original text with novel source grep ${novelDir} <regex>, novel source similar ${novelDir} <text> and novel query ${novelDir} 'MATCH …', then answer each item with: novel world answer ${novelDir} ${batch.id} <item> <option> --reason "<why, citing sentence ids>". The world goes on meanwhile and applies your answers under its laws.`;
-  try { return await piConsole.submit({ id: batch.id.replace(/^wb_/, 'world-'), text }); } catch (error) { return { error: error.message }; }
+  try { return await piConsole.submit({ id: uuidOf(batch.id), text }); } catch (error) { return { error: error.message }; }
 }
 
 /** Answers not applied yet, as pins for the world, and the items they settle. */
