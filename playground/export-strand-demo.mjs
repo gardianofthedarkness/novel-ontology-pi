@@ -88,7 +88,8 @@ export async function strandDemo(novelDir, options) {
   let jev = null;
   if (worldScript) {
     const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
-    jev = cachedDecisions(jevFromEnv(process.env), `${novelDir}/stage/world/cache`);
+    // Pinned to the model that answers box questions (1.14): left to the environment, Jev defaults to 1.13, which refuses them.
+    jev = cachedDecisions(jevFromEnv({ ...process.env, JEV_MODEL: WORLD_MODEL }), `${novelDir}/stage/world/cache`);
     for (const scene of chosen) {
       const entry = worldScene.get(scene.id);
       if (!entry) continue;
@@ -1093,6 +1094,8 @@ export function simulationRecord(data, strand) {
  * the growth log), so each run says which engine made it. A version pushed as stable is tagged world-engine-v<N> in git.
  */
 export const ENGINE_VERSION = 3;
+/** The Jev model the world-first engine asks (births, meetings, gatherings): one that answers box questions. */
+export const WORLD_MODEL = 'jev-1.14.0';
 /** The engine's name in run records. */
 export const ENGINE = `world-engine-${ENGINE_VERSION}`;
 /** What the walk's seeds come from (the scene keys under it): kept while the walk itself is unchanged, so its runs reproduce. */
