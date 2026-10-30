@@ -62,8 +62,8 @@ export async function strandDemo(novelDir, options) {
   const { forkTimeline, walkTimeline } = await load('dist/src/digger/stage/environment.js');
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
-  const { structureOf, intact, blast, settle, skeletonStanding, unitAt } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, undergroundOf, FACILITY_LABEL, LANDSCAPES } = await load('dist/src/ground/stage/landscape.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const { structureOf, intact, blast, settle, skeletonStanding, unitAt, BLAST_ENERGY } = await load('dist/apps/playground/src/data/structure.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, LANDSCAPES } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
@@ -255,6 +255,15 @@ export async function strandDemo(novelDir, options) {
     if (chosen?.pick) traceOf(scene.id, scene.events.findIndex(entry => entry.id === event.id)).impact = { pick: chosen.pick.pick, confidence: chosen.pick.confidence, top: top(chosen.pick.distribution, 4), spots: (chosen.spots ?? []).map(spot => ({ label: spot.label, x: spot.x, y: spot.y, z: spot.z, from: spot.from })),
       size: chosen.size ? { pick: chosen.size.pick, confidence: chosen.size.confidence, top: top(chosen.size.distribution, 4) } : null, sphere: chosen.sphere ?? null, none: !!chosen.none };
     if (chosen?.none) { notes.impacts.none++; return; }
+    // A fight underground: the blast is where its first actor stands, as big as Jev chose (else 4–8 m by its strength),
+    // and reaches only what is underground (docs/underground-design.md §4.2).
+    const fighter = W.nodePos(world, at[0]);
+    if (fighter.y < -1) {
+      const r = chosen?.sphere?.r ?? 2 + 2 * strength, round = value => Math.round(value * 10) / 10, under = underHit(fighter, r, strength);
+      notes.hits++; notes.impacts.sphere++;
+      hits.set(event.id, { lot: -1, under, strength: Math.round(strength * 100) / 100, point: { x: fighter.x, y: fighter.y, z: fighter.z }, box: { x: [fighter.x - r, fighter.x + r], y: [fighter.y - r, fighter.y + r], z: [fighter.z - r, fighter.z + r] }, sphere: { x: round(fighter.x), y: round(fighter.y), z: round(fighter.z), r } });
+      return;
+    }
     if (chosen?.sphere) return hitSphere(scene, event, chosen.sphere, strength, seed);
     // Things near the blast are hit too; a big one loses part of its structure.
     const near = W.nodePos(world, at[0]), thingHits = [];
@@ -274,7 +283,40 @@ export async function strandDemo(novelDir, options) {
     const result = degrade(group.layout, index, group.standing[index], box, strength, stream(seed, 'hit'));
     group.standing[index] = result.standing; group.version++;
     notes.hits++; notes.destroyed += result.destroyed.length;
-    hits.set(event.id, { lot: index, strength: Math.round(strength * 100) / 100, point, box, destroyed: result.destroyed, cutOff: result.cutOff, cutRooms: result.cutRooms });
+    hits.set(event.id, { lot: index, strength: Math.round(strength * 100) / 100, point, box, destroyed: result.destroyed, cutOff: result.cutOff, cutRooms: result.cutRooms, under: underHit(point, half, strength) });
+  };
+  /**
+   * A blast reaching underground (docs/underground-design.md §4), only where the area is awake (§4.8): from a blast inside
+   * a hall, along the hall (the void channels it); from the street, only a shallow hall's roof under it, straight through the
+   * ground. Each hall reached collapses (U.collapse): its piles close its cells; a shallow hall's cave may dent the street.
+   */
+  const underHit = (centre, r, strength) => {
+    const halls = world.source.underground?.halls ?? [], energy = BLAST_ENERGY * strength * (2 * r / 8) ** 3, out = [];
+    halls.forEach((hall, index) => {
+      if (!awake.has(hall.area)) return;
+      const b = U.boundsOf(hall), top = hall.depth - hall.height, below = centre.y < -1;
+      if (centre.x < b.x0 - r || centre.x > b.x1 + r || centre.z < b.z0 - r || centre.z > b.z1 + r) return;
+      if (below ? centre.y < -hall.depth - r || centre.y > -top + r : !(top < U.BANDS[0].to && top + centre.y <= r)) return;
+      reach(centre.x, centre.z, r + 40);
+      const k = W.levelOf(hall.depth), cells = [];
+      for (let i = Math.floor(b.x0 / 2); i <= Math.floor(b.x1 / 2); i++) for (let j = Math.floor(b.z0 / 2); j <= Math.floor(b.z1 / 2); j++) { const entry = W.hallsAt(world, i, j).find(e => e.hall === index && e.k === k); if (entry) cells.push({ i, j, pillar: entry.pillar, reach: Infinity }); }
+      if (!cells.length) return;
+      if (below) {
+        // Along the hall from the cell nearest the blast (2 m a step, 2.8 m a diagonal).
+        const at = new Map(cells.map((cell, n) => [W.cellKey(cell.i, cell.j), n])), start = cells.reduce((best, cell, n) => Math.hypot((cell.i + 0.5) * 2 - centre.x, (cell.j + 0.5) * 2 - centre.z) < Math.hypot((cells[best].i + 0.5) * 2 - centre.x, (cells[best].j + 0.5) * 2 - centre.z) ? n : best, 0), queue = [start];
+        cells[start].reach = 0;
+        for (let head = 0; head < queue.length; head++) for (const [di, dj, cost] of [[1, 0, 2], [-1, 0, 2], [0, 1, 2], [0, -1, 2], [1, 1, 2.83], [1, -1, 2.83], [-1, 1, 2.83], [-1, -1, 2.83]]) { const cell = cells[queue[head]], m = at.get(W.cellKey(cell.i + di, cell.j + dj)); if (m !== undefined && cell.reach + cost < cells[m].reach) { cells[m].reach = cell.reach + cost; queue.push(m); } }
+      } else for (const cell of cells) cell.reach = Math.hypot((cell.i + 0.5) * 2 - centre.x, top + centre.y, (cell.j + 0.5) * 2 - centre.z);
+      const width = hall.bores.length ? hall.bores[0].width : Math.min(...hall.boxes.map(box => Math.min(box.w, box.d)));
+      const result = U.collapse({ depth: hall.depth, height: hall.height, lined: hall.lined, pillars: hall.pillars, width }, cells, energy, below ? width * hall.height : Infinity);
+      if (!result.failed.length && !result.pillars.length && !result.lining.length) return;
+      const piles = world.underDamage.piles.get(index) ?? world.underDamage.piles.set(index, new Map()).get(index);
+      for (const [n, height] of Object.entries(result.pile)) { const key = W.cellKey(cells[n].i, cells[n].j); piles.set(key, Math.max(piles.get(key) ?? 0, height)); }
+      for (const [n, depth] of Object.entries(result.dent)) { const key = W.cellKey(cells[n].i, cells[n].j); world.underDamage.dents.set(key, Math.max(world.underDamage.dents.get(key) ?? 0, depth)); }
+      out.push({ hall: hall.id, kind: hall.kind, stopped: result.stopped, pillars: result.pillars.length, lining: result.lining.length, failed: result.failed.length, layers: result.layers, pile: Math.max(0, ...Object.values(result.pile)), dent: Object.keys(result.dent).length });
+    });
+    if (out.length) { notes.underground.hits += out.length; shared.version++; }
+    return out;
   };
   /**
    * A chosen impact: every building the sphere reaches loses what its percolation step takes inside the sphere; things in it
@@ -310,10 +352,11 @@ export async function strandDemo(novelDir, options) {
       return { id: entity.id, destroyed };
     });
     if (thingHits.length) hitThings.set(event.id, thingHits);
-    if (!parts.length) return;
+    const under = underHit(sphere, sphere.r, strength);
+    if (!parts.length && !under.length) return;
     group.version++; notes.hits++; notes.impacts.sphere++;
-    const [main, ...more] = parts, round = value => Math.round(value * 10) / 10;
-    hits.set(event.id, { ...main, more, strength: Math.round(strength * 100) / 100, point: { x: sphere.x, y: sphere.y, z: sphere.z }, box: { x: box.x, y: box.y, z: box.z }, sphere: { x: round(sphere.x), y: round(sphere.y), z: round(sphere.z), r: sphere.r } });
+    const [main = { lot: -1 }, ...more] = parts, round = value => Math.round(value * 10) / 10;
+    hits.set(event.id, { ...main, more, under, strength: Math.round(strength * 100) / 100, point: { x: sphere.x, y: sphere.y, z: sphere.z }, box: { x: box.x, y: box.y, z: box.z }, sphere: { x: round(sphere.x), y: round(sphere.y), z: round(sphere.z), r: sphere.r } });
   };
   // The macro view: the strand's places and their ancestors in the place tree; and who migrated between places, scene by scene.
   const placeOf = new Map(chosen.map(scene => [scene.id, scene.placeId])), tree = new Set(chosen.flatMap(scene => places.get(scene.placeId)?.path ?? [scene.placeId]));
@@ -413,8 +456,8 @@ export async function strandDemo(novelDir, options) {
     const patchOf = b => place.landscape.patches.find(patch => patch.id === (filled.owner[b.lot] ?? String(b.lot).split(':')[0])) ?? place.landscape.patches[0];
     const manifoldOf = patch => createHash('sha256').update(JSON.stringify({ recipe: 1, patch, older: place.landscape.patches.slice(0, place.landscape.patches.indexOf(patch)) })).digest('hex').slice(0, 12);
     const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, manifold: manifoldOf(patch), era: LANDSCAPES[patch.type]?.era ?? 'modern' }; });
-    // What lies under it (undergroundOf): storm-water tanks, shopping arcades at the subway level, deep facilities.
-    const below = undergroundOf(place.landscape), under = { tanks: below.tanks.map(tank => ({ ...tank, x: tank.x + wx, z: tank.z + wz })), arcades: below.arcades.map(zone => ({ ...zone, x: zone.x + wx, z: zone.z + wz })), facilities: below.facilities.map(f => ({ ...f, x: f.x + wx, z: f.z + wz, label: FACILITY_LABEL[f.kind] })) };
+    // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
+    const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
     // Each patch (manifold) in birth order: its type and era, its centre and radius, its outline as 48 points (world metres),
     // and its fingerprint; each building's manifold in `buildings` order.
@@ -441,8 +484,16 @@ export async function strandDemo(novelDir, options) {
     return { place: id, label: name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role, floors, era: themeAt(node?.spotX ?? 0, node?.spotZ ?? 0) };
   });
   notes.buildings = Object.fromEntries(Object.entries(anchors.filter(anchor => anchor.own).reduce((count, anchor) => ({ ...count, [anchor.role]: (count[anchor.role] ?? 0) + 1 }), {})));
-  const underground = Object.fromEntries(['tanks', 'arcades', 'facilities'].map(key => [key, landscapes.flatMap(entry => entry.source.underground[key])]));
-  notes.underground = { tanks: underground.tanks.length, arcades: underground.arcades.length, facilities: underground.facilities.map(f => f.kind) };
+  // The city's subway on its own logic (subwayOf): through the centres of the areas the canvas has (its districts and
+  // streets, not the scenes' own spots) and the stations the story names; across the city through its middle without them.
+  // Each hall belongs to the smallest area its middle lies in: its underground comes alive once someone goes down there.
+  const city = macro.filter(node => !node.parent && node.scale === 'city').sort((a, b) => b.r - a.r)[0] ?? macro.filter(node => !node.parent).sort((a, b) => b.r - a.r)[0];
+  const stops = macro.filter(node => ['district', 'street'].includes(node.scale) && !node.temporary && !String(node.id).startsWith('spot:')).map(node => ({ id: node.id, x: node.x, z: node.z }))
+    .concat(anchors.filter(anchor => anchor.own && anchor.role === 'station').map(anchor => ({ id: anchor.place, x: anchor.x, z: anchor.z })));
+  const areaAt = (x, z) => macro.filter(node => !node.dwelling && ['city', 'district', 'street'].includes(node.scale) && Math.hypot(x - node.x, z - node.z) <= node.r).sort((a, b) => a.r - b.r)[0]?.id ?? city?.id ?? null;
+  const halls = [...landscapes.flatMap(entry => entry.source.underground), ...(city ? U.subwayOf(stops, city.id, city.r) : [])].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
+  const underground = { halls };
+  notes.underground = { halls: Object.fromEntries(Object.entries(halls.reduce((count, hall) => ({ ...count, [hall.kind]: (count[hall.kind] ?? 0) + 1 }), {}))), stops: stops.length, active: {}, hits: 0 };
   world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors, underground });
   shared.layout = { id: 'world', kind: 'world', lots: world.lots };
   // Damage other story lines left on the world (stage/simulation/world.json, from their accepted runs): applied in story order,
@@ -675,10 +726,11 @@ export async function strandDemo(novelDir, options) {
     // In a room on a floor the text does not give: a floor drawn at random (the same for this person and scene every run)
     // among the floors of the scene's own building, or of the tallest building around when the scene has none.
     const ROOM = 'inside a building, in a room, on a floor the text does not say';
-    const levels = [['outside, at street level', null], ['inside a building, on the ground floor', 0], ...Array.from({ length: top - 1 }, (_, n) => [`inside a building, on floor ${n + 2}`, n + 1]), [ROOM, 'room'], ['on a roof', 'roof'], ['underground, at the subway level (its tunnels, platforms, a station concourse, an underground shopping street)', W.SUBWAY], ["underground, on a building's underground floors (a car park, storage, a basement)", W.UNDER], ['underground, in the storm-water channels or tanks', W.WATER], ['far underground, super deep (a military bunker, an experiment lab, a quantum facility, a shelter)', W.DEEP]];
-    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins: outside, on which floor of a building (or in a room on a floor the text does not say), on a roof, or underground (the subway level, a building's underground floors, the storm-water channels, or super deep)?`, options: levels.map(([label]) => label) }]);
+    const levels = [['outside, at street level', null], ['inside a building, on the ground floor', 0], ...Array.from({ length: top - 1 }, (_, n) => [`inside a building, on floor ${n + 2}`, n + 1]), [ROOM, 'room'], ['on a roof', 'roof'], ['underground, just under the street (a basement, a car park, an underground mall)', 'shallow'], ['in the subway (a station, a platform, a tunnel)', 'subway'], ['deep underground (storm-water tanks and channels, a deep facility, a bunker)', 'deep']];
+    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins: outside, on which floor of a building (or in a room on a floor the text does not say), on a roof, or underground (just under the street, in the subway, or deep)?`, options: levels.map(([label]) => label) }]);
     let floor = levels.find(([label]) => label === level?.value)?.[1] ?? null, own = null;
     if (floor === 'room') { const index = groups.get(scene.placeId).main?.(); own = index != null ? world.lots[index] : null; const floors = own ? own.floors : top; floor = Math.min(floors - 1, Math.floor(stream(`${scene.id}|${handoff.person}|floor`)() * floors)); notes.roomFloors = [...(notes.roomFloors ?? []), floor + 1]; }
+    if (['shallow', 'subway', 'deep'].includes(floor)) return bornUnder({ scene, handoff, who, context, anchor, radius, choice: floor, level: level?.value ?? null });
     const inside = typeof floor === 'number';
     // A floor drawn for the scene's own building: the slice is of that building, close up, so the box picks one of its rooms.
     const centre = own ? { x: (own.i0 + own.nx / 2) * 2, z: (own.j0 + own.nz / 2) * 2, r: Math.max(own.nx, own.nz) + 6 } : { x: anchor.x, z: anchor.z, r: radius };
@@ -712,6 +764,76 @@ export async function strandDemo(novelDir, options) {
     notes.bornInRooms = (notes.bornInRooms ?? 0) + (room && node != null ? 1 : 0);
     (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: level?.value ?? null, ...(inside ? { floor: floor >= 0 ? floor + 1 : floor } : {}), at: [Math.round(point.x), Math.round(point.z)], ...(room ? { room: room.n, building: lot.source } : {}) });
     return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, [node, 0], `${scene.id}|${handoff.person}`) : [node, 0];
+  };
+  /**
+   * Underground (docs/underground-design.md §6.1): what is under a point for one of Jev's three choices, a hall (its index)
+   * or a building's basement (its lot), the one under the point, else the nearest within 30 m; and its node nearest the point.
+   */
+  const hallUnder = (choice, point) => {
+    const halls = world.source.underground?.halls ?? [], own = halls.map((hall, index) => ({ hall, index })).filter(({ hall }) => U.intervalsOf(hall).includes(choice));
+    const lotIndex = world.lotAt.get(W.cellKey(Math.floor(point.x / 2), Math.floor(point.z / 2))), basement = choice === 'shallow' && lotIndex !== undefined && W.basementsOf(world.lots[lotIndex]) ? { lot: lotIndex } : null;
+    // A basement is drawn over whatever lies deeper under its building, so a box on it means the basement.
+    const under = own.find(({ hall }) => U.inHall(hall, [point.x, point.z]));
+    if (basement) return basement;
+    if (under) return { hall: under.index };
+    const gap = hall => { const b = U.boundsOf(hall); return Math.hypot(Math.max(0, b.x0 - point.x, point.x - b.x1), Math.max(0, b.z0 - point.z, point.z - b.z1)); };
+    const near = own.map(({ hall, index }) => ({ index, gap: gap(hall) })).filter(entry => entry.gap <= 30).sort((a, b) => a.gap - b.gap)[0];
+    return near ? { hall: near.index } : null;
+  };
+  const nodeOfHall = (found, point) => {
+    reach(point.x, point.z, 40);
+    const built = graphOf(point), want = found.hall !== undefined ? W.HALL_LOT + found.hall : found.lot;
+    let best = null, far = Infinity;
+    for (let id = 0; id < built.type.length; id++) {
+      if (built.type[id] !== 5 || built.lot[id] !== want || built.graph.offsets[id + 1] === built.graph.offsets[id]) continue;
+      const p = W.nodePos(world, id), d = Math.hypot(p.x - point.x, p.z - point.z);
+      if (d < far) { far = d; best = id; }
+    }
+    return best;
+  };
+  /** Someone first seen underground: a picture of that choice's halls from above, a box on it, the hall it finds. */
+  const bornUnder = async ({ scene, handoff, who, context, anchor, radius, choice, level }) => {
+    reach(anchor.x, anchor.z, radius + 8);
+    const below = [...where.entries()].filter(([id, entry]) => id !== handoff.person && entry.place === scene.placeId && entry.at).map(([, entry]) => W.nodePos(world, entry.at[0])).filter(p => p.k < 0).map(p => [p.x, p.z]);
+    const picture = mapPicture(world, { x: anchor.x, z: anchor.z, radius, people: below, under: choice });
+    const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: `Where down here is ${who} when this scene begins? Box that place on the picture.` }], { images: { map: picture.png } });
+    notes.worldStarts = (notes.worldStarts ?? 0) + 1;
+    const box = asked[0]?.box;
+    if (!box) return null;
+    const point = picture.at(box), found = hallUnder(choice, point), node = found ? nodeOfHall(found, point) : null;
+    if (node == null) return null;
+    notes.bornUnder = (notes.bornUnder ?? 0) + 1;
+    wake(node);
+    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level, under: choice, at: [Math.round(point.x), Math.round(point.z)], ...(found.hall !== undefined ? { hall: world.source.underground.halls[found.hall].id } : { basement: world.lots[found.lot].source }) });
+    return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, [node, 0], `${scene.id}|${handoff.person}`) : [node, 0];
+  };
+  /**
+   * The hook (docs/underground-design.md §4.8): an area's underground comes alive the first moment anyone stands on a node
+   * under it (a hall's, or a basement's: the area its building's middle lies in); until then no blast reaches it.
+   */
+  const awake = new Map();
+  const wake = node => {
+    if (node == null || W.nodePos(world, node).k >= 0) return;
+    const built = graphOf(W.nodePos(world, node)), lot = built.lot[node], hall = lot >= W.HALL_LOT ? world.source.underground.halls[lot - W.HALL_LOT] : null;
+    const area = hall ? hall.area : lot >= 0 && lot < W.HALL_LOT ? areaAt((world.lots[lot].i0 + world.lots[lot].nx / 2) * 2, (world.lots[lot].j0 + world.lots[lot].nz / 2) * 2) : null;
+    if (area && !awake.has(area)) { awake.set(area, moment); notes.underground.active[name(area)] = moment; }
+  };
+  /**
+   * The underground as the page draws it: each hall's plan, depth and height, kind and label, and its pillars (2 m points);
+   * what cave-ins left (piles on hall cells, dents in the street: cell, level or depth, metres); and the areas awake.
+   */
+  const undergroundView = () => {
+    const halls = world.source.underground?.halls ?? [], cellOf = key => { const { ci, cj } = W.chunkOf(key); return [ci, cj]; };
+    return {
+      halls: halls.map(hall => {
+        const b = U.boundsOf(hall), pillars = [];
+        if (hall.pillars) for (let x = Math.floor(b.x0 / 2) * 2 + 1; x <= b.x1; x += 2) for (let z = Math.floor(b.z0 / 2) * 2 + 1; z <= b.z1; z += 2) if (U.pillarAt(hall, [x, z])) pillars.push([x, z]);
+        return { id: hall.id, kind: hall.kind, label: hall.label, area: hall.area, depth: hall.depth, height: hall.height, boxes: hall.boxes, bores: hall.bores, pillars };
+      }),
+      piles: [...world.underDamage.piles].flatMap(([index, cells]) => [...cells].map(([key, height]) => [...cellOf(key), W.levelOf(halls[index].depth), height])),
+      dents: [...world.underDamage.dents].map(([key, depth]) => [...cellOf(key), depth]),
+      awake: [...awake.keys()],
+    };
   };
   /** Walk someone to a node, the way the engine walks a move. */
   const walkTo = (scene, event, person, at, target, seed, label) => {
@@ -748,8 +870,10 @@ export async function strandDemo(novelDir, options) {
       const floors = at.reduce((count, p) => count.set(p.k, (count.get(p.k) ?? 0) + 1), new Map()), k = [...floors].sort((x, y) => y[1] - x[1])[0][0], on = at.filter(p => p.k === k);
       const mid = { x: on.reduce((sum, p) => sum + p.x, 0) / on.length, z: on.reduce((sum, p) => sum + p.z, 0) / on.length };
       if (at.every(p => p.k === k && Math.hypot(p.x - mid.x, p.z - mid.z) <= TALK)) { notes.groupsTogether = (notes.groupsTogether ?? 0) + 1; return {}; }
-      const indoors = k !== 0 || on.some(p => world.lotAt.has(W.cellKey(p.i, p.j)));
-      const picture = mapPicture(world, { x: mid.x, z: mid.z, radius: 48, people: peopleAt(scene.placeId, null, k), ...(indoors ? { floor: k } : {}) });
+      // Underground, the picture is of the choice the group's hall is in; above, a slice of the floor indoors, else the street.
+      const down = k < 0 ? (() => { const node = posOf(members[0])[0], built = graphOf(W.nodePos(world, node)), lot = built.lot[node]; return lot >= W.HALL_LOT ? U.intervalsOf(world.source.underground.halls[lot - W.HALL_LOT])[0] : 'shallow'; })() : null;
+      const indoors = k > 0 || on.some(p => world.lotAt.has(W.cellKey(p.i, p.j)));
+      const picture = mapPicture(world, { x: mid.x, z: mid.z, radius: 48, people: peopleAt(scene.placeId, null, k), ...(down ? { under: down } : indoors ? { floor: k } : {}) });
       const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: `Where on this ${indoors ? 'floor' : 'map'} do ${node.parties.map(name).join('、')} and the others with them gather to talk together?` }], { images: { map: picture.png } });
       notes.groupBoxes = (notes.groupBoxes ?? 0) + 1;
       const box = asked[0]?.box;
@@ -769,7 +893,7 @@ export async function strandDemo(novelDir, options) {
     const plan = meetings.get(key), target = plan.targets?.[person];
     return target == null || !at ? { kind: 'stay' } : walkTo(scene, event, person, at, target, seed, plan.label);
   };
-  mover.start = async args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const boxed = await firstStart(args), at = boxed ?? start(args); if (boxed) begun.set(`${args.scene.id}|${args.handoff.person}`, boxed); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
+  mover.start = async args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const boxed = await firstStart(args), at = boxed ?? start(args); wake(at?.[0]); if (boxed) begun.set(`${args.scene.id}|${args.handoff.person}`, boxed); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
   // `pace` (seconds): each moment held that long before the next is played, so a live view shows every event.
   const hold = () => new Promise(done => setTimeout(done, options.pace * 1000));
   mover.act = async args => {
@@ -777,7 +901,7 @@ export async function strandDemo(novelDir, options) {
     if (now !== moment) { if (options.pace) { live(false, true); await hold(); } else live(); }
     moment = now;
     const outcome = args.event.dialogue && jev ? await dialogueAct(args) : act(args);
-    if (outcome.kind === 'move') { where.set(args.person, { place: args.scene.placeId, at: outcome.to }); const end = W.nodePos(world, outcome.to[0]); reach(end.x, end.z, 40); }
+    if (outcome.kind === 'move') { where.set(args.person, { place: args.scene.placeId, at: outcome.to }); const end = W.nodePos(world, outcome.to[0]); reach(end.x, end.z, 40); wake(outcome.to[0]); }
     return outcome;
   };
   const detected = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
@@ -816,6 +940,8 @@ export async function strandDemo(novelDir, options) {
     }
     notes.detected = { buildings: lotNames.size, objects: [...placedObjects.values()].reduce((sum, list) => sum + list.length, 0) };
     const worn = new Set(entities.filter(entity => entity.model && entity.placed.length).map(entity => entity.model));
+    // A deep facility is dressed in the modern kit's model of its kind (kk-lab, kk-military, kk-quantum).
+    for (const hall of world.source.underground?.halls ?? []) if (['lab', 'military', 'quantum'].includes(hall.kind)) worn.add(`kk-${hall.kind}`);
     // One world: a lot is named whichever place named it.
     const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
     const shellOf = (placeId, lot, index) => { if (lot.era === 'ancient' && !named(placeId, index)) { const model = ANCIENT_SHELLS[Math.floor(stream('shell', placeId, index)() * ANCIENT_SHELLS.length)]; worn.add(model); return model; } const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
@@ -825,7 +951,7 @@ export async function strandDemo(novelDir, options) {
     const bounds = W.worldBounds(world), NX = bounds.i1 - bounds.i0, NZ = bounds.j1 - bounds.j0, oi = -bounds.i0, oj = -bounds.j0;
     const K = Math.max(1, ...world.lots.map(lot => lot.floors + 1), ...[...shared.things.values()].map(thing => thing.top + 1));
     // Levels below the street are negative: they are packed from `ok` levels down, so every node is a non-negative number.
-    const ok = -W.DEEP + 4, dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return ((k + ok) * NZ + (j + oj)) * NX + (i + oi); };
+    const ok = W.UNDER_LEVELS, dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return ((k + ok) * NZ + (j + oj)) * NX + (i + oi); };
     const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
     const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
       i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
@@ -839,7 +965,7 @@ export async function strandDemo(novelDir, options) {
       macro, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
       people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
-      world: { NX, NZ, K, oi, oj, ok, lots: worldLots, earlier, underground: world.source.underground,
+      world: { NX, NZ, K, oi, oj, ok, lots: worldLots, earlier, underground: undergroundView(),
         ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]),
         // Landscape buildings that never stood as lots (under a staged building, or no room on the grid), and when that was settled.
         dropped: [...world.dropped] },

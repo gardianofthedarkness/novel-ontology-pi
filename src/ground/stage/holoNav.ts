@@ -87,14 +87,13 @@ const GRIDS: Record<ArchitectureKind, () => NavGrid> = {
 };
 
 /**
- * Under every place, the levels the world builds below the street (world.ts): the subway level (tunnels, platforms, a
- * concourse, an underground mall), a building's underground floors, the storm-water channels, and a super-deep one,
- * reached from the basement, else the first way out.
+ * Under every place, Jev's three underground choices (docs/underground-design.md §6.1): just under the street (a
+ * basement, an underground mall), the subway, and deep underground; reached from the basement, else the first way out.
  */
-const UNDERGROUND = [spot("subway", "Subway", "underground at the subway level: its tunnels, platforms and concourse", 0, -0.25, 0.3), spot("arcade", "Underground mall", "the underground shopping street under the commercial streets", -0.2, -0.25, 0.3), spot("underground", "Underground floors", "a building's underground floors: a car park, storage, machine rooms", 0.2, -0.4, -0.2), spot("water", "Storm-water channels", "the storm-water channels and tanks far under the roads", -0.2, -0.5, 0), spot("deep", "Deep underground", "far underground: a military bunker, an experiment lab, a quantum facility, a shelter", 0, -0.6, 0)];
+const UNDERGROUND = [spot("under", "Just under the street", "underground just below the street: a building's basement, a car park, an underground mall", 0.2, -0.25, -0.2), spot("subway", "Subway", "the subway: a station, a platform, a tunnel", 0, -0.35, 0.3), spot("deep", "Deep underground", "deep underground: storm-water tanks and channels, a deep facility, a bunker, a lab", 0, -0.6, 0)];
 export function navGrid(kind: ArchitectureKind): NavGrid {
   const grid = GRIDS[kind](), from = grid.spots.find((entry) => entry.id === "basement") ?? grid.spots.find((entry) => entry.out || entry.outdoor) ?? grid.spots[0];
-  return { spots: [...grid.spots, ...UNDERGROUND], links: [...grid.links, [from.id, "subway"], ["subway", "arcade"], [from.id, "underground"], [from.id, "water"], ["underground", "deep"]] };
+  return { spots: [...grid.spots, ...UNDERGROUND], links: [...grid.links, [from.id, "under"], [from.id, "subway"], ["under", "deep"]] };
 }
 
 /** Spot positions on the stage for a building of this box. */

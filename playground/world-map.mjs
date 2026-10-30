@@ -3,11 +3,17 @@
 // across. It shows the ground (dark), the roads (grey), every lot standing there (blue, darker the taller, with its
 // outline), and the people already placed (red dots), so Jev can place someone among them. With a `floor`, it is a slice
 // of the buildings at that floor: each one's rooms (light, outlined), its corridors and stairs (mid-grey), and a building
-// too low to reach it as its roof, so a box on it picks a room. Below the street (SUBWAY, DEEP), it is that level: the
-// subway's tunnels under the roads and a station's concourse, the buildings' underground floors, or the deep chambers. Plain Node: a small PNG writer, no browser.
+// too low to reach it as its roof, so a box on it picks a room. With `under` (one of Jev's three underground choices, docs/
+// underground-design.md §6.1), it is what lies there from above: the halls of that choice by kind (and every building's
+// basement just under the street), with their pillars, in the dark of the ground. Plain Node: a small PNG writer, no browser.
 import { deflateSync } from 'node:zlib';
 import { CORRIDOR, MASS, cellIndex } from '../dist/apps/playground/src/data/skeleton.js';
-import { DEEP, SUBWAY, UNDER, WATER } from '../dist/apps/playground/src/data/world.js';
+import { basementsOf } from '../dist/apps/playground/src/data/world.js';
+import { boundsOf, inHall, intervalsOf, pillarAt } from '../dist/src/ground/stage/underground.js';
+
+/** The halls' colours on a picture underground: the subway, a mall, the storm water, a deep facility, a basement. */
+const HALL_COLOUR = { station: [110, 210, 225], tunnel: [80, 170, 190], mall: [230, 190, 110], tank: [110, 150, 235], channel: [90, 130, 220], lab: [235, 140, 160], military: [215, 120, 120], quantum: [200, 150, 235] };
+const BASEMENT = [160, 145, 235];
 
 const CRC = Int32Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
 const crc32 = bytes => { let c = -1; for (const byte of bytes) c = CRC[(c ^ byte) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
@@ -28,8 +34,9 @@ const toSegment = (x, z, [ax, az], [bx, bz]) => { const dx = bx - ax, dz = bz - 
  * The map around (x, z), `radius` metres each way, `size` pixels square. `people`: points [x, z] already placed. Returns
  * the PNG (base64) and how to read a box on it back into the world (`at(box)`: the box's middle in metres).
  */
-export function mapPicture(world, { x, z, radius = 48, size = 384, people = [], floor = null }) {
+export function mapPicture(world, { x, z, radius = 48, size = 384, people = [], floor = null, under = null }) {
   const rgb = Buffer.alloc(size * size * 3), metres = radius * 2, x0 = x - radius, z0 = z - radius, scale = size / metres;
+  const halls = under ? (world.source.underground?.halls ?? []).filter(hall => intervalsOf(hall).includes(under)).map(hall => ({ hall, b: boundsOf(hall) })).filter(({ b }) => b.x1 >= x0 && b.x0 <= x0 + metres && b.z1 >= z0 && b.z0 <= z0 + metres) : [];
   const paint = (px, py, [r, g, b]) => { if (px < 0 || py < 0 || px >= size || py >= size) return; const at = (py * size + px) * 3; rgb[at] = r; rgb[at + 1] = g; rgb[at + 2] = b; };
   const roads = world.source.roads.filter(road => toSegment(x, z, road.a, road.b) <= radius * 1.5 + road.width);
   for (let py = 0; py < size; py++) for (let px = 0; px < size; px++) {
@@ -37,11 +44,13 @@ export function mapPicture(world, { x, z, radius = 48, size = 384, people = [], 
     // Underground, the roads are the subway's tunnels (none reach the deep level); above, the streets.
     // Underground, the roads are the subway's tunnels (amber where an underground mall runs), the wide ones the storm-water
     // channels; the tanks are wide halls; none reach the deep level. Above, the streets.
-    const under = world.source.underground ?? { tanks: [], arcades: [], facilities: [] };
-    const road = (floor === null || floor >= 0 || floor === SUBWAY) && roads.some(road => toSegment(wx, wz, road.a, road.b) <= road.width / 2);
-    const water = floor === WATER && (roads.some(road => road.width >= 18 && toSegment(wx, wz, road.a, road.b) <= road.width / 2) || under.tanks.some(tank => Math.hypot(wx - tank.x, wz - tank.z) <= tank.r));
-    const mall = floor === SUBWAY && road && under.arcades.some(zone => Math.hypot(wx - zone.x, wz - zone.z) <= zone.r);
-    paint(px, py, water ? [120, 160, 230] : mall ? [220, 180, 110] : road ? (floor === SUBWAY ? [150, 164, 182] : [96, 102, 110]) : [34, 40, 46]);
+    if (under) {
+      // Underground: the dark of the ground, and the halls of this choice (a pillar darker) where they lie.
+      const hall = halls.find(entry => wx >= entry.b.x0 && wx <= entry.b.x1 && wz >= entry.b.z0 && wz <= entry.b.z1 && inHall(entry.hall, [wx, wz]))?.hall;
+      paint(px, py, hall ? (pillarAt(hall, [wx, wz]) ? HALL_COLOUR[hall.kind].map(value => value * 0.45) : HALL_COLOUR[hall.kind]) : [18, 20, 24]);
+      continue;
+    }
+    paint(px, py, roads.some(road => toSegment(wx, wz, road.a, road.b) <= road.width / 2) ? [96, 102, 110] : [34, 40, 46]);
   }
   const cellBox = (lot, i0, j0, i1, j1, fill, edge) => {
     const [p0, q0, p1, q1] = [Math.floor(((lot.i0 + i0) * 2 - x0) * scale), Math.floor(((lot.j0 + j0) * 2 - z0) * scale), Math.ceil(((lot.i0 + i1 + 1) * 2 - x0) * scale), Math.ceil(((lot.j0 + j1 + 1) * 2 - z0) * scale)];
@@ -50,11 +59,9 @@ export function mapPicture(world, { x, z, radius = 48, size = 384, people = [], 
   for (const lot of world.lots) {
     const lx0 = lot.i0 * 2, lz0 = lot.j0 * 2, lx1 = lx0 + lot.nx * 2, lz1 = lz0 + lot.nz * 2;
     if (lx1 < x0 || lx0 > x0 + metres || lz1 < z0 || lz0 > z0 + metres) continue;
-    if (floor !== null && floor < 0) {
-      // Underground (world.ts): a scene's station has a concourse at the subway level; a scene's own building or a tower
-      // of 30 floors or more, a chamber at the deep one.
-      const scenes = String(lot.source).startsWith('anchor:'), here = floor === UNDER || floor === DEEP && (scenes || (lot.height ?? 0) >= 30) || floor === SUBWAY && scenes && lot.role === 'station';
-      if (here) cellBox(lot, 0, 0, lot.nx - 1, lot.nz - 1, [196, 214, 232], [60, 90, 130]);
+    if (under) {
+      // Just under the street, every building's basement under its footprint (violet), unless a hall of this choice is drawn there.
+      if (under === 'shallow' && basementsOf(lot)) cellBox(lot, 0, 0, lot.nx - 1, lot.nz - 1, BASEMENT, [90, 80, 160]);
       continue;
     }
     if (floor !== null) {
@@ -69,22 +76,16 @@ export function mapPicture(world, { x, z, radius = 48, size = 384, people = [], 
     const [p0, q0, p1, q1] = [Math.floor((lx0 - x0) * scale), Math.floor((lz0 - z0) * scale), Math.ceil((lx1 - x0) * scale), Math.ceil((lz1 - z0) * scale)];
     for (let py = q0; py < q1; py++) for (let px = p0; px < p1; px++) paint(px, py, px === p0 || px === p1 - 1 || py === q0 || py === q1 - 1 ? edge : fill);
   }
-  // The deep facilities, as rooms of the deep level.
-  if (floor === DEEP) for (const f of world.source.underground?.facilities ?? []) {
-    const [p0, q0, p1, q1] = [Math.floor((f.x - f.w / 2 - x0) * scale), Math.floor((f.z - f.d / 2 - z0) * scale), Math.ceil((f.x + f.w / 2 - x0) * scale), Math.ceil((f.z + f.d / 2 - z0) * scale)];
-    for (let py = q0; py < q1; py++) for (let px = p0; px < p1; px++) paint(px, py, px === p0 || px === p1 - 1 || py === q0 || py === q1 - 1 ? [130, 40, 60] : [232, 170, 180]);
-  }
   for (const [px, pz] of people) {
     const cx = Math.round((px - x0) * scale), cy = Math.round((pz - z0) * scale);
     for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) if (dx * dx + dy * dy <= 16) paint(cx + dx, cy + dy, [235, 70, 80]);
   }
   return {
     png: encodePng(size, size, rgb).toString('base64'),
-    legend: floor === null ? `A map from above, north up, ${metres} m across: dark is open ground, grey are roads, blue blocks are buildings (darker is taller), red dots are people already there.`
-      : floor === SUBWAY ? `The subway level, 12 m under the street, from above, north up, ${metres} m across: light bands are the tunnels under the roads (amber where they are an underground shopping street), light outlined boxes a station's concourse, dark is rock, red dots are people already down here.`
-      : floor === WATER ? `The storm-water level, 42 m down, from above, north up, ${metres} m across: blue bands are the channels under the wide roads, blue discs the pressure tanks, dark is rock, red dots are people already down here.`
-      : floor === UNDER ? `The underground floors of the buildings, 24 m down, from above, north up, ${metres} m across: light outlined boxes are each building's underground floors (car parks, storage, basements), dark is rock, red dots are people already down here.`
-      : floor === DEEP ? `The super-deep level, 60 m down, from above, north up, ${metres} m across: light outlined boxes are the deep chambers under buildings, pink boxes the deep facilities (military bunkers, experiment labs, quantum research), dark is rock, red dots are people already down here.`
+    legend: floor === null && !under ? `A map from above, north up, ${metres} m across: dark is open ground, grey are roads, blue blocks are buildings (darker is taller), red dots are people already there.`
+      : under === 'shallow' ? `What lies just under the street, from above, north up, ${metres} m across: violet boxes are the basements under buildings, amber an underground mall, blue the top of a storm-water tank, darker squares pillars, the rest is ground; red dots are people already down here.`
+      : under === 'subway' ? `The subway, 12 m down, from above, north up, ${metres} m across: light teal boxes are stations (a platform with a concourse at each end), darker teal bands the tunnels between them, darker squares pillars, the rest is ground; red dots are people already down here.`
+      : under === 'deep' ? `Deep underground, from above, north up, ${metres} m across: blue are the storm-water tank and its channels, pink and red boxes deep facilities (labs, military bunkers, quantum research), darker squares pillars, the rest is rock; red dots are people already down here.`
       : `A slice through the buildings at floor ${floor + 1}, from above, north up, ${metres} m across: light outlined boxes are rooms, mid-grey are corridors and stairs, grey blocks are roofs of buildings too low to reach this floor, red dots are people already on this floor.`,
     at: box => ({ x: x0 + ((box.left + box.right) / 2) * metres, z: z0 + ((box.top + box.bottom) / 2) * metres, w: (box.right - box.left) * metres, d: (box.bottom - box.top) * metres }),
   };
