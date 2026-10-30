@@ -90,6 +90,8 @@ export async function strandDemo(novelDir, options) {
     const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
     // Pinned to the model that answers box questions (1.14): left to the environment, Jev defaults to 1.13, which refuses them.
     jev = cachedDecisions(jevFromEnv({ ...process.env, JEV_MODEL: WORLD_MODEL }), `${novelDir}/stage/world/cache`);
+    // A live run records every question the engine asks (its exact prompt and pictures) on the live page.
+    if (options.watch) jev = options.watch(jev);
     for (const scene of chosen) {
       const entry = worldScene.get(scene.id);
       if (!entry) continue;
@@ -864,7 +866,9 @@ export async function strandDemo(novelDir, options) {
       halls: halls.map(hall => {
         const b = U.boundsOf(hall), pillars = [];
         if (hall.pillars) for (let x = Math.floor(b.x0 / 2) * 2 + 1; x <= b.x1; x += 2) for (let z = Math.floor(b.z0 / 2) * 2 + 1; z <= b.z1; z += 2) if (U.pillarAt(hall, [x, z])) pillars.push([x, z]);
-        return { id: hall.id, kind: hall.kind, label: hall.label, area: hall.area, depth: hall.depth, height: hall.height, boxes: hall.boxes, bores: hall.bores, pillars };
+        // A passage's stairs: from the pavement nearest its end (where the world joins them) down to the passage.
+        const stairs = hall.kind === 'corridor' ? hall.up.map(([x, z]) => { const [sx, sz] = W.streetNear(world, x, z, 30) ?? [x, z]; return [sx, sz, x, z]; }) : undefined;
+        return { id: hall.id, kind: hall.kind, label: hall.label, area: hall.area, depth: hall.depth, height: hall.height, boxes: hall.boxes, bores: hall.bores, pillars, ...(stairs ? { stairs } : {}) };
       }),
       piles: [...world.underDamage.piles].flatMap(([index, cells]) => [...cells].map(([key, height]) => [...cellOf(key), W.levelOf(halls[index].depth), height])),
       dents: [...world.underDamage.dents].map(([key, depth]) => [...cellOf(key), depth]),
@@ -1178,9 +1182,9 @@ export async function keepWorldDamage(folder) {
  * returns the player's data (what strandDemo makes). The one entry point `novel sim run` uses, so the engine behind it can
  * change (city filling, say) without the command changing.
  */
-export async function runStrand(novelDir, { from, to, fork = null, title } = {}, { until = null, live = null, pace = 0 } = {}) {
+export async function runStrand(novelDir, { from, to, fork = null, title } = {}, { until = null, live = null, pace = 0, watch = null } = {}) {
   // `live`: called with the world as it stands at each moment played (at most every 0.3 s) and at the end, for the live view.
-  return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}), ...(until ? { until } : {}), ...(live ? { live } : {}), ...(pace ? { pace } : {}) });
+  return strandDemo(novelDir, { from, to, ...(fork ? { fork } : {}), ...(title ? { title } : {}), ...(until ? { until } : {}), ...(live ? { live } : {}), ...(pace ? { pace } : {}), ...(watch ? { watch } : {}) });
 }
 
 /** A strand's page data with the world's lots once (data.world.lots): each place's copy of them is restored by the page. */

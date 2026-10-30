@@ -50,6 +50,7 @@
   details { margin-top: 8px; color: var(--muted); font-size: 12px; }
   details p { margin: 4px 0; }
   .context p { margin: 2px 0; color: var(--text); font-size: 13px; }
+  .prompt pre { margin: 6px 0 0; padding: 8px 10px; max-height: 50vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); background: rgba(0, 0, 0, 0.25); border-radius: 6px; }
   .transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
   .transport[hidden] { display: none; }
   .transport input[type=range] { flex: 1 1 200px; }
@@ -161,6 +162,8 @@
       body.push(answers);
     }
     if (frame.context?.length) body.push(make('details', { className: 'context', open: true }, make('summary', { textContent: 'What it is about' }), ...frame.context.map(text => make('p', { textContent: text }))));
+    // The exact text Jev was given (its composed context and the question's setting), as sent.
+    if (frame.prompt) body.push(make('details', { className: 'prompt' }, make('summary', { textContent: 'The exact prompt' }), make('pre', { textContent: frame.prompt })));
     if (frame.questions?.length) body.push(make('details', {}, make('summary', { textContent: 'What Jev was asked' }), ...frame.questions.map(question => make('p', { textContent: `${question.key} (${question.primitive}${question.options ? `, ${question.options} options` : ''}): ${question.instructions}` }))));
     card.replaceChildren(...body);
   }

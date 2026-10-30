@@ -87,7 +87,7 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
     // the line as far as it was played, as a frame the world view draws in 3D (an unpaced run numbers no frame of its own,
     // so without it the world view would wait through every pick).
     let last = null;
-    const data = await runStrand(novelDir, strand, { ...(until ? { until: { scene: until.scene, event: until.index } } : {}), ...(live ? { live: (snapshot, page) => { last = snapshot; return live.world(snapshot, page); } } : {}) });
+    const data = await runStrand(novelDir, strand, { ...(until ? { until: { scene: until.scene, event: until.index } } : {}), ...(live ? { live: (snapshot, page) => { last = snapshot; return live.world(snapshot, page); }, watch: model => live.watch(model) } : {}) });
     if (live && last) await live.world(last, data);
     await writeFile(join(work, 'index.html'), inlineStrand(template, data, { vendor: true }));
     await chrome.evaluate('delete window.__stage').catch(() => {});
@@ -301,7 +301,7 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
           const f = frame++, started = Date.now(), context = text.split('\n').filter(line => /^(Place|Event|Thing): |^A thing a novel mentions: /.test(line)).map(line => line.slice(0, 400));
           const files = await keep(f, Object.entries(options.images ?? {}));
           state.calls++;
-          state.ask = { f, at: at(), call: state.calls, line: state.line, phase: state.phase, subject: subjectOf(context), context, pictures: files, questions: questions.map(question => ({ key: question.key, primitive: question.primitive, ...(question.label ? { label: question.label } : {}), instructions: String(question.instructions).slice(0, 300), ...(question.options ? { options: question.options.length } : {}) })), answers: null };
+          state.ask = { f, at: at(), call: state.calls, line: state.line, phase: state.phase, subject: subjectOf(context), context, pictures: files, questions: questions.map(question => ({ key: question.key, primitive: question.primitive, ...(question.label ? { label: question.label } : {}), instructions: String(question.instructions).slice(0, 300), ...(question.options ? { options: question.options.length } : {}) })), answers: null , prompt: text };
           await write();
           try {
             const answers = await jev.decide(text, questions, options);

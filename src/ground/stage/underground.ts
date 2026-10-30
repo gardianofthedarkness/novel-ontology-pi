@@ -9,7 +9,7 @@ import { stageStream } from "./stream.js";
  * Pure: metres and plain data. The world (apps/playground/src/data/world.ts) puts the halls on its 2 m grid and walks them.
  */
 export type Point = [number, number];
-export type HallKind = "tunnel" | "station" | "mall" | "tank" | "channel" | "lab" | "military" | "quantum";
+export type HallKind = "tunnel" | "station" | "corridor" | "mall" | "tank" | "channel" | "lab" | "military" | "quantum";
 /** A rotated box (centre, size, turn about y) and a bore (a segment and its width), in metres. */
 export interface HallBox { x: number; z: number; w: number; d: number; angle: number }
 export interface Bore { a: Point; b: Point; width: number }
@@ -39,9 +39,9 @@ export const LINING = { span: 12, bond: 4 }, PILLAR_BOND = 5;
  */
 export const INTERVALS = { shallow: [0, 25], subway: [5, 20], deep: [20, 110] } as const;
 export type Interval = keyof typeof INTERVALS;
-const SUBWAY_KINDS = new Set(["station", "tunnel"]);
+const SUBWAY_KINDS = new Set(["station", "tunnel", "corridor"]);
 export const intervalsOf = (hall: Pick<Hall, "depth" | "height"> & { kind?: string }): Interval[] => (hall.kind && SUBWAY_KINDS.has(hall.kind) ? ["subway"] : (["shallow", "deep"] as Interval[]).filter((key) => hall.depth - hall.height <= INTERVALS[key][1] && hall.depth >= INTERVALS[key][0]));
-export const HALL_LABEL: Record<HallKind, string> = { tunnel: "a subway tunnel", station: "a subway station", mall: "an underground mall", tank: "a storm-water tank", channel: "a storm-water channel", lab: "an experiment lab", military: "a military bunker", quantum: "a quantum research facility" };
+export const HALL_LABEL: Record<HallKind, string> = { tunnel: "a subway tunnel", station: "a subway station", corridor: "a subway passage", mall: "an underground mall", tank: "a storm-water tank", channel: "a storm-water channel", lab: "an experiment lab", military: "a military bunker", quantum: "a quantum research facility" };
 
 const round = (value: number) => Math.round(value * 10) / 10;
 const turn = (angle: number, [u, v]: Point): Point => [u * Math.cos(angle) - v * Math.sin(angle), u * Math.sin(angle) + v * Math.cos(angle)];
@@ -126,7 +126,9 @@ const widen = (hall: Hall, by: number): Hall => ({ ...hall, boxes: hall.boxes.ma
  * districts and areas, and any station the story names), ordered as a path from the stop farthest out, split into two
  * lines when there are more than five stops; stations at the stops and every 600 m between, each a platform 120 × 20 m with
  * a concourse 30 m long at each end on one level, 12 m down; twin-bore tunnels 12 m wide between them. With fewer than two
- * stops, one line straight across the city through its middle. Stations have their ways up at both ends.
+ * stops, one line straight across the city through its middle. Each station has four entrances, two at each end, one on
+ * either side: a passage 5 m wide from the station's end out 30 m to the side, and stairs up from its far end to the street
+ * (the passage's `up`). The world joins the stairs to the pavement nearest them.
  */
 export function subwayOf(stops: { id: string; x: number; z: number }[], seed: string, radius: number): Hall[] {
   const rng = stageStream(seed, "subway");
@@ -149,7 +151,14 @@ export function subwayOf(stops: { id: string; x: number; z: number }[], seed: st
     stations.push(line[line.length - 1]);
     stations.forEach((p, n) => {
       const next = stations[Math.min(n + 1, stations.length - 1)], prev = stations[Math.max(n - 1, 0)], angle = Math.atan2(next[1] - prev[1], next[0] - prev[0]);
-      halls.push({ id: `subway${l}:station${n}`, kind: "station", depth: 12, height: 7, boxes: [{ x: round(p[0]), z: round(p[1]), w: 180, d: 20, angle: round(angle) }], bores: [], pillars: 8, lined: true, up: ends(p[0], p[1], 180, angle) });
+      // Its entrances: from each end, a passage out to either side, and stairs up at the passage's far end.
+      const entrances: Point[] = [];
+      for (const [end, along] of ends(p[0], p[1], 180, angle).map((end, e) => [end, e ? 1 : -1] as const)) for (const side of [-1, 1]) {
+        const out: Point = [round(end[0] + Math.cos(angle) * along * 6 - Math.sin(angle) * side * 30), round(end[1] + Math.sin(angle) * along * 6 + Math.cos(angle) * side * 30)];
+        halls.push({ id: `subway${l}:station${n}:entrance${entrances.length}`, kind: "corridor", depth: 12, height: 3.5, boxes: [], bores: [{ a: end, b: out, width: 5 }], pillars: 0, lined: true, up: [out] });
+        entrances.push(out);
+      }
+      halls.push({ id: `subway${l}:station${n}`, kind: "station", depth: 12, height: 7, boxes: [{ x: round(p[0]), z: round(p[1]), w: 180, d: 20, angle: round(angle) }], bores: [], pillars: 8, lined: true, up: entrances });
       // The tunnel to the next station runs from this station's end to that one's (so a tunnel never lies under a station).
       if (n < stations.length - 1) { const along = Math.atan2(next[1] - p[1], next[0] - p[0]), u: Point = [Math.cos(along), Math.sin(along)], length = Math.hypot(next[0] - p[0], next[1] - p[1]); if (length > 190) halls.push({ id: `subway${l}:tunnel${n}`, kind: "tunnel", depth: 12, height: 6, boxes: [], bores: [{ a: [round(p[0] + u[0] * 90), round(p[1] + u[1] * 90)], b: [round(next[0] - u[0] * 90), round(next[1] - u[1] * 90)], width: 12 }], pillars: 0, lined: true, up: [] }); }
     });

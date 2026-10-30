@@ -240,6 +240,8 @@ const unit = new THREE.BoxGeometry(1, 1, 1), matrix = new THREE.Matrix4(), color
 const mats = {
   // The levels under the street (world.ts), each its own colour, faint until the street is seen through (xray below).
   subway: new THREE.MeshBasicMaterial({ color: 0x3fd0e0, transparent: true, opacity: 0.25, depthWrite: false }),
+  // A subway entrance on the street: seen whether or not the street is seen through.
+  entrance: new THREE.MeshBasicMaterial({ color: 0x3fd0e0, transparent: true, opacity: 0.3, depthWrite: false }),
   arcade: new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.25, depthWrite: false }),
   under: new THREE.MeshBasicMaterial({ color: 0x9a8cff, transparent: true, opacity: 0.25, depthWrite: false }),
   water: new THREE.MeshBasicMaterial({ color: 0x2f7dff, transparent: true, opacity: 0.25, depthWrite: false }),
@@ -308,7 +310,7 @@ function buildPlace(id) {
     // the moment the ground above it was reached; a facility's name only while the street is seen through.
     const under = data.world.underground ?? { halls: [], piles: [], dents: [] };
     const reached = new Map(data.world.chunks.map(([ci, cj, born]) => [`${ci},${cj}`, bornAt(born)])), atPoint = (x, z) => reached.get(`${Math.floor(x / (16 * CELL))},${Math.floor(z / (16 * CELL))}`);
-    const tint = { station: mats.subway, tunnel: mats.subway, mall: mats.arcade, tank: mats.water, channel: mats.water, lab: mats.facility, military: mats.facility, quantum: mats.facility };
+    const tint = { station: mats.subway, tunnel: mats.subway, corridor: mats.subway, mall: mats.arcade, tank: mats.water, channel: mats.water, lab: mats.facility, military: mats.facility, quantum: mats.facility };
     const show = (mesh, x, z, extra = {}) => { const at = atPoint(x, z); if (at === undefined) return; group.add(mesh); chunks.push({ mesh, at, x, z, ...extra }); };
     for (const hall of under.halls) {
       const material = tint[hall.kind] ?? mats.deep, y = -hall.depth + hall.height / 2;
@@ -318,6 +320,14 @@ function buildPlace(id) {
       const model = ["lab", "military", "quantum"].includes(hall.kind) ? shellOf(`kk-${hall.kind}`) : null, box = hall.boxes[0];
       if (model && box) { const shell = new THREE.LineSegments(model.edges, new THREE.LineBasicMaterial({ color: 0xff8a9a, transparent: true, opacity: 0.6 })); shell.scale.set(box.w * 0.8 / model.size.x, hall.height * 0.8 / model.size.y, box.d * 0.8 / model.size.z); shell.position.set(box.x, -hall.depth, box.z); show(shell, box.x, box.z); }
       if (box && hall.label) { const tag = label(hall.label, "#ff8a9a", 20); tag.position.set(box.x, -hall.depth + hall.height + 2, box.z); show(tag, box.x, box.z, { under: true }); }
+      // A subway entrance: the structure over the stairs on the pavement (seen from the street), and the steps down to its passage.
+      for (const [sx, sz, ex, ez] of hall.stairs ?? []) {
+        const steps = Array.from({ length: 10 }, (_, n) => { const t = (n + 0.5) / 10; return [sx + (ex - sx) * t, -hall.depth * t + 0.2, sz + (ez - sz) * t, 3, 0.45, 3]; });
+        show(instanced(mats.subway, steps), sx, sz);
+        const kiosk = new THREE.BoxGeometry(4, 2.8, 4), canopy = new THREE.Group();
+        canopy.add(new THREE.Mesh(kiosk, mats.entrance), new THREE.LineSegments(new THREE.EdgesGeometry(kiosk), new THREE.LineBasicMaterial({ color: 0x7ff0ff, transparent: true, opacity: 0.85 })));
+        canopy.position.set(sx, 1.4, sz); canopy.rotation.y = -Math.atan2(ez - sz, ex - sx); show(canopy, sx, sz);
+      }
     }
     for (const lot of data.world.lots) {
       const floors = lot.height ?? lot.floors, levels = floors >= 20 ? 3 : floors >= 10 ? 2 : floors >= 2 ? 1 : 0;

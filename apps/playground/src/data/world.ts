@@ -38,6 +38,16 @@ export const UNDER_LEVELS = 36;
 export const basementsOf = (lot: { floors: number; height?: number }) => { const floors = lot.height ?? lot.floors; return floors >= 20 ? 3 : floors >= 10 ? 2 : floors >= 2 ? 1 : 0; };
 export const levelOf = (depth: number) => -Math.round(depth / FLOOR_HEIGHT);
 const carParkPillar = (lot: WorldLot, i: number, j: number) => (i - lot.i0) % 4 === 2 && (j - lot.j0) % 4 === 2 && i - lot.i0 < lot.nx - 1 && j - lot.j0 < lot.nz - 1;
+/** The open ground nearest a point (metres) within `radius` cells, on ground the world has laid: where a hall's stairs come up. */
+export function streetNear(world: World, x: number, z: number, radius = 30): [number, number] | null {
+  const i0 = Math.floor(x / SKELETON_CELL), j0 = Math.floor(z / SKELETON_CELL);
+  for (let r = 0; r <= radius; r++) for (let di = -r; di <= r; di++) for (let dj = -r; dj <= r; dj++) {
+    if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+    const key = cellKey(i0 + di, j0 + dj);
+    if (world.ground.has(key) && !world.lotAt.has(key) && !world.clutter.has(key)) return [(i0 + di + 0.5) * SKELETON_CELL, (j0 + dj + 0.5) * SKELETON_CELL];
+  }
+  return null;
+}
 /** A hall node's lot: past every building's and thing's, so a node says which hall it is. */
 export const HALL_LOT = 1_000_000;
 /** The halls on a cell, each at its floor's level, as the chunk laid them. */

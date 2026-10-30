@@ -32,7 +32,7 @@ interface StrandData { title: string; notes: { hits?: number; impacts?: { sphere
 interface Engine {
   ENGINE: string;
   ENGINE_VERSION: number;
-  runStrand(novelDir: string, strand: Omit<SimStrand, "id">, options?: { until?: { scene: string; event: number }; live?: (snapshot: unknown, page: unknown) => unknown; pace?: number }): Promise<StrandData>;
+  runStrand(novelDir: string, strand: Omit<SimStrand, "id">, options?: { until?: { scene: string; event: number }; live?: (snapshot: unknown, page: unknown) => unknown; pace?: number; watch?: (model: DecisionModel) => DecisionModel }): Promise<StrandData>;
   simulationRecord(data: StrandData, strand: Omit<SimStrand, "title">): { strand: { title: string } };
   simulationInputs(novelDir: string): Promise<string>;
   keepRun(folder: string, strand: Omit<SimStrand, "title">, record: unknown, options: { inputs: string; accept?: boolean; page?: unknown }): Promise<KeptRun>;
@@ -186,7 +186,7 @@ export async function simRun(novelDir: string, options: { strand?: string; auto?
     for (const [index, line] of chosen.entries()) {
       await live.line(index, { status: "running" });
       const started = Date.now(), strand = line.strand;
-      const data = await sim.runStrand(novelDir, { from: strand.from, to: strand.to, fork: strand.fork }, { live: (snapshot, page) => live.world(snapshot, page), ...(options.pace ? { pace: options.pace } : {}) });
+      const data = await sim.runStrand(novelDir, { from: strand.from, to: strand.to, fork: strand.fork }, { live: (snapshot, page) => live.world(snapshot, page), watch: (model) => live.watch(model), ...(options.pace ? { pace: options.pace } : {}) });
       const kept = await sim.keepRun(simulationFolder(novelDir), strand, sim.simulationRecord(data, strand), { inputs, accept: options.accept, page: data });
       const run = { ...kept, title: data.title, places: Object.keys(data.places).length, scenes: data.scenes.length, moves: data.scenes.reduce((sum, scene) => sum + scene.events.reduce((count, event) => count + event.moves.length, 0), 0), hits: data.notes.hits ?? 0, things: data.things.length, jev: jevShare(data), seconds: (Date.now() - started) / 1000 };
       runs.push(run);
