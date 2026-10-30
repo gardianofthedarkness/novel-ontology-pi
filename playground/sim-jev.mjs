@@ -83,8 +83,12 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
   // The line as the engine makes it now, with every answer so far, in capture mode; with `until` (one of its events), only as
   // far as that event (an engine that cannot stop early makes all of it).
   const load = async (until = null) => {
-    // The world as the engine plays it goes to the live record too (live/world.json), for the live view of the world.
-    const data = await runStrand(novelDir, strand, { ...(until ? { until: { scene: until.scene, event: until.index } } : {}), ...(live ? { live: (snapshot, page) => live.world(snapshot, page) } : {}) });
+    // The world as the engine plays it goes to the live record too (live/world.json), for the live view of the world; and
+    // the line as far as it was played, as a frame the world view draws in 3D (an unpaced run numbers no frame of its own,
+    // so without it the world view would wait through every pick).
+    let last = null;
+    const data = await runStrand(novelDir, strand, { ...(until ? { until: { scene: until.scene, event: until.index } } : {}), ...(live ? { live: (snapshot, page) => { last = snapshot; return live.world(snapshot, page); } } : {}) });
+    if (live && last) await live.world(last, data);
     await writeFile(join(work, 'index.html'), inlineStrand(template, data, { vendor: true }));
     await chrome.evaluate('delete window.__stage').catch(() => {});
     await chrome.open(url);
