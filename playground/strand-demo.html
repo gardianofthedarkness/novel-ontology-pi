@@ -125,8 +125,14 @@ if (chosen?.name) document.title = chosen.name;
 if (!data) { $("title").textContent = "No strand in this page."; throw new Error("no data"); }
 $("title").textContent = data.title;
 const CELL = 2, FLOOR = 3, DEMO = 3, READ = 2.1, CARD = 2.0, MACRO = 3.8;
-/** The world's three levels under the street (world.ts SUBWAY, UNDER and DEEP, in metres). */
-const SUBWAY_Y = -12, UNDER_Y = -24, DEEP_Y = -60;
+/** The world's levels under the street (world.ts SUBWAY, UNDER, WATER and DEEP, in metres). */
+const SUBWAY_Y = -12, UNDER_Y = -24, WATER_Y = -42, DEEP_Y = -60;
+/**
+ * Seeing underground: the street is a little see-through always, and nearly clear while someone in view is below it or
+ * the viewer asks (the world view's Underground button, or ?under=1); the levels below brighten as it clears.
+ */
+const groundMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8 });
+let xray = new URLSearchParams(location.search).get("under") === "1", groundSeen = 0.8;
 const ELEVATION = Math.atan(1 / Math.SQRT2), G = 9.8;
 /** A sky arc between two nodes too far apart to step: launched along a rising cube diagonal, it lands on b; null for a step. */
 const flight = (a, b) => {
@@ -233,8 +239,13 @@ const resize = () => { const { clientWidth: w, clientHeight: h } = host; rendere
 new ResizeObserver(resize).observe(host);
 const unit = new THREE.BoxGeometry(1, 1, 1), matrix = new THREE.Matrix4(), color = new THREE.Color();
 const mats = {
-  // The levels under the street (world.ts): faint, so the street still reads above them.
-  underground: new THREE.MeshBasicMaterial({ color: 0x3f8fb0, transparent: true, opacity: 0.22, depthWrite: false }),
+  // The levels under the street (world.ts), each its own colour, faint until the street is seen through (xray below).
+  subway: new THREE.MeshBasicMaterial({ color: 0x3fd0e0, transparent: true, opacity: 0.25, depthWrite: false }),
+  arcade: new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.25, depthWrite: false }),
+  under: new THREE.MeshBasicMaterial({ color: 0x9a8cff, transparent: true, opacity: 0.25, depthWrite: false }),
+  water: new THREE.MeshBasicMaterial({ color: 0x2f7dff, transparent: true, opacity: 0.25, depthWrite: false }),
+  deep: new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0.25, depthWrite: false }),
+  facility: new THREE.MeshBasicMaterial({ color: 0xff4d6a, transparent: true, opacity: 0.25, depthWrite: false }),
   corridor: new THREE.MeshLambertMaterial({ color: 0x7ce6ff, emissive: 0x0b3a48, transparent: true, opacity: 0.85 }),
   stair: new THREE.MeshLambertMaterial({ color: 0xffb547, emissive: 0x4a2a00, transparent: true, opacity: 0.8 }),
   cut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.9 }),
@@ -286,21 +297,38 @@ function buildPlace(id) {
   const place = data.places[id], spot = macroAt.get(id) ?? { x: 0, z: 0 }, group = new THREE.Group(), cx = place.world ? 0 : place.NX * CELL / 2 - spot.x, cz = place.world ? 0 : place.NZ * CELL / 2 - spot.z;
   const chunks = [];
   if (place.world) {
+    const under = data.world.underground ?? { tanks: [], arcades: [], facilities: [] };
     // The world's ground, chunk by chunk (16 × 16 cells), each shown from the moment it was first reached.
     for (const [ci, cj, born, ground] of data.world.chunks) {
-      const tiles = new THREE.InstancedMesh(unit, new THREE.MeshBasicMaterial(), 256);
+      const tiles = new THREE.InstancedMesh(unit, groundMat, 256);
       for (let n = 0; n < 256; n++) { matrix.compose(new THREE.Vector3((ci * 16 + (n % 16) + 0.5) * CELL, -0.05, (cj * 16 + Math.floor(n / 16) + 0.5) * CELL), new THREE.Quaternion(), new THREE.Vector3(CELL * 0.98, 0.1, CELL * 0.98)); tiles.setMatrixAt(n, matrix); tiles.setColorAt(n, color.set(GROUND_COLOR[Number(ground[n])] ?? 0x112532)); }
       group.add(tiles); chunks.push({ mesh: tiles, at: bornAt(born), x: (ci * 16 + 8) * CELL, z: (cj * 16 + 8) * CELL });
-      // The subway level under it (world.ts): a faint tunnel under every road cell, shown with the chunk.
-      const tunnels = [];
-      for (let n = 0; n < 256; n++) if (Number(ground[n]) === 3) tunnels.push([(ci * 16 + (n % 16) + 0.5) * CELL, SUBWAY_Y + 1.3, (cj * 16 + Math.floor(n / 16) + 0.5) * CELL, CELL, 2.6, CELL]);
-      if (tunnels.length) { const mesh = instanced(mats.underground, tunnels); group.add(mesh); chunks.push({ mesh, at: bornAt(born), x: (ci * 16 + 8) * CELL, z: (cj * 16 + 8) * CELL }); }
+      // The subway level under it (world.ts): a faint tunnel under every road cell (amber where it is an underground
+      // shopping street), shown with the chunk.
+      const tunnels = [], malls = [];
+      for (let n = 0; n < 256; n++) if (Number(ground[n]) === 3) { const x = (ci * 16 + (n % 16) + 0.5) * CELL, z = (cj * 16 + Math.floor(n / 16) + 0.5) * CELL; (under.arcades.some((zone) => Math.hypot(x - zone.x, z - zone.z) <= zone.r) ? malls : tunnels).push([x, SUBWAY_Y + 1.3, z, CELL, 2.6, CELL]); }
+      for (const [list, material] of [[tunnels, mats.subway], [malls, mats.arcade]]) if (list.length) { const mesh = instanced(material, list); group.add(mesh); chunks.push({ mesh, at: bornAt(born), x: (ci * 16 + 8) * CELL, z: (cj * 16 + 8) * CELL }); }
+    }
+    // The storm-water level: a channel under every wide road and a pressure tank under each modern patch; the deep
+    // facilities, labelled. Each shows from the moment the ground above it was reached.
+    const reached = new Map(data.world.chunks.map(([ci, cj, born]) => [`${ci},${cj}`, bornAt(born)])), atPoint = (x, z) => reached.get(`${Math.floor(x / (16 * CELL))},${Math.floor(z / (16 * CELL))}`);
+    for (const entry of data.landscapes ?? []) for (const [x0, z0, x1, z1, width] of entry.roads ?? []) {
+      const x = (x0 + x1) / 2, z = (z0 + z1) / 2, at = atPoint(x, z);
+      if (width < 18 || at === undefined) continue;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(x1 - x0, z1 - z0), 5, Math.max(4, width * 0.4)), mats.water);
+      mesh.position.set(x, WATER_Y + 2.5, z); mesh.rotation.y = -Math.atan2(z1 - z0, x1 - x0); group.add(mesh); chunks.push({ mesh, at, x, z });
+    }
+    for (const tank of under.tanks) { const at = atPoint(tank.x, tank.z); if (at === undefined) continue; const mesh = new THREE.Mesh(new THREE.CylinderGeometry(tank.r, tank.r, 14, 28), mats.water); mesh.position.set(tank.x, WATER_Y + 7, tank.z); group.add(mesh); chunks.push({ mesh, at, x: tank.x, z: tank.z }); }
+    for (const facility of under.facilities) {
+      const at = atPoint(facility.x, facility.z); if (at === undefined) continue;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(facility.w, 9, facility.d), mats.facility); mesh.position.set(facility.x, DEEP_Y + 4.5, facility.z); group.add(mesh); chunks.push({ mesh, at, x: facility.x, z: facility.z });
+      const tag = label(facility.label ?? facility.kind, "#ff8a9a", 22); tag.position.set(facility.x, DEEP_Y + 12, facility.z); group.add(tag); chunks.push({ mesh: tag, at, x: facility.x, z: facility.z, under: true });
     }
     // Below a scene's station, its concourse at the subway level; below every building, its underground floors; below a
     // scene's own building or a tower of 30 floors or more, a chamber at the deep level. Each shows once its building stands.
     for (const lot of data.world.lots) {
       const scenes = String(lot.source).startsWith("anchor:"), w = lot.nx * CELL, d = lot.nz * CELL, x = lot.i0 * CELL + w / 2, z = lot.j0 * CELL + d / 2;
-      for (const [here, y] of [[scenes && lot.role === "station", SUBWAY_Y], [true, UNDER_Y], [scenes || (lot.height ?? 0) >= 30, DEEP_Y]]) if (here) { const mesh = instanced(mats.underground, [[x, y + 2, z, w, 4, d]]); group.add(mesh); chunks.push({ mesh, at: bornAt(lot.born), x, z }); }
+      for (const [here, y, material] of [[scenes && lot.role === "station", SUBWAY_Y, mats.subway], [true, UNDER_Y, mats.under], [scenes || (lot.height ?? 0) >= 30, DEEP_Y, mats.deep]]) if (here) { const mesh = instanced(material, [[x, y + 2, z, w, 4, d]]); group.add(mesh); chunks.push({ mesh, at: bornAt(lot.born), x, z }); }
     }
     const clutter = [];
     for (let n = 0; n < data.world.clutter.length; n += 2) clutter.push([(data.world.clutter[n] + 0.5) * CELL, 0.45, (data.world.clutter[n + 1] + 0.5) * CELL, 1.2, 0.9, 1.2]);
@@ -705,7 +733,13 @@ function frame(now) {
   else if (follow && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
   // The world as explored by now: chunks and the faint city's copies of buildings since stood up.
   if (liveMode && now - lastCull > 400) { lastCull = now; cullByInterest(entry); }
-  for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.at <= time && chunk.near !== false;
+  // A deep facility's name shows only while the street is seen through.
+  for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.at <= time && chunk.near !== false && (!chunk.under || groundSeen < 0.5);
+  // The street clears while anyone shown is below it (or the viewer asked), and the levels below brighten.
+  const below = xray || [...pawns.values()].some(({ pawn }) => pawn.parent && pawn.position.y < -1);
+  groundSeen += ((below ? 0.15 : 0.8) - groundSeen) * Math.min(1, dt * 3);
+  groundMat.opacity = groundSeen;
+  for (const key of ["subway", "arcade", "under", "water", "deep", "facility"]) mats[key].opacity = 0.18 + (0.8 - groundSeen) * 0.6;
   decor(time);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
@@ -779,6 +813,7 @@ if (liveMode) {
   addEventListener("message", (event) => {
     if (event.source !== parent || event.origin !== origin) return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
+    if (event.data?.type === "underground") { xray = !!event.data.on; return; }
     // The world view is done with this frame: its WebGL context is let go now (a phone allows only a few at once), not
     // whenever the removed frame is collected.
     if (event.data?.type === "dispose") { renderer.dispose(); renderer.forceContextLoss(); return; }

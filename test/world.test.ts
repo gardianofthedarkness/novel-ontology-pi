@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createWorld, ensure, inscribed, nodeNear, nodePos, spotsNear, worldGraph, worldSpot, CHUNK, type WorldSource } from "../apps/playground/src/data/world.js";
-import { fillLandscape, firstLandscape } from "../src/ground/stage/landscape.js";
+import { createWorld, ensure, inscribed, nodeNear, nodePos, spotsNear, worldGraph, worldSpot, CHUNK, DEEP, SUBWAY, UNDER, WATER, type WorldSource } from "../apps/playground/src/data/world.js";
+import { fillLandscape, firstLandscape, undergroundOf } from "../src/ground/stage/landscape.js";
 import { solveWalk, sampleWalk, temperatureBound } from "../apps/playground/src/data/pathIntegral.js";
 import { skeletonStream } from "../apps/playground/src/data/skeleton.js";
 
@@ -82,4 +82,33 @@ test("a thin building turned off the grid stands turned to the nearest axis, and
   assert.ok(lot("edge") && (lot("edge")!.j0 + lot("edge")!.nz) * 2 <= 34, "the crossed one stands short of the road");
   assert.ok(!lot("road") && world.dropped.has("road"));
   assert.ok(!lot("under") && world.dropped.has("under"));
+});
+
+test("under the street: tunnels under the roads (an underground mall in a commercial quarter), every building's underground floors, storm-water channels and a tank, a deep facility; all reached on foot", () => {
+  const landscape = firstLandscape("d", "commercial"), under = undergroundOf(landscape);
+  assert.equal(under.tanks.length, 1);
+  assert.equal(under.arcades.length, 1);
+  const facility = { x: under.tanks[0].x + 40, z: under.tanks[0].z, w: 30, d: 24, kind: "lab" };
+  const world = createWorld({ ...source(), underground: { ...under, facilities: [facility] } });
+  ensure(world, 0, 0, 90, 0);
+  const built = worldGraph(world, standingOf(world)), levels = new Map<number, number>();
+  for (let id = 0; id < built.type.length; id++) if (built.type[id] === 5) levels.set(nodePos(world, id).k, (levels.get(nodePos(world, id).k) ?? 0) + 1);
+  for (const level of [SUBWAY, UNDER, WATER, DEEP]) assert.ok((levels.get(level) ?? 0) > 0, `nodes at level ${level}`);
+  const spots = spotsNear(world, built, 0, 0, 90, null);
+  for (const spot of ["subway", "arcade", "underground", "water", "deep", "facility"]) assert.ok(spots[spot].length, spot);
+  assert.equal(worldSpot(spots, "basement"), "main:underground", "a basement is the nearest building's own underground floors");
+  assert.equal(worldSpot(spots, "sewer"), "water");
+  // From the street, every level is reached on foot: a walk sampled toward each level's spots ends there.
+  const street = nodeNear(world, built, 0, 0, 0)!, T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 });
+  for (const spot of ["subway", "arcade", "underground", "water", "facility"]) {
+    const path = sampleWalk(built.graph, solveWalk(built.graph, spots[spot], { T, kappa: 1, lambda: 8 }), street, 0, skeletonStream(spot));
+    assert.ok(path && spots[spot].includes(path.at(-1)!), `${spot} reached from the street`);
+  }
+});
+
+test("each modern landscape has what lies under it, drawn from its seed: ancient ground has nothing below", () => {
+  assert.deepEqual(undergroundOf(firstLandscape("x", "skyscrapers")), undergroundOf(firstLandscape("x", "skyscrapers")));
+  assert.ok(undergroundOf(firstLandscape("x", "skyscrapers")).facilities.length >= 2);
+  assert.equal(undergroundOf(firstLandscape("x", "residential")).facilities.length, 0);
+  assert.deepEqual(undergroundOf(firstLandscape("x", "castle")), { tanks: [], arcades: [], facilities: [] });
 });

@@ -63,7 +63,7 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, LANDSCAPES } = await load('dist/src/ground/stage/landscape.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, undergroundOf, FACILITY_LABEL, LANDSCAPES } = await load('dist/src/ground/stage/landscape.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
@@ -413,13 +413,15 @@ export async function strandDemo(novelDir, options) {
     const patchOf = b => place.landscape.patches.find(patch => patch.id === (filled.owner[b.lot] ?? String(b.lot).split(':')[0])) ?? place.landscape.patches[0];
     const manifoldOf = patch => createHash('sha256').update(JSON.stringify({ recipe: 1, patch, older: place.landscape.patches.slice(0, place.landscape.patches.indexOf(patch)) })).digest('hex').slice(0, 12);
     const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, manifold: manifoldOf(patch), era: LANDSCAPES[patch.type]?.era ?? 'modern' }; });
+    // What lies under it (undergroundOf): storm-water tanks, shopping arcades at the subway level, deep facilities.
+    const below = undergroundOf(place.landscape), under = { tanks: below.tanks.map(tank => ({ ...tank, x: tank.x + wx, z: tank.z + wz })), arcades: below.arcades.map(zone => ({ ...zone, x: zone.x + wx, z: zone.z + wz })), facilities: below.facilities.map(f => ({ ...f, x: f.x + wx, z: f.z + wz, label: FACILITY_LABEL[f.kind] })) };
     const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
     // Each patch (manifold) in birth order: its type and era, its centre and radius, its outline as 48 points (world metres),
     // and its fingerprint; each building's manifold in `buildings` order.
     const patches = place.landscape.patches.map(patch => ({ id: patch.id, type: patch.type, era: LANDSCAPES[patch.type]?.era ?? 'modern', born: patch.born ?? null, centre: [round(patch.x + wx), round(patch.z + wz)], radius: round(patch.R), height: round(patch.H), manifold: manifoldOf(patch),
       outline: Array.from({ length: 48 }, (_, n) => { const angle = (n / 48) * Math.PI * 2, d = reachOf(patch, [patch.x + Math.cos(angle), patch.z + Math.sin(angle)]); return [round(patch.x + wx + Math.cos(angle) * d), round(patch.z + wz + Math.sin(angle) * d)]; }) }));
     return { place: place.id, types: place.landscape.patches.map(patch => patch.type), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width]),
-      walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })) } };
+      walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })), underground: under } };
   });
   /** The theme of the manifold at a point: the era of the patch reaching it most surely (modern where no landscape does). */
   const themeAt = (x, z) => {
@@ -439,7 +441,9 @@ export async function strandDemo(novelDir, options) {
     return { place: id, label: name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role, floors, era: themeAt(node?.spotX ?? 0, node?.spotZ ?? 0) };
   });
   notes.buildings = Object.fromEntries(Object.entries(anchors.filter(anchor => anchor.own).reduce((count, anchor) => ({ ...count, [anchor.role]: (count[anchor.role] ?? 0) + 1 }), {})));
-  world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors });
+  const underground = Object.fromEntries(['tanks', 'arcades', 'facilities'].map(key => [key, landscapes.flatMap(entry => entry.source.underground[key])]));
+  notes.underground = { tanks: underground.tanks.length, arcades: underground.arcades.length, facilities: underground.facilities.map(f => f.kind) };
+  world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors, underground });
   shared.layout = { id: 'world', kind: 'world', lots: world.lots };
   // Damage other story lines left on the world (stage/simulation/world.json, from their accepted runs): applied in story order,
   // to a building the moment it stands here, when the scene that broke it comes before the one being walked. A building whose
@@ -671,8 +675,8 @@ export async function strandDemo(novelDir, options) {
     // In a room on a floor the text does not give: a floor drawn at random (the same for this person and scene every run)
     // among the floors of the scene's own building, or of the tallest building around when the scene has none.
     const ROOM = 'inside a building, in a room, on a floor the text does not say';
-    const levels = [['outside, at street level', null], ['inside a building, on the ground floor', 0], ...Array.from({ length: top - 1 }, (_, n) => [`inside a building, on floor ${n + 2}`, n + 1]), [ROOM, 'room'], ['on a roof', 'roof'], ['underground, at the subway level (its tunnels, platforms, concourse)', W.SUBWAY], ["underground, on a building's underground floors (a car park, storage, a basement)", W.UNDER], ['far underground, super deep (a deep facility or shelter)', W.DEEP]];
-    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins: outside, on which floor of a building (or in a room on a floor the text does not say), on a roof, or underground (the subway level, a building's underground floors, or super deep)?`, options: levels.map(([label]) => label) }]);
+    const levels = [['outside, at street level', null], ['inside a building, on the ground floor', 0], ...Array.from({ length: top - 1 }, (_, n) => [`inside a building, on floor ${n + 2}`, n + 1]), [ROOM, 'room'], ['on a roof', 'roof'], ['underground, at the subway level (its tunnels, platforms, a station concourse, an underground shopping street)', W.SUBWAY], ["underground, on a building's underground floors (a car park, storage, a basement)", W.UNDER], ['underground, in the storm-water channels or tanks', W.WATER], ['far underground, super deep (a military bunker, an experiment lab, a quantum facility, a shelter)', W.DEEP]];
+    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins: outside, on which floor of a building (or in a room on a floor the text does not say), on a roof, or underground (the subway level, a building's underground floors, the storm-water channels, or super deep)?`, options: levels.map(([label]) => label) }]);
     let floor = levels.find(([label]) => label === level?.value)?.[1] ?? null, own = null;
     if (floor === 'room') { const index = groups.get(scene.placeId).main?.(); own = index != null ? world.lots[index] : null; const floors = own ? own.floors : top; floor = Math.min(floors - 1, Math.floor(stream(`${scene.id}|${handoff.person}|floor`)() * floors)); notes.roomFloors = [...(notes.roomFloors ?? []), floor + 1]; }
     const inside = typeof floor === 'number';
@@ -834,7 +838,7 @@ export async function strandDemo(novelDir, options) {
       macro, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
       people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
-      world: { NX, NZ, K, oi, oj, lots: worldLots, earlier,
+      world: { NX, NZ, K, oi, oj, lots: worldLots, earlier, underground: world.source.underground,
         ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]),
         // Landscape buildings that never stood as lots (under a staged building, or no room on the grid), and when that was settled.
         dropped: [...world.dropped] },

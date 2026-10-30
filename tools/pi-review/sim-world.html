@@ -34,7 +34,7 @@
   <div class="counts" id="counts"></div>
 </section>
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
-<nav class="bar"><button id="follow" aria-pressed="true">Follow Jev</button><a id="live" href="live">Jev's questions</a><a id="play" href="./">Player</a></nav>
+<nav class="bar"><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><a id="live" href="live">Jev's questions</a><a id="play" href="./">Player</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
@@ -56,6 +56,13 @@
     showFollow(on); if (camera) camera.follow = on;
     for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "follow", on }, origin);
   });
+  // Seeing underground: the street turns clear and the levels below it show (each frame clears it on its own while
+  // someone is down there).
+  $("under").addEventListener("click", () => {
+    const on = $("under").getAttribute("aria-pressed") !== "true";
+    $("under").setAttribute("aria-pressed", String(on));
+    for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "underground", on }, origin);
+  });
   /** The loading frame takes over once it is ready and the viewer's finger has settled: it gets the camera the shown one had, fades in on top, and the old one goes. */
   const swap = () => {
     clearTimeout(swapTimer);
@@ -64,6 +71,7 @@
     if (wait > 0) { swapTimer = setTimeout(swap, wait); return; }
     ready = false;
     if (camera) next.contentWindow.postMessage({ ...camera, type: "camera" }, origin);
+    next.contentWindow.postMessage({ type: "underground", on: $("under").getAttribute("aria-pressed") === "true" }, origin);
     const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment; shownPage = page;
     shown.classList.remove("waiting"); $("empty").hidden = true;
     if (old) setTimeout(() => retire(old), 450);

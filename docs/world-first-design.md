@@ -295,10 +295,19 @@ Before this, every spot the world made was an office.
   - in movement, every place has the spots "Subway", "Underground floors" and "Deep underground" (`holoNav.ts`);
   - a group that talks underground is boxed on that level's picture.
 - **In the live view:** the levels are drawn as faint holograms, and a pawn below the street shows through the ground.
-- **Still to come (the user's list):**
-  - a storm-water chamber system under every city by default;
-  - underground shopping under commercial streets;
-  - military, experiment-lab and quantum facilities in the modern kit for the deep level.
+- **Generated with the landscape (2026-10-29, the user's list):** what lies under each modern patch is drawn from its seed with the rest of the city (`undergroundOf` in `src/ground/stage/landscape.ts`). Ancient ground has nothing below.
+  - **Storm water, 42 m down (`WATER`):**
+    - a pressure tank near every modern patch's middle;
+    - channels under every road 18 m or wider;
+    - manholes down from the road, about one road cell in 61, and a shaft at each tank.
+  - **Underground malls:** under a commercial quarter (0.6 of its radius) or a skyscraper core (0.4), the subway level's tunnels are a shopping street. Its shops run under the fronts of the buildings beside it, which have stairs down to it.
+  - **Deep facilities, 60 m down:** military bunkers, experiment labs and quantum research. There are one plus one per 100 m of radius under a skyscraper core, two under an industrial area, and one under a harbour, each 30–60 m across with a shaft at its middle and stairs from the buildings above.
+  - **Seen in the live view:**
+    - every level has its own colour;
+    - the street is slightly see-through, and nearly clear while anyone in view is below it or the viewer presses Underground;
+    - a facility's name shows while the street is clear.
+  - **Jev's choices:** the storm-water level is a birth height, and "Underground mall" and "Storm-water channels" are spots in movement.
+  - **On vol 1:** 17 tanks, 17 malls and 22 deep facilities under 学园都市 and its districts.
 
 **Gatherings keep their floor.** A group conversation gathers on the floor where most of the group is, round their middle, boxed on that floor's slice when indoors. A group already together doesn't move. Before this, every gathering was boxed on a street map and walked to street level: most moves in a run, and the reason everyone stayed on the ground.
 

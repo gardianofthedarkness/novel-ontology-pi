@@ -286,6 +286,34 @@ export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: n
   return { fabric, owner, walls, keeps, landmarks, plazas, radius };
 }
 
+/**
+ * What lies under a landscape, generated with it from its seed (the world builds it, world.ts; the walk reaches it by
+ * stairs and shafts). Under every modern patch, a storm-water pressure tank near its middle, 42 m down (the channels
+ * joining the tanks run under the wide roads); under a commercial quarter or a skyscraper core, an underground shopping
+ * arcade at the subway level (`arcades`: the reach round the centre where the subway's tunnels are shopping streets); and
+ * deep facilities, 60 m down: military bunkers, experiment labs, quantum research (two or three under a skyscraper core,
+ * two under an industrial area, one under a harbour). Ancient ground has none. In the landscape's frame, metres.
+ */
+export type Facility = "military" | "lab" | "quantum";
+export interface Underground { tanks: { x: number; z: number; r: number }[]; arcades: { x: number; z: number; r: number }[]; facilities: { x: number; z: number; w: number; d: number; kind: Facility }[] }
+export const FACILITY_LABEL: Record<Facility, string> = { military: "a military bunker", lab: "an experiment lab", quantum: "a quantum research facility" };
+const FACILITY_KINDS: Partial<Record<LandscapeType, Facility[]>> = { skyscrapers: ["lab", "quantum", "military"], industrial: ["lab", "military", "quantum"], harbour: ["military", "lab"] };
+export function undergroundOf(landscape: Landscape): Underground {
+  const out: Underground = { tanks: [], arcades: [], facilities: [] };
+  for (const patch of landscape.patches) {
+    if (LANDSCAPES[patch.type].era !== "modern") continue;
+    const rng = skeletonStream(landscape.seed, "underground", patch.id), turn = rng() * Math.PI * 2;
+    out.tanks.push({ x: round(patch.x + Math.cos(turn) * 0.15 * patch.R, 1), z: round(patch.z + Math.sin(turn) * 0.15 * patch.R, 1), r: round(Math.max(16, Math.min(36, 0.1 * patch.R)), 1) });
+    if (patch.type === "commercial" || patch.type === "skyscrapers") out.arcades.push({ x: patch.x, z: patch.z, r: round((patch.type === "commercial" ? 0.6 : 0.4) * patch.R, 1) });
+    const kinds = FACILITY_KINDS[patch.type] ?? [], count = patch.type === "skyscrapers" ? 1 + Math.floor(patch.R / 100) : patch.type === "industrial" ? 2 : kinds.length ? 1 : 0;
+    for (let n = 0; n < count; n++) {
+      const angle = rng() * Math.PI * 2, distance = (0.25 + 0.4 * rng()) * patch.R;
+      out.facilities.push({ x: round(patch.x + Math.cos(angle) * distance, 1), z: round(patch.z + Math.sin(angle) * distance, 1), w: round(30 + 30 * rng(), 1), d: round(24 + 24 * rng(), 1), kind: kinds[Math.floor(rng() * kinds.length)] });
+    }
+  }
+  return out;
+}
+
 /** The question Jev answers for a place: which landscape its ground is, from what the analysis knows of it. */
 export const LANDSCAPE_HINTS: Record<LandscapeType | "none", string> = { ...Object.fromEntries(LANDSCAPE_TYPES.map((type) => [type, `${type}: ${LANDSCAPES[type].hint}`])) as Record<LandscapeType, string>, none: "none: not open ground (a single building, a room, the sky, the sea)" };
 
