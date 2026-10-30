@@ -671,8 +671,8 @@ export async function strandDemo(novelDir, options) {
     // In a room on a floor the text does not give: a floor drawn at random (the same for this person and scene every run)
     // among the floors of the scene's own building, or of the tallest building around when the scene has none.
     const ROOM = 'inside a building, in a room, on a floor the text does not say';
-    const levels = [['outside, at street level', null], ['inside a building, on the ground floor', 0], ...Array.from({ length: top - 1 }, (_, n) => [`inside a building, on floor ${n + 2}`, n + 1]), [ROOM, 'room'], ['on a roof', 'roof']];
-    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins: outside, on which floor of a building (or in a room on a floor the text does not say), or on a roof?`, options: levels.map(([label]) => label) }]);
+    const levels = [['outside, at street level', null], ['inside a building, on the ground floor', 0], ...Array.from({ length: top - 1 }, (_, n) => [`inside a building, on floor ${n + 2}`, n + 1]), [ROOM, 'room'], ['on a roof', 'roof'], ['underground, at the subway level (its tunnels, platforms, concourse)', W.SUBWAY], ['far underground, super deep (a deep facility or shelter)', W.DEEP]];
+    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins: outside, on which floor of a building (or in a room on a floor the text does not say), on a roof, or underground (the subway level, or super deep)?`, options: levels.map(([label]) => label) }]);
     let floor = levels.find(([label]) => label === level?.value)?.[1] ?? null, own = null;
     if (floor === 'room') { const index = groups.get(scene.placeId).main?.(); own = index != null ? world.lots[index] : null; const floors = own ? own.floors : top; floor = Math.min(floors - 1, Math.floor(stream(`${scene.id}|${handoff.person}|floor`)() * floors)); notes.roomFloors = [...(notes.roomFloors ?? []), floor + 1]; }
     const inside = typeof floor === 'number';
@@ -706,7 +706,7 @@ export async function strandDemo(novelDir, options) {
     node ??= W.nodeNear(world, built, point.x, point.z, floor === 'roof' && lot ? lot.floors : inside ? floor : 0);
     if (node == null) return null;
     notes.bornInRooms = (notes.bornInRooms ?? 0) + (room && node != null ? 1 : 0);
-    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: level?.value ?? null, ...(inside ? { floor: floor + 1 } : {}), at: [Math.round(point.x), Math.round(point.z)], ...(room ? { room: room.n, building: lot.source } : {}) });
+    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: level?.value ?? null, ...(inside ? { floor: floor >= 0 ? floor + 1 : floor } : {}), at: [Math.round(point.x), Math.round(point.z)], ...(room ? { room: room.n, building: lot.source } : {}) });
     return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, [node, 0], `${scene.id}|${handoff.person}`) : [node, 0];
   };
   /** Walk someone to a node, the way the engine walks a move. */
@@ -744,7 +744,7 @@ export async function strandDemo(novelDir, options) {
       const floors = at.reduce((count, p) => count.set(p.k, (count.get(p.k) ?? 0) + 1), new Map()), k = [...floors].sort((x, y) => y[1] - x[1])[0][0], on = at.filter(p => p.k === k);
       const mid = { x: on.reduce((sum, p) => sum + p.x, 0) / on.length, z: on.reduce((sum, p) => sum + p.z, 0) / on.length };
       if (at.every(p => p.k === k && Math.hypot(p.x - mid.x, p.z - mid.z) <= TALK)) { notes.groupsTogether = (notes.groupsTogether ?? 0) + 1; return {}; }
-      const indoors = on.some(p => world.lotAt.has(W.cellKey(p.i, p.j)));
+      const indoors = k !== 0 || on.some(p => world.lotAt.has(W.cellKey(p.i, p.j)));
       const picture = mapPicture(world, { x: mid.x, z: mid.z, radius: 48, people: peopleAt(scene.placeId, null, k), ...(indoors ? { floor: k } : {}) });
       const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: `Where on this ${indoors ? 'floor' : 'map'} do ${node.parties.map(name).join('、')} and the others with them gather to talk together?` }], { images: { map: picture.png } });
       notes.groupBoxes = (notes.groupBoxes ?? 0) + 1;

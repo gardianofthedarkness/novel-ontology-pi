@@ -20,7 +20,18 @@ export const WALK_FLOORS = 40;
 const OFF = 32768, NOT = -1;
 export const cellKey = (i: number, j: number) => (i + OFF) * 65536 + (j + OFF);
 const chunkKey = (ci: number, cj: number) => cellKey(ci, cj);
-const nodeKey = (i: number, j: number, k: number) => cellKey(i, j) * 1024 + k;
+const nodeKey = (i: number, j: number, k: number) => cellKey(i, j) * 1024 + k + 64;
+
+/**
+ * Underground, two levels: the subway level (SUBWAY floors down, 12 m: tunnels under every road, a concourse under a
+ * scene's station, stairs down from the street every so often and from the station's stairs) and the super-deep level
+ * (DEEP, 60 m: a chamber under a scene's own building or a tower of 30 floors or more, reached by a shaft from its stairs).
+ */
+export const SUBWAY = -4, DEEP = -20;
+const concourse = (lot: WorldLot) => lot.source.startsWith("anchor:") && lot.role === "station";
+const deepUnder = (lot: WorldLot) => lot.source.startsWith("anchor:") || lot.height >= 30;
+/** A road cell with stairs down to the subway level: about one in 37, the same cells every time. */
+const entrance = (i: number, j: number) => ((Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) >>> 0) % 37 === 0;
 
 /** `manifold`: a fingerprint of the landscape it was filled from, so damage kept for it applies only while that landscape stands. */
 export interface SourceBuilding { id: string; x: number; z: number; w: number; d: number; angle: number; floors: number; kind: string; manifold?: string; era?: string }
@@ -178,7 +189,7 @@ export function nodeId(world: World, i: number, j: number, k: number): number {
   return id;
 }
 
-/** What each node is, from the last graph: 0 none, 1 outdoor, 2 circulation, 3 room, 4 roof; its lot; its ground. */
+/** What each node is, from the last graph: 0 none, 1 outdoor, 2 circulation, 3 room, 4 roof, 5 underground; its lot; its ground. */
 export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Array; ground: Uint8Array }
 
 /**
@@ -195,8 +206,14 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   const span = CHUNK;
   const known = (i: number, j: number) => world.chunks.has(chunkKey(Math.floor(i / span), Math.floor(j / span)));
   const what = (i: number, j: number, k: number): { type: number; lot: number; local: number } => {
-    if (k < 0 || !inside(i, j)) return { type: 0, lot: NOT, local: NOT };
+    if (!inside(i, j)) return { type: 0, lot: NOT, local: NOT };
     const key = cellKey(i, j), index = world.lotAt.get(key) ?? NOT, thing = thingAt.get(key) ?? NOT;
+    if (k < 0) {
+      // Underground: a tunnel under a road or a station's concourse at the subway level, a chamber at the deep one.
+      const under = index >= 0 ? world.lots[index] : null;
+      if (known(i, j) && (k === SUBWAY && (under ? concourse(under) : world.ground.get(key) === GROUND.avenue) || k === DEEP && !!under && deepUnder(under))) return { type: 5, lot: index, local: NOT };
+      return { type: 0, lot: NOT, local: NOT };
+    }
     if (thing >= 0 && k === things[thing].top && (index < 0 || k > world.lots[index].floors)) return { type: 4, lot: 1000 + thing, local: NOT };
     if (index < 0) return { type: k === 0 && known(i, j) && !world.clutter.has(key) && !(thing >= 0 && things[thing].grounded) ? 1 : 0, lot: NOT, local: NOT };
     const lot = world.lots[index];
@@ -208,8 +225,8 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   };
   // Every cell to walk: the open ground of materialized chunks, and every lot's cells on every floor up to its roof.
   const cells: [number, number, number][] = [];
-  for (const [key] of world.chunks) { const ci = Math.floor(key / 65536) - OFF, cj = (key % 65536) - OFF; for (let j = cj * CHUNK; j < (cj + 1) * CHUNK; j++) for (let i = ci * CHUNK; i < (ci + 1) * CHUNK; i++) if (inside(i, j) && !world.lotAt.has(cellKey(i, j))) cells.push([i, j, 0]); }
-  world.lots.forEach((lot) => { if (box && ((lot.i0 + lot.nx) * SKELETON_CELL < box.x0 || lot.i0 * SKELETON_CELL > box.x1 || (lot.j0 + lot.nz) * SKELETON_CELL < box.z0 || lot.j0 * SKELETON_CELL > box.z1)) return; for (let k = 0; k <= lot.floors; k++) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) if (inside(i, j)) cells.push([i, j, k]); });
+  for (const [key] of world.chunks) { const ci = Math.floor(key / 65536) - OFF, cj = (key % 65536) - OFF; for (let j = cj * CHUNK; j < (cj + 1) * CHUNK; j++) for (let i = ci * CHUNK; i < (ci + 1) * CHUNK; i++) if (inside(i, j) && !world.lotAt.has(cellKey(i, j))) { cells.push([i, j, 0]); if (world.ground.get(cellKey(i, j)) === GROUND.avenue) cells.push([i, j, SUBWAY]); } }
+  world.lots.forEach((lot) => { if (box && ((lot.i0 + lot.nx) * SKELETON_CELL < box.x0 || lot.i0 * SKELETON_CELL > box.x1 || (lot.j0 + lot.nz) * SKELETON_CELL < box.z0 || lot.j0 * SKELETON_CELL > box.z1)) return; for (let k = 0; k <= lot.floors; k++) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) if (inside(i, j)) cells.push([i, j, k]); for (const k of [...concourse(lot) ? [SUBWAY] : [], ...deepUnder(lot) ? [DEEP] : []]) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) if (inside(i, j)) cells.push([i, j, k]); });
   for (const thing of things) for (let j = thing.j0; j <= thing.j1; j++) for (let i = thing.i0; i <= thing.i1; i++) if (inside(i, j)) cells.push([i, j, thing.top]);
   const add = (from: number, to: number, dx: number, dz: number, cost: number, kind: number, dir = directionOf(dx, dz)) => edges.push({ from, to, dir, cost, kind });
   const surface = (i: number, j: number) => { const key = cellKey(i, j), index = world.lotAt.get(key) ?? NOT, thing = thingAt.get(key) ?? NOT; return Math.max(index < 0 ? 0 : world.lots[index].floors * FLOOR_HEIGHT, thing < 0 ? 0 : things[thing].top * FLOOR_HEIGHT); };
@@ -217,12 +234,13 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   for (const [i, j, k] of cells) {
     const here = what(i, j, k);
     if (!here.type) continue;
-    const node = nodeId(world, i, j, k), eight = here.type === 1 || here.type === 4;
+    const node = nodeId(world, i, j, k), eight = here.type === 1 || here.type === 4 || here.type === 5;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], ...(eight ? [[1, 1], [1, -1], [-1, 1], [-1, -1]] : [])]) {
       const there = what(i + dx, j + dz, k);
       if (!there.type) continue;
       let ok = false;
       if (here.type === 1 && there.type === 1) ok = !(dx && dz) || (what(i + dx, j, k).type === 1 && what(i, j + dz, k).type === 1);
+      else if (here.type === 5 && there.type === 5) ok = !(dx && dz) || (what(i + dx, j, k).type === 5 && what(i, j + dz, k).type === 5);
       else if (here.type === 4 && there.type === 4) ok = here.lot === there.lot;
       else if (here.lot === there.lot && here.lot >= 0) {
         const roomA = here.type === 3 ? roomOf[here.lot][here.local] : NOT, roomB = there.type === 3 ? roomOf[there.lot][there.local] : NOT;
@@ -233,6 +251,15 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       }
       if (ok) add(node, nodeId(world, i + dx, j + dz, k), dx, dz, SKELETON_CELL * Math.hypot(dx, dz), EDGE.walk);
     }
+    // Between the street and underground: stairs from the road down to the subway level, and from a station's stairs to
+    // its concourse; a shaft from a building's stairs down to its deep chamber (an elevator ride, the same either way).
+    const stairAt = (index: number) => index >= 0 && standing[index]?.[cellIndex(world.lots[index].skeleton, i - world.lots[index].i0, j - world.lots[index].j0, 0)] && world.lots[index].skeleton.cells[cellIndex(world.lots[index].skeleton, i - world.lots[index].i0, j - world.lots[index].j0, 0)] === STAIR;
+    const between = (level: number, cost: number) => add(node, nodeId(world, i, j, level), 0, 0, cost, level < k ? EDGE.descend : EDGE.climb, level < k ? DOWN : UP);
+    if (k === 0 && here.type === 1 && entrance(i, j) && what(i, j, SUBWAY).type === 5) between(SUBWAY, 2 + 4 * FLOOR_HEIGHT);
+    if (k === SUBWAY && here.type === 5 && here.lot < 0 && entrance(i, j) && what(i, j, 0).type === 1) between(0, 2 + 32 * FLOOR_HEIGHT);
+    if (k === 0 && here.type === 2 && stairAt(here.lot)) { if (concourse(world.lots[here.lot]) && what(i, j, SUBWAY).type === 5) between(SUBWAY, 2 + 4 * FLOOR_HEIGHT); if (deepUnder(world.lots[here.lot]) && what(i, j, DEEP).type === 5) between(DEEP, 24); }
+    if (k === SUBWAY && here.type === 5 && here.lot >= 0 && stairAt(here.lot) && what(i, j, 0).type === 2) between(0, 2 + 32 * FLOOR_HEIGHT);
+    if (k === DEEP && here.type === 5 && here.lot >= 0 && stairAt(here.lot) && what(i, j, 0).type === 2) between(0, 24);
     if (here.type === 2) {
       const lot = world.lots[here.lot], up = what(i, j, k + 1), down = what(i, j, k - 1);
       if (lot.skeleton.cells[here.local] === STAIR) {
@@ -286,7 +313,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
  * building (the scene's own, or the one nearest the point) as `main:floorN` and `main:roof`.
  */
 export function spotsNear(world: World, built: WorldGraph, x: number, z: number, radius: number, main: number | null): Record<string, number[]> {
-  const spots: Record<string, number[]> = { avenue: [], plaza: [], north: [], west: [], east: [], rooftop: [] };
+  const spots: Record<string, number[]> = { avenue: [], plaza: [], north: [], west: [], east: [], rooftop: [], subway: [], deep: [] };
   const count = built.type.length, lotNear = main ?? nearestLot(world, x, z);
   for (let id = 0; id < count; id++) {
     const type = built.type[id];
@@ -297,6 +324,7 @@ export function spotsNear(world: World, built: WorldGraph, x: number, z: number,
     if (type === 1) (built.ground[id] === GROUND.avenue ? spots.avenue : built.ground[id] === GROUND.plaza ? spots.plaza : spots.north).push(id);
     if (type === 3 && !own) (px < x ? spots.west : spots.east).push(id);
     if (type === 4) spots.rooftop.push(id);
+    if (type === 5) (k === DEEP ? spots.deep : spots.subway).push(id);
   }
   return spots;
 }
@@ -315,7 +343,9 @@ export function worldSpot(spots: Record<string, number[]>, spot: string | null |
   const level = /^(?:floor|stairs)-(\d+)$/.exec(spot);
   if (level) { const key = `main:floor${level[1]}`; return spots[key]?.length ? key : spots["main:floor1"]?.length ? "main:floor1" : "avenue"; }
   if (["roof", "bell-tower", "keep-top", "tower-top"].includes(spot)) return spots["main:roof"]?.length ? "main:roof" : "rooftop";
-  if (spot === "basement") return spots["main:floor1"]?.length ? "main:floor1" : "avenue";
+  // Underground: the subway level (a basement too, as the nearest level below the street), and the deep one.
+  if (["subway", "underground", "tunnel", "basement"].includes(spot)) return spots.subway?.length ? "subway" : spots["main:floor1"]?.length ? "main:floor1" : "avenue";
+  if (spot === "deep") return spots.deep?.length ? "deep" : spots.subway?.length ? "subway" : "avenue";
   const named = ({ street: "avenue", "front-door": "avenue", entrance: "avenue", gate: "avenue", road: "avenue", alley: "north", "back-door": "north", "side-door": "east", concourse: "plaza", platform: "plaza", path: "plaza", courtyard: "plaza", garden: "north" } as Record<string, string>)[spot] ?? null;
   return named && !spots[named]?.length && named === "plaza" ? "north" : named;
 }

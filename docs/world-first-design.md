@@ -283,6 +283,22 @@ Inside, the room under the box is where they are born, on one of its walkable ce
 
 Before this, every spot the world made was an office.
 
+**Underground (2026-10-29).** Two levels under the street, built with the world (`SUBWAY` and `DEEP` in `apps/playground/src/data/world.ts`):
+- **The subway level, 12 m down:**
+  - tunnels under every road;
+  - a concourse under a scene's station;
+  - stairs down from the road about every 37th road cell, and from a station's stairs.
+- **The super-deep level, 60 m down:** a chamber under a scene's own building or a tower of 30 floors or more, reached by a shaft from its stairs.
+- **Jev's choices:**
+  - at a first sighting, both levels are among the heights to choose from;
+  - in movement, every place has the spots "Subway" and "Deep underground" (`holoNav.ts`);
+  - a group that talks underground is boxed on that level's picture.
+- **In the live view:** the levels are drawn as faint holograms, and a pawn below the street shows through the ground.
+- **Still to come (the user's list):**
+  - a storm-water chamber system under every city by default;
+  - underground shopping under commercial streets;
+  - military, experiment-lab and quantum facilities in the modern kit for the deep level.
+
 **Gatherings keep their floor.** A group conversation gathers on the floor where most of the group is, round their middle, boxed on that floor's slice when indoors. A group already together doesn't move. Before this, every gathering was boxed on a street map and walked to street level: most moves in a run, and the reason everyone stayed on the ground.
 
 **The city's manifold (2026-10-29).** The ground every place stands on (its landscape: skyscrapers, a commercial quarter, a park…) is set before the world runs:
