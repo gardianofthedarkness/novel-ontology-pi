@@ -40,8 +40,11 @@ Measured on 2026-10-30 (vol 1, Jev 1.14):
 | One request per scene (36 events → 4) | — | 0.6 s | far less sure (0.46 against 0.92): the chain of events stays |
 
 A recorded pick of 36 events took 449 s; Jev answered in 28 s of it. The rest was the pick loop replaying the engine from
-the line's start and reopening the 3D page in headless Chrome before each event (and a 222 s stretch before the first
-event question, not yet accounted for: a full-line load measures about 15 s).
+the line's start and reopening the 3D page in headless Chrome before each event. The long stretch before the first event
+question (222 s then) is the line's loads: loading the line in the page is where the world-first engine asks its own
+questions (births, meetings, gatherings), one request each on a picture. On vol 1's v2 line (2026-10-30) the first load
+asked 232, the model catalog 22 more, and the load after it, with things now drawn as models, asked the 232 again (the
+pictures changed, so nothing was reused): about 5 minutes before the first event.
 
 ## 2. Extraction (the Digger)
 
@@ -222,8 +225,12 @@ v2 makes each a structured request:
 - Pi runs the commands the guard allows (`sim pick --max-calls ≤ 60`, `sim run --pace 0.5–5`), from v2 builds.
 
 ## 7. Order of work
-1. Movement on structured states in the pick loop (each person's spot now from the engine); the model catalog's
-   one-question calls as one request; time the stretch before the first event question.
+0. **Done 2026-10-30:** the reading flow of the sketch (§2.0), on vol 1 end to end into the engine; the model catalog in one
+   request per theme (21 things: 0.42 s, 17 of 21 the same as one request each); the stretch before the first event
+   explained (the line's loads, above).
+1. Movement on structured states in the pick loop (each person's spot now from the engine); births and meetings of the
+   line's load as structured requests too (one per scene, not one per person on a picture), and kept across the reload
+   after models.
 2. Units of people, ways and per-unit destinations (spots by choice, boxes for rooms, roofs and underground).
 3. Identity as structured requests (at birth and universal); identities before units.
 4. Movable things (vehicles, mechs, nominated objects) in the objects step, the roster and units.
