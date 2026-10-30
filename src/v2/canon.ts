@@ -13,11 +13,18 @@ const KIND = { person: "Character", place: "Location", thing: "Item" } as const;
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
 const RANK = { speaks: 0, acts: 0, addressed: 1, named: 2, described: 2 } as const;
 
-/** A card's people of the chart (who speaks or acts first, then who is spoken to, then who is named or described), and its unnamed people (slots). */
-export function cardPeople(result: FlowResult, card: FlowResult["cards"][number]): { people: string[]; extras: string[] } {
+/**
+ * A card's people of the chart (who speaks or acts first, then who is spoken to, then who is named or described), its
+ * unnamed people and crowds (slots), and the things and places that act in it.
+ */
+export function cardPeople(result: FlowResult, card: FlowResult["cards"][number]): { people: string[]; extras: string[]; things: string[] } {
   const rank = (person: FlowResult["cards"][number]["people"][number]) => Math.min(...person.how.map((how) => RANK[how]));
-  const sorted = [...card.people].sort((a, b) => rank(a) - rank(b));
-  return { people: sorted.filter((person) => result.chart.entities.get(person.id)?.category === "person").map((person) => person.id), extras: sorted.filter((person) => person.id.startsWith("slot_")).map((person) => person.id) };
+  const sorted = [...card.people].sort((a, b) => rank(a) - rank(b)), category = (id: string) => result.chart.entities.get(id)?.category;
+  return {
+    people: sorted.filter((person) => category(person.id) === "person").map((person) => person.id),
+    extras: sorted.filter((person) => person.id.startsWith("slot_")).map((person) => person.id),
+    things: sorted.filter((person) => category(person.id) === "thing" || category(person.id) === "place").map((person) => person.id),
+  };
 }
 
 /** The action cards as events, numbered in reading order (the world loop's base layer uses the same ids). */

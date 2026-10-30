@@ -192,6 +192,51 @@ is 茵蒂克丝 in one scene and someone else in the next; 姐姐大人 is 美�
   themself a Level 0 given to 美琴 at 0.9 (the speaker is 上条).
 - Still split, for the second EM: 最后之作 / 御坂御坂 / 最终信号, 茵蒂克丝 / 禁书目录.
 
+### 2.0.2 Facts, the action rule and crowds (the user's notes, 2026-10-30) — built
+
+**Facts are the source of truth for every EM** (`src/v2/facts.ts`). Every fact card is a fact in an ordered ledger
+(`fact_000001` …, reading order), so the facts grow as the book does. Who a fact is about: the chart's proper names in it
+(rescanned as EM gives people more names, so a fact read before a name was known is found once it is), and the descriptions
+EM² resolved in it (`via: description`). Each fact keeps its time (the latest time node at or before it); facts are
+ordered by reading order until the calendar places the time nodes, and then a later fact about the same thing (an update)
+is ordered by story time. As EM and EM² run, the ledger is asked for the latest facts before the place they decide: for
+EM, about each candidate and holding the string itself; for EM², about the first eight of the cast and holding each
+description. They go in the document once each, keyed by id, with what they were fetched for (`facts: {fact_000012:
+{about: [char_000001, names.n3], text}}`), and the task says to trust them. Each EM result and EM² reference keeps the
+fact ids it was given.
+
+**The action rule.** An action is an action or movement by someone or something that matters (a person, a crowd, an
+important object, weapon or vehicle, a building or a place), or the story going back in time; something happening in the
+background with no one who matters in it is narration. Three places carry it:
+- the sentence kinds' definitions say so (action, and narration's "what happens in the background");
+- EM² asks of every action who or what acts (the cast, slots, the things and places the passage names, or `time`: the
+  story goes back in time), and a noul, whether it matters to the story or is background;
+- after EM², an action where nothing acts (`none`, `unnamed`, people in general) or that is background becomes narration
+  (`was: action`, and `actor` if something acted); the cards are cut again.
+A count of appearances was tried first and dropped: EM had made every cleaning robot of the book one thing, seen in eight
+scenes, so the robot passing in scene 1 still counted as important.
+
+**Crowds.** The listing asks for crowds and groups of people who are there; typing has a `crowd` type; a crowd is never a
+name (EM keeps it as a description); EM² resolves it where it stands: a person of the cast, a crowd slot (`kind: crowd`),
+people in general, or not a person. A crowd can act, be spoken to, and is drawn by the world engine as a group.
+
+**Measured on vol 1** (`~/claude-world-first/v2-vol1-facts`; the listing changed, so everything after the tiling was asked
+again: 177 work-model requests, 645 Jev, 87 s; then the matters question, 259 Jev, 43 s):
+- Kinds with the new definitions: 425 action cards (450 before), 82 environment (120), 923 narration (841); then the action
+  rule turned 31 more actions into narration (the cleaning robot among them). 43 actions have a thing or a place acting.
+  No line was answered as going back in time: vol 1 has no flashback the classifier took for an action.
+- Facts: 155; 76 are about someone (32 through a description); EM gave facts for 277 of the 878 strings it asked about,
+  EM² for 364 of 1,141 descriptions.
+- Crowds: 129 crowd slots. 暗部 → a crowd 20 times, people in general 10; 大人 → people in general 21 of 21; 人们 → people in
+  general 13, a crowd 4.
+- 1,588 of 2,216 lines with a sure speaker or actor; 720 of 1,674 spoken lines with a sure listener (a line is no longer
+  said to its own speaker: the next answer is taken).
+- 38 people (35 before). New wrong ones from the new listing's typing: 圣诞少女 (舞殿's epithet, typed as a proper name),
+  10032号 (御坂妹), 斯芬克斯 (the cat), 停机坪 (a helipad).
+- Found: EM for things has the sink EM for people had. A thing's description (机器人, 清扫机器人) is a name only where EM
+  said it, but the recommender pulls each new one to the entity that already has it, so every cleaning robot is one thing.
+  The same answer as for people fits: a thing's description resolved where it stands, in its scene.
+
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
 kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record
 it is part of (the book's text is in it: never public).
@@ -289,7 +334,8 @@ v2 makes each a structured request:
 0. **Done 2026-10-30:** the reading flow of the sketch (§2.0), on vol 1 end to end into the engine; the model catalog in one
    request per theme (21 things: 0.42 s, 17 of 21 the same as one request each); the stretch before the first event
    explained (the line's loads, above). Then EM² (§2.0.1): roles and slots, on vol 1 (35 people; 1,561 of 2,272 lines
-   with a sure speaker or actor), and the reading's data page. Not yet run through the world engine.
+   with a sure speaker or actor), and the reading's data page. Then the fact ledger as the evidence of both EMs, the action
+   rule, and crowds (§2.0.2). Not yet run through the world engine.
 1. Movement on structured states in the pick loop (each person's spot now from the engine); births and meetings of the
    line's load as structured requests too (one per scene, not one per person on a picture), and kept across the reload
    after models.

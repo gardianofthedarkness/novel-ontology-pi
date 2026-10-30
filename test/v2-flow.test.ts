@@ -8,11 +8,13 @@ import { lexiconLister } from "../src/v2/listing.js";
 import { typeNames, typingDocument } from "../src/v2/typing.js";
 import { readFlow } from "../src/v2/flow.js";
 import { resolveRoles } from "../src/v2/roles.js";
+import { FactLedger } from "../src/v2/facts.js";
 import { worldBase } from "../src/v2/base.js";
 import { canonRecords } from "../src/v2/canon.js";
 import { yamlDocument } from "../src/v2/yaml.js";
 
 const sentences = (text: string, block = 1): Sentence[] => sectionBlock(text, block).sentences;
+const noFacts = () => new FactLedger([], () => "", () => 0);
 
 test("cards: runs of one kind, a new card where the carrier changes, exchanges nested over the runs inside them", () => {
   const ids = ["s1", "s2", "s3", "s4", "s5", "s6", "s7"];
@@ -60,10 +62,10 @@ test("EM: an exact name is that entity, with no model call; a new name with no c
   const first = await resolveBatch(decide, chart, batch, [
     { key: "n1", text: "上条当麻", type: "person", category: "person", confidence: 0.9, proper: 1, sentences: [batch[0].id, batch[1].id] },
     { key: "n2", text: "第二天早上", type: "time", category: "time", confidence: 0.9, proper: 1, sentences: [batch[2].id] },
-  ], { position, text: () => "", facts: [] });
+  ], { position, text: () => "", facts: noFacts() });
   assert.deepEqual(first.map((entry) => entry.outcome), ["new", "time"]);
   assert.equal(calls, 0);
-  const again = await resolveBatch(decide, chart, batch, [{ key: "n1", text: "上条当麻", type: "person", category: "person", confidence: 0.9, proper: 1, sentences: [batch[1].id] }], { position, text: () => "", facts: [] });
+  const again = await resolveBatch(decide, chart, batch, [{ key: "n1", text: "上条当麻", type: "person", category: "person", confidence: 0.9, proper: 1, sentences: [batch[1].id] }], { position, text: () => "", facts: noFacts() });
   assert.deepEqual([again[0].outcome, again[0].entity], ["exact", "char_000001"]);
   assert.equal(calls, 0);
   assert.deepEqual(chart.entities.get("char_000001")!.seen, [batch[0].id, batch[1].id]);
@@ -84,12 +86,13 @@ test("EM: the recommender's best three go to Jev with the facts that name them; 
   const results = await resolveBatch(decide, chart, text.slice(3), [
     { key: "n1", text: "上条", type: "person", category: "person", confidence: 1, proper: 1, sentences: [text[3].id] },
     { key: "n2", text: "那个少年", type: "person", category: "person", confidence: 1, proper: 1, sentences: [text[4].id] },
-  ], { position, text: (id) => text[position(id)]?.text ?? "", facts: [{ first: text[0].id, text: "上条当麻是高中生。" }] });
+  ], { position, text: (id) => text[position(id)]?.text ?? "", facts: new FactLedger([text[0], text[1]].map((sentence) => ({ id: `fact:${sentence.id}`, first: sentence.id, last: sentence.id, sentences: [sentence.id] })), (id) => (id === text[0].id ? "上条当麻是高中生。" : "那个少年总是倒霉。"), position) });
   assert.deepEqual(results.map((entry) => [entry.outcome, entry.entity]), [["alias", "char_000001"], ["new", "char_000004"]]);
   assert.equal(results[1].unsure, "char_000001", "kept for the world engine's second EM");
   assert.deepEqual(chart.entities.get("char_000001")!.names, ["上条当麻", "上条"]);
   assert.ok(Object.keys(state.candidates as object).includes("char_000001"));
-  assert.deepEqual(state.facts, [{ about: "char_000001", text: "上条当麻是高中生。" }]);
+  assert.deepEqual(state.facts, { fact_000001: { about: ["char_000001", "names.n1"], text: "上条当麻是高中生。" }, fact_000002: { about: ["names.n2"], text: "那个少年总是倒霉。" } }, "the facts are the evidence: the latest about each candidate, and those that hold the name");
+  assert.deepEqual(results.map((entry) => entry.facts), [["fact_000001"], ["fact_000001", "fact_000002"]]);
 });
 
 test("EM: a description of a person is no one's name (EM² resolves it); a thing's is a name only where EM said it", async () => {
@@ -102,7 +105,7 @@ test("EM: a description of a person is no one's name (EM² resolves it); a thing
   const results = await resolveBatch(async (state, questions) => { calls++; return scripted({ "em:n2": ["item_000001", 0.9] })(state, questions); }, chart, batch, [
     { key: "n1", text: "那个少年", type: "person", category: "person", confidence: 1, proper: 0.1, sentences: [batch[1].id] },
     { key: "n2", text: "手机", type: "object", category: "thing", confidence: 1, proper: 0.2, sentences: [batch[1].id] },
-  ], { position, text: () => "", facts: [] });
+  ], { position, text: () => "", facts: noFacts() });
   assert.deepEqual(results.map((entry) => [entry.outcome, entry.entity]), [["description", undefined], ["alias", "item_000001"]]);
   assert.deepEqual(results[0].sentences, [batch[1].id]);
   assert.equal(calls, 1, "only the thing is asked");
@@ -113,64 +116,6 @@ test("EM: a description of a person is no one's name (EM² resolves it); a thing
   assert.deepEqual(chart.entities.get("item_000001")!.seen, [batch[0].id, batch[1].id], "seen where EM decided it");
 });
 
-test("EM²: who says, acts and is spoken to; a description means a cast member, or opens a slot a later line can choose; habits shown next time", async () => {
-  const chart = new Chart();
-  const text = sentences("上条当麻走在街上。「姐姐大人！」白井黑子喊道。少女回过头。「你是谁？」那个少女问。他没有回答。「走吧。」", 1);
-  const id = (index: number) => text[index].id;
-  const kinds: Record<string, { kind: string }> = Object.fromEntries(text.map((sentence, index) => [sentence.id, { kind: ["action", "spoken", "action", "spoken", "action", "spoken"][index] }]));
-  chart.mint("person", "person", "上条当麻", [id(0)]);
-  chart.mint("person", "person", "白井黑子", [id(1)]);
-  chart.mint("person", "person", "御坂美琴", []);
-  const named = new Map([[id(0), ["char_000001"]], [id(1), ["char_000002"]]]);
-  const asked: { state: Record<string, unknown>; questions: DecisionQuestion[] }[] = [];
-  const answers: Record<string, [string, number]> = {
-    [`role:who:${id(0)}`]: ["char_000001", 0.9],
-    [`role:who:${id(1)}`]: ["char_000002", 0.95], [`role:to:${id(1)}`]: ["d1", 0.8],
-    [`role:who:${id(2)}`]: ["d2", 0.9],
-    [`role:who:${id(3)}`]: ["d3", 0.9], [`role:to:${id(3)}`]: ["char_000001", 0.7],
-    [`role:who:${id(4)}`]: ["char_000001", 0.4],
-    [`role:who:${id(5)}`]: ["slot_000001_1", 0.8], [`role:to:${id(5)}`]: ["none", 0.6],
-  };
-  const decide = async (state: DecisionState, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> => {
-    asked.push({ state: state as Record<string, unknown>, questions });
-    const descriptions = (state as { descriptions?: Record<string, { text: string }> }).descriptions ?? {};
-    return questions.map((q) => {
-      const ref = q.key.startsWith("ref:") ? descriptions[q.key.slice(4)].text : null;
-      const [value, confidence] = ref === "姐姐大人" ? ["char_000003", 0.9] : ref ? ["new", 0.9] : answers[q.key] ?? ["none", 0.9];
-      return { key: q.key, value, confidence, distribution: { [value]: confidence } };
-    });
-  };
-  const result = await resolveRoles(decide, {
-    scenes: [{ id: "scene_000001", sentences: text.map((sentence) => sentence.id) }], kinds, chart, named, descriptions: ["姐姐大人", "少女", "那个少女"],
-    recommended: new Map([["scene_000001", [{ id: "char_000003", score: 2 }]]]), facts: [], text: (sentence) => text.find((entry) => entry.id === sentence)?.text ?? "", position: (sentence) => text.findIndex((entry) => entry.id === sentence),
-  });
-  assert.equal(asked.length, 1, "six lines: one request");
-  const cast = Object.keys(asked[0].state.cast as object);
-  assert.deepEqual(cast.slice(0, 2), ["char_000001", "char_000002"], "the people named in the passage first");
-  assert.ok(cast.includes("char_000003"), "the recommender's people");
-  assert.deepEqual(asked[0].questions.filter((q) => q.key.startsWith("role:to:")).length, 3, "who a spoken line is said to");
-  assert.deepEqual(result.references.map((entry) => [entry.text, entry.entity]), [["姐姐大人", "char_000003"], ["少女", "slot_000001_1"], ["那个少女", "slot_000001_2"]]);
-  assert.equal(result.roles[id(1)].to!.id, "char_000003", "a line said to 姐姐大人 is said to whom it means");
-  assert.deepEqual([result.roles[id(2)].who.id, result.roles[id(2)].who.answer], ["slot_000001_1", "少女"]);
-  assert.equal(result.roles[id(4)].who.id, null, "below ROLE_ACCEPT: no one sure");
-  assert.equal(result.roles[id(4)].who.answer, "char_000001");
-  assert.equal(result.roles[id(5)].to!.id, null);
-  assert.deepEqual(result.slots.map((slot) => [slot.id, slot.names]), [["slot_000001_1", ["少女"]], ["slot_000001_2", ["那个少女"]]]);
-  assert.deepEqual(result.habits, [{ text: "姐姐大人", entity: "char_000003", count: 1, speakers: { char_000002: 1 } }]);
-  assert.deepEqual(chart.names().map(([name]) => name).sort(), ["上条当麻", "御坂美琴", "白井黑子"].sort(), "nothing joins the chart");
-
-  // The next scene: the slots of the scene before are offered, and a description's habit comes with it.
-  asked.length = 0;
-  const next = sentences("「姐姐大人。」", 2);
-  await resolveRoles(decide, {
-    scenes: [{ id: "scene_000001", sentences: text.map((sentence) => sentence.id) }, { id: "scene_000002", sentences: [next[0].id] }], kinds: { ...kinds, [next[0].id]: { kind: "spoken" } }, chart, named, descriptions: ["姐姐大人", "少女", "那个少女"],
-    recommended: new Map([["scene_000001", [{ id: "char_000003", score: 2 }]]]), facts: [], text: (sentence) => [...text, ...next].find((entry) => entry.id === sentence)?.text ?? "", position: (sentence) => [...text, ...next].findIndex((entry) => entry.id === sentence),
-  });
-  const second = asked[1].state as { cast: Record<string, unknown>; descriptions: Record<string, { meant?: string }> };
-  assert.ok("slot_000001_1" in second.cast && "char_000003" in second.cast);
-  assert.equal(second.descriptions.d1.meant, "御坂美琴 ×1 (in lines of 白井黑子 ×1)");
-});
-
 test("EM: two new names of one person born in one batch see each other", async () => {
   const chart = new Chart();
   const batch = sentences("白井黒子出现了。黒子笑了。");
@@ -178,32 +123,122 @@ test("EM: two new names of one person born in one batch see each other", async (
   const results = await resolveBatch(scripted({ "em:n2": ["n1", 0.9], "em:n1": ["new", 0.9] }), chart, batch, [
     { key: "n1", text: "白井黒子", type: "person", category: "person", confidence: 1, proper: 1, sentences: [batch[0].id] },
     { key: "n2", text: "黒子", type: "person", category: "person", confidence: 1, proper: 1, sentences: [batch[0].id, batch[1].id] },
-  ], { position, text: () => "", facts: [] });
+  ], { position, text: () => "", facts: noFacts() });
   assert.deepEqual(results.map((entry) => [entry.outcome, entry.entity]), [["new", "char_000001"], ["alias", "char_000001"]]);
   assert.deepEqual(chart.entities.get("char_000001")!.names, ["白井黒子", "黒子"]);
 });
 
+test("EM²: who says, acts and is spoken to; a description means a cast member, or opens a slot (a person or a crowd); things act; flashbacks; facts as evidence; habits next time", async () => {
+  const chart = new Chart();
+  const text = sentences("上条当麻走在街上。「姐姐大人！」白井黑子喊道。少女回过头。「你是谁？」那个少女问。警备员们包围了大楼。「走吧。」那是三年前的事。电车开走了。", 1);
+  const id = (index: number) => text[index].id;
+  const kinds: Record<string, { kind: string }> = Object.fromEntries(text.map((sentence, index) => [sentence.id, { kind: ["action", "spoken", "action", "spoken", "action", "spoken", "action", "action"][index] }]));
+  chart.mint("person", "person", "上条当麻", [id(0)]);
+  chart.mint("person", "person", "白井黑子", [id(1)]);
+  chart.mint("person", "person", "御坂美琴", []);
+  chart.mint("thing", "vehicle", "电车", [id(7)]);
+  const named = new Map([[id(0), ["char_000001"]], [id(1), ["char_000002"]], [id(7), ["item_000001"]]]);
+  const fact = sentences("御坂美琴被叫作姐姐大人。", 0);
+  const all = [...fact, ...text], position = (sentence: string) => all.findIndex((entry) => entry.id === sentence);
+  const ledger = () => new FactLedger([{ id: `fact:${fact[0].id}`, first: fact[0].id, last: fact[0].id, sentences: [fact[0].id] }], (sentence) => all.find((entry) => entry.id === sentence)?.text ?? "", position);
+  const asked: { state: Record<string, unknown>; questions: DecisionQuestion[] }[] = [];
+  const answers: Record<string, [string, number]> = {
+    [`role:who:${id(0)}`]: ["char_000001", 0.9],
+    [`role:who:${id(1)}`]: ["char_000002", 0.95], [`role:to:${id(1)}`]: ["d1", 0.8],
+    [`role:who:${id(2)}`]: ["d2", 0.9],
+    [`role:who:${id(3)}`]: ["d3", 0.9], [`role:to:${id(3)}`]: ["d3", 0.7],
+    [`role:who:${id(4)}`]: ["d4", 0.8],
+    [`role:who:${id(5)}`]: ["char_000001", 0.4], [`role:to:${id(5)}`]: ["none", 0.6],
+    [`role:who:${id(6)}`]: ["time", 0.8],
+    [`role:who:${id(7)}`]: ["item_000001", 0.9],
+  };
+  const decide = async (state: DecisionState, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> => {
+    asked.push({ state: state as Record<string, unknown>, questions });
+    const descriptions = (state as { descriptions?: Record<string, { text: string }> }).descriptions ?? {};
+    return questions.map((q) => {
+      const ref = q.key.startsWith("ref:") ? descriptions[q.key.slice(4)].text : null;
+      if (q.primitive === "noul") return { key: q.key, value: 0.9 };
+      const [value, confidence] = ref === "姐姐大人" ? ["char_000003", 0.9] : ref === "警备员们" ? ["crowd", 0.9] : ref ? ["new", 0.9] : answers[q.key] ?? ["none", 0.9];
+      const distribution: Record<string, number> = q.key === `role:to:${id(3)}` ? { d3: 0.7, char_000001: 0.2 } : { [value]: confidence };
+      return { key: q.key, value, confidence, distribution };
+    });
+  };
+  const descriptions = [{ text: "姐姐大人", type: "person" as const }, { text: "少女", type: "person" as const }, { text: "那个少女", type: "person" as const }, { text: "警备员们", type: "crowd" as const }];
+  const facts = ledger();
+  const result = await resolveRoles(decide, {
+    scenes: [{ id: "scene_000001", sentences: text.map((sentence) => sentence.id) }], kinds, chart, named, descriptions,
+    recommended: new Map([["scene_000001", [{ id: "char_000003", score: 2 }]]]), facts, text: (sentence) => all.find((entry) => entry.id === sentence)?.text ?? "", position,
+  });
+  assert.equal(asked.length, 1, "eight lines: one request");
+  const state = asked[0].state as { cast: Record<string, unknown>; things: Record<string, unknown>; facts: Record<string, { about: string[] }> };
+  assert.deepEqual(Object.keys(state.cast).slice(0, 2), ["char_000001", "char_000002"], "the people named in the passage first");
+  assert.ok("char_000003" in state.cast, "the recommender's people");
+  assert.deepEqual(Object.keys(state.things), ["item_000001"], "the things the passage names, for actions");
+  assert.deepEqual(state.facts.fact_000001.about, ["char_000003", "descriptions.d1"], "the facts about the cast and the ones that hold a description");
+  assert.ok(asked[0].questions.find((q) => q.key === `role:who:${id(6)}`)!.options!.includes("time"));
+  assert.ok(!asked[0].questions.find((q) => q.key === `role:who:${id(1)}`)!.options!.includes("time"), "only an action may go back in time");
+  assert.deepEqual(result.references.map((entry) => [entry.text, entry.entity]), [["姐姐大人", "char_000003"], ["少女", "slot_000001_1"], ["那个少女", "slot_000001_2"], ["警备员们", "slot_000001_3"]]);
+  assert.deepEqual(result.slots.map((slot) => [slot.id, slot.kind, slot.names]), [["slot_000001_1", "person", ["少女"]], ["slot_000001_2", "person", ["那个少女"]], ["slot_000001_3", "crowd", ["警备员们"]]]);
+  assert.deepEqual(result.references[0].facts, ["fact_000001"]);
+  assert.equal(result.roles[id(1)].to!.id, "char_000003", "a line said to 姐姐大人 is said to whom it means");
+  assert.deepEqual(result.roles[id(1)].to!.via, "姐姐大人");
+  assert.deepEqual([result.roles[id(2)].who.id, result.roles[id(2)].who.via], ["slot_000001_1", "少女"]);
+  assert.deepEqual([result.roles[id(3)].to!.answer, result.roles[id(3)].to!.id], ["char_000001", null], "never said to the one who says it: the next answer, below 0.5");
+  assert.equal(result.roles[id(4)].who.id, "slot_000001_3", "a crowd acts");
+  assert.deepEqual([result.roles[id(5)].who.id, result.roles[id(5)].who.answer], [null, "char_000001"], "below ROLE_ACCEPT: no one sure");
+  assert.deepEqual([result.roles[id(6)].who.id, result.roles[id(6)].who.answer], [null, "time"], "the story goes back in time");
+  assert.equal(result.roles[id(7)].who.id, "item_000001", "a vehicle acts");
+  assert.equal(result.roles[id(7)].matters, 0.9, "and EM² says whether it matters");
+  assert.deepEqual(result.habits, [{ text: "姐姐大人", entity: "char_000003", count: 1, speakers: { char_000002: 1 } }]);
+  assert.deepEqual(chart.names().map(([name]) => name).sort(), ["上条当麻", "御坂美琴", "电车", "白井黑子"].sort(), "nothing joins the chart");
+  // A description resolved in a fact makes the fact about the person (the fact sentence is asked when it holds one).
+  facts.link([fact[0].id], "char_000003");
+  facts.settle(chart, position);
+  assert.deepEqual(facts.facts[0].about, [{ id: "char_000003", via: "name" }]);
+
+  // The next scene: the slots of the scene before are offered, and a description's habit comes with it.
+  asked.length = 0;
+  const next = sentences("「姐姐大人。」", 2), more = [...all, ...next];
+  await resolveRoles(decide, {
+    scenes: [{ id: "scene_000001", sentences: text.map((sentence) => sentence.id) }, { id: "scene_000002", sentences: [next[0].id] }], kinds: { ...kinds, [next[0].id]: { kind: "spoken" } }, chart, named, descriptions,
+    recommended: new Map([["scene_000001", [{ id: "char_000003", score: 2 }]]]), facts: ledger(), text: (sentence) => more.find((entry) => entry.id === sentence)?.text ?? "", position: (sentence) => more.findIndex((entry) => entry.id === sentence),
+  });
+  const second = asked[1].state as { cast: Record<string, unknown>; descriptions: Record<string, { meant?: string }> };
+  assert.ok("slot_000001_1" in second.cast && "char_000003" in second.cast);
+  assert.equal(second.descriptions.d1.meant, "御坂美琴 ×1 (in lines of 白井黑子 ×1)");
+});
+
 test("the flow: tiling, kinds and listing at once, then EM, the card scan, contexts and the world loop's base", async () => {
-  const block = sentences("上条当麻走进教室。「早上好。」上条当麻说。白井黒子跑了过来。学园都市有两百三十万人。");
+  const block = sentences("上条当麻走进教室。「早上好。」上条当麻说。白井黒子跑了过来。学园都市有两百三十万人。远处的机器发出声音。清扫机器人经过。");
   const decide = async (state: DecisionState, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> => questions.map((q) => {
-    if (q.key.startsWith("dlg_kind:")) { const index = block.findIndex((sentence) => q.key.endsWith(sentence.id)); return { key: q.key, value: ["action", "spoken", "action", "action", "fact"][index] ?? "narration", confidence: 0.9 }; }
+    if (q.key.startsWith("dlg_kind:")) { const index = block.findIndex((sentence) => q.key.endsWith(sentence.id)); return { key: q.key, value: ["action", "spoken", "action", "action", "fact", "action", "action"][index] ?? "narration", confidence: 0.9 }; }
     if (q.key.startsWith("dlg_turn:")) return { key: q.key, value: 0, confidence: 0.9 };
     if (q.key.startsWith("proper:")) return { key: q.key, value: 0.9, confidence: 0.9 };
     if (q.key.startsWith("type:")) { const named = (state as { names: Record<string, { text: string }> }).names[q.key.slice(5)].text; return { key: q.key, value: named.length === 4 ? "person" : "time", confidence: 0.9 }; }
     if (q.key.startsWith("scene_start:")) return { key: q.key, value: "NONE", confidence: 0.9 };
     if (q.key.startsWith("scene_end:")) return { key: q.key, value: q.options![q.options!.length - 1], confidence: 0.9 };
-    if (q.key.startsWith("role:who:")) { const named = ["上条当麻", "白井黒子"].findIndex((name) => block.find((sentence) => q.key.endsWith(sentence.id))?.text.includes(name)); return { key: q.key, value: named >= 0 ? `char_00000${named + 1}` : "char_000001", confidence: 0.9 }; }
+    if (q.key.startsWith("role:who:")) {
+      const sentence = block.find((entry) => q.key.endsWith(entry.id))!, named = ["上条当麻", "白井黒子"].findIndex((name) => sentence.text.includes(name));
+      return { key: q.key, value: named >= 0 ? `char_00000${named + 1}` : sentence.text.includes("机器") ? "none" : "char_000001", confidence: 0.9 };
+    }
     return { key: q.key, value: q.primitive === "noul" ? 0 : q.options![0], confidence: 0.9 };
   });
-  const result = await readFlow([{ id: "b0001", chapter: 1, sentences: block }], decide, lexiconLister(["上条当麻", "白井黒子"]));
+  const robot = async (state: DecisionState, questions: DecisionQuestion[]) => (await decide(state, questions)).map((answer) => (answer.key.startsWith("type:") && (state as { names: Record<string, { text: string }> }).names[answer.key.slice(5)].text === "清扫机器人" ? { ...answer, value: "object" } : answer.key.startsWith("role:who:") && answer.key.endsWith(block[6].id) ? { ...answer, value: "item_000001" } : answer.key.startsWith("role:matters:") ? { ...answer, value: answer.key.endsWith(block[6].id) ? 0.1 : 0.9 } : answer));
+  const result = await readFlow([{ id: "b0001", chapter: 1, sentences: block }], robot, lexiconLister(["上条当麻", "白井黒子", "清扫机器人"]));
   assert.equal(result.scenes.length, 1);
-  assert.deepEqual([...result.chart.entities.values()].map((entity) => entity.names[0]), ["上条当麻", "白井黒子"]);
+  assert.deepEqual([...result.chart.entities.values()].map((entity) => [entity.id, entity.names[0]]).sort(), [["char_000001", "上条当麻"], ["char_000002", "白井黒子"], ["item_000001", "清扫机器人"]]);
   const action = result.cards.find((card) => card.kind === "action")!;
   assert.deepEqual(action.entities.map((hit) => hit.id), ["char_000001"]);
   assert.deepEqual(action.people.map((person) => [person.id, person.how]), [["char_000001", ["named", "acts"]]]);
   const said = block.find((sentence) => sentence.text.includes("早上好"))!.id;
   assert.equal(result.roles[said].who.id, "char_000001", "the line that names no one: who says it, from EM²");
   assert.ok(result.steps.some((step) => step.step === "roles (EM²)"));
+  const background = block[5].id;
+  assert.deepEqual([result.kinds[background].kind, result.kinds[background].was], ["narration", "action"], "an action where nothing that matters acts is narration");
+  assert.deepEqual([result.kinds[block[6].id].kind, result.kinds[block[6].id].actor], ["narration", "item_000001"], "so is one EM² calls background, whoever acts in it");
+  assert.equal(result.roles[background], undefined);
+  assert.ok(result.cards.some((card) => card.kind === "narration" && card.first === background), "the cards are cut again");
+  assert.deepEqual(result.facts.map((fact) => [fact.id, fact.first]), [["fact_000001", block[4].id]]);
   assert.ok(result.steps.some((step) => step.step === "EM"));
   const base = worldBase(result, (id) => block.find((sentence) => sentence.id === id)?.text ?? "");
   assert.equal(base.scenes[0].events.length, 2);
@@ -214,7 +249,7 @@ test("the flow: tiling, kinds and listing at once, then EM, the card scan, conte
   const canon = canonRecords(result, (id) => block.find((sentence) => sentence.id === id)?.text ?? "");
   assert.deepEqual(canon.scenes.map((scene) => scene.id), ["scene_000001"]);
   assert.deepEqual(canon.events.map((event) => event.id), base.scenes[0].events.map((event) => event.id));
-  assert.deepEqual(canon.entities.map((entity) => [entity.kind, entity.names[0]]), [["Character", { text: "上条当麻", lang: "zh", kind: "canonical" }], ["Character", { text: "白井黒子", lang: "zh", kind: "canonical" }]]);
+  assert.deepEqual(canon.entities.filter((entity) => entity.kind === "Character").map((entity) => [entity.kind, entity.names[0]]), [["Character", { text: "上条当麻", lang: "zh", kind: "canonical" }], ["Character", { text: "白井黒子", lang: "zh", kind: "canonical" }]]);
   assert.ok(canon.relations.every((relation) => relation.type === "PARTICIPATES_IN" && canon.events.some((event) => event.id === relation.toId)));
   assert.equal(canon.scenes[0].dialogues.length, 1);
 });

@@ -255,7 +255,8 @@ export async function tileScenes(
  * of a window goes in one request (parallel questions: one call, not a chain of start and end questions), and the windows
  * run at the same time. For each sentence: is it spoken aloud, thought (a person's inner voice, feelings in their head,
  * talking to themself), a fact (background knowledge of the world: how things are, what a place or a power is, history —
- * not this scene's happening), an action or movement, a description of the surroundings (the environment: a place, the
+ * not this scene's happening), an action or movement by someone or something that matters (a person, a crowd, an important
+ * thing, a building or a place), or a jump back in time (the user's rule, 2026-10-30), a description of the surroundings (the environment: a place, the
  * weather, the light, what stands around), or narration; and does the sentence's carrier change there (the user's v2 flow,
  * 2026-10-30: who carries it — the speaker, the one acting, or what it is about — and so the people taking part).
  *
@@ -269,9 +270,9 @@ export const SENTENCE_KINDS = {
   spoken: "spoken aloud: a line of speech someone says to someone (or shouts, announces)",
   thought: "a person's inner voice: their thoughts, feelings in their head, or talking to themself (a monologue)",
   fact: "background knowledge of the world: how things are, what a place, a group, a power or a thing is, its history or rules — not something happening in this scene",
-  action: "an action or a movement: someone does something or goes somewhere, or something physically happens",
+  action: "an action or a movement by someone or something that matters: a person or a crowd, an important object, weapon or vehicle, a building or a place acts, moves or changes; or the story goes back in time (a flashback). Something happening in the background with no one who matters in it is narration",
   environment: "a description of the surroundings: a place, a building or a room, the street, the weather, the light, what stands around",
-  narration: "narration: how someone looks or feels, the scene's mood, commentary, a passage of time",
+  narration: "narration: how someone looks or feels, the scene's mood, commentary, a passage of time, and what happens in the background with no one who matters in it (a passing machine's noise)",
 } as const;
 export type SentenceKind = keyof typeof SENTENCE_KINDS;
 /** Each kind in a few words, as its choice's criterion (the full definition is in the document's `kinds`). */
@@ -279,9 +280,9 @@ const KIND_LABELS: Record<SentenceKind, string> = {
   spoken: "said aloud to someone",
   thought: "a person's inner voice, or talking to themself",
   fact: "background knowledge of the world",
-  action: "an action or a movement",
+  action: "who or what matters acts or moves; a flashback",
   environment: "the surroundings: a place, weather, things",
-  narration: "how someone looks or feels, mood, commentary",
+  narration: "looks, feelings, mood, commentary, background",
 };
 /** The carrier of a sentence: who speaks it, who acts in it, or what it is about. It changes where the people taking part do. */
 const TURN = {

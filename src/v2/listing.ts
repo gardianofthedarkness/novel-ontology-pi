@@ -5,7 +5,7 @@ import { detectTimeMentions } from "../digger/timeplace/lexicon.js";
 /**
  * Entity listing (the user's v2 flow, 2026-10-30; System 2): a batch of sentences goes to the work model, not an agent: fixed
  * instructions and a structured output, a list of strings. Each string is an important name as the passage writes it: a
- * person, an object, a weapon or a vehicle, a place, a building or a room, or a time. What each one is, is Jev's (typing.ts);
+ * person, a crowd, an object, a weapon or a vehicle, a place, a building or a room, or a time. What each one is, is Jev's (typing.ts);
  * who or what it is, EM's (em.ts). A string the passage does not hold, word for word, is dropped: from here on everything
  * finds it by string match.
  */
@@ -13,6 +13,7 @@ export const LISTING_SYSTEM = [
   "You list the important names in a passage of a novel. Reply with JSON: {\"names\": [\"...\", ...]}.",
   "List every string, exactly as the passage writes it, that names or refers to:",
   "- a person: a name, a surname, a nickname, or a title or description used for one person (e.g. \"the boy with spiky hair\");",
+  "- a crowd or a group of people who are there (e.g. \"the officers\", \"the crowd\", \"the students\");",
   "- an object, a weapon or a vehicle (also a mech) that matters to what happens;",
   "- a place, a building or a room;",
   "- a time: a date, a day, an hour, a part of the day, \"the next morning\".",

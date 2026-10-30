@@ -50,6 +50,7 @@ export async function inspect(novelDir, outDir) {
     entities: data.chart.entities.map(({ seen, ...entity }) => ({ ...entity, seenCount: seen.length, seen: seen.slice(0, 6) })),
     times: data.chart.times.map(({ seen, ...node }) => ({ ...node, seenCount: seen.length })),
     roles: data.roles ?? {}, references: data.references ?? [], slots: data.slots ?? [], habits: data.habits ?? [],
+    facts: (data.facts ?? []).map(fact => ({ ...fact, text: fact.sentences.map(id => text.get(id) ?? '').join('') })),
   };
   const html = (await readFile(join(repository, 'experiments', 'v2', 'inspect.html'), 'utf8')).replace('/*DATA*/null', JSON.stringify(page).replace(/</g, '\\u003c'));
   const file = join(outDir, 'v2', 'inspect.html');

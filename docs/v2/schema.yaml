@@ -24,6 +24,7 @@ kind:                # kinds.yaml — one per sentence (Jev, one structured docu
   kind: [spoken, thought, fact, action, environment, narration]
   turn: number       # 0..1: does the carrier change here (who speaks it, who acts in it, or what it is about)
   confidence: number
+  was: string        # action, where the action rule made it narration (nothing that matters acts in it, by EM²)
 
 card:                # cards.yaml — runs of one kind, a new card where the carrier changes; exchanges and monologues over them
   id: string         # <kind>:<first sentence id>
@@ -44,14 +45,15 @@ card:                # cards.yaml — runs of one kind, a new card where the car
 detected:            # a listed string, typed (em.yaml holds each with its outcome)
   key: string        # n1, n2 … within its batch
   text: string       # word for word as the passage writes it
-  type: [person, object, weapon, vehicle, place, building, room, time, none]
-  category: [person, thing, place, time, null]
+  type: [person, crowd, object, weapon, vehicle, place, building, room, time, none]
+  category: [person, crowd, thing, place, time, null]   # a crowd is never a name: EM² places it
   proper: number     # 0..1: a proper name (a name anywhere) or a description (a name only where EM said it)
   sentences: [string]
 
 em_result:           # em.yaml — per batch (its first sentence id), per detected string
   outcome: [exact, alias, new, time, description, skip]   # description: a person's description, no one's name (EM² resolves it)
   sentences: [string] # description: the sentences that hold it
+  facts: [string]    # the facts Jev was given for it (fact ids): the latest about its candidates, and those holding it
   entity: string     # the chart entity (or time node) it is
   candidates:        # the recommender's best three, by nearness, frequency and shared names
     - id: string
@@ -84,29 +86,33 @@ context:             # contexts.yaml — what the world engine is given for each
   recommended:       # the people the recommender expects (the last three scenes)
     - id: string
       score: number
-  facts: [string]    # the latest fact cards before it
+  facts: [string]    # the latest facts before it (fact ids)
 
 pick:                # one EM² answer
-  id: string         # the person or slot it settles on; null: no one, or no one sure (below 0.5)
-  answer: string     # what Jev chose: a person or slot id, a description's text (id: whom it meant), unnamed, none
+  id: string         # the person, slot, thing or place it settles on; null: no one, or no one sure (below 0.5)
+  answer: string     # what it settled to: an id, unnamed, none, time (the story goes back in time); through a description, its answer (an id, general, none)
   confidence: number
+  via: string        # the description of the passage the answer went through
 
 role:                # roles.yaml — per spoken or action sentence (EM²)
   kind: [spoken, action]
-  who: pick          # who says it / who acts
+  who: pick          # who says it / who or what acts (a person, a crowd, a thing, a place), or time
   to: pick           # spoken only: who it is said to
 
-reference:           # references.yaml — a description of a person where it stands (EM²)
+reference:           # references.yaml — a description of a person or a crowd where it stands (EM²)
   text: string
+  type: [person, crowd]
   scene: string
   sentences: [string]
   entity: string     # a person, a slot, or null (people in general, not a person)
   answer: string     # a person or slot id, new, general, none
   confidence: number
   unsure: string     # not sure: the person it leaned to (a slot was opened)
+  facts: [string]    # the facts holding it that Jev was given
 
-slot:                # slots.yaml — an unnamed person of one scene; never anyone's name
+slot:                # slots.yaml — an unnamed person or crowd of one scene; never anyone's name
   id: string         # slot_<scene number>_<n>
+  kind: [person, crowd]
   scene: string
   label: string      # the description that opened it
   names: [string]    # every description that meant it
@@ -117,6 +123,18 @@ habit:               # slots.yaml habits — what a description has meant (a pri
   entity: string
   count: integer
   speakers: { person id: integer }   # in whose lines
+
+fact:                # facts.yaml — the fact ledger: the source of truth for EM and EM², in reading order
+  id: string         # fact_000001 …
+  card: string       # the fact card
+  first: string
+  last: string
+  sentences: [string]
+  order: integer     # its place in reading order (story-time order once the calendar places time nodes)
+  time: string       # the latest time node at or before it
+  about:             # who and what it is about
+    - id: string
+      via: [name, description]   # a name in it (the chart's names at the end), or a description EM² resolved in it
 
 log:                 # log.yaml — the run
   sentences: integer

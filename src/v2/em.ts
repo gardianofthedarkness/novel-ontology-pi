@@ -1,4 +1,5 @@
 import type { Sentence } from "../digger/intake/sectioning.js";
+import { factEvidence, FACT_RECENT, type FactLedger } from "./facts.js";
 import type { Category, Decide, Detected, EntityType } from "./typing.js";
 
 /**
@@ -12,8 +13,10 @@ import type { Category, Decide, Detected, EntityType } from "./typing.js";
  *    said it, so it goes to the recommender every time, and never tags a sentence elsewhere. A description of a person
  *    ("少女", "那个刺猬头", "姐姐大人") is no one's name at all: it is kept as a description, and EM² (roles.ts) says who it
  *    means each time it stands (a description that became a person of its own drew every later use of it to that person).
+ *    A crowd ("警备员们", "人群") is never a name either: EM² places it in its scene.
  * 3. Otherwise the recommender scores the chart's entities of the string's category: by how near before it, and how often,
- *    each appears (and by the names they share), the best three; and the latest facts that name them.
+ *    each appears (and by the names they share), the best three; and the facts (facts.ts, the source of truth): the latest
+ *    ones about each candidate, and the latest ones that hold the string itself.
  * 4. Jev decides, one structured request per group of strings (groups of a batch in parallel): the batch's sentences, the
  *    strings, their candidates and the facts, keyed once; each string chooses a candidate, another string of the batch
  *    (two new names of one person born together), or new. Below EM_ACCEPT it is new, with its best candidate kept for the
@@ -24,8 +27,6 @@ export const EM_ACCEPT = 0.6;
 export const EM_WINDOW = 80, EM_TOP = 3;
 /** Strings a Jev request decides (each with up to three candidates and their facts). */
 export const EM_GROUP = 16;
-/** Facts a candidate brings along, the latest first. */
-export const EM_FACTS = 2;
 
 /** `names`: every name EM gave it; `proper`: the ones that are its names anywhere (exact match, the card scan). */
 export interface ChartEntity { id: string; category: Category; type: EntityType; names: string[]; proper: string[]; first: string; seen: string[] }
@@ -36,11 +37,12 @@ export interface EmResult {
   entity?: string; confidence?: number; candidates?: { id: string; score: number }[]; answer?: string; unsure?: string;
   /** description: the sentences that hold it (EM² resolves each). */
   sentences?: string[];
+  /** The facts Jev was given for it (fact ids). */
+  facts?: string[];
 }
-export interface Fact { first: string; text: string }
 
 /** Ids as the canon's (the chart is the ontology's identity: a v2 workspace's entities are these). */
-const PREFIX: Record<Category, string> = { person: "char_", thing: "item_", place: "loc_", time: "time_" };
+const PREFIX: Record<Category, string> = { person: "char_", crowd: "crowd_", thing: "item_", place: "loc_", time: "time_" };
 /** A proper name (typing's answer, at even odds or better). */
 const isProper = (detected: Detected) => (detected.proper ?? 1) >= 0.5;
 
@@ -48,14 +50,14 @@ export class Chart {
   readonly entities = new Map<string, ChartEntity>();
   readonly times = new Map<string, TimeNode>();
   private readonly byName = new Map<string, string>();
-  private readonly count: Record<Category, number> = { person: 0, thing: 0, place: 0, time: 0 };
+  private readonly count: Record<Category, number> = { person: 0, crowd: 0, thing: 0, place: 0, time: 0 };
 
   exact(text: string): ChartEntity | undefined {
     const id = this.byName.get(text);
     return id ? this.entities.get(id) : undefined;
   }
 
-  mint(category: Exclude<Category, "time">, type: EntityType, text: string, sentences: string[], proper = true): ChartEntity {
+  mint(category: Exclude<Category, "time" | "crowd">, type: EntityType, text: string, sentences: string[], proper = true): ChartEntity {
     const id = `${PREFIX[category]}${String(++this.count[category]).padStart(6, "0")}`;
     const entity: ChartEntity = { id, category, type, names: [], proper: [], first: sentences[0] ?? "", seen: [] };
     this.entities.set(id, entity);
@@ -126,35 +128,25 @@ export function recommend(chart: Chart, detected: Detected, position: (sentence:
   return scored.sort((a, b) => b.score - a.score).slice(0, top);
 }
 
-/** The latest facts (before the string) that name a candidate, a few a candidate. */
-export function factsFor(chart: Chart, candidates: string[], facts: Fact[], before: number, position: (sentence: string) => number): { about: string; text: string }[] {
-  const out: { about: string; text: string }[] = [];
-  for (const id of candidates) {
-    const names = chart.entities.get(id)?.names ?? [];
-    out.push(...facts.filter((fact) => position(fact.first) < before && names.some((name) => fact.text.includes(name))).slice(-EM_FACTS).reverse().map((fact) => ({ about: id, text: fact.text.slice(0, 240) })));
-  }
-  return out;
-}
-
 const describe = (entity: ChartEntity) => entity.names.slice(0, 4).join(" / ");
 
 /** The structured document a group's EM questions are about. */
-export function emDocument(chart: Chart, batch: Sentence[], group: { detected: Detected; candidates: string[]; peers: string[] }[], facts: { about: string; text: string }[], text: (sentence: string) => string) {
+export function emDocument(chart: Chart, batch: Sentence[], group: { detected: Detected; candidates: string[]; peers: string[] }[], facts: Record<string, { about: string[]; text: string }>, text: (sentence: string) => string) {
   const ids = [...new Set(group.flatMap((entry) => entry.candidates))];
   return {
-    task: "Names found in a passage of a novel. For each, say who or what it is: one of its candidates (the people, things and places the story has had so far), the same as another name of this passage, or new.",
+    task: "Names found in a passage of a novel. For each, say who or what it is: one of its candidates (the people, things and places the story has had so far), the same as another name of this passage, or new. The facts are what the book has stated so far about the candidates and the names (each says what it is about): they are the truth, trust them over how the names look.",
     passage: Object.fromEntries(batch.map((sentence) => [sentence.id, sentence.text])),
     names: Object.fromEntries(group.map(({ detected }) => [detected.key, { text: detected.text, type: detected.type, in: detected.sentences }])),
     candidates: Object.fromEntries(ids.map((id) => { const entity = chart.entities.get(id)!; const last = entity.seen[entity.seen.length - 1]; return [id, { names: entity.names, type: entity.type, seen: entity.seen.length, last: last ? text(last).slice(0, 160) : "" }]; })),
-    ...(facts.length ? { facts } : {}),
+    ...(Object.keys(facts).length ? { facts } : {}),
   };
 }
 
 /**
  * EM for one batch's detected strings, in place on the chart. `position` gives a sentence's place in the book, `text` its
- * text, `facts` the facts so far (fact cards, in reading order).
+ * text, `facts` the ledger (every fact of the book; only those before a string are ever given for it).
  */
-export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence[], detected: Detected[], context: { position: (sentence: string) => number; text: (sentence: string) => string; facts: Fact[] }): Promise<EmResult[]> {
+export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence[], detected: Detected[], context: { position: (sentence: string) => number; text: (sentence: string) => string; facts: FactLedger }): Promise<EmResult[]> {
   const results = new Map<string, EmResult>();
   const pending: { detected: Detected; candidates: string[]; scores: { id: string; score: number }[]; peers: string[] }[] = [];
   for (const entry of detected) {
@@ -163,18 +155,23 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
     if (entry.category === "time") { const node = chart.time(entry.text, entry.sentences); results.set(entry.key, { ...base, outcome: "time", entity: node.id }); continue; }
     const known = chart.exact(entry.text);
     if (known) { chart.see(known.id, entry.sentences); results.set(entry.key, { ...base, outcome: "exact", entity: known.id }); continue; }
-    if (entry.category === "person" && !isProper(entry)) { results.set(entry.key, { ...base, outcome: "description", sentences: entry.sentences }); continue; }
+    if (entry.category === "crowd" || (entry.category === "person" && !isProper(entry))) { results.set(entry.key, { ...base, outcome: "description", sentences: entry.sentences }); continue; }
     const scores = recommend(chart, entry, context.position);
     pending.push({ detected: entry, candidates: scores.map((score) => score.id), scores, peers: [] });
   }
   // Two new names of one person born in the same batch ("白井黒子", "黒子"): each is a candidate for the other.
   for (const entry of pending) entry.peers = pending.filter((other) => other !== entry && other.detected.category === entry.detected.category && nameOverlap(other.detected.text, entry.detected.text) === 1).map((other) => other.detected.key);
   const asked = pending.filter((entry) => entry.candidates.length || entry.peers.length);
-  const answers = new Map<string, { value: string; confidence: number }>();
+  const answers = new Map<string, { value: string; confidence: number }>(), given = new Map<string, string[]>();
   const groups = Array.from({ length: Math.ceil(asked.length / EM_GROUP) }, (_, index) => asked.slice(index * EM_GROUP, (index + 1) * EM_GROUP));
   await Promise.all(groups.map(async (group) => {
     const before = Math.min(...group.map((entry) => context.position(entry.detected.sentences[0] ?? "")));
-    const facts = factsFor(chart, [...new Set(group.flatMap((entry) => entry.candidates))], context.facts, before, context.position);
+    const found = [
+      ...[...new Set(group.flatMap((entry) => entry.candidates))].flatMap((id) => context.facts.about(chart, [id], before, FACT_RECENT).map((fact) => ({ fact, for: id }))),
+      ...group.flatMap((entry) => context.facts.holding(entry.detected.text, before, FACT_RECENT).map((fact) => ({ fact, for: `names.${entry.detected.key}` }))),
+    ];
+    const facts = factEvidence(found);
+    for (const entry of group) given.set(entry.detected.key, Object.keys(facts).filter((id) => facts[id].about.some((key) => key === `names.${entry.detected.key}` || entry.candidates.includes(key))));
     const peerText = new Map(pending.map((entry) => [entry.detected.key, entry.detected.text]));
     const replies = await decide(emDocument(chart, batch, group, facts, context.text), group.map((entry) => ({
       key: `em:${entry.detected.key}`, primitive: "choice" as const,
@@ -191,7 +188,8 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
   // Candidates first, then the new ones, then names that are another name of the batch (following the pointers).
   const entityOf = new Map<string, string>();
   for (const entry of pending) {
-    const answer = answers.get(entry.detected.key), base = { key: entry.detected.key, text: entry.detected.text, type: entry.detected.type, category: entry.detected.category, candidates: entry.scores, answer: answer?.value, confidence: answer?.confidence };
+    const answer = answers.get(entry.detected.key), evidence = given.get(entry.detected.key) ?? [];
+    const base = { key: entry.detected.key, text: entry.detected.text, type: entry.detected.type, category: entry.detected.category, candidates: entry.scores, answer: answer?.value, confidence: answer?.confidence, ...(evidence.length ? { facts: evidence } : {}) };
     if (answer && chart.entities.has(answer.value) && answer.confidence >= EM_ACCEPT) {
       chart.name(answer.value, entry.detected.text, isProper(entry.detected)); chart.see(answer.value, entry.detected.sentences); entityOf.set(entry.detected.key, answer.value);
       results.set(entry.detected.key, { ...base, outcome: "alias", entity: answer.value });
@@ -202,10 +200,11 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
     if (entityOf.has(key)) return entityOf.get(key)!;
     const entry = byKey.get(key)!, answer = answers.get(key);
     const peer = answer && byKey.has(answer.value) && answer.confidence >= EM_ACCEPT && !trail.has(answer.value) ? answer.value : null;
-    const id = peer ? settle(peer, new Set([...trail, key])) : chart.mint(entry.detected.category as Exclude<Category, "time">, entry.detected.type, entry.detected.text, entry.detected.sentences, isProper(entry.detected)).id;
+    const id = peer ? settle(peer, new Set([...trail, key])) : chart.mint(entry.detected.category as Exclude<Category, "time" | "crowd">, entry.detected.type, entry.detected.text, entry.detected.sentences, isProper(entry.detected)).id;
     if (peer) { chart.name(id, entry.detected.text, isProper(entry.detected)); chart.see(id, entry.detected.sentences); }
     entityOf.set(key, id);
-    results.set(key, { key, text: entry.detected.text, type: entry.detected.type, category: entry.detected.category, candidates: entry.scores, answer: answer?.value, confidence: answer?.confidence, outcome: peer ? "alias" : "new", entity: id, ...(!peer && answer && answer.value !== "new" ? { unsure: answer.value } : {}) });
+    const evidence = given.get(key) ?? [];
+    results.set(key, { key, text: entry.detected.text, type: entry.detected.type, category: entry.detected.category, candidates: entry.scores, answer: answer?.value, confidence: answer?.confidence, ...(evidence.length ? { facts: evidence } : {}), outcome: peer ? "alias" : "new", entity: id, ...(!peer && answer && answer.value !== "new" ? { unsure: answer.value } : {}) });
     return id;
   };
   // Longer names first, so a short form pointing at a long one finds it minted (in a ring of names pointing at each other,
