@@ -102,12 +102,14 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
     await live.outcome({ subject: view.subject, text: view.text, ...(view.capture ? { picture: await chrome.still('jpeg'), jpeg: true } : {}) });
   } : null;
   try {
-    // The page loaded has every answer so far and reaches event `through` of the line (all of it at first).
+    // The page loaded has every answer so far and reaches event `through` of the line (all of it at first). Loading the line
+    // is where the world-first engine asks its own questions (births, meetings, gatherings), so the live page names it.
+    await live?.phase('the line loads · births, meetings');
     let { data, stage } = await load(), calls = 0, through = Infinity;
     await live?.phase('models');
     const picked = await pickModels({ chrome, jev, stage, models, limit: budget, log });
     calls += picked;
-    if (picked) { await saveBoxes(); ({ data, stage } = await load()); }
+    if (picked) { await saveBoxes(); await live?.phase('the line loads again with its models · births, meetings'); ({ data, stage } = await load()); }
     // The whole line as first made: what each event is (its text, its people, the things it places, its fight), which answers do not change.
     const line = { data, stage };
     const counts = { events: { asked: 0, reused: 0, left: 0 }, placements: { asked: 0, reused: 0, failed: 0, left: 0 }, fights: { asked: 0, reused: 0, left: 0 } };

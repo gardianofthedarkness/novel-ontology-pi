@@ -84,12 +84,25 @@ const SHAPES = ['box', 'oval', 'triangle', 'diamond', 'donut'];
 const hint = key => key.startsWith('skyscraper') ? 'a skyscraper' : key.startsWith('tower') ? 'a slim tower block' : key.startsWith('block-wide') ? 'a wide low block' : key.startsWith('office') ? 'an office building'
   : ({ market: 'a market hall', keep: 'a castle keep', fountain: 'a fountain', windmill: 'an old windmill with sails', 'wind-turbine': 'a modern wind turbine: a tall mast with three long blades', 'wind-turbine-scifi': 'a futuristic turbine', wagon: 'a wooden cart or wagon', 'crate-wood': 'a wooden crate', 'crate-scifi': 'a metal sci-fi crate', 'barrel-scifi': 'a sci-fi barrel or canister', 'chest-scifi': 'a sci-fi storage chest', 'computer-scifi': 'a sci-fi console or terminal', 'switch-theme': 'none of these fits: it belongs to another era or style (ask again among the other themes\' models)', box: 'a box: vehicles, containers, machines', oval: 'an egg, capsule or ball: airships, pods, spheres', triangle: 'a triangular prism: roofs, ramps, tents', diamond: 'a diamond: crystals', donut: 'a ring: halos, wheels, rings' })[key] ?? key;
 
-/** Call 0: which model or shape a thing is drawn as, picked from the labelled sheet (`keys` may end with switching theme). */
-async function pickModel(jev, sheet, keys, thing, text) {
-  const [answer] = await jev.decide([`Picture "models" is a sheet of every model and shape a 3D stage can draw, each labelled with its name.`, `A thing a novel mentions: ${thing.name}, about ${thing.size} m across${thing.airborne ? ', in the air' : ''}.`, `Where it is mentioned: ${text}`].join('\n'),
-    [{ key: 'model', primitive: 'choice', instructions: `Which model or shape on picture "models" should ${thing.name} be drawn as: the one that looks most like it?`, options: keys, optionHints: Object.fromEntries(keys.map(key => [key, `${key}: ${hint(key)}`])) }], { images: { models: sheet } });
-  const top = Object.entries(answer.distribution ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([key, p]) => [key, Math.round(p * 100) / 100]);
-  return { id: answer.value, kind: SHAPES.includes(answer.value) ? 'shape' : 'model', confidence: answer.confidence ?? null, top };
+/**
+ * Call 0: which model or shape each thing is drawn as, picked from the labelled sheet (`keys` may end with switching theme).
+ * Every thing on one sheet in one request (docs/v2/world-engine-v2.md §1): a structured state with the things keyed once
+ * (name, size, where the text mentions it), the sheet as picture "models", and a short question per thing that names it
+ * by path. It was one request per thing: about 90 of a vol 1 pick's first 320 calls, before its first event.
+ */
+const MENTION = 300;
+async function pickModelsOn(jev, sheet, keys, entries) {
+  const key = n => `t${n + 1}`;
+  const state = {
+    task: 'Picture "models" is a sheet of every model and shape a 3D stage can draw, each labelled with its name. For each thing a novel mentions (in things), say which model or shape it should be drawn as: the one that looks most like it.',
+    things: Object.fromEntries(entries.map(({ thing, text }, n) => [key(n), { name: thing.name, size: `about ${thing.size} m across`, ...(thing.airborne ? { airborne: true } : {}), mentioned: text.length > MENTION ? `${text.slice(0, MENTION)}…` : text }])),
+  };
+  const answers = await jev.decide(state, entries.map((_, n) => ({ key: `model:${key(n)}`, primitive: 'choice', instructions: `Which model or shape on picture "models" should things.${key(n)} be drawn as?`, options: keys, optionHints: Object.fromEntries(keys.map(option => [option, `${option}: ${hint(option)}`])) })), { images: { models: sheet } });
+  return entries.map((_, n) => {
+    const answer = answers.find(entry => entry.key === `model:${key(n)}`) ?? { value: SHAPES[0] };
+    const top = Object.entries(answer.distribution ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([option, p]) => [option, Math.round(p * 100) / 100]);
+    return { id: answer.value, kind: SHAPES.includes(answer.value) ? 'shape' : 'model', confidence: answer.confidence ?? null, top };
+  });
 }
 
 /** The side view's turns, in degrees from the reader's view, each a picture named for its turn. */
@@ -237,19 +250,26 @@ export async function pickModels({ chrome, jev, stage, models, limit = Infinity,
     if (!sheets.has(name)) { await chrome.evaluate(`window.__stage.sheet(${JSON.stringify({ models: Object.fromEntries(keys.filter(key => library.models[key]).map(key => [key, library.models[key]])), entries: keys })})`); const still = await chrome.still(); sheets.set(name, still); if (out) await writeFile(join(out, `00-models-${name}.png`), Buffer.from(still, 'base64')); }
     return sheets.get(name);
   };
-  let calls = 0;
+  // The things of a theme in one request; those that switch theme in one more.
+  const byTheme = new Map();
   for (const thing of waiting) {
-    if (calls >= limit) break;
     const first = thing.placed[0], text = stage.scenes.find(scene => scene.id === first.scene)?.events[first.event] ?? '', theme = stage.places[first.place]?.theme ?? 'modern';
+    byTheme.set(theme, [...(byTheme.get(theme) ?? []), { thing, text }]);
+  }
+  let calls = 0;
+  for (const [theme, entries] of byTheme) {
+    if (calls >= limit) break;
     const own = [...themedKeys(themes, all, theme), ...SHAPES];
-    let answer = await pickModel(jev, await sheetOf(theme, own), [...own, SWITCH_THEME], thing, text); calls++;
-    if (answer.id === SWITCH_THEME && calls < limit) {
-      const other = [...otherKeys(themes, all, theme), ...SHAPES];
-      answer = { ...await pickModel(jev, await sheetOf(`not-${theme}`, other), other, thing, text), switched: true }; calls++;
+    const answers = await pickModelsOn(jev, await sheetOf(theme, own), [...own, SWITCH_THEME], entries); calls++;
+    const switching = entries.filter((_, n) => answers[n].id === SWITCH_THEME);
+    const again = switching.length && calls < limit ? await pickModelsOn(jev, await sheetOf(`not-${theme}`, [...otherKeys(themes, all, theme), ...SHAPES]), [...otherKeys(themes, all, theme), ...SHAPES], switching) : [];
+    if (switching.length && again.length) calls++;
+    for (const [n, { thing }] of entries.entries()) {
+      const switched = switching.indexOf(entries[n]), answer = answers[n].id === SWITCH_THEME && again[switched] ? { ...again[switched], switched: true } : answers[n];
+      if (answer.id === SWITCH_THEME) continue;
+      models[thing.name] = { ...answer, theme: answer.switched ? themes.models[answer.id]?.theme ?? null : theme };
+      log(`${thing.name}: drawn as ${models[thing.name].id}${answer.switched ? ' (switched theme)' : ''} on ${theme} ground (${models[thing.name].top.map(([key, p]) => `${key} ${p}`).join(', ')})`);
     }
-    if (answer.id === SWITCH_THEME) continue;
-    models[thing.name] = { ...answer, theme: answer.switched ? themes.models[answer.id]?.theme ?? null : theme };
-    log(`${thing.name}: drawn as ${models[thing.name].id}${answer.switched ? ' (switched theme)' : ''} on ${theme} ground (${models[thing.name].top.map(([key, p]) => `${key} ${p}`).join(', ')})`);
   }
   return calls;
 }
