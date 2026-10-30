@@ -163,7 +163,7 @@ test("ingest --auto-approve runs the full loop: blocks -> Jev miniloop -> gate -
 
     // The real JevClient was consulted through the wire mock...
     assert.ok(jev.seenKeys.some((k) => k.startsWith("scene_end:")), "scene segmentation questions asked");
-    assert.ok(jev.seenKeys.some((k) => k.startsWith("dlg_start:")), "dialogue selection questions asked");
+    assert.ok(jev.seenKeys.some((k) => k.startsWith("dlg_kind:")), "sentence kind questions asked");
     // ...and the seeded entity reached the presence patch, which only
     // happens when the cumulative registry is actually loaded per block
     // (the old code hardcoded an empty registry).

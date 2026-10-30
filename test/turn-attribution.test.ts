@@ -63,7 +63,7 @@ test("failed structure repair retains provisional spans without guessing a speak
 
 test("reviewer pins keep their original scene-scoped meaning when block-turn mode is selected", async () => {
   const source = sectionBlock("小红说：“你好。”", 0).sentences;
-  const key = `dlg_start:${source[0].id}`;
+  const key = `dlg_kind:${source[0].id}`;
   let identityCalls = 0;
   const graph = new FacultyGraph({ modelId: "mock", async decide(state, questions) { return questions.map(question => ({ key: question.key, value: source[0].id, confidence: 0.99 })); } }, {
     modelId: "mock", async generate(request) {
@@ -72,7 +72,7 @@ test("reviewer pins keep their original scene-scoped meaning when block-turn mod
       return JSON.stringify({ events: [] });
     },
   }, { dialogueScope: "block-turn" });
-  const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences: source, knownEntities: [], pins: new Map([[key, "NONE"]]) });
+  const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences: source, knownEntities: [], pins: new Map([[key, "narration"]]) });
   assert.ok(result.miniloop.appliedPins?.includes(key));
   assert.ok(result.miniloop.changeset.reviewNotes["faculty:pinned-dialogue-scope"]);
   assert.equal(result.miniloop.accepted.blockIdentityDeclarations, undefined);

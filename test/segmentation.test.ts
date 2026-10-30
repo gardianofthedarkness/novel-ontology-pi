@@ -8,8 +8,10 @@ import { sectionBlock, type Sentence } from "../src/digger/intake/sectioning.js"
 import {
   selectExchanges,
   selectExchangeSpans,
+  spansOfKinds,
   tileScenes,
   type DecideFn,
+  type SentenceKind,
 } from "../src/digger/autostep/segmentation.js";
 
 const GATES = { accept: 0.85, reask: 0.55 };
@@ -24,12 +26,12 @@ function scripted(script: Record<string, string>, confidence = 0.95): DecideFn {
   return async (_state: string, questions: DecisionQuestion[]) => {
     return questions.map((q): DecisionAnswer => {
       let value: string | number = script[q.key] ?? "";
+      if (value === "" && q.primitive === "noul") value = 0;
       if (value === "" && q.primitive === "choice") {
         if (q.key.startsWith("scene_end:")) value = q.options![q.options!.length - 1];
         else if (q.key.startsWith("scene_start:")) value = "NONE";
         else if (q.key.startsWith("scene_seam:")) value = "continues";
-        else if (q.key.startsWith("dlg_start:")) value = "NONE";
-        else if (q.key.startsWith("dlg_end:")) value = q.options![0];
+        else if (q.key.startsWith("dlg_kind:")) value = "narration";
         else value = q.options![0];
       }
       return { key: q.key, value, confidence };
@@ -103,36 +105,47 @@ test("tileScenes: low-confidence picks escalate but the partition is still produ
   assert.ok(escalations.length > 0);
 });
 
-test("selectExchanges: >=3-sentence overlap merges across batches and links two scenes", async () => {
+/** The sentences' kinds as a script: `kinds` by index (others narration), `turns` the indices where the people change. */
+function kindsScript(sentences: Sentence[], kinds: Record<number, SentenceKind>, turns: number[] = []): Record<string, string> {
+  return Object.fromEntries([
+    ...Object.entries(kinds).map(([index, kind]) => [`dlg_kind:${sentences[Number(index)].id}`, kind]),
+    ...turns.map((index) => [`dlg_turn:${sentences[index].id}`, 1 as unknown as string]),
+  ]);
+}
+const spoken = (from: number, to: number, every = 1): Record<number, SentenceKind> =>
+  Object.fromEntries(Array.from({ length: to - from + 1 }, (_, i) => from + i).filter((i) => (i - from) % every === 0).map((i) => [i, "spoken"]));
+
+test("selectExchanges: one batched request per window, and an exchange straddling a scene cut links two scenes", async () => {
   const sentences = makeSentences(100);
   const sceneSpans = [ids(sentences, 0, 49), ids(sentences, 50, 99)];
-  const decide = scripted({
-    [`dlg_start:${sentences[0].id}`]: sentences[10].id,
-    [`dlg_end:${sentences[10].id}`]: sentences[70].id,
-    [`dlg_start:${sentences[71].id}`]: "NONE",
-    [`dlg_start:${sentences[60].id}`]: sentences[65].id,
-    [`dlg_end:${sentences[65].id}`]: sentences[90].id,
-    [`dlg_start:${sentences[91].id}`]: "NONE",
-  });
+  const calls: DecisionQuestion[][] = [];
+  const answer = scripted(kindsScript(sentences, spoken(40, 60, 2)));
+  const decide: DecideFn = async (state, questions) => { calls.push(questions); return answer(state, questions); };
   const { units, unitScenes } = await selectExchanges(sentences, sceneSpans, decide, { stateSummary: "t", gates: GATES });
-  assert.deepEqual(units, [ids(sentences, 10, 90)]);
+  assert.equal(calls.length, 3, "100 sentences are three requests (40 a window), not a chain of start and end questions");
+  assert.deepEqual(calls[0].map((q) => q.key).slice(0, 2), [`dlg_kind:${sentences[0].id}`, `dlg_turn:${sentences[0].id}`]);
+  assert.deepEqual(units, [ids(sentences, 40, 60)], "narration between the lines stays inside the exchange");
   assert.deepEqual(unitScenes, [[0, 1]], "exchange straddles the scene cut -> two scene links");
 });
 
-test("selectExchanges: a 1-2 sentence graze trims instead of merging", async () => {
-  const sentences = makeSentences(100);
-  const sceneSpans = [ids(sentences, 0, 99)];
-  const decide = scripted({
-    [`dlg_start:${sentences[0].id}`]: sentences[10].id,
-    [`dlg_end:${sentences[10].id}`]: sentences[70].id,
-    [`dlg_start:${sentences[71].id}`]: "NONE",
-    [`dlg_start:${sentences[60].id}`]: sentences[69].id,
-    [`dlg_end:${sentences[69].id}`]: sentences[75].id,
-    [`dlg_start:${sentences[76].id}`]: "NONE",
-  });
-  const { units, unitScenes } = await selectExchanges(sentences, sceneSpans, decide, { stateSummary: "t", gates: GATES });
-  assert.deepEqual(units, [ids(sentences, 10, 70), ids(sentences, 71, 75)]);
-  assert.deepEqual(unitScenes, [[0], [0]]);
+test("spansOfKinds: a dialogue runs as long as its people stay, ends where they change or after a long silence", () => {
+  const kinds: SentenceKind[] = Array.from({ length: 40 }, () => "narration");
+  const turns = new Array(40).fill(0);
+  for (const i of [0, 2, 3, 6, 8]) kinds[i] = "spoken";
+  kinds[5] = "action"; kinds[7] = "fact";
+  for (const i of [10, 12]) kinds[i] = "spoken";
+  turns[10] = 1; // someone new speaks: a new exchange
+  kinds[21] = "spoken"; // eight quiet sentences after 12: still the same exchange
+  kinds[31] = "spoken"; // nine quiet sentences after 21: the earlier exchange ended
+  assert.deepEqual(spansOfKinds(kinds, turns).dialogues, [[0, 8], [10, 21], [31, 31]]);
+});
+
+test("spansOfKinds: monologues are runs of thought with a few asides; facts are kept apart", () => {
+  const kinds: SentenceKind[] = ["thought", "narration", "thought", "action", "narration", "thought", "narration", "narration", "narration", "spoken", "thought", "spoken", "fact", "fact", "narration", "fact"];
+  const { dialogues, monologues, facts } = spansOfKinds(kinds, new Array(kinds.length).fill(0));
+  assert.deepEqual(monologues, [[0, 5], [10, 10]], "two asides inside a monologue; a third, or a spoken line, ends it");
+  assert.deepEqual(facts, [[12, 13], [15, 15]]);
+  assert.deepEqual(dialogues, [[9, 11]], "a thought between two lines stays inside the exchange");
 });
 
 test("miniloop pipelines: scene tiling and dialogue selection run concurrently", async () => {
@@ -147,9 +160,8 @@ test("miniloop pipelines: scene tiling and dialogue selection run concurrently",
     inFlight--;
     return questions.map((q): DecisionAnswer => {
       let value: string | number = q.options ? q.options[q.options.length - 1] : 0;
-      if (q.key.startsWith("scene_start:") || q.key.startsWith("dlg_start:")) value = "NONE";
+      if (q.key.startsWith("scene_start:")) value = "NONE";
       if (q.key.startsWith("scene_seam:")) value = "continues";
-      if (q.key.startsWith("dlg_end:")) value = q.options![0];
       return { key: q.key, value, confidence: 0.95 };
     });
   };
@@ -163,57 +175,39 @@ test("miniloop pipelines: scene tiling and dialogue selection run concurrently",
   assert.ok(Array.isArray(result.accepted["dialogueUnitScenes"]), "the scene-link join ran after the pipelines");
 });
 
-test("dialogue prompts retain brief narration but split long non-verbal gaps within the same scene", async () => {
-  const sentences = sectionBlock('“我会回来。”\n他站起身。\n“天亮之前。”\n风吹过街道。\n雪落在窗沿。\n远处的灯熄灭了。\n“我还会等你。”', 1).sentences;
+test("the classification prompt names every kind, and asks one turn question a sentence", async () => {
+  const sentences = sectionBlock('“我会回来。”\n他站起身。\n天亮之前，学园都市的电车停运。\n我真想留下，他想。', 1).sentences;
   const prompts: DecisionQuestion[] = [];
-  const answer = scripted({
-    [`dlg_start:${sentences[0].id}`]: sentences[0].id,
-    [`dlg_end:${sentences[0].id}`]: sentences[2].id,
-    [`dlg_start:${sentences[3].id}`]: sentences[6].id,
-    [`dlg_end:${sentences[6].id}`]: sentences[6].id,
-  });
-  const decide: DecideFn = async (state, questions) => {
-    prompts.push(...questions);
-    return answer(state, questions);
-  };
-  const result = await selectExchanges(sentences, [ids(sentences, 0, 6)], decide, { stateSummary: "同一场景，同一说话人", gates: GATES });
-  assert.deepEqual(result.units, [ids(sentences, 0, 2), ids(sentences, 6, 6)]);
-  assert.deepEqual(result.unitScenes, [[0], [0]]);
-  const starts = prompts.filter(question => question.key.startsWith("dlg_start:"));
-  const ends = prompts.filter(question => question.key.startsWith("dlg_end:"));
-  assert.ok(starts.length >= 2 && ends.length >= 2);
-  for (const question of starts) {
-    assert.match(question.instructions, /sentence level/);
-    assert.match(question.instructions, /Three or more consecutive non-verbal sentences/);
-    assert.match(question.instructions, /even with the same speakers in the same scene/);
-    assert.match(question.instructions, /One or two brief narration/);
+  const answer = scripted(kindsScript(sentences, { 0: "spoken", 1: "action", 2: "fact", 3: "thought" }));
+  const result = await selectExchangeSpans(sentences, async (state, questions) => { prompts.push(...questions); return answer(state, questions); }, { stateSummary: "", gates: GATES });
+  const kinds = prompts.filter((q) => q.key.startsWith("dlg_kind:"));
+  assert.equal(kinds.length, 4);
+  assert.equal(prompts.filter((q) => q.key.startsWith("dlg_turn:") && q.primitive === "noul").length, 4);
+  for (const question of kinds) {
+    assert.deepEqual(question.options, ["spoken", "thought", "fact", "action", "narration"]);
+    assert.match(question.optionHints!.thought, /talking to themself/);
+    assert.match(question.optionHints!.fact, /background knowledge/);
   }
-  for (const question of ends) {
-    assert.match(question.instructions, /BEFORE any gap of three or more/);
-    assert.match(question.instructions, /LAST spoken sentence/);
-    assert.match(question.instructions, /same speakers resume in the same scene/);
-  }
+  assert.deepEqual(result.spans, [[0, 0]]);
+  assert.deepEqual(result.monologues, [[3, 3]]);
+  assert.deepEqual(result.facts, [[2, 2]]);
 });
 
-test("uncertain NONE dialogue decisions are escalated and streamed coverage reaches EOF", async () => {
-  const sentences = sectionBlock("他没有说话。", 0).sentences;
-  const result = await selectExchanges(sentences, [sentences.map(sentence => sentence.id)], async (_state, questions) => questions.map(question => ({ key: question.key, value: "NONE", confidence: 0.2 })), { stateSummary: "", gates: GATES });
+test("an uncertain spoken line is escalated", async () => {
+  const sentences = sectionBlock("“走吧。”", 0).sentences;
+  const result = await selectExchanges(sentences, [sentences.map(sentence => sentence.id)], async (_state, questions) => questions.map(question => ({ key: question.key, value: question.key.startsWith("dlg_kind:") ? "spoken" : 0, confidence: 0.2 })), { stateSummary: "", gates: GATES });
   assert.equal(result.escalations.length, 1);
-  assert.match(result.escalations[0].reason, /absence decision/);
+  assert.match(result.escalations[0].reason, /too uncertain/);
 });
 
 test("dialogue streaming only publishes stable spans and monotone complete-through watermarks", async () => {
   const sentences = makeSentences(100);
   const snapshots: { spans: [number, number][]; through: number }[] = [];
-  const result = await selectExchangeSpans(sentences, scripted({
-    [`dlg_start:${sentences[0].id}`]: sentences[10].id,
-    [`dlg_end:${sentences[10].id}`]: sentences[70].id,
-    [`dlg_start:${sentences[60].id}`]: sentences[65].id,
-    [`dlg_end:${sentences[65].id}`]: sentences[90].id,
-  }), { stateSummary: "", gates: GATES, onBatch: async (spans, through) => { snapshots.push({ spans: structuredClone(spans), through }); } });
-  assert.equal(snapshots[0].through, 9);
-  assert.deepEqual(snapshots[0].spans, []);
+  const result = await selectExchangeSpans(sentences, scripted(kindsScript(sentences, { ...spoken(10, 20), ...spoken(36, 44), ...spoken(70, 90, 3) })), { stateSummary: "", gates: GATES, onBatch: async (spans, through) => { snapshots.push({ spans: structuredClone(spans), through }); } });
+  assert.equal(snapshots[0].through, 31, "the first window settles all but its last quiet stretch");
+  assert.deepEqual(snapshots[0].spans, [[10, 20]], "an exchange still open at the window's end waits");
   assert.equal(snapshots.at(-1)!.through, 99);
   assert.deepEqual(snapshots.at(-1)!.spans, result.spans);
+  assert.deepEqual(result.spans, [[10, 20], [36, 44], [70, 88]]);
   assert.ok(snapshots.every((snapshot, index) => !index || snapshot.through >= snapshots[index - 1].through));
 });

@@ -64,7 +64,7 @@ Today, presence, dialogue members, time and place, the place tree, strands and i
 | Intake: blocks, sentences (code) | Chapter blocks, sentence ids | Keep | The provenance anchor for everything. |
 | Album: illustrations, portraits | Image anchors; OCR heads bound to characters | Keep | Later, portraits can dress the people in the world. |
 | Scene boundaries (Jev) and adjudication (work) | Jev points at scene starts; uncertain cuts adjudicated | Keep. Fragments (under 20 characters, no events) are no longer a defect: the fragment law carries the scene before. | About 10% of scenes are fragments. They caused most empty casts; the world absorbs them without calls. |
-| Dialogue exchanges (Jev) | One continuous exchange of speech, "involving one or more people" | Keep, with a new rule: **a third person joining starts a new exchange** (§8.1). | Every live dialogue node then has exactly two parties, so its proximity can be enforced. |
+| Dialogue exchanges (Jev) | One continuous exchange of speech, "involving one or more people" | Keep, with a new rule: **a third person joining starts a new exchange** (§8.1). **Since 2026-10-30, one batched classification:** every sentence is spoken, thought, fact, action or narration, and for each, whether the people talking change there (questions `dlg_kind:<sentence>`, `dlg_turn:<sentence>`, 40 sentences a request, all asked at once as Jev's parallel questions). An exchange runs as long as the same people talk, narration and actions between the lines inside it; it ends where they change, or after 8 sentences with no one speaking. A **monologue** (a run of thought, two asides allowed) is a card of its own (`monologue:` ids, its member the one thinking). **Facts** (background knowledge of the world) go to the changeset's `faculty:facts` note, then into every later scene's context (§5). | Actions are extracted apart, as events, so exchanges can be as long as their speakers stay. One request a window replaces a chain of start and end questions. |
 | Dialogue structure, speaker attribution (work), dialogue members (Jev + work) | Turns, speaker per turn, members per card | **Replaced** by the world's dialogue rules (§8): kind and parties decided in the scene's context, under the laws. No line-by-line speakers. | Members are unstable. Vol 1: 17 of 73 cards have fewer than two people. Vol 3: 227 of 267. Vol 2: no cards at all. |
 | Name detector (code + Jev) | Known names by code; new names and nicknames by Jev | Keep | The roster. |
 | Entities and presence (work), presence detector (Jev) | Who is present, from the scene alone | **Split.** Entity detection stays (the roster, and who is mentioned where). Presence moves to the world (§6). | Presence from one scene can't know who stayed; this was the vanishing. |
@@ -126,11 +126,12 @@ Today, presence, dialogue members, time and place, the place tree, strands and i
 
 Each decision gets the same shape. Built for presence, place and time; it extends to all decisions.
 - **World:** who is where, since which scene and time, and their states (holding, hurt, knows).
+- **What the book has told of the world:** its facts so far (background knowledge, the latest 12, oldest first).
 - **Story so far:** the latest scenes, newest last, with their place, time, people and summary.
 - **This scene in full:** the original text; for an event or a dialogue, up to its end.
 - **Focus:** the decision's own part: the candidates, the event, the exchange's text, the parties' positions, and a map picture for boxes.
 
-The budget is about 10,000 characters (Jev reads about 32k tokens). Over budget, the oldest story goes first, then the least recently placed people, then the middle of a very long scene. The scene's start and the focus are never cut.
+The budget is about 10,000 characters (Jev reads about 32k tokens). Over budget, the oldest story goes first, then the oldest facts, then the least recently placed people, then the middle of a very long scene. The scene's start and the focus are never cut.
 
 | Decision | Focus |
 |---|---|

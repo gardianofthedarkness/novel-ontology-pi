@@ -45,6 +45,16 @@ test('context composition keeps the shape and the budget: the oldest story goes 
   assert.ok(compose({ text: 'short', focus: 'q' }).includes('this is the first scene'));
 });
 
+test('the book facts go into the context, oldest cut first, after the oldest story', () => {
+  const facts = Array.from({ length: 6 }, (_, n) => `fact ${n + 1}: ${'知'.repeat(150)}`), story = Array.from({ length: 4 }, (_, n) => `scene ${n + 1}: ${'事'.repeat(150)}`);
+  const roomy = compose({ facts, story, text: '场景', focus: 'q' });
+  assert.ok(roomy.includes('What the book has told of the world:\n- fact 1:') && roomy.indexOf('fact 6') < roomy.indexOf('The story so far'));
+  const tight = compose({ facts, story, text: '场景', focus: 'q', budget: 1200 });
+  assert.ok(!tight.includes('scene 1:') && tight.includes('scene 4:'), 'the story goes first, down to two scenes');
+  assert.ok(!tight.includes('fact 1:') && tight.includes('fact 6:'), 'then the oldest facts');
+  assert.ok(!compose({ text: 'x', focus: 'q' }).includes('told of the world'), 'no facts, no section');
+});
+
 test('after a flashback the story stays in the past until a scene goes back to the main time, which picks up after the last scene before it', () => {
   const world = createWorld();
   enter(world, { id: 's1', place: 'P', relation: 'after', present: ['x'] });

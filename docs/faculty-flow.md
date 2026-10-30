@@ -65,7 +65,7 @@ first question's key prefix, work-model calls by their pool faculty.
 | --- | --- |
 | Scene boundaries | `scene_start`, `scene_end`, `scene_seam`, `scene-boundaries` |
 | Scene adjudication | `scene-adjudication` |
-| Dialogue exchanges | `dlg_start`, `dlg_end`, `dialogue-boundaries`, `dialogue-structure` |
+| Dialogue exchanges | `dlg_kind`, `dlg_turn` (older runs: `dlg_start`, `dlg_end`), `dialogue-boundaries`, `dialogue-structure` |
 | Entities and presence | `entities-participants` |
 | Universal EM | `who` (older logs: `birth`, `fragment`) |
 | Scene understanding | `scene-understanding` |

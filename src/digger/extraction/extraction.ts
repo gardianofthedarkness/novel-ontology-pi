@@ -746,7 +746,7 @@ export function createExtractor(work: WorkModel) {
           return [];
         }))];
         const participantIds = resolveMembers(card.participantNames);
-        return { id: card.id, sentenceIds: [...card.sentenceIds], participantIds, unresolvedParticipantIds: resolveMembers(card.unresolvedNames).filter(id => !participantIds.includes(id)) };
+        return { id: card.id, sentenceIds: [...card.sentenceIds], participantIds, unresolvedParticipantIds: resolveMembers(card.unresolvedNames).filter(id => !participantIds.includes(id)), ...(card.kind ? { kind: card.kind } : {}) };
       });
     }
 

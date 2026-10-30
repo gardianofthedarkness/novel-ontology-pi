@@ -109,6 +109,8 @@ export interface DialogueCard {
   participantIds: string[];
   unresolvedParticipantIds?: string[];
   summary?: string;
+  /** A monologue: one person's thoughts or talking to themself, not an exchange between people. */
+  kind?: "monologue";
 }
 
 export interface Scene {

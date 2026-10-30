@@ -113,8 +113,9 @@ test("default faculty graph emits multi-person cards, not speaker/turn adjudicat
   const decisions: DecisionModel = { modelId: "mock", async decide(_state, questions) {
     assert.ok(questions.every(question => !question.key.startsWith("speaker:")));
     return questions.map(question => ({ key: question.key, confidence: 0.99, value:
-      question.key.startsWith("scene_end:") || question.key.startsWith("dlg_end:") ? source.at(-1)!.id :
-      question.key === `dlg_start:${source[0].id}` ? source[0].id :
+      question.key.startsWith("scene_end:") ? source.at(-1)!.id :
+      question.key.startsWith("dlg_kind:") ? [source[0].id, source[1].id].some(id => question.key.endsWith(`:${id}`)) ? "spoken" : "narration" :
+      question.key.startsWith("dlg_turn:") ? 0 :
       question.key.startsWith("dialogue-member:") ? question.instructions.includes("丙") ? "not-participating" : "participates" : "NONE" }));
   } };
   const work: WorkModel = { modelId: "mock", async generate(request) {

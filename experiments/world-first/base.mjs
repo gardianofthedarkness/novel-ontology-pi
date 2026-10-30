@@ -1,10 +1,11 @@
 // The review-free layer of a book, taken from a workspace: what the Digger's faculties give before any review gate. That is
 // the scenes (their sentences, in reading order, by chapter), each scene's own text and summary, the events (summary,
-// evidence, who takes part) and the dialogue exchanges (their text), each with its first sentence so they interleave in
-// narrative order; the state changes (what each person holds and learns after an event); the roster (every character and
+// evidence, who takes part), the dialogue exchanges and the monologues (their text), each with its first sentence so they
+// interleave in narrative order, and the facts (background knowledge of the world the text states); the state changes (what each person holds and learns after an event); the roster (every character and
 // place the book names, with their name forms, and a place's scale when the stage has asked it). Nothing a
 // reviewer or a later faculty decided is taken: no presence, no scene places, no place tree, no times, no strands. The
-// world-first loop (run.mjs) decides those itself. Written as JSON into <out>/base/; the book's text stays out of the repo.
+// world-first loop (run.mjs) decides those itself. Written as JSON into <out>/base/ (facts.json: the book's facts in reading
+// order, with their scene); the book's text stays out of the repo.
 //   npm run build && node experiments/world-first/base.mjs <novel-dir> <out-dir>
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -20,6 +21,7 @@ const formsOf = entity => [...new Set((entity.names ?? []).map(name => name.text
 export async function takeBase(novelDir, outDir) {
   const { BundleStore } = await load('dist/src/ground/connectors/bundle.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
+  const { listChangeSets } = await load('dist/src/solidifier/merge/changesetStore.js');
   const bundle = new BundleStore(join(novelDir, 'ontology'));
   const scenes = fold(await bundle.loadFile('scenes.jsonl')).sort((a, b) => order(a.sentenceIds?.[0]) - order(b.sentenceIds?.[0]));
   const events = fold(await bundle.loadFile('events.jsonl')), entities = fold(await bundle.loadFile('entities.jsonl')), relations = await bundle.loadFile('relations.jsonl');
@@ -37,12 +39,19 @@ export async function takeBase(novelDir, outDir) {
     byScene.set(scene, [...(byScene.get(scene) ?? []), { id: event.id, first: event.evidence?.sentenceIds?.[0] ?? null, summary: event.summaryEn ?? event.summary ?? '', evidence: event.evidence?.text ?? '', actors: [...who] }]);
   }
   const textOf = ids => (ids ?? []).map(id => sentences.get(id)?.text ?? '').join('');
-  // The exchanges a scene holds (the dialogue faculty's spans; its members are not taken: the world decides who talks).
-  const dialoguesOf = scene => (scene.dialogues ?? []).map(dialogue => ({ id: dialogue.id, first: dialogue.sentenceIds?.[0] ?? null, text: textOf(dialogue.sentenceIds) })).filter(dialogue => dialogue.text.trim());
+  // The exchanges and monologues a scene holds (the dialogue faculty's spans; its members are not taken: the world decides
+  // who talks).
+  const spansOf = (scene, monologue) => (scene.dialogues ?? []).filter(dialogue => (dialogue.kind === 'monologue') === monologue).map(dialogue => ({ id: dialogue.id, first: dialogue.sentenceIds?.[0] ?? null, text: textOf(dialogue.sentenceIds) })).filter(dialogue => dialogue.text.trim());
+  // The facts the dialogue faculty kept from each block (runs of sentences), in reading order, each with its scene.
+  const facts = (await listChangeSets(novelDir)).flatMap(changeset => { try { return JSON.parse(changeset.reviewNotes?.['faculty:facts'] ?? '[]'); } catch { return []; } })
+    .map(fact => ({ scene: sceneOf.get(fact.sentenceIds?.[0] ?? '') ?? null, first: fact.sentenceIds?.[0] ?? null, text: textOf(fact.sentenceIds) || fact.text || '' }))
+    .filter(fact => fact.scene && fact.text.trim()).sort((a, b) => order(a.first) - order(b.first));
+  const factsOf = new Map();
+  for (const fact of facts) factsOf.set(fact.scene, [...(factsOf.get(fact.scene) ?? []), { first: fact.first, text: fact.text }]);
   const states = await bundle.loadFile('state-changes.jsonl').catch(() => []);
   const scale = JSON.parse(await readFile(join(novelDir, 'stage', 'scale.json'), 'utf8').catch(() => 'null'))?.places ?? {};
   const base = {
-    scenes: scenes.map((scene, index) => ({ id: scene.id, index, chapter: scene.chapterIndex ?? 0, summary: scene.summary ?? '', text: textOf(scene.sentenceIds), events: byScene.get(scene.id) ?? [], dialogues: dialoguesOf(scene) })),
+    scenes: scenes.map((scene, index) => ({ id: scene.id, index, chapter: scene.chapterIndex ?? 0, summary: scene.summary ?? '', text: textOf(scene.sentenceIds), events: byScene.get(scene.id) ?? [], dialogues: spansOf(scene, false), monologues: spansOf(scene, true), facts: factsOf.get(scene.id) ?? [] })),
     states: states.map(state => ({ person: state.characterId, after: state.afterEventId, holds: state.possessionsAdd ?? [], drops: state.possessionsRemove ?? [], learns: state.knowledgeAdd ?? [] })).filter(state => state.holds.length || state.drops.length || state.learns.length),
     roster: {
       characters: entities.filter(entity => entity.kind === 'Character').map(entity => ({ id: entity.id, names: formsOf(entity) })).filter(entry => entry.names.length),
@@ -53,7 +62,8 @@ export async function takeBase(novelDir, outDir) {
   await writeFile(join(outDir, 'base', 'scenes.json'), JSON.stringify(base.scenes), { mode: 0o600 });
   await writeFile(join(outDir, 'base', 'roster.json'), JSON.stringify(base.roster, null, 1), { mode: 0o600 });
   await writeFile(join(outDir, 'base', 'states.json'), JSON.stringify(base.states), { mode: 0o600 });
-  return { scenes: base.scenes.length, chapters: new Set(base.scenes.map(scene => scene.chapter)).size, events: base.scenes.reduce((sum, scene) => sum + scene.events.length, 0), dialogues: base.scenes.reduce((sum, scene) => sum + scene.dialogues.length, 0), states: base.states.length, characters: base.roster.characters.length, places: base.roster.places.length };
+  await writeFile(join(outDir, 'base', 'facts.json'), JSON.stringify(facts), { mode: 0o600 });
+  return { scenes: base.scenes.length, chapters: new Set(base.scenes.map(scene => scene.chapter)).size, events: base.scenes.reduce((sum, scene) => sum + scene.events.length, 0), dialogues: base.scenes.reduce((sum, scene) => sum + scene.dialogues.length, 0), monologues: base.scenes.reduce((sum, scene) => sum + scene.monologues.length, 0), facts: facts.length, states: base.states.length, characters: base.roster.characters.length, places: base.roster.places.length };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -64,7 +64,7 @@ test("the faculty graph streams candidates scene by scene, well before extractio
       return questions.map(question => {
         if (question.key.startsWith("scene_end:")) return { key: question.key, value: question.key.endsWith(ids[0]) ? ids[1] : ids[3], confidence: 0.99 };
         if (question.key.startsWith("scene_start:")) return { key: question.key, value: question.key.endsWith(ids[0]) ? ids[2] : "NONE", confidence: 0.99 };
-        if (question.key.startsWith("dlg_start:")) return { key: question.key, value: "NONE", confidence: 0.99 };
+        if (question.key.startsWith("dlg_kind:") || question.key.startsWith("dlg_turn:")) return { key: question.key, value: question.key.startsWith("dlg_kind:") ? "narration" : 0, confidence: 0.99 };
         return { key: question.key, value: "NEW_PERSON", confidence: 0.99 };
       });
     },
@@ -111,7 +111,7 @@ test("a failing draft consumer never fails identity work", async () => {
       return questions.map(question => {
         if (question.key.startsWith("scene_end:")) return { key: question.key, value: question.key.endsWith(ids[0]) ? ids[1] : ids[3], confidence: 0.99 };
         if (question.key.startsWith("scene_start:")) return { key: question.key, value: question.key.endsWith(ids[0]) ? ids[2] : "NONE", confidence: 0.99 };
-        if (question.key.startsWith("dlg_start:")) return { key: question.key, value: "NONE", confidence: 0.99 };
+        if (question.key.startsWith("dlg_kind:") || question.key.startsWith("dlg_turn:")) return { key: question.key, value: question.key.startsWith("dlg_kind:") ? "narration" : 0, confidence: 0.99 };
         return { key: question.key, value: "NEW_PERSON", confidence: 0.99 };
       });
     },

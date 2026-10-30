@@ -56,7 +56,7 @@ test("working scene/dialogue drafts exist before extraction or the merge gate, w
   const draftFile = join(directory, "working", "b0001.json");
   const bundle = new BundleStore(join(directory, "ontology"));
   let extractions = 0;
-  const processor = new BlockProcessor(bundle, new MockDecisionModel({ "boundary:b0000_s0001": 1 }), async () => {
+  const processor = new BlockProcessor(bundle, new MockDecisionModel({ "boundary:b0000_s0001": 1, "dlg_turn:b0000_s0001": 1 }), async () => {
     const draft = JSON.parse(await readFile(draftFile, "utf8")) as WorkingDraft;
     assert.equal(draft.stage, "gate");
     assert.equal(await readFile(join(directory, "ontology", "events.jsonl"), "utf8"), "");

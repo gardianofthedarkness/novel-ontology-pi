@@ -18,7 +18,7 @@ export const FLOW_NODES: FlowNode[] = [
   node("intake", "Intake", "digger", "step", [], 1.25, 0),
   node("album", "Album anchors", "digger", "step", [], 2.6, 0),
   node("scenes", "Scene boundaries", "digger", "jev", ["scene_start", "scene_end", "scene_seam", "scene-boundaries"], 0.5, 1),
-  node("exchanges", "Dialogue exchanges", "digger", "jev", ["dlg_start", "dlg_end", "dialogue-boundaries", "dialogue-structure"], 2, 1),
+  node("exchanges", "Dialogue exchanges", "digger", "jev", ["dlg_kind", "dlg_turn", "dlg_start", "dlg_end", "dialogue-boundaries", "dialogue-structure"], 2, 1),
   node("adjudicate", "Scene adjudication", "digger", "work", ["scene-adjudication"], -0.75, 1),
   node("identity", "Entities + presence", "digger", "work", ["entities-participants"], 0, 2),
   node("understanding", "Scene understanding", "digger", "work", ["scene-understanding"], 1.15, 2),

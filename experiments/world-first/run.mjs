@@ -5,10 +5,12 @@
 //   3. when it is against the scene before, among the times the laws allow, and the time its text names (one call; the
 //      candidates come from the time lexicon);
 //   4. each dialogue node, in narrative order: its kind (live, group, remote, public) and its two parties (one call), and
-//      for a remote node which party is here (a second call), settled by the dialogue rules (dialogue.mjs);
+//      for a remote node which party is here (a second call), settled by the dialogue rules (dialogue.mjs); a monologue
+//      (one person's thoughts) costs nothing and moves no one;
 //   5. what the 3D stage settles next (the geometry): nominated rooms to bind, people seen for the first time (their
 //      starts: height and map box), live meetings and group boxes.
 // A fragment scene costs nothing. It stops at the end of the chapters asked for, or before --max-calls would be passed.
+// The facts the book states (background knowledge of the world) go into every later scene's context.
 // Every answer is cached under <out>/cache, so running it again pays only for what changed. After the book, the laws on
 // things and knowledge run over it.
 //   JEV_MODEL=jev-1.14.0 node experiments/world-first/run.mjs <out-dir> [--chapters 0-5] [--max-calls 400] [--novel <dir>]
@@ -58,6 +60,8 @@ const FRAGMENT = 20;
 const PRESENT = 0.5, UNSURE = 0.3;
 /** At most this many candidates are asked about in a scene, and this many parties offered for a dialogue. */
 const CANDIDATES = 14, PARTIES = 10;
+/** The latest facts a context holds, each clipped to this many characters. */
+const FACTS = 12, FACT_CHARS = 160;
 // When the time lexicon finds nothing: dates and parts of the day.
 const TIME_WORDS = /(平安夜|圣诞[节夜]?|除夕|元旦|新年|清晨|黎明|早上|上午|中午|午后|下午|傍晚|黄昏|晚上|夜里|深夜|半夜|午夜|凌晨|第二天|翌日|次日|当天|那天|今天|今晚|明天|昨天|昨晚)/g;
 
@@ -80,6 +84,8 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
   const byName = new Map([...name].map(([id, label]) => [label, id]));
   const placeName = new Map(roster.places.map(entry => [entry.id, entry.names[0]])), placeForms = new Map(roster.places.map(entry => [entry.id, entry.names])), placeScale = new Map(roster.places.map(entry => [entry.id, entry.scale ?? null]));
   let world, log, script, aliases, areaOf;
+  /** The facts told so far (the book's background knowledge), oldest first. */
+  const told = [];
   const summaries = new Map(scenes.map(scene => [scene.id, scene.summary])), number = new Map(scenes.map(scene => [scene.id, scene.index + 1]));
   const labelOf = place => placeName.get(place) ?? world.places[place]?.label ?? place;
   const when = scene => (scene.timeNode ? `, ${scene.timeNode}` : '');
@@ -102,14 +108,14 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
       traced.add(key);
       const sample = id => { for (const entry of scenes) { const form = (forms.get(id) ?? []).find(item => entry.text.includes(item)); if (form) { const at = entry.text.indexOf(form); return clip(entry.text.slice(Math.max(0, at - 40), at + 80), 120); } } return ''; };
       const focus = `Two people whose traces in the world run alike: ${name.get(a)} was in ${A.size} scenes, ${name.get(b)} in ${B.size}, in the same scene ${shared} times (${Math.round(alike * 100)}% alike). How the text names them: “${sample(a)}” / “${sample(b)}”.`;
-      const reply = await jev.decide(compose({ world: worldLines(), story: storyLines(), text: '', focus }), [{ key: 'same', primitive: 'noul', instructions: `Are ${name.get(a)} and ${name.get(b)} one and the same person, called two ways?` }, { key: 'distinct', primitive: 'noul', instructions: `Are ${name.get(a)} and ${name.get(b)} two different people?` }]);
+      const reply = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text: '', focus }), [{ key: 'same', primitive: 'noul', instructions: `Are ${name.get(a)} and ${name.get(b)} one and the same person, called two ways?` }, { key: 'distinct', primitive: 'noul', instructions: `Are ${name.get(a)} and ${name.get(b)} two different people?` }]);
       const same = Number(reply.find(item => item.key === 'same')?.value ?? 0), distinct = Number(reply.find(item => item.key === 'distinct')?.value ?? 1), why = `traces ${Math.round(alike * 100)}% alike over ${A.size} and ${B.size} scenes; Jev same ${same.toFixed(2)}, distinct ${distinct.toFixed(2)}`;
       if (same >= 0.85 && distinct < 0.3) { const [keep, drop] = DESCRIPTIVE.test(name.get(a)) ? [b, a] : [a, b]; sameAs.set(drop, keep); aliases.push({ a: drop, b: keep, why }); }
       if (same >= 0.5) await flagged([identityFlag({ a, b, name: id => name.get(id) ?? id, why })]);
     }
   };
   const pass = async () => {
-  world = createWorld(); log = []; script = []; aliases = []; areaOf = new Map(); sameAs.clear(); failedPins.clear();
+  world = createWorld(); log = []; script = []; aliases = []; areaOf = new Map(); sameAs.clear(); failedPins.clear(); told.length = 0;
   for (const [a, b] of pins.same) { const [x, y] = [canon(a), canon(b)]; if (x !== y) sameAs.set(DESCRIPTIVE.test(name.get(x) ?? '') ? x : y, DESCRIPTIVE.test(name.get(x) ?? '') ? y : x); }
   different = new Set(pins.different.map(pair => [...pair].sort().join('|')));
   for (const scene of scenes.filter(entry => !chapters || chapters.includes(entry.chapter))) {
@@ -118,12 +124,13 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     if (novelDir && replays < REPLAYS) { const settled = await newAnswers(novelDir); if (settled.length) { pins = pinsFrom(pins, settled); await savePins(novelDir, pins); await settleItems(novelDir, settled); if (settled.some(({ item }) => item.kind !== 'landscape')) { replays++; return 'replay'; } } }
     // A chapter's end: people whose traces run too alike are asked about again.
     if (world.scenes.length && world.scenes.at(-1).chapter !== scene.chapter) await tracesAlike();
-    const previous = world.scenes.at(-1), text = scene.text.trim();
+    const previous = world.scenes.at(-1), text = scene.text.trim(), factLines = (scene.facts ?? []).map(fact => clip(fact.text, FACT_CHARS));
     // Without text, nothing changes: the scene before carries on (its people stay, unseen).
     if (text.length < FRAGMENT && !scene.events.length) {
       const entry = enter(world, { id: scene.id, chapter: scene.chapter, place: previous?.place ?? null, relation: 'after', present: [], fragment: true });
       log.push({ scene: scene.id, chapter: scene.chapter, chars: text.length, fragment: true, place: labelOf(entry.place), relation: 'after', clock: entry.clock, present: [], stayed: entry.stayed.map(id => name.get(id)), calls: 0 });
       script.push({ id: scene.id, chapter: scene.chapter, fragment: true, place: entry.place, relation: 'after', clock: entry.clock, present: [], stayed: entry.stayed, joined: [], firstSeen: [], timeline: [] });
+      told.push(...factLines);
       continue;
     }
     if (calls + 2 + scene.dialogues.length * 2 > maxCalls) { stopped = `--max-calls ${maxCalls} reached before scene ${scene.id}`; break; }
@@ -143,7 +150,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     const events = scene.events.map(event => `- ${clip(event.summary, 140)}`).join('\n');
     // Epithets ("刺猬头少年", "白衣修女"): which named person the text means, in this scene.
     const epithets = candidates.filter(id => DESCRIPTIVE.test(name.get(id))).slice(0, EPITHETS), proper = candidates.filter(id => !DESCRIPTIVE.test(name.get(id))).slice(0, NAMED);
-    const first = await jev.decide(compose({ world: worldLines(), story: storyLines(), text, focus: `What happens in this scene (its events):\n${events || '- (none recorded)'}\nPeople who may be in it: ${names(candidates) || '(nobody named)'}.` }), [
+    const first = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus: `What happens in this scene (its events):\n${events || '- (none recorded)'}\nPeople who may be in it: ${names(candidates) || '(nobody named)'}.` }), [
       ...candidates.map((id, index) => ({ key: `present_${index}`, primitive: 'noul', instructions: `Is ${name.get(id)} physically in this scene: at its place, taking part, or within sight or earshot of what happens? Being only mentioned, remembered, thought of, or heard on a phone is not being there.` })),
       { key: 'place', primitive: 'choice', instructions: 'Where does this scene take place?', options: placeOptions },
       ...(proper.length ? epithets.map((id, index) => ({ key: `who_${index}`, primitive: 'choice', instructions: `In this scene, who is the one the text calls “${name.get(id)}”?`, options: [...proper.map(other => name.get(other)), NOBODY_NAMED] })) : []),
@@ -182,7 +189,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
         world.places[place] = { label: `${indoors ? 'a building' : 'a street'}${host ? ` in ${labelOf(host)}` : ''} (scene ${scene.index + 1})`, scale: indoors ? 'building' : 'street', parent: host, spot: true };
         // A new indoor spot: what kind of building it is, from the scene in its context (asked once, when the world makes it).
         if (indoors) {
-          const [kind] = await jev.decide(compose({ world: worldLines(), story: storyLines(), text, focus: `This scene happens indoors${host ? ` in ${labelOf(host)}` : ''}. What happens in it:\n${events || '- (none recorded)'}` }), [{ key: 'building', primitive: 'choice', instructions: 'What kind of building does this scene happen in? Judge by what the text shows of it (its rooms, who is there, what they do).', options: Object.keys(BUILDINGS), optionHints: BUILDINGS }]);
+          const [kind] = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus: `This scene happens indoors${host ? ` in ${labelOf(host)}` : ''}. What happens in it:\n${events || '- (none recorded)'}` }), [{ key: 'building', primitive: 'choice', instructions: 'What kind of building does this scene happen in? Judge by what the text shows of it (its rooms, who is there, what they do).', options: Object.keys(BUILDINGS), optionHints: BUILDINGS }]);
           world.places[place].building = kind?.value in BUILDINGS ? kind.value : 'office';
           if (kind?.confidence !== undefined) world.places[place].buildingSure = Math.round(kind.confidence * 100) / 100;
         }
@@ -194,7 +201,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     const allowed = allowedTimes(world, present, place, { opening, chapterStart }), times = inPast(world, chapterStart) ? PAST_TIMES : TIMES;
     const mentions = detectTimeMentions([{ id: scene.id, text }]).sort((a, b) => a.inQuote - b.inQuote).map(mention => mention.text);
     const phrases = [...new Set(mentions.length ? mentions : text.match(TIME_WORDS) ?? [])].slice(0, 8);
-    const context = compose({ world: worldLines(), story: storyLines(), text, focus: `In this scene, at ${labelOf(place)}: ${names(present) || 'nobody named is there'}.` });
+    const context = compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus: `In this scene, at ${labelOf(place)}: ${names(present) || 'nobody named is there'}.` });
     const second = allowed.length > 1 || phrases.length ? await jev.decide(context, [
       ...(allowed.length > 1 ? [{ key: 'time', primitive: 'choice', instructions: `When does this scene happen, against the scene before${inPast(world, chapterStart) ? ' (which is in a flashback)' : ''}?`, options: allowed.map(relation => times[relation]) }] : []),
       ...(phrases.length ? [{ key: 'time_node', primitive: 'choice', instructions: 'Which time does this scene itself happen at, as its text says? Pick none when the text only mentions a time for something else.', options: [...phrases, 'none'] }] : []),
@@ -210,7 +217,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     for (const dialogue of scene.dialogues) {
       const inScene = [...entry.present, ...entry.stayed], offered = [...new Set([...inScene, ...named(dialogue.text)])].slice(0, PARTIES), partyOptions = [...offered.map(id => name.get(id)), UNNAMED];
       const focus = `This dialogue, in the scene:\n${dialogue.text}\nIn the scene: ${names(inScene) || 'nobody named'}.`;
-      const asked = await jev.decide(compose({ world: worldLines(), story: storyLines(), text, focus }), [
+      const asked = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus }), [
         { key: 'kind', primitive: 'choice', instructions: 'How does this dialogue happen?', options: Object.values(KINDS) },
         { key: 'party_a', primitive: 'choice', instructions: 'Who speaks first in this dialogue?', options: partyOptions },
         { key: 'party_b', primitive: 'choice', instructions: 'Who is the other person in it (who answers, or is spoken to)?', options: partyOptions },
@@ -219,7 +226,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
       const kind = pins.kind[dialogue.id] ?? Object.keys(KINDS).find(key => KINDS[key] === got('kind')) ?? 'live', parties = [byName.get(got('party_a')) ?? null, byName.get(got('party_b')) ?? null];
       let local = null;
       if (kind === 'remote' && parties[0] && parties[1] && parties[0] !== parties[1]) {
-        const here = await jev.decide(compose({ world: worldLines(), story: storyLines(), text, focus }), [{ key: 'local', primitive: 'choice', instructions: 'Which of the two is here, in this scene (the other is somewhere else)?', options: parties.map(id => name.get(id)) }]);
+        const here = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus }), [{ key: 'local', primitive: 'choice', instructions: 'Which of the two is here, in this scene (the other is somewhere else)?', options: parties.map(id => name.get(id)) }]);
         local = byName.get(here[0]?.value) ?? null;
       }
       const node = settle({ kind, parties: parties[0] === parties[1] ? [parties[0], null] : parties, local, inScene, elsewhere: id => elsewhere(world, entry, id) });
@@ -229,16 +236,17 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     // For the 3D stage: a nominated room to bind, and who is seen for the first time (or first since a flashback).
     const firstSeen = entry.clock ? entry.present.filter(id => world.people[id].log.filter(item => !item.past).length === 1) : [];
     const timeline = [...scene.events.map(event => ({ type: 'event', id: event.id, first: event.first, actors: event.actors })), ...nodes.map(node => ({ type: 'dialogue', ...node }))].sort((a, b) => order(a.first) - order(b.first));
-    script.push({ id: scene.id, chapter: scene.chapter, place, room: placeScale.get(place) === 'room', relation, clock: entry.clock, timeNode, present: entry.present, stayed: entry.stayed, joined: entry.joined ?? [], firstSeen, timeline, actorFlags: cast.flags, context });
+    script.push({ id: scene.id, chapter: scene.chapter, place, room: placeScale.get(place) === 'room', relation, clock: entry.clock, timeNode, present: entry.present, stayed: entry.stayed, joined: entry.joined ?? [], firstSeen, timeline, monologues: (scene.monologues ?? []).map(monologue => ({ id: monologue.id, first: monologue.first })), actorFlags: cast.flags, context });
     log.push({ scene: scene.id, chapter: scene.chapter, chars: text.length, place: labelOf(place), room: placeScale.get(place) === 'room', relation, allowed, clock: entry.clock, timeNode,
       present: entry.present.map(id => ({ name: name.get(id), p: Math.round((chances.get(id) ?? 0) * 100) / 100 })), unsure: [...chances].filter(([, p]) => p >= UNSURE && p < PRESENT).map(([id, p]) => ({ name: name.get(id), p: Math.round(p * 100) / 100 })),
       stayed: entry.stayed.map(id => name.get(id)), joined: (entry.joined ?? []).map(item => `${name.get(item.person)} (${item.why})`), firstSeen: names(firstSeen), travelled: entry.travelled.map(trip => `${name.get(trip.person)}: ${labelOf(trip.from)} → ${labelOf(trip.to)}`),
       dialogues: nodes.map(node => ({ kind: node.kind, parties: names(node.parties), ...(node.public ? { public: true, listeners: node.listeners.length } : {}), ...(node.kind === 'remote' ? { here: name.get(node.local), there: name.get(node.remote) } : {}), ...(node.conflicts.length ? { conflicts: node.conflicts } : {}) })),
-      actorFlags: cast.flags.length, calls: calls - before });
+      monologues: (scene.monologues ?? []).length, facts: factLines.length, actorFlags: cast.flags.length, calls: calls - before });
     // What this scene leaves unsure, or against a law, into the review pool (a batch goes to the main agent as it fills).
     await flagged(flagsOf({ scene: scene.id, number: scene.index + 1, placeLabel: labelOf(place), summary: clip(summaries.get(scene.id) ?? '', 120), name: id => name.get(id) ?? id, dialogues: nodes,
       unsure: [...chances].filter(([id, p]) => p >= UNSURE && p < PRESENT && pinned(id) === undefined).map(([id, p]) => ({ id, p })),
       actorFlags: cast.flags.filter(flag => flag.law === 'actor not in the scene' && pinned(flag.person) === undefined) }));
+    told.push(...factLines);
   }
   await tracesAlike();
   return 'done';
@@ -266,6 +274,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
   const dialogues = script.flatMap(scene => scene.timeline.filter(item => item.type === 'dialogue'));
   const summary = { scenes: log.length, fragments: log.filter(line => line.fragment).length, calls, stopped, model: live.modelId, chapters: [...new Set(log.map(line => line.chapter))],
     dialogues: Object.fromEntries(Object.keys(KINDS).map(kind => [kind, dialogues.filter(item => item.kind === kind).length])), joinedByDialogue: dialogues.reduce((sum, item) => sum + item.joins.length, 0),
+    monologues: script.reduce((sum, scene) => sum + (scene.monologues?.length ?? 0), 0), facts: told.length,
     flags: { actors: laws.actors.length, things: laws.things.flags.length, knowledge: laws.knowledge.length, dialogue: laws.dialogue.length }, aliases: aliases.length, spots: Object.values(world.places).filter(place => place.spot).length, replays, sameAs: sameAs.size, failedPins: failedPins.size };
   await writeFile(join(outDir, 'run.json'), JSON.stringify(summary, null, 1), { mode: 0o600 });
   return summary;

@@ -16,7 +16,7 @@ export interface WorkingDraft {
   sceneSpans: string[][];
   dialogueUnits: string[][];
   turns: DialogueTurn[];
-  dialogueCards?: { id: string; sentenceIds: string[]; participantNames: string[]; unresolvedNames: string[] }[];
+  dialogueCards?: { id: string; sentenceIds: string[]; participantNames: string[]; unresolvedNames: string[]; kind?: "monologue" }[];
   completedScenes: number;
   totalScenes: number;
   statePreview?: CharacterStateAtPoint[];
