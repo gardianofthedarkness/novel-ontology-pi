@@ -629,26 +629,52 @@ export async function strandDemo(novelDir, options) {
   const partialRuns = () => { const out = {}; for (const [key, begin] of begun) { const [sceneId, person] = key.split('|'); ((out[sceneId] ??= { starts: {}, events: [] }).starts[person] = begin); } return out; };
   const { start, act } = mover;
   // World-first starts and meetings (see worldScript above). Conversation distance: the same floor, within 4 m.
-  const LEVELS = { outside: 'outside, at street level', ground: 'inside a building, on the ground floor', upper: 'inside a building, on an upper floor', roof: 'on a roof' }, TALK = 4;
+  const TALK = 4;
   const meetings = new Map();
-  const peopleAt = (placeId, except = null) => [...where.entries()].filter(([id, entry]) => id !== except && entry.place === placeId && entry.at).map(([, entry]) => { const p = W.nodePos(world, entry.at[0]); return [p.x, p.z]; });
-  /** Someone first seen: the level, then a box on a map of the place; null leaves it to the engine's own start. */
+  const peopleAt = (placeId, except = null, floor = null) => [...where.entries()].filter(([id, entry]) => id !== except && entry.place === placeId && entry.at).map(([, entry]) => W.nodePos(world, entry.at[0])).filter(p => floor === null || p.k === floor).map(p => [p.x, p.z]);
+  /**
+   * Someone first seen: first the level (the street, a building's ground floor, each floor up to the tallest building
+   * around, a roof), then a box on a picture of that level, a slice through the buildings there with their rooms drawn.
+   * Inside, the room under the box (or the nearest room on that floor of that building) is where they are born, on a
+   * walkable cell of it; outside, the walkable cell nearest the box. Null leaves it to the engine's own start.
+   */
   const firstStart = async ({ scene, handoff, carried }) => {
     const entry = worldScene.get(scene.id);
     if (!jev || carried || !entry?.firstSeen?.includes(handoff.person)) return null;
-    const { anchor } = groups.get(scene.placeId);
+    const { anchor } = groups.get(scene.placeId), radius = 48;
     reach(anchor.x, anchor.z, 56);
-    const who = name(handoff.person), context = entry.context ?? '', picture = mapPicture(world, { x: anchor.x, z: anchor.z, radius: 48, people: peopleAt(scene.placeId, handoff.person) });
-    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins?`, options: Object.values(LEVELS) }]);
-    const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: `Where on this map is ${who} when this scene begins?` }, { key: 'on', primitive: 'noul', instructions: `Is where ${who} is when this scene begins somewhere on this map?` }], { images: { map: picture.png } });
+    const who = name(handoff.person), context = entry.context ?? '';
+    const around = world.lots.filter(lot => Math.abs((lot.i0 + lot.nx / 2) * 2 - anchor.x) <= radius && Math.abs((lot.j0 + lot.nz / 2) * 2 - anchor.z) <= radius);
+    const top = Math.min(12, Math.max(1, ...around.map(lot => lot.floors)));
+    const levels = [['outside, at street level', null], ['inside a building, on the ground floor', 0], ...Array.from({ length: top - 1 }, (_, n) => [`inside a building, on floor ${n + 2}`, n + 1]), ['on a roof', 'roof']];
+    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins: outside, on which floor of a building, or on a roof?`, options: levels.map(([label]) => label) }]);
+    const floor = levels.find(([label]) => label === level?.value)?.[1] ?? null, inside = typeof floor === 'number';
+    const picture = mapPicture(world, { x: anchor.x, z: anchor.z, radius, people: peopleAt(scene.placeId, handoff.person, inside ? floor : null), floor: inside ? floor : null });
+    const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: inside ? `Which room on this floor is ${who} in when this scene begins? Box that room.` : `Where on this map is ${who} when this scene begins?` }, { key: 'on', primitive: 'noul', instructions: `Is where ${who} is when this scene begins somewhere on this picture?` }], { images: { map: picture.png } });
     notes.worldStarts = (notes.worldStarts ?? 0) + 1;
     const box = asked.find(answer => answer.key === 'box')?.box, on = Number(asked.find(answer => answer.key === 'on')?.value ?? 0);
     if (!box || on < 0.3) return null;
-    const point = picture.at(box), index = world.lotAt.get(W.cellKey(Math.floor(point.x / 2), Math.floor(point.z / 2))), lot = index === undefined ? null : world.lots[index];
-    const kind = Object.keys(LEVELS).find(key => LEVELS[key] === level?.value) ?? 'outside', k = !lot || kind === 'outside' ? 0 : kind === 'roof' ? lot.floors : kind === 'upper' ? Math.max(1, Math.min(lot.floors - 1, 2)) : 0;
-    const node = W.nodeNear(world, graphOf(point), point.x, point.z, k);
+    const point = picture.at(box), index = world.lotAt.get(W.cellKey(Math.floor(point.x / 2), Math.floor(point.z / 2))), lot = index === undefined ? null : world.lots[index], built = graphOf(point);
+    let node = null, room = null;
+    if (inside && lot && lot.floors > floor) {
+      const ci = Math.floor(point.x / 2) - lot.i0, cj = Math.floor(point.z / 2) - lot.j0, rooms = (lot.rooms ?? []).map((box, n) => ({ box, n })).filter(entry => entry.box.floor === floor);
+      const gap = ({ box }) => Math.hypot((box.i0 + box.i1) / 2 - ci, (box.j0 + box.j1) / 2 - cj);
+      room = rooms.find(({ box }) => ci >= box.i0 && ci <= box.i1 && cj >= box.j0 && cj <= box.j1) ?? rooms.sort((a, b) => gap(a) - gap(b))[0] ?? null;
+      if (room) {
+        let far = Infinity;
+        for (let id = 0; id < built.type.length; id++) {
+          if (!built.type[id] || built.graph.offsets[id + 1] === built.graph.offsets[id]) continue;
+          const p = W.nodePos(world, id);
+          if (p.k !== floor || p.i < lot.i0 + room.box.i0 || p.i > lot.i0 + room.box.i1 || p.j < lot.j0 + room.box.j0 || p.j > lot.j0 + room.box.j1) continue;
+          const d = Math.hypot(p.x - point.x, p.z - point.z);
+          if (d < far) { far = d; node = id; }
+        }
+      }
+    }
+    node ??= W.nodeNear(world, built, point.x, point.z, floor === 'roof' && lot ? lot.floors : inside ? floor : 0);
     if (node == null) return null;
-    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: kind, at: [Math.round(point.x), Math.round(point.z)], k });
+    notes.bornInRooms = (notes.bornInRooms ?? 0) + (room && node != null ? 1 : 0);
+    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: level?.value ?? null, at: [Math.round(point.x), Math.round(point.z)], ...(room ? { room: room.n, building: lot.source } : {}) });
     return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, [node, 0], `${scene.id}|${handoff.person}`) : [node, 0];
   };
   /** Walk someone to a node, the way the engine walks a move. */

@@ -1,9 +1,11 @@
 // A top-down map picture of the world around a point, for Jev's box questions (docs/world-first-design.md §7–8): where
 // someone starts, where a nominated room is, where a group gathers. North is up and one picture is `2 × radius` metres
 // across. It shows the ground (dark), the roads (grey), every lot standing there (blue, darker the taller, with its
-// outline), and the people already placed (red dots), so Jev can place someone among them. Plain Node: a small PNG writer,
-// no browser.
+// outline), and the people already placed (red dots), so Jev can place someone among them. With a `floor`, it is a slice
+// of the buildings at that floor: each one's rooms (light, outlined), its corridors and stairs (mid-grey), and a building
+// too low to reach it as its roof, so a box on it picks a room. Plain Node: a small PNG writer, no browser.
 import { deflateSync } from 'node:zlib';
+import { CORRIDOR, MASS, cellIndex } from '../dist/apps/playground/src/data/skeleton.js';
 
 const CRC = Int32Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
 const crc32 = bytes => { let c = -1; for (const byte of bytes) c = CRC[(c ^ byte) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
@@ -24,7 +26,7 @@ const toSegment = (x, z, [ax, az], [bx, bz]) => { const dx = bx - ax, dz = bz - 
  * The map around (x, z), `radius` metres each way, `size` pixels square. `people`: points [x, z] already placed. Returns
  * the PNG (base64) and how to read a box on it back into the world (`at(box)`: the box's middle in metres).
  */
-export function mapPicture(world, { x, z, radius = 48, size = 384, people = [] }) {
+export function mapPicture(world, { x, z, radius = 48, size = 384, people = [], floor = null }) {
   const rgb = Buffer.alloc(size * size * 3), metres = radius * 2, x0 = x - radius, z0 = z - radius, scale = size / metres;
   const paint = (px, py, [r, g, b]) => { if (px < 0 || py < 0 || px >= size || py >= size) return; const at = (py * size + px) * 3; rgb[at] = r; rgb[at + 1] = g; rgb[at + 2] = b; };
   const roads = world.source.roads.filter(road => toSegment(x, z, road.a, road.b) <= radius * 1.5 + road.width);
@@ -32,9 +34,21 @@ export function mapPicture(world, { x, z, radius = 48, size = 384, people = [] }
     const wx = x0 + (px + 0.5) / scale, wz = z0 + (py + 0.5) / scale;
     paint(px, py, roads.some(road => toSegment(wx, wz, road.a, road.b) <= road.width / 2) ? [96, 102, 110] : [34, 40, 46]);
   }
+  const cellBox = (lot, i0, j0, i1, j1, fill, edge) => {
+    const [p0, q0, p1, q1] = [Math.floor(((lot.i0 + i0) * 2 - x0) * scale), Math.floor(((lot.j0 + j0) * 2 - z0) * scale), Math.ceil(((lot.i0 + i1 + 1) * 2 - x0) * scale), Math.ceil(((lot.j0 + j1 + 1) * 2 - z0) * scale)];
+    for (let py = q0; py < q1; py++) for (let px = p0; px < p1; px++) paint(px, py, edge && (px === p0 || px === p1 - 1 || py === q0 || py === q1 - 1) ? edge : fill);
+  };
   for (const lot of world.lots) {
     const lx0 = lot.i0 * 2, lz0 = lot.j0 * 2, lx1 = lx0 + lot.nx * 2, lz1 = lz0 + lot.nz * 2;
     if (lx1 < x0 || lx0 > x0 + metres || lz1 < z0 || lz0 > z0 + metres) continue;
+    if (floor !== null) {
+      // The slice at this floor: too low, its roof; else its walls, corridors and stairs, then its rooms.
+      if (lot.floors <= floor) { cellBox(lot, 0, 0, lot.nx - 1, lot.nz - 1, [70, 74, 80], [110, 116, 124]); continue; }
+      cellBox(lot, 0, 0, lot.nx - 1, lot.nz - 1, [22, 30, 44], [150, 200, 240]);
+      for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if (lot.skeleton.cells[cellIndex(lot.skeleton, i, j, floor)] !== MASS) cellBox(lot, i, j, i, j, lot.skeleton.cells[cellIndex(lot.skeleton, i, j, floor)] === CORRIDOR ? [92, 104, 118] : [120, 110, 90], null);
+      for (const room of lot.rooms ?? []) if (room.floor === floor) cellBox(lot, room.i0, room.j0, room.i1, room.j1, [196, 214, 232], [60, 90, 130]);
+      continue;
+    }
     const shade = Math.max(70, 210 - Math.min(lot.height ?? lot.floors, 40) * 4), fill = [40, Math.round(shade * 0.6), shade], edge = [150, 200, 240];
     const [p0, q0, p1, q1] = [Math.floor((lx0 - x0) * scale), Math.floor((lz0 - z0) * scale), Math.ceil((lx1 - x0) * scale), Math.ceil((lz1 - z0) * scale)];
     for (let py = q0; py < q1; py++) for (let px = p0; px < p1; px++) paint(px, py, px === p0 || px === p1 - 1 || py === q0 || py === q1 - 1 ? edge : fill);
@@ -45,7 +59,8 @@ export function mapPicture(world, { x, z, radius = 48, size = 384, people = [] }
   }
   return {
     png: encodePng(size, size, rgb).toString('base64'),
-    legend: `A map from above, north up, ${metres} m across: dark is open ground, grey are roads, blue blocks are buildings (darker is taller), red dots are people already there.`,
+    legend: floor === null ? `A map from above, north up, ${metres} m across: dark is open ground, grey are roads, blue blocks are buildings (darker is taller), red dots are people already there.`
+      : `A slice through the buildings at floor ${floor + 1}, from above, north up, ${metres} m across: light outlined boxes are rooms, mid-grey are corridors and stairs, grey blocks are roofs of buildings too low to reach this floor, red dots are people already on this floor.`,
     at: box => ({ x: x0 + ((box.left + box.right) / 2) * metres, z: z0 + ((box.top + box.bottom) / 2) * metres, w: (box.right - box.left) * metres, d: (box.bottom - box.top) * metres }),
   };
 }
