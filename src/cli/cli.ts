@@ -87,7 +87,8 @@ const COMMANDS: Record<string, string> = {
   "novel watch <novel-dir> [--port N]": "Read-only loopback SSE over the processing event log",
   "novel section <file>": "Deterministic sentence sectioning only (free, testable)",
   "novel blocks <file> [--size N]": "Chapter detection + block cutting map (no models)",
-  "novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]":
+  "novel init <path> --world-first": "A world-first workspace: its base layer is applied without fact review, and the world loop decides presence, place, time and dialogue (docs/world-first-design.md)",
+  "novel ingest <novel-dir> <file> [--auto-approve | --base-layer] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]":
     "Full loop: blocks -> miniloop (live Jev) -> extraction (work LLM, when configured) -> ChangeSets -> merge gate -> graph. Default stops at the first gate; --auto-approve applies every ChangeSet. Causality waits for story time and strands: ingest only marks the causality sweep pending (novel checklist runs it after them); --no-causality skips even that",
   "novel causality candidates <novel-dir> [--unit ID] [--chapter N] [--limit N]":
     "List hybrid-nominated CAUSES candidates (graph patterns + embedding top-K) for agent adjudication. No proposals are created.",
@@ -214,10 +215,11 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "init") {
-    if (!sub?.trim() || sub.startsWith("--") || positional.length !== 2) {
-      throw new Error("Usage: novel init <path> [--pretty]");
+    const worldFirst = positional.includes("--world-first");
+    if (!sub?.trim() || sub.startsWith("--") || positional.length !== (worldFirst ? 3 : 2)) {
+      throw new Error("Usage: novel init <path> [--world-first] [--pretty]");
     }
-    out(await initWorkspace(sub), pretty);
+    out(await initWorkspace(sub, { worldFirst }), pretty);
     return;
   }
 
@@ -491,7 +493,7 @@ async function main(): Promise<void> {
     const file = positional[2];
     if (!novelDir || !file || file.startsWith("--")) {
       throw new Error(
-        "Usage: novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]",
+        "Usage: novel ingest <novel-dir> <file> [--auto-approve | --base-layer] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]",
       );
     }
     const maxBlocksRaw = flag(positional, "--max-blocks");
@@ -507,6 +509,7 @@ async function main(): Promise<void> {
     out(
       await ingestNovel(novelDir, file, {
         autoApprove: positional.includes("--auto-approve"),
+        baseLayer: positional.includes("--base-layer"),
         maxBlocks,
         blockSize,
         noExtract: positional.includes("--no-extract"),

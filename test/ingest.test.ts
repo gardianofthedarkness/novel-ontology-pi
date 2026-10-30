@@ -487,3 +487,18 @@ test("ingest with a work LLM requires explicit fact decisions before graph appli
     await work.close();
   }
 });
+
+test("--base-layer applies without fact review only in a world-first workspace; a reviewed workspace refuses it before any model runs", async () => {
+  const root = await mkdtemp(join(tmpdir(), "novel-base-layer-"));
+  try {
+    const source = join(root, "book.txt");
+    await writeFile(source, "第一章\n她走进了房间。\n");
+    const reviewed = (await initWorkspace(join(root, "reviewed"))).novelDir;
+    await assert.rejects(ingestNovel(reviewed, source, { baseLayer: true, env: {} }), /only in a world-first workspace/);
+    const worldFirst = await initWorkspace(join(root, "world"), { worldFirst: true });
+    assert.equal(worldFirst.manifest.worldFirst, true);
+    await assert.rejects(ingestNovel(worldFirst.novelDir, source, { baseLayer: true, autoApprove: true, env: {} }), /two different modes/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
