@@ -1,5 +1,7 @@
 # The underground: halls in the ground
 
+**Status (2026-10-30):** built as below, as world engine 3, in `src/ground/stage/underground.ts`, `world.ts` and the exporter. The measured choice of three underground answers is in §6.1. Flooding is still for later. Building EM is in §9 (`experiments/world-first/buildings.mjs`).
+
 A redesign of what lies under the world (user, 2026-10-30): **underground places are halls, not buildings.** A hall is a void carved in soil or rock, and it stands or falls by the ground around it. A building stands or falls by its own walls and slabs. So gravity, damage and collapse follow different logic underground, and walking, generation and drawing change with them. This replaces the first version (four flat levels of walkable cells, built 2026-10-29 in `world.ts`). Nothing here is built yet.
 
 ## 0. Decisions (user, 2026-10-30)
@@ -233,7 +235,18 @@ Like a building's shell, a model is drawn, never walked.
 
 ## 6. Jev's choices
 
-### 6.1 Two overlapping depth intervals, and the box
+### 6.1 Three underground choices, and the box
+
+**Measured on six generated cities (2026-10-30):** the share of boxes that find exactly one hall.
+
+| Layout | Just under the street | Subway | Deep |
+|---|---|---|---|
+| Two intervals, subway inside the shallow one | 87–92% (under 90% in 4 cities of 6) | — | 98.6–99.3% |
+| **Three choices, built** | 94–96% | 99% | 99% |
+
+**Why three:** a subway on its own logic runs under buildings, so it overlaps their basements. The subway is therefore a choice of its own: a kind of place readers name (platforms, trains, stations), not one more depth layer. The test (`test/world.test.ts`) holds every city to 90% for each choice.
+
+The two depth intervals below still define the other two choices.
 
 **Jev's height question:** for someone first seen, or a move underground, the options are the street, a building's floors, a roof, **just under the street**, or **deep underground**. Never a list of hall kinds or depths.
 
