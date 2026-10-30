@@ -23,7 +23,8 @@ import { compose } from './compose.mjs';
 import { KINDS, UNNAMED, settle } from './dialogue.mjs';
 import { DESCRIPTIVE } from './identity.mjs';
 import { actors, knowledge, things } from './laws.mjs';
-import { allowedTimes, createWorld, elsewhere, enter, inPast, join as joinScene, PAST_TIMES, TIMES, whereabouts } from './world.mjs';
+import { flagsOf, identityFlag, loadPins, newAnswers, pinsFrom, pool, savePins, settle as settleItems } from './pool.mjs';
+import { allowedTimes, conflicts, createWorld, elsewhere, enter, inPast, join as joinScene, PAST_TIMES, TIMES, whereabouts } from './world.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`).href);
@@ -33,6 +34,10 @@ const ELSEWHERE = 'another place the text does not name', NOBODY_NAMED = 'someon
 const AREAS = new Set(['region', 'city', 'district', 'street']);
 /** At most this many epithets are asked about in a scene, against this many named people. */
 const EPITHETS = 4, NAMED = 8;
+/** Two people in at least TRACE_MIN scenes each, in the same scenes this much of the time, are asked about again (one person?). */
+const TRACE_MIN = 6, TRACE_ALIKE = 0.8;
+/** The world replays with the main agent's answers at most this many times a run. */
+const REPLAYS = 6;
 /** A scene this short (in characters) with no events is a fragment: a stray line the scene splitter cut off. */
 const FRAGMENT = 20;
 /** Present at this probability; below it but above UNSURE, kept in the log as unsure (and an actor that likely joins). */
@@ -48,7 +53,7 @@ const order = (id = '') => { const match = /^b(\d+)_s(\d+)$/.exec(id ?? ''); ret
 const formsOf = name => [name, ...(/[·・]/.test(name) ? name.split(/[·・]/) : /^[一-鿿]{3,4}$/.test(name) ? [name.slice(0, 2), name.slice(-2)] : [])].filter(form => form.length >= 2);
 const count = (text, form) => text.split(form).length - 1;
 
-export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, decisions = null, novelDir = null } = {}) {
+export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, decisions = null, novelDir = null, batchSize = 8, agentConsole = null } = {}) {
   const scenes = JSON.parse(await readFile(join(outDir, 'base', 'scenes.json'), 'utf8')), roster = JSON.parse(await readFile(join(outDir, 'base', 'roster.json'), 'utf8'));
   const states = JSON.parse(await readFile(join(outDir, 'base', 'states.json'), 'utf8').catch(() => '[]'));
   const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
@@ -60,15 +65,44 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
   const name = new Map(roster.characters.map(entry => [entry.id, entry.names[0]])), forms = new Map(roster.characters.map(entry => [entry.id, [...new Set(entry.names.flatMap(formsOf))]]));
   const byName = new Map([...name].map(([id, label]) => [label, id]));
   const placeName = new Map(roster.places.map(entry => [entry.id, entry.names[0]])), placeForms = new Map(roster.places.map(entry => [entry.id, entry.names])), placeScale = new Map(roster.places.map(entry => [entry.id, entry.scale ?? null]));
-  const world = createWorld(), log = [], script = [], aliases = [], areaOf = new Map(), summaries = new Map(scenes.map(scene => [scene.id, scene.summary])), number = new Map(scenes.map(scene => [scene.id, scene.index + 1]));
+  let world, log, script, aliases, areaOf;
+  const summaries = new Map(scenes.map(scene => [scene.id, scene.summary])), number = new Map(scenes.map(scene => [scene.id, scene.index + 1]));
   const labelOf = place => placeName.get(place) ?? world.places[place]?.label ?? place;
   const when = scene => (scene.timeNode ? `, ${scene.timeNode}` : '');
   const names = ids => ids.map(id => name.get(id) ?? id).join('、');
   const worldLines = () => whereabouts(world).map(([id, person]) => `${name.get(id) ?? id} — at ${labelOf(person.place)}${person.spot ? ` (${person.spot})` : ''}, since scene ${number.get(person.since)}${when(world.scenes.find(scene => scene.id === person.since) ?? {})}`);
   const storyLines = () => world.scenes.slice(-8).map(scene => `Scene ${number.get(scene.id)} · ${labelOf(scene.place)} · ${scene.clock ? scene.relation : 'in a flashback'}${when(scene)}${scene.present.length ? ` · with ${names(scene.present)}` : ''}: ${clip(summaries.get(scene.id) ?? '', 160)}`);
   const named = text => [...forms].map(([id, list]) => [id, list.reduce((sum, form) => sum + count(text, form) * (form === name.get(id) ? 3 : 1), 0)]).filter(([, hits]) => hits).sort((a, b) => b[1] - a[1]).map(([id]) => id);
-  let stopped = null;
+  // The review pool (pool.mjs): the main agent's answers as pins, and the identities the world holds as one (sameAs).
+  let pins = novelDir ? await loadPins(novelDir) : { present: {}, same: [], different: [], kind: {} }, stopped = null, replays = 0, different = new Set();
+  const sameAs = new Map(), canon = id => { let at = id; while (sameAs.has(at)) at = sameAs.get(at); return at; }, traced = new Set(), failedPins = new Map();
+  const flagged = items => (novelDir ? pool(novelDir, items, { size: batchSize, console: agentConsole }) : []);
+  /** Two people whose traces run too alike over a long stretch: Jev is asked again, with their traces, whether they are one. */
+  const tracesAlike = async () => {
+    const seen = new Map();
+    for (const entry of world.scenes) if (entry.clock) for (const id of new Set([...entry.present, ...entry.stayed])) (seen.get(id) ?? seen.set(id, new Set()).get(id)).add(entry.id);
+    const people = [...seen].filter(([, set]) => set.size >= TRACE_MIN);
+    for (const [index, [a, A]] of people.entries()) for (const [b, B] of people.slice(index + 1)) {
+      const key = [a, b].sort().join('|'), shared = [...A].filter(id => B.has(id)).length, alike = shared / new Set([...A, ...B]).size;
+      if (alike < TRACE_ALIKE || traced.has(key) || different.has(key) || canon(a) === canon(b)) continue;
+      traced.add(key);
+      const sample = id => { for (const entry of scenes) { const form = (forms.get(id) ?? []).find(item => entry.text.includes(item)); if (form) { const at = entry.text.indexOf(form); return clip(entry.text.slice(Math.max(0, at - 40), at + 80), 120); } } return ''; };
+      const focus = `Two people whose traces in the world run alike: ${name.get(a)} was in ${A.size} scenes, ${name.get(b)} in ${B.size}, in the same scene ${shared} times (${Math.round(alike * 100)}% alike). How the text names them: “${sample(a)}” / “${sample(b)}”.`;
+      const reply = await jev.decide(compose({ world: worldLines(), story: storyLines(), text: '', focus }), [{ key: 'same', primitive: 'noul', instructions: `Are ${name.get(a)} and ${name.get(b)} one and the same person, called two ways?` }, { key: 'distinct', primitive: 'noul', instructions: `Are ${name.get(a)} and ${name.get(b)} two different people?` }]);
+      const same = Number(reply.find(item => item.key === 'same')?.value ?? 0), distinct = Number(reply.find(item => item.key === 'distinct')?.value ?? 1), why = `traces ${Math.round(alike * 100)}% alike over ${A.size} and ${B.size} scenes; Jev same ${same.toFixed(2)}, distinct ${distinct.toFixed(2)}`;
+      if (same >= 0.85 && distinct < 0.3) { const [keep, drop] = DESCRIPTIVE.test(name.get(a)) ? [b, a] : [a, b]; sameAs.set(drop, keep); aliases.push({ a: drop, b: keep, why }); }
+      if (same >= 0.5) await flagged([identityFlag({ a, b, name: id => name.get(id) ?? id, why })]);
+    }
+  };
+  const pass = async () => {
+  world = createWorld(); log = []; script = []; aliases = []; areaOf = new Map(); sameAs.clear(); failedPins.clear();
+  for (const [a, b] of pins.same) { const [x, y] = [canon(a), canon(b)]; if (x !== y) sameAs.set(DESCRIPTIVE.test(name.get(x) ?? '') ? x : y, DESCRIPTIVE.test(name.get(x) ?? '') ? y : x); }
+  different = new Set(pins.different.map(pair => [...pair].sort().join('|')));
   for (const scene of scenes.filter(entry => !chapters || chapters.includes(entry.chapter))) {
+    // Between scenes: the main agent's answers stop the world, which replays from the start with them as pins.
+    if (novelDir && replays < REPLAYS) { const settled = await newAnswers(novelDir); if (settled.length) { pins = pinsFrom(pins, settled); await savePins(novelDir, pins); await settleItems(novelDir, settled); replays++; return 'replay'; } }
+    // A chapter's end: people whose traces run too alike are asked about again.
+    if (world.scenes.length && world.scenes.at(-1).chapter !== scene.chapter) await tracesAlike();
     const previous = world.scenes.at(-1), text = scene.text.trim();
     // Without text, nothing changes: the scene before carries on (its people stay, unseen).
     if (text.length < FRAGMENT && !scene.events.length) {
@@ -81,9 +115,9 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     const before = calls;
     // Candidates: who the text names, who its events have taking part, and who was in the scene before (they may still be there).
     const score = new Map(), add = (id, points) => score.set(id, (score.get(id) ?? 0) + points);
-    for (const [id, list] of forms) for (const form of list) { const hits = count(text, form); if (hits) add(id, hits * (form === name.get(id) ? 3 : 1)); }
-    for (const event of scene.events) for (const id of event.actors) if (name.has(id)) add(id, 5);
-    for (const id of [...(previous?.present ?? []), ...(previous?.stayed ?? [])]) add(id, 4);
+    for (const [id, list] of forms) for (const form of list) { const hits = count(text, form); if (hits) add(canon(id), hits * (form === name.get(id) ? 3 : 1)); }
+    for (const event of scene.events) for (const id of event.actors) if (name.has(id)) add(canon(id), 5);
+    for (const id of [...(previous?.present ?? []), ...(previous?.stayed ?? [])]) add(canon(id), 4);
     const candidates = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, CANDIDATES).map(([id]) => id);
     // Where: the place of the scene before, places the text names, places where the candidates are, or a new unnamed one.
     const namedPlaces = [...placeForms].filter(([, list]) => list.some(form => text.includes(form))).map(([id]) => id);
@@ -106,15 +140,18 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     // An epithet Jev ties to a named person (surely) is that person here: one presence, and evidence for EM.
     for (const [index, id] of epithets.entries()) {
       const reply = answer(`who_${index}`), person = proper.find(other => name.get(other) === reply?.value), sure = Number(reply?.distribution?.[reply?.value] ?? reply?.confidence ?? 0);
-      if (!person || sure < 0.75) continue;
+      if (!person || sure < 0.75 || different.has([id, person].sort().join('|'))) continue;
       chances.set(person, Math.max(chances.get(person) ?? 0, chances.get(id) ?? 0));
       chances.delete(id);
       aliases.push({ a: id, b: person, why: `in scene ${scene.index + 1} the text calls ${name.get(person)} “${name.get(id)}” (Jev ${Math.round(sure * 100)}%)` });
     }
-    const present = [...chances].filter(([, p]) => p >= PRESENT).map(([id]) => id);
+    let present = [...chances].filter(([, p]) => p >= PRESENT).map(([id]) => id);
+    // Pins from the main agent's answers: who is, or is not, in this scene.
+    const pinned = id => pins.present[`${scene.id}|${id}`];
+    for (const [key, on] of Object.entries(pins.present)) { const [at, person] = key.split('|'); if (at === scene.id) present = on ? [...new Set([...present, canon(person)])] : present.filter(id => id !== canon(person)); }
     // Actors are there: an event's actor Jev thought likely joins; the others are flagged.
-    const cast = actors({ events: scene.events.map(event => ({ ...event, actors: event.actors.filter(id => name.has(id)) })), inScene: present, chance: id => chances.get(id), elsewhere: () => false, floor: UNSURE });
-    present.push(...cast.add);
+    const cast = actors({ events: scene.events.map(event => ({ ...event, actors: event.actors.filter(id => name.has(id)).map(canon) })), inScene: present, chance: id => chances.get(id), elsewhere: () => false, floor: UNSURE });
+    present.push(...cast.add.filter(id => pinned(id) !== false));
     const picked = String(answer('place')?.value ?? ELSEWHERE), placeIndex = placeOptions.indexOf(picked);
     let place = placeIndex >= 0 && placeIndex < places.length ? places[placeIndex] : null;
     // A scene in an area is at a spot inside it: the scene before's spot when it carries on there, else a spot of its own
@@ -142,6 +179,8 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     const relation = allowed.length > 1 ? allowed.find(key => times[key] === reply('time')?.value) ?? allowed[0] : allowed[0];
     const timeNode = phrases.length && reply('time_node')?.value !== 'none' ? String(reply('time_node')?.value ?? '') || null : null;
     const entry = enter(world, { id: scene.id, chapter: scene.chapter, place, relation, present, timeNode, chapterStart });
+    // A pin the laws reject (someone pinned here while somewhere else at this time) goes back to the pool.
+    for (const person of present.filter(id => pinned(id) === true)) if (conflicts(world, [person], place, entry.clock).length) failedPins.set(`${scene.id}|${person}`, `${name.get(person)} is somewhere else at this time`);
     // Dialogue nodes, in narrative order: kind and parties, then (remote) which party is here.
     const nodes = [];
     for (const dialogue of scene.dialogues) {
@@ -153,7 +192,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
         { key: 'party_b', primitive: 'choice', instructions: 'Who is the other person in it (who answers, or is spoken to)?', options: partyOptions },
       ]);
       const got = key => asked.find(item => item.key === key)?.value;
-      const kind = Object.keys(KINDS).find(key => KINDS[key] === got('kind')) ?? 'live', parties = [byName.get(got('party_a')) ?? null, byName.get(got('party_b')) ?? null];
+      const kind = pins.kind[dialogue.id] ?? Object.keys(KINDS).find(key => KINDS[key] === got('kind')) ?? 'live', parties = [byName.get(got('party_a')) ?? null, byName.get(got('party_b')) ?? null];
       let local = null;
       if (kind === 'remote' && parties[0] && parties[1] && parties[0] !== parties[1]) {
         const here = await jev.decide(compose({ world: worldLines(), story: storyLines(), text, focus }), [{ key: 'local', primitive: 'choice', instructions: 'Which of the two is here, in this scene (the other is somewhere else)?', options: parties.map(id => name.get(id)) }]);
@@ -172,6 +211,21 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
       stayed: entry.stayed.map(id => name.get(id)), joined: (entry.joined ?? []).map(item => `${name.get(item.person)} (${item.why})`), firstSeen: names(firstSeen), travelled: entry.travelled.map(trip => `${name.get(trip.person)}: ${labelOf(trip.from)} → ${labelOf(trip.to)}`),
       dialogues: nodes.map(node => ({ kind: node.kind, parties: names(node.parties), ...(node.public ? { public: true, listeners: node.listeners.length } : {}), ...(node.kind === 'remote' ? { here: name.get(node.local), there: name.get(node.remote) } : {}), ...(node.conflicts.length ? { conflicts: node.conflicts } : {}) })),
       actorFlags: cast.flags.length, calls: calls - before });
+    // What this scene leaves unsure, or against a law, into the review pool (a batch goes to the main agent as it fills).
+    await flagged(flagsOf({ scene: scene.id, number: scene.index + 1, placeLabel: labelOf(place), summary: clip(summaries.get(scene.id) ?? '', 120), name: id => name.get(id) ?? id, dialogues: nodes,
+      unsure: [...chances].filter(([id, p]) => p >= UNSURE && p < PRESENT && pinned(id) === undefined).map(([id, p]) => ({ id, p })),
+      actorFlags: cast.flags.filter(flag => flag.law === 'actor not in the scene' && pinned(flag.person) === undefined) }));
+  }
+  await tracesAlike();
+  return 'done';
+  };
+  while (await pass() === 'replay');
+  // Pins the laws rejected: dropped from the world, their items back in the pool with why.
+  if (novelDir && failedPins.size) {
+    const { loadPool } = await load('dist/src/cli/commands/extract/worldCommands.js'), items = await loadPool(novelDir), back = [];
+    for (const [key, why] of failedPins) { const item = items.find(entry => ['presence', 'actor'].includes(entry.kind) && `${entry.scene}|${entry.subjects[0]}` === key); if (item) back.push([item, why]); delete pins.present[key]; }
+    await savePins(novelDir, pins);
+    await settleItems(novelDir, back.map(([item]) => ({ item })), new Map(back.map(([item, why]) => [item.id, why])));
   }
   // The laws on things and knowledge, over the book.
   const eventOrder = new Map(script.flatMap(scene => scene.timeline.filter(item => item.type === 'event')).map((item, index) => [item.id, index]));
@@ -188,14 +242,14 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
   const dialogues = script.flatMap(scene => scene.timeline.filter(item => item.type === 'dialogue'));
   const summary = { scenes: log.length, fragments: log.filter(line => line.fragment).length, calls, stopped, model: live.modelId, chapters: [...new Set(log.map(line => line.chapter))],
     dialogues: Object.fromEntries(Object.keys(KINDS).map(kind => [kind, dialogues.filter(item => item.kind === kind).length])), joinedByDialogue: dialogues.reduce((sum, item) => sum + item.joins.length, 0),
-    flags: { actors: laws.actors.length, things: laws.things.flags.length, knowledge: laws.knowledge.length, dialogue: laws.dialogue.length }, aliases: aliases.length, spots: Object.values(world.places).filter(place => place.spot).length };
+    flags: { actors: laws.actors.length, things: laws.things.flags.length, knowledge: laws.knowledge.length, dialogue: laws.dialogue.length }, aliases: aliases.length, spots: Object.values(world.places).filter(place => place.spot).length, replays, sameAs: sameAs.size, failedPins: failedPins.size };
   await writeFile(join(outDir, 'run.json'), JSON.stringify(summary, null, 1), { mode: 0o600 });
   return summary;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { chapters: { type: 'string' }, 'max-calls': { type: 'string' }, novel: { type: 'string' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { chapters: { type: 'string' }, 'max-calls': { type: 'string' }, novel: { type: 'string' }, batch: { type: 'string' }, agent: { type: 'string' } } });
   const range = values.chapters?.match(/^(\d+)(?:-(\d+))?$/), chapters = range ? Array.from({ length: Number(range[2] ?? range[1]) - Number(range[1]) + 1 }, (_, n) => Number(range[1]) + n) : null;
   if (!positionals[0]) throw new Error('Usage: node experiments/world-first/run.mjs <out-dir> [--chapters 0-5] [--max-calls 400]');
-  console.log(JSON.stringify(await runWorldFirst(resolve(positionals[0]), { chapters, maxCalls: Number(values['max-calls'] ?? 400), novelDir: values.novel ? resolve(values.novel) : null })));
+  console.log(JSON.stringify(await runWorldFirst(resolve(positionals[0]), { chapters, maxCalls: Number(values['max-calls'] ?? 400), novelDir: values.novel ? resolve(values.novel) : null, batchSize: Number(values.batch ?? 8), agentConsole: values.agent ? resolve(values.agent) : null })));
 }

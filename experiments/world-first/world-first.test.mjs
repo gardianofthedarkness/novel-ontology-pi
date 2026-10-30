@@ -140,3 +140,18 @@ test('identity: an epithet tied to several named people is never merged, and two
   const chain = planMerges([{ a: 't', b: 'a', why: 's' }, { a: 't', b: 'g', why: 's' }], names);
   assert.equal(chain.merges.length, 0, 'an epithet tied to two people is ambiguous: neither merges');
 });
+
+test('the review pool: a scene\'s unsure presence, dialogue conflicts and missing actors become items (the same question one item); answers become pins', async () => {
+  const { flagsOf, pinsFrom, identityFlag } = await import('./pool.mjs');
+  const name = id => ({ a: '上条当麻', b: '茵蒂克丝', c: '御坂美琴' })[id] ?? id;
+  const items = flagsOf({ scene: 's1', number: 1, placeLabel: 'P', summary: '...', name, unsure: [{ id: 'a', p: 0.4 }], dialogues: [{ id: 'd1', kind: 'remote', parties: ['a', 'b'], conflicts: ['b, on the other end, is in the scene'] }], actorFlags: [{ event: 'e1', person: 'c', law: 'actor not in the scene' }] });
+  assert.deepEqual(items.map(item => item.kind), ['presence', 'dialogue', 'actor']);
+  assert.ok(items.every(item => /^wi_[a-f0-9]{16}$/.test(item.id)));
+  assert.equal(flagsOf({ scene: 's1', number: 1, placeLabel: 'P', summary: '...', name, unsure: [{ id: 'a', p: 0.45 }], dialogues: [], actorFlags: [] })[0].id, items[0].id, 'one question, one item');
+  const identity = identityFlag({ a: 'b', b: 'a', name, why: 'x' });
+  assert.equal(identity.id, identityFlag({ a: 'a', b: 'b', name, why: 'y' }).id);
+  const pins = pinsFrom({ present: {}, same: [], different: [], kind: {} }, [
+    { answer: { verdict: 'not present' }, item: items[0] }, { answer: { verdict: 'live' }, item: items[1] }, { answer: { verdict: 'different' }, item: identity },
+  ]);
+  assert.deepEqual(pins, { present: { 's1|a': false }, same: [], different: [['a', 'b']], kind: { d1: 'live' } });
+});
