@@ -74,7 +74,7 @@ function settle(items: ChecklistItem[], known: ChecklistItem[] = []): ChecklistI
 export async function bookChecklist(novelDir: string, options: { input?: string; env?: NodeJS.ProcessEnv; stage?: boolean } = {}): Promise<BookChecklist> {
   const dir = quote(novelDir);
   const store = new BundleStore(join(novelDir, "ontology"));
-  const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}")) as { title?: string };
+  const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}")) as { title?: string; worldFirst?: boolean };
   const [entities, relations, scenes] = [fold(await store.loadFile<Entity>("entities.jsonl")), await store.loadFile<Relation>("relations.jsonl"), fold(await store.loadFile<Scene>("scenes.jsonl"))];
   const changesets = await listChangeSets(novelDir).catch(() => []);
   const pending = (test: (id: string, blockId: string) => boolean) => changesets.filter((changeset) => ["pending_review", "held", "revision_requested"].includes(changeset.status) && test(changeset.id, changeset.blockId));
@@ -196,6 +196,13 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   items.push({ id: "graph", title: "Query graph up to date", dependsOn: ["blocks"], status: !graph || graph.mtimeMs < newest ? "todo" : "done",
     counts: { built: !!graph }, next: !graph || graph.mtimeMs < newest ? [`novel graph build ${quote(join(novelDir, "ontology"))}`] : [] });
 
+  // A world-first workspace: story time, scene places, the place tree, strands and in-book causality are the world's
+  // (docs/world-first-design.md), done once its world script is written; these faculties are never asked.
+  if (manifest.worldFirst) {
+    const script = await exists(join(novelDir, "stage", "world", "script.json"));
+    for (const item of items) if (["time-place", "place-tree", "strands", "causality"].includes(item.id)) Object.assign(item, { status: script ? "done" : "todo", next: script ? [] : [`node experiments/world-first/run.mjs <out-dir> --novel ${dir}`], note: `World-first: the world ${script ? "decides" : "will decide"} this (stage/world/script.json).` });
+  }
+  const worldFirst = !!manifest.worldFirst;
   settle(items);
   const result: BookChecklist = { novelDir, title: manifest.title ?? novelDir, complete: items.every((item) => item.status === "done" || item.status === "optional"), items,
     next: items.filter((item) => item.status === "todo" || item.status === "review").flatMap((item) => item.next.map((command) => `[${item.id}] ${command}`)) };
@@ -210,7 +217,8 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   // What each city, district and street looks like from above: into the ontology through review (the place's landscape property).
   const landscapeOpen = await landscapePacketsOpen(novelDir);
   stageItems.push({ id: "landscape", title: "Landscape of open places (what cities, districts and streets look like from above; into the ontology, reviewed)", dependsOn: ["scale"],
-    status: landscapeOpen.length ? "review" : stage.landscapeCurrent ? "done" : "todo", counts: { places: stage.landscapePlaces.length, picked: Object.keys(stage.landscape?.places ?? {}).length, proposed: stage.landscape?.proposed?.length ?? 0, awaitingReview: landscapeOpen.length, current: stage.landscapeCurrent },
+    // World-first: the landscape is stage view data, not a world fact; its packet may wait for review without holding the stage.
+    status: landscapeOpen.length && !worldFirst ? "review" : stage.landscapeCurrent ? "done" : "todo", counts: { places: stage.landscapePlaces.length, picked: Object.keys(stage.landscape?.places ?? {}).length, proposed: stage.landscape?.proposed?.length ?? 0, awaitingReview: landscapeOpen.length, current: stage.landscapeCurrent },
     next: landscapeOpen.length ? landscapeOpen.map((changeset) => reviewCommand(changeset.id)) : stage.landscapeCurrent ? [] : [`novel stage landscape ${dir}`],
     note: landscapeOpen.length ? "Review it like any packet: accept a place's landscape only if its sentences show that kind of place." : stage.landscapeCurrent ? undefined : `About ${stage.landscapePlaces.length} Jev choice(s), one per city, district or street; it proposes a review packet.` });
   stageItems.push({ id: "architecture", title: "Buildings of places (a sub-kind of place, for read mode)", dependsOn: ["time-place", "place-tree"],

@@ -68,6 +68,37 @@ async function writeReport(path: string, value: unknown) {
   await writeFile(path, JSON.stringify(value, null, 1), { mode: 0o600 });
 }
 
+/** The world script of a world-first workspace (stage/world/script.json, from the world-first loop), or null. */
+interface WorldScript { places: Record<string, { label: string; scale?: string | null }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }
+async function worldScript(novelDir: string): Promise<WorldScript | null> {
+  const manifest = await readJson<{ worldFirst?: boolean }>(join(novelDir, "ontology", "manifest.json"));
+  return manifest?.worldFirst ? readJson<WorldScript>(join(novelDir, "stage", "world", "script.json")) : null;
+}
+/**
+ * A world-first workspace stages the world, not the reviewed presence (docs/world-first-design.md): each scene's cast is
+ * who the world has there (present, and those who stayed unseen), its place is the world's (an unnamed place becomes a
+ * place of its own), and a scene the world has in the past is a flashback. Places and names are added for the unnamed.
+ */
+function worldFirstScenes(data: ReturnType<typeof strandProjection>, world: WorldScript) {
+  const byId = new Map(world.scenes.map((scene) => [scene.id, scene]));
+  for (const scene of data.scenes) {
+    const entry = byId.get(scene.id);
+    if (!entry || entry.fragment) continue;
+    scene.placeIds = entry.place ? [entry.place] : [];
+    scene.placeCarried = false;
+    scene.characterIds = [...new Set([...entry.present, ...entry.stayed])];
+    scene.flashback = !entry.clock;
+  }
+  const known = new Set(data.places.map((place) => place.id));
+  for (const [id, place] of Object.entries(world.places)) {
+    const sceneIds = data.scenes.filter((scene) => scene.placeIds.includes(id)).map((scene) => scene.id);
+    if (known.has(id)) { const stored = data.places.find((entry) => entry.id === id)!; stored.sceneIds = sceneIds; continue; }
+    if (!sceneIds.length) continue;
+    data.places.push({ id, label: place.label, sceneIds, statedScenes: sceneIds.length, characterIds: [], parentId: null, depth: 0, path: [id] });
+    data.names[id] = place.label;
+  }
+}
+
 /** Everything the stage reads (no model calls): its places, its scenes with cast and events, and the fingerprints. Shared with `novel checklist`. */
 export async function stageInputs(novelDir: string) {
   const bundle = new BundleStore(join(novelDir, "ontology"));
@@ -77,6 +108,8 @@ export async function stageInputs(novelDir: string) {
   const events = fold(await bundle.loadFile<StoredEvent>("events.jsonl"));
   // Reviewed canon only: time-place proposals still awaiting review are not staged (the strands view shows them; nothing here pays for them).
   const data = strandProjection({ scenes, entities, relations });
+  const world = await worldScript(novelDir);
+  if (world) worldFirstScenes(data, world);
   const sceneLabel = new Map(data.scenes.map((scene) => [scene.id, scene.label]));
 
   // Architecture: every place a scene happens in.
@@ -121,7 +154,9 @@ export async function stageInputs(novelDir: string) {
   });
   const scale = await readJson<ScaleReport>(stageFile(novelDir, "scale"));
   const scaleCurrent = scale?.inputs === scaleFingerprint(scalePlaces);
-  const kindOf = (placeId: string) => { const kind = architecture?.places[placeId]?.kind; return kind && kind !== "none" ? kind : null; };
+  // A world-first book stages every scene: a place no building picture fits is an office building when its scale is a
+  // building or a room, and open city ground otherwise (an area, or an unnamed place).
+  const kindOf = (placeId: string) => { const kind = architecture?.places[placeId]?.kind; if (kind && kind !== "none") return kind; if (!world) return null; return ["building", "room"].includes(scale?.places[placeId]?.scale ?? "") ? "office" : "city"; };
   const movementScenes: MovementScene[] = [];
   for (const scene of data.scenes) {
     const placeId = scene.placeIds.find((id) => kindOf(id));
@@ -135,13 +170,15 @@ export async function stageInputs(novelDir: string) {
     });
     // The cast: who is present, as the strands view and causality read it (the answered cast where "who is present?" was asked,
     // else the recorded one), and whoever its events record taking part; the busiest first. Someone only mentioned is not on stage.
-    const present = answers?.presence.get(scene.id) ?? scene.characterIds;
+    const present = world ? scene.characterIds : answers?.presence.get(scene.id) ?? scene.characterIds;
     const appearances = new Map<string, number>();
     for (const event of moving) for (const id of event.actors) appearances.set(id, (appearances.get(id) ?? 0) + 1);
     const cast = [...new Set([...present, ...appearances.keys()])].filter(isCharacter)
       .sort((first, second) => (appearances.get(second) ?? 0) - (appearances.get(first) ?? 0)).slice(0, CAST_LIMIT);
     const castSet = new Set(cast);
-    movementScenes.push({ id: scene.id, placeId, placeLabel: names[placeId] ?? placeId, kind: kindOf(placeId)!, opening: `${clip(scene.label, 160)}${text(scene.id) ? `（开头：${clip(text(scene.id), 200)}）` : ""}`, cast,
+    // A world-first scene opens with its composed context (the world as it stands, the story so far, its full text).
+    const composed = world?.scenes.find((entry) => entry.id === scene.id)?.context;
+    movementScenes.push({ id: scene.id, placeId, placeLabel: names[placeId] ?? world?.places[placeId]?.label ?? placeId, kind: kindOf(placeId)!, opening: composed ?? `${clip(scene.label, 160)}${text(scene.id) ? `（开头：${clip(text(scene.id), 200)}）` : ""}`, cast,
       events: moving.map((event) => ({ ...event, actors: event.actors.filter((id) => castSet.has(id)) })) });
   }
   const movement = await readJson<MovementReport>(stageFile(novelDir, "movement"));

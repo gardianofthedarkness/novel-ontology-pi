@@ -11,10 +11,11 @@
 // A fragment scene costs nothing. It stops at the end of the chapters asked for, or before --max-calls would be passed.
 // Every answer is cached under <out>/cache, so running it again pays only for what changed. After the book, the laws on
 // things and knowledge run over it.
-//   JEV_MODEL=jev-1.14.0 node experiments/world-first/run.mjs <out-dir> [--chapters 0-5] [--max-calls 400]
+//   JEV_MODEL=jev-1.14.0 node experiments/world-first/run.mjs <out-dir> [--chapters 0-5] [--max-calls 400] [--novel <dir>]
 // Writes <out>/world-log.jsonl (a line a scene), <out>/script.json (the world script the 3D stage plays), <out>/world.json,
-// <out>/laws.json and <out>/run.json.
-import { readFile, writeFile } from 'node:fs/promises';
+// <out>/laws.json and <out>/run.json. With --novel (a world-first workspace), the script also goes to <novel>/stage/world/
+// script.json, where the stage reads its cast, places and flashbacks, and each scene's composed context opens its questions.
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -42,7 +43,7 @@ const order = (id = '') => { const match = /^b(\d+)_s(\d+)$/.exec(id ?? ''); ret
 const formsOf = name => [name, ...(/[·・]/.test(name) ? name.split(/[·・]/) : /^[一-鿿]{3,4}$/.test(name) ? [name.slice(0, 2), name.slice(-2)] : [])].filter(form => form.length >= 2);
 const count = (text, form) => text.split(form).length - 1;
 
-export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, decisions = null } = {}) {
+export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, decisions = null, novelDir = null } = {}) {
   const scenes = JSON.parse(await readFile(join(outDir, 'base', 'scenes.json'), 'utf8')), roster = JSON.parse(await readFile(join(outDir, 'base', 'roster.json'), 'utf8'));
   const states = JSON.parse(await readFile(join(outDir, 'base', 'states.json'), 'utf8').catch(() => '[]'));
   const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
@@ -104,7 +105,8 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     const allowed = allowedTimes(world, present, place, { opening, chapterStart }), times = inPast(world, chapterStart) ? PAST_TIMES : TIMES;
     const mentions = detectTimeMentions([{ id: scene.id, text }]).sort((a, b) => a.inQuote - b.inQuote).map(mention => mention.text);
     const phrases = [...new Set(mentions.length ? mentions : text.match(TIME_WORDS) ?? [])].slice(0, 8);
-    const second = allowed.length > 1 || phrases.length ? await jev.decide(compose({ world: worldLines(), story: storyLines(), text, focus: `In this scene, at ${labelOf(place)}: ${names(present) || 'nobody named is there'}.` }), [
+    const context = compose({ world: worldLines(), story: storyLines(), text, focus: `In this scene, at ${labelOf(place)}: ${names(present) || 'nobody named is there'}.` });
+    const second = allowed.length > 1 || phrases.length ? await jev.decide(context, [
       ...(allowed.length > 1 ? [{ key: 'time', primitive: 'choice', instructions: `When does this scene happen, against the scene before${inPast(world, chapterStart) ? ' (which is in a flashback)' : ''}?`, options: allowed.map(relation => times[relation]) }] : []),
       ...(phrases.length ? [{ key: 'time_node', primitive: 'choice', instructions: 'Which time does this scene itself happen at, as its text says? Pick none when the text only mentions a time for something else.', options: [...phrases, 'none'] }] : []),
     ]) : [];
@@ -136,7 +138,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     // For the 3D stage: a nominated room to bind, and who is seen for the first time (or first since a flashback).
     const firstSeen = entry.clock ? entry.present.filter(id => world.people[id].log.filter(item => !item.past).length === 1) : [];
     const timeline = [...scene.events.map(event => ({ type: 'event', id: event.id, first: event.first, actors: event.actors })), ...nodes.map(node => ({ type: 'dialogue', ...node }))].sort((a, b) => order(a.first) - order(b.first));
-    script.push({ id: scene.id, chapter: scene.chapter, place, room: placeScale.get(place) === 'room', relation, clock: entry.clock, timeNode, present: entry.present, stayed: entry.stayed, joined: entry.joined ?? [], firstSeen, timeline, actorFlags: cast.flags });
+    script.push({ id: scene.id, chapter: scene.chapter, place, room: placeScale.get(place) === 'room', relation, clock: entry.clock, timeNode, present: entry.present, stayed: entry.stayed, joined: entry.joined ?? [], firstSeen, timeline, actorFlags: cast.flags, context });
     log.push({ scene: scene.id, chapter: scene.chapter, chars: text.length, place: labelOf(place), room: placeScale.get(place) === 'room', relation, allowed, clock: entry.clock, timeNode,
       present: entry.present.map(id => ({ name: name.get(id), p: Math.round((chances.get(id) ?? 0) * 100) / 100 })), unsure: [...chances].filter(([, p]) => p >= UNSURE && p < PRESENT).map(([id, p]) => ({ name: name.get(id), p: Math.round(p * 100) / 100 })),
       stayed: entry.stayed.map(id => name.get(id)), joined: (entry.joined ?? []).map(item => `${name.get(item.person)} (${item.why})`), firstSeen: names(firstSeen), travelled: entry.travelled.map(trip => `${name.get(trip.person)}: ${labelOf(trip.from)} → ${labelOf(trip.to)}`),
@@ -149,7 +151,9 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
   const heard = new Map(script.map(scene => [scene.id, new Set([...scene.present, ...scene.stayed, ...scene.timeline.filter(item => item.type === 'dialogue').flatMap(item => [...item.parties, ...item.listeners])])]));
   const laws = { things: things(states, eventOrder), knowledge: knowledge(states, sceneOf, id => heard.get(id) ?? new Set()), actors: script.flatMap(scene => scene.actorFlags ?? []), dialogue: script.flatMap(scene => scene.timeline.filter(item => item.type === 'dialogue' && item.conflicts.length).map(item => ({ scene: scene.id, dialogue: item.id, conflicts: item.conflicts }))) };
   await writeFile(join(outDir, 'world-log.jsonl'), log.map(line => JSON.stringify(line)).join('\n') + '\n', { mode: 0o600 });
-  await writeFile(join(outDir, 'script.json'), JSON.stringify({ version: 2, places: { ...Object.fromEntries([...placeName].map(([id, label]) => [id, { label, scale: placeScale.get(id) }])), ...world.places }, names: Object.fromEntries(name), scenes: script }), { mode: 0o600 });
+  const scriptText = JSON.stringify({ version: 2, places: { ...Object.fromEntries([...placeName].map(([id, label]) => [id, { label, scale: placeScale.get(id) }])), ...world.places }, names: Object.fromEntries(name), scenes: script });
+  await writeFile(join(outDir, 'script.json'), scriptText, { mode: 0o600 });
+  if (novelDir) { await mkdir(join(novelDir, 'stage', 'world'), { recursive: true, mode: 0o700 }); await writeFile(join(novelDir, 'stage', 'world', 'script.json'), scriptText, { mode: 0o600 }); }
   await writeFile(join(outDir, 'world.json'), JSON.stringify({ people: Object.fromEntries(Object.entries(world.people).map(([id, person]) => [name.get(id) ?? id, { ...person, place: labelOf(person.place) }])), places: world.places, scenes: world.scenes }, null, 1), { mode: 0o600 });
   await writeFile(join(outDir, 'laws.json'), JSON.stringify(laws, null, 1), { mode: 0o600 });
   const dialogues = script.flatMap(scene => scene.timeline.filter(item => item.type === 'dialogue'));
@@ -161,8 +165,8 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { chapters: { type: 'string' }, 'max-calls': { type: 'string' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { chapters: { type: 'string' }, 'max-calls': { type: 'string' }, novel: { type: 'string' } } });
   const range = values.chapters?.match(/^(\d+)(?:-(\d+))?$/), chapters = range ? Array.from({ length: Number(range[2] ?? range[1]) - Number(range[1]) + 1 }, (_, n) => Number(range[1]) + n) : null;
   if (!positionals[0]) throw new Error('Usage: node experiments/world-first/run.mjs <out-dir> [--chapters 0-5] [--max-calls 400]');
-  console.log(JSON.stringify(await runWorldFirst(resolve(positionals[0]), { chapters, maxCalls: Number(values['max-calls'] ?? 400) })));
+  console.log(JSON.stringify(await runWorldFirst(resolve(positionals[0]), { chapters, maxCalls: Number(values['max-calls'] ?? 400), novelDir: values.novel ? resolve(values.novel) : null })));
 }
