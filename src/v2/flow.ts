@@ -3,7 +3,7 @@ import { classifySentences, kindCards, tileScenes, type KindCard, type SentenceK
 import { Chart, mentions, resolveBatch, type EmResult } from "./em.js";
 import { FactLedger, type FactEntry } from "./facts.js";
 import type { Lister } from "./listing.js";
-import { resolveRoles, type RolesResult } from "./roles.js";
+import { resolveRoles, type DescriptionType, type RolesResult } from "./roles.js";
 import { typeNames, type Decide, type Detected } from "./typing.js";
 
 /**
@@ -18,7 +18,8 @@ import { typeNames, type Decide, type Detected } from "./typing.js";
  * - each scene's context is composed: its world cards, the scene before's cards of the same kind in sequence, and the
  *   people the recommender expects from the recent scenes (the world engine adds its view of who is where);
  * - EM² (roles.ts), scene by scene: who says or does each line, who a line is said to, and who each description of a
- *   person or a crowd means where it stands (a person of the chart, or an unnamed person or crowd of the scene: a slot);
+ *   person or a crowd means where it stands (a person of the chart, or an unnamed person or crowd of the scene: a slot),
+ *   and which vehicle or weapon an unnamed one is (a named one, or the scene's own: a slot);
  *   an action where nothing that matters acts becomes narration (the user's rule), and the cards are cut again; each
  *   card's people are then the ones it names, and the ones its lines and descriptions point at;
  * - the facts (facts.ts) are the source of truth throughout: EM and EM² are given the latest facts about their candidates.
@@ -156,15 +157,15 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
 
   // EM², scene by scene in reading order.
   const named = new Map([...found].map(([id, hits]) => [id, [...new Set(hits.map((hit) => hit.id))]]));
-  const described = new Map<string, "person" | "crowd">();
-  for (const entry of em.flatMap((batch) => batch.results)) if (entry.outcome === "description" && !described.has(entry.text)) described.set(entry.text, entry.category === "crowd" ? "crowd" : "person");
+  const described = new Map<string, DescriptionType>();
+  for (const entry of em.flatMap((batch) => batch.results)) if (entry.outcome === "description" && !described.has(entry.text)) described.set(entry.text, entry.category === "crowd" ? "crowd" : entry.category === "thing" ? (entry.type as "vehicle" | "weapon") : "person");
   const rolesLog = meter("roles (EM²)"), rolesDecide = decideFor(rolesLog);
   const resolved = await timed(rolesLog, () => resolveRoles(rolesDecide, { scenes, kinds: kindOf, chart, named, descriptions: [...described].map(([text, type]) => ({ text, type })), recommended: new Map(contexts.map((context) => [context.scene, context.recommended])), facts, text, position: pos, present: options.present }));
 
-  // The user's rule for actions: an action is something that matters acting or moving (a person, a crowd, a thing, a
-  // building or a place), or the story going back in time. One where nothing that matters acts is narration (no one acts,
-  // or EM² says it is background: a cleaning robot passing by): the cards are cut again, scanned again, and the contexts
-  // composed again. The kind keeps what it was, and who or what acted.
+  // The user's rule for actions: an action is something that matters acting or moving (a person, a crowd, a vehicle, a
+  // weapon, a thing with a name of its own, a building or a place), or the story going back in time. One where nothing that
+  // matters acts is narration (no one acts, an everyday thing does, or EM² says it is background): the cards are cut again,
+  // scanned again, and the contexts composed again. The kind keeps what it was, and who or what acted.
   for (const [id, role] of Object.entries(resolved.roles)) {
     if (role.kind !== "action" || ((role.matters ?? 1) >= 0.5 && (role.who.id || !["none", "unnamed", "general"].includes(role.who.answer)))) continue;
     kindOf[id] = { ...kindOf[id], kind: "narration", was: "action", ...(role.who.id ? { actor: role.who.id } : {}) };

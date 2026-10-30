@@ -9,8 +9,11 @@ import type { Category, Decide, Detected, EntityType } from "./typing.js";
  * 1. A time goes to the times (EM for times is the calendar's, later).
  * 2. Any other string that is a name already in the chart (any category: the whole chart) is that entity. Not new; the
  *    sentences that hold it are recorded as its appearances. System 0: string match, no model. Only proper names are names
- *    of the chart (typing asks): a description or a common word ("屋顶", "手机") is a thing's or a place's name only where EM
- *    said it, so it goes to the recommender every time, and never tags a sentence elsewhere. A description of a person
+ *    of the chart (typing asks): a description or a common word ("屋顶", "车站") is a place's name only where EM said it, so
+ *    it goes to the recommender every time, and never tags a sentence elsewhere. A thing is an entity only when it has a
+ *    name of its own (the user's rule, 2026-10-30: only important named things, vehicles and weapons): an unnamed vehicle
+ *    or weapon ("那辆车", "手枪") is a description EM² places in its scene, as a person's is; an everyday thing ("手机",
+ *    "清扫机器人", or an object with no name) is routine, never an entity. A description of a person
  *    ("少女", "那个刺猬头", "姐姐大人") is no one's name at all: it is kept as a description, and EM² (roles.ts) says who it
  *    means each time it stands (a description that became a person of its own drew every later use of it to that person).
  *    A crowd ("警备员们", "人群") is never a name either: EM² places it in its scene.
@@ -33,7 +36,7 @@ export interface ChartEntity { id: string; category: Category; type: EntityType;
 export interface TimeNode { id: string; text: string; seen: string[] }
 export interface EmResult {
   key: string; text: string; type: EntityType; category: Category | null;
-  outcome: "exact" | "alias" | "new" | "time" | "description" | "skip";
+  outcome: "exact" | "alias" | "new" | "time" | "description" | "routine" | "skip";
   entity?: string; confidence?: number; candidates?: { id: string; score: number }[]; answer?: string; unsure?: string;
   /** description: the sentences that hold it (EM² resolves each). */
   sentences?: string[];
@@ -151,11 +154,12 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
   const pending: { detected: Detected; candidates: string[]; scores: { id: string; score: number }[]; peers: string[] }[] = [];
   for (const entry of detected) {
     const base = { key: entry.key, text: entry.text, type: entry.type, category: entry.category };
-    if (!entry.category) { results.set(entry.key, { ...base, outcome: "skip" }); continue; }
+    if (!entry.category) { results.set(entry.key, { ...base, outcome: entry.type === "routine" ? "routine" : "skip" }); continue; }
     if (entry.category === "time") { const node = chart.time(entry.text, entry.sentences); results.set(entry.key, { ...base, outcome: "time", entity: node.id }); continue; }
     const known = chart.exact(entry.text);
     if (known) { chart.see(known.id, entry.sentences); results.set(entry.key, { ...base, outcome: "exact", entity: known.id }); continue; }
-    if (entry.category === "crowd" || (entry.category === "person" && !isProper(entry))) { results.set(entry.key, { ...base, outcome: "description", sentences: entry.sentences }); continue; }
+    if (entry.category === "crowd" || (!isProper(entry) && (entry.category === "person" || entry.type === "vehicle" || entry.type === "weapon"))) { results.set(entry.key, { ...base, outcome: "description", sentences: entry.sentences }); continue; }
+    if (entry.category === "thing" && !isProper(entry)) { results.set(entry.key, { ...base, outcome: "routine" }); continue; }
     const scores = recommend(chart, entry, context.position);
     pending.push({ detected: entry, candidates: scores.map((score) => score.id), scores, peers: [] });
   }

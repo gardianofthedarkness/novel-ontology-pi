@@ -5,7 +5,8 @@ import { detectTimeMentions } from "../digger/timeplace/lexicon.js";
 /**
  * Entity listing (the user's v2 flow, 2026-10-30; System 2): a batch of sentences goes to the work model, not an agent: fixed
  * instructions and a structured output, a list of strings. Each string is an important name as the passage writes it: a
- * person, a crowd, an object, a weapon or a vehicle, a place, a building or a room, or a time. What each one is, is Jev's (typing.ts);
+ * person, a crowd, a weapon or a vehicle, a thing with a name of its own, a place, a building or a room, or a time (no
+ * everyday things: the user's rule, 2026-10-30). What each one is, is Jev's (typing.ts);
  * who or what it is, EM's (em.ts). A string the passage does not hold, word for word, is dropped: from here on everything
  * finds it by string match.
  */
@@ -14,7 +15,7 @@ export const LISTING_SYSTEM = [
   "List every string, exactly as the passage writes it, that names or refers to:",
   "- a person: a name, a surname, a nickname, or a title or description used for one person (e.g. \"the boy with spiky hair\");",
   "- a crowd or a group of people who are there (e.g. \"the officers\", \"the crowd\", \"the students\");",
-  "- an object, a weapon or a vehicle (also a mech) that matters to what happens;",
+  "- a weapon or a vehicle (also a mech), or an important thing with a name of its own; not everyday things (a phone, a bag, food, a door, a machine at its routine work);",
   "- a place, a building or a room;",
   "- a time: a date, a day, an hour, a part of the day, \"the next morning\".",
   "Each string once, in the passage's own words and language, as short as still names it. No pronouns, no explanations.",

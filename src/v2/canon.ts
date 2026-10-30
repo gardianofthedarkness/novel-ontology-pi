@@ -15,15 +15,18 @@ const RANK = { speaks: 0, acts: 0, addressed: 1, named: 2, described: 2 } as con
 
 /**
  * A card's people of the chart (who speaks or acts first, then who is spoken to, then who is named or described), its
- * unnamed people and crowds (slots), and the things and places that act in it.
+ * unnamed people and crowds (slots), and the things and places that act in it (named, or the scene's unnamed vehicles and
+ * weapons: slots too).
  */
 export function cardPeople(result: FlowResult, card: FlowResult["cards"][number]): { people: string[]; extras: string[]; things: string[] } {
   const rank = (person: FlowResult["cards"][number]["people"][number]) => Math.min(...person.how.map((how) => RANK[how]));
   const sorted = [...card.people].sort((a, b) => rank(a) - rank(b)), category = (id: string) => result.chart.entities.get(id)?.category;
+  const slotKind = (id: string) => result.slots.find((slot) => slot.id === id)?.kind;
+  const thingSlot = (id: string) => slotKind(id) === "vehicle" || slotKind(id) === "weapon";
   return {
     people: sorted.filter((person) => category(person.id) === "person").map((person) => person.id),
-    extras: sorted.filter((person) => person.id.startsWith("slot_")).map((person) => person.id),
-    things: sorted.filter((person) => category(person.id) === "thing" || category(person.id) === "place").map((person) => person.id),
+    extras: sorted.filter((person) => person.id.startsWith("slot_") && !thingSlot(person.id)).map((person) => person.id),
+    things: sorted.filter((person) => category(person.id) === "thing" || category(person.id) === "place" || thingSlot(person.id)).map((person) => person.id),
   };
 }
 

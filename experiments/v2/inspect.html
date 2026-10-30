@@ -116,6 +116,8 @@ main > *, .files > *, .tiles > *, .frame > *, .card > * { min-width: 0; }
 .m-d { border-bottom: 2px dashed var(--person); }
 .m-d sup { font: 600 0.62rem var(--ui); color: var(--person); margin-left: 1px; }
 .m-d.open { border-bottom-color: var(--slot); } .m-d.open sup { color: var(--slot); }
+.m-d.thing { border-bottom-color: var(--thing); } .m-d.thing sup { color: var(--thing); }
+.m-r { border-bottom: 1px dotted var(--muted); }
 
 .files { display: grid; gap: 8px; }
 .file { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
@@ -148,9 +150,9 @@ footer { color: var(--muted); font-size: 0.78rem; padding-block: 0 32px; }
     <span class="key k-thought">thought <small>ontology</small></span><span class="key k-fact">fact <small>ontology</small></span><span class="key k-narration">narration <small>ontology</small></span>
   </div>
   <div class="legend-row"><span class="label">Marks in the text</span>
-    <span class="m-char">person</span><span class="m-loc">place</span><span class="m-item">thing</span><span class="m-time">time</span>
-    <span class="m-d">description<sup>→ whom it meant</sup></span><span class="m-d open">description<sup>→ unnamed</sup></span>
-    <span class="chip">named person</span><span class="chip slot">unnamed person (slot)</span><span class="chip slot crowd">crowd (slot)</span><span class="chip thing">a thing that acts</span><span class="chip back">back in time</span><span class="chip maybe">maybe, below 0.5</span><span class="was">was action</span>
+    <span class="m-char">person</span><span class="m-loc">place</span><span class="m-item">named thing, vehicle, weapon</span><span class="m-time">time</span><span class="m-r">everyday thing (no entity)</span>
+    <span class="m-d">description<sup>→ whom it meant</sup></span><span class="m-d open">description<sup>→ unnamed</sup></span><span class="m-d thing">那辆车<sup>→ unnamed vehicle</sup></span>
+    <span class="chip">named person</span><span class="chip slot">unnamed person (slot)</span><span class="chip slot crowd">crowd (slot)</span><span class="chip thing">a named thing that acts</span><span class="chip slot thing">unnamed vehicle or weapon (slot)</span><span class="chip back">back in time</span><span class="chip maybe">maybe, below 0.5</span><span class="was">was action</span>
   </div>
   <div class="legend-row"><span class="label">How the records nest</span>
     <div class="nest"><span>sentence id</span><i>→</i><span>kind + turn</span><i>→</i><span>run card</span><i>→</i><span>exchange / monologue</span><i>→</i><span>scene</span></div>
@@ -202,9 +204,9 @@ const fmt = (n) => Number(n).toLocaleString('en-US');
 
 function chip(id, note = '') {
   if (!id) return '';
-  const slot = SLOT.get(id);
-  const cls = slot ? `chip slot${slot.kind === 'crowd' ? ' crowd' : ''}` : id.startsWith('loc_') ? 'chip place' : id.startsWith('item_') ? 'chip thing' : 'chip';
-  return `<span class="${cls}" title="${esc(id)}">${slot ? (slot.kind === 'crowd' ? 'crowd · ' : 'unnamed · ') : ''}${esc(label(id))}${note ? `<small>${esc(note)}</small>` : ''}</span>`;
+  const slot = SLOT.get(id), ofThings = slot && (slot.kind === 'vehicle' || slot.kind === 'weapon');
+  const cls = slot ? `chip slot${slot.kind === 'crowd' ? ' crowd' : ofThings ? ' thing' : ''}` : id.startsWith('loc_') ? 'chip place' : id.startsWith('item_') ? 'chip thing' : 'chip';
+  return `<span class="${cls}" title="${esc(id)}">${slot ? (slot.kind === 'crowd' ? 'crowd · ' : ofThings ? `unnamed ${slot.kind} · ` : 'unnamed · ') : ''}${esc(label(id))}${note ? `<small>${esc(note)}</small>` : ''}</span>`;
 }
 const HOW = { speaks: 'says', acts: 'acts', addressed: 'to', named: 'named', described: 'desc' };
 const peopleChips = (people) => (people ?? []).map((person) => chip(person.id, person.how.map((how) => HOW[how]).join('·'))).join('');
@@ -235,7 +237,9 @@ function marked(id) {
     if (start < at) continue;
     out += esc(text.slice(at, start));
     const word = esc(text.slice(start, start + length));
-    if (kind === 'd') out += ref ? `<span class="m-d${SLOT.has(ref) ? ' open' : ''}" title="${esc(ref)}">${word}<sup>→ ${esc(SLOT.has(ref) ? 'unnamed' : label(ref))}</sup></span>` : `<span class="m-d open" title="description, not resolved here">${word}</span>`;
+    const slot = SLOT.get(ref), ofThings = slot && (slot.kind === 'vehicle' || slot.kind === 'weapon');
+    if (kind === 'd') out += ref ? `<span class="m-d${ofThings || ref.startsWith('item_') ? ' thing' : slot ? ' open' : ''}" title="${esc(ref)}">${word}<sup>→ ${esc(slot ? (slot.kind === 'person' ? 'unnamed' : slot.kind === 'crowd' ? 'a crowd' : `unnamed ${slot.kind}`) : label(ref))}</sup></span>` : `<span class="m-d open" title="description, not resolved here">${word}</span>`;
+    else if (kind === 'r') out += `<span class="m-r" title="an everyday thing: no entity, never an actor">${word}</span>`;
     else out += `<span class="m-${kind}" title="${esc(ref)}">${word}</span>`;
     at = start + length;
   }
@@ -249,14 +253,14 @@ function pickHtml(pick, none) {
   if (pick.answer === 'time') return `<span class="chip back">the story goes back in time</span> <span class="cf">${pct(pick.confidence)}</span>`;
   if (pick.answer === 'none' || pick.answer === 'general') return `<span class="chip no">${esc(pick.answer === 'general' ? 'people in general' : none)}</span>${via} <span class="cf">${pct(pick.confidence)}</span>`;
   if (pick.answer === 'unnamed') return `<span class="chip no">someone unnamed</span> <span class="cf">${pct(pick.confidence)}</span>`;
-  const maybe = /^(char|slot)_/.test(pick.answer) ? label(pick.answer) : pick.answer;
+  const maybe = /^(char|slot|item|loc)_/.test(pick.answer) ? label(pick.answer) : pick.answer;
   return `<span class="chip maybe" title="below 0.5: no one sure">maybe ${esc(maybe)}</span>${via} <span class="cf">${pct(pick.confidence)}</span>`;
 }
 
 function sentenceHtml(id) {
   const kind = DATA.kinds[id] ?? {}, role = DATA.roles[id];
   const turn = kind.turn >= 0.5 ? `<span class="turn" title="the carrier changes here · ${pct(kind.turn)}">↻ ${pct(kind.turn)}</span>` : '';
-  const roleHtml = role ? `<div class="role"><span class="v">${role.kind === 'spoken' ? 'says' : 'acts'}</span> ${pickHtml(role.who, role.kind === 'spoken' ? 'no one can tell' : 'no person')}${role.to ? ` <span class="v">to</span> ${pickHtml(role.to, 'no one in particular')}` : ''}</div>` : '';
+  const roleHtml = role ? `<div class="role"><span class="v">${role.kind === 'spoken' ? 'says' : 'acts'}</span> ${pickHtml(role.who, role.kind === 'spoken' ? 'no one can tell' : 'nothing that matters')}${role.to ? ` <span class="v">to</span> ${pickHtml(role.to, 'no one in particular')}` : ''}</div>` : '';
   const was = kind.was ? `<span class="was" title="the classifier said ${esc(kind.was)}; nothing that matters acts in it">was ${esc(kind.was)}</span>` : '';
   return `<div class="s k-${esc(kind.kind ?? 'narration')}" data-id="${esc(id)}"><div class="sid">${esc(short(id))}${turn}${was}</div><div class="tx">${marked(id)}</div>${roleHtml}</div>`;
 }
@@ -304,7 +308,7 @@ function render(index) {
     <p class="ids">${esc(scene.sentences[0])} → ${esc(scene.sentences[scene.sentences.length - 1])} · ${leaves.length} run cards (${Object.entries(kinds).map(([kind, n]) => `${n} ${kind}`).join(', ')}) · ${frames.length} exchanges and monologues · ${sceneFacts.length} facts · ${scene.sentences.filter((id) => DATA.kinds[id]?.was).length} actions turned narration</p></div>
     <div class="sub">People here (EM²: says, acts, to · card scan: named · descriptions: desc)</div>
     <div class="people" lang="zh-Hans">${top.map(([id, how]) => chip(id, Object.entries(how).map(([key, n]) => `${HOW[key]} ${n}`).join(' · '))).join('') || '<span class="cf">no one named</span>'}</div>
-    ${slots.length ? `<div class="sub">Unnamed people and crowds (slots) opened here</div><div class="people" lang="zh-Hans">${slots.map((slot) => chip(slot.id, slot.names.length > 1 ? `also ${slot.names.slice(1).join(', ')}` : '')).join('')}</div>` : ''}
+    ${slots.length ? `<div class="sub">Unnamed people, crowds, vehicles and weapons (slots) opened here</div><div class="people" lang="zh-Hans">${slots.map((slot) => chip(slot.id, slot.names.length > 1 ? `also ${slot.names.slice(1).join(', ')}` : '')).join('')}</div>` : ''}
     ${context ? `<div class="sub">What the world engine is given (context)</div><div class="people" lang="zh-Hans">${context.recommended.map((entry) => chip(entry.id, `expected ${entry.score}`)).join('')}<span class="cf">${Object.entries(context.before).map(([kind, list]) => `${list.length} ${kind} cards before`).join(' · ')} · ${context.facts.length} recent facts</span></div>` : ''}`;
 
   let html = '', frame = null, card = null;
@@ -331,8 +335,8 @@ function render(index) {
     ['em.yaml', 'per listing batch (30 sentences): each listed string, typed, and how EM settled it', null, batch ? { batch: batch.batch, results: batch.results.slice(0, 4) } : {}],
     ['contexts.yaml', 'per scene: its world cards, the scene before\'s cards of each kind, the people the recommender expects, recent facts', DATA.contexts.length, context ?? {}],
     ['roles.yaml', 'per spoken or action sentence: who says or acts (who) and who a line is said to (to); id null = no one sure', Object.keys(DATA.roles).length, Object.fromEntries(roles.map((id) => [id, DATA.roles[id]]))],
-    ['references.yaml', 'each description of a person where it stands, and who it means there', DATA.references.length, references.slice(0, 2)],
-    ['slots.yaml', 'unnamed people and crowds (one scene each), and habits: what a description has meant, in whose lines', DATA.slots.length, { slots: slots.slice(0, 2), habits: DATA.habits.slice(0, 2) }],
+    ['references.yaml', 'each description of a person, a crowd, a vehicle or a weapon where it stands, and who or what it means there', DATA.references.length, references.slice(0, 2)],
+    ['slots.yaml', 'unnamed people, crowds, vehicles and weapons (one scene each), and habits: what a description has meant, in whose lines', DATA.slots.length, { slots: slots.slice(0, 2), habits: DATA.habits.slice(0, 2) }],
     ['facts.yaml', 'the fact ledger, in reading order: each fact card, who it is about (by name, or by a description EM² resolved), and its time; EM and EM² get the latest ones as evidence', DATA.facts.length, sceneFacts.slice(0, 2).map(({ text: _, ...rest }) => rest)],
   ];
   $('files').innerHTML = `<h2>This scene in each file</h2><p class="lede">One real record from each output file (under &lt;out&gt;/v2/), taken from this scene where the file has one.</p>` + files.map(([name, what, count, record]) => `<details class="file"><summary><code>${name}</code><span>${esc(what)}${count !== null ? ` · ${fmt(count)} records` : ''}</span></summary><pre lang="zh-Hans"></pre></details>`).join('');
@@ -376,8 +380,10 @@ if (log) {
   $('run').innerHTML = [
     ['sentences', fmt(log.sentences)], ['scenes', fmt(log.scenes)], ['cards', fmt(cards)],
     ['people / places / things / times', `${log.chart.person} / ${log.chart.place} / ${log.chart.thing} / ${log.chart.time}`],
+    ...(log.chart.thingTypes ? [['things: named · vehicles · weapons', `${log.chart.thingTypes.object} · ${log.chart.thingTypes.vehicle} · ${log.chart.thingTypes.weapon}`]] : []),
+    ...(log.em?.routine ? [['everyday things left out (strings)', fmt(log.em.routine)]] : []),
     ['paid in this run (a rerun from the cache pays nothing)', `${fmt(log.paidRequests.jev)} Jev · ${fmt(log.paidRequests.work)} work model`], ['wall, this run', `${(log.wallMs / 1000).toFixed(1)} s`],
-    ...(log.roles ? [['lines with a sure speaker or actor', `${fmt(log.roles.whoSettled)} of ${fmt(log.roles.lines)}`], ['slots (crowds)', `${fmt(log.roles.slots)} (${fmt(log.roles.crowds ?? 0)})`], ['actions turned narration', fmt(log.roles.actionsToNarration ?? 0)]] : []),
+    ...(log.roles ? [['lines with a sure speaker or actor', `${fmt(log.roles.whoSettled)} of ${fmt(log.roles.lines)}`], ['slots: people · crowds · vehicles · weapons', `${fmt(log.roles.slots - (log.roles.crowds ?? 0) - (log.roles.vehicles ?? 0) - (log.roles.weapons ?? 0))} · ${fmt(log.roles.crowds ?? 0)} · ${fmt(log.roles.vehicles ?? 0)} · ${fmt(log.roles.weapons ?? 0)}`], ['actions turned narration', fmt(log.roles.actionsToNarration ?? 0)]] : []),
     ...(log.facts ? [['facts (about someone)', `${fmt(log.facts.facts)} (${fmt(log.facts.about)})`]] : []),
   ].map(([name, value]) => `<span>${name} <b>${value}</b></span>`).join('');
   $('steps').innerHTML = '<tr><th>step</th><th>requests (cached included)</th><th>ms</th></tr>' + (log.steps ?? []).map((step) => `<tr><td>${esc(step.step)}</td><td>${fmt(step.requests)}</td><td>${fmt(step.ms)}</td></tr>`).join('');

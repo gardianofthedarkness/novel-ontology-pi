@@ -26,11 +26,15 @@ export async function inspect(novelDir, outDir) {
     ...[...new Set(data.em.flatMap(batch => batch.results).filter(entry => entry.outcome === 'description').map(entry => entry.text))].map(name => [name, `desc:${name}`]),
     ...data.chart.times.map(node => [node.text, node.id]),
   ].sort((a, b) => b[0].length - a[0].length);
+  // Everyday things (EM's routine outcome: no entity), marked only where no name, description or time stands.
+  const routine = [...new Set(data.em.flatMap(batch => batch.results).filter(entry => entry.outcome === 'routine').map(entry => entry.text))].map(name => [name, 'routine']).sort((a, b) => b[0].length - a[0].length);
   const meant = new Map();
   for (const reference of data.references) for (const id of reference.sentences) meant.set(`${id}\u0000${reference.text}`, reference.entity ?? '');
   const spans = {};
   for (const [id, sentence] of text) {
     const found = mentions(sentence, lexicon).map(hit => hit.id.startsWith('desc:') ? [hit.at, hit.name.length, 'd', meant.get(`${id}\u0000${hit.name}`) ?? null] : [hit.at, hit.name.length, hit.id.slice(0, hit.id.indexOf('_')), hit.id]);
+    const taken = found.map(([at, length]) => [at, at + length]);
+    for (const hit of mentions(sentence, routine)) if (!taken.some(([from, to]) => hit.at < to && hit.at + hit.name.length > from)) found.push([hit.at, hit.name.length, 'r', 'routine']);
     if (found.length) spans[id] = found;
   }
   // EM's results for the strings a sentence holds (its listing batch: the latest batch starting at or before it).

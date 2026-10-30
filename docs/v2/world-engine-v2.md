@@ -237,6 +237,39 @@ again: 177 work-model requests, 645 Jev, 87 s; then the matters question, 259 Je
   said it, but the recommender pulls each new one to the entity that already has it, so every cleaning robot is one thing.
   The same answer as for people fits: a thing's description resolved where it stands, in its scene.
 
+### 2.0.3 Things: only named things, vehicles and weapons (the user's rule, 2026-10-30) — built
+
+The user's answer to the sink above: only important named things, vehicles or weapons count, never everyday things. Vol 1's
+chart had 351 things, 283 of them unnamed everyday objects (手机 seen 42 times, the cleaning robots, a plastic bag, bread,
+a wall), and only six named objects. Now:
+- **typing** has a `routine` type (an everyday thing: a phone, a bag, food, clothes, furniture, a door or a wall, a machine
+  at its routine work) with no category, and `object` is an important thing the story names or singles out. The listing
+  asks for weapons, vehicles and things with a name of their own, not everyday things.
+- **EM**: a thing is an entity only with a name of its own (typing's proper ≥ 0.5): a named object, vehicle or weapon. An
+  unnamed vehicle or weapon (那辆车, 手枪) is a description, as a person's is; an unnamed object or an everyday thing is
+  `routine`: no entity, never asked, never an actor.
+- **EM²** resolves a vehicle's or a weapon's description where it stands: a named one of its type in the passage, an
+  unnamed one of the scene or the scene before (a slot, `kind: vehicle | weapon`), vehicles in general, or none. Such a slot
+  can act; a spoken line is never said by one. The matters noul and the `none` answer name everyday things as background,
+  so an everyday thing acting makes the line narration.
+- **The world engine** gets the scene's unnamed vehicles and weapons with its things (an event's `things`, the roster's
+  things), apart from the unnamed people and crowds (`extras`).
+
+**Measured on vol 1** (`~/claude-world-first/v2-vol1-things`; the listing and typing changed, so everything after the
+tiling was asked again: 177 work-model requests, 602 Jev, 81 s):
+- The chart's things went from 351 to 14: 10 named objects (天空之眼, 禁书目录, 圣经 …), 1 named vehicle (锤头鲨), 3 named
+  weapons. 145 strings were everyday things (手机, 清扫机器人, 遥控器, 大门, 面包 …), now no entity.
+- 40 slots of unnamed vehicles and weapons (20 each: 货车, 救援直升机, VTOL战斗机, 手枪, 暗杀用手枪 …); other descriptions of
+  them went to vehicles or weapons in general (无人机, 航母) or to 锤头鲨 (无人追踪车, 警备员的特殊车辆).
+- 49 actions became narration (31 before), ten of them holding an everyday thing (the cleaning robot of scene 1, a phone
+  showing errors, a door opening). 25 lines have a thing or a place acting (a van, a helicopter, a fighter, a pistol, a
+  building), none of them an everyday thing.
+- Wrong still: typing took an ability (幻想杀手) and a network (御坂网络) for named objects, and a fist (拳头) for a weapon
+  (six slots); a few lines went the wrong way (two people's fists clashing became narration; a TV broadcast was given to the
+  fireworks).
+- The sentence kinds' definition of an action names everyday things as narration; the run used a longer short label for
+  action than the one kept (labels stay under 50 characters).
+
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
 kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record
 it is part of (the book's text is in it: never public).
@@ -335,7 +368,8 @@ v2 makes each a structured request:
    request per theme (21 things: 0.42 s, 17 of 21 the same as one request each); the stretch before the first event
    explained (the line's loads, above). Then EM² (§2.0.1): roles and slots, on vol 1 (35 people; 1,561 of 2,272 lines
    with a sure speaker or actor), and the reading's data page. Then the fact ledger as the evidence of both EMs, the action
-   rule, and crowds (§2.0.2). Not yet run through the world engine.
+   rule, and crowds (§2.0.2). Then things: only named things, vehicles and weapons (§2.0.3). Not yet run through the world
+   engine.
 1. Movement on structured states in the pick loop (each person's spot now from the engine); births and meetings of the
    line's load as structured requests too (one per scene, not one per person on a picture), and kept across the reload
    after models.

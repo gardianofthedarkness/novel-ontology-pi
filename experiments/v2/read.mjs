@@ -52,16 +52,19 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     detected: result.em.reduce((sum, batch) => sum + batch.results.length, 0), em: outcomes,
     roles: (() => {
       const lines = Object.values(result.roles), spoken = lines.filter(role => role.kind === 'spoken');
+      const thingSlots = new Set(result.slots.filter(slot => slot.kind === 'vehicle' || slot.kind === 'weapon').map(slot => slot.id));
       return {
         lines: lines.length, whoSettled: lines.filter(role => role.who.id).length, spoken: spoken.length, toSettled: spoken.filter(role => role.to?.id).length,
         actionsToNarration: Object.values(result.kinds).filter(kind => kind.was === 'action').length, backInTime: lines.filter(role => role.who.answer === 'time').length,
-        thingsActing: lines.filter(role => role.who.id && /^(item|loc)_/.test(role.who.id)).length,
-        references: result.references.length, referencesToPeople: result.references.filter(entry => entry.entity && !entry.entity.startsWith('slot_')).length,
-        slots: result.slots.length, crowds: result.slots.filter(slot => slot.kind === 'crowd').length, habits: result.habits.length,
+        thingsActing: lines.filter(role => role.who.id && (/^(item|loc)_/.test(role.who.id) || thingSlots.has(role.who.id))).length,
+        references: result.references.length, referencesToPeople: result.references.filter(entry => entry.entity?.startsWith('char_')).length,
+        slots: result.slots.length, crowds: result.slots.filter(slot => slot.kind === 'crowd').length,
+        vehicles: result.slots.filter(slot => slot.kind === 'vehicle').length, weapons: result.slots.filter(slot => slot.kind === 'weapon').length, habits: result.habits.length,
       };
     })(),
     facts: { facts: result.facts.length, about: result.facts.filter(fact => fact.about.length).length, byDescription: result.facts.filter(fact => fact.about.some(entry => entry.via === 'description')).length, timed: result.facts.filter(fact => fact.time).length },
-    chart: { person: entities.filter(entity => entity.category === 'person').length, thing: entities.filter(entity => entity.category === 'thing').length, place: entities.filter(entity => entity.category === 'place').length, time: times.length },
+    chart: { person: entities.filter(entity => entity.category === 'person').length, thing: entities.filter(entity => entity.category === 'thing').length,
+      thingTypes: Object.fromEntries(['object', 'vehicle', 'weapon'].map(type => [type, entities.filter(entity => entity.category === 'thing' && entity.type === type).length])), place: entities.filter(entity => entity.category === 'place').length, time: times.length },
     steps: result.steps,
   };
   await Promise.all([
