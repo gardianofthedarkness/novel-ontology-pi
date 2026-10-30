@@ -100,7 +100,8 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
   different = new Set(pins.different.map(pair => [...pair].sort().join('|')));
   for (const scene of scenes.filter(entry => !chapters || chapters.includes(entry.chapter))) {
     // Between scenes: the main agent's answers stop the world, which replays from the start with them as pins.
-    if (novelDir && replays < REPLAYS) { const settled = await newAnswers(novelDir); if (settled.length) { pins = pinsFrom(pins, settled); await savePins(novelDir, pins); await settleItems(novelDir, settled); replays++; return 'replay'; } }
+    // A landscape answer moves no one: it is pinned for the stage, and the world goes on.
+    if (novelDir && replays < REPLAYS) { const settled = await newAnswers(novelDir); if (settled.length) { pins = pinsFrom(pins, settled); await savePins(novelDir, pins); await settleItems(novelDir, settled); if (settled.some(({ item }) => item.kind !== 'landscape')) { replays++; return 'replay'; } } }
     // A chapter's end: people whose traces run too alike are asked about again.
     if (world.scenes.length && world.scenes.at(-1).chapter !== scene.chapter) await tracesAlike();
     const previous = world.scenes.at(-1), text = scene.text.trim();

@@ -277,6 +277,13 @@ How it runs:
 
 Inside, the room under the box is where they are born, on one of its walkable cells.
 
+**The city's manifold (2026-10-29).** The ground every place stands on (its landscape: skyscrapers, a commercial quarter, a park…) is set before the world runs:
+1. **Jev sets it up:** `novel stage landscape` makes one Jev choice per city, district or street the ontology names, right after the scales and before the world loop.
+2. **No packet:** in a world-first book the pick is the world's ground, not a fact for review.
+3. **Unsure picks go to the pool:** a pick Jev is less sure of than 0.5 is a pool item for the main agent. Its answer stands over Jev's pick, and moves no one, so the world goes on without replaying.
+4. **Terrain rules:** a position with no manifold of its own (a scene's spot, a temporary area, a place Jev wasn't asked about) is built as the ground of the nearest larger place that has one. A spot in a park district is park. Only with nothing above it does it take the ground its scale suggests (`groundFor` in `src/ground/stage/landscape.ts`).
+5. **Shown live:** the live view shows the manifold under each moment, from the city in, with who set each part: Jev and how sure, the agent, or the terrain rules.
+
 **The gate sees only:**
 - low-confidence identity merges;
 - conflicts the laws can't settle (a dialogue the travel law rejects twice; an actor who can't be present);

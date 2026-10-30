@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { LANDSCAPE_TYPES } from "../../../ground/stage/landscape.js";
+import type { LandscapePick } from "../../../digger/stage/landscape.js";
 
 /**
  * The world's review pool (docs/world-first-design.md §11): what the world-first loop flags — a merge it made on world
@@ -12,7 +14,7 @@ import { randomUUID } from "node:crypto";
  */
 export interface PoolItem {
   id: string;
-  kind: "identity" | "presence" | "dialogue" | "actor" | "trace";
+  kind: "identity" | "presence" | "dialogue" | "actor" | "trace" | "landscape";
   scene: string | null;
   subjects: string[];
   names: string[];
@@ -47,6 +49,18 @@ export async function writePool(novelDir: string, items: PoolItem[]) {
   if (!items.length) return;
   await mkdir(folder(novelDir), { recursive: true, mode: 0o700 });
   await appendFile(join(folder(novelDir), "pool.jsonl"), items.map((item) => JSON.stringify(item)).join("\n") + "\n", { mode: 0o600 });
+}
+
+/**
+ * The question for a landscape Jev is unsure of (a world-first book's manifold, `novel stage landscape`): what the
+ * ground of a city, district or street mostly looks like. Its id follows the pick's inputs, so a place asked again with
+ * more to go on is a new question.
+ */
+export function landscapeItem(placeId: string, pick: LandscapePick): PoolItem {
+  const top = Object.entries(pick.probabilities ?? {}).sort((first, second) => second[1] - first[1]).slice(0, 3).map(([type, p]) => `${type} ${Math.round(p * 100)}%`).join(", ");
+  return { id: `wi_${createHash("sha256").update(`landscape|${placeId}|${pick.inputs}`).digest("hex").slice(0, 16)}`, kind: "landscape", scene: null, subjects: [placeId], names: [pick.label],
+    question: `Seen from above, what does the ground of ${pick.label} mostly look like, as the novel tells it (its era, what stands there)? Jev picked ${pick.type} at ${Math.round((pick.confidence ?? 0) * 100)}%. Its places with no landscape of their own take this ground.`,
+    options: [...LANDSCAPE_TYPES, "none"], evidence: [`Jev: ${top || pick.type}`], status: "open", attempts: 0, at: new Date().toISOString() };
 }
 
 /** A batch of open items for the main agent: written, and the items marked as in it. */

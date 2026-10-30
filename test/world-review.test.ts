@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initWorkspace } from "../src/ground/workspace/init.js";
 import { sourceGrep, sourceSimilar } from "../src/cli/commands/extract/sourceCommands.js";
-import { loadPool, makeBatch, worldAnswer, worldBatch, worldPool, writePool, type PoolItem } from "../src/cli/commands/extract/worldCommands.js";
+import { landscapeItem, loadPool, makeBatch, worldAnswer, worldBatch, worldPool, writePool, type PoolItem } from "../src/cli/commands/extract/worldCommands.js";
 
 const book = async (worldFirst: boolean) => {
   const { novelDir } = await initWorkspace(join(await mkdtemp(join(tmpdir(), "world-review-")), "novel"), { worldFirst });
@@ -38,4 +38,19 @@ test("the world's review pool: a batch for the main agent; an answer must be one
   await worldAnswer(novelDir, batch.id, "wi_0000000000000001", "same", "b0001_s0002 calls 上条当麻 刺猬头少年");
   assert.equal((await loadPool(novelDir)).find((entry) => entry.id === "wi_0000000000000001")?.status, "answered");
   await assert.rejects(worldPool(await book(false)), /not a world-first workspace/);
+});
+
+test("a landscape Jev is unsure of is a question for the main agent: any landscape (or none), asked again only when the pick's inputs change", async () => {
+  const novelDir = await book(true);
+  const pick = { label: "第七学区", type: "commercial" as const, inputs: "abc", confidence: 0.4, probabilities: { commercial: 0.4, residential: 0.35, skyscrapers: 0.2 } };
+  const item = landscapeItem("loc_000002", pick);
+  assert.match(item.id, /^wi_[a-f0-9]{16}$/);
+  assert.equal(item.id, landscapeItem("loc_000002", pick).id);
+  assert.notEqual(item.id, landscapeItem("loc_000002", { ...pick, inputs: "abd" }).id);
+  assert.ok(item.options.includes("park") && item.options.includes("none"));
+  assert.match(item.evidence[0], /commercial 40%, residential 35%/);
+  await writePool(novelDir, [item]);
+  const batch = await makeBatch(novelDir, await loadPool(novelDir));
+  await worldAnswer(novelDir, batch.id, item.id, "residential", "b0002_s0010 calls it a district of student dorms");
+  assert.equal((await loadPool(novelDir))[0].status, "answered");
 });

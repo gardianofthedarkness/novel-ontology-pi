@@ -59,7 +59,7 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, insideBy, reachOf, LANDSCAPES } = await load('dist/src/ground/stage/landscape.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, LANDSCAPES } = await load('dist/src/ground/stage/landscape.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
@@ -327,17 +327,21 @@ export async function strandDemo(novelDir, options) {
   // with over the whole book, so places people travel between more sit closer, and every strand stands in the same city.
   // Each open place's ground is its landscape (Jev's, stage/landscape.json), filled from its centre; a staged open place
   // keeps its grid at its middle.
+  const ground = new Map();
   const canvasLayout = () => {
     const OPEN = new Set(['region', 'city', 'district', 'street']), scaleOf = id => inputs.scale?.places[id]?.scale ?? null;
     const isOpen = id => OPEN.has(scaleOf(id)) || (!scaleOf(id) && (ownGrids.has(id) ? kindOf(id) : 'district') !== 'site');
-    // Jev's landscape for the place (novel stage landscape); without one yet, the kind of ground its scale suggests, so the
-    // world is never bare: a street of shops, a district or a city of homes. A region is too varied for one.
-    const DEFAULT = { street: 'commercial', district: 'residential', city: 'residential' };
-    const landscapeOf = (id, scale = scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')) => { const type = inputs.landscape?.places[id]?.type; if (type && type !== 'none') return type; const fallback = type === 'none' ? null : DEFAULT[scale] ?? null; if (fallback) notes.landscapeDefaults = (notes.landscapeDefaults ?? 0) + 1; return fallback; };
     // A staged building's lot, with room round it; an open place's own ground is its landscape, filled from its middle.
     const gridRadius = () => 22;
     const placeTree = inputs.placeTree ?? inputs.data.places, treePath = new Map(placeTree.map(place => [place.id, place.path ?? [place.id]]));
     const pathOf = id => treePath.get(id) ?? places.get(id)?.path ?? [id];
+    // The manifold under each place (groundFor, src/ground/stage/landscape.ts): Jev's landscape (novel stage landscape), or
+    // the main agent's answer over it; a place without one is built by the terrain rules as the ground of the nearest
+    // larger place that has one, else as its scale suggests, so the world is never bare.
+    const landscapeOf = (id, scale = scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')) => {
+      if (!ground.has(id)) ground.set(id, groundFor(inputs.landscape?.places[id], pathOf(id).filter(at => at !== id).reverse(), at => inputs.landscape?.places[at], scale));
+      return ground.get(id).type;
+    };
     const trips = (a, b) => bookTrips.filter(m => m.from && m.to && (pathOf(m.from).includes(a) && pathOf(m.to).includes(b) || pathOf(m.from).includes(b) && pathOf(m.to).includes(a))).length;
     const canvas = C.emptyCanvas();
     const toward = (id, parent) => Object.values(canvas.places).filter(place => place.parent === parent && place.id !== id).map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0].at;
@@ -383,6 +387,15 @@ export async function strandDemo(novelDir, options) {
     return { nodes, canvas };
   };
   const { nodes: macro, canvas } = canvasLayout(), macroOf = new Map(macro.map(node => [node.id, node]));
+  // An area the build made for a building (a temporary one) stands on the ground of the place it was made in.
+  for (const place of Object.values(canvas.places)) if (!ground.has(place.id) && place.landscape) ground.set(place.id, { type: place.landscape.patches[0].type, by: place.parent ? 'terrain' : 'scale', ...(place.parent ? { from: place.parent } : {}) });
+  notes.ground = Object.fromEntries(['jev', 'agent', 'terrain', 'scale', 'none'].map(by => [by, [...ground.values()].filter(entry => entry.by === by).length]).filter(([, count]) => count));
+  /** The manifold a moment stands on, for the live view: from the city in to the scene's place, each with its ground and who set it. */
+  const groundLine = id => {
+    const parts = [], label = at => macroOf.get(at)?.label ?? name(at);
+    for (let at = id; at; at = macroOf.get(at)?.parent) { const entry = ground.get(at); if (entry?.type) parts.unshift(`${label(at)} ${entry.type} (${entry.by === 'jev' ? `Jev ${Math.round((entry.confidence ?? 0) * 100)}%` : entry.by === 'terrain' ? `terrain, as ${label(entry.from)}` : entry.by})`); }
+    return parts.join(' › ');
+  };
   // Each open place's landscape, filled (src/ground/stage/landscape.ts), in map metres: what stands around the staged grids,
   // never on them (nor on the units and circles built inside it). Derived view data: only nominated buildings are canon.
   const landscapes = Object.values(canvas.places).filter(place => place.landscape).map(place => {
@@ -621,7 +634,7 @@ export async function strandDemo(novelDir, options) {
       lots: world.lots.map(lot => ({ i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, label: lot.label, role: lot.role, source: lot.source, place: lot.place, born: lot.born, cells: [...lot.skeleton.cells].join('') })),
       broken, hits: [...hits.entries()].map(([id, hit]) => ({ event: id, sphere: hit.sphere ?? null, point: hit.point })), earlier: earlier.map(({ lot, strand, scene: from, story: at }) => ({ lot, strand, scene: from, story: at })),
       landscapes: landscapes.map(entry => ({ place: entry.place, buildings: entry.buildings, ids: entry.source.buildings.map(b => b.id), roads: entry.roads })), dropped: [...world.dropped],
-      notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied, build: notes.build } };
+      notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied, build: notes.build, ground: scene ? groundLine(scene.placeId) : '' } };
   };
   let lastLive = 0;
   const live = (final = false, now = false) => { if (!options.live || (!final && !now && Date.now() - lastLive < 300)) return; lastLive = Date.now(); options.live(snapshot(final), now ? assemble(partialRuns(), moment) : null); };

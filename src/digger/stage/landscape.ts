@@ -16,16 +16,20 @@ import { LANDSCAPE_HINTS, LANDSCAPE_TYPES, type Landscape, type LandscapeType } 
  *
  * The landscape itself (its patches: type, centre, radius, seed, shape numbers) is kept in the ontology as the
  * place's `landscape` property, through the shared review gate (`landscapeProposal`); the buildings it is filled
- * with never are, except the ones the story names.
+ * with never are, except the ones the story names. A world-first book has no such packet: the pick is the world's
+ * ground, and one Jev is unsure of (below LANDSCAPE_UNSURE) goes to the world's review pool for the main agent.
  */
 /** `sentences`: what the text says about the place, the first few sentences naming it (scene summaries alone often say nothing of its look). */
 export interface LandscapePlace { id: string; label: string; scale: string; path: string[]; contains: string[]; scenes: string[]; buildings: string[]; sentences?: string[]; sentenceIds?: string[] }
-export interface LandscapePick { label: string; type: LandscapeType | "none"; inputs: string; confidence?: number; probabilities?: Record<string, number> }
+/** `by`: "agent" when the main agent answered the pick from the world's review pool (a world-first book); Jev's otherwise. */
+export interface LandscapePick { label: string; type: LandscapeType | "none"; inputs: string; confidence?: number; probabilities?: Record<string, number>; by?: "agent" }
 /** `complete`: every open place has a pick (without Jev, places not asked before are left for a run with it). `proposed`: proposal ids already put to review. */
 export interface LandscapeReport { version: 1; inputs: string; model: string | null; askedAt: string; complete?: boolean; usage: { calls: number; reused: number; skipped?: number }; places: Record<string, LandscapePick>; proposed?: string[] }
 
 /** The scales whose places are open ground of one kind: a region (a country, a state) is too varied to be one landscape, and buildings and rooms are not ground. */
 export const OPEN_SCALES = new Set(["city", "district", "street"]);
+/** A world-first book asks the main agent about a pick Jev is less sure of than this. */
+export const LANDSCAPE_UNSURE = 0.5;
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 export const landscapeInputs = (place: LandscapePlace) => hash([place.label, place.scale, place.path, place.contains, place.scenes.slice(0, 3), place.buildings.slice(0, 8), (place.sentences ?? []).slice(0, 3)]);
 export const landscapeFingerprint = (places: LandscapePlace[]) => hash(places.map((place) => [place.id, landscapeInputs(place)]).sort());

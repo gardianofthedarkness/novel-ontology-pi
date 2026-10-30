@@ -29,6 +29,7 @@
 <section class="hud" aria-live="polite">
   <h1>World · live</h1>
   <div class="row" id="where"></div>
+  <div class="counts" id="ground"></div>
   <div class="jev" id="jev"></div>
   <div class="counts" id="counts"></div>
 </section>
@@ -104,6 +105,8 @@
         const world = state.world;
         if (world) {
           $("where").textContent = `${world.moment ?? ""}${world.final ? " · end" : ""}`;
+          // The manifold the moment stands on: each place's ground, and who set it (Jev, the main agent, or the terrain rules).
+          $("ground").textContent = world.notes?.ground ? `ground · ${world.notes.ground}` : "";
           $("counts").textContent = world.notes ? `${state.engine ? `engine v${state.engine} · ` : ""}chunks ${world.notes.chunks} · buildings ${world.notes.lots} · ${world.notes.nodes} walk nodes${world.notes.applied ? ` · ${world.notes.applied} broken earlier` : ""}` : "";
           // A new command counts its pages from 1 again: start over with it.
           if (state.startedAt !== epoch) { epoch = state.startedAt; page = 0; shownPage = 0; wanted = 0; shownMoment = null; }

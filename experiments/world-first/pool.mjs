@@ -3,7 +3,8 @@
 // `batch` open items are a batch, sent to the main agent (Pi, through its console's queue, as the host itself does)
 // while the world goes on. The agent answers from the original text; the world, between scenes, turns answers into pins
 // (a presence settled, two names one person or not, a dialogue's kind) and replays from the start with them: the cache
-// keeps unchanged scenes free. A pin the laws reject (someone pinned into a scene while elsewhere at that time) sends its
+// keeps unchanged scenes free. A landscape answer (the ground of a place, from `novel stage landscape`) changes no one's
+// whereabouts: it is pinned for the stage, and the world goes on. A pin the laws reject (someone pinned into a scene while elsewhere at that time) sends its
 // item back to the pool, for the next batch.
 import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
@@ -69,9 +70,9 @@ export async function newAnswers(novelDir) {
   return (await loadAnswers(novelDir)).map(answer => ({ answer, item: items.get(answer.item) })).filter(({ item }) => item?.status === 'answered');
 }
 
-/** The pins the world plays by (stage/world/pins.json): presence settled per scene, identities, dialogue kinds. */
+/** The pins the world plays by (stage/world/pins.json): presence settled per scene, identities, dialogue kinds, and the ground (landscape) of places. */
 export async function loadPins(novelDir) {
-  return JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'pins.json'), 'utf8').catch(() => '{"present":{},"same":[],"different":[],"kind":{}}'));
+  return { landscape: {}, ...JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'pins.json'), 'utf8').catch(() => '{"present":{},"same":[],"different":[],"kind":{}}')) };
 }
 export async function savePins(novelDir, pins) { await writeFile(join(novelDir, 'stage', 'world', 'pins.json'), JSON.stringify(pins, null, 1), { mode: 0o600 }); }
 
@@ -81,6 +82,8 @@ export function pinsFrom(pins, settled) {
     if (item.kind === 'presence' || item.kind === 'actor') pins.present[`${item.scene}|${item.subjects[0]}`] = answer.verdict === 'present';
     if (item.kind === 'identity') (answer.verdict === 'same' ? pins.same : pins.different).push([...item.subjects].sort());
     if (item.kind === 'dialogue') pins.kind[item.evidence[0].replace(/^dialogue /, '')] = answer.verdict;
+    // A landscape (novel stage landscape): the stage reads it over Jev's pick.
+    if (item.kind === 'landscape') (pins.landscape ??= {})[item.subjects[0]] = answer.verdict;
   }
   return pins;
 }

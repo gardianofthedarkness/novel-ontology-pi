@@ -20,7 +20,8 @@ import { architectureFingerprint, architecturePictures, pickArchitecture, type A
 import { askMovement, movementFingerprint, pairsCallLimit, sceneCallEstimate, sceneCallLimit, sceneInputs, type MovementReport, type MovementScene } from "../../../digger/stage/movement.js";
 import { prepareStage, prepFingerprint, type StagePlan } from "../../../digger/stage/prep.js";
 import { pickScales, scaleFingerprint, SCALES, type ScalePlace, type ScaleReport } from "../../../digger/stage/scale.js";
-import { landscapeFingerprint, landscapeProposal, OPEN_SCALES, pickLandscapes, type LandscapePlace, type LandscapeReport } from "../../../digger/stage/landscape.js";
+import { LANDSCAPE_UNSURE, landscapeFingerprint, landscapeProposal, OPEN_SCALES, pickLandscapes, type LandscapePick, type LandscapePlace, type LandscapeReport } from "../../../digger/stage/landscape.js";
+import { landscapeItem, loadPool, writePool } from "./worldCommands.js";
 import { firstLandscape, type Landscape } from "../../../ground/stage/landscape.js";
 import { loadWorkspaceSentences, pendingTreeLinks } from "./timeplaceCommands.js";
 
@@ -71,9 +72,11 @@ async function writeReport(path: string, value: unknown) {
 /** The world script of a world-first workspace (stage/world/script.json, from the world-first loop), or null. */
 interface WorldScript { places: Record<string, { label: string; scale?: string | null; parent?: string | null; spot?: boolean }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }
 async function worldScript(novelDir: string): Promise<WorldScript | null> {
-  const manifest = await readJson<{ worldFirst?: boolean }>(join(novelDir, "ontology", "manifest.json"));
-  return manifest?.worldFirst ? readJson<WorldScript>(join(novelDir, "stage", "world", "script.json")) : null;
+  return await worldFirstBook(novelDir) ? readJson<WorldScript>(join(novelDir, "stage", "world", "script.json")) : null;
 }
+const worldFirstBook = async (novelDir: string) => !!(await readJson<{ worldFirst?: boolean }>(join(novelDir, "ontology", "manifest.json")))?.worldFirst;
+/** The main agent's answers on landscapes (stage/world/pins.json, written by the world loop): place id → landscape. */
+const landscapePins = async (novelDir: string) => (await readJson<{ landscape?: Record<string, string> }>(join(novelDir, "stage", "world", "pins.json")))?.landscape ?? {};
 /**
  * A world-first workspace stages the world, not the reviewed presence (docs/world-first-design.md): each scene's cast is
  * who the world has there (present, and those who stayed unseen), its place is the world's (an unnamed place becomes a
@@ -209,6 +212,8 @@ export async function stageInputs(novelDir: string) {
       buildings: [...new Set(place.sceneIds.flatMap((id) => objectsAt.get(id) ?? []))], sentences: naming.map(([, sentence]) => clip(sentence.text, 110)), sentenceIds: naming.map(([id]) => id) };
   });
   const landscape = await readJson<LandscapeReport>(stageFile(novelDir, "landscape"));
+  // A world-first book: the main agent's answer on a landscape stands over Jev's pick.
+  if (landscape && await worldFirstBook(novelDir)) for (const [id, type] of Object.entries(await landscapePins(novelDir))) if (landscape.places[id]) landscape.places[id] = { ...landscape.places[id], type: type as LandscapePick["type"], by: "agent" };
   const landscapeCurrent = !!landscape?.complete && landscape.inputs === landscapeFingerprint(landscapePlaces);
   return { data, places, placeTree, worldFirst: !!world, world, scalePlaces, scale, scaleCurrent, landscapePlaces, landscape, landscapeCurrent, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, objects, objectsCurrent, plan, planCurrent, answers,
     estimate: Math.ceil(toAsk.reduce((sum, scene) => sum + sceneCallEstimate(scene), 0) + toPair.reduce((sum, scene) => sum + pairsCallLimit(scene) * 0.5, 0)), limit: toAsk.reduce((sum, scene) => sum + sceneCallLimit(scene), 0) + toPair.reduce((sum, scene) => sum + pairsCallLimit(scene), 0) };
@@ -247,10 +252,16 @@ export async function stageLandscape(novelDir: string, options: StageOptions = {
   const report = await pickLandscapes(inputs.landscapePlaces, { decisions: decisionsFor(options), names: inputs.names, previous: inputs.landscape });
   const types: Record<string, number> = {};
   for (const pick of Object.values(report.places)) types[pick.type] = (types[pick.type] ?? 0) + 1;
-  // Into the ontology, through the shared review gate: a place whose landscape is new or of another type.
+  // Into the ontology, through the shared review gate: a place whose landscape is new or of another type. A world-first
+  // book has no packet: the pick is the world's ground, and one Jev is unsure of waits in the world's review pool.
   const open = await landscapePacketsOpen(novelDir);
   let ontology: Record<string, unknown>;
-  if (open.length) ontology = { packet: open[0].id, note: `A stage-landscape packet awaits review (${open[0].id}): review it (novel review show ${novelDir} ${open[0].id} --scope book --offset 0 --limit 20) before anything more is proposed.` };
+  if (await worldFirstBook(novelDir)) {
+    const known = new Set((await loadPool(novelDir)).map((item) => item.id));
+    const items = Object.entries(report.places).filter(([, pick]) => !pick.by && pick.type !== "none" && (pick.confidence ?? 1) < LANDSCAPE_UNSURE).map(([id, pick]) => landscapeItem(id, pick)).filter((item) => !known.has(item.id));
+    await writePool(novelDir, items);
+    ontology = { pool: items.length, note: "A world-first book: the landscape is the world's ground (no review packet); picks Jev is unsure of wait in the world's review pool for the main agent, whose answer stands over Jev's." };
+  } else if (open.length) ontology = { packet: open[0].id, note: `A stage-landscape packet awaits review (${open[0].id}): review it (novel review show ${novelDir} ${open[0].id} --scope book --offset 0 --limit 20) before anything more is proposed.` };
   else {
     const entities = new Map(fold(await new BundleStore(join(novelDir, "ontology")).loadFile<Entity>("entities.jsonl")).map((entity) => [entity.id, entity]));
     const proposed = new Set(report.proposed ?? []), sentences = await loadWorkspaceSentences(novelDir);

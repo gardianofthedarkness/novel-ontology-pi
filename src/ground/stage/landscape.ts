@@ -144,8 +144,24 @@ export function overlaps(a: Patch, b: Patch, gap = 6): boolean {
   return insideBy(a, [b.x, b.z]) > 0 || insideBy(b, [a.x, a.z]) > 0;
 }
 
+/** The ground a scale suggests when nothing larger has a landscape: a street of shops, a district or a city of homes (a region is too varied for one). */
+export const GROUND_BY_SCALE: Record<string, LandscapeType> = { street: "commercial", district: "residential", city: "residential" };
+/**
+ * The manifold a place stands on, and who set it: its own landscape (`by` "jev", or "agent" when the main agent answered
+ * over Jev's pick); without one, the terrain rules build it as the ground of the nearest larger place that has one (a spot
+ * the world made in a park district is park; `from` names that place); else the ground its scale suggests. A pick of
+ * "none" (no one landscape) leaves the place bare. `ancestors`: the larger places, nearest first.
+ */
+export interface Ground { type: LandscapeType | null; by: "jev" | "agent" | "terrain" | "scale" | "none"; from?: string; confidence?: number }
+export function groundFor(own: { type: string; by?: string; confidence?: number } | undefined, ancestors: string[], pickOf: (id: string) => { type: string } | undefined, scale: string): Ground {
+  if (own?.type === "none") return { type: null, by: "none" };
+  if (own) return { type: own.type as LandscapeType, by: own.by === "agent" ? "agent" : "jev", ...(own.confidence !== undefined ? { confidence: own.confidence } : {}) };
+  for (const id of ancestors) { const type = pickOf(id)?.type; if (type && type !== "none") return { type: type as LandscapeType, by: "terrain", from: id }; }
+  return GROUND_BY_SCALE[scale] ? { type: GROUND_BY_SCALE[scale], by: "scale" } : { type: null, by: "none" };
+}
+
 /** A place's first patch, at its centre. */
-export const firstLandscape = (seed: string, type: LandscapeType, born?: Patch["born"]): Landscape => ({ version: LANDSCAPE_VERSION, seed, patches: [samplePatch(type, "p0", seed, [0, 0], born)] });
+export const firstLandscape =(seed: string, type: LandscapeType, born?: Patch["born"]): Landscape => ({ version: LANDSCAPE_VERSION, seed, patches: [samplePatch(type, "p0", seed, [0, 0], born)] });
 /**
  * A new part against the landscape's edge, toward a point (where a scene drifted, or where a new strand enters):
  * its centre past the edge in that direction by 0.6 of its radius, so it overlaps and joins what is there, and never

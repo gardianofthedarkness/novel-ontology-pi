@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addPatch, circleOf, depthInside, fillLandscape, firstLandscape, insideBy, LANDSCAPE_TYPES, LANDSCAPES, ownerOf, samplePatch, type Landscape, type LandscapeType } from "../src/ground/stage/landscape.js";
+import { addPatch, circleOf, depthInside, fillLandscape, firstLandscape, groundFor, insideBy, LANDSCAPE_TYPES, LANDSCAPES, ownerOf, samplePatch, type Landscape, type LandscapeType } from "../src/ground/stage/landscape.js";
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const fill = (type: LandscapeType, seed = "loc_mock") => fillLandscape(firstLandscape(seed, type));
@@ -188,4 +188,17 @@ test("a stadium is an oval bowl with open ground round it; a commercial quarter 
   assert.ok(filled.fabric.roads.some((road) => road.level === "boulevard" && road.width === 30 && road.id === avenue.id), "a 30 m boulevard");
   const u = [Math.cos(patch.shape.turn), Math.sin(patch.shape.turn)], off = (p: [number, number]) => Math.abs(-(p[0] - patch.x) * u[1] + (p[1] - patch.z) * u[0]), along = (p: [number, number]) => Math.abs((p[0] - patch.x) * u[0] + (p[1] - patch.z) * u[1]);
   assert.ok(filled.fabric.lots.every((lot) => off(lot.centre) >= 15 || along(lot.centre) >= 0.85 * patch.R), "no lot on the boulevard");
+});
+
+test("the manifold under a place: its own landscape (the main agent's over Jev's), else the terrain rules build the nearest larger place's ground, else its scale's", () => {
+  const picks: Record<string, { type: string; by?: string; confidence?: number }> = { city: { type: "skyscrapers", confidence: 0.66 }, park: { type: "park", by: "agent" }, bare: { type: "none" } };
+  const pickOf = (id: string) => picks[id];
+  assert.deepEqual(groundFor(picks.city, [], pickOf, "city"), { type: "skyscrapers", by: "jev", confidence: 0.66 });
+  assert.deepEqual(groundFor(picks.park, ["city"], pickOf, "district"), { type: "park", by: "agent" });
+  // A spot the world made in the park district is park, not a street of shops; one in the city alone is the city's towers.
+  assert.deepEqual(groundFor(undefined, ["park", "city"], pickOf, "street"), { type: "park", by: "terrain", from: "park" });
+  assert.deepEqual(groundFor(undefined, ["bare", "city"], pickOf, "street"), { type: "skyscrapers", by: "terrain", from: "city" });
+  assert.deepEqual(groundFor(undefined, [], pickOf, "street"), { type: "commercial", by: "scale" });
+  assert.deepEqual(groundFor(picks.bare, ["city"], pickOf, "district"), { type: null, by: "none" });
+  assert.deepEqual(groundFor(undefined, [], pickOf, "region"), { type: null, by: "none" });
 });

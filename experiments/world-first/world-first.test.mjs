@@ -154,4 +154,6 @@ test('the review pool: a scene\'s unsure presence, dialogue conflicts and missin
     { answer: { verdict: 'not present' }, item: items[0] }, { answer: { verdict: 'live' }, item: items[1] }, { answer: { verdict: 'different' }, item: identity },
   ]);
   assert.deepEqual(pins, { present: { 's1|a': false }, same: [], different: [['a', 'b']], kind: { d1: 'live' } });
+  // A landscape answer is the ground of its place, pinned for the stage.
+  assert.deepEqual(pinsFrom({ present: {}, same: [], different: [], kind: {} }, [{ answer: { verdict: 'park' }, item: { kind: 'landscape', subjects: ['loc_000003'] } }]).landscape, { loc_000003: 'park' });
 });
