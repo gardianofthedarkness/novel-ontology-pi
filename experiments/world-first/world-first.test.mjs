@@ -157,3 +157,22 @@ test('the review pool: a scene\'s unsure presence, dialogue conflicts and missin
   // A landscape answer is the ground of its place, pinned for the stage.
   assert.deepEqual(pinsFrom({ present: {}, same: [], different: [], kind: {} }, [{ answer: { verdict: 'park' }, item: { kind: 'landscape', subjects: ['loc_000003'] } }]).landscape, { loc_000003: 'park' });
 });
+
+test('building EM: answers join scene spots, named places and names into one building each; a name of its own is one building for the book', async () => {
+  const { identitiesOf } = await import('./buildings.mjs');
+  const labels = { loc_bar: '飞镖酒吧', 'spot:s24': 'a building (scene 24)', 'spot:s30': 'a building in 学园都市 (scene 30)' };
+  const identities = identitiesOf([
+    { scene: 's24', place: 'spot:s24', name: '飞镖酒吧', to: 'here' },
+    { scene: 's25', place: 'spot:s25', name: '飞镖酒吧', to: 'loc_bar' },
+    { scene: 's27', place: 'spot:s27', name: '现代建筑', to: 'loc_bar' },
+    { scene: 's31', place: 'spot:s30', name: '隧道', to: 'subway' },
+    { scene: 's33', place: 'spot:s33', name: '电影院', to: 'own' },
+    { scene: 's35', place: 'spot:s35', name: '电影院', to: 'name:电影院' },
+  ], labels);
+  const bar = identities.find(identity => identity.places.includes('loc_bar'));
+  assert.deepEqual(bar.places.sort(), ['loc_bar', 'spot:s24']);
+  assert.deepEqual(bar.names.sort(), ['现代建筑', '飞镖酒吧']);
+  assert.equal(bar.label, '飞镖酒吧');
+  assert.deepEqual(identities.find(identity => identity.names.includes('电影院')).places, []);
+  assert.ok(!identities.some(identity => identity.names.includes('隧道')), 'the subway is not a building');
+});

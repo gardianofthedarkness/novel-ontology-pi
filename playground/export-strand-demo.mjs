@@ -175,7 +175,11 @@ export async function strandDemo(novelDir, options) {
   // Jev's three calls per thing (playground/two-view-things.mjs): which model it is, then a box on two views of each placement.
   const twoView = JSON.parse(await readFile(`${novelDir}/stage/thing-boxes.json`, 'utf8').catch(() => 'null')), boxes = twoView?.placements ?? {};
   const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8'));
-  const mentions = chosen.flatMap(scene => (found?.scenes?.[scene.id]?.objects ?? []).filter(object => !object.room && !(object.kind === 'building' && object.match.kind === 'building')).map(object => ({ scene: scene.id, event: Math.max(0, scene.events.findIndex(entry => entry.id === object.event)), object })));
+  // Building EM (experiments/world-first/buildings.mjs): with it, a building the text mentions is never a box; it is its
+  // building's real lot (below, and the page's named lots).
+  const buildingsEM = worldScript ? JSON.parse(await readFile(`${novelDir}/stage/world/buildings.json`, 'utf8').catch(() => 'null')) : null;
+  const { memberOf } = await import(pathToFileURL(`${repository}/experiments/world-first/buildings.mjs`).href), identityBy = new Map((buildingsEM?.identities ?? []).flatMap(identity => (identity.members ?? []).map(member => [member, identity])));
+  const mentions = chosen.flatMap(scene => (found?.scenes?.[scene.id]?.objects ?? []).filter(object => !object.room && !(object.kind === 'building' && (buildingsEM || object.match.kind === 'building'))).map(object => ({ scene: scene.id, event: Math.max(0, scene.events.findIndex(entry => entry.id === object.event)), object })));
   const tokensOf = text => { const latin = text.match(/[A-Za-z]+/g) ?? [], cjk = [...text.replace(/[^一-鿿぀-ヿ]/g, '')], acronym = latin.length >= 2 ? latin.map(word => word[0].toUpperCase()).join('') : ''; return new Set([...latin.map(word => word.toUpperCase()).filter(word => word.length >= 3), ...(acronym.length >= 3 ? [acronym] : []), ...cjk.slice(0, -1).map((char, n) => char + cjk[n + 1])]); };
   const STOP = new Set(['机器', '装置', '飞行', '巨型', '人行', '通道', '临时', '仓库', '大型', '残骸']), names = [...new Set(mentions.map(entry => entry.object.name))], counts = new Map();
   for (const text of names) for (const token of tokensOf(text)) counts.set(token, (counts.get(token) ?? 0) + 1);
@@ -486,10 +490,28 @@ export async function strandDemo(novelDir, options) {
     return best && LANDSCAPES[best.type]?.era === 'ancient' ? 'ancient' : 'modern';
   };
   // The world: every staged place an anchor on its canvas spot (a staged building stands there; an open place is its ground).
+  // One building, one lot (building EM, the user's rules): a building whose identity holds several of the scenes' places
+  // keeps the one with the least total travel for everyone who went there in the book (from where each was in their scene
+  // before), and every scene at the others moves onto it; it takes the building's name.
+  const keptOf = new Map();
+  if (buildingsEM) {
+    const position = id => macroOf.get(id), merged = [];
+    for (const identity of buildingsEM.identities) {
+      const candidates = identity.places.filter(id => ownGrids.has(id) && position(id));
+      if (!candidates.length) continue;
+      const visits = chosen.flatMap((scene, n) => identity.places.includes(scene.placeId) ? scene.cast.map(person => { for (let m = n - 1; m >= 0; m--) if (chosen[m].cast.includes(person) && !identity.places.includes(chosen[m].placeId)) return position(chosen[m].placeId); return null; }).filter(Boolean) : []);
+      const cost = id => visits.reduce((sum, from) => sum + Math.hypot(from.x - position(id).x, from.z - position(id).z), 0);
+      const kept = candidates.sort((a, b) => cost(a) - cost(b))[0];
+      for (const id of identity.places) keptOf.set(id, { kept, label: identity.label, identity: identity.id });
+      if (candidates.length > 1) merged.push(`${identity.label}: ${candidates.map(name).join(' + ')} → ${name(kept)} (${Math.round(cost(kept))} m of travel)`);
+    }
+    for (const scene of chosen) { const to = keptOf.get(scene.placeId)?.kept; if (to && to !== scene.placeId) { ownGrids.delete(scene.placeId); scene.placeId = to; } }
+    notes.buildingEM = { identities: buildingsEM.identities.length, merged };
+  }
   // A named building's role and floors by its kind (architecture); a world-first spot's by the building the world said it is.
   const anchors = [...ownGrids].map(id => {
     const node = macroOf.get(id), own = kindOf(id) === 'site', kind = inputs.architecture?.places[id]?.kind, [role, floors] = BUILDING_OF[worldScript?.places?.[id]?.building] ?? [ROLE_OF[kind] ?? 'office', FLOORS_OF[kind] ?? 6];
-    return { place: id, label: name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role, floors, era: themeAt(node?.spotX ?? 0, node?.spotZ ?? 0) };
+    return { place: id, label: keptOf.get(id)?.label ?? name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role, floors, era: themeAt(node?.spotX ?? 0, node?.spotZ ?? 0) };
   });
   notes.buildings = Object.fromEntries(Object.entries(anchors.filter(anchor => anchor.own).reduce((count, anchor) => ({ ...count, [anchor.role]: (count[anchor.role] ?? 0) + 1 }), {})));
   // The city's subway on its own logic (subwayOf): through the centres of the areas the canvas has (its districts and
@@ -941,6 +963,21 @@ export async function strandDemo(novelDir, options) {
         const eventIndex = Math.max(0, scene.events.findIndex(event => event.id === object.event));
         // A room is inside a building: it never takes a lot of its own.
         if (object.room) continue;
+        // With building EM: the building the mention is (its answer), one lot for it in the whole book — the kept lot of its
+        // places, else one generic lot near where it is first mentioned; never one per place, never a box.
+        if (object.kind === 'building' && buildingsEM) {
+          const answer = buildingsEM.answers.find(entry => entry.scene === scene.id && entry.name === object.name), member = answer ? memberOf(answer) : null;
+          if (!member) continue;
+          const identity = identityBy.get(member) ?? { id: member, label: object.name, places: [] };
+          if (lotNames.has(identity.id)) continue;
+          const kept = identity.places.map(id => keptOf.get(id)?.kept ?? id).find(id => world.lots.some(lot => lot.place === id));
+          if (kept) { lotNames.set(identity.id, { place: kept, lot: world.lots.findIndex(lot => lot.place === kept), name: identity.label, scene: scene.id, event: eventIndex, model: object.match.id }); continue; }
+          const { anchor } = group, gap = lot => Math.hypot((lot.i0 + lot.nx / 2) * 2 - anchor.x, (lot.j0 + lot.nz / 2) * 2 - anchor.z);
+          const near = world.lots.map((lot, index) => ({ lot, index, gap: gap(lot) })).filter(entry => entry.gap <= 80 && !entry.lot.label && !entry.lot.place && ![...lotNames.values()].some(other => other.lot === entry.index)).sort((a, b) => a.gap - b.gap);
+          const index = (near.find(entry => entry.lot.role === ROLE_FOR[object.match.id]) ?? near[0])?.index ?? -1;
+          if (index >= 0) lotNames.set(identity.id, { place: scene.placeId, lot: index, name: identity.label, scene: scene.id, event: eventIndex, model: object.match.id });
+          continue;
+        }
         if (object.kind === 'building' && object.match.kind === 'building') {
           if (!newBuildingHere(object.name, group.label, [...groups.values()].map(other => other.label))) continue;
           const key = `${scene.placeId}|${object.name}`;
