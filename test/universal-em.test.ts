@@ -194,3 +194,15 @@ test("review: accepting chained matches follows the earlier merge", async () => 
   const rows = (await readFile(join(dir, "ontology", "entities.jsonl"), "utf8")).split("\n").filter(Boolean).map((line) => JSON.parse(line) as Entity);
   assert.deepEqual([...new Set(rows.map((row) => row.id))], ["char_000001"]);
 });
+
+test("after apply in a world-first book: EM at birth approves its own confident match even with no name tie (an epithet); a reviewed book raises it; a less sure one is raised either way", async () => {
+  const worldFirst = async (dir: string) => { const path = join(dir, "ontology", "manifest.json"); await writeFile(path, JSON.stringify({ ...JSON.parse(await readFile(path, "utf8")), worldFirst: true })); return dir; };
+  const make = () => workspace(["上条当麻跑了过来。", "镜子里，上条当麻看见那个刺猬头少年喘着气。"], [character("char_000001", "上条当麻"), { ...character("char_000002", "刺猬头少年"), properties: { possibleSame: [{ ref: "char_000001" }] } }], (ids) => [scene("scene_000001", [ids[0], ids[1]], ["char_000001", "char_000002"])]);
+  const sure = fake({}, { "same:0": 0.9, "distinct:0": 0.1 });
+  const world = await runIdentityAfterApply({ novelDir: await worldFirst(await make()), decisions: sure, changeset: mintPacket("char_000002"), env: {} });
+  assert.deepEqual([world.merged.length, world.review], [1, null]);
+  const reviewed = await runIdentityAfterApply({ novelDir: await make(), decisions: fake({}, { "same:0": 0.9, "distinct:0": 0.1 }), changeset: mintPacket("char_000002"), env: {} });
+  assert.deepEqual([reviewed.merged.length, reviewed.review?.proposals], [0, 1]);
+  const unsure = await runIdentityAfterApply({ novelDir: await worldFirst(await make()), decisions: fake({}, { "same:0": 0.8, "distinct:0": 0.1 }), changeset: mintPacket("char_000002"), env: {} });
+  assert.deepEqual([unsure.merged.length, unsure.review?.proposals], [0, 1]);
+});

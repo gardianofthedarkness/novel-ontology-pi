@@ -37,6 +37,12 @@ import { identityPool, recommend, type PoolEntry } from "./recommender.js";
 export const EM_PAIRS_PER_CHARACTER = 3;
 export const EM_PAIRS_PER_CALL = 12;
 const PASSAGE_CHARS = 160;
+/**
+ * World-first books (docs/world-first-design.md) have no review: EM at birth approves its own match at this "same" or above
+ * (the text not showing two people), without the names having to tie them: an epithet ("刺猬头少年") shares no form with
+ * the name it stands for. The merge says so in its audit. Below it, the match still goes to an identity packet.
+ */
+export const EM_AUTO_WORLD_FIRST = 0.85;
 /** A pair the text shows as two people this strongly is never merged automatically. */
 const DISTINCT_BLOCKS = 0.3;
 /** Remembered as two people (never asked again) only when Jev is this sure, and sure they are not one. */
@@ -174,6 +180,7 @@ export async function runIdentityAfterApply(input: {
   const scope = await castScope(input.novelDir, input.env);
   const cast = await loadCast(scope);
   const bundle = new BundleStore(join(input.novelDir, "ontology"));
+  const worldFirst = !!JSON.parse(await readFile(join(input.novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}")).worldFirst;
   const fold = <T extends { id: string }>(rows: T[]) => [...new Map(rows.map((row) => [row.id, row])).values()];
   let entities = fold(await bundle.loadFile<Entity>("entities.jsonl"));
   const scenes = fold(await bundle.loadFile<Scene>("scenes.jsonl"));
@@ -246,8 +253,10 @@ export async function runIdentityAfterApply(input: {
     if (!best || best.verdict.same < EM_REVIEW || gone.has(target.id)) continue;
     const reason = `Jev: same ${best.verdict.same.toFixed(2)}, distinct ${best.verdict.distinct.toFixed(2)}`;
     // Automatic only when Jev is sure, nothing says two people, and the names themselves tie them; anything less is reviewed.
-    if (best.verdict.same >= EM_AUTO && best.verdict.distinct < DISTINCT_BLOCKS && best.byName) {
-      const merged = await mergeIdentity(input.novelDir, scope, cast, entities, target.id, best.candidate.kind === "book" ? { kind: "entity", sourceId: scope.sourceId, entityId: best.candidate.ref } : { kind: "person", personId: best.candidate.ref.slice("person:".length) }, best.verdict.same, "jev", reason);
+    const approved = best.verdict.distinct < DISTINCT_BLOCKS && (best.verdict.same >= EM_AUTO && best.byName || worldFirst && best.verdict.same >= EM_AUTO_WORLD_FIRST);
+    if (approved) {
+      const why = best.verdict.same >= EM_AUTO && best.byName ? reason : `${reason}; approved at birth (world-first: same ${EM_AUTO_WORLD_FIRST} or above, no review)`;
+      const merged = await mergeIdentity(input.novelDir, scope, cast, entities, target.id, best.candidate.kind === "book" ? { kind: "entity", sourceId: scope.sourceId, entityId: best.candidate.ref } : { kind: "person", personId: best.candidate.ref.slice("person:".length) }, best.verdict.same, "jev", why);
       entities = merged.entities;
       gone.add(merged.drop);
       summary.merged.push({ keep: merged.keep, drop: merged.drop, confidence: best.verdict.same, across: best.candidate.kind !== "book" });
