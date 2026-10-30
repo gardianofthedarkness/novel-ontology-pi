@@ -1083,7 +1083,7 @@ export function simulationRecord(data, strand) {
       const place = data.places[scene.place];
       return { id: scene.id, index: scene.index ?? null, place: scene.place, label: scene.label, starts: Object.fromEntries(Object.entries(scene.starts).map(([person, node]) => [person, node == null ? null : point(place, node)])),
         events: scene.events.map((event, index) => ({ index, text: event.text, moves: event.moves.map(move => ({ person: move.person, how: move.how, spot: move.spot, ...(move.with ? { with: move.with } : {}), path: move.path.map(node => point(place, node)) })),
-          hit: event.hit && { sphere: event.hit.sphere ?? null, strength: event.hit.strength, parts: [event.hit, ...(event.hit.more ?? [])].map(part) }, hitThings: event.hitThings })) };
+          hit: event.hit && { sphere: event.hit.sphere ?? null, strength: event.hit.strength, parts: [event.hit, ...(event.hit.more ?? [])].filter(entry => entry.lot >= 0).map(part), under: event.hit.under ?? [] }, hitThings: event.hitThings })) };
     }),
   };
 }
