@@ -117,7 +117,7 @@ export async function stageInputs(novelDir: string) {
   const sceneLabel = new Map(data.scenes.map((scene) => [scene.id, scene.label]));
 
   // Architecture: every place a scene happens in.
-  const inside = (id: string) => data.places.filter((place) => place.parentId === id).map((place) => place.id);
+  const inside = (id: string) => data.places.filter((place) => place.parentId === id && !worldMade(place.id)).map((place) => place.id);
   const places: ArchitecturePlace[] = data.places.filter((place) => place.sceneIds.length && !worldMade(place.id)).map((place) => ({ id: place.id, label: place.label, path: place.path ?? [place.id], contains: inside(place.id), sceneLabels: place.sceneIds.map((id) => sceneLabel.get(id) ?? "").filter((label) => label && !/^scene_\d+$/.test(label)).slice(0, 3) }));
   const architecture = await readJson<ArchitectureReport>(stageFile(novelDir, "architecture"));
   const architectureCurrent = architecture?.inputs === architectureFingerprint(places);
@@ -152,7 +152,7 @@ export async function stageInputs(novelDir: string) {
   for (const link of await pendingTreeLinks(novelDir)) if (isLocation(link.fromId) && isLocation(link.toId) && !parentOf.has(link.fromId) && !proposedParent.has(link.fromId)) proposedParent.set(link.fromId, link.toId);
   const placeTree = [...data.places.map((place) => ({ id: place.id, label: place.label, parentId: place.parentId, proposedParentId: place.parentId ? null : proposedParent.get(place.id) ?? null, path: place.path ?? [place.id], sceneIds: place.sceneIds })),
     ...entities.filter((entity) => entity.kind === "Location" && !projected.has(entity.id)).map((entity) => ({ id: entity.id, label: names[entity.id] ?? entity.id, parentId: parentOf.get(entity.id) ?? null, proposedParentId: parentOf.has(entity.id) ? null : proposedParent.get(entity.id) ?? null, path: treePath(entity.id), sceneIds: [] as string[] }))];
-  const within = (id: string) => placeTree.filter((place) => place.parentId === id).map((place) => place.id);
+  const within = (id: string) => placeTree.filter((place) => place.parentId === id && !worldMade(place.id)).map((place) => place.id);
   // Scale: every place in the tree, with scenes of its own or not (the stage's map draws them all).
   const scalePlaces: ScalePlace[] = placeTree.filter((place) => !worldMade(place.id)).map((place) => {
     const forms = byId.get(place.id)?.names ?? [], canonical = names[place.id] ?? place.label;
