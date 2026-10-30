@@ -56,7 +56,7 @@ export async function takeBase(novelDir, outDir) {
   return { scenes: base.scenes.length, chapters: new Set(base.scenes.map(scene => scene.chapter)).size, events: base.scenes.reduce((sum, scene) => sum + scene.events.length, 0), dialogues: base.scenes.reduce((sum, scene) => sum + scene.dialogues.length, 0), states: base.states.length, characters: base.roster.characters.length, places: base.roster.places.length };
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [novelDir, outDir] = process.argv.slice(2);
   if (!novelDir || !outDir) throw new Error('Usage: node experiments/world-first/base.mjs <novel-dir> <out-dir>');
   console.log(JSON.stringify(await takeBase(resolve(novelDir), resolve(outDir))));

@@ -53,7 +53,7 @@ export async function compare(outDir, oldNovel) {
   return report;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [outDir, oldNovel] = process.argv.slice(2);
   if (!outDir || !oldNovel) throw new Error('Usage: node experiments/world-first/compare.mjs <out-dir> <old-novel-dir>');
   console.log(JSON.stringify(await compare(resolve(outDir), resolve(oldNovel)), null, 1));

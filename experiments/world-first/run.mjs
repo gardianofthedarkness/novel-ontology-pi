@@ -21,13 +21,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { compose } from './compose.mjs';
 import { KINDS, UNNAMED, settle } from './dialogue.mjs';
+import { DESCRIPTIVE } from './identity.mjs';
 import { actors, knowledge, things } from './laws.mjs';
 import { allowedTimes, createWorld, elsewhere, enter, inPast, join as joinScene, PAST_TIMES, TIMES, whereabouts } from './world.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 
-const ELSEWHERE = 'another place the text does not name';
+const ELSEWHERE = 'another place the text does not name', NOBODY_NAMED = 'someone not named here';
+/** Places of these scales are areas: a scene in one is at a spot inside it (a building or a street of its own). */
+const AREAS = new Set(['region', 'city', 'district', 'street']);
+/** At most this many epithets are asked about in a scene, against this many named people. */
+const EPITHETS = 4, NAMED = 8;
 /** A scene this short (in characters) with no events is a fragment: a stray line the scene splitter cut off. */
 const FRAGMENT = 20;
 /** Present at this probability; below it but above UNSURE, kept in the log as unsure (and an actor that likely joins). */
@@ -55,7 +60,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
   const name = new Map(roster.characters.map(entry => [entry.id, entry.names[0]])), forms = new Map(roster.characters.map(entry => [entry.id, [...new Set(entry.names.flatMap(formsOf))]]));
   const byName = new Map([...name].map(([id, label]) => [label, id]));
   const placeName = new Map(roster.places.map(entry => [entry.id, entry.names[0]])), placeForms = new Map(roster.places.map(entry => [entry.id, entry.names])), placeScale = new Map(roster.places.map(entry => [entry.id, entry.scale ?? null]));
-  const world = createWorld(), log = [], script = [], summaries = new Map(scenes.map(scene => [scene.id, scene.summary])), number = new Map(scenes.map(scene => [scene.id, scene.index + 1]));
+  const world = createWorld(), log = [], script = [], aliases = [], areaOf = new Map(), summaries = new Map(scenes.map(scene => [scene.id, scene.summary])), number = new Map(scenes.map(scene => [scene.id, scene.index + 1]));
   const labelOf = place => placeName.get(place) ?? world.places[place]?.label ?? place;
   const when = scene => (scene.timeNode ? `, ${scene.timeNode}` : '');
   const names = ids => ids.map(id => name.get(id) ?? id).join('、');
@@ -87,19 +92,42 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     const option = place => (place === previous?.place ? `the same place as the scene before (${labelOf(place)})` : labelOf(place));
     const placeOptions = [...places.map(option), ELSEWHERE];
     const events = scene.events.map(event => `- ${clip(event.summary, 140)}`).join('\n');
+    // Epithets ("刺猬头少年", "白衣修女"): which named person the text means, in this scene.
+    const epithets = candidates.filter(id => DESCRIPTIVE.test(name.get(id))).slice(0, EPITHETS), proper = candidates.filter(id => !DESCRIPTIVE.test(name.get(id))).slice(0, NAMED);
     const first = await jev.decide(compose({ world: worldLines(), story: storyLines(), text, focus: `What happens in this scene (its events):\n${events || '- (none recorded)'}\nPeople who may be in it: ${names(candidates) || '(nobody named)'}.` }), [
       ...candidates.map((id, index) => ({ key: `present_${index}`, primitive: 'noul', instructions: `Is ${name.get(id)} physically in this scene: at its place, taking part, or within sight or earshot of what happens? Being only mentioned, remembered, thought of, or heard on a phone is not being there.` })),
       { key: 'place', primitive: 'choice', instructions: 'Where does this scene take place?', options: placeOptions },
+      ...(proper.length ? epithets.map((id, index) => ({ key: `who_${index}`, primitive: 'choice', instructions: `In this scene, who is the one the text calls “${name.get(id)}”?`, options: [...proper.map(other => name.get(other)), NOBODY_NAMED] })) : []),
+      ...(previous ? [{ key: 'same_spot', primitive: 'noul', instructions: 'Does this scene happen at the very same spot as the scene before: the same room, or the same stretch of street?' }] : []),
+      { key: 'indoors', primitive: 'noul', instructions: 'Does this scene happen indoors?' },
     ]);
     const answer = key => first.find(entry => entry.key === key);
     const chances = new Map(candidates.map((id, index) => [id, Number(answer(`present_${index}`)?.value ?? 0)]));
+    // An epithet Jev ties to a named person (surely) is that person here: one presence, and evidence for EM.
+    for (const [index, id] of epithets.entries()) {
+      const reply = answer(`who_${index}`), person = proper.find(other => name.get(other) === reply?.value), sure = Number(reply?.distribution?.[reply?.value] ?? reply?.confidence ?? 0);
+      if (!person || sure < 0.75) continue;
+      chances.set(person, Math.max(chances.get(person) ?? 0, chances.get(id) ?? 0));
+      chances.delete(id);
+      aliases.push({ a: id, b: person, why: `in scene ${scene.index + 1} the text calls ${name.get(person)} “${name.get(id)}” (Jev ${Math.round(sure * 100)}%)` });
+    }
     const present = [...chances].filter(([, p]) => p >= PRESENT).map(([id]) => id);
     // Actors are there: an event's actor Jev thought likely joins; the others are flagged.
     const cast = actors({ events: scene.events.map(event => ({ ...event, actors: event.actors.filter(id => name.has(id)) })), inScene: present, chance: id => chances.get(id), elsewhere: () => false, floor: UNSURE });
     present.push(...cast.add);
     const picked = String(answer('place')?.value ?? ELSEWHERE), placeIndex = placeOptions.indexOf(picked);
     let place = placeIndex >= 0 && placeIndex < places.length ? places[placeIndex] : null;
-    if (!place) { place = `unnamed:${scene.id}`; world.places[place] = { label: `an unnamed place (scene ${scene.index + 1})` }; }
+    // A scene in an area is at a spot inside it: the scene before's spot when it carries on there, else a spot of its own
+    // (a building indoors, a street outdoors), so a classroom and a doorway in one city are not one place.
+    const sameSpot = Number(answer('same_spot')?.value ?? 0) >= 0.5, indoors = Number(answer('indoors')?.value ?? 0) >= 0.5;
+    const area = place ?? (previous?.place ? areaOf.get(previous.place) ?? previous.place : null);
+    const isArea = id => !!id && !world.places[id]?.spot && (AREAS.has(placeScale.get(id) ?? '') || !placeScale.get(id));
+    if (!place || isArea(place)) {
+      const before = previous?.place && areaOf.get(previous.place) === area ? previous.place : null;
+      if (place && before && sameSpot) place = before;
+      else { place = `spot:${scene.id}`; world.places[place] = { label: `${indoors ? 'a building' : 'a street'}${area ? ` in ${labelOf(area)}` : ''} (scene ${scene.index + 1})`, scale: indoors ? 'building' : 'street', parent: area && isArea(area) ? area : null, spot: true }; }
+    }
+    areaOf.set(place, world.places[place]?.parent ?? (isArea(place) ? place : areaOf.get(place) ?? place));
     // When, by the laws; the time the text names, from the time lexicon (outside quotes first).
     const chapterStart = !!previous && previous.chapter !== scene.chapter, opening = text.slice(0, 200);
     const allowed = allowedTimes(world, present, place, { opening, chapterStart }), times = inPast(world, chapterStart) ? PAST_TIMES : TIMES;
@@ -156,15 +184,16 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
   if (novelDir) { await mkdir(join(novelDir, 'stage', 'world'), { recursive: true, mode: 0o700 }); await writeFile(join(novelDir, 'stage', 'world', 'script.json'), scriptText, { mode: 0o600 }); }
   await writeFile(join(outDir, 'world.json'), JSON.stringify({ people: Object.fromEntries(Object.entries(world.people).map(([id, person]) => [name.get(id) ?? id, { ...person, place: labelOf(person.place) }])), places: world.places, scenes: world.scenes }, null, 1), { mode: 0o600 });
   await writeFile(join(outDir, 'laws.json'), JSON.stringify(laws, null, 1), { mode: 0o600 });
+  await writeFile(join(outDir, 'aliases.json'), JSON.stringify(aliases, null, 1), { mode: 0o600 });
   const dialogues = script.flatMap(scene => scene.timeline.filter(item => item.type === 'dialogue'));
   const summary = { scenes: log.length, fragments: log.filter(line => line.fragment).length, calls, stopped, model: live.modelId, chapters: [...new Set(log.map(line => line.chapter))],
     dialogues: Object.fromEntries(Object.keys(KINDS).map(kind => [kind, dialogues.filter(item => item.kind === kind).length])), joinedByDialogue: dialogues.reduce((sum, item) => sum + item.joins.length, 0),
-    flags: { actors: laws.actors.length, things: laws.things.flags.length, knowledge: laws.knowledge.length, dialogue: laws.dialogue.length } };
+    flags: { actors: laws.actors.length, things: laws.things.flags.length, knowledge: laws.knowledge.length, dialogue: laws.dialogue.length }, aliases: aliases.length, spots: Object.values(world.places).filter(place => place.spot).length };
   await writeFile(join(outDir, 'run.json'), JSON.stringify(summary, null, 1), { mode: 0o600 });
   return summary;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { chapters: { type: 'string' }, 'max-calls': { type: 'string' }, novel: { type: 'string' } } });
   const range = values.chapters?.match(/^(\d+)(?:-(\d+))?$/), chapters = range ? Array.from({ length: Number(range[2] ?? range[1]) - Number(range[1]) + 1 }, (_, n) => Number(range[1]) + n) : null;
   if (!positionals[0]) throw new Error('Usage: node experiments/world-first/run.mjs <out-dir> [--chapters 0-5] [--max-calls 400]');

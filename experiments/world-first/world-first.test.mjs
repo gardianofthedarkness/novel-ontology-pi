@@ -117,3 +117,26 @@ test('a flashback opens only where the text looks back, and a chapter opens in t
   assert.ok(enter(world, { id: 's3', chapter: 1, place: 'R', relation: 'after', present: ['z'], chapterStart: true }).clock, 'not the past');
   assert.ok(BACKWARD.test('三年前的那天'));
 });
+
+test('identity: matches chain into one person kept under a proper name; a pair the world has apart at once stays two', async () => {
+  const { planMerges, DESCRIPTIVE } = await import('./identity.mjs');
+  const names = { a: '上条当麻', b: '刺猬头少年', c: '猪头少年', d: '茵蒂克丝', e: '白衣修女' };
+  const { merges } = planMerges([{ a: 'b', b: 'a', why: 'x' }, { a: 'c', b: 'b', why: 'y' }], names);
+  assert.deepEqual(merges.map(merge => [merge.drop, merge.keep]).sort(), [['b', 'a'], ['c', 'a']]);
+  const script = { scenes: [{ place: 'P', clock: [0, 1], present: ['d'], stayed: [] }, { place: 'Q', clock: [0, 1], present: ['e'], stayed: [] }] };
+  const apart = planMerges([{ a: 'e', b: 'd', why: 'z' }], names, script);
+  assert.deepEqual([apart.merges.length, apart.apart.length], [0, 1]);
+  assert.ok(DESCRIPTIVE.test('学园都市第一名') && DESCRIPTIVE.test('白色的怪物') && !DESCRIPTIVE.test('一方通行'));
+});
+
+test('identity: an epithet tied to several named people is never merged, and two named people never become one through epithets', async () => {
+  const { planMerges } = await import('./identity.mjs');
+  const names = { m: '那个男人', a: '一方通行', b: '上条当麻', g: '门卫', t: '统括理事长', x: '最后之作', y: '司令塔' };
+  const scenes = [{ a: 'm', b: 'g' }, { a: 'm', b: 'b' }, { a: 'm', b: 'a' }, { a: 't', b: 'a' }].map(pair => ({ ...pair, why: 'scene' }));
+  const plan = planMerges([...scenes, { a: 'y', b: 'x', why: 'birth', direct: true }], names);
+  assert.deepEqual(plan.merges.map(merge => [merge.drop, merge.keep].sort().join('')).sort(), ['at', 'xy'], 'only the unambiguous epithet, and the direct match of two names');
+  assert.ok(plan.merges.some(merge => merge.drop === 't' && merge.keep === 'a'), 'kept under the name');
+  assert.ok(plan.apart.some(pair => pair.apart === 'an epithet for more than one person'));
+  const chain = planMerges([{ a: 't', b: 'a', why: 's' }, { a: 't', b: 'g', why: 's' }], names);
+  assert.equal(chain.merges.length, 0, 'an epithet tied to two people is ambiguous: neither merges');
+});

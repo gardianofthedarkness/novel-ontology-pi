@@ -76,7 +76,7 @@ export async function solidify(outDir, { novelDir = null, apply = false } = {}) 
   return report;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [outDir, novelDir] = process.argv.slice(2).filter(arg => !arg.startsWith('--'));
   if (!outDir) throw new Error('Usage: node experiments/world-first/solidify.mjs <out-dir> [<novel-dir> --apply]');
   console.log(JSON.stringify(await solidify(resolve(outDir), { novelDir: novelDir ? resolve(novelDir) : null, apply: process.argv.includes('--apply') }), null, 1));
