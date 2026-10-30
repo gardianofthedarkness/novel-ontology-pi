@@ -19,7 +19,7 @@ const PALETTE = ['#7ce6ff', '#ff8fb1', '#ffd36e', '#9dff8a', '#c59bff', '#ff9d5c
 /** The artistic models (Kenney CC0 kits, baked in apps/playground) a building of each role may wear; one is drawn per lot at random. */
 /** Shells for lots on ancient ground (a village, a castle town, farmland): the old town's buildings. */
 const ANCIENT_SHELLS = ['market', 'keep', 'windmill', 'market'];
-const SHELLS = { office: ['tower-a', 'tower-b', 'tower-d', 'tower-e', 'tower-f', 'tower-g', 'tower-h', 'tower-i', 'tower-j', 'tower-l', 'tower-m', 'office-c', 'office-h', 'block-wide-a', 'block-wide-b'], tall: ['skyscraper-a', 'skyscraper-b', 'skyscraper-e', 'tower-c', 'tower-k'], shop: ['office-c', 'block-wide-a', 'market'], hospital: ['office-k'], station: ['block-wide-b'] };
+const SHELLS = { office: ['tower-a', 'tower-b', 'tower-d', 'tower-e', 'tower-f', 'tower-g', 'tower-h', 'tower-i', 'tower-j', 'tower-l', 'tower-m', 'office-c', 'office-h', 'block-wide-a', 'block-wide-b'], tall: ['skyscraper-a', 'skyscraper-b', 'skyscraper-e', 'tower-c', 'tower-k'], shop: ['office-c', 'block-wide-a', 'market'], hospital: ['office-k'], station: ['block-wide-b'], school: ['kk-school'], home: ['kk-dormitory', 'kk-apartment'], mall: ['kk-mall'] };
 // The basic shapes, at unit size (their extents). A sphere is a kind of oval: an oval in a cube-shaped cast.
 const SHAPES = { box: [1, 1, 1], oval: [1, 0.55, 0.7], triangle: [1, 1, 1], diamond: [1, 1, 1], donut: [1, 0.3, 1] };
 /**
@@ -824,7 +824,8 @@ export async function strandDemo(novelDir, options) {
     // as that grid's dense cells, each lot and chunk with the moment it was first reached.
     const bounds = W.worldBounds(world), NX = bounds.i1 - bounds.i0, NZ = bounds.j1 - bounds.j0, oi = -bounds.i0, oj = -bounds.j0;
     const K = Math.max(1, ...world.lots.map(lot => lot.floors + 1), ...[...shared.things.values()].map(thing => thing.top + 1));
-    const dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return (k * NZ + (j + oj)) * NX + (i + oi); };
+    // Levels below the street are negative: they are packed from `ok` levels down, so every node is a non-negative number.
+    const ok = -W.DEEP + 4, dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return ((k + ok) * NZ + (j + oj)) * NX + (i + oi); };
     const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
     const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
       i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
@@ -838,11 +839,11 @@ export async function strandDemo(novelDir, options) {
       macro, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
       people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
-      world: { NX, NZ, K, oi, oj, lots: worldLots, earlier, underground: world.source.underground,
+      world: { NX, NZ, K, oi, oj, ok, lots: worldLots, earlier, underground: world.source.underground,
         ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]),
         // Landscape buildings that never stood as lots (under a staged building, or no room on the grid), and when that was settled.
         dropped: [...world.dropped] },
-      places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, theme: anchor.era, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, lots: worldLots }])),
+      places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, theme: anchor.era, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, ok, lots: worldLots }])),
       scenes: shown.map(scene => {
         const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label, kind = staged.get(scene.id)?.kind ?? null;
         // The spots the movement questions offer for this building, each at a node of the world near a point (the one nearest
@@ -881,7 +882,7 @@ export async function strandDemo(novelDir, options) {
 export function simulationRecord(data, strand) {
   const CELL = 2, FLOOR = 3, round = value => Math.round(value * 100) / 100;
   // A node as a point: on the world's grid, in world metres (oi, oj: where world cell 0, 0 sits on the grid).
-  const point = (place, node) => { const i = node % place.NX - (place.oi ?? 0), j = Math.floor(node / place.NX) % place.NZ - (place.oj ?? 0), k = Math.floor(node / (place.NX * place.NZ)); return [round((i + 0.5) * CELL), k * FLOOR, round((j + 0.5) * CELL)]; };
+  const point = (place, node) => { const i = node % place.NX - (place.oi ?? 0), j = Math.floor(node / place.NX) % place.NZ - (place.oj ?? 0), k = Math.floor(node / (place.NX * place.NZ)) - (place.ok ?? 0); return [round((i + 0.5) * CELL), k * FLOOR, round((j + 0.5) * CELL)]; };
   const part = part => ({ lot: part.lot, energy: part.energy ?? null, blasted: part.blasted ?? null, fallen: part.fallen ?? null, destroyedCells: part.destroyed, fellCells: part.fell ?? [], cutOffCells: part.cutOff, cutOffRooms: part.cutRooms });
   return {
     kind: 'stage-simulation', version: 2, exportedAt: data.exportedAt, strand: { ...strand, title: data.title },
@@ -889,7 +890,7 @@ export function simulationRecord(data, strand) {
     engine: { T: data.T, kappa: data.kappa, lambda: data.lambda, notes: data.notes, travel: data.travel },
     people: data.people,
     // The world once (every lot explored, in world cells, with the moment it was first reached); each place lists the lots round its anchor.
-    world: data.world ? { grid: { NX: data.world.NX, NZ: data.world.NZ, floors: data.world.K, oi: data.world.oi, oj: data.world.oj }, chunks: data.world.chunks.map(([ci, cj, born]) => [ci, cj, born]),
+    world: data.world ? { grid: { NX: data.world.NX, NZ: data.world.NZ, floors: data.world.K, oi: data.world.oi, oj: data.world.oj, ok: data.world.ok }, chunks: data.world.chunks.map(([ci, cj, born]) => [ci, cj, born]),
       lots: data.world.lots.map(lot => ({ label: lot.label, detected: lot.detected, role: lot.role, model: lot.model, source: lot.source, manifold: lot.manifold, footprint: { i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz }, floors: lot.floors, height: lot.height, born: lot.born, place: lot.place, skeleton: lot.cells, rooms: lot.rooms })),
       earlier: data.world.earlier.map(({ lot, strand, run, scene, story }) => ({ lot, strand, run, scene, story })) } : null,
     buildings: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, scale: place.scale, kind: place.kind, anchor: place.anchor,
@@ -912,7 +913,7 @@ export function simulationRecord(data, strand) {
  * world, its walk, its record format), and kept with every run (the record's `run`, the strand index, the live state and
  * the growth log), so each run says which engine made it. A version pushed as stable is tagged world-engine-v<N> in git.
  */
-export const ENGINE_VERSION = 2;
+export const ENGINE_VERSION = 3;
 /** The engine's name in run records. */
 export const ENGINE = `world-engine-${ENGINE_VERSION}`;
 /** What the walk's seeds come from (the scene keys under it): kept while the walk itself is unchanged, so its runs reproduce. */

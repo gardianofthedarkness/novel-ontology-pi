@@ -147,7 +147,7 @@ const along = (a, b, arc, f) => { const t = f * arc.T; return { x: a.x + (b.x - 
 const SPEED = { walk: 1.4, run: 3.6, sneak: 0.8, "climb up": 1.1, "go down": 1.4, fall: 1.6, dragged: 1.2 };
 const GROUND_COLOR = [0x0c1822, 0x112532, 0x173444, 0x15293a, 0x112532];
 
-const at = (place, node) => { const i = node % place.NX - (place.oi ?? 0), j = Math.floor(node / place.NX) % place.NZ - (place.oj ?? 0), k = Math.floor(node / (place.NX * place.NZ)); return { x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, y: k * FLOOR, i, j, k }; };
+const at = (place, node) => { const i = node % place.NX - (place.oi ?? 0), j = Math.floor(node / place.NX) % place.NZ - (place.oj ?? 0), k = Math.floor(node / (place.NX * place.NZ)) - (place.ok ?? 0); return { x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, y: k * FLOOR, i, j, k }; };
 /** A move's timing: each step at the manner's pace; climbs at stair pace, falls in free fall. */
 const timing = (place, move) => {
   if (move.how === "teleport") return { total: 0.8, steps: [0, 0.8] };
