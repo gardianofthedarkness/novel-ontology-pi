@@ -1,0 +1,92 @@
+# The v2 reading's data (src/v2, docs/v2/world-engine-v2.md §2.0). Every record is keyed by, or made of, sentence ids:
+# the sentence is the smallest unit. experiments/v2/read.mjs writes these as YAML under <out>/v2/ (and data.json, the same
+# data for tools), with log.yaml for the run.
+
+sentence:            # from intake (sectioning), never a model
+  id: string         # b<block>_s<n>, stable for the same text and block size
+  text: string
+  block: string      # b0001 …
+  chapter: integer
+
+picture:             # the album (EPUB illustrations), anchored on a sentence
+  file: string       # assets/ill_0001.jpg
+  sentenceId: string
+
+scene:               # scenes.yaml — scene tiling (Jev, start selection)
+  id: string         # scene_000001
+  block: string
+  chapter: integer
+  first: string      # sentence id
+  last: string       # sentence id
+  sentences: integer
+
+kind:                # kinds.yaml — one per sentence (Jev, one structured document a window)
+  kind: [spoken, thought, fact, action, environment, narration]
+  turn: number       # 0..1: does the carrier change here (who speaks it, who acts in it, or what it is about)
+  confidence: number
+
+card:                # cards.yaml — runs of one kind, a new card where the carrier changes; exchanges and monologues over them
+  id: string         # <kind>:<first sentence id>
+  kind: [spoken, thought, fact, action, environment, narration, dialogue, monologue]
+  home: [world, ontology]   # dialogue, spoken, action, environment → world; thought, monologue, fact, narration → ontology
+  first: string
+  last: string
+  inside: [string]   # dialogue and monologue cards: the cards inside them
+  block: string
+  entities:          # the card scan (System 0): who and what the card names, and where
+    - id: string
+      at: [string]   # sentence ids
+
+detected:            # a listed string, typed (em.yaml holds each with its outcome)
+  key: string        # n1, n2 … within its batch
+  text: string       # word for word as the passage writes it
+  type: [person, object, weapon, vehicle, place, building, room, time, none]
+  category: [person, thing, place, time, null]
+  proper: number     # 0..1: a proper name (a name anywhere) or a description (a name only where EM said it)
+  sentences: [string]
+
+em_result:           # em.yaml — per batch (its first sentence id), per detected string
+  outcome: [exact, alias, new, time, skip]
+  entity: string     # the chart entity (or time node) it is
+  candidates:        # the recommender's best three, by nearness, frequency and shared names
+    - id: string
+      score: number
+  answer: string     # Jev's choice: a candidate, another string of the batch (n…), or new
+  confidence: number
+  unsure: string     # new below the threshold: its best candidate, for the world engine's second EM
+
+entity:              # chart.yaml — the ontology's identities (canon ids: char_, loc_, item_)
+  id: string
+  category: [person, place, thing]
+  type: string       # the type it was first typed as
+  names: [string]    # every name EM gave it
+  proper: [string]   # its names anywhere (exact match, the card scan)
+  first: string      # sentence id
+  seen: [string]     # every sentence it appears in
+
+time_node:           # chart.yaml times — EM for times is the calendar's (later)
+  id: string         # time_000001
+  text: string
+  seen: [string]
+
+context:             # contexts.yaml — what the world engine is given for each scene
+  scene: string
+  cards: [string]    # its world cards
+  before:            # the scene before's cards of the same kinds, in order
+    dialogue: [string]
+    action: [string]
+    environment: [string]
+  recommended:       # the people the recommender expects (the last three scenes)
+    - id: string
+      score: number
+  facts: [string]    # the latest fact cards before it
+
+log:                 # log.yaml — the run
+  sentences: integer
+  wallMs: integer
+  paidRequests: { jev: integer, work: integer }
+  steps:
+    - step: string
+      requests: integer
+      ms: integer
+      inputChars: integer

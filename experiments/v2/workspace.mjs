@@ -20,7 +20,10 @@ export async function v2Workspace(sourceDir, outDir, novelDir) {
   const canon = canonRecords(result, id => text.get(id) ?? '');
   await mkdir(join(novelDir, 'ontology'), { recursive: true, mode: 0o700 });
   await cp(join(sourceDir, 'source'), join(novelDir, 'source'), { recursive: true });
-  for (const name of ['manifest.json', 'source.json']) await cp(join(sourceDir, 'ontology', name), join(novelDir, 'ontology', name));
+  await cp(join(sourceDir, 'ontology', 'source.json'), join(novelDir, 'ontology', 'source.json'));
+  // A world-first workspace whose canon is a v2 reading: `novel checklist` takes the reading as its blocks and identities.
+  const manifest = JSON.parse(await readFile(join(sourceDir, 'ontology', 'manifest.json'), 'utf8'));
+  await writeFile(join(novelDir, 'ontology', 'manifest.json'), JSON.stringify({ ...manifest, worldFirst: true, blocksProcessed: 0, v2Reading: { at: new Date().toISOString(), out: outDir } }, null, 2), { mode: 0o600 });
   const lines = records => records.map(record => JSON.stringify(record)).join('\n') + (records.length ? '\n' : '');
   await Promise.all([
     writeFile(join(novelDir, 'ontology', 'scenes.jsonl'), lines(canon.scenes), { mode: 0o600 }),

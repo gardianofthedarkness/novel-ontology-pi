@@ -74,7 +74,7 @@ function settle(items: ChecklistItem[], known: ChecklistItem[] = []): ChecklistI
 export async function bookChecklist(novelDir: string, options: { input?: string; env?: NodeJS.ProcessEnv; stage?: boolean } = {}): Promise<BookChecklist> {
   const dir = quote(novelDir);
   const store = new BundleStore(join(novelDir, "ontology"));
-  const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}")) as { title?: string; worldFirst?: boolean };
+  const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}")) as { title?: string; worldFirst?: boolean; v2Reading?: { at: string; out: string } };
   const [entities, relations, scenes] = [fold(await store.loadFile<Entity>("entities.jsonl")), await store.loadFile<Relation>("relations.jsonl"), fold(await store.loadFile<Scene>("scenes.jsonl"))];
   const changesets = await listChangeSets(novelDir).catch(() => []);
   const pending = (test: (id: string, blockId: string) => boolean) => changesets.filter((changeset) => ["pending_review", "held", "revision_requested"].includes(changeset.status) && test(changeset.id, changeset.blockId));
@@ -102,6 +102,10 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
     counts: { blocks: blocks.length, applied: blocks.length - missingBlocks.length, awaitingReview: blockReview.length, scenes: scenes.length, entities: entities.length },
     next: blockReview.length ? blockReview.map((changeset) => reviewCommand(changeset.id)) : missingBlocks.length ? [options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>  (continues at ${missingBlocks[0]})`] : [] });
 
+  // A v2 workspace (docs/v2/world-engine-v2.md §2.0): its canon is the v2 reading (experiments/v2/workspace.mjs), written
+  // whole, not block by block through the gate; its identities are the reading's unified EM.
+  if (manifest.v2Reading) Object.assign(items.at(-1)!, { status: "done", next: [], note: `v2 reading of ${manifest.v2Reading.at}: scenes, cards, entities and events written as canon (${manifest.v2Reading.out}).` });
+
   // Identities: every character is someone in the universe's shared list; less confident matches reviewed.
   const castAt = await castScope(novelDir, options.env ?? process.env);
   const cast = await loadCast(castAt);
@@ -110,7 +114,7 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   const identityReview = await openIdentityPackets(castAt, castAt.sourceId);
   const identityCommand = (id: string) => castAt.standalone ? reviewCommand(id) : `novel review show ${quote(castAt.root)} ${id} --scope universe --universe ${castAt.universeId} --offset 0 --limit 20`;
   // A world-first book settles identity without review (EM at birth, then the world's evidence: experiments/world-first/identity.mjs).
-  const identitySettled = !!manifest.worldFirst && await readFile(join(novelDir, "stage", "world", "identity.json"), "utf8").then(() => true, () => false);
+  const identitySettled = !!manifest.v2Reading || (!!manifest.worldFirst && await readFile(join(novelDir, "stage", "world", "identity.json"), "utf8").then(() => true, () => false));
   items.push({ id: "identities", title: "Characters in the universe's shared list (universal EM)", dependsOn: ["blocks"],
     status: identitySettled ? "done" : identityReview.length ? "review" : outside.length ? "todo" : "done",
     counts: { characters: characters.length, outsideTheList: outside.length, sharedWithOtherBooks: cast.persons.filter((person) => person.members.some((member) => member.sourceId === castAt.sourceId) && person.members.some((member) => member.sourceId !== castAt.sourceId)).length, awaitingReview: identityReview.reduce((sum, packet) => sum + packet.proposals.length, 0) },

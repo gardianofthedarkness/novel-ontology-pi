@@ -45,6 +45,93 @@ event question, not yet accounted for: a full-line load measures about 15 s).
 
 ## 2. Extraction (the Digger)
 
+### 2.0 The reading flow (the user's sketch, 2026-10-30) — built
+
+![The user's sketch of the flow](flow-sketch.jpg)
+
+```mermaid
+flowchart TD
+  book["EPUB → sentences (ids) + pictures anchored on sentence ids"] --> tiling["Scene tiling (Jev, start selection)"]
+  book --> kinds["Sentence kinds (Jev, one document a window): spoken / thought / fact / action / environment / narration + carrier turn"]
+  book --> listing["Listing (System 2: the work model, structured output: a list of strings a batch)"]
+  tiling --> scenes["Scenes: lists of sentence ids"]
+  kinds --> cards["Cards: type + first + last id; adjacent sentences of a kind, split where the carrier changes; exchanges and monologues nested over them"]
+  listing --> typing["Typing (Jev, one document a batch): person / object, weapon, vehicle / place, building, room / time; proper name or not"]
+  typing --> em["Unified EM: time → the calendar; exact proper name → that entity (System 0); else the recommender's best three + their latest facts → Jev (groups in parallel)"]
+  cards -- "fact cards" --> em
+  em --> scan["Card scan (System 0): which entities each card names"]
+  cards --> scan
+  scenes --> compose["Each scene's context: its world cards, the scene before's cards of the same kind, the people the recommender expects, the world's view"]
+  scan --> compose
+  compose --> world["World engine: world loop (presence, place, time, dialogue), stage steps, the engine"]
+  cards -- "thought, fact, narration" --> ontology["Ontology (canon)"]
+  em --> ontology
+```
+
+Three systems, as in the sketch: **System 0** is string match (sentence and card scans, exact names), **System 1** is Jev
+with a composed context, **System 2** is the main model (the work model for listing; the agent for the review pool).
+
+**The flow, step by step** (`src/v2/`, run with `experiments/v2/read.mjs`):
+1. **Sentences.** The book's sentences keep their ids (`b<block>_s<n>`); the album's pictures hang on sentence ids. The
+   sentence is the smallest unit of everything after: scenes, cards and appearances are lists of sentence ids.
+2. **At once:** scene tiling (the mature start-selection tiler); sentence kinds; listing then typing, batch by batch.
+3. **Sentence kinds** (`segmentation.ts`): six kinds, `environment` (a place, the weather, what stands around) new beside
+   narration; and for every sentence whether its **carrier** changes (who speaks it, who acts in it, or what it is about).
+   **Cards** (`kindCards`): adjacent sentences of one kind are one card, `{kind, first, last}`, a new card where the carrier
+   changes. Exchanges (a conversation as long as its people stay, its narration and actions inside) and monologues are
+   cards over those runs, nested (`inside`). Dialogue, action and environment cards go to the world engine; thought, fact and
+   narration to the ontology.
+4. **Listing** (`listing.ts`, System 2): 30 sentences a batch to the work model with fixed instructions and a structured
+   output, `{"names": [...]}`: every important person, object, weapon, vehicle, place, building, room and time, as the
+   passage writes it. A string the passage does not hold word for word is dropped, and so are pronouns.
+5. **Typing** (`typing.ts`, System 1): one structured document a batch (the types once, the sentences by id, the strings by
+   key with the sentences that hold them); each string chooses a type, and a noul says whether it is a **proper name**.
+6. **Unified EM** (`em.ts`), batch by batch in reading order (the chart grows as it reads):
+   - a time goes to the times (EM for times is the calendar's, later);
+   - a string that is a proper name already in the chart (the whole chart) is that entity, with no model: its sentences are
+     recorded as appearances;
+   - otherwise the **recommender** scores the chart's entities of its category: nearness of their appearances before it
+     (within 80 sentences, nearer counting more), how often they appear, and the names they share; the best three, and the
+     latest facts that name them, go to **Jev** in one structured request per group of 16 strings (a batch's groups in
+     parallel). Each string chooses a candidate, another new string of the same batch (two names of one person born together
+     find each other), or new. Below 0.6 it is new, its best candidate kept for the world engine's second EM.
+   - **A description is not a name** (the one change to the sketch, after the first run): typing's proper-name answer
+     decides. A proper name joins the chart's names and matches anywhere; a description or a common word (少女, 那个刺猬头,
+     屋顶, 车站) is the entity's name only where EM said it, so it goes to the recommender each time and never tags a sentence
+     elsewhere. On the first run the lister's 他 had become 上条当麻's alias, which would have tagged every 他 in the book.
+7. **Card scan** (System 0): every card's sentences scanned for the chart's proper names (a longer name masks the shorter
+   inside it), plus the appearances EM recorded; each card lists the entities it names and where.
+8. **Context** for each scene: its world cards, the scene before's cards of the same kinds in order, the people the
+   recommender expects from the last three scenes, and (at run time) the world's view of who is where.
+9. **Out:** the data and the run's log as YAML (`docs/v2/schema.yaml` is the schema; `<out>/v2/*.yaml`), the world loop's base
+   layer (`<out>/base/`), and with `experiments/v2/workspace.mjs` a world-first workspace whose canon is this reading (scenes,
+   entities, events from action cards, who takes part), so the world loop, the stage steps and the engine run on it as they
+   are.
+
+**Measured on vol 1, 2026-10-30** (5,202 sentences, Jev 1.14, deepseek-chat; a fraction of a dollar in all):
+
+| Step | Requests | Time |
+|---|---|---|
+| Scene tiling | 224 Jev | 5.4 s |
+| Sentence kinds | 56 Jev | 1.6 s |
+| Listing | 177 work model | 3.0 s |
+| Typing | 177 Jev | 24.8 s (inside the listing loop) |
+| EM | 158 Jev | 14.2 s |
+| Card scan | — | 0.1 s |
+| **The whole reading** | 552 Jev + 160 work model | **42 s wall** |
+
+46 scenes; 227 exchanges, 337 monologues, 450 action cards, 120 environment cards, 183 facts; 2,231 strings, of which 657
+matched a proper name exactly, 569 joined an entity through Jev, 632 were new, 120 were times. The chart: 174 people, 318
+things, 140 places, 57 times. Then, on the same reading: the world loop (46 scenes, 332 Jev calls, 40 s); scale (140
+places), landscape (27), objects (14 work-model calls, 50 objects), building EM (7 buildings), movement (41 scenes, 615
+calls, 16 s, 174 moves); one story line of 46 scenes for the engine.
+
+**EM against the old extraction's people** (vol 1's earlier roster, 31 people): 上条当麻 gathers 上条, 当麻, 阿上, 上条先生
+and his descriptions where they were said; 御坂美琴 gathers 美琴, 御坂, 御坂同学, 超电磁炮, 第三位; 食蜂操祈 gathers 食蜂, 蜂蜜色少女,
+常盘台的女王. Still apart, for the world engine's second EM: 姐姐大人 (where EM met it before 美琴 was a candidate), 禁书目录 and
+茵蒂克丝, 最后之作 and 御坂御坂, 一方通行 and 统括理事长. Many more people than before (174 against 31): one-scene descriptions
+(小混混, 追击者) are people of their own, and a description EM was unsure of is a new one each time.
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by
