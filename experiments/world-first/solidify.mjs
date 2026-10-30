@@ -44,7 +44,7 @@ export function sameness(script, names) {
   const companions = id => new Set((scenesOf.get(id) ?? []).flatMap(scene => [...scene.present, ...scene.stayed]).filter(other => other !== id));
   // Names overlap on a part of their own: a shared two-character stretch that is not a common word for a person.
   const pairsOf = text => new Set([...text].slice(0, -1).map((char, index) => text.slice(index, index + 2)));
-  const overlap = (a, b) => [...pairsOf(a)].some(part => pairsOf(b).has(part) && !GENERIC.test(part));
+  const overlap = (a, b) => [...pairsOf(a)].some(part => pairsOf(b).has(part) && !GENERIC.test(part) && !/[的之]/.test(part));
   const people = [...scenesOf.keys()].filter(id => names[id]), pairs = [];
   for (const [i, a] of people.entries()) for (const b of people.slice(i + 1)) {
     if (together.has(a < b ? `${a}|${b}` : `${b}|${a}`) || !overlap(names[a], names[b])) continue;
