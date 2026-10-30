@@ -125,7 +125,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     if (!place || isArea(place)) {
       const before = previous?.place && areaOf.get(previous.place) === area ? previous.place : null;
       if (place && before && sameSpot) place = before;
-      else { place = `spot:${scene.id}`; world.places[place] = { label: `${indoors ? 'a building' : 'a street'}${area ? ` in ${labelOf(area)}` : ''} (scene ${scene.index + 1})`, scale: indoors ? 'building' : 'street', parent: area && isArea(area) ? area : null, spot: true }; }
+      else { const host = area && isArea(area) ? area : null; place = `spot:${scene.id}`; world.places[place] = { label: `${indoors ? 'a building' : 'a street'}${host ? ` in ${labelOf(host)}` : ''} (scene ${scene.index + 1})`, scale: indoors ? 'building' : 'street', parent: host, spot: true }; }
     }
     areaOf.set(place, world.places[place]?.parent ?? (isArea(place) ? place : areaOf.get(place) ?? place));
     // When, by the laws; the time the text names, from the time lexicon (outside quotes first).
