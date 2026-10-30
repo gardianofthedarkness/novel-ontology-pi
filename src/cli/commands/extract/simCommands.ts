@@ -26,7 +26,7 @@ import { stageInputs } from "./stageCommands.js";
  * the engine reads, so the runs made after it play them. While either command runs, it writes what it
  * is doing to stage/simulation/live.json for the host's `play/live` page.
  */
-interface SimStrand { id: string; from: string; to: string; fork: string; title?: string }
+interface SimStrand { id: string; from: string; to: string; fork: string | null; title?: string }
 interface KeptRun { strand: string; run: string; fresh: boolean; accepted: string; note?: string }
 interface StrandData { title: string; notes: { hits?: number; impacts?: { sphere: number; none: number } }; things: unknown[]; places: Record<string, unknown>; scenes: { events: { moves: unknown[] }[] }[] }
 interface Engine {
@@ -73,6 +73,11 @@ const readIndex = async (novelDir: string): Promise<SimIndex> => readFile(join(s
  */
 export async function simStrandList(novelDir: string) {
   const inputs = await stageInputs(novelDir);
+  // A world-first book is one line, the whole book in reading order: the world's clock orders it, not strands.
+  if (inputs.worldFirst) {
+    const simulated = inputs.movementScenes.filter((scene) => scene.events.length);
+    return simulated.length ? [{ id: "world", scenes: inputs.data.scenes.length, simulated: simulated.length, people: new Set(simulated.flatMap((scene) => scene.cast)).size, from: simulated[0].id, to: simulated.at(-1)!.id, places: [...new Set(simulated.map((scene) => scene.placeLabel))], firstPerson: [] as string[] }] : [];
+  }
   if (!inputs.data.available) throw new Error(`The simulation follows story time, which ${novelDir} does not have yet. See novel checklist.`);
   const strands = storyStrands(inputs.data, inputs.answers ?? {});
   const staged = new Map(inputs.movementScenes.map((scene) => [scene.id, scene]));
@@ -105,7 +110,7 @@ async function chooseLines(novelDir: string, options: { strand?: string; auto?: 
   const lines = await simStrandList(novelDir);
   const chosen = options.strand ? lines.filter((line) => line.id === options.strand) : lines.slice(0, Math.max(1, options.auto ?? 1));
   if (options.strand && !chosen.length) throw new Error(`No story line ${options.strand} with a simulated scene. Lines: ${lines.map((line) => line.id).join(", ") || "none"}.`);
-  return chosen.map((line) => ({ ...line, strand: { id: line.id.replace(/[^A-Za-z0-9_-]/g, "_"), from: line.from!, to: line.to!, fork: line.id }, title: line.places.join(" → ") }));
+  return chosen.map((line) => ({ ...line, strand: { id: line.id.replace(/[^A-Za-z0-9_-]/g, "_"), from: line.from!, to: line.to!, fork: line.id === "world" ? null : line.id }, title: line.places.slice(0, 6).join(" → ") }));
 }
 
 /**

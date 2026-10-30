@@ -123,6 +123,8 @@ export async function stageInputs(novelDir: string) {
   const byId = new Map(entities.map((entity) => [entity.id, entity]));
   const isCharacter = (id: string) => byId.get(id)?.kind === "Character";
   const names: Record<string, string> = Object.fromEntries(entities.filter((entity) => entity.kind === "Character" || entity.kind === "Location").map((entity) => [entity.id, entity.names?.find((form) => form.kind === "canonical")?.text ?? entity.names?.[0]?.text ?? entity.id]));
+  // A world-first book's unnamed places go by the world's labels for them.
+  if (world) for (const [id, place] of Object.entries(world.places)) names[id] ??= place.label;
   const stored = new Map(scenes.map((scene) => [scene.id, scene]));
   const text = (sceneId: string) => (stored.get(sceneId)?.sentenceIds ?? []).map((id) => sentences.get(id)?.text ?? "").join("");
   const answers = await latestStrandAnswers(novelDir);
@@ -202,7 +204,7 @@ export async function stageInputs(novelDir: string) {
   });
   const landscape = await readJson<LandscapeReport>(stageFile(novelDir, "landscape"));
   const landscapeCurrent = !!landscape?.complete && landscape.inputs === landscapeFingerprint(landscapePlaces);
-  return { data, places, placeTree, scalePlaces, scale, scaleCurrent, landscapePlaces, landscape, landscapeCurrent, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, objects, objectsCurrent, plan, planCurrent, answers,
+  return { data, places, placeTree, worldFirst: !!world, world, scalePlaces, scale, scaleCurrent, landscapePlaces, landscape, landscapeCurrent, architecture, architectureCurrent, movementScenes, names, movement, movementCurrent, objects, objectsCurrent, plan, planCurrent, answers,
     estimate: Math.ceil(toAsk.reduce((sum, scene) => sum + sceneCallEstimate(scene), 0) + toPair.reduce((sum, scene) => sum + pairsCallLimit(scene) * 0.5, 0)), limit: toAsk.reduce((sum, scene) => sum + sceneCallLimit(scene), 0) + toPair.reduce((sum, scene) => sum + pairsCallLimit(scene), 0) };
 }
 

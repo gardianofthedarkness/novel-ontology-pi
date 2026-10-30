@@ -11,6 +11,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { mapPicture } from './world-map.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`));
@@ -75,6 +76,22 @@ export async function strandDemo(novelDir, options) {
   const stop = options.until ? byIndex.get(options.until.scene) : Infinity;
   const chosen = lineScenes.filter(scene => byIndex.get(scene.id) <= stop).map(scene => (scene.id === options.until?.scene ? { ...scene, events: scene.events.slice(0, options.until.event + 1) } : scene));
   const timeline = forkTimeline(chosen, strands);
+  // World-first (docs/world-first-design.md): the world script's dialogue nodes come in among each scene's events (a live
+  // or a group node moves people: who came to whom, or where the group gathers); and Jev is asked at run time, in the
+  // scene's composed context, where someone first seen starts (the level, then a box on a map of the place), who came to
+  // whom when two people talking face to face are apart, and the box a group gathers in. Cached under stage/world/cache.
+  const worldScript = inputs.worldFirst ? inputs.world : null, worldScene = new Map((worldScript?.scenes ?? []).map(scene => [scene.id, scene]));
+  let jev = null;
+  if (worldScript) {
+    const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
+    jev = cachedDecisions(jevFromEnv(process.env), `${novelDir}/stage/world/cache`);
+    for (const scene of chosen) {
+      const entry = worldScene.get(scene.id);
+      if (!entry) continue;
+      const own = new Map((scene.events ?? []).map(event => [event.id, event]));
+      scene.events = entry.timeline.flatMap(item => item.type === 'event' ? (own.has(item.id) ? [own.get(item.id)] : []) : ['live', 'group'].includes(item.kind) && item.parties.length ? [{ id: item.id, text: item.kind === 'group' ? '（几个人当面交谈）' : '（两人当面交谈）', actors: item.parties, dialogue: item }] : []);
+    }
+  }
   const places = new Map(inputs.data.places.map(place => [place.id, place])), name = id => inputs.names[id] ?? id;
 
   // One world for every staged place (apps/playground/src/data/world.ts): the city of the canvas and its landscapes, streamed
@@ -608,14 +625,86 @@ export async function strandDemo(novelDir, options) {
   /** The walk so far as runs: each scene begun, with where its people began (where they were after each event is not kept). */
   const partialRuns = () => { const out = {}; for (const [key, begin] of begun) { const [sceneId, person] = key.split('|'); ((out[sceneId] ??= { starts: {}, events: [] }).starts[person] = begin); } return out; };
   const { start, act } = mover;
-  mover.start = args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const at = start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
+  // World-first starts and meetings (see worldScript above). Conversation distance: the same floor, within 4 m.
+  const LEVELS = { outside: 'outside, at street level', ground: 'inside a building, on the ground floor', upper: 'inside a building, on an upper floor', roof: 'on a roof' }, TALK = 4;
+  const meetings = new Map();
+  const peopleAt = (placeId, except = null) => [...where.entries()].filter(([id, entry]) => id !== except && entry.place === placeId && entry.at).map(([, entry]) => { const p = W.nodePos(world, entry.at[0]); return [p.x, p.z]; });
+  /** Someone first seen: the level, then a box on a map of the place; null leaves it to the engine's own start. */
+  const firstStart = async ({ scene, handoff, carried }) => {
+    const entry = worldScene.get(scene.id);
+    if (!jev || carried || !entry?.firstSeen?.includes(handoff.person)) return null;
+    const { anchor } = groups.get(scene.placeId);
+    reach(anchor.x, anchor.z, 56);
+    const who = name(handoff.person), context = entry.context ?? '', picture = mapPicture(world, { x: anchor.x, z: anchor.z, radius: 48, people: peopleAt(scene.placeId, handoff.person) });
+    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins?`, options: Object.values(LEVELS) }]);
+    const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: `Where on this map is ${who} when this scene begins?` }, { key: 'on', primitive: 'noul', instructions: `Is where ${who} is when this scene begins somewhere on this map?` }], { images: { map: picture.png } });
+    notes.worldStarts = (notes.worldStarts ?? 0) + 1;
+    const box = asked.find(answer => answer.key === 'box')?.box, on = Number(asked.find(answer => answer.key === 'on')?.value ?? 0);
+    if (!box || on < 0.3) return null;
+    const point = picture.at(box), index = world.lotAt.get(W.cellKey(Math.floor(point.x / 2), Math.floor(point.z / 2))), lot = index === undefined ? null : world.lots[index];
+    const kind = Object.keys(LEVELS).find(key => LEVELS[key] === level?.value) ?? 'outside', k = !lot || kind === 'outside' ? 0 : kind === 'roof' ? lot.floors : kind === 'upper' ? Math.max(1, Math.min(lot.floors - 1, 2)) : 0;
+    const node = W.nodeNear(world, graphOf(point), point.x, point.z, k);
+    if (node == null) return null;
+    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: kind, at: [Math.round(point.x), Math.round(point.z)], k });
+    return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, [node, 0], `${scene.id}|${handoff.person}`) : [node, 0];
+  };
+  /** Walk someone to a node, the way the engine walks a move. */
+  const walkTo = (scene, event, person, at, target, seed, label) => {
+    const { graph } = graphOf(focusOf(at)), [node, heading] = at, rng = stream(seed);
+    if (node === target) return { kind: 'stay' };
+    const path = sampleWalk(graph, solve(scene.placeId, `node@${target}@${node}`, [target], 'walk', node), node, heading, rng);
+    if (!path) { notes.unreachable++; return { kind: 'stay' }; }
+    const last = path.length > 1 ? directionOf(graph.x[path.at(-1)] - graph.x[path.at(-2)], graph.z[path.at(-1)] - graph.z[path.at(-2)]) : heading;
+    moves.set(`${scene.id}|${event.id}|${person}`, { person, how: 'walk', spot: label, path, ensemble: [] });
+    return { kind: 'move', to: [path.at(-1), last >= 0 ? last : heading] };
+  };
+  /** Where a live or group node takes people: a live pair apart meets (who came to whom); a group gathers in one box. */
+  const meetingOf = async (scene, event, node) => {
+    const context = worldScene.get(scene.id)?.context ?? '', posOf = id => { const entry = where.get(id); return entry?.at && entry.place === scene.placeId ? entry.at : null; };
+    if (node.kind === 'live') {
+      const [a, b] = node.parties, pa = posOf(a), pb = posOf(b);
+      if (!a || !b || !pa || !pb) return {};
+      const A = W.nodePos(world, pa[0]), B = W.nodePos(world, pb[0]), apart = Math.hypot(A.x - B.x, A.z - B.z);
+      if (apart <= TALK && A.k === B.k) return {};
+      const options = [`${name(a)} came to ${name(b)}`, `${name(b)} came to ${name(a)}`, 'they met between them'];
+      const [came] = await jev.decide(`${context}\n\n${name(a)} and ${name(b)} are ${Math.round(apart)} m apart${A.k !== B.k ? ', on different floors' : ''}, and now talk face to face.`, [{ key: 'came', primitive: 'choice', instructions: `${name(a)} and ${name(b)} talk face to face here. Who came to whom?`, options }]);
+      notes.meetings = (notes.meetings ?? 0) + 1;
+      const pick = options.indexOf(came?.value);
+      if (pick === 0) return { label: `to:${b}`, targets: { [a]: besideNode(scene.placeId, pb[0]) } };
+      if (pick === 1) return { label: `to:${a}`, targets: { [b]: besideNode(scene.placeId, pa[0]) } };
+      const mid = W.nodeNear(world, graphOf({ x: (A.x + B.x) / 2, z: (A.z + B.z) / 2 }), (A.x + B.x) / 2, (A.z + B.z) / 2, A.k);
+      return mid == null ? {} : { label: 'met', targets: { [a]: mid, [b]: besideNode(scene.placeId, mid) } };
+    }
+    if (node.kind === 'group') {
+      const { anchor } = groups.get(scene.placeId), picture = mapPicture(world, { x: anchor.x, z: anchor.z, radius: 48, people: peopleAt(scene.placeId) });
+      const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: `Where on this map do ${node.parties.map(name).join('、')} and the others with them gather to talk together?` }], { images: { map: picture.png } });
+      notes.groupBoxes = (notes.groupBoxes ?? 0) + 1;
+      const box = asked[0]?.box;
+      if (!box) return {};
+      const area = picture.at(box), built = graphOf(area), rng = stream(`${scene.id}|${event.id}|group`), targets = {};
+      for (const id of new Set([...node.parties, ...node.listeners])) {
+        if (!posOf(id)) continue;
+        const target = W.nodeNear(world, built, area.x + (rng() - 0.5) * Math.max(2, area.w), area.z + (rng() - 0.5) * Math.max(2, area.d), 0);
+        if (target != null) targets[id] = target;
+      }
+      return { label: 'group', targets };
+    }
+    return {};
+  };
+  const dialogueAct = async ({ scene, event, person, at, seed }) => {
+    const key = `${scene.id}|${event.id}`;
+    if (!meetings.has(key)) meetings.set(key, await meetingOf(scene, event, event.dialogue));
+    const plan = meetings.get(key), target = plan.targets?.[person];
+    return target == null || !at ? { kind: 'stay' } : walkTo(scene, event, person, at, target, seed, plan.label);
+  };
+  mover.start = async args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const at = (await firstStart(args)) ?? start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
   // `pace` (seconds): each moment held that long before the next is played, so a live view shows every event.
   const hold = () => new Promise(done => setTimeout(done, options.pace * 1000));
   mover.act = async args => {
     const now = `${args.scene.id}|${args.scene.events.findIndex(entry => entry.id === args.event.id)}`;
     if (now !== moment) { if (options.pace) { live(false, true); await hold(); } else live(); }
     moment = now;
-    const outcome = act(args);
+    const outcome = args.event.dialogue && jev ? await dialogueAct(args) : act(args);
     if (outcome.kind === 'move') { where.set(args.person, { place: args.scene.placeId, at: outcome.to }); const end = W.nodePos(world, outcome.to[0]); reach(end.x, end.z, 40); }
     return outcome;
   };
