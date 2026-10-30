@@ -4,10 +4,10 @@
 // outline), and the people already placed (red dots), so Jev can place someone among them. With a `floor`, it is a slice
 // of the buildings at that floor: each one's rooms (light, outlined), its corridors and stairs (mid-grey), and a building
 // too low to reach it as its roof, so a box on it picks a room. Below the street (SUBWAY, DEEP), it is that level: the
-// subway's tunnels under the roads and a station's concourse, or the deep chambers. Plain Node: a small PNG writer, no browser.
+// subway's tunnels under the roads and a station's concourse, the buildings' underground floors, or the deep chambers. Plain Node: a small PNG writer, no browser.
 import { deflateSync } from 'node:zlib';
 import { CORRIDOR, MASS, cellIndex } from '../dist/apps/playground/src/data/skeleton.js';
-import { DEEP, SUBWAY } from '../dist/apps/playground/src/data/world.js';
+import { DEEP, SUBWAY, UNDER } from '../dist/apps/playground/src/data/world.js';
 
 const CRC = Int32Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
 const crc32 = bytes => { let c = -1; for (const byte of bytes) c = CRC[(c ^ byte) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
@@ -35,7 +35,7 @@ export function mapPicture(world, { x, z, radius = 48, size = 384, people = [], 
   for (let py = 0; py < size; py++) for (let px = 0; px < size; px++) {
     const wx = x0 + (px + 0.5) / scale, wz = z0 + (py + 0.5) / scale;
     // Underground, the roads are the subway's tunnels (none reach the deep level); above, the streets.
-    const road = floor !== DEEP && roads.some(road => toSegment(wx, wz, road.a, road.b) <= road.width / 2);
+    const road = (floor === null || floor >= 0 || floor === SUBWAY) && roads.some(road => toSegment(wx, wz, road.a, road.b) <= road.width / 2);
     paint(px, py, road ? (floor === SUBWAY ? [150, 164, 182] : [96, 102, 110]) : [34, 40, 46]);
   }
   const cellBox = (lot, i0, j0, i1, j1, fill, edge) => {
@@ -48,7 +48,7 @@ export function mapPicture(world, { x, z, radius = 48, size = 384, people = [], 
     if (floor !== null && floor < 0) {
       // Underground (world.ts): a scene's station has a concourse at the subway level; a scene's own building or a tower
       // of 30 floors or more, a chamber at the deep one.
-      const scenes = String(lot.source).startsWith('anchor:'), here = floor === DEEP ? scenes || (lot.height ?? 0) >= 30 : scenes && lot.role === 'station';
+      const scenes = String(lot.source).startsWith('anchor:'), here = floor === UNDER || (floor === DEEP ? scenes || (lot.height ?? 0) >= 30 : scenes && lot.role === 'station');
       if (here) cellBox(lot, 0, 0, lot.nx - 1, lot.nz - 1, [196, 214, 232], [60, 90, 130]);
       continue;
     }
@@ -72,6 +72,7 @@ export function mapPicture(world, { x, z, radius = 48, size = 384, people = [], 
     png: encodePng(size, size, rgb).toString('base64'),
     legend: floor === null ? `A map from above, north up, ${metres} m across: dark is open ground, grey are roads, blue blocks are buildings (darker is taller), red dots are people already there.`
       : floor === SUBWAY ? `The subway level, 12 m under the street, from above, north up, ${metres} m across: light bands are the tunnels under the roads, light outlined boxes a station's concourse, dark is rock, red dots are people already down here.`
+      : floor === UNDER ? `The underground floors of the buildings, 24 m down, from above, north up, ${metres} m across: light outlined boxes are each building's underground floors (car parks, storage, basements), dark is rock, red dots are people already down here.`
       : floor === DEEP ? `The super-deep level, 60 m down, from above, north up, ${metres} m across: light outlined boxes are the deep chambers under buildings, dark is rock, red dots are people already down here.`
       : `A slice through the buildings at floor ${floor + 1}, from above, north up, ${metres} m across: light outlined boxes are rooms, mid-grey are corridors and stairs, grey blocks are roofs of buildings too low to reach this floor, red dots are people already on this floor.`,
     at: box => ({ x: x0 + ((box.left + box.right) / 2) * metres, z: z0 + ((box.top + box.bottom) / 2) * metres, w: (box.right - box.left) * metres, d: (box.bottom - box.top) * metres }),

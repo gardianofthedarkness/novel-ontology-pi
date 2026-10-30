@@ -87,13 +87,13 @@ const GRIDS: Record<ArchitectureKind, () => NavGrid> = {
 };
 
 /**
- * Under every place, the two levels the world builds below the street (world.ts): the subway level (tunnels, platforms,
- * a concourse) and a super-deep one, reached from the basement, else from the first way out.
+ * Under every place, the three levels the world builds below the street (world.ts): the subway level (tunnels, platforms,
+ * a concourse), a building's underground floors, and a super-deep one, reached from the basement, else the first way out.
  */
-const UNDERGROUND = [spot("subway", "Subway", "underground at the subway level: its tunnels, platforms and concourse", 0, -0.25, 0.3), spot("deep", "Deep underground", "far underground, a deep facility or shelter below everything", 0, -0.6, 0)];
+const UNDERGROUND = [spot("subway", "Subway", "underground at the subway level: its tunnels, platforms and concourse", 0, -0.25, 0.3), spot("underground", "Underground floors", "a building's underground floors: a car park, storage, machine rooms", 0.2, -0.4, -0.2), spot("deep", "Deep underground", "far underground, a deep facility or shelter below everything", 0, -0.6, 0)];
 export function navGrid(kind: ArchitectureKind): NavGrid {
   const grid = GRIDS[kind](), from = grid.spots.find((entry) => entry.id === "basement") ?? grid.spots.find((entry) => entry.out || entry.outdoor) ?? grid.spots[0];
-  return { spots: [...grid.spots, ...UNDERGROUND], links: [...grid.links, [from.id, "subway"], ["subway", "deep"]] };
+  return { spots: [...grid.spots, ...UNDERGROUND], links: [...grid.links, [from.id, "subway"], [from.id, "underground"], ["underground", "deep"]] };
 }
 
 /** Spot positions on the stage for a building of this box. */

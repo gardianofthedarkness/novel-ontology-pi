@@ -283,15 +283,16 @@ Inside, the room under the box is where they are born, on one of its walkable ce
 
 Before this, every spot the world made was an office.
 
-**Underground (2026-10-29).** Two levels under the street, built with the world (`SUBWAY` and `DEEP` in `apps/playground/src/data/world.ts`):
+**Underground (2026-10-29).** Three levels under the street, built with the world (`SUBWAY`, `UNDER` and `DEEP` in `apps/playground/src/data/world.ts`):
 - **The subway level, 12 m down:**
   - tunnels under every road;
   - a concourse under a scene's station;
   - stairs down from the road about every 37th road cell, and from a station's stairs.
+- **The buildings' underground floors, 24 m down** (the user's middle layer): under every building, down its stairs. A car park, storage or a basement; "basement" now means this, not the subway.
 - **The super-deep level, 60 m down:** a chamber under a scene's own building or a tower of 30 floors or more, reached by a shaft from its stairs.
 - **Jev's choices:**
-  - at a first sighting, both levels are among the heights to choose from;
-  - in movement, every place has the spots "Subway" and "Deep underground" (`holoNav.ts`);
+  - at a first sighting, all three levels are among the heights to choose from;
+  - in movement, every place has the spots "Subway", "Underground floors" and "Deep underground" (`holoNav.ts`);
   - a group that talks underground is boxed on that level's picture.
 - **In the live view:** the levels are drawn as faint holograms, and a pawn below the street shows through the ground.
 - **Still to come (the user's list):**
