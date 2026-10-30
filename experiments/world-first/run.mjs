@@ -125,6 +125,8 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     // A chapter's end: people whose traces run too alike are asked about again.
     if (world.scenes.length && world.scenes.at(-1).chapter !== scene.chapter) await tracesAlike();
     const previous = world.scenes.at(-1), text = scene.text.trim(), factLines = (scene.facts ?? []).map(fact => clip(fact.text, FACT_CHARS));
+    // A v2 base layer (experiments/v2/read.mjs) composes more: the scene before's world cards, and who the recommender expects.
+    const beforeLines = Object.entries(scene.v2?.before ?? {}).flatMap(([kind, lines]) => lines.map(line => `${kind}: ${line}`));
     // Without text, nothing changes: the scene before carries on (its people stay, unseen).
     if (text.length < FRAGMENT && !scene.events.length) {
       const entry = enter(world, { id: scene.id, chapter: scene.chapter, place: previous?.place ?? null, relation: 'after', present: [], fragment: true });
@@ -140,6 +142,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     for (const [id, list] of forms) for (const form of list) { const hits = count(text, form); if (hits) add(canon(id), hits * (form === name.get(id) ? 3 : 1)); }
     for (const event of scene.events) for (const id of event.actors) if (name.has(id)) add(canon(id), 5);
     for (const id of [...(previous?.present ?? []), ...(previous?.stayed ?? [])]) add(canon(id), 4);
+    for (const { id, score: expected } of scene.v2?.recommended ?? []) if (name.has(id)) add(canon(id), Math.min(6, 2 + expected / 4));
     const candidates = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, CANDIDATES).map(([id]) => id);
     // Where: the place of the scene before, places the text names, places where the candidates are, or a new unnamed one.
     const namedPlaces = [...placeForms].filter(([, list]) => list.some(form => text.includes(form))).map(([id]) => id);
@@ -150,7 +153,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     const events = scene.events.map(event => `- ${clip(event.summary, 140)}`).join('\n');
     // Epithets ("刺猬头少年", "白衣修女"): which named person the text means, in this scene.
     const epithets = candidates.filter(id => DESCRIPTIVE.test(name.get(id))).slice(0, EPITHETS), proper = candidates.filter(id => !DESCRIPTIVE.test(name.get(id))).slice(0, NAMED);
-    const first = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus: `What happens in this scene (its events):\n${events || '- (none recorded)'}\nPeople who may be in it: ${names(candidates) || '(nobody named)'}.` }), [
+    const first = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), before: beforeLines, text, focus: `What happens in this scene (its events):\n${events || '- (none recorded)'}\nPeople who may be in it: ${names(candidates) || '(nobody named)'}.` }), [
       ...candidates.map((id, index) => ({ key: `present_${index}`, primitive: 'noul', instructions: `Is ${name.get(id)} physically in this scene: at its place, taking part, or within sight or earshot of what happens? Being only mentioned, remembered, thought of, or heard on a phone is not being there.` })),
       { key: 'place', primitive: 'choice', instructions: 'Where does this scene take place?', options: placeOptions },
       ...(proper.length ? epithets.map((id, index) => ({ key: `who_${index}`, primitive: 'choice', instructions: `In this scene, who is the one the text calls “${name.get(id)}”?`, options: [...proper.map(other => name.get(other)), NOBODY_NAMED] })) : []),
@@ -189,7 +192,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
         world.places[place] = { label: `${indoors ? 'a building' : 'a street'}${host ? ` in ${labelOf(host)}` : ''} (scene ${scene.index + 1})`, scale: indoors ? 'building' : 'street', parent: host, spot: true };
         // A new indoor spot: what kind of building it is, from the scene in its context (asked once, when the world makes it).
         if (indoors) {
-          const [kind] = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus: `This scene happens indoors${host ? ` in ${labelOf(host)}` : ''}. What happens in it:\n${events || '- (none recorded)'}` }), [{ key: 'building', primitive: 'choice', instructions: 'What kind of building does this scene happen in? Judge by what the text shows of it (its rooms, who is there, what they do).', options: Object.keys(BUILDINGS), optionHints: BUILDINGS }]);
+          const [kind] = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), before: beforeLines, text, focus: `This scene happens indoors${host ? ` in ${labelOf(host)}` : ''}. What happens in it:\n${events || '- (none recorded)'}` }), [{ key: 'building', primitive: 'choice', instructions: 'What kind of building does this scene happen in? Judge by what the text shows of it (its rooms, who is there, what they do).', options: Object.keys(BUILDINGS), optionHints: BUILDINGS }]);
           world.places[place].building = kind?.value in BUILDINGS ? kind.value : 'office';
           if (kind?.confidence !== undefined) world.places[place].buildingSure = Math.round(kind.confidence * 100) / 100;
         }
@@ -201,7 +204,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     const allowed = allowedTimes(world, present, place, { opening, chapterStart }), times = inPast(world, chapterStart) ? PAST_TIMES : TIMES;
     const mentions = detectTimeMentions([{ id: scene.id, text }]).sort((a, b) => a.inQuote - b.inQuote).map(mention => mention.text);
     const phrases = [...new Set(mentions.length ? mentions : text.match(TIME_WORDS) ?? [])].slice(0, 8);
-    const context = compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus: `In this scene, at ${labelOf(place)}: ${names(present) || 'nobody named is there'}.` });
+    const context = compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), before: beforeLines, text, focus: `In this scene, at ${labelOf(place)}: ${names(present) || 'nobody named is there'}.` });
     const second = allowed.length > 1 || phrases.length ? await jev.decide(context, [
       ...(allowed.length > 1 ? [{ key: 'time', primitive: 'choice', instructions: `When does this scene happen, against the scene before${inPast(world, chapterStart) ? ' (which is in a flashback)' : ''}?`, options: allowed.map(relation => times[relation]) }] : []),
       ...(phrases.length ? [{ key: 'time_node', primitive: 'choice', instructions: 'Which time does this scene itself happen at, as its text says? Pick none when the text only mentions a time for something else.', options: [...phrases, 'none'] }] : []),
@@ -217,7 +220,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     for (const dialogue of scene.dialogues) {
       const inScene = [...entry.present, ...entry.stayed], offered = [...new Set([...inScene, ...named(dialogue.text)])].slice(0, PARTIES), partyOptions = [...offered.map(id => name.get(id)), UNNAMED];
       const focus = `This dialogue, in the scene:\n${dialogue.text}\nIn the scene: ${names(inScene) || 'nobody named'}.`;
-      const asked = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus }), [
+      const asked = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), before: beforeLines, text, focus }), [
         { key: 'kind', primitive: 'choice', instructions: 'How does this dialogue happen?', options: Object.values(KINDS) },
         { key: 'party_a', primitive: 'choice', instructions: 'Who speaks first in this dialogue?', options: partyOptions },
         { key: 'party_b', primitive: 'choice', instructions: 'Who is the other person in it (who answers, or is spoken to)?', options: partyOptions },
@@ -226,7 +229,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
       const kind = pins.kind[dialogue.id] ?? Object.keys(KINDS).find(key => KINDS[key] === got('kind')) ?? 'live', parties = [byName.get(got('party_a')) ?? null, byName.get(got('party_b')) ?? null];
       let local = null;
       if (kind === 'remote' && parties[0] && parties[1] && parties[0] !== parties[1]) {
-        const here = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), text, focus }), [{ key: 'local', primitive: 'choice', instructions: 'Which of the two is here, in this scene (the other is somewhere else)?', options: parties.map(id => name.get(id)) }]);
+        const here = await jev.decide(compose({ world: worldLines(), facts: told.slice(-FACTS), story: storyLines(), before: beforeLines, text, focus }), [{ key: 'local', primitive: 'choice', instructions: 'Which of the two is here, in this scene (the other is somewhere else)?', options: parties.map(id => name.get(id)) }]);
         local = byName.get(here[0]?.value) ?? null;
       }
       const node = settle({ kind, parties: parties[0] === parties[1] ? [parties[0], null] : parties, local, inScene, elsewhere: id => elsewhere(world, entry, id) });

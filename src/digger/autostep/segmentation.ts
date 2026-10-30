@@ -255,8 +255,9 @@ export async function tileScenes(
  * of a window goes in one request (parallel questions: one call, not a chain of start and end questions), and the windows
  * run at the same time. For each sentence: is it spoken aloud, thought (a person's inner voice, feelings in their head,
  * talking to themself), a fact (background knowledge of the world: how things are, what a place or a power is, history —
- * not this scene's happening), an action or movement, or narration; and do the people in a conversation change there
- * (someone new speaks or is spoken to, or someone who was talking has gone).
+ * not this scene's happening), an action or movement, a description of the surroundings (the environment: a place, the
+ * weather, the light, what stands around), or narration; and does the sentence's carrier change there (the user's v2 flow,
+ * 2026-10-30: who carries it — the speaker, the one acting, or what it is about — and so the people taking part).
  *
  * From that (the user's rules, 2026-10-30): a dialogue exchange runs as long as the same people are talking, narration and
  * actions between the lines inside it (actions are extracted apart, as events); it ends where the people talking change, or
@@ -269,7 +270,8 @@ export const SENTENCE_KINDS = {
   thought: "a person's inner voice: their thoughts, feelings in their head, or talking to themself (a monologue)",
   fact: "background knowledge of the world: how things are, what a place, a group, a power or a thing is, its history or rules — not something happening in this scene",
   action: "an action or a movement: someone does something or goes somewhere, or something physically happens",
-  narration: "narration or description: how something or someone looks, sounds or feels, the scene's mood",
+  environment: "a description of the surroundings: a place, a building or a room, the street, the weather, the light, what stands around",
+  narration: "narration: how someone looks or feels, the scene's mood, commentary, a passage of time",
 } as const;
 export type SentenceKind = keyof typeof SENTENCE_KINDS;
 /** Each kind in a few words, as its choice's criterion (the full definition is in the document's `kinds`). */
@@ -278,11 +280,13 @@ const KIND_LABELS: Record<SentenceKind, string> = {
   thought: "a person's inner voice, or talking to themself",
   fact: "background knowledge of the world",
   action: "an action or a movement",
-  narration: "description or mood",
+  environment: "the surroundings: a place, weather, things",
+  narration: "how someone looks or feels, mood, commentary",
 };
+/** The carrier of a sentence: who speaks it, who acts in it, or what it is about. It changes where the people taking part do. */
 const TURN = {
-  true: "someone new speaks or is spoken to here, or someone who was talking has gone",
-  false: "the same people go on talking, or no one is talking",
+  true: "the people taking part change here: someone new speaks, acts or is spoken to, someone who was taking part has gone, or it turns to another subject or place",
+  false: "the same people go on (talking, even taking turns, or acting), or it stays on the same subject",
 };
 /**
  * Sentences classified a request (each with two questions: about 120 tokens, so a window is well inside Jev's 64k-token
@@ -299,7 +303,7 @@ export function sentenceDocument(task: string, before: Sentence[], asked: Senten
   return {
     task: `${task} Classify every sentence of the passage (sentences keyed by id, in reading order).`.trim(),
     kinds: { ...SENTENCE_KINDS },
-    change: `The people in a conversation change at a sentence when ${TURN.true}.`,
+    change: `A sentence's carrier is who speaks it, who acts in it, or what it is about. It changes when ${TURN.true}.`,
     ...(before.length ? { before: Object.fromEntries(before.map((sentence) => [sentence.id, sentence.text])) } : {}),
     passage: Object.fromEntries(asked.map((sentence) => [sentence.id, sentence.text])),
   };
@@ -333,7 +337,7 @@ export async function classifySentences(
       const b = windows[next++], asked = sentences.slice(b, b + CLASSIFY), before = sentences.slice(Math.max(0, b - CONTEXT), b);
       done.set(b, await decide(sentenceDocument(opts.stateSummary, before, asked), asked.flatMap((sentence) => [
         { key: `dlg_kind:${sentence.id}`, primitive: "choice" as const, instructions: `What kind of sentence is passage.${sentence.id}? (The kinds are defined in kinds.)`, options: Object.keys(SENTENCE_KINDS), optionHints: { ...KIND_LABELS } },
-        { key: `dlg_turn:${sentence.id}`, primitive: "noul" as const, instructions: `At passage.${sentence.id}, do the people in a conversation change?`, noulCriteria: TURN },
+        { key: `dlg_turn:${sentence.id}`, primitive: "noul" as const, instructions: `At passage.${sentence.id}, does the carrier change?`, noulCriteria: TURN },
       ])));
       publishing = publishing.then(publish);
       await publishing;
@@ -360,6 +364,33 @@ export function spansOfKinds(kinds: SentenceKind[], turns: number[]): { dialogue
   if (talk) dialogues.push(talk);
   if (inner) monologues.push(inner);
   return { dialogues, monologues, facts };
+}
+
+/** A card's kind: a sentence kind (a run of it), or an exchange or a monologue over such runs. */
+export type CardKind = SentenceKind | "dialogue" | "monologue";
+/** Where a card goes (the user's v2 flow): the world engine plays dialogue, action and environment; thought, fact and narration go to the ontology. */
+export const CARD_HOME: Record<CardKind, "world" | "ontology"> = { dialogue: "world", spoken: "world", action: "world", environment: "world", thought: "ontology", monologue: "ontology", fact: "ontology", narration: "ontology" };
+export interface KindCard { id: string; kind: CardKind; home: "world" | "ontology"; first: string; last: string; inside?: string[] }
+
+/**
+ * A block's cards from its sentences' kinds (the user's v2 flow, 2026-10-30): adjacent sentences of one kind are one card, a
+ * new card where the carrier changes. Exchanges and monologues (spansOfKinds) are cards over those runs, nested: a dialogue
+ * card holds the runs inside it (its spoken lines, and the actions and narration between them), so an action inside a
+ * conversation is still an action card for the world engine. `ids` are the sentences' ids, in the order of `kinds`.
+ */
+export function kindCards(ids: string[], kinds: SentenceKind[], turns: number[]): KindCard[] {
+  const card = (kind: CardKind, first: number, last: number): KindCard => ({ id: `${kind}:${ids[first]}`, kind, home: CARD_HOME[kind], first: ids[first], last: ids[last] });
+  const runs: [SentenceKind, number, number][] = [];
+  for (let i = 0; i < kinds.length; i++) {
+    const run = runs[runs.length - 1];
+    if (run && run[0] === kinds[i] && run[2] === i - 1 && !(turns[i] >= 0.5)) run[2] = i;
+    else runs.push([kinds[i], i, i]);
+  }
+  const { dialogues, monologues } = spansOfKinds(kinds, turns);
+  const over = (kind: CardKind, spans: [number, number][]): KindCard[] => spans.map(([first, last]) => ({ ...card(kind, first, last), inside: runs.filter(([, from, to]) => from >= first && to <= last).map(([inner, from, to]) => card(inner, from, to).id) }));
+  const order = new Map(ids.map((id, index) => [id, index]));
+  return [...runs.map(([kind, first, last]) => card(kind, first, last)), ...over("dialogue", stitchDialogueSpans(dialogues)), ...over("monologue", monologues)]
+    .sort((a, b) => order.get(a.first)! - order.get(b.first)! || order.get(b.last)! - order.get(a.last)!);
 }
 
 /**

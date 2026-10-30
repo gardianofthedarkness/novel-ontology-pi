@@ -1,0 +1,59 @@
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { cutBlocks } from "../digger/intake/blocks.js";
+import { sectionBlock } from "../digger/intake/sectioning.js";
+import { storedSource } from "../ground/workspace/source.js";
+import { actionEvents } from "./canon.js";
+import type { FlowBlock, FlowResult } from "./flow.js";
+
+/** A workspace's book as the flow reads it: its blocks (chapter by chapter) and their sentences, ids as at ingest. */
+export async function loadBlocks(novelDir: string): Promise<FlowBlock[]> {
+  const bound = await storedSource(novelDir);
+  const files = bound ? [bound.file] : (await readdir(join(novelDir, "source"))).filter((name) => !name.startsWith("."));
+  if (files.length !== 1) throw new Error("The flow needs one stored source.");
+  const text = await readFile(join(novelDir, "source", files[0]), "utf8");
+  return (bound ? cutBlocks(text, bound.blockSize) : cutBlocks(text)).map((block) => ({ id: block.id, chapter: block.chapterIndex, sentences: sectionBlock(block.text, block.index).sentences }));
+}
+
+/** An entity's names, its proper names first (the first is its label). */
+const namesOf = (entity: { names: string[]; proper: string[] }) => [...entity.proper, ...entity.names.filter((name) => !entity.proper.includes(name))];
+const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
+
+/**
+ * The world loop's base layer (experiments/world-first/base.mjs's shape) from the flow, so the world engine runs on it as
+ * it is: a scene's events are its action cards (who takes part: the people the card names), its dialogues the exchange
+ * cards, its monologues the monologue cards, its facts the fact cards; new beside them, its environment cards and its
+ * composed context (`v2`: the people the recommender expects, the scene before's cards of each world kind). The roster is
+ * the chart: people as characters, places as places, things apart.
+ */
+export function worldBase(result: FlowResult, text: (sentence: string) => string) {
+  const cardText = (card: { sentences: string[] }) => card.sentences.map(text).join("");
+  const sceneOf = new Map(result.scenes.flatMap((scene) => scene.sentences.map((id) => [id, scene.id])));
+  const bySceneCards = new Map<string, FlowResult["cards"]>();
+  for (const card of result.cards) { const scene = sceneOf.get(card.first); if (scene) bySceneCards.set(scene, [...(bySceneCards.get(scene) ?? []), card]); }
+  const people = (card: FlowResult["cards"][number]) => card.entities.filter((hit) => result.chart.entities.get(hit.id)?.category === "person").map((hit) => hit.id);
+  const contextOf = new Map(result.contexts.map((context) => [context.scene, context]));
+  const eventId = new Map(actionEvents(result).map(({ id, card }) => [card.id, id]));
+  const facts = result.cards.filter((card) => card.kind === "fact").map((card) => ({ scene: sceneOf.get(card.first) ?? null, first: card.first, text: cardText(card) })).filter((fact) => fact.scene);
+  const scenes = result.scenes.map((scene) => {
+    const cards = bySceneCards.get(scene.id) ?? [], of = (kind: string) => cards.filter((card) => card.kind === kind);
+    const context = contextOf.get(scene.id);
+    const body = scene.sentences.map(text).join("");
+    return {
+      id: scene.id, index: scene.index, chapter: scene.chapter, summary: clip(body.replace(/\s+/g, " "), 120), text: body,
+      events: of("action").map((card) => ({ id: eventId.get(card.id) ?? card.id, first: card.first, summary: clip(cardText(card), 140), evidence: cardText(card), actors: people(card) })),
+      dialogues: of("dialogue").map((card) => ({ id: card.id, first: card.first, text: cardText(card), people: people(card) })),
+      monologues: of("monologue").map((card) => ({ id: card.id, first: card.first, text: cardText(card), people: people(card) })),
+      facts: of("fact").map((card) => ({ first: card.first, text: cardText(card) })),
+      environment: of("environment").map((card) => ({ id: card.id, first: card.first, text: cardText(card) })),
+      v2: { recommended: context?.recommended ?? [], before: Object.fromEntries(Object.entries(context?.before ?? {}).map(([kind, ids]) => [kind, (ids ?? []).map((id) => { const card = result.cards.find((entry) => entry.id === id); return card ? clip(cardText(card), 160) : ""; })])) },
+    };
+  });
+  const entities = [...result.chart.entities.values()];
+  const roster = {
+    characters: entities.filter((entity) => entity.category === "person").map((entity) => ({ id: entity.id, names: namesOf(entity) })),
+    places: entities.filter((entity) => entity.category === "place").map((entity) => ({ id: entity.id, names: namesOf(entity), type: entity.type, scale: null })),
+    things: entities.filter((entity) => entity.category === "thing").map((entity) => ({ id: entity.id, names: namesOf(entity), type: entity.type })),
+  };
+  return { scenes, roster, facts, states: [] as unknown[] };
+}

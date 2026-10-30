@@ -11,20 +11,23 @@
 const DEFAULT_BUDGET = 10000;
 
 /**
- * One context: `world` lines (latest placed first), `facts` (oldest first), `story` lines (oldest first), the scene's `text`,
- * and the decision's `focus`.
+ * One context: `world` lines (latest placed first), `facts` (oldest first), `story` lines (oldest first), `before` (the scene
+ * before in its own words: its world cards, in reading order, from a v2 base layer), the scene's `text`, and the decision's
+ * `focus`. Over budget, the scene before's cards go after the story.
  */
-export function compose({ world = [], facts = [], story = [], text = '', focus = '', budget = DEFAULT_BUDGET }) {
-  let people = [...world], told = [...facts], past = [...story], body = text;
+export function compose({ world = [], facts = [], story = [], before = [], text = '', focus = '', budget = DEFAULT_BUDGET }) {
+  let people = [...world], told = [...facts], past = [...story], cards = [...before], body = text;
   const render = () => [
     people.length ? `The world as it stands (who is where):\n${people.map(line => `- ${line}`).join('\n')}` : 'The world as it stands: nobody placed yet.',
     told.length ? `What the book has told of the world:\n${told.map(line => `- ${line}`).join('\n')}` : '',
     past.length ? `The story so far (newest last):\n${past.map(line => `- ${line}`).join('\n')}` : 'The story so far: this is the first scene.',
+    cards.length ? `The scene before, in its own words (its dialogue, actions and surroundings, in order):\n${cards.map(line => `- ${line}`).join('\n')}` : '',
     `This scene, in full:\n${body || '(no text)'}`,
     focus,
   ].filter(Boolean).join('\n\n');
   let context = render();
   while (context.length > budget && past.length > 2) { past.shift(); context = render(); }
+  while (context.length > budget && cards.length) { cards.shift(); context = render(); }
   while (context.length > budget && told.length) { told.shift(); context = render(); }
   while (context.length > budget && people.length > 6) { people.pop(); context = render(); }
   if (context.length > budget) {

@@ -192,7 +192,7 @@ test("the classification state is one structured document; questions name their 
   const kinds = prompts.filter((q) => q.key.startsWith("dlg_kind:"));
   assert.equal(kinds.length, 4);
   for (const [index, question] of kinds.entries()) {
-    assert.deepEqual(question.options, ["spoken", "thought", "fact", "action", "narration"]);
+    assert.deepEqual(question.options, ["spoken", "thought", "fact", "action", "environment", "narration"]);
     assert.ok(question.instructions.includes(`passage.${sentences[index].id}`));
     assert.ok(Object.values(question.optionHints!).every((hint) => hint.length <= 50), "a short label per kind, not its definition");
   }
