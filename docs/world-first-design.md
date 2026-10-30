@@ -310,6 +310,15 @@ The live test is vol 1 from scratch, watched in the live world. The checks:
 - **Conflicts:** every one is listed, none silently dropped.
 - **Cost:** calls stay within the guard.
 
+## 14a. Built for the first live test (2026-10-29)
+
+| Stage | Built | Not yet |
+|---|---|---|
+| 1. Base layer | `novel init --world-first` and `novel ingest --base-layer` (no review, only in such a workspace); the exchange prompt splits when a third person joins. Vol 1 fresh: 8 blocks, 78 scenes, 651 events, 179 exchanges, no causality. | Skipping the presence and member faculties the world replaces (they still run, unused). |
+| 2. World loop v2 | `experiments/world-first/run.mjs`: presence and place, time with lexicon candidates; laws 1–4; the actor law; flashbacks only on a backward cue; chapters open in the main time; dialogue kinds and parties (remote side asked); things and knowledge checks. Vol 1 fresh: 10 scenes in the past (was 29 before the two time laws), 4 scenes with nobody. | The travel law (needs distances, in the engine); nominated-room binding (vol 1's one room had no scene). |
+| 3. 3D engine | The stage reads the world script (cast, place, flashback, composed openings); movement asked in composed context (855 calls); one line for the whole book; starts by level + map box; live meetings (who came to whom), group boxes. | True back-propagation: a meeting is walked at the dialogue, from where the mover is, not re-timed back to their last anchor. |
+| 4. Solidifier | In-book causality off (ingest `--no-causality`, checklist done by the world); lineage from the world; EM from world evidence, auto-merged with a flag when nothing conflicts (vol 1: the two 理事长 identities). | Lineage in the viewer (it still draws CAUSES arrows, now none). |
+
 ## 15. Decisions (2026-10-29)
 
 1. **Group conversations** are a fourth kind, *group*: one bounding box from top down holds them (§8.2).
