@@ -109,8 +109,10 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
   const outside = characters.filter((entity) => !cast.persons.some((person) => person.members.some((member) => member.sourceId === castAt.sourceId && member.entityId === entity.id)));
   const identityReview = await openIdentityPackets(castAt, castAt.sourceId);
   const identityCommand = (id: string) => castAt.standalone ? reviewCommand(id) : `novel review show ${quote(castAt.root)} ${id} --scope universe --universe ${castAt.universeId} --offset 0 --limit 20`;
+  // A world-first book settles identity without review (EM at birth, then the world's evidence: experiments/world-first/identity.mjs).
+  const identitySettled = !!manifest.worldFirst && await readFile(join(novelDir, "stage", "world", "identity.json"), "utf8").then(() => true, () => false);
   items.push({ id: "identities", title: "Characters in the universe's shared list (universal EM)", dependsOn: ["blocks"],
-    status: identityReview.length ? "review" : outside.length ? "todo" : "done",
+    status: identitySettled ? "done" : identityReview.length ? "review" : outside.length ? "todo" : "done",
     counts: { characters: characters.length, outsideTheList: outside.length, sharedWithOtherBooks: cast.persons.filter((person) => person.members.some((member) => member.sourceId === castAt.sourceId) && person.members.some((member) => member.sourceId !== castAt.sourceId)).length, awaitingReview: identityReview.reduce((sum, packet) => sum + packet.proposals.length, 0) },
     next: identityReview.length ? identityReview.map((packet) => identityCommand(packet.id)) : outside.length ? [`novel em sweep ${dir}`] : [],
     note: "Applying a block runs universal EM; a sweep checks every character again." });

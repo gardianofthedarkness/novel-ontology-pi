@@ -420,10 +420,12 @@ export async function stageObjects(novelDir: string, options: StageOptions & { w
   const byMatch: Record<string, number> = {};
   for (const object of all) byMatch[object.match.id] = (byMatch[object.match.id] ?? 0) + 1;
 
-  // Into the ontology, through the shared review gate.
+  // Into the ontology, through the shared review gate. A world-first book has no packet: its buildings are the world's
+  // (building EM, experiments/world-first/buildings.mjs) and the stage reads its things from this report.
   const open = await objectsPacketsOpen(novelDir);
   let ontology: Record<string, unknown>;
-  if (open.length) ontology = { packet: open[0].id, note: `A stage-objects packet awaits review (${open[0].id}): review it (novel review show ${novelDir} ${open[0].id} --scope book --offset 0 --limit 20) before anything more is proposed.` };
+  if (await worldFirstBook(novelDir)) ontology = { packet: null, note: "A world-first book: no review packet; the world settles its buildings (building EM) and the stage reads the things from this report." };
+  else if (open.length) ontology = { packet: open[0].id, note: `A stage-objects packet awaits review (${open[0].id}): review it (novel review show ${novelDir} ${open[0].id} --scope book --offset 0 --limit 20) before anything more is proposed.` };
   else {
     const bundle = new BundleStore(join(novelDir, "ontology"));
     const entities = fold(await bundle.loadFile<Entity>("entities.jsonl")), relations = await bundle.loadFile<Relation>("relations.jsonl");
