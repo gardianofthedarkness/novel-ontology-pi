@@ -48,7 +48,7 @@ const FORMS = {
   causality: 'novel causality candidates <book> [--unit ID] [--chapter N] [--limit 1-20] | sweep <book> [--limit 1-20] | evidence <book> <from> <to> | propose <book> <from> <to> --reason "…"',
   timeplace: 'novel timeplace show <book> | run <book> --propose [--mode M] [--chapter N] [--limit N] | tree <book> --propose [--max-questions N] | strands <book> [--ask] [--max-questions N] [--min-impact N]',
   atlas: 'novel atlas show <library> <universe-id> | novel atlas sweep <library> <universe-id> --propose [--max-questions N]',
-  sim: 'novel sim strands <book> | pick <book> --max-calls N≤60 [--auto N] [--strand <id>] | run <book> [--auto N] [--strand <id>] | show <book>  (the stage simulation: pick asks Jev on pictures, run makes no model calls and keeps each run; accepting a run is the user\'s)',
+  sim: 'novel sim strands <book> | pick <book> --max-calls N≤60 [--auto N] [--strand <id>] | run <book> [--auto N] [--strand <id>] [--pace seconds] | show <book>  (the stage simulation: pick asks Jev on pictures, run makes no model calls and keeps each run; accepting a run is the user\'s)',
   stage: 'novel stage show <book> | scale <book> [--no-jev] | landscape <book> [--no-jev] | architecture <book> [--no-jev] | objects <book> [--max-calls N] [--no-jev] | movement <book> [--max-calls N] [--no-jev] | prep <book>  (read mode; objects and landscape propose review packets; prep only once everything else is done)',
   em: 'novel em show|sweep <book> [--limit 1-200]  (identity matches it raises are reviewed with novel review)', calendar: 'novel calendar show|build <book> | novel calendar show|build <library> --universe <id>  (year questions are reviewed with novel review)', fix: 'novel fix <operation> <book> … --reason "…"  (references/repair.md)',
   graph: 'novel graph build <book>/ontology', album: 'novel album list|portraits <book>', library: 'novel library … <library>  (novel-library skill)',
@@ -337,16 +337,18 @@ function permit(command, scope) {
   if (verb === 'sim') {
     // The stage simulation: rank the story lines, ask Jev on pictures of them within a bounded budget (pick), run the engine (no model
     // calls) and keep each run as derived view data. Accepting a run (--accept) fixes the book's staged history: the user's decision, never Pi's.
-    const flags = new Map(), allowed = operation === 'pick' ? ['--auto', '--strand', '--max-calls'] : ['--auto', '--strand'];
+    // A run may be paced (seconds a moment, 0.5–5), so a live view shows every moment as the engine plays it.
+    const flags = new Map(), allowed = operation === 'pick' ? ['--auto', '--strand', '--max-calls'] : ['--auto', '--strand', '--pace'];
     for (let index = 3; index < tokens.length; index++) {
       const name = tokens[index];
-      if (flags.has(name) || !allowed.includes(name)) throw new Error('Simulation options are bounded: novel sim pick <book> --max-calls N≤60 [--auto N≤5] [--strand <id>], novel sim run <book> [--auto N≤5] [--strand <id>]; accepting a run is the user\'s');
+      if (flags.has(name) || !allowed.includes(name)) throw new Error('Simulation options are bounded: novel sim pick <book> --max-calls N≤60 [--auto N≤5] [--strand <id>], novel sim run <book> [--auto N≤5] [--strand <id>] [--pace 0.5–5]; accepting a run is the user\'s');
       flags.set(name, tokens[++index]);
     }
     const auto = !flags.has('--auto') || /^\d+$/.test(flags.get('--auto') ?? '') && Number(flags.get('--auto')) >= 1 && Number(flags.get('--auto')) <= 5;
     const strand = !flags.has('--strand') || /^[A-Za-z0-9_-]{1,80}$/.test(flags.get('--strand') ?? '');
     const budget = /^\d+$/.test(flags.get('--max-calls') ?? '') && Number(flags.get('--max-calls')) >= 1 && Number(flags.get('--max-calls')) <= 60;
-    valid = tokens[2] === novel && (['strands', 'show'].includes(operation) ? tokens.length === 3 : operation === 'run' ? auto && strand : operation === 'pick' && auto && strand && budget);
+    const pace = !flags.has('--pace') || /^\d+(\.\d+)?$/.test(flags.get('--pace') ?? '') && Number(flags.get('--pace')) >= 0.5 && Number(flags.get('--pace')) <= 5;
+    valid = tokens[2] === novel && (['strands', 'show'].includes(operation) ? tokens.length === 3 : operation === 'run' ? auto && strand && pace : operation === 'pick' && auto && strand && budget);
     if (!valid) throw new Error('Simulation commands work on the assigned book: novel sim strands|show <book>, novel sim pick <book> --max-calls N≤60 [--auto N≤5] [--strand <id>], novel sim run <book> [--auto N≤5] [--strand <id>]');
     return { kind: 'cli', args: tokens, label: `novel sim ${operation}` };
   }

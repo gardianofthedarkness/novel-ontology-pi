@@ -296,3 +296,11 @@ test('Pi may search the original text and answer a world-first book\'s review ba
   assert.throws(() => authorizeScoped(`novel world answer ${novel} wb_0123456789abcdef wi_0123456789abcdef same`, defaultScope));
   assert.throws(() => authorizeScoped('novel source grep /other/book 刺猬头', defaultScope));
 });
+
+test('Pi may pace a simulation run for the live view, within 0.5–5 s a moment, and nothing else new', async () => {
+  const book = defaultScope.novel, ok = command => { try { return authorize(command).kind === 'cli'; } catch { return false; } };
+  assert.ok(ok(`novel sim run ${book} --strand world --pace 2`));
+  assert.ok(!ok(`novel sim run ${book} --strand world --pace 9`));
+  assert.ok(!ok(`novel sim run ${book} --strand world --force`));
+  assert.ok(!ok(`novel sim pick ${book} --strand world --max-calls 60 --pace 2`));
+});
