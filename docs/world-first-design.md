@@ -258,6 +258,25 @@ Causal retrieval and the viewer's arrows read lineage instead of CAUSES edges. L
 - **split candidates:** presence the two-places law keeps rejecting;
 - **knowledge-flow breaks:** someone acting on what they couldn't know.
 
+**The review pool and the main agent (2026-10-29).** What the world can't settle, it flags into a pool, and the world never waits for it:
+- presence Jev is unsure of;
+- a dialogue or an actor the laws reject;
+- an epithet tied to several people;
+- two identities whose traces run too alike.
+
+How it runs:
+1. **Batches:** every batch of items (8 by default) is sent to the main agent, Pi (the first host in `src/adapters/hosts.ts`), through its console's queue. The world loop runs on the same machine, so it writes to that queue in-process, with the same checks as the HTTP route.
+2. **Answers:** the agent answers each item from the original text: `novel source grep` (a regular expression), `novel source similar` (the passages most like a text) and `novel query` (Cypher). It answers with `novel world answer <book> <batch> <item> <option> --reason …`.
+3. **Replay:** between scenes, answers stop the world. They become pins (presence per scene, two records one person or not, a dialogue's kind), and the world replays from the start with them; the cache keeps unchanged scenes free.
+4. **Laws:** a pin the laws reject (someone pinned into a scene while somewhere else at that time) goes back to the pool with the reason, for the next batch, while the world goes on.
+5. **Traces alike:** at each chapter's end, two people in at least 6 scenes each, in the same scenes at least 80% of the time, are asked about again. Jev gets their traces and how the text names each. At same ≥ 0.85 (distinct < 0.3) the world holds them as one and asks the agent to confirm; at same ≥ 0.5 it asks the agent.
+
+**Birth in rooms (2026-10-29).** Every standing building has a skeleton with rooms on each floor. A first-seen person's start asks:
+1. the level: the street, the ground floor, each floor up to the tallest building around, or a roof;
+2. a box on a slice through the buildings at that floor, with their rooms drawn.
+
+Inside, the room under the box is where they are born, on one of its walkable cells.
+
 **The gate sees only:**
 - low-confidence identity merges;
 - conflicts the laws can't settle (a dialogue the travel law rejects twice; an actor who can't be present);
