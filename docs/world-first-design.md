@@ -1,6 +1,6 @@
 # World-first extraction: design
 
-**Status:** design for review before the first live test (2026-10-29). Branch `claude/world-first`.
+**Status:** approved 2026-10-29, with the decisions in §15; being built (§14). Branch `claude/world-first`.
 
 **The experiment so far:** `experiments/world-first/`, run on vol 1. It covers presence, place and time with context composition and four laws. Everything else here is designed but not built.
 
@@ -65,7 +65,7 @@ Today, presence, dialogue members, time and place, the place tree, strands and i
 | Album: illustrations, portraits | Image anchors; OCR heads bound to characters | Keep | Later, portraits can dress the people in the world. |
 | Scene boundaries (Jev) and adjudication (work) | Jev points at scene starts; uncertain cuts adjudicated | Keep. Fragments (under 20 characters, no events) are no longer a defect: the fragment law carries the scene before. | About 10% of scenes are fragments. They caused most empty casts; the world absorbs them without calls. |
 | Dialogue exchanges (Jev) | One continuous exchange of speech, "involving one or more people" | Keep, with a new rule: **a third person joining starts a new exchange** (§8.1). | Every live dialogue node then has exactly two parties, so its proximity can be enforced. |
-| Dialogue structure, speaker attribution (work), dialogue members (Jev + work) | Turns, speaker per turn, members per card | **Replaced** by the world's dialogue rules (§8): kind and parties decided in the scene's context, under the laws. Turn-by-turn speakers are kept only for the viewer's dialogue cards, as an option. | Members are unstable. Vol 1: 17 of 73 cards have fewer than two people. Vol 3: 227 of 267. Vol 2: no cards at all. |
+| Dialogue structure, speaker attribution (work), dialogue members (Jev + work) | Turns, speaker per turn, members per card | **Replaced** by the world's dialogue rules (§8): kind and parties decided in the scene's context, under the laws. No line-by-line speakers. | Members are unstable. Vol 1: 17 of 73 cards have fewer than two people. Vol 3: 227 of 267. Vol 2: no cards at all. |
 | Name detector (code + Jev) | Known names by code; new names and nicknames by Jev | Keep | The roster. |
 | Entities and presence (work), presence detector (Jev) | Who is present, from the scene alone | **Split.** Entity detection stays (the roster, and who is mentioned where). Presence moves to the world (§6). | Presence from one scene can't know who stayed; this was the vanishing. |
 | Universal EM at birth (Jev), fragment-at-birth | Each new name against the universal recommender, before minting | Keep, before the world runs | The world needs one identity per person, or the two-places law misfires. |
@@ -168,7 +168,7 @@ After a person's start, no spot question is asked for them again. Conversation a
 
 ## 8. Dialogue as events
 
-### 8.1 The node
+### 8.1 The node (a group conversation is one node of kind *group*; §8.2)
 
 A dialogue node is a dialogue exchange: a span of sentences in one scene, placed on the scene's timeline between the events before and after it, in narrative order. The exchange prompt gains one rule (`selectExchangeSpans`, after "Alternating voices do not require a new exchange."):
 
@@ -179,14 +179,16 @@ A live node therefore has exactly two parties. A group of three talking is a cha
 ### 8.2 The kinds, and their calls
 
 **Call 1, every node:** the node's kind, and its parties. Kind is a choice:
-- **live:** face to face;
-- **remote:** a phone, video, message or telepathy;
+- **live:** two people face to face;
+- **group:** three or more people talking together face to face;
+- **remote:** a phone, video, message, letter or telepathy;
 - **public:** one voice to everyone around.
 
 The parties are two choices among the present people and the reachable people elsewhere.
 
 | Kind | Calls | What the world does |
 |---|---|---|
+| **Group** | 2 | **Call 2:** one bounding box on a top-down map of the place, where the group stands. Everyone in it is placed within the box, and it becomes an anchor for each of them, back-propagated like a live meeting (§8.3). That's all. |
 | **Public** | 1 | The speaker is party 1. The listeners are everyone present in the focus scene, including the unseen people who stayed, within earshot (about 25 m outdoors; the same floor indoors). The node is marked `public: true` in the ontology. Knowledge flows to every listener (§4.8). |
 | **Remote** | 2 | **Call 2, ownership:** which party is here holding the phone, and is the other party in a place the world knows (choice among their place, another place, unknown). Law: the remote party is not present here. If the world has them present, the kind is wrong, or the presence is. Their position doesn't change. |
 | **Live** | 2 | Law: the two parties are within conversation distance at the node's time: the same room, or about 4 m outdoors and in corridors. If they already are, call 2 isn't needed. If not, call 2 asks **who came to whom**: A came to B, B came to A, they met between, or they were together all along and a track is wrong. Then the world back-propagates (§8.3). |
@@ -210,11 +212,28 @@ In a flashback, back-propagation runs inside the past's tracks only.
 
 Dialogue nodes are events on the timeline, equal to the extracted events. Causal retrieval already treats lines and events as equal units.
 
+## 8a. Nominated rooms
+
+A nominated room is a room the text names: a place Jev scales as *room* (保安室, a named office, an apartment's room). It's a place inside a building, so it's bound to one real room of that building's skeleton. It stays bound to that room for the rest of the book.
+
+**Binding: once, at the first scene there, 2 calls.**
+- **Building:** the room's parent place, if that's a building. Otherwise the building of the scene's place. A room the ontology puts nowhere dwells in its proposed parent or a random building, like any other place (§3, central build).
+- **Floor:** one choice among the building's levels.
+- **Room:** one box on that floor's plan. The room is the skeleton room whose area holds the box's centre. Nobody else's nominated room may already be bound to it.
+
+**What binding gives:**
+- **Starts:** anyone first detected in a scene at the room starts inside it. Their map box is asked on that floor's plan and kept within the room.
+- **Live dialogue:** "the same room" means the same bound room.
+- **Movement:** leaving the room is a move; the room never moves.
+- **Records:** the place keeps `building`, `floor` and `room` (the skeleton room's index).
+
 ## 9. How positions evolve
 
 | Source | When | Calls |
 |---|---|---|
 | Start (height + map box) | First detection | 2 per person |
+| Room binding (floor + plan box) | First scene at a nominated room | 2 per room |
+| Group box | Each group node | 1 (its call 2) |
 | Persistence | Always | 0 |
 | Event moves | Each event with a mover | 1–2 per event (as today) |
 | Dialogue anchors and back-propagation | Each live node whose parties are apart | 1 (call 2 of the node) + engine sampling |
@@ -234,7 +253,7 @@ Causal retrieval and the viewer's arrows read lineage instead of CAUSES edges. L
 
 **EM at birth stays** with name detection, before the world: one identity per person.
 
-**After each chapter, the world gives EM evidence**, which goes to `um_` packets when not confident:
+**After each chapter, the world gives EM evidence.** A merge with no conflict against the laws is applied automatically, with a flag (`emFromWorld`) on the merged record that says why, so it can be undone. Anything else goes to `um_` packets.
 - **merge candidates:** two identities never present together, with overlapping names and shared companions;
 - **split candidates:** presence the two-places law keeps rejecting;
 - **knowledge-flow breaks:** someone acting on what they couldn't know.
@@ -291,10 +310,11 @@ The live test is vol 1 from scratch, watched in the live world. The checks:
 - **Conflicts:** every one is listed, none silently dropped.
 - **Cost:** calls stay within the guard.
 
-## 15. Open questions
+## 15. Decisions (2026-10-29)
 
-1. **Group conversations:** three or more people talking face to face. Pairs chained (as above), or a fourth kind, "group", with everyone held within conversation distance?
-2. **Distances:** live about 4 m outdoors or the same room indoors; public about 25 m or the same floor. Are these right?
-3. **Remote kinds:** should messages and letters (asynchronous) be remote nodes, or events?
-4. **EM from world evidence:** only to review, or applied automatically above a confidence?
-5. **Speakers per line:** keep turn-by-turn attribution for the viewer's dialogue cards, or show only the two parties?
+1. **Group conversations** are a fourth kind, *group*: one bounding box from top down holds them (§8.2).
+2. **Distances:** live, the same room or about 4 m outdoors and in corridors. Public, the same floor or about 25 m.
+3. **Messages and letters** are remote dialogue nodes.
+4. **EM from world evidence:** merged automatically when nothing conflicts, with a flag; otherwise review.
+5. **No line-by-line speakers.** A node has its parties, and no turn attribution.
+6. **Nominated rooms** are bound to rooms of a building's skeleton (§8a).
