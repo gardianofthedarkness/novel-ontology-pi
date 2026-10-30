@@ -55,3 +55,37 @@ test('after a flashback the story stays in the past until a scene goes back to t
   const back = enter(world, { id: 's4', place: 'P', relation: 'back', present: ['x'] });
   assert.deepEqual(back.clock, [1, 2]);
 });
+
+test('a dialogue node: live parties join the scene unless they are elsewhere then; a remote party in the scene is a conflict; public listeners are everyone there', async () => {
+  const { settle } = await import('./dialogue.mjs');
+  const away = id => id === 'far';
+  const live = settle({ kind: 'live', parties: ['x', 'y'], inScene: ['x'], elsewhere: away });
+  assert.deepEqual([live.joins, live.conflicts, live.geometry], [['y'], [], 'meeting']);
+  assert.deepEqual(settle({ kind: 'live', parties: ['x', 'far'], inScene: ['x'], elsewhere: away }).conflicts, ['far is elsewhere at this time']);
+  const phone = settle({ kind: 'remote', parties: ['x', 'y'], local: 'x', inScene: ['x', 'y'], elsewhere: away });
+  assert.equal(phone.remote, 'y');
+  assert.equal(phone.conflicts.length, 1);
+  const shout = settle({ kind: 'public', parties: ['x', null], inScene: ['x', 'y', 'z'], elsewhere: away });
+  assert.deepEqual([shout.public, shout.listeners], [true, ['y', 'z']]);
+  assert.equal(settle({ kind: 'group', parties: ['x', 'y'], inScene: ['x', 'y', 'z'], elsewhere: away }).geometry, 'box');
+});
+
+test('the laws on actors, things and knowledge', async () => {
+  const { actors, things, knowledge } = await import('./laws.mjs');
+  const found = actors({ events: [{ id: 'e1', actors: ['a', 'b', 'c'] }], inScene: ['a'], chance: id => ({ b: 0.4, c: 0.1 })[id], elsewhere: () => false });
+  assert.deepEqual([found.add, found.flags.map(flag => flag.person)], [['b'], ['c']]);
+  const held = things([{ person: 'a', after: 'e1', holds: ['key'], drops: [] }, { person: 'b', after: 'e2', holds: ['key'], drops: [] }], new Map([['e1', 1], ['e2', 2]]));
+  assert.equal(held.flags.length, 1);
+  const learned = knowledge([{ person: 'a', after: 'e1', learns: ['the plan'] }, { person: 'z', after: 'e1', learns: ['the plan'] }], new Map([['e1', 's1']]), () => new Set(['a']));
+  assert.deepEqual(learned.map(flag => flag.person), ['z']);
+});
+
+test('someone a dialogue shows was there joins the scene, and a person elsewhere at that time does not', async () => {
+  const { join } = await import('./world.mjs');
+  const world = createWorld();
+  enter(world, { id: 's1', place: 'P', relation: 'after', present: ['x'] });
+  const same = enter(world, { id: 's2', place: 'Q', relation: 'same', present: ['y'] });
+  assert.equal(join(world, same, 'x', 'dialogue'), false, 'x is at P at this time');
+  assert.equal(join(world, same, 'z', 'dialogue'), true);
+  assert.equal(world.people.z.place, 'Q');
+});

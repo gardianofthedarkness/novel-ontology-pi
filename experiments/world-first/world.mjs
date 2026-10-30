@@ -87,3 +87,24 @@ export function enter(world, scene) {
 
 /** Everyone the world holds and where, for a scene's context: the latest placed first. */
 export const whereabouts = world => Object.entries(world.people).filter(([, person]) => person.place).sort(([, a], [, b]) => world.scenes.findIndex(scene => scene.id === b.since) - world.scenes.findIndex(scene => scene.id === a.since));
+
+/** Whether a person is in another scene at another place over the stretch of the scene `entry` (so cannot be in it). */
+export const elsewhere = (world, entry, person) => !!entry.clock && world.scenes.some(scene => scene !== entry && scene.clock && scene.clock[0] < entry.clock[1] && entry.clock[0] < scene.clock[1] && scene.place !== entry.place && (scene.present.includes(person) || scene.stayed.includes(person)));
+
+/**
+ * Someone the scene turns out to have (a dialogue's party, an event's actor): into the entered scene, as if detected
+ * there, with `why` kept on the scene. A person already in it, or elsewhere at this time, is not moved.
+ */
+export function join(world, entry, person, why) {
+  if (entry.present.includes(person) || elsewhere(world, entry, person)) return false;
+  entry.stayed = entry.stayed.filter(id => id !== person);
+  entry.present.push(person);
+  (entry.joined ??= []).push({ person, why });
+  const now = world.people[person] ?? (world.people[person] = { place: null, spot: null, since: null, log: [] });
+  now.log.push({ scene: entry.id, place: entry.place, spot: null, clock: entry.clock, timeNode: entry.timeNode, past: !entry.clock, why });
+  if (entry.clock) {
+    if (now.place && now.place !== entry.place) entry.travelled.push({ person, from: now.place, to: entry.place, after: now.since });
+    Object.assign(now, { place: entry.place, spot: null, since: entry.id });
+  }
+  return true;
+}
