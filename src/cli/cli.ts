@@ -64,6 +64,8 @@ import { approveBook } from "../solidifier/merge/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
 import { SIM_USAGE, simPick, simRun, simShow, simStrands } from "./commands/extract/simCommands.js";
+import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js";
+import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
 import { STAGE_USAGE, stageArchitecture, stageLandscape, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
@@ -142,6 +144,9 @@ const COMMANDS: Record<string, string> = {
   "novel graph query <db-path> <cypher>": "Raw Cypher against the Ladybug store",
   "novel graph stats <db-path>": "Node/relation counts per table",
   "novel query <novel-dir> <cypher>": "OntologyStore query (graph traversal)",
+  "novel source grep <novel-dir> <regex> [--limit N]": "Original sentences matching a regular expression, with sentence and scene ids (read-only)",
+  "novel source similar <novel-dir> <text> [--limit N]": "The original passages most like a text (lexical retrieval), with sentence and scene ids (read-only)",
+  "novel world pool|batch|answer <novel-dir> …": "World-first review pool: what the world flagged, a batch for the main agent, and its answers (novel world answer <dir> <batch> <item> <option> --reason <text>)",
   "novel search <novel-dir> <text> [--limit N]":
     "Graph-first text search (Cypher CONTAINS scan)",
   "novel state <novel-dir> <character-id> [--at <event-id>]":
@@ -718,6 +723,27 @@ async function main(): Promise<void> {
       throw new Error("Usage: novel query <novel-dir> <cypher>");
     }
     out(await novelQuery(novelDir, cypher), pretty);
+    return;
+  }
+
+  if (cmd === "source") {
+    const novelDir = positional[2];
+    if (!["grep", "similar"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel source grep|similar <novel-dir> <regex|text> [--limit N]");
+    const text = restText(positional.slice(3), ["--limit"]), rawLimit = flag(positional, "--limit"), limit = rawLimit === undefined ? (sub === "grep" ? 20 : 10) : Number(rawLimit);
+    if (!text) throw new Error(`Usage: novel source ${sub} <novel-dir> <${sub === "grep" ? "regex" : "text"}> [--limit N]`);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("--limit must be a whole number from 1 to 50.");
+    out(await (sub === "grep" ? sourceGrep(novelDir, text, limit) : sourceSimilar(novelDir, text, limit)), pretty);
+    return;
+  }
+
+  if (cmd === "world") {
+    const novelDir = positional[2];
+    if (!["pool", "batch", "answer"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel world pool <novel-dir> | batch <novel-dir> <batch-id> | answer <novel-dir> <batch-id> <item> <option> --reason <text>");
+    if (sub === "pool") { out(await worldPool(novelDir), pretty); return; }
+    if (sub === "batch") { if (!positional[3]) throw new Error("Usage: novel world batch <novel-dir> <batch-id>"); out(await worldBatch(novelDir, positional[3]), pretty); return; }
+    const reason = flag(positional, "--reason");
+    if (!positional[3] || !positional[4] || !positional[5] || positional[5].startsWith("--") || !reason) throw new Error("Usage: novel world answer <novel-dir> <batch-id> <item> <option> --reason <text>");
+    out(await worldAnswer(novelDir, positional[3], positional[4], positional[5], reason), pretty);
     return;
   }
 

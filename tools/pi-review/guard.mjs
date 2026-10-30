@@ -39,6 +39,8 @@ const FORMS = {
   checklist: 'novel checklist <book> | novel checklist <library> --universe <id>  (what the analysis still needs, with next commands)',
   ingest: 'novel ingest <book> <its assigned input: NOVEL_JOB.json volumes[].input> [--max-blocks N] [--block-size 24000]',
   search: 'novel search <book> <text> [--limit 1-30]',
+  source: 'novel source grep <book> <regex> [--limit 1-50] | similar <book> <text> [--limit 1-50]  (the original text, read-only)',
+  world: 'novel world pool <book> | batch <book> <batch-id> | answer <book> <batch-id> <item> <option> --reason <text>  (a world-first book\'s review pool)',
   query: "novel query <book> 'MATCH … RETURN …'  (one read-only Cypher string)",
   inspect: 'novel inspect <book>', timeline: 'novel timeline list <book>', recall: 'novel recall <book> <blockId>', init: 'novel init <book>',
   review: 'novel review show|evidence|decide|apply <book|library> <packet> --scope book|universe|library [--universe <id>] [--offset N] [--limit 1-20]',
@@ -365,6 +367,10 @@ function permit(command, scope) {
   if (verb === 'recall') valid = operation === novel && tokens.length === 3 && blockIds.includes(tokens[2]);
   if (verb === 'graph') valid = operation === 'build' && tokens.length === 3 && tokens[2] === `${novel}/ontology`;
   if (verb === 'query') valid = operation === novel && tokens.length === 3 && /^\s*MATCH\b/i.test(tokens[2]) && !/\b(CREATE|MERGE|SET|DELETE|DROP|ALTER|COPY|LOAD|INSTALL|ATTACH|CALL|REMOVE)\b|;/i.test(tokens[2]);
+  // The original text, read-only: a regular expression, or the passages most like a text.
+  if (verb === 'source') valid = ['grep', 'similar'].includes(operation) && tokens[2] === novel && !!tokens[3] && (tokens.length === 4 || tokens.length === 6 && tokens[4] === '--limit' && /^\d+$/.test(tokens[5]) && Number(tokens[5]) >= 1 && Number(tokens[5]) <= 50);
+  // A world-first book's review pool: read it, read a batch, answer one item (an option of it, with a reason).
+  if (verb === 'world') valid = tokens[2] === novel && (operation === 'pool' && tokens.length === 3 || operation === 'batch' && tokens.length === 4 && /^wb_[a-f0-9]{16}$/.test(tokens[3]) || operation === 'answer' && tokens.length === 8 && /^wb_[a-f0-9]{16}$/.test(tokens[3]) && /^wi_[a-f0-9]{16}$/.test(tokens[4]) && !!tokens[5] && tokens[6] === '--reason' && !!tokens[7] && tokens[7].length <= 600);
   if (verb === 'search') valid = operation === novel && (tokens.length === 3 || tokens.length === 5 && tokens[3] === '--limit' && /^\d+$/.test(tokens[4]) && Number(tokens[4]) >= 1 && Number(tokens[4]) <= 30);
   if (verb === 'inspect') valid = operation === novel && tokens.length === 2;
   if (verb === 'timeline') valid = operation === 'list' && tokens.length === 3 && tokens[2] === novel;

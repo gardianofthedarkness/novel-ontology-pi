@@ -286,3 +286,13 @@ test('the universe calendar: Pi may show and rebuild the clock of its book or it
   for (const command of [`novel calendar build /elsewhere`, `novel calendar show /private/other --universe toaru`, `novel calendar decide ${novel}`]) assert.throws(() => authorize(command, scope), command);
   assert.equal(authorize(`novel review show /private/library ut_${'b'.repeat(24)} --scope universe --universe toaru`, scope).label, 'novel review show');
 });
+
+test('Pi may search the original text and answer a world-first book\'s review batches, in their bounded forms', () => {
+  const novel = defaultScope.novel;
+  assert.equal(authorizeScoped(`novel source grep ${novel} 刺猬头`, defaultScope).label, 'novel source');
+  assert.equal(authorizeScoped(`novel source similar ${novel} 茵蒂克丝咬头 --limit 5`, defaultScope).label, 'novel source');
+  assert.equal(authorizeScoped(`novel world pool ${novel}`, defaultScope).label, 'novel world');
+  assert.equal(authorizeScoped(`novel world answer ${novel} wb_0123456789abcdef wi_0123456789abcdef same --reason 'b0001_s0002 names both'`, defaultScope).label, 'novel world');
+  assert.throws(() => authorizeScoped(`novel world answer ${novel} wb_0123456789abcdef wi_0123456789abcdef same`, defaultScope));
+  assert.throws(() => authorizeScoped('novel source grep /other/book 刺猬头', defaultScope));
+});
