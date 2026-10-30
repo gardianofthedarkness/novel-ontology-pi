@@ -330,7 +330,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     for (const [x, z] of hall.up) {
       const [i, j] = [Math.floor(x / SKELETON_CELL), Math.floor(z / SKELETON_CELL)], below = what(i, j, k);
       if (below.type !== 5 || below.lot !== HALL_LOT + index) continue;
-      const street = outdoorNear(x, z, hall.kind === "station" || hall.kind === "mall" ? 15 : 25);
+      const street = outdoorNear(x, z, hall.kind === "station" || hall.kind === "mall" ? 30 : 40);
       if (!street) continue;
       const hallNode = nodeId(world, i, j, k), streetNode = nodeId(world, street[0], street[1], 0);
       add(hallNode, streetNode, 0, 0, climb, EDGE.climb, UP); add(streetNode, hallNode, 0, 0, drop, EDGE.descend, DOWN);

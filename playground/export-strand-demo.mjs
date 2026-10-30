@@ -318,6 +318,14 @@ export async function strandDemo(novelDir, options) {
     if (out.length) { notes.underground.hits += out.length; shared.version++; }
     return out;
   };
+  /** Where someone under fallen ground gets out to: the nearest open cell of the same hall (null when they are not buried). */
+  const buried = at => {
+    if (!at) return null;
+    const p = W.nodePos(world, at[0]), hall = p.k < 0 ? W.hallsAt(world, p.i, p.j).find(e => e.k === p.k) : null;
+    if (!hall || (world.underDamage.piles.get(hall.hall)?.get(W.cellKey(p.i, p.j)) ?? 0) < 2) return null;
+    const out = nodeOfHall({ hall: hall.hall }, { x: p.x, z: p.z });
+    return out != null && out !== at[0] ? out : null;
+  };
   /**
    * A chosen impact: every building the sphere reaches loses what its percolation step takes inside the sphere; things in it
    * are hit too. A blast reaches into the building it hits: chosen off its structure, the sphere centres on that building's
@@ -491,7 +499,8 @@ export async function strandDemo(novelDir, options) {
   const stops = macro.filter(node => ['district', 'street'].includes(node.scale) && !node.temporary && !String(node.id).startsWith('spot:')).map(node => ({ id: node.id, x: node.x, z: node.z }))
     .concat(anchors.filter(anchor => anchor.own && anchor.role === 'station').map(anchor => ({ id: anchor.place, x: anchor.x, z: anchor.z })));
   const areaAt = (x, z) => macro.filter(node => !node.dwelling && ['city', 'district', 'street'].includes(node.scale) && Math.hypot(x - node.x, z - node.z) <= node.r).sort((a, b) => a.r - b.r)[0]?.id ?? city?.id ?? null;
-  const halls = [...landscapes.flatMap(entry => entry.source.underground), ...(city ? U.subwayOf(stops, city.id, city.r) : [])].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
+  // One storm-water system for the city: its own landscape's (a district's landscape keeps its malls and deep facilities).
+  const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city ? U.subwayOf(stops, city.id, city.r) : [])].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
   const underground = { halls };
   notes.underground = { halls: Object.fromEntries(Object.entries(halls.reduce((count, hall) => ({ ...count, [hall.kind]: (count[hall.kind] ?? 0) + 1 }), {}))), stops: stops.length, active: {}, hits: 0 };
   world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors, underground });
@@ -661,7 +670,8 @@ export async function strandDemo(novelDir, options) {
       let targets = spots[spot], key = spot;
       if (targets.includes(node)) { targets = targets.filter(other => Math.hypot(graph.x[other] - graph.x[node], graph.z[other] - graph.z[node]) > 4 || graph.y[other] !== graph.y[node]); key = `${spot}@${node}`; }
       const field = solve(scene.placeId, `${key}@${node}`, targets, answer.how, node), path = sampleWalk(graph, field, node, heading, rng);
-      if (!path) { notes.unreachable++; return { kind: 'stay' }; }
+      // What a move could not reach (the first few, for the run's notes): where it was going and from which level.
+      if (!path) { notes.unreachable++; if ((notes.unreachableWhy ??= []).length < 12) notes.unreachableWhy.push({ scene: scene.id, spot, how: answer.how, from: W.nodePos(world, node).k, targets: targets.length }); return { kind: 'stay' }; }
       const ensemble = Array.from({ length: 14 }, () => sampleWalk(graph, field, node, heading, rng)).filter(Boolean);
       const last = path.length > 1 ? directionOf(graph.x[path.at(-1)] - graph.x[path.at(-2)], graph.z[path.at(-1)] - graph.z[path.at(-2)]) : heading;
       notes.sampled++;
@@ -814,6 +824,9 @@ export async function strandDemo(novelDir, options) {
   const awake = new Map();
   const wake = node => {
     if (node == null || W.nodePos(world, node).k >= 0) return;
+    // Someone below the street: the ground over every way out of their hall is laid too (a station's stairs are 90 m off).
+    const at = W.nodePos(world, node);
+    for (const entry of W.hallsAt(world, at.i, at.j)) for (const [x, z] of world.source.underground.halls[entry.hall].up) reach(x, z, 16);
     const built = graphOf(W.nodePos(world, node)), lot = built.lot[node], hall = lot >= W.HALL_LOT ? world.source.underground.halls[lot - W.HALL_LOT] : null;
     const area = hall ? hall.area : lot >= 0 && lot < W.HALL_LOT ? areaAt((world.lots[lot].i0 + world.lots[lot].nx / 2) * 2, (world.lots[lot].j0 + world.lots[lot].nz / 2) * 2) : null;
     if (area && !awake.has(area)) { awake.set(area, moment); notes.underground.active[name(area)] = moment; }
@@ -893,13 +906,16 @@ export async function strandDemo(novelDir, options) {
     const plan = meetings.get(key), target = plan.targets?.[person];
     return target == null || !at ? { kind: 'stay' } : walkTo(scene, event, person, at, target, seed, plan.label);
   };
-  mover.start = async args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const boxed = await firstStart(args), at = boxed ?? start(args); wake(at?.[0]); if (boxed) begun.set(`${args.scene.id}|${args.handoff.person}`, boxed); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
+  mover.start = async args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const boxed = await firstStart(args); let at = boxed ?? start(args); const free = buried(at); if (free != null) { at = [free, at[1]]; notes.underground.escaped = (notes.underground.escaped ?? 0) + 1; } wake(at?.[0]); if (boxed) begun.set(`${args.scene.id}|${args.handoff.person}`, boxed); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
   // `pace` (seconds): each moment held that long before the next is played, so a live view shows every event.
   const hold = () => new Promise(done => setTimeout(done, options.pace * 1000));
   mover.act = async args => {
     const now = `${args.scene.id}|${args.scene.events.findIndex(entry => entry.id === args.event.id)}`;
     if (now !== moment) { if (options.pace) { live(false, true); await hold(); } else live(); }
     moment = now;
+    // Under fallen ground: they get out first, to the nearest open cell of their hall.
+    const free = buried(args.at);
+    if (free != null) { notes.underground.escaped = (notes.underground.escaped ?? 0) + 1; moves.set(`${args.scene.id}|${args.event.id}|${args.person}`, { person: args.person, how: 'run', spot: 'out from under', path: [args.at[0], free], ensemble: [] }); where.set(args.person, { place: args.scene.placeId, at: [free, args.at[1]] }); return { kind: 'move', to: [free, args.at[1]] }; }
     const outcome = args.event.dialogue && jev ? await dialogueAct(args) : act(args);
     if (outcome.kind === 'move') { where.set(args.person, { place: args.scene.placeId, at: outcome.to }); const end = W.nodePos(world, outcome.to[0]); reach(end.x, end.z, 40); wake(outcome.to[0]); }
     return outcome;
