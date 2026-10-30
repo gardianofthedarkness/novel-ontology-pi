@@ -69,7 +69,7 @@ async function writeReport(path: string, value: unknown) {
 }
 
 /** The world script of a world-first workspace (stage/world/script.json, from the world-first loop), or null. */
-interface WorldScript { places: Record<string, { label: string; scale?: string | null }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }
+interface WorldScript { places: Record<string, { label: string; scale?: string | null; parent?: string | null; spot?: boolean }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }
 async function worldScript(novelDir: string): Promise<WorldScript | null> {
   const manifest = await readJson<{ worldFirst?: boolean }>(join(novelDir, "ontology", "manifest.json"));
   return manifest?.worldFirst ? readJson<WorldScript>(join(novelDir, "stage", "world", "script.json")) : null;
@@ -89,15 +89,19 @@ function worldFirstScenes(data: ReturnType<typeof strandProjection>, world: Worl
     scene.characterIds = [...new Set([...entry.present, ...entry.stayed])];
     scene.flashback = !entry.clock;
   }
-  const known = new Set(data.places.map((place) => place.id));
+  const known = new Set(data.places.map((place) => place.id)), pathOf = (id: string): string[] => { const parent = world.places[id]?.parent ?? data.places.find((place) => place.id === id)?.parentId ?? null; return parent && parent !== id ? [...(data.places.find((place) => place.id === parent)?.path ?? pathOf(parent)), id] : [id]; };
+  // The world's own places (a spot of a scene inside an area, an unnamed place) go in under the area they are in.
   for (const [id, place] of Object.entries(world.places)) {
     const sceneIds = data.scenes.filter((scene) => scene.placeIds.includes(id)).map((scene) => scene.id);
     if (known.has(id)) { const stored = data.places.find((entry) => entry.id === id)!; stored.sceneIds = sceneIds; continue; }
     if (!sceneIds.length) continue;
-    data.places.push({ id, label: place.label, sceneIds, statedScenes: sceneIds.length, characterIds: [], parentId: null, depth: 0, path: [id] });
+    const path = pathOf(id);
+    data.places.push({ id, label: place.label, sceneIds, statedScenes: sceneIds.length, characterIds: [], parentId: place.parent ?? null, depth: path.length - 1, path });
     data.names[id] = place.label;
   }
 }
+/** A place the world made (a scene's spot, an unnamed place): its scale is the world's, and no stage step asks about it. */
+const worldMade = (id: string) => id.startsWith("spot:") || id.startsWith("unnamed:");
 
 /** Everything the stage reads (no model calls): its places, its scenes with cast and events, and the fingerprints. Shared with `novel checklist`. */
 export async function stageInputs(novelDir: string) {
@@ -114,7 +118,7 @@ export async function stageInputs(novelDir: string) {
 
   // Architecture: every place a scene happens in.
   const inside = (id: string) => data.places.filter((place) => place.parentId === id).map((place) => place.id);
-  const places: ArchitecturePlace[] = data.places.filter((place) => place.sceneIds.length).map((place) => ({ id: place.id, label: place.label, path: place.path ?? [place.id], contains: inside(place.id), sceneLabels: place.sceneIds.map((id) => sceneLabel.get(id) ?? "").filter((label) => label && !/^scene_\d+$/.test(label)).slice(0, 3) }));
+  const places: ArchitecturePlace[] = data.places.filter((place) => place.sceneIds.length && !worldMade(place.id)).map((place) => ({ id: place.id, label: place.label, path: place.path ?? [place.id], contains: inside(place.id), sceneLabels: place.sceneIds.map((id) => sceneLabel.get(id) ?? "").filter((label) => label && !/^scene_\d+$/.test(label)).slice(0, 3) }));
   const architecture = await readJson<ArchitectureReport>(stageFile(novelDir, "architecture"));
   const architectureCurrent = architecture?.inputs === architectureFingerprint(places);
 
@@ -150,11 +154,13 @@ export async function stageInputs(novelDir: string) {
     ...entities.filter((entity) => entity.kind === "Location" && !projected.has(entity.id)).map((entity) => ({ id: entity.id, label: names[entity.id] ?? entity.id, parentId: parentOf.get(entity.id) ?? null, proposedParentId: parentOf.has(entity.id) ? null : proposedParent.get(entity.id) ?? null, path: treePath(entity.id), sceneIds: [] as string[] }))];
   const within = (id: string) => placeTree.filter((place) => place.parentId === id).map((place) => place.id);
   // Scale: every place in the tree, with scenes of its own or not (the stage's map draws them all).
-  const scalePlaces: ScalePlace[] = placeTree.map((place) => {
+  const scalePlaces: ScalePlace[] = placeTree.filter((place) => !worldMade(place.id)).map((place) => {
     const forms = byId.get(place.id)?.names ?? [], canonical = names[place.id] ?? place.label;
     return { id: place.id, label: place.label, aliases: [...new Set(forms.map((form) => form.text).filter((text) => text && text !== canonical))], path: place.path, contains: within(place.id) };
   });
   const scale = await readJson<ScaleReport>(stageFile(novelDir, "scale"));
+  // The world's own places carry their scale from the world (a spot: a building indoors, a street outdoors).
+  if (world && scale) for (const [id, place] of Object.entries(world.places)) if (worldMade(id) && place.scale) scale.places[id] ??= { label: place.label, inputs: "", scale: place.scale as ScaleReport["places"][string]["scale"], by: "world" as ScaleReport["places"][string]["by"] };
   const scaleCurrent = scale?.inputs === scaleFingerprint(scalePlaces);
   // A world-first book stages every scene: a place no building picture fits is an office building when its scale is a
   // building or a room, and open city ground otherwise (an area, or an unnamed place).
@@ -197,7 +203,7 @@ export async function stageInputs(novelDir: string) {
   const objectsAt = new Map<string, string[]>();
   for (const [sceneId, found] of Object.entries(objects?.scenes ?? {})) objectsAt.set(sceneId, found.objects.filter((object) => object.kind === "building" && !object.room).map((object) => object.name));
   const sentenceList = [...sentences.entries()];
-  const landscapePlaces: LandscapePlace[] = placeTree.filter((place) => OPEN_SCALES.has(scale?.places[place.id]?.scale ?? "")).map((place) => {
+  const landscapePlaces: LandscapePlace[] = placeTree.filter((place) => !worldMade(place.id) && OPEN_SCALES.has(scale?.places[place.id]?.scale ?? "")).map((place) => {
     const label = names[place.id] ?? place.label, naming = sentenceList.filter(([, sentence]) => sentence.text.includes(label) && sentence.text.length >= label.length + 8).slice(0, 3);
     return { id: place.id, label, scale: scale!.places[place.id].scale, path: place.path, contains: within(place.id), scenes: place.sceneIds.map((id) => (sceneLabel.get(id) ?? "").split("（原文：")[0]).filter((text) => text && !/^scene_\d+$/.test(text)).map((text) => clip(text, 110)),
       buildings: [...new Set(place.sceneIds.flatMap((id) => objectsAt.get(id) ?? []))], sentences: naming.map(([, sentence]) => clip(sentence.text, 110)), sentenceIds: naming.map(([id]) => id) };

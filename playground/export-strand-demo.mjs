@@ -218,9 +218,12 @@ export async function strandDemo(novelDir, options) {
       }
       else {
         // No box yet: on the ground beside the actor, in the first direction with open ground; on the actor's spot when there is none.
+        // A thing in the air flies above the roofs around it (an airship over the towers), by at least its own height.
         const actor = W.nodePos(world, at[0]), lotAt = (px, pz) => world.lots.find(entry => px >= entry.i0 * 2 && px < (entry.i0 + entry.nx) * 2 && pz >= entry.j0 * 2 && pz < (entry.j0 + entry.nz) * 2);
         const gap = entity.size / 2 + 2, open = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => ({ x: actor.x + dx * gap, z: actor.z + dz * gap })).find(spot => !lotAt(spot.x, spot.z) && actor.k === 0);
-        ({ x, z } = open ?? actor); cast = { w: entity.size, h: entity.height, d: entity.shape === 'box' ? Math.max(1.2, entity.size * 0.35) : entity.size, y0: entity.airborne ? 8 : 0 };
+        ({ x, z } = open ?? actor);
+        const roofs = entity.airborne ? world.lots.filter(entry => Math.hypot((entry.i0 + entry.nx / 2) * 2 - x, (entry.j0 + entry.nz / 2) * 2 - z) <= entity.size / 2 + 24).map(entry => (entry.height ?? entry.floors) * 3) : [];
+        cast = { w: entity.size, h: entity.height, d: entity.shape === 'box' ? Math.max(1.2, entity.size * 0.35) : entity.size, y0: entity.airborne ? Math.max(12, ...roofs) + Math.max(6, entity.height ?? 4) : 0 };
       }
       reach(x, z, Math.max(24, entity.size));
       // At its first placement, a thing takes the theme of the manifold under it (its category's model of that era: a
