@@ -697,7 +697,7 @@ export async function strandDemo(novelDir, options) {
     const plan = meetings.get(key), target = plan.targets?.[person];
     return target == null || !at ? { kind: 'stay' } : walkTo(scene, event, person, at, target, seed, plan.label);
   };
-  mover.start = async args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const at = (await firstStart(args)) ?? start(args); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
+  mover.start = async args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const boxed = await firstStart(args), at = boxed ?? start(args); if (boxed) begun.set(`${args.scene.id}|${args.handoff.person}`, boxed); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
   // `pace` (seconds): each moment held that long before the next is played, so a live view shows every event.
   const hold = () => new Promise(done => setTimeout(done, options.pace * 1000));
   mover.act = async args => {
