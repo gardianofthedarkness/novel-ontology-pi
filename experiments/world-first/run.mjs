@@ -100,17 +100,18 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     let place = placeIndex >= 0 && placeIndex < places.length ? places[placeIndex] : null;
     if (!place) { place = `unnamed:${scene.id}`; world.places[place] = { label: `an unnamed place (scene ${scene.index + 1})` }; }
     // When, by the laws; the time the text names, from the time lexicon (outside quotes first).
-    const allowed = allowedTimes(world, present, place), times = inPast(world) ? PAST_TIMES : TIMES;
+    const chapterStart = !!previous && previous.chapter !== scene.chapter, opening = text.slice(0, 200);
+    const allowed = allowedTimes(world, present, place, { opening, chapterStart }), times = inPast(world, chapterStart) ? PAST_TIMES : TIMES;
     const mentions = detectTimeMentions([{ id: scene.id, text }]).sort((a, b) => a.inQuote - b.inQuote).map(mention => mention.text);
     const phrases = [...new Set(mentions.length ? mentions : text.match(TIME_WORDS) ?? [])].slice(0, 8);
     const second = allowed.length > 1 || phrases.length ? await jev.decide(compose({ world: worldLines(), story: storyLines(), text, focus: `In this scene, at ${labelOf(place)}: ${names(present) || 'nobody named is there'}.` }), [
-      ...(allowed.length > 1 ? [{ key: 'time', primitive: 'choice', instructions: `When does this scene happen, against the scene before${inPast(world) ? ' (which is in a flashback)' : ''}?`, options: allowed.map(relation => times[relation]) }] : []),
+      ...(allowed.length > 1 ? [{ key: 'time', primitive: 'choice', instructions: `When does this scene happen, against the scene before${inPast(world, chapterStart) ? ' (which is in a flashback)' : ''}?`, options: allowed.map(relation => times[relation]) }] : []),
       ...(phrases.length ? [{ key: 'time_node', primitive: 'choice', instructions: 'Which time does this scene itself happen at, as its text says? Pick none when the text only mentions a time for something else.', options: [...phrases, 'none'] }] : []),
     ]) : [];
     const reply = key => second.find(entry => entry.key === key);
     const relation = allowed.length > 1 ? allowed.find(key => times[key] === reply('time')?.value) ?? allowed[0] : allowed[0];
     const timeNode = phrases.length && reply('time_node')?.value !== 'none' ? String(reply('time_node')?.value ?? '') || null : null;
-    const entry = enter(world, { id: scene.id, chapter: scene.chapter, place, relation, present, timeNode });
+    const entry = enter(world, { id: scene.id, chapter: scene.chapter, place, relation, present, timeNode, chapterStart });
     // Dialogue nodes, in narrative order: kind and parties, then (remote) which party is here.
     const nodes = [];
     for (const dialogue of scene.dialogues) {

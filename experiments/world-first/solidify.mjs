@@ -11,6 +11,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+/** Two-character stretches common to many people's descriptions, which say nothing of who they are. */
+const GENERIC = /^(少女|少年|女孩|男孩|小姐|先生|女士|修女|老师|男人|女人|孩子|女性|男性|姑娘|大叔|大姐|学生|同学|医生|护士|警察|士兵|神父|女仆|店员|客人|的少|的女|的男|小小|色的|的修|圣诞|红色|白色|金发|黑色)$/;
 
 /** Every timeline item of the script with where and when it is: scene, place, clock start, past or not. */
 function items(script) {
@@ -40,7 +42,9 @@ export function sameness(script, names) {
     for (const a of here) for (const b of here) if (a < b) together.add(`${a}|${b}`);
   }
   const companions = id => new Set((scenesOf.get(id) ?? []).flatMap(scene => [...scene.present, ...scene.stayed]).filter(other => other !== id));
-  const overlap = (a, b) => a.length >= 2 && b.length >= 2 && (a.includes(b.slice(0, 2)) || b.includes(a.slice(0, 2)) || a.includes(b.slice(-2)) || b.includes(a.slice(-2)));
+  // Names overlap on a part of their own: a shared two-character stretch that is not a common word for a person.
+  const pairsOf = text => new Set([...text].slice(0, -1).map((char, index) => text.slice(index, index + 2)));
+  const overlap = (a, b) => [...pairsOf(a)].some(part => pairsOf(b).has(part) && !GENERIC.test(part));
   const people = [...scenesOf.keys()].filter(id => names[id]), pairs = [];
   for (const [i, a] of people.entries()) for (const b of people.slice(i + 1)) {
     if (together.has(a < b ? `${a}|${b}` : `${b}|${a}`) || !overlap(names[a], names[b])) continue;

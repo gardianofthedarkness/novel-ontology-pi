@@ -10,6 +10,8 @@
 //   the scene before can only come after it, or be a flashback.
 // - A flashback is the past: it logs what people did then, and moves nobody now. The scenes after it stay in the past
 //   (carrying on, or later in it) until one goes back to the main time, which picks up after the last scene before it.
+//   A flashback opens only where the text looks back (a backward cue at the scene's opening), and a chapter opens in the
+//   main time: a flashback never runs on across a chapter's start.
 // - Without text, nothing changes: a fragment scene (a stray line between two scenes) carries the scene before on.
 //
 // The clock counts scenes, not hours: each scene is a stretch [start, end] of it; time the text names (a date, an hour,
@@ -27,18 +29,20 @@ export const PAST_TIMES = {
   later: 'still in the flashback, some time later',
   back: 'back to the main time: after the last scene before the flashback',
 };
-/** Whether the scene before is in the past (a flashback, or a scene still in one): its relations are then PAST_TIMES. */
-export const inPast = world => !!world.scenes.length && !world.scenes.at(-1).clock;
+/** Whether the scene before is in the past (a flashback, or a scene still in one): its relations are then PAST_TIMES. A chapter's first scene starts afresh. */
+export const inPast = (world, chapterStart = false) => !chapterStart && !!world.scenes.length && !world.scenes.at(-1).clock;
+/** Words at a scene's opening that look back: only such a scene may open a flashback. */
+export const BACKWARD = /(追溯|回想|回忆|回到|那时候|那时|当时|之前|以前|从前|往日|过去|曾经|记得|[几数一二三四五六七八九十两\d]+(?:天|日|周|星期|个月|月|年)前|前些)/;
 /** Clock ticks a scene "later" than the one before leaves between them. */
 const GAP = 2;
 
 export const createWorld = () => ({ people: {}, places: {}, scenes: [] });
 
 /** The stretch of the clock a scene takes, by its relation to the scene before; null for a flashback (the unplaced past). */
-export function stretchOf(world, relation) {
+export function stretchOf(world, relation, chapterStart = false) {
   const previous = world.scenes.findLast(scene => scene.clock);
   if (!previous) return [0, 1];
-  if (relation === 'flashback' || (inPast(world) && relation !== 'back')) return null;
+  if (relation === 'flashback' || (inPast(world, chapterStart) && relation !== 'back')) return null;
   if (relation === 'back') return [previous.clock[1], previous.clock[1] + 1];
   if (relation === 'same') return [...previous.clock];
   const start = previous.clock[1] + (relation === 'later' ? GAP : 0);
@@ -52,10 +56,14 @@ export function conflicts(world, present, place, stretch) {
   return present.filter(id => world.scenes.some(scene => overlaps(scene) && scene.place !== place && (scene.present.includes(id) || scene.stayed.includes(id))));
 }
 
-/** The relations a scene may take to the one before, given who is in it and where: those that break no law. */
-export function allowedTimes(world, present, place) {
+/**
+ * The relations a scene may take to the one before, given who is in it and where: those that break no law. A flashback
+ * only with a backward cue at the scene's opening (`opening`); a chapter's first scene (`chapterStart`) in the main time.
+ */
+export function allowedTimes(world, present, place, { opening = null, chapterStart = false } = {}) {
   if (!world.scenes.some(scene => scene.clock)) return ['after'];
-  return Object.keys(inPast(world) ? PAST_TIMES : TIMES).filter(relation => !conflicts(world, present, place, stretchOf(world, relation)).length);
+  const relations = Object.keys(inPast(world, chapterStart) ? PAST_TIMES : TIMES).filter(relation => relation !== 'flashback' || opening === null || BACKWARD.test(opening));
+  return relations.filter(relation => !conflicts(world, present, place, stretchOf(world, relation, chapterStart)).length);
 }
 
 /** Who of the scene before is still there, not mentioned: the scene carries straight on in the same place. */
@@ -71,8 +79,8 @@ export function stayers(world, present, place, relation) {
  * stay; everyone else stays where they were. A flashback only logs.
  */
 export function enter(world, scene) {
-  const { id, chapter, place, relation, present, spots = {}, timeNode = null, fragment = false } = scene;
-  const clock = stretchOf(world, relation), stayed = stayers(world, present, place, relation), entry = { id, chapter, place, relation, clock, timeNode, present: [...present], stayed, fragment, travelled: [] };
+  const { id, chapter, place, relation, present, spots = {}, timeNode = null, fragment = false, chapterStart = false } = scene;
+  const clock = stretchOf(world, relation, chapterStart), stayed = stayers(world, present, place, relation), entry = { id, chapter, place, relation, clock, timeNode, present: [...present], stayed, fragment, travelled: [] };
   for (const person of present) {
     const now = world.people[person] ?? (world.people[person] = { place: null, spot: null, since: null, log: [] });
     now.log.push({ scene: id, place, spot: spots[person] ?? null, clock, timeNode, past: !clock });

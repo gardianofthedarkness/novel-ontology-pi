@@ -104,3 +104,16 @@ test('lineage: what led up to an event, from the world alone; EM from world evid
   assert.ok(ab && !ab.conflict, 'never together, names overlap, a companion shared, no clash');
   assert.ok(!pairs.some(pair => pair.names.includes('御坂妹')), 'no shared companion');
 });
+
+test('a flashback opens only where the text looks back, and a chapter opens in the main time', async () => {
+  const { BACKWARD } = await import('./world.mjs');
+  const world = createWorld();
+  enter(world, { id: 's1', chapter: 0, place: 'P', relation: 'after', present: ['x'] });
+  assert.ok(!allowedTimes(world, ['y'], 'Q', { opening: '第二章变化的学园都市，前夜' }).includes('flashback'));
+  assert.ok(allowedTimes(world, ['y'], 'Q', { opening: '事情要追溯到之前上条出门的时候' }).includes('flashback'));
+  enter(world, { id: 's2', chapter: 0, place: 'Q', relation: 'flashback', present: ['y'] });
+  assert.deepEqual(allowedTimes(world, ['y'], 'Q', { opening: '' }), ['after', 'later', 'back']);
+  assert.ok(allowedTimes(world, ['z'], 'R', { opening: '', chapterStart: true }).includes('same'), 'a new chapter is in the main time');
+  assert.ok(enter(world, { id: 's3', chapter: 1, place: 'R', relation: 'after', present: ['z'], chapterStart: true }).clock, 'not the past');
+  assert.ok(BACKWARD.test('三年前的那天'));
+});
