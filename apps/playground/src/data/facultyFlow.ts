@@ -39,7 +39,7 @@ export const FLOW_NODES: FlowNode[] = [
   // The v2 reading flow (src/v2, docs/v2/world-engine-v2.md §2): listing (work model), typing, unified EM and EM² roles (Jev).
   node("listing", "Listing · v2", "digger", "work", ["v2-listing"], 3.6, 1),
   node("typing", "Typing · v2", "digger", "jev", ["type", "proper"], 3.6, 2),
-  node("unified", "Unified EM · v2", "digger", "jev", ["em"], 3.6, 3),
+  node("unified", "Unified EM · v2", "digger", "jev", ["em", "own"], 3.6, 3),
   node("roles", "Roles · EM² · v2", "digger", "jev", ["role", "ref"], 3.6, 4),
 ];
 

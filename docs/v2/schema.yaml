@@ -45,8 +45,8 @@ card:                # cards.yaml — runs of one kind, a new card where the car
 detected:            # a listed string, typed (em.yaml holds each with its outcome)
   key: string        # n1, n2 … within its batch
   text: string       # word for word as the passage writes it
-  type: [person, crowd, object, routine, weapon, vehicle, place, building, room, time, none]
-  category: [person, crowd, thing, place, time, null]   # a crowd is never a name: EM² places it; routine (an everyday thing): null
+  type: [person, crowd, object, routine, weapon, vehicle, place, building, room, concept, time, none]
+  category: [person, crowd, thing, place, concept, time, null]   # a crowd is never a name: EM² places it; routine (an everyday thing): null
   proper: number     # 0..1: a proper name (a name anywhere) or a description (a name only where EM said it)
   sentences: [string]
 
@@ -54,6 +54,7 @@ em_result:           # em.yaml — per batch (its first sentence id), per detect
   outcome: [exact, alias, new, time, description, routine, skip]   # description: of a person, a crowd, or an unnamed vehicle or weapon (EM² resolves it); routine: an everyday or unnamed thing, no entity
   sentences: [string] # description: the sentences that hold it
   facts: [string]    # the facts Jev was given for it (fact ids): the latest about its candidates, and those holding it
+  owner: { answer: string, confidence: number }   # a concept: whose it is, as asked in this batch (a person id, many, none)
   entity: string     # the chart entity (or time node) it is
   candidates:        # the recommender's best three, by nearness, frequency and shared names
     - id: string
@@ -62,14 +63,16 @@ em_result:           # em.yaml — per batch (its first sentence id), per detect
   confidence: number
   unsure: string     # new below the threshold: its best candidate, for the world engine's second EM
 
-entity:              # chart.yaml — the ontology's identities (canon ids: char_, loc_, item_)
+entity:              # chart.yaml — the ontology's identities (canon ids: char_, loc_, item_, concept_)
   id: string
-  category: [person, place, thing]
+  category: [person, place, thing, concept]
   type: string       # the type it was first typed as
   names: [string]    # every name EM gave it
   proper: [string]   # its names anywhere (exact match, the card scan)
   first: string      # sentence id
   seen: [string]     # every sentence it appears in
+  owners:            # a concept's: whose it is (a person id, or many), from the sentence it was said in
+    - { id: string, from: string, confidence: number }
 
 time_node:           # chart.yaml times — EM for times is the calendar's (later)
   id: string         # time_000001
@@ -134,7 +137,7 @@ fact:                # facts.yaml — the fact ledger: the source of truth for E
   time: string       # the latest time node at or before it
   about:             # who and what it is about
     - id: string
-      via: [name, description]   # a name in it (the chart's names at the end), or a description EM² resolved in it
+      via: [name, description, concept]   # a name in it (the chart's names at the end), a description EM² resolved in it, or the owner of a concept it names
 
 log:                 # log.yaml — the run
   sentences: integer

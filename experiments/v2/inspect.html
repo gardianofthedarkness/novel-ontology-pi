@@ -8,7 +8,7 @@
 :root {
   --bg: #f6f4ee; --surface: #fffdf7; --ink: #1e1d1a; --muted: #6b675f; --line: #e3ddd0; --chip: #eee9de;
   --spoken: #2b66a6; --thought: #7a4dab; --fact: #9c6810; --action: #bf3f28; --environment: #2b8253; --narration: #6c6963;
-  --person: #ad2d66; --place: #0d7a82; --thing: #8a5a2b; --time: #5252cc; --slot: #7d828b;
+  --person: #ad2d66; --place: #0d7a82; --thing: #8a5a2b; --time: #5252cc; --slot: #7d828b; --concept: #4f7a1f;
   --world: #1d6e5a; --ontology: #6b4a9a;
   --cjk: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
   --ui: system-ui, -apple-system, "Segoe UI", Roboto, var(--cjk);
@@ -19,14 +19,14 @@
   :root:not([data-theme="light"]) {
     --bg: #14151a; --surface: #1b1d23; --ink: #ebe9e3; --muted: #a29e97; --line: #2d3037; --chip: #262930;
     --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f;
-    --person: #ef79a7; --place: #4ec2c8; --thing: #d29a62; --time: #a2a2ff; --slot: #99a0aa;
+    --person: #ef79a7; --place: #4ec2c8; --thing: #d29a62; --time: #a2a2ff; --slot: #99a0aa; --concept: #9fcd6a;
     --world: #5bc3a5; --ontology: #b49ae0; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #14151a; --surface: #1b1d23; --ink: #ebe9e3; --muted: #a29e97; --line: #2d3037; --chip: #262930;
   --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f;
-  --person: #ef79a7; --place: #4ec2c8; --thing: #d29a62; --time: #a2a2ff; --slot: #99a0aa;
+  --person: #ef79a7; --place: #4ec2c8; --thing: #d29a62; --time: #a2a2ff; --slot: #99a0aa; --concept: #9fcd6a;
   --world: #5bc3a5; --ontology: #b49ae0; color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -79,6 +79,7 @@ main > *, .files > *, .tiles > *, .frame > *, .card > * { min-width: 0; }
 .chip.slot { background: transparent; border: 1px dashed var(--slot); }
 .chip.place { background: color-mix(in srgb, var(--place) 13%, var(--surface)); }
 .chip.thing { background: color-mix(in srgb, var(--thing) 13%, var(--surface)); }
+.chip.concept { background: color-mix(in srgb, var(--concept) 14%, var(--surface)); }
 .chip.maybe { background: transparent; color: var(--muted); font-style: italic; border: 1px solid var(--line); }
 .chip.crowd { border-style: double; border-width: 3px; }
 .chip.back { background: color-mix(in srgb, var(--time) 14%, var(--surface)); }
@@ -112,6 +113,7 @@ main > *, .files > *, .tiles > *, .frame > *, .card > * { min-width: 0; }
 .m-char { color: var(--person); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--person) 40%, transparent); }
 .m-loc { color: var(--place); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--place) 40%, transparent); }
 .m-item { color: var(--thing); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--thing) 40%, transparent); }
+.m-concept { color: var(--concept); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--concept) 40%, transparent); }
 .m-time { color: var(--time); border: 1px dashed color-mix(in srgb, var(--time) 60%, transparent); border-radius: 4px; padding: 0 2px; }
 .m-d { border-bottom: 2px dashed var(--person); }
 .m-d sup { font: 600 0.62rem var(--ui); color: var(--person); margin-left: 1px; }
@@ -150,7 +152,7 @@ footer { color: var(--muted); font-size: 0.78rem; padding-block: 0 32px; }
     <span class="key k-thought">thought <small>ontology</small></span><span class="key k-fact">fact <small>ontology</small></span><span class="key k-narration">narration <small>ontology</small></span>
   </div>
   <div class="legend-row"><span class="label">Marks in the text</span>
-    <span class="m-char">person</span><span class="m-loc">place</span><span class="m-item">named thing, vehicle, weapon</span><span class="m-time">time</span><span class="m-r">everyday thing (no entity)</span>
+    <span class="m-char">person</span><span class="m-loc">place</span><span class="m-item">named thing, vehicle, weapon</span><span class="m-concept">concept (someone's)</span><span class="m-time">time</span><span class="m-r">everyday thing (no entity)</span>
     <span class="m-d">description<sup>→ whom it meant</sup></span><span class="m-d open">description<sup>→ unnamed</sup></span><span class="m-d thing">那辆车<sup>→ unnamed vehicle</sup></span>
     <span class="chip">named person</span><span class="chip slot">unnamed person (slot)</span><span class="chip slot crowd">crowd (slot)</span><span class="chip thing">a named thing that acts</span><span class="chip slot thing">unnamed vehicle or weapon (slot)</span><span class="chip back">back in time</span><span class="chip maybe">maybe, below 0.5</span><span class="was">was action</span>
   </div>
@@ -205,7 +207,7 @@ const fmt = (n) => Number(n).toLocaleString('en-US');
 function chip(id, note = '') {
   if (!id) return '';
   const slot = SLOT.get(id), ofThings = slot && (slot.kind === 'vehicle' || slot.kind === 'weapon');
-  const cls = slot ? `chip slot${slot.kind === 'crowd' ? ' crowd' : ofThings ? ' thing' : ''}` : id.startsWith('loc_') ? 'chip place' : id.startsWith('item_') ? 'chip thing' : 'chip';
+  const cls = slot ? `chip slot${slot.kind === 'crowd' ? ' crowd' : ofThings ? ' thing' : ''}` : id.startsWith('loc_') ? 'chip place' : id.startsWith('item_') ? 'chip thing' : id.startsWith('concept_') ? 'chip concept' : 'chip';
   return `<span class="${cls}" title="${esc(id)}">${slot ? (slot.kind === 'crowd' ? 'crowd · ' : ofThings ? `unnamed ${slot.kind} · ` : 'unnamed · ') : ''}${esc(label(id))}${note ? `<small>${esc(note)}</small>` : ''}</span>`;
 }
 const HOW = { speaks: 'says', acts: 'acts', addressed: 'to', named: 'named', described: 'desc' };
@@ -268,7 +270,7 @@ function sentenceHtml(id) {
 function caption(card, sceneIds) {
   const cut = !sceneIds.has(card.first) || !sceneIds.has(card.last) ? ' <span title="the card runs past this scene">(cut at the scene edge)</span>' : '';
   const fact = FACT_OF_CARD.get(card.id);
-  const factLine = fact ? `<div class="factline"><code>${esc(fact.id)}</code><span>about</span>${fact.about.length ? fact.about.map((entry) => chip(entry.id, entry.via === 'description' ? 'by description' : '')).join('') : '<span>no one named yet</span>'}${fact.time ? `<span>· time</span><span class="m-time">${esc(label(fact.time))}</span>` : ''}</div>` : '';
+  const factLine = fact ? `<div class="factline"><code>${esc(fact.id)}</code><span>about</span>${fact.about.length ? fact.about.map((entry) => chip(entry.id, entry.via === 'description' ? 'by description' : entry.via === 'concept' ? 'owns a concept in it' : '')).join('') : '<span>no one named yet</span>'}${fact.time ? `<span>· time</span><span class="m-time">${esc(label(fact.time))}</span>` : ''}</div>` : '';
   return `<div class="cap"><span class="kind">${esc(card.kind)}</span><span class="range">${esc(short(card.first))}–${esc(short(card.last))}</span><span class="home ${esc(card.home)}">${esc(card.home)}</span>${cut}${peopleChips(card.people)}</div>${factLine}`;
 }
 
@@ -380,6 +382,7 @@ if (log) {
   $('run').innerHTML = [
     ['sentences', fmt(log.sentences)], ['scenes', fmt(log.scenes)], ['cards', fmt(cards)],
     ['people / places / things / times', `${log.chart.person} / ${log.chart.place} / ${log.chart.thing} / ${log.chart.time}`],
+    ...(log.chart.concept !== undefined ? [['concepts (with an owner)', `${fmt(log.chart.concept)} (${fmt(log.chart.conceptsOwned ?? 0)})`]] : []),
     ...(log.chart.thingTypes ? [['things: named · vehicles · weapons', `${log.chart.thingTypes.object} · ${log.chart.thingTypes.vehicle} · ${log.chart.thingTypes.weapon}`]] : []),
     ...(log.em?.routine ? [['everyday things left out (strings)', fmt(log.em.routine)]] : []),
     ['paid in this run (a rerun from the cache pays nothing)', `${fmt(log.paidRequests.jev)} Jev · ${fmt(log.paidRequests.work)} work model`], ['wall, this run', `${(log.wallMs / 1000).toFixed(1)} s`],

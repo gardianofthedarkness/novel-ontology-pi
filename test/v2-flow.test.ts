@@ -40,6 +40,7 @@ test("typing: one structured document a batch, each string by path, types groupe
   const detected = await typeNames(async (_state: DecisionState, questions) => { asked = questions; return questions.map((q) => ({ key: q.key, value: types[q.key] ?? (q.key === "proper:n3" ? 0.1 : 0.9), confidence: 0.9 })); }, batch, ["上条当麻", "学园都市", "第二天早上", "手机"]);
   assert.deepEqual(asked.slice(0, 2).map((q) => q.instructions), ["What is names.n1?", "Is names.n1 a proper name?"]);
   assert.deepEqual(detected.map((entry) => [entry.type, entry.category, entry.proper]), [["person", "person", 0.9], ["place", "place", 0.9], ["time", "time", 0.1], ["routine", null, 0.9]], "an everyday thing is no entity");
+  assert.ok(asked[0].options!.includes("concept"), "a concept (an ability, a network) is one of the types");
 });
 
 test("names: a longer name masks the shorter inside it; overlap of names", () => {
@@ -119,6 +120,32 @@ test("EM: a description of a person, a vehicle or a weapon is no one's name (EM�
   assert.equal(chart.exact("学校"), undefined);
   assert.deepEqual(chart.names().map(([name]) => name).sort(), ["上条当麻", "天空之眼", "常盘台中学"].sort());
   assert.deepEqual(chart.entities.get("loc_000001")!.seen, [batch[0].id, batch[2].id], "seen where EM decided it");
+});
+
+test("EM: a concept the story names is an entity, and whose it is is asked until it is known; a fact about it is about its owner", async () => {
+  const chart = new Chart();
+  const fact = sentences("幻想杀手能消除一切异能。", 0), batch = sentences("上条当麻举起右手。幻想杀手消除了攻击。超能力也一样。"), later = sentences("幻想杀手又一次发动了。", 2);
+  const all = [...fact, ...batch, ...later], position = (id: string) => all.findIndex((sentence) => sentence.id === id);
+  const facts = new FactLedger([{ id: "fact:0", first: fact[0].id, last: fact[0].id, sentences: [fact[0].id] }], (id) => all.find((sentence) => sentence.id === id)?.text ?? "", position);
+  chart.mint("person", "person", "上条当麻", [batch[0].id]);
+  const asked: { state: Record<string, unknown>; questions: DecisionQuestion[] }[] = [];
+  const decide = async (state: DecisionState, questions: DecisionQuestion[]) => { asked.push({ state: state as Record<string, unknown>, questions }); return scripted({ "own:concept_000001": ["char_000001", 0.9] })(state, questions); };
+  const results = await resolveBatch(decide, chart, batch, [
+    { key: "n1", text: "幻想杀手", type: "concept", category: "concept", confidence: 1, proper: 0.9, sentences: [batch[1].id] },
+    { key: "n2", text: "超能力", type: "concept", category: "concept", confidence: 1, proper: 0.1, sentences: [batch[2].id] },
+  ], { position, text: () => "", facts });
+  assert.deepEqual(results.map((entry) => [entry.outcome, entry.entity]), [["new", "concept_000001"], ["skip", undefined]], "a concept with no name of its own is no entity");
+  assert.equal(asked.length, 1, "only whose it is is asked");
+  assert.deepEqual(asked[0].questions.map((q) => [q.key, q.options]), [["own:concept_000001", ["char_000001", "many", "none"]]]);
+  assert.deepEqual(Object.keys((asked[0].state as { facts: Record<string, unknown> }).facts), ["fact_000001"], "with the facts that name it");
+  assert.deepEqual(results[0].owner, { answer: "char_000001", confidence: 0.9 });
+  assert.deepEqual(chart.entities.get("concept_000001")!.owners, [{ id: "char_000001", from: batch[1].id, confidence: 0.9 }]);
+  // Known by name and owned: no request.
+  const again = await resolveBatch(decide, chart, later, [{ key: "n1", text: "幻想杀手", type: "concept", category: "concept", confidence: 1, proper: 0.9, sentences: [later[0].id] }], { position, text: () => "", facts });
+  assert.deepEqual([again[0].outcome, asked.length], ["exact", 1]);
+  assert.deepEqual(facts.about(chart, ["char_000001"], position(later[0].id)).map((entry) => entry.id), ["fact_000001"], "a fact about the concept is about its owner");
+  facts.settle(chart, position);
+  assert.deepEqual(facts.facts[0].about, [{ id: "concept_000001", via: "name" }, { id: "char_000001", via: "concept" }]);
 });
 
 test("EM: two new names of one person born in one batch see each other", async () => {

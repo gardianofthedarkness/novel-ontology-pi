@@ -4,7 +4,8 @@ import { mentions, type Chart } from "./em.js";
  * The facts (the user's call, 2026-10-30): the source of truth for every EM. Each fact card of the book is a fact, kept in
  * reading order, so the facts grow as the book does. Who a fact is about is found the way EM finds people: by their names
  * (every proper name EM has given them so far, so a fact read before a name was known is found once it is; a longer name
- * masks the shorter inside it), and by the descriptions EM² resolved in it (linked). EM and EM² ask the ledger, as they run,
+ * masks the shorter inside it), and by the descriptions EM² resolved in it (linked). A fact about a concept (an ability, a
+ * network) is about its owner too. EM and EM² ask the ledger, as they run,
  * for the latest facts about each candidate and about the string being decided, before the place they decide, and give
  * them to Jev as evidence.
  * A fact's time is the latest time node read at or before it. Facts are ordered by reading order for now; once the calendar
@@ -20,8 +21,8 @@ export interface FactEntry {
   order: number;
   /** The latest time node at or before it (settle). */
   time: string | null;
-  /** Who and what it is about (settle): by a name in it, or by a description EM² resolved in it. */
-  about: { id: string; via: "name" | "description" }[];
+  /** Who and what it is about (settle): by a name in it, by a description EM² resolved in it, or as the owner of a concept it names. */
+  about: { id: string; via: "name" | "description" | "concept" }[];
 }
 
 export class FactLedger {
@@ -45,9 +46,10 @@ export class FactLedger {
     return ids;
   }
 
-  /** The latest facts before `before` (a position) that are about any of `ids`, newest first. */
+  /** The latest facts before `before` (a position) that are about any of `ids` (or a concept one of them owns), newest first. */
   about(chart: Chart, ids: string[], before: number, limit = FACT_RECENT): FactEntry[] {
     const names = chart.names(), out: FactEntry[] = [];
+    ids = [...ids, ...[...chart.entities.values()].filter((entity) => entity.owners?.some((owner) => ids.includes(owner.id))).map((entity) => entity.id)];
     for (let index = this.facts.length - 1; index >= 0 && out.length < limit; index--) {
       const fact = this.facts[index];
       if (fact.order >= before) continue;
@@ -75,7 +77,8 @@ export class FactLedger {
     const times = [...chart.times.values()].flatMap((node) => node.seen.map((id) => [position(id), node.id] as const)).sort((a, b) => a[0] - b[0]);
     for (const fact of this.facts) {
       const named = this.named(fact, names), linked = this.linked.get(fact.id) ?? new Set<string>();
-      fact.about = [...[...named].map((id) => ({ id, via: "name" as const })), ...[...linked].filter((id) => !named.has(id)).map((id) => ({ id, via: "description" as const }))];
+      const owners = [...named].flatMap((id) => (chart.entities.get(id)?.owners ?? []).map((owner) => owner.id)).filter((id) => id !== "many" && !named.has(id) && !linked.has(id));
+      fact.about = [...[...named].map((id) => ({ id, via: "name" as const })), ...[...linked].filter((id) => !named.has(id)).map((id) => ({ id, via: "description" as const })), ...[...new Set(owners)].map((id) => ({ id, via: "concept" as const }))];
       const last = fact.order + fact.sentences.length - 1;
       fact.time = times.filter(([at]) => at <= last).at(-1)?.[1] ?? null;
     }

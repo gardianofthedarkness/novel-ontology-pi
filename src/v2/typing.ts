@@ -7,7 +7,8 @@ import { sentencesWith } from "./listing.js";
  * types defined once, the batch's sentences keyed by id and the strings keyed by a short key with the sentences that hold
  * them; each question names its string by path and chooses a type. Types fall into EM's categories: a person, a crowd (a
  * group of people who are there: never a name, EM² places it), a thing (a named object, a weapon, a vehicle), a place
- * (place, building, room), and a time (EM for times is the calendar's). An everyday thing (a phone, a bag, a cleaning robot
+ * (place, building, room), a concept (an ability, a network, a plan: someone's, EM asks whose), and a time (EM for times
+ * is the calendar's). An everyday thing (a phone, a bag, a cleaning robot
  * at its work) is routine: no category, never an entity (the user's rule, 2026-10-30: only important named things,
  * vehicles and weapons).
  */
@@ -21,15 +22,16 @@ export const ENTITY_TYPES = {
   place: "a place in the open: a city, a district, a street, a park, a bridge, a region",
   building: "a building or a structure: a school, a dormitory, a shop, a station, a tower",
   room: "a room or a part inside a building: a classroom, a corridor, a roof, a hall",
+  concept: "a concept the story names: an ability, a power, a technique or a spell, a network or a system, a project or a plan (幻想杀手, 御坂网络); something someone has, uses or runs, not a thing in the hand",
   time: "a time: a date, a day, an hour, a part of the day, a season",
-  none: "none of these: an organisation as such, a power or an ability, a concept, an ordinary word",
+  none: "none of these: an organisation as such, an ordinary word",
 } as const;
 export type EntityType = keyof typeof ENTITY_TYPES;
-export type Category = "person" | "crowd" | "thing" | "place" | "time";
-export const CATEGORY_OF: Record<EntityType, Category | null> = { person: "person", crowd: "crowd", object: "thing", routine: null, weapon: "thing", vehicle: "thing", place: "place", building: "place", room: "place", time: "time", none: null };
+export type Category = "person" | "crowd" | "thing" | "place" | "concept" | "time";
+export const CATEGORY_OF: Record<EntityType, Category | null> = { person: "person", crowd: "crowd", object: "thing", routine: null, weapon: "thing", vehicle: "thing", place: "place", building: "place", room: "place", concept: "concept", time: "time", none: null };
 const TYPE_LABELS: Record<EntityType, string> = {
   person: "a person", crowd: "a crowd or a group of people", object: "an important named thing", routine: "an everyday thing", weapon: "a weapon", vehicle: "a vehicle or a mech",
-  place: "a place in the open", building: "a building", room: "a room or a part of a building", time: "a time", none: "none of these",
+  place: "a place in the open", building: "a building", room: "a room or a part of a building", concept: "an ability, a network or a plan (a concept)", time: "a time", none: "none of these",
 };
 
 /**

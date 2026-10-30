@@ -27,7 +27,7 @@ const clip = (text: string, size: number) => (text.length > size ? `${text.slice
  * before's cards of each world kind). Unnamed people and crowds (EM²'s slots) ride along as `extras`, the things and places
  * that act as `things` (with the scene's unnamed vehicles and weapons), and an action that goes back in time is marked. The
  * roster is the chart: people as characters, places as places, things apart (named things, vehicles and weapons, and the
- * unnamed vehicles and weapons of a scene), and the unnamed people and crowds as extras.
+ * unnamed vehicles and weapons of a scene), concepts with their owners, and the unnamed people and crowds as extras.
  */
 export function worldBase(result: FlowResult, text: (sentence: string) => string) {
   const cardText = (card: { sentences: string[] }) => card.sentences.map(text).join("");
@@ -61,6 +61,7 @@ export function worldBase(result: FlowResult, text: (sentence: string) => string
       ...entities.filter((entity) => entity.category === "thing").map((entity) => ({ id: entity.id, names: namesOf(entity), type: entity.type as string })),
       ...result.slots.filter((slot) => slot.kind === "vehicle" || slot.kind === "weapon").map((slot) => ({ id: slot.id, names: slot.names, type: slot.kind as string, scene: slot.scene })),
     ],
+    concepts: entities.filter((entity) => entity.category === "concept").map((entity) => ({ id: entity.id, names: namesOf(entity), owners: entity.owners ?? [] })),
     extras: result.slots.filter((slot) => slot.kind === "person" || slot.kind === "crowd").map((slot) => ({ id: slot.id, kind: slot.kind, scene: slot.scene, names: slot.names })),
   };
   return { scenes, roster, facts, states: [] as unknown[] };

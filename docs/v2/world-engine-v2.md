@@ -270,6 +270,52 @@ tiling was asked again: 177 work-model requests, 602 Jev, 81 s):
 - The sentence kinds' definition of an action names everyday things as narration; the run used a longer short label for
   action than the one kept (labels stay under 50 characters).
 
+### 2.0.4 Concepts, and whose they are (the user's call, 2026-10-30) — built, not run
+
+Typing took an ability (幻想杀手) and a network (御坂网络) for named objects. A concept is now one of the options: an
+ability, a power, a technique or a spell, a network or a system, a project or a plan, which someone has, uses or runs. The
+listing asks for the concepts the story names; typing has `concept`; EM makes a named concept an entity (`concept_…`, its
+own category, its candidates only concepts), and a concept with no name of its own is no entity. A concept can be owned:
+for the concepts of a batch with no owner yet, one Jev request asks whose each is (the people the passage names, many
+people or a group, or no one's), and a sure answer becomes the concept's owner, kept with the sentence it was said from.
+Until an owner is known, the question comes back the next time the concept appears. A fact about a concept is about its
+owner too: EM and EM² get it among the owner's facts, and the ledger lists the owner (`via: concept`). EM² shows the
+concepts of its passage with their owners as context; a concept never acts, its owner does. Canon has the concepts
+(`Concept`) and `OWNS` from the owner; the world base has them in its roster.
+
+### 2.0.5 Story time and the calendar: how it works now, and the proposal — proposed
+
+**Now, in the v2 reading:** a time word is listed, typed `time`, and EM keeps it as a time node keyed by its exact text,
+with the sentences it is in. So 早上 in chapter 1 and 早上 in chapter 5 are one node, and nothing reads its value. A fact's
+time is the latest time node at or before it, in reading order. EM² can answer that an action line goes back in time (none
+did on vol 1). Nothing decides whether a time word sets the scene's time or is only mentioned, nothing makes story periods,
+and canon has no time at all, so `novel calendar build` finds nothing to place: the calendar of the v2 vol 1 workspace has
+0 periods (and so does the v1 world-first one).
+
+**In the world loop:** the clock counts scenes. Jev says when each scene is against the one before, among the relations
+the laws allow (carrying on, later, the same time elsewhere, a flashback, back to the present), and keeps the time words
+the scene names as its time node. That is the only story time the engine has.
+
+**What exists from v1** (the time-place faculty and the calendar, never run on these workspaces): the time lexicon reads
+a time word's value (a date, a clock time, a part of the day, "the next day", "three years ago"); Jev gives each time word
+that could set a scene's time a role (ADVANCE, FLASHBACK, RETURN, REFERENCE); code makes story periods from them (an anchor
+until the next one, a flashback stack, story order, a date derived only from stated words); periods become TimePoints with
+scenes OCCURS_DURING them; the calendar places every period of a universe on one clock (Year 1 relative; a stated or
+derived day, at its clock time or part of the day; an undated period as a range between dated neighbours; a date that
+contradicts story order reported, never reordered).
+
+**The proposal** (for approval, then one vol 1 run to check it):
+1. Each time word where it stands, with its value from the lexicon, not one node per text.
+2. In EM²'s existing request per batch (no extra requests), a `time:` question per time word of the batch: the four
+   roles, with the current period, its date, and an open flashback in the document. Flashbacks then come from time words
+   too, not only from action lines.
+3. The v1 assembly code makes the periods; canon writes TimePoints and OCCURS_DURING; the calendar is built from them, with
+   no model.
+4. Each fact's time is its period, and the ledger orders facts by story time on the calendar: the latest facts before a
+   decision are the latest in the story, a flashback's facts sort into the past, an update comes after what it updates.
+5. Checked on vol 1: the periods with their dates and flashbacks, the conflicts, a time strip per scene on the data page,
+   and the world loop's "when" answers against the calendar's order.
+
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
 kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record
 it is part of (the book's text is in it: never public).
@@ -368,8 +414,9 @@ v2 makes each a structured request:
    request per theme (21 things: 0.42 s, 17 of 21 the same as one request each); the stretch before the first event
    explained (the line's loads, above). Then EM² (§2.0.1): roles and slots, on vol 1 (35 people; 1,561 of 2,272 lines
    with a sure speaker or actor), and the reading's data page. Then the fact ledger as the evidence of both EMs, the action
-   rule, and crowds (§2.0.2). Then things: only named things, vehicles and weapons (§2.0.3). Not yet run through the world
-   engine.
+   rule, and crowds (§2.0.2). Then things: only named things, vehicles and weapons (§2.0.3). Then concepts and their
+   owners (§2.0.4, not run yet); the calendar's proposal (§2.0.5) and the context composing engine's design
+   ([context-engine.md](context-engine.md)), both for approval. Not yet run through the world engine.
 1. Movement on structured states in the pick loop (each person's spot now from the engine); births and meetings of the
    line's load as structured requests too (one per scene, not one per person on a picture), and kept across the reload
    after models.

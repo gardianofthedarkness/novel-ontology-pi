@@ -6,10 +6,11 @@ import type { FlowResult } from "./flow.js";
  * - scenes: the tiles, each with its cards' people (mentioned, not present: presence is the world loop's) and its
  *   exchange and monologue cards as dialogue cards (their people: who speaks, who is spoken to, who is named);
  * - entities: the chart's people, places and things (Character, Location, Item), proper names first, descriptions kept apart;
- * - events: the action cards, in reading order, each with its people as its actors (who acts first; PARTICIPATES_IN).
+ * - events: the action cards, in reading order, each with its people as its actors (who acts first; PARTICIPATES_IN);
+ * - concepts (Concept) and whose they are (OWNS, from the owner).
  * Times are not canon yet (EM for times is the calendar's); slots (unnamed people) are not canon.
  */
-const KIND = { person: "Character", place: "Location", thing: "Item" } as const;
+const KIND = { person: "Character", place: "Location", thing: "Item", concept: "Concept" } as const;
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
 const RANK = { speaks: 0, acts: 0, addressed: 1, named: 2, described: 2 } as const;
 
@@ -53,13 +54,16 @@ export function canonRecords(result: FlowResult, text: (sentence: string) => str
     return {
       id: entity.id, kind: KIND[entity.category as keyof typeof KIND], confidence: 0.7,
       names: names.map((name, index) => ({ text: name, lang: "zh", kind: index === 0 ? "canonical" : "alias" })),
-      properties: { v2Type: entity.type, firstSentenceId: entity.first, descriptions: entity.names.filter((name) => !entity.proper.includes(name)) },
+      properties: { v2Type: entity.type, firstSentenceId: entity.first, descriptions: entity.names.filter((name) => !entity.proper.includes(name)), ...(entity.owners?.length ? { owners: entity.owners } : {}) },
     };
   });
   const events = actionEvents(result).map(({ id, card }, index) => {
     const body = card.sentences.map(text).join("");
     return { id, timelineId: "tl_canon", chapterIndex: sceneOf.get(card.first)?.chapter ?? 0, chronologicalOrder: index + 1, eventType: "other", summaryEn: clip(body, 140), evidence: { text: body, sentenceIds: card.sentences }, importance: 0.5, primaryActors: people(card), affectedCharacters: [], confidence: 0.7 };
   });
-  const relations = events.flatMap((event) => event.primaryActors.map((actor) => ({ fromId: actor, toId: event.id, type: "PARTICIPATES_IN", properties: {}, confidence: 0.7 })));
+  const relations = [
+    ...events.flatMap((event) => event.primaryActors.map((actor) => ({ fromId: actor, toId: event.id, type: "PARTICIPATES_IN", properties: {}, confidence: 0.7 }))),
+    ...[...result.chart.entities.values()].flatMap((entity) => (entity.owners ?? []).filter((owner) => result.chart.entities.has(owner.id)).map((owner) => ({ fromId: owner.id, toId: entity.id, type: "OWNS", properties: { from: owner.from }, confidence: owner.confidence }))),
+  ];
   return { scenes, entities, events, relations };
 }

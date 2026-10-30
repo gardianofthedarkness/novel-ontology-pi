@@ -20,6 +20,10 @@ import type { Category, Decide, Detected, EntityType } from "./typing.js";
  * 3. Otherwise the recommender scores the chart's entities of the string's category: by how near before it, and how often,
  *    each appears (and by the names they share), the best three; and the facts (facts.ts, the source of truth): the latest
  *    ones about each candidate, and the latest ones that hold the string itself.
+ * A concept (an ability, a power, a network, a plan: 幻想杀手, 御坂网络) is an entity when the story names it, and it can be
+ * someone's (the user's call, 2026-10-30): a concept of the batch with no owner yet is asked whose it is, one request a
+ * batch (the people the passage names, many people or a group, or no one's), and keeps its owners with the sentence each
+ * was said from. A fact about a concept is about its owner too (facts.ts).
  * 4. Jev decides, one structured request per group of strings (groups of a batch in parallel): the batch's sentences, the
  *    strings, their candidates and the facts, keyed once; each string chooses a candidate, another string of the batch
  *    (two new names of one person born together), or new. Below EM_ACCEPT it is new, with its best candidate kept for the
@@ -31,8 +35,10 @@ export const EM_WINDOW = 80, EM_TOP = 3;
 /** Strings a Jev request decides (each with up to three candidates and their facts). */
 export const EM_GROUP = 16;
 
-/** `names`: every name EM gave it; `proper`: the ones that are its names anywhere (exact match, the card scan). */
-export interface ChartEntity { id: string; category: Category; type: EntityType; names: string[]; proper: string[]; first: string; seen: string[] }
+/** Whose a concept is: a person, or `many` (many people share it, or a group runs it); from the sentence it was said in. */
+export interface Owner { id: string; from: string; confidence: number }
+/** `names`: every name EM gave it; `proper`: the ones that are its names anywhere (exact match, the card scan); `owners`: a concept's. */
+export interface ChartEntity { id: string; category: Category; type: EntityType; names: string[]; proper: string[]; first: string; seen: string[]; owners?: Owner[] }
 export interface TimeNode { id: string; text: string; seen: string[] }
 export interface EmResult {
   key: string; text: string; type: EntityType; category: Category | null;
@@ -42,10 +48,12 @@ export interface EmResult {
   sentences?: string[];
   /** The facts Jev was given for it (fact ids). */
   facts?: string[];
+  /** A concept: whose it is, as asked in this batch (a person, many, or none). */
+  owner?: { answer: string; confidence: number };
 }
 
 /** Ids as the canon's (the chart is the ontology's identity: a v2 workspace's entities are these). */
-const PREFIX: Record<Category, string> = { person: "char_", crowd: "crowd_", thing: "item_", place: "loc_", time: "time_" };
+const PREFIX: Record<Category, string> = { person: "char_", crowd: "crowd_", thing: "item_", place: "loc_", concept: "concept_", time: "time_" };
 /** A proper name (typing's answer, at even odds or better). */
 const isProper = (detected: Detected) => (detected.proper ?? 1) >= 0.5;
 
@@ -53,7 +61,7 @@ export class Chart {
   readonly entities = new Map<string, ChartEntity>();
   readonly times = new Map<string, TimeNode>();
   private readonly byName = new Map<string, string>();
-  private readonly count: Record<Category, number> = { person: 0, crowd: 0, thing: 0, place: 0, time: 0 };
+  private readonly count: Record<Category, number> = { person: 0, crowd: 0, thing: 0, place: 0, concept: 0, time: 0 };
 
   exact(text: string): ChartEntity | undefined {
     const id = this.byName.get(text);
@@ -131,7 +139,11 @@ export function recommend(chart: Chart, detected: Detected, position: (sentence:
   return scored.sort((a, b) => b.score - a.score).slice(0, top);
 }
 
-const describe = (entity: ChartEntity) => entity.names.slice(0, 4).join(" / ");
+/** The concepts' owners and the people as a request names them. */
+const label = (chart: Chart, id: string) => id === "many" ? "many people, or a group" : chart.entities.get(id)?.proper[0] ?? chart.entities.get(id)?.names[0] ?? id;
+const describe = (entity: ChartEntity, chart?: Chart) => entity.names.slice(0, 4).join(" / ") + (chart && entity.owners?.length ? ` (${label(chart, entity.owners[entity.owners.length - 1].id)}'s)` : "");
+/** People a concept's owner question offers (the ones the passage names, and the concept's owner so far). */
+export const OWNER_PEOPLE = 12;
 
 /** The structured document a group's EM questions are about. */
 export function emDocument(chart: Chart, batch: Sentence[], group: { detected: Detected; candidates: string[]; peers: string[] }[], facts: Record<string, { about: string[]; text: string }>, text: (sentence: string) => string) {
@@ -140,7 +152,7 @@ export function emDocument(chart: Chart, batch: Sentence[], group: { detected: D
     task: "Names found in a passage of a novel. For each, say who or what it is: one of its candidates (the people, things and places the story has had so far), the same as another name of this passage, or new. The facts are what the book has stated so far about the candidates and the names (each says what it is about): they are the truth, trust them over how the names look.",
     passage: Object.fromEntries(batch.map((sentence) => [sentence.id, sentence.text])),
     names: Object.fromEntries(group.map(({ detected }) => [detected.key, { text: detected.text, type: detected.type, in: detected.sentences }])),
-    candidates: Object.fromEntries(ids.map((id) => { const entity = chart.entities.get(id)!; const last = entity.seen[entity.seen.length - 1]; return [id, { names: entity.names, type: entity.type, seen: entity.seen.length, last: last ? text(last).slice(0, 160) : "" }]; })),
+    candidates: Object.fromEntries(ids.map((id) => { const entity = chart.entities.get(id)!; const last = entity.seen[entity.seen.length - 1]; return [id, { names: entity.names, type: entity.type, ...(entity.owners?.length ? { of: label(chart, entity.owners[entity.owners.length - 1].id) } : {}), seen: entity.seen.length, last: last ? text(last).slice(0, 160) : "" }]; })),
     ...(Object.keys(facts).length ? { facts } : {}),
   };
 }
@@ -160,6 +172,7 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
     if (known) { chart.see(known.id, entry.sentences); results.set(entry.key, { ...base, outcome: "exact", entity: known.id }); continue; }
     if (entry.category === "crowd" || (!isProper(entry) && (entry.category === "person" || entry.type === "vehicle" || entry.type === "weapon"))) { results.set(entry.key, { ...base, outcome: "description", sentences: entry.sentences }); continue; }
     if (entry.category === "thing" && !isProper(entry)) { results.set(entry.key, { ...base, outcome: "routine" }); continue; }
+    if (entry.category === "concept" && !isProper(entry)) { results.set(entry.key, { ...base, outcome: "skip" }); continue; }
     const scores = recommend(chart, entry, context.position);
     pending.push({ detected: entry, candidates: scores.map((score) => score.id), scores, peers: [] });
   }
@@ -181,7 +194,7 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
       key: `em:${entry.detected.key}`, primitive: "choice" as const,
       instructions: `Who or what is names.${entry.detected.key}? One of its candidates (in candidates), the same as another name of the passage, or new.`,
       options: [...entry.candidates, ...entry.peers, "new"],
-      optionHints: Object.fromEntries([...entry.candidates.map((id) => [id, describe(chart.entities.get(id)!)]), ...entry.peers.map((key) => [key, `the same as names.${key} (${peerText.get(key)})`]), ["new", "not one of these: someone or something new"]]),
+      optionHints: Object.fromEntries([...entry.candidates.map((id) => [id, describe(chart.entities.get(id)!, chart)]), ...entry.peers.map((key) => [key, `the same as names.${key} (${peerText.get(key)})`]), ["new", "not one of these: someone or something new"]]),
     })));
     for (const entry of group) {
       const reply = replies.find((item) => item.key === `em:${entry.detected.key}`);
@@ -216,5 +229,42 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
   for (const entry of [...pending].sort((a, b) => b.detected.text.length - a.detected.text.length)) settle(entry.detected.key, new Set());
   // An unsure answer that was another name of the batch is kept as that name's entity.
   for (const result of results.values()) if (result.unsure && entityOf.has(result.unsure)) result.unsure = entityOf.get(result.unsure);
+  await askOwners(decide, chart, batch, [...results.values()], context);
   return detected.map((entry) => results.get(entry.key)!);
+}
+
+/**
+ * Whose each concept of the batch is, for the ones with no owner yet: one request. The options are the people the passage
+ * names, many (people share it, or a group runs it) and none (no one's, or the passage does not say); a sure person or
+ * many is the concept's owner from its first sentence here.
+ */
+async function askOwners(decide: Decide, chart: Chart, batch: Sentence[], results: EmResult[], context: { position: (sentence: string) => number; facts: FactLedger }): Promise<void> {
+  const asked = new Map<string, EmResult[]>();
+  for (const result of results) {
+    const entity = result.entity ? chart.entities.get(result.entity) : undefined;
+    if (entity?.category === "concept" && !entity.owners?.length) asked.set(entity.id, [...(asked.get(entity.id) ?? []), result]);
+  }
+  if (!asked.size) return;
+  const names = chart.names().filter(([, id]) => chart.entities.get(id)?.category === "person");
+  const people = [...new Set(batch.flatMap((sentence) => mentions(sentence.text, names).map((hit) => hit.id)))].slice(0, OWNER_PEOPLE);
+  const sentencesOf = (id: string) => [...new Set(asked.get(id)!.flatMap((result) => batch.filter((sentence) => sentence.text.includes(result.text)).map((sentence) => sentence.id)))];
+  const before = context.position(batch[0]?.id ?? "");
+  const facts = factEvidence([...asked.keys()].flatMap((id) => chart.entities.get(id)!.proper.flatMap((name) => context.facts.holding(name, before, FACT_RECENT).map((fact) => ({ fact, for: id })))));
+  const state = {
+    task: "Concepts a passage of a novel names: abilities, powers, techniques, networks, systems, plans. For each, say whose it is: the person who has it, uses it or runs it; many people or a group; or no one's (it is general, or the passage does not say). The facts are what the book has stated so far about them: trust them.",
+    passage: Object.fromEntries(batch.map((sentence) => [sentence.id, sentence.text])),
+    concepts: Object.fromEntries([...asked.keys()].map((id) => [id, { name: label(chart, id), in: sentencesOf(id) }])),
+    people: Object.fromEntries(people.map((id) => [id, label(chart, id)])),
+    ...(Object.keys(facts).length ? { facts } : {}),
+  };
+  const replies = await decide(state, [...asked.keys()].map((id) => ({
+    key: `own:${id}`, primitive: "choice" as const, instructions: `Whose is concepts.${id}?`, options: [...people, "many", "none"],
+    optionHints: { ...Object.fromEntries(people.map((person) => [person, label(chart, person)])), many: "many people share it, or a group runs it", none: "no one's: it is general, or the passage does not say whose" },
+  })));
+  for (const [id, entries] of asked) {
+    const reply = replies.find((entry) => entry.key === `own:${id}`), value = String(reply?.value ?? "none");
+    const confidence = Number(Number(reply?.distribution?.[value] ?? reply?.confidence ?? 0).toFixed(3));
+    for (const result of entries) result.owner = { answer: value, confidence };
+    if (value !== "none" && confidence >= EM_ACCEPT && (value === "many" || people.includes(value))) chart.entities.get(id)!.owners = [{ id: value, from: sentencesOf(id)[0] ?? batch[0]?.id ?? "", confidence }];
+  }
 }

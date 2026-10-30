@@ -19,7 +19,8 @@ import type { Decide } from "./typing.js";
  * unnamed crowd of the scene (小混混, 追击者, 警备员们), never a name of anyone; one that means people in general (学生 as
  * students at large) is no one. A line may point at whoever a description of the passage means, at someone unnamed, or at
  * no one. A habit (what a description has meant, in whose lines) is shown with it next time: a prior, never an exact match.
- * The facts (facts.ts, the source of truth) come along: the latest ones about the cast, and the ones that hold each
+ * The concepts the passage names (an ability, a network) come along with whose they are, as context: a concept never acts,
+ * its owner does. The facts (facts.ts, the source of truth) come along: the latest ones about the cast, and the ones that hold each
  * description; a description resolved to a person in a fact makes that fact about the person from then on.
  */
 /** Sentences a request asks about; answers below ROLE_ACCEPT are no one sure (a description: an unnamed person). */
@@ -124,6 +125,8 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
       const people = [...cast, ...offered.map((slot) => slot.id)];
       const namedThings = [...new Set(passage.flatMap((id) => input.named.get(id) ?? []).filter((id) => categoryOf(id) === "thing" || categoryOf(id) === "place"))].slice(0, CAST_THINGS);
       const things = [...namedThings, ...offeredThings.map((slot) => slot.id)];
+      // The concepts the passage names (an ability, a network) and whose they are: context, never an actor (its owner acts).
+      const concepts = [...new Set(passage.flatMap((id) => input.named.get(id) ?? []).filter((id) => categoryOf(id) === "concept"))];
       // The things a vehicle's or a weapon's description may mean: the named ones of its type, and the scene's unnamed ones.
       const ofType = (type: string) => things.filter((id) => chart.entities.get(id)?.type === type || slotOf.get(id)?.kind === type);
       const lineDescs = descs.filter((desc) => !OF_THINGS.has(desc.type));
@@ -146,6 +149,7 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
           ...namedThings.map((id) => [id, { name: label(id), is: chart.entities.get(id)!.type }]),
           ...offeredThings.map((slot) => [slot.id, { name: `(unnamed ${slot.kind}) ${slot.label}`, ...(slot.names.length > 1 ? { also: slot.names.slice(1, 4) } : {}), from: slot.scene === scene.id ? "this scene" : "the scene before" }]),
         ]) } : {}),
+        ...(concepts.length ? { concepts: Object.fromEntries(concepts.map((id) => { const owner = chart.entities.get(id)!.owners?.at(-1)?.id; return [id, { name: label(id), ...(owner ? { of: owner === "many" ? "many people, or a group" : label(owner) } : {}) }]; })) } : {}),
         ...(Object.keys(facts).length ? { facts } : {}),
         ...(before.length ? { before: Object.fromEntries(before.map((id) => { const role = roles[id]; return [id, { text: clip(text(id), 60), who: role.who.id ? label(role.who.id) : role.who.answer === "time" ? "a flashback" : "no one", ...(role.to ? { to: role.to.id ? label(role.to.id) : "no one" } : {}) }]; })) } : {}),
         passage: Object.fromEntries(passage.map((id) => [id, text(id)])),
