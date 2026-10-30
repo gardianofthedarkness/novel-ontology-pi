@@ -351,6 +351,14 @@ Jev calls for vol 1 (77 scenes, 610 events, 73 dialogue cards, 31 named characte
 
 Each call takes about 0.1–0.5 s. Composed contexts make each call longer, but there are no more calls than today's separate faculties, and in-book causality and its sweeps go entirely.
 
+### 13a. Structured input for the engine (explored 2026-10-30)
+
+Measured on the last recorded pick (vol 1, scenes 2–5, 36 events, Jev 1.14) and a copy of its workspace:
+- **Jev is not the cost.** The pick took 449 s; Jev answered in 28 s of it. Each event question waited 2–6 s for the pick loop to replay the engine from the line's start (1.5 s at scene 4) and reopen the 3D page in headless Chrome (3.7 s) to draw the picture it asks on. A full-line load measures about 15 s (engine 9.8 s, Chrome 5 s); the 222 s before the first event question is not yet accounted for.
+- **Movement asks on a structured state instead of a picture**: the place, its spots by id with what each is, who stands at which spot now, the scene's text, the events so far and this one. The same 211 questions per kind took 4.4 s instead of 22.8 s, with no Chrome. Confidence in where a person ends up rose from 0.25 (on the picture, with 8 spots) to 0.93; the answers follow the text (the rooftop when 美琴 jumps onto a five-storey building, people who only talk stay). Whether someone moves agrees 91%, which way 96%. The test lacked each person's real spot at a scene's start (the engine would give it).
+- **One request per scene** (every event's end spot at once) is 7× faster again but far less sure (0.46 against 0.92): who stands where after each event matters, so the chain of events stays.
+- Pictures stay where only a picture can answer: box questions (where a thing stands, where a fight hits) and the model catalog, whose 24 one-question calls can be one request.
+
 ## 14. Building it, and the first live test
 
 1. **Base layer, live:** the review-free faculties run on vol 1 from its source with no gate: scenes, exchanges (with the split rule), names, EM at birth, events, summaries and states. They write the base layer the world reads.
