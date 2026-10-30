@@ -32,6 +32,20 @@ const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 const ELSEWHERE = 'another place the text does not name', NOBODY_NAMED = 'someone not named here';
 /** Places of these scales are areas: a scene in one is at a spot inside it (a building or a street of its own). */
 const AREAS = new Set(['region', 'city', 'district', 'street']);
+/** What kind of building an indoor spot is, as the stage builds it (a school with classrooms, a dormitory with a room per person on every floor…). */
+export const BUILDINGS = {
+  school: 'a school or academy: classrooms off corridors, on a few floors',
+  dormitory: 'a student dormitory or an apartment block: a room per person on every floor',
+  house: 'a house or a small home',
+  hospital: 'a hospital or clinic: wards on several floors',
+  office: 'an office building, a laboratory, a police or security post',
+  mall: 'a department store or shopping centre: shops on several floors',
+  shop: 'a small shop, restaurant, café or bar at street level',
+  station: 'a train or subway station',
+  church: 'a church or temple',
+  skyscraper: 'a tall tower',
+  warehouse: 'a warehouse, factory, hangar or garage',
+};
 /** At most this many epithets are asked about in a scene, against this many named people. */
 const EPITHETS = 4, NAMED = 8;
 /** Two people in at least TRACE_MIN scenes each, in the same scenes this much of the time, are asked about again (one person?). */
@@ -163,7 +177,16 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     if (!place || isArea(place)) {
       const before = previous?.place && areaOf.get(previous.place) === area ? previous.place : null;
       if (place && before && sameSpot) place = before;
-      else { const host = area && isArea(area) ? area : null; place = `spot:${scene.id}`; world.places[place] = { label: `${indoors ? 'a building' : 'a street'}${host ? ` in ${labelOf(host)}` : ''} (scene ${scene.index + 1})`, scale: indoors ? 'building' : 'street', parent: host, spot: true }; }
+      else {
+        const host = area && isArea(area) ? area : null; place = `spot:${scene.id}`;
+        world.places[place] = { label: `${indoors ? 'a building' : 'a street'}${host ? ` in ${labelOf(host)}` : ''} (scene ${scene.index + 1})`, scale: indoors ? 'building' : 'street', parent: host, spot: true };
+        // A new indoor spot: what kind of building it is, from the scene in its context (asked once, when the world makes it).
+        if (indoors) {
+          const [kind] = await jev.decide(compose({ world: worldLines(), story: storyLines(), text, focus: `This scene happens indoors${host ? ` in ${labelOf(host)}` : ''}. What happens in it:\n${events || '- (none recorded)'}` }), [{ key: 'building', primitive: 'choice', instructions: 'What kind of building does this scene happen in? Judge by what the text shows of it (its rooms, who is there, what they do).', options: Object.keys(BUILDINGS), optionHints: BUILDINGS }]);
+          world.places[place].building = kind?.value in BUILDINGS ? kind.value : 'office';
+          if (kind?.confidence !== undefined) world.places[place].buildingSure = Math.round(kind.confidence * 100) / 100;
+        }
+      }
     }
     areaOf.set(place, world.places[place]?.parent ?? (isArea(place) ? place : areaOf.get(place) ?? place));
     // When, by the laws; the time the text names, from the time lexicon (outside quotes first).

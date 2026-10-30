@@ -50,8 +50,8 @@ export interface World {
 }
 
 const KIND_OF: Record<string, SkeletonKind> = { skyscraper: "tower", tower: "tower", office: "tower", "block-wide": "school", hall: "school", school: "school", hospital: "school", station: "school", stadium: "school", warehouse: "school", factory: "school", keep: "tower" };
-const ROLE_SIZE: Record<BuildingRole, [number, number]> = { office: [12, 10], shop: [7, 6], hospital: [15, 9], station: [15, 8] };
-const ROLE_KIND: Record<BuildingRole, SkeletonKind> = { office: "tower", shop: "house", hospital: "school", station: "school" };
+const ROLE_SIZE: Record<BuildingRole, [number, number]> = { office: [12, 10], shop: [7, 6], hospital: [15, 9], station: [15, 8], school: [18, 10], home: [11, 8], mall: [18, 14] };
+const ROLE_KIND: Record<BuildingRole, SkeletonKind> = { office: "tower", shop: "house", hospital: "school", station: "school", school: "school", home: "tower", mall: "school" };
 const roleOf = (kind: string, floors: number): BuildingRole => (KIND_OF[kind] === "tower" || floors >= 8 ? "office" : KIND_OF[kind] === "school" ? "station" : "shop");
 const seedOf = (text: string) => [...text].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7);
 

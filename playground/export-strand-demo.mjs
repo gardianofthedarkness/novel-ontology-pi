@@ -41,7 +41,11 @@ export function fitInCast(form, cast, natural) {
   const [nw, nh, nd] = SHAPES[form] ?? SHAPES.box;
   return { sx: cast.w / nw, sy: cast.h / nh, sz: cast.d / nd, turn: 0, stand: false, w: cast.w, h: cast.h, d: cast.d, y0: cast.y0 };
 }
-const ROLE_OF = { hospital: 'hospital', station: 'station', office: 'office', skyscraper: 'office', school: 'office', home: 'shop', market: 'shop' };
+const ROLE_OF = { hospital: 'hospital', station: 'station', office: 'office', skyscraper: 'office', school: 'school', home: 'home', market: 'shop', church: 'station' };
+/** Floors of a named building by its kind (novel stage architecture). */
+const FLOORS_OF = { skyscraper: 16, office: 10, school: 4, home: 8, hospital: 6, market: 2, station: 2, church: 2 };
+/** A world-first spot's building (the world loop's choice when it made the spot): its role in the world and its floors. */
+const BUILDING_OF = { school: ['school', 4], dormitory: ['home', 8], house: ['home', 2], hospital: ['hospital', 6], office: ['office', 10], mall: ['mall', 5], shop: ['shop', 2], station: ['station', 2], church: ['station', 2], skyscraper: ['office', 16], warehouse: ['station', 2] };
 /** Edge-cost factors by kind [walk, climb, descend, jump, fall, sky arc]: a fall is cheap only for someone falling; jumps and arcs for someone running or falling. */
 const FACTORS = { walk: [1, 1, 1, 3, 6, 3], run: [1, 1, 1, 1, 4, 1], fall: [1, 1, 1, 1, 0.15, 1] };
 const classOf = how => how === 'fall' ? 'fall' : how === 'run' ? 'run' : 'walk';
@@ -429,7 +433,12 @@ export async function strandDemo(novelDir, options) {
     return best && LANDSCAPES[best.type]?.era === 'ancient' ? 'ancient' : 'modern';
   };
   // The world: every staged place an anchor on its canvas spot (a staged building stands there; an open place is its ground).
-  const anchors = [...ownGrids].map(id => { const node = macroOf.get(id), own = kindOf(id) === 'site', kind = inputs.architecture?.places[id]?.kind; return { place: id, label: name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role: ROLE_OF[kind] ?? 'office', floors: kind === 'skyscraper' ? 12 : 6, era: themeAt(node?.spotX ?? 0, node?.spotZ ?? 0) }; });
+  // A named building's role and floors by its kind (architecture); a world-first spot's by the building the world said it is.
+  const anchors = [...ownGrids].map(id => {
+    const node = macroOf.get(id), own = kindOf(id) === 'site', kind = inputs.architecture?.places[id]?.kind, [role, floors] = BUILDING_OF[worldScript?.places?.[id]?.building] ?? [ROLE_OF[kind] ?? 'office', FLOORS_OF[kind] ?? 6];
+    return { place: id, label: name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role, floors, era: themeAt(node?.spotX ?? 0, node?.spotZ ?? 0) };
+  });
+  notes.buildings = Object.fromEntries(Object.entries(anchors.filter(anchor => anchor.own).reduce((count, anchor) => ({ ...count, [anchor.role]: (count[anchor.role] ?? 0) + 1 }), {})));
   world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors });
   shared.layout = { id: 'world', kind: 'world', lots: world.lots };
   // Damage other story lines left on the world (stage/simulation/world.json, from their accepted runs): applied in story order,
@@ -659,15 +668,25 @@ export async function strandDemo(novelDir, options) {
     const who = name(handoff.person), context = entry.context ?? '';
     const around = world.lots.filter(lot => Math.abs((lot.i0 + lot.nx / 2) * 2 - anchor.x) <= radius && Math.abs((lot.j0 + lot.nz / 2) * 2 - anchor.z) <= radius);
     const top = Math.min(12, Math.max(1, ...around.map(lot => lot.floors)));
-    const levels = [['outside, at street level', null], ['inside a building, on the ground floor', 0], ...Array.from({ length: top - 1 }, (_, n) => [`inside a building, on floor ${n + 2}`, n + 1]), ['on a roof', 'roof']];
-    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins: outside, on which floor of a building, or on a roof?`, options: levels.map(([label]) => label) }]);
-    const floor = levels.find(([label]) => label === level?.value)?.[1] ?? null, inside = typeof floor === 'number';
-    const picture = mapPicture(world, { x: anchor.x, z: anchor.z, radius, people: peopleAt(scene.placeId, handoff.person, inside ? floor : null), floor: inside ? floor : null });
+    // In a room on a floor the text does not give: a floor drawn at random (the same for this person and scene every run)
+    // among the floors of the scene's own building, or of the tallest building around when the scene has none.
+    const ROOM = 'inside a building, in a room, on a floor the text does not say';
+    const levels = [['outside, at street level', null], ['inside a building, on the ground floor', 0], ...Array.from({ length: top - 1 }, (_, n) => [`inside a building, on floor ${n + 2}`, n + 1]), [ROOM, 'room'], ['on a roof', 'roof']];
+    const [level] = await jev.decide(context, [{ key: 'level', primitive: 'choice', instructions: `Where is ${who} when this scene begins: outside, on which floor of a building (or in a room on a floor the text does not say), or on a roof?`, options: levels.map(([label]) => label) }]);
+    let floor = levels.find(([label]) => label === level?.value)?.[1] ?? null, own = null;
+    if (floor === 'room') { const index = groups.get(scene.placeId).main?.(); own = index != null ? world.lots[index] : null; const floors = own ? own.floors : top; floor = Math.min(floors - 1, Math.floor(stream(`${scene.id}|${handoff.person}|floor`)() * floors)); notes.roomFloors = [...(notes.roomFloors ?? []), floor + 1]; }
+    const inside = typeof floor === 'number';
+    // A floor drawn for the scene's own building: the slice is of that building, close up, so the box picks one of its rooms.
+    const centre = own ? { x: (own.i0 + own.nx / 2) * 2, z: (own.j0 + own.nz / 2) * 2, r: Math.max(own.nx, own.nz) + 6 } : { x: anchor.x, z: anchor.z, r: radius };
+    const picture = mapPicture(world, { x: centre.x, z: centre.z, radius: centre.r, people: peopleAt(scene.placeId, handoff.person, inside ? floor : null), floor: inside ? floor : null });
     const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: inside ? `Which room on this floor is ${who} in when this scene begins? Box that room.` : `Where on this map is ${who} when this scene begins?` }, { key: 'on', primitive: 'noul', instructions: `Is where ${who} is when this scene begins somewhere on this picture?` }], { images: { map: picture.png } });
     notes.worldStarts = (notes.worldStarts ?? 0) + 1;
     const box = asked.find(answer => answer.key === 'box')?.box, on = Number(asked.find(answer => answer.key === 'on')?.value ?? 0);
-    if (!box || on < 0.3) return null;
-    const point = picture.at(box), index = world.lotAt.get(W.cellKey(Math.floor(point.x / 2), Math.floor(point.z / 2))), lot = index === undefined ? null : world.lots[index], built = graphOf(point);
+    // In the scene's own building (a drawn floor) they are there by the scene: without a box, the middle of its floor.
+    if (!own && (!box || on < 0.3)) return null;
+    const point = box ? picture.at(box) : { x: centre.x, z: centre.z }, index = world.lotAt.get(W.cellKey(Math.floor(point.x / 2), Math.floor(point.z / 2))), boxed = index === undefined ? null : world.lots[index], built = graphOf(point);
+    // The box missed the building whose floor was drawn (a roof, the street): the nearest room on that floor of that building.
+    const lot = own && !(boxed && boxed.floors > floor) ? own : boxed;
     let node = null, room = null;
     if (inside && lot && lot.floors > floor) {
       const ci = Math.floor(point.x / 2) - lot.i0, cj = Math.floor(point.z / 2) - lot.j0, rooms = (lot.rooms ?? []).map((box, n) => ({ box, n })).filter(entry => entry.box.floor === floor);
@@ -687,7 +706,7 @@ export async function strandDemo(novelDir, options) {
     node ??= W.nodeNear(world, built, point.x, point.z, floor === 'roof' && lot ? lot.floors : inside ? floor : 0);
     if (node == null) return null;
     notes.bornInRooms = (notes.bornInRooms ?? 0) + (room && node != null ? 1 : 0);
-    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: level?.value ?? null, at: [Math.round(point.x), Math.round(point.z)], ...(room ? { room: room.n, building: lot.source } : {}) });
+    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: level?.value ?? null, ...(inside ? { floor: floor + 1 } : {}), at: [Math.round(point.x), Math.round(point.z)], ...(room ? { room: room.n, building: lot.source } : {}) });
     return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, [node, 0], `${scene.id}|${handoff.person}`) : [node, 0];
   };
   /** Walk someone to a node, the way the engine walks a move. */
@@ -718,15 +737,22 @@ export async function strandDemo(novelDir, options) {
       return mid == null ? {} : { label: 'met', targets: { [a]: mid, [b]: besideNode(scene.placeId, mid) } };
     }
     if (node.kind === 'group') {
-      const { anchor } = groups.get(scene.placeId), picture = mapPicture(world, { x: anchor.x, z: anchor.z, radius: 48, people: peopleAt(scene.placeId) });
-      const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: `Where on this map do ${node.parties.map(name).join('、')} and the others with them gather to talk together?` }], { images: { map: picture.png } });
+      // A group talks where most of it already is: on that floor (a slice through the buildings there when it is indoors),
+      // round the middle of those on it; a group already together on one floor does not move.
+      const members = [...new Set([...node.parties, ...node.listeners])].filter(posOf), at = members.map(id => W.nodePos(world, posOf(id)[0]));
+      if (!at.length) return {};
+      const floors = at.reduce((count, p) => count.set(p.k, (count.get(p.k) ?? 0) + 1), new Map()), k = [...floors].sort((x, y) => y[1] - x[1])[0][0], on = at.filter(p => p.k === k);
+      const mid = { x: on.reduce((sum, p) => sum + p.x, 0) / on.length, z: on.reduce((sum, p) => sum + p.z, 0) / on.length };
+      if (at.every(p => p.k === k && Math.hypot(p.x - mid.x, p.z - mid.z) <= TALK)) { notes.groupsTogether = (notes.groupsTogether ?? 0) + 1; return {}; }
+      const indoors = on.some(p => world.lotAt.has(W.cellKey(p.i, p.j)));
+      const picture = mapPicture(world, { x: mid.x, z: mid.z, radius: 48, people: peopleAt(scene.placeId, null, k), ...(indoors ? { floor: k } : {}) });
+      const asked = await jev.decide(`${context}\n\n${picture.legend}`, [{ key: 'box', primitive: 'box', instructions: `Where on this ${indoors ? 'floor' : 'map'} do ${node.parties.map(name).join('、')} and the others with them gather to talk together?` }], { images: { map: picture.png } });
       notes.groupBoxes = (notes.groupBoxes ?? 0) + 1;
       const box = asked[0]?.box;
       if (!box) return {};
       const area = picture.at(box), built = graphOf(area), rng = stream(`${scene.id}|${event.id}|group`), targets = {};
-      for (const id of new Set([...node.parties, ...node.listeners])) {
-        if (!posOf(id)) continue;
-        const target = W.nodeNear(world, built, area.x + (rng() - 0.5) * Math.max(2, area.w), area.z + (rng() - 0.5) * Math.max(2, area.d), 0);
+      for (const id of members) {
+        const target = W.nodeNear(world, built, area.x + (rng() - 0.5) * Math.max(2, area.w), area.z + (rng() - 0.5) * Math.max(2, area.d), k);
         if (target != null) targets[id] = target;
       }
       return { label: 'group', targets };
@@ -882,7 +908,7 @@ export function simulationRecord(data, strand) {
  * world, its walk, its record format), and kept with every run (the record's `run`, the strand index, the live state and
  * the growth log), so each run says which engine made it. A version pushed as stable is tagged world-engine-v<N> in git.
  */
-export const ENGINE_VERSION = 1;
+export const ENGINE_VERSION = 2;
 /** The engine's name in run records. */
 export const ENGINE = `world-engine-${ENGINE_VERSION}`;
 /** What the walk's seeds come from (the scene keys under it): kept while the walk itself is unchanged, so its runs reproduce. */

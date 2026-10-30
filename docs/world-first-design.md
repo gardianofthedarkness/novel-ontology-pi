@@ -272,10 +272,18 @@ How it runs:
 5. **Traces alike:** at each chapter's end, two people in at least 6 scenes each, in the same scenes at least 80% of the time, are asked about again. Jev gets their traces and how the text names each. At same ≥ 0.85 (distinct < 0.3) the world holds them as one and asks the agent to confirm; at same ≥ 0.5 it asks the agent.
 
 **Birth in rooms (2026-10-29).** Every standing building has a skeleton with rooms on each floor. A first-seen person's start asks:
-1. the level: the street, the ground floor, each floor up to the tallest building around, or a roof;
+1. the level: the street, the ground floor, each floor up to the tallest building around, a roof, or **in a room on a floor the text doesn't say**;
 2. a box on a slice through the buildings at that floor, with their rooms drawn.
 
-Inside, the room under the box is where they are born, on one of its walkable cells.
+Inside, the room under the box is where they are born, on one of its walkable cells. When no floor is given (the user's rule, 2026-10-29), the floor is drawn at random among the floors of the scene's own building, the same for that person and scene in every run. The slice is then a close-up of that building, and a box that misses it takes the nearest room on that floor. Before this option, Jev answered "ground floor" whenever the text gave no floor, so no one was born above it.
+
+**What the world's buildings are (2026-10-29).** When the world makes an indoor spot, Jev says what kind of building it is, from the scene in its context:
+- the kinds: a school, a dormitory or apartment block, a house, a hospital, an office, a shopping centre, a small shop or bar, a station, a church, a tower, a warehouse;
+- they stand as schools, homes and malls in the world (new roles beside offices, shops, hospitals and stations), each with its own floors: a dormitory 8, an office 10, a school 4, a shopping centre 5.
+
+Before this, every spot the world made was an office.
+
+**Gatherings keep their floor.** A group conversation gathers on the floor where most of the group is, round their middle, boxed on that floor's slice when indoors. A group already together doesn't move. Before this, every gathering was boxed on a street map and walked to street level: most moves in a run, and the reason everyone stayed on the ground.
 
 **The city's manifold (2026-10-29).** The ground every place stands on (its landscape: skyscrapers, a commercial quarter, a park…) is set before the world runs:
 1. **Jev sets it up:** `novel stage landscape` makes one Jev choice per city, district or street the ontology names, right after the scales and before the world loop.

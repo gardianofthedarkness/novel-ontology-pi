@@ -15,8 +15,9 @@ import { EDGE, UP, DOWN, buildGraph, directionOf, launchOf, type MoveGraph } fro
  * closes outdoor cells, redrawn while it cuts any building door off the
  * avenue. Damage removes skeleton cells, and the walk sees what is left.
  */
-export type BuildingRole = "shop" | "office" | "hospital" | "station";
-const SKELETON_OF: Record<BuildingRole, { kind: SkeletonKind; floors: [number, number] }> = { shop: { kind: "house", floors: [2, 4] }, office: { kind: "tower", floors: [5, 8] }, hospital: { kind: "school", floors: [4, 6] }, station: { kind: "school", floors: [2, 3] } };
+/** A school (classrooms off corridors), a home (a dormitory or an apartment block: rooms on every floor) and a mall (a shopping centre) are the world's buildings for what scenes take place in. */
+export type BuildingRole = "shop" | "office" | "hospital" | "station" | "school" | "home" | "mall";
+const SKELETON_OF: Record<BuildingRole, { kind: SkeletonKind; floors: [number, number] }> = { shop: { kind: "house", floors: [2, 4] }, office: { kind: "tower", floors: [5, 8] }, hospital: { kind: "school", floors: [4, 6] }, station: { kind: "school", floors: [2, 3] }, school: { kind: "school", floors: [3, 5] }, home: { kind: "tower", floors: [5, 9] }, mall: { kind: "school", floors: [3, 6] } };
 export const PLACE_GRID = { NX: 32, NZ: 24 };
 const NORTH = 2, ROW = 7, MIDDLE = 4, AVENUE = 4, SIDE = 2, ALLEY = 1, PLAZA = 8, LAMBDA = 8;
 /** Launch speeds (m/s) of a sky arc, and its effort: metres of walking per metre of launch height v²/2g, plus a landing that drops more than a floor. */
