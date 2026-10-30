@@ -297,14 +297,16 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
     watch(jev) {
       return {
         modelId: jev.modelId,
-        async decide(text, questions, options = {}) {
+        async decide(input, questions, options = {}) {
+          // A structured state (a JSON object) shows as its JSON, as Jev reads it.
+          const text = typeof input === 'string' ? input : JSON.stringify(input, null, 1);
           const f = frame++, started = Date.now(), context = text.split('\n').filter(line => /^(Place|Event|Thing): |^A thing a novel mentions: /.test(line)).map(line => line.slice(0, 400));
           const files = await keep(f, Object.entries(options.images ?? {}));
           state.calls++;
           state.ask = { f, at: at(), call: state.calls, line: state.line, phase: state.phase, subject: subjectOf(context), context, pictures: files, questions: questions.map(question => ({ key: question.key, primitive: question.primitive, ...(question.label ? { label: question.label } : {}), instructions: String(question.instructions).slice(0, 300), ...(question.options ? { options: question.options.length } : {}) })), answers: null , prompt: text };
           await write();
           try {
-            const answers = await jev.decide(text, questions, options);
+            const answers = await jev.decide(input, questions, options);
             state.ask.answers = answers.map(answer => ({ key: answer.key, value: typeof answer.value === 'number' ? Math.round(answer.value * 100) / 100 : answer.value, confidence: answer.confidence ?? null,
               ...(answer.box ? { box: answer.box } : {}), ...(answer.distribution ? { top: Object.entries(answer.distribution).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([option, p]) => [option, Math.round(p * 100) / 100]) } : {}) }));
             state.ask.ms = Date.now() - started;

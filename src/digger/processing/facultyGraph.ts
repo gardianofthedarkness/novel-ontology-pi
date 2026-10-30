@@ -1,4 +1,4 @@
-import type { DecisionAnswer, DecisionModel, DecisionQuestion } from "../../ground/connectors/jev.js";
+import type { DecisionAnswer, DecisionModel, DecisionQuestion, DecisionState } from "../../ground/connectors/jev.js";
 import type { WorkModel } from "../../ground/connectors/llm.js";
 import type { Entity } from "../../ground/ontology/types.js";
 import type { Sentence } from "../intake/sectioning.js";
@@ -105,7 +105,7 @@ export class FacultyGraph {
       const text = renderSentences(sentences);
       return input.knownEntities.filter(entity => entity.names.some(name => text.includes(name.text))).map(entity => ({ id: entity.id, forms: entity.names.map(name => name.text) }));
     };
-    const askPinned = async (state: string, questions: DecisionQuestion[], signal?: AbortSignal): Promise<DecisionAnswer[]> => {
+    const askPinned = async (state: DecisionState, questions: DecisionQuestion[], signal?: AbortSignal): Promise<DecisionAnswer[]> => {
       const answers = await this.decisions.decide(state, questions, { signal });
       return answers.map(answer => {
         if (input.pins?.has(answer.key)) {
@@ -115,7 +115,7 @@ export class FacultyGraph {
         return answer;
       });
     };
-    const decide = async (state: string, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> => {
+    const decide = async (state: DecisionState, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> => {
       const started = performance.now();
       const answers = await askPinned(state, questions);
       const initialMs = Math.round((performance.now() - started) / Math.max(1, answers.length));
@@ -124,7 +124,7 @@ export class FacultyGraph {
         const question = questions.find(entry => entry.key === answer.key);
         // Sentence kinds come a window at a time (one question a sentence); re-asking each uncertain one alone would undo the
         // batching, so only scene boundaries are routed. An uncertain dialogue start escalates in selectExchangeSpans.
-        if (!question || !question.key.startsWith("scene_")) return answer;
+        if (!question || !question.key.startsWith("scene_") || typeof state !== "string") return answer;
         const routed = await this.router.route({
           faculty: "scene-boundaries",
           initial: async () => answer,

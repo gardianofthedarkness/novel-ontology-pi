@@ -28,8 +28,8 @@ test("neighbor blocks and reviewer constraints are read-only attribution evidenc
   const after = { ...sentences[0], id: "b0002_s0000", text: "随后小明离开。" };
   const turns = await attributeBlockTurns({ sentences, contextSentences: [before, ...sentences, after], constraintsText: "REVIEWER CONSTRAINTS: distinguish the two people\n", selectedSpans: [[2, 2]], identities: { newEntities: [{ name: "小红", kind: "Character" }] }, knownNames: [], router: new DecisionRouter(),
     decisions: { modelId: "mock", async decide(state, questions) {
-      assert.ok(state.startsWith("REVIEWER CONSTRAINTS:"));
-      assert.ok(state.includes(before.id) && state.includes(after.id));
+      assert.ok(String(state).startsWith("REVIEWER CONSTRAINTS:"));
+      assert.ok(String(state).includes(before.id) && String(state).includes(after.id));
       assert.ok(!questions[0].instructions.includes(before.id));
       return questions.map(question => ({ key: question.key, value: "小红", confidence: 0.99 }));
     } }, pool: new FacultyPool({ modelId: "mock", async generate() { throw new Error("No S2 expected"); } }), note() {},
@@ -95,7 +95,7 @@ test("per-turn retry can use a block identity and context outside a scene withou
   const router = new DecisionRouter();
   const source = Array.from({ length: 20 }, (_, index) => ({ ...sentences[0], id: `b0001_s${String(index).padStart(4, "0")}`, index, text: index === 10 ? "「你好。」" : index === 0 ? "小红开口。" : "他停下。" }));
   const turns = await attributeBlockTurns({ sentences: source, selectedSpans: [[10, 10]], identities: { newEntities: [{ name: "小红", kind: "Character" }] }, knownNames: [], router,
-    decisions: { modelId: "mock", async decide(state, questions) { states.push(state); return questions.map(question => ({ key: question.key, value: "小红", confidence: states.length === 1 ? 0.1 : 0.99 })); } },
+    decisions: { modelId: "mock", async decide(state: string, questions) { states.push(state); return questions.map(question => ({ key: question.key, value: "小红", confidence: states.length === 1 ? 0.1 : 0.99 })); } },
     pool: new FacultyPool({ modelId: "mock", async generate() { throw new Error("No fallback expected"); } }), note() {},
   });
   assert.equal(turns[0].speakerName, "小红");
@@ -122,7 +122,7 @@ test("the experimental graph attributes block turns independently and only then 
   const graph = new FacultyGraph({ modelId: "mock", async decide(state, questions) {
     return questions.map(question => {
       if (question.key.startsWith("speaker:")) {
-        assert.ok(state.includes(ids[0]) && state.includes(ids[2]));
+        assert.ok(String(state).includes(ids[0]) && String(state).includes(ids[2]));
         assert.ok(question.options?.includes("小樱"));
         return { key: question.key, value: "小樱", confidence: 0.99 };
       }

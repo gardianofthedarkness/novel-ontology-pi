@@ -113,7 +113,7 @@ test("the faculty asks Jev only about checkable words, keeps quoted ones as refe
     modelId: "mock-jev",
     async decide(state, questions) {
       asked.push(...questions.map((question) => question.key));
-      return questions.map((question) => ({ key: question.key, value: state.includes("在搬来这里之前") ? "FLASHBACK" : "REFERENCE", confidence: 0.8, distribution: { FLASHBACK: 0.8 } }));
+      return questions.map((question) => ({ key: question.key, value: String(state).includes("在搬来这里之前") ? "FLASHBACK" : "REFERENCE", confidence: 0.8, distribution: { FLASHBACK: 0.8 } }));
     },
   };
   const work: WorkModel = { modelId: "mock-work", async generate(request) {

@@ -16,7 +16,7 @@ import { stageInputs } from "../src/cli/commands/extract/stageCommands.js";
 /** A decision model that records what it was asked and answers from a function. */
 function recording(answer: (state: string, question: DecisionQuestion) => DecisionAnswer["value"]) {
   const asked: { state: string; questions: DecisionQuestion[]; images: string[] }[] = [];
-  const model: DecisionModel = { modelId: "test", async decide(state, questions, options) { asked.push({ state, questions, images: Object.keys(options?.images ?? {}) }); return questions.map((question) => ({ key: question.key, value: answer(state, question) })); } };
+  const model: DecisionModel = { modelId: "test", async decide(state: string, questions, options) { asked.push({ state, questions, images: Object.keys(options?.images ?? {}) }); return questions.map((question) => ({ key: question.key, value: answer(state, question) })); } };
   return { model, asked };
 }
 

@@ -176,7 +176,7 @@ test("invalid faculty output keeps complete source scenes and explicit unresolve
 test("scene boundaries retry System 1 with wider context before any System 2 escalation", async () => {
   const sentences = sectionBlock(Array.from({ length: 100 }, (_, index) => `第${index}句叙述。`).join("\n"), 0).sentences;
   const decisions: DecisionModel = { modelId: "jev", async decide(state, questions) {
-    return questions.map(question => ({ key: question.key, value: question.key.startsWith("scene_end:") ? question.options!.at(-1)! : question.key.startsWith("scene_seam:") ? "continues" : "NONE", confidence: question.key.startsWith("scene_end:") && !state.includes("READ-ONLY NEIGHBOR CONTEXT") ? 0.4 : 0.99 }));
+    return questions.map(question => ({ key: question.key, value: question.key.startsWith("scene_end:") ? question.options!.at(-1)! : question.key.startsWith("scene_seam:") ? "continues" : "NONE", confidence: question.key.startsWith("scene_end:") && !String(state).includes("READ-ONLY NEIGHBOR CONTEXT") ? 0.4 : 0.99 }));
   } };
   const work: WorkModel = { modelId: "work", async generate(request) {
     assert.ok(!request.system.startsWith("Resolve one uncertain"));
@@ -194,8 +194,8 @@ test("dialogue retries keep the same questions and units while using neighboring
   const neighbors = sectionBlock("此前小樱与小林一起走来。", 0).sentences;
   let originalQuestions: unknown;
   const decisions: DecisionModel = { modelId: "jev", async decide(state, questions, options) {
-    if (state.includes("READ-ONLY NEIGHBOR CONTEXT") && questions[0].key.startsWith("speaker:")) {
-      assert.ok(state.includes(neighbors[0].id));
+    if (String(state).includes("READ-ONLY NEIGHBOR CONTEXT") && questions[0].key.startsWith("speaker:")) {
+      assert.ok(String(state).includes(neighbors[0].id));
       assert.ok(options?.signal);
       assert.deepEqual(questions, originalQuestions);
       return questions.map(question => ({ key: question.key, confidence: 0.99, value: question.key.endsWith(sentences[0].id) ? "小樱" : "小林" }));

@@ -131,7 +131,7 @@ export class Miniloop {
     // but the applied answer is the reviewing agent's correction, at
     // full confidence.
     const decideWithPins = async (
-      state: string,
+      state: Parameters<DecisionModel["decide"]>[0],
       questions: Parameters<DecisionModel["decide"]>[1],
     ) => {
       const decided = await this.decisions.decide(state, questions);

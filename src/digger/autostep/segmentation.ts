@@ -1,6 +1,7 @@
 import type {
   DecisionAnswer,
   DecisionQuestion,
+  DecisionState,
 } from "../../ground/connectors/jev.js";
 import type { Sentence } from "../intake/sectioning.js";
 
@@ -30,7 +31,7 @@ import type { Sentence } from "../intake/sectioning.js";
  */
 
 export type DecideFn = (
-  state: string,
+  state: DecisionState,
   questions: DecisionQuestion[],
 ) => Promise<DecisionAnswer[]>;
 
@@ -242,12 +243,15 @@ export async function tileScenes(
 }
 
 /**
- * What each sentence of a block is, in one batched request per window (Jev answers a request's questions independently
- * against the same passage: docs.typesafe.ai, parallel questions — one call for a window, not a chain of start and end
- * questions): spoken aloud, thought (a person's inner voice, feelings in their head, talking to themself), a fact (background
- * knowledge of the world: how things are, what a place or a power is, history — not this scene's happening), an action or
- * movement, or narration; and, for every sentence, whether the people in a conversation change there (someone new speaks
- * or is spoken to, or someone who was talking has gone).
+ * What each sentence of a block is, asked a window at a time as one structured document (Jev's structured input,
+ * docs.typesafe.ai/concepts/state and /primitives/advanced): the state is a JSON object holding the kinds' definitions once
+ * and the window's sentences keyed by id (with the sentences before it as context only), and each question names its
+ * sentence by path (`passage.<id>`), so a question costs a few tokens instead of repeating the definitions. Every question
+ * of a window goes in one request (parallel questions: one call, not a chain of start and end questions), and the windows
+ * run at the same time. For each sentence: is it spoken aloud, thought (a person's inner voice, feelings in their head,
+ * talking to themself), a fact (background knowledge of the world: how things are, what a place or a power is, history —
+ * not this scene's happening), an action or movement, or narration; and do the people in a conversation change there
+ * (someone new speaks or is spoken to, or someone who was talking has gone).
  *
  * From that (the user's rules, 2026-10-30): a dialogue exchange runs as long as the same people are talking, narration and
  * actions between the lines inside it (actions are extracted apart, as events); it ends where the people talking change, or
@@ -263,12 +267,38 @@ export const SENTENCE_KINDS = {
   narration: "narration or description: how something or someone looks, sounds or feels, the scene's mood",
 } as const;
 export type SentenceKind = keyof typeof SENTENCE_KINDS;
-/** Sentences classified a request (each with two questions), and the sentences before them shown as context only. */
-const CLASSIFY = 40, CONTEXT = 8;
+/** Each kind in a few words, as its choice's criterion (the full definition is in the document's `kinds`). */
+const KIND_LABELS: Record<SentenceKind, string> = {
+  spoken: "said aloud to someone",
+  thought: "a person's inner voice, or talking to themself",
+  fact: "background knowledge of the world",
+  action: "an action or a movement",
+  narration: "description or mood",
+};
+const TURN = {
+  true: "someone new speaks or is spoken to here, or someone who was talking has gone",
+  false: "the same people go on talking, or no one is talking",
+};
+/**
+ * Sentences classified a request (each with two questions: about 120 tokens, so a window is well inside Jev's 64k-token
+ * request), the sentences before them shown as context only, and the windows asked at once.
+ */
+const CLASSIFY = 100, CONTEXT = 8, WINDOWS_AT_ONCE = 4;
 /** A conversation that goes this many sentences with no one speaking has ended. */
 const QUIET = 8;
 /** A monologue keeps at most this many narration or action sentences inside it. */
 const ASIDE = 2;
+
+/** The structured document a window's questions are about (the request's state). */
+export function sentenceDocument(task: string, before: Sentence[], asked: Sentence[]) {
+  return {
+    task: `${task} Classify every sentence of the passage (sentences keyed by id, in reading order).`.trim(),
+    kinds: { ...SENTENCE_KINDS },
+    change: `The people in a conversation change at a sentence when ${TURN.true}.`,
+    ...(before.length ? { before: Object.fromEntries(before.map((sentence) => [sentence.id, sentence.text])) } : {}),
+    passage: Object.fromEntries(asked.map((sentence) => [sentence.id, sentence.text])),
+  };
+}
 
 export async function classifySentences(
   sentences: Sentence[],
@@ -276,21 +306,34 @@ export async function classifySentences(
   opts: { stateSummary: string; onBatch?: (through: number, kinds: SentenceKind[], turns: number[]) => Promise<void> },
 ): Promise<{ kinds: SentenceKind[]; confidence: number[]; turns: number[] }> {
   const kinds: SentenceKind[] = [], confidence: number[] = [], turns: number[] = [];
-  for (let b = 0; b < sentences.length; b += CLASSIFY) {
-    const asked = sentences.slice(b, b + CLASSIFY), before = sentences.slice(Math.max(0, b - CONTEXT), b);
-    const state = `${opts.stateSummary}\n---\n${before.length ? `(Before, for context only:)\n${render(before)}\n---\n` : ""}${render(asked)}`;
-    const answers = await decide(state, asked.flatMap((sentence) => [
-      { key: `dlg_kind:${sentence.id}`, primitive: "choice" as const, instructions: `What is sentence ${sentence.id}?`, options: Object.keys(SENTENCE_KINDS), optionHints: { ...SENTENCE_KINDS } },
-      { key: `dlg_turn:${sentence.id}`, primitive: "noul" as const, instructions: `At sentence ${sentence.id}, do the people in a conversation change: does someone new speak or get spoken to, or has someone who was talking gone?` },
-    ]));
-    for (const sentence of asked) {
-      const kind = choiceValue(answers, `dlg_kind:${sentence.id}`), turn = answers.find((answer) => answer.key === `dlg_turn:${sentence.id}`);
-      kinds.push((kind?.value && kind.value in SENTENCE_KINDS ? kind.value : "narration") as SentenceKind);
-      confidence.push(kind?.confidence ?? 0);
-      turns.push(Number(turn?.value ?? 0));
+  const windows = Array.from({ length: Math.ceil(sentences.length / CLASSIFY) }, (_, w) => w * CLASSIFY);
+  const done = new Map<number, DecisionAnswer[]>();
+  let next = 0, published = 0, publishing = Promise.resolve();
+  // Windows finish in any order; their answers join the kinds in reading order, and each finished prefix is published.
+  const publish = async () => {
+    while (done.has(windows[published])) {
+      const b = windows[published], answers = done.get(b)!;
+      for (const sentence of sentences.slice(b, b + CLASSIFY)) {
+        const kind = choiceValue(answers, `dlg_kind:${sentence.id}`), turn = answers.find((answer) => answer.key === `dlg_turn:${sentence.id}`);
+        kinds.push((kind?.value && kind.value in SENTENCE_KINDS ? kind.value : "narration") as SentenceKind);
+        confidence.push(kind?.confidence ?? 0);
+        turns.push(Number(turn?.value ?? 0));
+      }
+      published++;
+      await opts.onBatch?.(Math.min(sentences.length, b + CLASSIFY) - 1, kinds, turns);
     }
-    await opts.onBatch?.(Math.min(sentences.length, b + CLASSIFY) - 1, kinds, turns);
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(WINDOWS_AT_ONCE, windows.length) }, async () => {
+    while (next < windows.length) {
+      const b = windows[next++], asked = sentences.slice(b, b + CLASSIFY), before = sentences.slice(Math.max(0, b - CONTEXT), b);
+      done.set(b, await decide(sentenceDocument(opts.stateSummary, before, asked), asked.flatMap((sentence) => [
+        { key: `dlg_kind:${sentence.id}`, primitive: "choice" as const, instructions: `What kind of sentence is passage.${sentence.id}? (The kinds are defined in kinds.)`, options: Object.keys(SENTENCE_KINDS), optionHints: { ...KIND_LABELS } },
+        { key: `dlg_turn:${sentence.id}`, primitive: "noul" as const, instructions: `At passage.${sentence.id}, do the people in a conversation change?`, noulCriteria: TURN },
+      ])));
+      publishing = publishing.then(publish);
+      await publishing;
+    }
+  }));
   return { kinds, confidence, turns };
 }
 

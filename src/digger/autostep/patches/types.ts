@@ -1,4 +1,4 @@
-import type { DecisionAnswer, DecisionQuestion } from "../../../ground/connectors/jev.js";
+import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../../../ground/connectors/jev.js";
 import type { Sentence } from "../../intake/sectioning.js";
 import type { ChangeProposal } from "../../../solidifier/merge/changeset.js";
 import type { Entity } from "../../../ground/ontology/types.js";
@@ -61,7 +61,7 @@ export interface DecisionPatch {
   prepass?: (
     ctx: PatchContext,
     decide: (
-      state: string,
+      state: DecisionState,
       questions: DecisionQuestion[],
     ) => Promise<DecisionAnswer[]>,
     onProgress?: () => Promise<void>,

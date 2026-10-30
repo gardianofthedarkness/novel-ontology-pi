@@ -21,10 +21,10 @@ test("block context buffer includes the following block without proposing or pro
   const decisions: DecisionModel = { modelId: "mock", async decide(state, questions) {
     return questions.map(question => {
       const end = question.key.startsWith("scene_end:");
-      const expanded = state.includes("READ-ONLY NEIGHBOR CONTEXT");
+      const expanded = String(state).includes("READ-ONLY NEIGHBOR CONTEXT");
       if (end && expanded) {
         retried = true;
-        assert.ok(state.includes("b0008_s0000: 次章的来源"));
+        assert.ok(String(state).includes("b0008_s0000: 次章的来源"));
         assert.ok(question.options?.every(option => option.startsWith("b0007_")));
       }
       return { key: question.key, value: end ? question.options!.at(-1)! : "NONE", confidence: end && !expanded ? 0.4 : 0.99 };

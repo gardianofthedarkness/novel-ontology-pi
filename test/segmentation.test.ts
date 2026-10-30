@@ -11,6 +11,7 @@ import {
   spansOfKinds,
   tileScenes,
   type DecideFn,
+  SENTENCE_KINDS,
   type SentenceKind,
 } from "../src/digger/autostep/segmentation.js";
 
@@ -23,7 +24,7 @@ function makeSentences(count: number): Sentence[] {
 
 /** Decider scripted by question key; unscripted ends run to the region end, starts find nothing. */
 function scripted(script: Record<string, string>, confidence = 0.95): DecideFn {
-  return async (_state: string, questions: DecisionQuestion[]) => {
+  return async (_state: unknown, questions: DecisionQuestion[]) => {
     return questions.map((q): DecisionAnswer => {
       let value: string | number = script[q.key] ?? "";
       if (value === "" && q.primitive === "noul") value = 0;
@@ -115,16 +116,20 @@ function kindsScript(sentences: Sentence[], kinds: Record<number, SentenceKind>,
 const spoken = (from: number, to: number, every = 1): Record<number, SentenceKind> =>
   Object.fromEntries(Array.from({ length: to - from + 1 }, (_, i) => from + i).filter((i) => (i - from) % every === 0).map((i) => [i, "spoken"]));
 
-test("selectExchanges: one batched request per window, and an exchange straddling a scene cut links two scenes", async () => {
-  const sentences = makeSentences(100);
-  const sceneSpans = [ids(sentences, 0, 49), ids(sentences, 50, 99)];
-  const calls: DecisionQuestion[][] = [];
-  const answer = scripted(kindsScript(sentences, spoken(40, 60, 2)));
-  const decide: DecideFn = async (state, questions) => { calls.push(questions); return answer(state, questions); };
+test("selectExchanges: one structured request per 100 sentences, and an exchange straddling a scene cut links two scenes", async () => {
+  const sentences = makeSentences(250);
+  const sceneSpans = [ids(sentences, 0, 124), ids(sentences, 125, 249)];
+  const calls: { state: { passage: Record<string, string>; before?: Record<string, string> }; questions: DecisionQuestion[] }[] = [];
+  const answer = scripted(kindsScript(sentences, spoken(115, 135, 2)));
+  const decide: DecideFn = async (state, questions) => { calls.push({ state: state as never, questions }); return answer(state, questions); };
   const { units, unitScenes } = await selectExchanges(sentences, sceneSpans, decide, { stateSummary: "t", gates: GATES });
-  assert.equal(calls.length, 3, "100 sentences are three requests (40 a window), not a chain of start and end questions");
-  assert.deepEqual(calls[0].map((q) => q.key).slice(0, 2), [`dlg_kind:${sentences[0].id}`, `dlg_turn:${sentences[0].id}`]);
-  assert.deepEqual(units, [ids(sentences, 40, 60)], "narration between the lines stays inside the exchange");
+  assert.equal(calls.length, 3, "250 sentences are three requests, not a chain of start and end questions");
+  const second = calls.find((call) => sentences[100].id in call.state.passage)!;
+  assert.deepEqual(Object.keys(second.state.passage), ids(sentences, 100, 199), "the window's sentences, keyed by id");
+  assert.deepEqual(Object.keys(second.state.before!), ids(sentences, 92, 99), "the sentences before it, as context only");
+  assert.equal(second.questions.length, 200);
+  assert.match(second.questions[0].instructions, new RegExp(`passage\\.${sentences[100].id}`));
+  assert.deepEqual(units, [ids(sentences, 115, 135)], "narration between the lines stays inside the exchange");
   assert.deepEqual(unitScenes, [[0, 1]], "exchange straddles the scene cut -> two scene links");
 });
 
@@ -175,19 +180,24 @@ test("miniloop pipelines: scene tiling and dialogue selection run concurrently",
   assert.ok(Array.isArray(result.accepted["dialogueUnitScenes"]), "the scene-link join ran after the pipelines");
 });
 
-test("the classification prompt names every kind, and asks one turn question a sentence", async () => {
+test("the classification state is one structured document; questions name their sentence by path and stay short", async () => {
   const sentences = sectionBlock('“我会回来。”\n他站起身。\n天亮之前，学园都市的电车停运。\n我真想留下，他想。', 1).sentences;
   const prompts: DecisionQuestion[] = [];
+  let document: Record<string, unknown> = {};
   const answer = scripted(kindsScript(sentences, { 0: "spoken", 1: "action", 2: "fact", 3: "thought" }));
-  const result = await selectExchangeSpans(sentences, async (state, questions) => { prompts.push(...questions); return answer(state, questions); }, { stateSummary: "", gates: GATES });
+  const result = await selectExchangeSpans(sentences, async (state, questions) => { document = state as Record<string, unknown>; prompts.push(...questions); return answer(state, questions); }, { stateSummary: "Block b0001.", gates: GATES });
+  assert.deepEqual(document.kinds, { ...SENTENCE_KINDS }, "the kinds are defined once, in the state");
+  assert.deepEqual(document.passage, Object.fromEntries(sentences.map((sentence) => [sentence.id, sentence.text])));
+  assert.equal(document.before, undefined);
   const kinds = prompts.filter((q) => q.key.startsWith("dlg_kind:"));
   assert.equal(kinds.length, 4);
-  assert.equal(prompts.filter((q) => q.key.startsWith("dlg_turn:") && q.primitive === "noul").length, 4);
-  for (const question of kinds) {
+  for (const [index, question] of kinds.entries()) {
     assert.deepEqual(question.options, ["spoken", "thought", "fact", "action", "narration"]);
-    assert.match(question.optionHints!.thought, /talking to themself/);
-    assert.match(question.optionHints!.fact, /background knowledge/);
+    assert.ok(question.instructions.includes(`passage.${sentences[index].id}`));
+    assert.ok(Object.values(question.optionHints!).every((hint) => hint.length <= 50), "a short label per kind, not its definition");
   }
+  const turns = prompts.filter((q) => q.key.startsWith("dlg_turn:"));
+  assert.ok(turns.length === 4 && turns.every((q) => q.primitive === "noul" && q.noulCriteria?.true && q.noulCriteria.false));
   assert.deepEqual(result.spans, [[0, 0]]);
   assert.deepEqual(result.monologues, [[3, 3]]);
   assert.deepEqual(result.facts, [[2, 2]]);
@@ -200,14 +210,22 @@ test("an uncertain spoken line is escalated", async () => {
   assert.match(result.escalations[0].reason, /too uncertain/);
 });
 
-test("dialogue streaming only publishes stable spans and monotone complete-through watermarks", async () => {
-  const sentences = makeSentences(100);
+test("windows run at once; spans publish in reading order, settled, with monotone complete-through watermarks", async () => {
+  const sentences = makeSentences(250);
   const snapshots: { spans: [number, number][]; through: number }[] = [];
-  const result = await selectExchangeSpans(sentences, scripted(kindsScript(sentences, { ...spoken(10, 20), ...spoken(36, 44), ...spoken(70, 90, 3) })), { stateSummary: "", gates: GATES, onBatch: async (spans, through) => { snapshots.push({ spans: structuredClone(spans), through }); } });
-  assert.equal(snapshots[0].through, 31, "the first window settles all but its last quiet stretch");
+  const answer = scripted(kindsScript(sentences, { ...spoken(10, 20), ...spoken(95, 104), ...spoken(170, 190, 3) }));
+  let inFlight = 0, maxInFlight = 0;
+  // The first window answers last: its spans still publish first.
+  const decide: DecideFn = async (state, questions) => {
+    inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, sentences[0].id in (state as { passage: object }).passage ? 30 : 5));
+    inFlight--;
+    return answer(state, questions);
+  };
+  const result = await selectExchangeSpans(sentences, decide, { stateSummary: "", gates: GATES, onBatch: async (spans, through) => { snapshots.push({ spans: structuredClone(spans), through }); } });
+  assert.equal(maxInFlight, 3, "the three windows were asked at once");
+  assert.deepEqual(snapshots.map((snapshot) => snapshot.through), [91, 191, 249]);
   assert.deepEqual(snapshots[0].spans, [[10, 20]], "an exchange still open at the window's end waits");
-  assert.equal(snapshots.at(-1)!.through, 99);
+  assert.deepEqual(result.spans, [[10, 20], [95, 104], [170, 188]], "an exchange across two windows is one");
   assert.deepEqual(snapshots.at(-1)!.spans, result.spans);
-  assert.deepEqual(result.spans, [[10, 20], [36, 44], [70, 88]]);
-  assert.ok(snapshots.every((snapshot, index) => !index || snapshot.through >= snapshots[index - 1].through));
 });

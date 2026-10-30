@@ -31,6 +31,8 @@ export interface DecisionQuestion {
   options?: string[];
   /** choice only: what an option means, when its label does not say it (sent as that option's criterion). */
   optionHints?: Record<string, string>;
+  /** noul only: what counts as yes and as no. */
+  noulCriteria?: { true: string; false: string };
   /** score only: ordered level labels, 2..10 of them. */
   levels?: string[];
 }
@@ -52,6 +54,12 @@ export interface DecisionBox { left: number; top: number; right: number; bottom:
 /** Pictures a question looks at (PNG, base64), each named in the state by its key. */
 export type DecisionImages = Record<string, string>;
 
+/**
+ * What a request's questions are about: plain text, or a structured document (a JSON object: named parts, e.g. the
+ * passage's sentences keyed by id and the definitions its questions share), which questions may name by path.
+ */
+export type DecisionState = string | { readonly [part: string]: unknown };
+
 export interface DecisionModel {
   readonly modelId: string;
   /**
@@ -60,7 +68,7 @@ export interface DecisionModel {
    * `images` (experimental at TypeSafe, "danger zone"): the state becomes
    * { state, <name>: "<name>_image" } with one image asset per name.
    */
-  decide(state: string, questions: DecisionQuestion[], options?: { signal?: AbortSignal; images?: DecisionImages }): Promise<DecisionAnswer[]>;
+  decide(state: DecisionState, questions: DecisionQuestion[], options?: { signal?: AbortSignal; images?: DecisionImages }): Promise<DecisionAnswer[]>;
 }
 
 export interface JevConfig {
@@ -76,7 +84,7 @@ export class JevClient implements DecisionModel {
     this.modelId = cfg.model;
   }
 
-  async decide(state: string, questions: DecisionQuestion[], options: { signal?: AbortSignal; images?: DecisionImages } = {}): Promise<DecisionAnswer[]> {
+  async decide(state: DecisionState, questions: DecisionQuestion[], options: { signal?: AbortSignal; images?: DecisionImages } = {}): Promise<DecisionAnswer[]> {
     if (!this.cfg.apiKey) {
       throw new Error(
         "Jev API key missing. Run `novel jev login`, or set TYPESAFE_API_KEY (never hard-code the key).",
@@ -85,7 +93,7 @@ export class JevClient implements DecisionModel {
     const images = Object.entries(options.images ?? {});
     const body = JSON.stringify({
       model: this.cfg.model,
-      state: images.length ? { state, ...Object.fromEntries(images.map(([name]) => [name, `${name}_image`])) } : state,
+      state: images.length ? { ...(typeof state === "string" ? { state } : state), ...Object.fromEntries(images.map(([name]) => [name, `${name}_image`])) } : state,
       ...(images.length ? { assets: Object.fromEntries(images.map(([name, png]) => [`${name}_image`, { type: "image", format: "png", data_base64: png }])) } : {}),
       questions: toWireQuestions(questions),
     });
@@ -154,7 +162,7 @@ function toWireQuestions(
   const wire: Record<string, Record<string, unknown>> = {};
   for (const q of questions) {
     if (q.primitive === "noul") {
-      wire[q.key] = { type: "noul", instructions: withRubric(q) };
+      wire[q.key] = { type: "noul", instructions: withRubric(q), ...(q.noulCriteria ? { criteria: q.noulCriteria } : {}) };
     } else if (q.primitive === "box") {
       wire[q.key] = { type: "box", instructions: withRubric(q) };
     } else if (q.primitive === "choice") {

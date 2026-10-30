@@ -18,7 +18,7 @@ const scales = { city: "city", fog: "city", d3: "district", tower: "building", l
 
 function recording(answer: (state: string, question: DecisionQuestion) => DecisionAnswer["value"]) {
   const asked: { state: string; question: DecisionQuestion }[] = [];
-  const model: DecisionModel = { modelId: "test", async decide(state, questions) { asked.push({ state, question: questions[0] }); return questions.map((question) => ({ key: question.key, value: answer(state, question), confidence: 0.6 })); } };
+  const model: DecisionModel = { modelId: "test", async decide(state: string, questions) { asked.push({ state, question: questions[0] }); return questions.map((question) => ({ key: question.key, value: answer(state, question), confidence: 0.6 })); } };
   return { model, asked };
 }
 
