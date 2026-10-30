@@ -89,3 +89,18 @@ test('someone a dialogue shows was there joins the scene, and a person elsewhere
   assert.equal(join(world, same, 'z', 'dialogue'), true);
   assert.equal(world.people.z.place, 'Q');
 });
+
+test('lineage: what led up to an event, from the world alone; EM from world evidence merges only when one person would not be in two places at once', async () => {
+  const { lineage, sameness } = await import('./solidify.mjs');
+  const script = { names: { a: '御坂美琴', b: '美琴', c: '上条当麻', d: '御坂妹' }, scenes: [
+    { id: 's1', place: 'P', clock: [0, 1], present: ['a', 'c'], stayed: [], timeline: [{ type: 'event', id: 'e1', actors: ['a'] }, { type: 'dialogue', id: 'd1', kind: 'live', parties: ['a', 'c'], listeners: [] }] },
+    { id: 's2', place: 'Q', clock: [1, 2], present: ['b', 'c'], stayed: [], timeline: [{ type: 'event', id: 'e2', actors: ['c'] }] },
+    { id: 's3', place: 'R', clock: [1, 2], present: ['d'], stayed: [], timeline: [] },
+  ] };
+  const led = lineage(script, 'e2');
+  assert.deepEqual(led.map(item => item.id), ['d1'], 'the dialogue c took part in leads to e2; e1 shares nobody and was elsewhere');
+  const pairs = sameness(script, script.names);
+  const ab = pairs.find(pair => pair.names.includes('美琴') && pair.names.includes('御坂美琴'));
+  assert.ok(ab && !ab.conflict, 'never together, names overlap, a companion shared, no clash');
+  assert.ok(!pairs.some(pair => pair.names.includes('御坂妹')), 'no shared companion');
+});
