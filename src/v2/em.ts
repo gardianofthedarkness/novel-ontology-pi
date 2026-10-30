@@ -8,8 +8,10 @@ import type { Category, Decide, Detected, EntityType } from "./typing.js";
  * 1. A time goes to the times (EM for times is the calendar's, later).
  * 2. Any other string that is a name already in the chart (any category: the whole chart) is that entity. Not new; the
  *    sentences that hold it are recorded as its appearances. System 0: string match, no model. Only proper names are names
- *    of the chart (typing asks): a description or a common word ("少女", "屋顶") is an entity's name only where EM said it,
- *    so it goes to the recommender every time, and never tags a sentence elsewhere.
+ *    of the chart (typing asks): a description or a common word ("屋顶", "手机") is a thing's or a place's name only where EM
+ *    said it, so it goes to the recommender every time, and never tags a sentence elsewhere. A description of a person
+ *    ("少女", "那个刺猬头", "姐姐大人") is no one's name at all: it is kept as a description, and EM² (roles.ts) says who it
+ *    means each time it stands (a description that became a person of its own drew every later use of it to that person).
  * 3. Otherwise the recommender scores the chart's entities of the string's category: by how near before it, and how often,
  *    each appears (and by the names they share), the best three; and the latest facts that name them.
  * 4. Jev decides, one structured request per group of strings (groups of a batch in parallel): the batch's sentences, the
@@ -30,8 +32,10 @@ export interface ChartEntity { id: string; category: Category; type: EntityType;
 export interface TimeNode { id: string; text: string; seen: string[] }
 export interface EmResult {
   key: string; text: string; type: EntityType; category: Category | null;
-  outcome: "exact" | "alias" | "new" | "time" | "skip";
+  outcome: "exact" | "alias" | "new" | "time" | "description" | "skip";
   entity?: string; confidence?: number; candidates?: { id: string; score: number }[]; answer?: string; unsure?: string;
+  /** description: the sentences that hold it (EM² resolves each). */
+  sentences?: string[];
 }
 export interface Fact { first: string; text: string }
 
@@ -159,6 +163,7 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
     if (entry.category === "time") { const node = chart.time(entry.text, entry.sentences); results.set(entry.key, { ...base, outcome: "time", entity: node.id }); continue; }
     const known = chart.exact(entry.text);
     if (known) { chart.see(known.id, entry.sentences); results.set(entry.key, { ...base, outcome: "exact", entity: known.id }); continue; }
+    if (entry.category === "person" && !isProper(entry)) { results.set(entry.key, { ...base, outcome: "description", sentences: entry.sentences }); continue; }
     const scores = recommend(chart, entry, context.position);
     pending.push({ detected: entry, candidates: scores.map((score) => score.id), scores, peers: [] });
   }

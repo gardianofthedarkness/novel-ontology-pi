@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { cutBlocks } from "../digger/intake/blocks.js";
 import { sectionBlock } from "../digger/intake/sectioning.js";
 import { storedSource } from "../ground/workspace/source.js";
-import { actionEvents } from "./canon.js";
+import { actionEvents, cardPeople } from "./canon.js";
 import type { FlowBlock, FlowResult } from "./flow.js";
 
 /** A workspace's book as the flow reads it: its blocks (chapter by chapter) and their sentences, ids as at ingest. */
@@ -21,17 +21,18 @@ const clip = (text: string, size: number) => (text.length > size ? `${text.slice
 
 /**
  * The world loop's base layer (experiments/world-first/base.mjs's shape) from the flow, so the world engine runs on it as
- * it is: a scene's events are its action cards (who takes part: the people the card names), its dialogues the exchange
- * cards, its monologues the monologue cards, its facts the fact cards; new beside them, its environment cards and its
- * composed context (`v2`: the people the recommender expects, the scene before's cards of each world kind). The roster is
- * the chart: people as characters, places as places, things apart.
+ * it is: a scene's events are its action cards (who takes part: who acts, then who the card names or describes), its
+ * dialogues the exchange cards (who speaks, who is spoken to), its monologues the monologue cards, its facts the fact cards;
+ * new beside them, its environment cards and its composed context (`v2`: the people the recommender expects, the scene
+ * before's cards of each world kind). Unnamed people (EM²'s slots) ride along as `extras`. The roster is the chart: people
+ * as characters, places as places, things apart, and the slots as extras.
  */
 export function worldBase(result: FlowResult, text: (sentence: string) => string) {
   const cardText = (card: { sentences: string[] }) => card.sentences.map(text).join("");
   const sceneOf = new Map(result.scenes.flatMap((scene) => scene.sentences.map((id) => [id, scene.id])));
   const bySceneCards = new Map<string, FlowResult["cards"]>();
   for (const card of result.cards) { const scene = sceneOf.get(card.first); if (scene) bySceneCards.set(scene, [...(bySceneCards.get(scene) ?? []), card]); }
-  const people = (card: FlowResult["cards"][number]) => card.entities.filter((hit) => result.chart.entities.get(hit.id)?.category === "person").map((hit) => hit.id);
+  const people = (card: FlowResult["cards"][number]) => cardPeople(result, card).people, extras = (card: FlowResult["cards"][number]) => cardPeople(result, card).extras;
   const contextOf = new Map(result.contexts.map((context) => [context.scene, context]));
   const eventId = new Map(actionEvents(result).map(({ id, card }) => [card.id, id]));
   const facts = result.cards.filter((card) => card.kind === "fact").map((card) => ({ scene: sceneOf.get(card.first) ?? null, first: card.first, text: cardText(card) })).filter((fact) => fact.scene);
@@ -41,8 +42,8 @@ export function worldBase(result: FlowResult, text: (sentence: string) => string
     const body = scene.sentences.map(text).join("");
     return {
       id: scene.id, index: scene.index, chapter: scene.chapter, summary: clip(body.replace(/\s+/g, " "), 120), text: body,
-      events: of("action").map((card) => ({ id: eventId.get(card.id) ?? card.id, first: card.first, summary: clip(cardText(card), 140), evidence: cardText(card), actors: people(card) })),
-      dialogues: of("dialogue").map((card) => ({ id: card.id, first: card.first, text: cardText(card), people: people(card) })),
+      events: of("action").map((card) => ({ id: eventId.get(card.id) ?? card.id, first: card.first, summary: clip(cardText(card), 140), evidence: cardText(card), actors: people(card), extras: extras(card) })),
+      dialogues: of("dialogue").map((card) => ({ id: card.id, first: card.first, text: cardText(card), people: people(card), extras: extras(card) })),
       monologues: of("monologue").map((card) => ({ id: card.id, first: card.first, text: cardText(card), people: people(card) })),
       facts: of("fact").map((card) => ({ first: card.first, text: cardText(card) })),
       environment: of("environment").map((card) => ({ id: card.id, first: card.first, text: cardText(card) })),
@@ -54,6 +55,7 @@ export function worldBase(result: FlowResult, text: (sentence: string) => string
     characters: entities.filter((entity) => entity.category === "person").map((entity) => ({ id: entity.id, names: namesOf(entity) })),
     places: entities.filter((entity) => entity.category === "place").map((entity) => ({ id: entity.id, names: namesOf(entity), type: entity.type, scale: null })),
     things: entities.filter((entity) => entity.category === "thing").map((entity) => ({ id: entity.id, names: namesOf(entity), type: entity.type })),
+    extras: result.slots.map((slot) => ({ id: slot.id, scene: slot.scene, names: slot.names })),
   };
   return { scenes, roster, facts, states: [] as unknown[] };
 }

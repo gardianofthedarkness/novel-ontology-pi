@@ -66,7 +66,9 @@ flowchart TD
   cards --> scan
   scenes --> compose["Each scene's context: its world cards, the scene before's cards of the same kind, the people the recommender expects, the world's view"]
   scan --> compose
-  compose --> world["World engine: world loop (presence, place, time, dialogue), stage steps, the engine"]
+  em -- "descriptions of people" --> roles["EM² (Jev, one document a 12 lines, scene by scene): who says or acts, who a line is said to, who each description means here; slots for the unnamed"]
+  compose -- "the cast" --> roles
+  roles --> world["World engine: world loop (presence, place, time, dialogue), stage steps, the engine"]
   cards -- "thought, fact, narration" --> ontology["Ontology (canon)"]
   em --> ontology
 ```
@@ -99,19 +101,24 @@ with a composed context, **System 2** is the main model (the work model for list
      parallel). Each string chooses a candidate, another new string of the same batch (two names of one person born together
      find each other), or new. Below 0.6 it is new, its best candidate kept for the world engine's second EM.
    - **A description is not a name** (the one change to the sketch, after the first run): typing's proper-name answer
-     decides. A proper name joins the chart's names and matches anywhere; a description or a common word (少女, 那个刺猬头,
-     屋顶, 车站) is the entity's name only where EM said it, so it goes to the recommender each time and never tags a sentence
-     elsewhere. On the first run the lister's 他 had become 上条当麻's alias, which would have tagged every 他 in the book.
+     decides. A proper name joins the chart's names and matches anywhere. A description of a person (少女, 那个刺猬头,
+     姐姐大人) is no one's name at all: it goes to EM² (§2.0.1), which says who it means each time it stands. A thing's or a
+     place's description (屋顶, 手机) is its name only where EM said it. On the first run the lister's 他 had become 上条当麻's
+     alias, which would have tagged every 他 in the book; on the second, 姐姐大人 had become a person of its own.
 7. **Card scan** (System 0): every card's sentences scanned for the chart's proper names (a longer name masks the shorter
    inside it), plus the appearances EM recorded; each card lists the entities it names and where.
 8. **Context** for each scene: its world cards, the scene before's cards of the same kinds in order, the people the
    recommender expects from the last three scenes, and (at run time) the world's view of who is where.
-9. **Out:** the data and the run's log as YAML (`docs/v2/schema.yaml` is the schema; `<out>/v2/*.yaml`), the world loop's base
+9. **EM²** (`roles.ts`, §2.0.1): who says or does each line, who a line is said to, and who each description of a person
+   means there. Each card's people are then the ones it names and the ones its lines and descriptions point at
+   (`people: [{id, how: [named, speaks, acts, addressed, described], at}]`); an event's actors and an exchange's people
+   come from them.
+10. **Out:** the data and the run's log as YAML (`docs/v2/schema.yaml` is the schema; `<out>/v2/*.yaml`), the world loop's base
    layer (`<out>/base/`), and with `experiments/v2/workspace.mjs` a world-first workspace whose canon is this reading (scenes,
    entities, events from action cards, who takes part), so the world loop, the stage steps and the engine run on it as they
    are.
 
-**Measured on vol 1, 2026-10-30** (5,202 sentences, Jev 1.14, deepseek-chat; a fraction of a dollar in all):
+**Measured on vol 1, 2026-10-30, before EM²** (5,202 sentences, Jev 1.14, deepseek-chat; a fraction of a dollar in all):
 
 | Step | Requests | Time |
 |---|---|---|
@@ -133,7 +140,61 @@ calls, 16 s, 174 moves); one story line of 46 scenes for the engine.
 and his descriptions where they were said; 御坂美琴 gathers 美琴, 御坂, 御坂同学, 超电磁炮, 第三位; 食蜂操祈 gathers 食蜂, 蜂蜜色少女,
 常盘台的女王. Still apart, for the world engine's second EM: 姐姐大人 (where EM met it before 美琴 was a candidate), 禁书目录 and
 茵蒂克丝, 最后之作 and 御坂御坂, 一方通行 and 统括理事长. Many more people than before (174 against 31): one-scene descriptions
-(小混混, 追击者) are people of their own, and a description EM was unsure of is a new one each time.
+(小混混, 追击者) are people of their own, and a description EM was unsure of is a new one each time. EM² (below) answers both.
+
+### 2.0.1 EM² — who is this, here (the user's call, 2026-10-30) — built
+
+**Why.** After the first full run, 137 of the 174 people had only descriptions for names (姐姐大人, 少女, 那个刺猬头, 老师), and
+the worst was a sink: 姐姐大人 stands in the book's first sentence, before 美琴 is named, so it became a person of its own, and
+every later 姐姐大人 joined that person (the recommender ranks a shared name highest). And 1,789 of the 2,419 world sentences
+(spoken, action, environment) name no one: their people are 我 and 你 (743 in spoken lines), 他 and 她 (206), or no word at
+all. The world engine needs exactly that: who speaks, who acts, who is spoken to. EM answers *which entity is this name*,
+once. The new question is *who is this, here*: asked where it stands, because the same words point at different people (少女
+is 茵蒂克丝 in one scene and someone else in the next; 姐姐大人 is 美琴 in 白井黑子's lines).
+
+**Two plans were weighed;** the user chose the second:
+- A: each vague string (pronoun, description) triggers its own EM, answered per occurrence and never added to the names.
+  It misses 我 and 你 and the lines with no word for the person, and a description before any name still has no one to
+  point at.
+- **B: roles and slots.** Only names enter the chart. Lines and descriptions are resolved against the scene's cast.
+
+**How** (`src/v2/roles.ts`, after the card scan and the contexts; scenes in reading order, a scene's batches in order):
+- **Asked:** every spoken and action sentence, and every sentence that holds a description of a person (the descriptions
+  typing found, scanned everywhere, a longer name masking the ones inside it: 御坂妹妹 is a name, not 妹妹). 12 asked
+  sentences a request; the passage runs from 3 sentences before the first to the last.
+- **The cast**, most likely first, at most 16: the people named in the passage, then in the scene, the people already
+  placed in the scene, the people a description of the batch has meant before (habits), the world's present people (when
+  the engine has them), the scene before's people, the recommender's people; and up to 6 slots of this scene and the one
+  before. Each with its other names and its latest fact.
+- **The document:** `{task, cast: {id: {name, also, named, fact}}, before: {id: {text, who, to}}, passage: {id: text},
+  descriptions: {d1: {text, in, meant}}}`. `before` carries the last answered lines of the previous batch; `meant` is a
+  description's habit (御坂美琴 ×5 (in lines of 白井黑子 ×3)).
+- **The questions:** `role:who:<id>` (spoken: who says it; action: who acts), `role:to:<id>` (spoken: who it is said to),
+  each a choice over the cast, the batch's descriptions (`d1`: whoever it means here), `unnamed` and `none`; `ref:d1` for
+  each description, a choice over the cast, `new`, `general` (people in general: 学生 as students at large) and `none`.
+- **Answers:** below 0.5 no one is sure (the answer is kept: `answer`, `confidence`). A description that is `new`, or not
+  sure, opens a **slot**: an unnamed person of the scene (`slot_<scene>_<n>`), later lines and descriptions can choose it,
+  the scene after sees it too. A slot is never anyone's name; the world engine's second EM may join a slot to a person.
+  A line that points at a description takes whoever it meant.
+- **Habits:** each description that meant a person is counted, with the speaker of the line it stood in; shown with it next
+  time (`meant`) and its people put in the cast. A prior, never an exact match.
+
+**Measured on vol 1** (the same reading; tiling, kinds, listing and typing from the cache): EM 154 Jev requests, 17 s; EM²
+247 requests, 37 s; 54 s wall, 398 Jev requests paid (the `general` choice cost 244 more on a rerun). The chart now holds
+**35 people** (174 before; the old extraction had 31), 318 things, 140 places, 57 times.
+- 2,272 lines: 1,561 with a sure speaker or actor; of 1,677 spoken lines, 741 with a sure listener (391 answered no one in
+  particular). Unsure answers sit at a median 0.38: often right, but a cast of 16 spreads the odds.
+- 692 descriptions where they stand: 401 meant a person, 206 an unnamed one (141 slots), 74 people in general, 11 not a
+  person. 姐姐大人 → 御坂美琴 every time (8; three in 白井黑子's lines); 少年 → 上条当麻 37 of 41; 第三位 → 美琴 10 of 10;
+  警备员 → 黄泉川爱穗 19 of 24; 克隆人 → 妹妹们 14 of 15; 三色猫 is not a person.
+- Read against the text (16 sure answers drawn at random): about 12 right; one wrong person (御坂妹's line given to
+  御坂御坂, a name EM split); the rest not decidable from the passage. A wrong one seen in passing: a line whose speaker calls
+  themself a Level 0 given to 美琴 at 0.9 (the speaker is 上条).
+- Still split, for the second EM: 最后之作 / 御坂御坂 / 最终信号, 茵蒂克丝 / 禁书目录.
+
+`experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
+kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record
+it is part of (the book's text is in it: never public).
 
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
@@ -227,7 +288,8 @@ v2 makes each a structured request:
 ## 7. Order of work
 0. **Done 2026-10-30:** the reading flow of the sketch (§2.0), on vol 1 end to end into the engine; the model catalog in one
    request per theme (21 things: 0.42 s, 17 of 21 the same as one request each); the stretch before the first event
-   explained (the line's loads, above).
+   explained (the line's loads, above). Then EM² (§2.0.1): roles and slots, on vol 1 (35 people; 1,561 of 2,272 lines
+   with a sure speaker or actor), and the reading's data page. Not yet run through the world engine.
 1. Movement on structured states in the pick loop (each person's spot now from the engine); births and meetings of the
    line's load as structured requests too (one per scene, not one per person on a picture), and kept across the reload
    after models.

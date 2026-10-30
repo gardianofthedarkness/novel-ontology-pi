@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>v2 Reading Data</title>
+<style>
+:root {
+  --bg: #f6f4ee; --surface: #fffdf7; --ink: #1e1d1a; --muted: #6b675f; --line: #e3ddd0; --chip: #eee9de;
+  --spoken: #2b66a6; --thought: #7a4dab; --fact: #9c6810; --action: #bf3f28; --environment: #2b8253; --narration: #6c6963;
+  --person: #ad2d66; --place: #0d7a82; --thing: #8a5a2b; --time: #5252cc; --slot: #7d828b;
+  --world: #1d6e5a; --ontology: #6b4a9a;
+  --cjk: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, var(--cjk);
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14151a; --surface: #1b1d23; --ink: #ebe9e3; --muted: #a29e97; --line: #2d3037; --chip: #262930;
+    --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f;
+    --person: #ef79a7; --place: #4ec2c8; --thing: #d29a62; --time: #a2a2ff; --slot: #99a0aa;
+    --world: #5bc3a5; --ontology: #b49ae0; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14151a; --surface: #1b1d23; --ink: #ebe9e3; --muted: #a29e97; --line: #2d3037; --chip: #262930;
+  --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f;
+  --person: #ef79a7; --place: #4ec2c8; --thing: #d29a62; --time: #a2a2ff; --slot: #99a0aa;
+  --world: #5bc3a5; --ontology: #b49ae0; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--ui); padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 1.7rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; }
+h3 { font-size: 0.95rem; }
+p { margin: 0; }
+.eyebrow { font: 600 0.72rem/1 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); max-width: 68ch; }
+header.top { padding-block: 28px 18px; border-bottom: 1px solid var(--line); }
+header.top .wrap { display: grid; gap: 10px; }
+.run { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); }
+.run b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.steps { width: 100%; border-collapse: collapse; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.steps td, .steps th { padding: 3px 10px 3px 0; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.steps th { font-weight: 600; color: var(--muted); }
+.scroll { overflow-x: auto; }
+details > summary { cursor: pointer; }
+
+.legend { display: grid; gap: 12px; padding-block: 16px; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: 0.82rem; }
+.legend-row > .label { width: 100%; font: 600 0.7rem/1 var(--ui); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.key { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 4px; border-radius: 6px; background: color-mix(in srgb, var(--k) 10%, var(--surface)); border-left: 4px solid var(--k); }
+.key small { color: var(--muted); }
+.nest { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 0.78rem; }
+.nest span { padding: 1px 7px; border-radius: 999px; background: var(--chip); }
+.nest i { color: var(--muted); font-style: normal; }
+
+nav.scenes { position: sticky; top: 0; z-index: 5; background: var(--bg); border-block: 1px solid var(--line); padding-block: 8px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 10; }
+nav.scenes { top: env(safe-area-inset-top, 0px); }
+nav.scenes .wrap { display: flex; gap: 8px; align-items: center; }
+nav select { flex: 1; min-width: 0; font: 0.88rem var(--ui); padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+nav button { font: 600 0.88rem var(--ui); padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+nav button:disabled { opacity: 0.4; cursor: default; }
+
+main { display: grid; gap: 18px; padding-block: 18px 48px; }
+.scene-head { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.scene-head .ids { font: 0.8rem var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.people { display: flex; flex-wrap: wrap; gap: 5px; }
+.sub { font: 600 0.7rem/1 var(--ui); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+
+.chip { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 7px; border-radius: 999px; font: 0.8rem/1.5 var(--cjk); background: color-mix(in srgb, var(--person) 12%, var(--surface)); color: var(--ink); white-space: nowrap; }
+.chip small { font: 0.68rem var(--ui); color: var(--muted); }
+.chip.slot { background: transparent; border: 1px dashed var(--slot); }
+.chip.place { background: color-mix(in srgb, var(--place) 13%, var(--surface)); }
+.chip.thing { background: color-mix(in srgb, var(--thing) 13%, var(--surface)); }
+.chip.maybe { background: transparent; color: var(--muted); font-style: italic; border: 1px solid var(--line); }
+.chip.no { background: var(--chip); color: var(--muted); }
+
+.tiles { display: grid; gap: 8px; }
+.frame { --k: var(--spoken); display: grid; gap: 6px; padding: 8px; border-radius: 12px; border: 1.5px solid color-mix(in srgb, var(--k) 55%, var(--line)); background: color-mix(in srgb, var(--k) 3%, var(--bg)); }
+.card { --k: var(--narration); display: grid; gap: 2px; padding: 6px 10px 8px; border-radius: 8px; border-left: 4px solid var(--k); background: color-mix(in srgb, var(--k) 8%, var(--surface)); }
+.k-spoken, .k-dialogue { --k: var(--spoken); } .k-thought, .k-monologue { --k: var(--thought); } .k-fact { --k: var(--fact); }
+.k-action { --k: var(--action); } .k-environment { --k: var(--environment); } .k-narration { --k: var(--narration); }
+.cap { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 0.74rem; color: var(--muted); }
+.cap .kind { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--k); }
+.cap .range { font-family: var(--mono); }
+.home { font: 600 0.66rem/1 var(--ui); letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 6px; border-radius: 4px; color: var(--surface); }
+.home.world { background: var(--world); } .home.ontology { background: var(--ontology); }
+
+.s { display: grid; grid-template-columns: 3.6em minmax(0, 1fr); gap: 0 8px; padding: 4px 0; border-top: 1px dashed color-mix(in srgb, var(--k) 25%, transparent); cursor: pointer; }
+.cap + .s { border-top: 0; }
+.s:hover .tx { text-decoration: underline dotted var(--line); }
+.sid { font: 0.68rem/1.9 var(--mono); color: var(--muted); display: grid; align-content: start; }
+.turn { font: 700 0.7rem/1.2 var(--ui); color: var(--k); }
+.tx { font: 1rem/1.75 var(--cjk); overflow-wrap: anywhere; }
+.role { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+.role .v { font-weight: 600; letter-spacing: 0.03em; }
+.cf { font: 0.66rem var(--mono); color: var(--muted); }
+.rec { grid-column: 1 / -1; margin: 6px 0 2px; padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); font: 0.74rem/1.5 var(--mono); white-space: pre; overflow-x: auto; color: var(--ink); cursor: text; }
+
+.m-char { color: var(--person); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--person) 40%, transparent); }
+.m-loc { color: var(--place); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--place) 40%, transparent); }
+.m-item { color: var(--thing); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--thing) 40%, transparent); }
+.m-time { color: var(--time); border: 1px dashed color-mix(in srgb, var(--time) 60%, transparent); border-radius: 4px; padding: 0 2px; }
+.m-d { border-bottom: 2px dashed var(--person); }
+.m-d sup { font: 600 0.62rem var(--ui); color: var(--person); margin-left: 1px; }
+.m-d.open { border-bottom-color: var(--slot); } .m-d.open sup { color: var(--slot); }
+
+.files { display: grid; gap: 8px; }
+.file { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.file summary { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 10px 12px; }
+.file summary code { font: 600 0.82rem var(--mono); }
+.file summary span { font-size: 0.82rem; color: var(--muted); }
+.file pre { margin: 0 12px 12px; padding: 10px 12px; border-radius: 8px; background: var(--bg); font: 0.74rem/1.5 var(--mono); overflow-x: auto; }
+footer { color: var(--muted); font-size: 0.78rem; padding-block: 0 32px; }
+@media (max-width: 560px) {
+  h1 { font-size: 1.35rem; }
+  .s { grid-template-columns: 2.9em minmax(0, 1fr); }
+  .tx { font-size: 0.98rem; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">v2 reading · pure processing, before the world engine</p>
+    <h1>Vol 1, as the reading leaves it</h1>
+    <p class="lede">Each scene's text, tiled into the cards it was cut into and coloured by sentence kind. Names, descriptions and times are marked where they stand, and under each line is who says or does it (EM²). Tap a sentence to see every record it belongs to, as the YAML files hold them.</p>
+    <div id="run" class="run"></div>
+    <details id="steps-box"><summary class="eyebrow">Steps of this run</summary><div class="scroll"><table class="steps" id="steps"></table></div></details>
+  </div>
+</header>
+
+<section class="wrap legend" aria-label="Legend">
+  <div class="legend-row"><span class="label">Sentence kinds (one card per run; a new card where the carrier changes, ↻)</span>
+    <span class="key k-spoken">spoken <small>world</small></span><span class="key k-action">action <small>world</small></span><span class="key k-environment">environment <small>world</small></span>
+    <span class="key k-thought">thought <small>ontology</small></span><span class="key k-fact">fact <small>ontology</small></span><span class="key k-narration">narration <small>ontology</small></span>
+  </div>
+  <div class="legend-row"><span class="label">Marks in the text</span>
+    <span class="m-char">person</span><span class="m-loc">place</span><span class="m-item">thing</span><span class="m-time">time</span>
+    <span class="m-d">description<sup>→ whom it meant</sup></span><span class="m-d open">description<sup>→ unnamed</sup></span>
+    <span class="chip">named person</span><span class="chip slot">unnamed (slot)</span><span class="chip maybe">maybe, below 0.5</span>
+  </div>
+  <div class="legend-row"><span class="label">How the records nest</span>
+    <div class="nest"><span>sentence id</span><i>→</i><span>kind + turn</span><i>→</i><span>run card</span><i>→</i><span>exchange / monologue</span><i>→</i><span>scene</span></div>
+    <div class="nest"><span>listed string</span><i>→</i><span>type, proper?</span><i>→</i><span>EM</span><i>→</i><span>chart entity</span><i>→</i><span>card scan</span></div>
+    <div class="nest"><span>line, description</span><i>→</i><span>EM² cast</span><i>→</i><span>role, reference, slot</span><i>→</i><span>card people</span></div>
+  </div>
+</section>
+
+<nav class="scenes" aria-label="Scenes">
+  <div class="wrap">
+    <button id="prev" type="button" aria-label="Previous scene">‹</button>
+    <select id="pick" aria-label="Scene"></select>
+    <button id="next" type="button" aria-label="Next scene">›</button>
+  </div>
+</nav>
+
+<main class="wrap">
+  <section class="scene-head" id="head"></section>
+  <section class="tiles" id="tiles" lang="zh-Hans"></section>
+  <section class="files" id="files"></section>
+</main>
+<footer class="wrap">Made from &lt;out&gt;/v2/data.json by experiments/v2/inspect.mjs. It holds the book's text: keep it private.</footer>
+
+<script>
+const DATA = /*DATA*/null;
+const $ = (id) => document.getElementById(id);
+const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const TEXT = new Map(DATA.sentences);
+const ORDER = new Map(DATA.sentences.map(([id], index) => [id, index]));
+const ENTITY = new Map(DATA.entities.map((entity) => [entity.id, entity]));
+const SLOT = new Map(DATA.slots.map((slot) => [slot.id, slot]));
+const TIME = new Map(DATA.times.map((node) => [node.id, node]));
+const CARD = new Map(DATA.cards.map((card) => [card.id, card]));
+const CONTEXT = new Map(DATA.contexts.map((context) => [context.scene, context]));
+const leafOf = new Map(), parentOf = new Map();
+for (const card of DATA.cards) {
+  if (card.kind === 'dialogue' || card.kind === 'monologue') { for (const inner of card.inside ?? []) if (!parentOf.has(inner)) parentOf.set(inner, card); }
+  else for (const id of card.sentences) leafOf.set(id, card);
+}
+const refsAt = new Map();
+for (const reference of DATA.references) for (const id of reference.sentences) refsAt.set(id, [...(refsAt.get(id) ?? []), reference]);
+const label = (id) => SLOT.has(id) ? SLOT.get(id).names[0] : ENTITY.get(id)?.proper[0] ?? ENTITY.get(id)?.names[0] ?? TIME.get(id)?.text ?? id;
+const short = (id) => id.replace(/^b\d+_/, '');
+const pct = (value) => (value ?? 0).toFixed(2);
+const fmt = (n) => Number(n).toLocaleString('en-US');
+
+function chip(id, note = '') {
+  if (!id) return '';
+  const cls = SLOT.has(id) ? 'chip slot' : id.startsWith('loc_') ? 'chip place' : id.startsWith('item_') ? 'chip thing' : 'chip';
+  return `<span class="${cls}" title="${esc(id)}">${SLOT.has(id) ? 'unnamed · ' : ''}${esc(label(id))}${note ? `<small>${esc(note)}</small>` : ''}</span>`;
+}
+const HOW = { speaks: 'says', acts: 'acts', addressed: 'to', named: 'named', described: 'desc' };
+const peopleChips = (people) => (people ?? []).map((person) => chip(person.id, person.how.map((how) => HOW[how]).join('·'))).join('');
+
+// A tiny YAML writer (the files' shape: blocks, short scalar lists inline).
+const plain = (text) => /^[^\s\-?:,\[\]{}#&*!|>'"%@`][^:#\n]*$/.test(text) && !/^(true|false|null|~|[-+]?\d[\d.]*)$/.test(text) && !/\s$/.test(text);
+const scalar = (value) => typeof value === 'string' ? (plain(value) ? value : JSON.stringify(value)) : value === null || value === undefined ? 'null' : String(value);
+function toYaml(value, indent = 0) {
+  const pad = ' '.repeat(indent);
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]';
+    if (value.every((item) => item === null || typeof item !== 'object') && JSON.stringify(value).length <= 90) return `[${value.map(scalar).join(', ')}]`;
+    return value.map((item) => `\n${pad}- ${toYaml(item, indent + 2).replace(/^\n\s*/, '')}`).join('');
+  }
+  if (value && typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (!keys.length) return '{}';
+    return keys.map((key) => `\n${pad}${/^[\w-]+$/.test(key) ? key : JSON.stringify(key)}: ${toYaml(value[key], indent + 2)}`).join('').replace(/: \n/g, ':\n');
+  }
+  return scalar(value);
+}
+const yaml = (value) => toYaml(value).replace(/^\n/, '');
+
+function marked(id) {
+  const text = TEXT.get(id) ?? '', spans = [...(DATA.spans[id] ?? [])].sort((a, b) => a[0] - b[0]);
+  let out = '', at = 0;
+  for (const [start, length, kind, ref] of spans) {
+    if (start < at) continue;
+    out += esc(text.slice(at, start));
+    const word = esc(text.slice(start, start + length));
+    if (kind === 'd') out += ref ? `<span class="m-d${SLOT.has(ref) ? ' open' : ''}" title="${esc(ref)}">${word}<sup>→ ${esc(SLOT.has(ref) ? 'unnamed' : label(ref))}</sup></span>` : `<span class="m-d open" title="description, not resolved here">${word}</span>`;
+    else out += `<span class="m-${kind}" title="${esc(ref)}">${word}</span>`;
+    at = start + length;
+  }
+  return out + esc(text.slice(at));
+}
+
+function pickHtml(pick, none) {
+  if (!pick) return '';
+  const via = /^(char|slot|item|loc)_/.test(pick.answer) || ['unnamed', 'none'].includes(pick.answer) ? '' : ` <small>via ${esc(pick.answer)}</small>`;
+  if (pick.id) return `${chip(pick.id)}${via} <span class="cf">${pct(pick.confidence)}</span>`;
+  if (pick.answer === 'none') return `<span class="chip no">${esc(none)}</span> <span class="cf">${pct(pick.confidence)}</span>`;
+  if (pick.answer === 'unnamed') return `<span class="chip no">someone unnamed</span> <span class="cf">${pct(pick.confidence)}</span>`;
+  const maybe = /^(char|slot)_/.test(pick.answer) ? label(pick.answer) : pick.answer;
+  return `<span class="chip maybe" title="below 0.5: no one sure">maybe ${esc(maybe)}</span> <span class="cf">${pct(pick.confidence)}</span>`;
+}
+
+function sentenceHtml(id) {
+  const kind = DATA.kinds[id] ?? {}, role = DATA.roles[id];
+  const turn = kind.turn >= 0.5 ? `<span class="turn" title="the carrier changes here · ${pct(kind.turn)}">↻ ${pct(kind.turn)}</span>` : '';
+  const roleHtml = role ? `<div class="role"><span class="v">${role.kind === 'spoken' ? 'says' : 'acts'}</span> ${pickHtml(role.who, role.kind === 'spoken' ? 'no one can tell' : 'no person')}${role.to ? ` <span class="v">to</span> ${pickHtml(role.to, 'no one in particular')}` : ''}</div>` : '';
+  return `<div class="s k-${esc(kind.kind ?? 'narration')}" data-id="${esc(id)}"><div class="sid">${esc(short(id))}${turn}</div><div class="tx">${marked(id)}</div>${roleHtml}</div>`;
+}
+
+function caption(card, sceneIds) {
+  const cut = !sceneIds.has(card.first) || !sceneIds.has(card.last) ? ' <span title="the card runs past this scene">(cut at the scene edge)</span>' : '';
+  return `<div class="cap"><span class="kind">${esc(card.kind)}</span><span class="range">${esc(short(card.first))}–${esc(short(card.last))}</span><span class="home ${esc(card.home)}">${esc(card.home)}</span>${cut}${peopleChips(card.people)}</div>`;
+}
+
+function sceneRecords(scene) {
+  const ids = new Set(scene.sentences);
+  const leaves = [...new Set(scene.sentences.map((id) => leafOf.get(id)).filter(Boolean))];
+  const frames = [...new Set(leaves.map((card) => parentOf.get(card.id)).filter(Boolean))];
+  const cardRecord = (card) => card && (({ sentences, ...rest }) => ({ ...rest, size: sentences.length }))(card);
+  const people = new Map();
+  for (const card of leaves) for (const person of card.people ?? []) {
+    const entry = people.get(person.id) ?? {};
+    for (const how of person.how) entry[how] = (entry[how] ?? 0) + person.at.filter((id) => ids.has(id)).length;
+    people.set(person.id, entry);
+  }
+  const top = [...people].filter(([id]) => ENTITY.has(id)).sort((a, b) => Object.values(b[1]).reduce((x, y) => x + y, 0) - Object.values(a[1]).reduce((x, y) => x + y, 0));
+  const lead = top[0] ? ENTITY.get(top[0][0]) : null;
+  const batch = scene.sentences.map((id) => DATA.emOf[id]).find(Boolean);
+  const roles = scene.sentences.filter((id) => DATA.roles[id]).slice(0, 3);
+  const references = DATA.references.filter((reference) => reference.scene === scene.id);
+  const slots = DATA.slots.filter((slot) => slot.scene === scene.id);
+  return { leaves, frames, people, top, lead, batch, roles, references, slots, cardRecord };
+}
+
+function render(index) {
+  const scene = DATA.scenes[index], ids = new Set(scene.sentences);
+  const { leaves, frames, top, lead, batch, roles, references, slots, cardRecord } = sceneRecords(scene);
+  const context = CONTEXT.get(scene.id);
+  $('pick').value = String(index);
+  $('prev').disabled = index === 0; $('next').disabled = index === DATA.scenes.length - 1;
+  if (location.hash !== `#s${index + 1}`) history.replaceState(null, '', `#s${index + 1}`);
+
+  const kinds = leaves.reduce((sum, card) => ({ ...sum, [card.kind]: (sum[card.kind] ?? 0) + 1 }), {});
+  $('head').innerHTML = `
+    <div><p class="eyebrow">Scene ${index + 1} of ${DATA.scenes.length} · block ${esc(scene.block)} · chapter ${esc(scene.chapter)}</p>
+    <h2>${esc(scene.id)} <span class="cf">${scene.sentences.length} sentences</span></h2>
+    <p class="ids">${esc(scene.sentences[0])} → ${esc(scene.sentences[scene.sentences.length - 1])} · ${leaves.length} run cards (${Object.entries(kinds).map(([kind, n]) => `${n} ${kind}`).join(', ')}) · ${frames.length} exchanges and monologues</p></div>
+    <div class="sub">People here (EM²: says, acts, to · card scan: named · descriptions: desc)</div>
+    <div class="people" lang="zh-Hans">${top.map(([id, how]) => chip(id, Object.entries(how).map(([key, n]) => `${HOW[key]} ${n}`).join(' · '))).join('') || '<span class="cf">no one named</span>'}</div>
+    ${slots.length ? `<div class="sub">Unnamed people (slots) opened here</div><div class="people" lang="zh-Hans">${slots.map((slot) => chip(slot.id, slot.names.length > 1 ? `also ${slot.names.slice(1).join(', ')}` : '')).join('')}</div>` : ''}
+    ${context ? `<div class="sub">What the world engine is given (context)</div><div class="people" lang="zh-Hans">${context.recommended.map((entry) => chip(entry.id, `expected ${entry.score}`)).join('')}<span class="cf">${Object.entries(context.before).map(([kind, list]) => `${list.length} ${kind} cards before`).join(' · ')} · ${context.facts.length} recent facts</span></div>` : ''}`;
+
+  let html = '', frame = null, card = null;
+  const closeCard = () => { if (card) { html += '</div>'; card = null; } };
+  const closeFrame = () => { closeCard(); if (frame) { html += '</div>'; frame = null; } };
+  for (const id of scene.sentences) {
+    const leaf = leafOf.get(id) ?? null, parent = leaf ? parentOf.get(leaf.id) ?? null : null;
+    if (parent !== frame) { closeFrame(); if (parent) { html += `<div class="frame k-${esc(parent.kind)}">${caption(parent, ids)}`; frame = parent; } }
+    if (leaf !== card) { closeCard(); if (leaf) { html += `<div class="card k-${esc(leaf.kind)}">${caption(leaf, ids)}`; card = leaf; } }
+    html += sentenceHtml(id);
+  }
+  closeFrame();
+  $('tiles').innerHTML = html;
+
+  const first = (list) => list[0];
+  const dialogue = first(frames.filter((entry) => entry.kind === 'dialogue')) ?? first(frames) ?? first(leaves);
+  const thing = [...new Set(leaves.flatMap((entry) => (entry.entities ?? []).map((hit) => hit.id)))].map((id) => ENTITY.get(id)).find((entity) => entity && entity.category !== 'person');
+  const entityRecord = (entity) => entity && (({ seenCount, seen, ...rest }) => ({ ...rest, seen: seenCount > seen.length ? [...seen, `… ${seenCount - seen.length} more`] : seen }))(entity);
+  const files = [
+    ['scenes.yaml', 'one record a scene: a list of sentence ids (scene tiling)', DATA.scenes.length, (({ sentences, index: _, ...rest }) => ({ ...rest, first: sentences[0], last: sentences[sentences.length - 1], sentences: sentences.length }))(scene)],
+    ['kinds.yaml', 'one record a sentence: its kind, whether the carrier changes (turn), how sure', Object.keys(DATA.kinds).length, Object.fromEntries(scene.sentences.slice(0, 4).map((id) => [id, DATA.kinds[id]]))],
+    ['cards.yaml', 'runs of one kind (a new card where the carrier changes), and exchanges and monologues over them; each with the entities the scan found and its people', DATA.cards.length, cardRecord(dialogue)],
+    ['chart.yaml', 'the identities: people, places, things (proper names match anywhere; seen = every sentence it is in) and time nodes', DATA.entities.length + DATA.times.length, { entities: [entityRecord(lead), entityRecord(thing)].filter(Boolean) }],
+    ['em.yaml', 'per listing batch (30 sentences): each listed string, typed, and how EM settled it', null, batch ? { batch: batch.batch, results: batch.results.slice(0, 4) } : {}],
+    ['contexts.yaml', 'per scene: its world cards, the scene before\'s cards of each kind, the people the recommender expects, recent facts', DATA.contexts.length, context ?? {}],
+    ['roles.yaml', 'per spoken or action sentence: who says or acts (who) and who a line is said to (to); id null = no one sure', Object.keys(DATA.roles).length, Object.fromEntries(roles.map((id) => [id, DATA.roles[id]]))],
+    ['references.yaml', 'each description of a person where it stands, and who it means there', DATA.references.length, references.slice(0, 2)],
+    ['slots.yaml', 'unnamed people (one scene each), and habits: what a description has meant, in whose lines', DATA.slots.length, { slots: slots.slice(0, 2), habits: DATA.habits.slice(0, 2) }],
+  ];
+  $('files').innerHTML = `<h2>This scene in each file</h2><p class="lede">One real record from each output file (under &lt;out&gt;/v2/), taken from this scene where the file has one.</p>` + files.map(([name, what, count, record]) => `<details class="file"><summary><code>${name}</code><span>${esc(what)}${count !== null ? ` · ${fmt(count)} records` : ''}</span></summary><pre lang="zh-Hans"></pre></details>`).join('');
+  [...$('files').querySelectorAll('pre')].forEach((pre, i) => { pre.textContent = yaml(files[i][3]); });
+}
+
+function records(id) {
+  const leaf = leafOf.get(id), parent = leaf ? parentOf.get(leaf.id) : null;
+  const strip = (card) => card && (({ sentences, ...rest }) => ({ ...rest, size: sentences.length }))(card);
+  const em = DATA.emOf[id];
+  return {
+    sentence: { id, text: TEXT.get(id) },
+    kind: DATA.kinds[id],
+    ...(DATA.roles[id] ? { role: DATA.roles[id] } : {}),
+    ...(refsAt.get(id) ? { references: refsAt.get(id) } : {}),
+    card: strip(leaf),
+    ...(parent ? { inside: strip(parent) } : {}),
+    ...(em ? { em: { batch: em.batch, results: em.results } } : {}),
+  };
+}
+
+$('tiles').addEventListener('click', (event) => {
+  if (event.target.closest('.rec')) return;
+  const row = event.target.closest('.s');
+  if (!row) return;
+  const open = row.querySelector('.rec');
+  if (open) { open.remove(); return; }
+  const pre = document.createElement('pre');
+  pre.className = 'rec'; pre.textContent = yaml(records(row.dataset.id));
+  row.appendChild(pre);
+});
+
+// The run.
+const log = DATA.log;
+if (log) {
+  const cards = Object.values(log.cards ?? {}).reduce((x, y) => x + y, 0);
+  $('run').innerHTML = [
+    ['sentences', fmt(log.sentences)], ['scenes', fmt(log.scenes)], ['cards', fmt(cards)],
+    ['people / places / things / times', `${log.chart.person} / ${log.chart.place} / ${log.chart.thing} / ${log.chart.time}`],
+    ['paid in this run (a rerun from the cache pays nothing)', `${fmt(log.paidRequests.jev)} Jev · ${fmt(log.paidRequests.work)} work model`], ['wall, this run', `${(log.wallMs / 1000).toFixed(1)} s`],
+    ...(log.roles ? [['lines with a sure speaker or actor', `${fmt(log.roles.whoSettled)} of ${fmt(log.roles.lines)}`], ['slots', fmt(log.roles.slots)]] : []),
+  ].map(([name, value]) => `<span>${name} <b>${value}</b></span>`).join('');
+  $('steps').innerHTML = '<tr><th>step</th><th>requests (cached included)</th><th>ms</th></tr>' + (log.steps ?? []).map((step) => `<tr><td>${esc(step.step)}</td><td>${fmt(step.requests)}</td><td>${fmt(step.ms)}</td></tr>`).join('');
+} else $('steps-box').hidden = true;
+
+$('pick').innerHTML = DATA.scenes.map((scene, index) => `<option value="${index}">${index + 1} · ${scene.id} · ch ${scene.chapter} · ${scene.sentences.length} sentences</option>`).join('');
+$('pick').addEventListener('change', (event) => { render(Number(event.target.value)); window.scrollTo({ top: $('head').offsetTop - 70 }); });
+$('prev').addEventListener('click', () => { render(Math.max(0, Number($('pick').value) - 1)); window.scrollTo({ top: $('head').offsetTop - 70 }); });
+$('next').addEventListener('click', () => { render(Math.min(DATA.scenes.length - 1, Number($('pick').value) + 1)); window.scrollTo({ top: $('head').offsetTop - 70 }); });
+const start = Number((/^#s(\d+)$/.exec(location.hash) ?? [])[1] ?? 1) - 1;
+render(Math.min(Math.max(0, start), DATA.scenes.length - 1));
+</script>
+</body>
+</html>

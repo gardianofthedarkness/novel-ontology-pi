@@ -36,6 +36,10 @@ card:                # cards.yaml — runs of one kind, a new card where the car
   entities:          # the card scan (System 0): who and what the card names, and where
     - id: string
       at: [string]   # sentence ids
+  people:            # who is in the card: named (scan), speaks / acts / addressed (EM² roles), described (EM² references)
+    - id: string     # a person (char_) or an unnamed one (slot_)
+      how: [string]
+      at: [string]
 
 detected:            # a listed string, typed (em.yaml holds each with its outcome)
   key: string        # n1, n2 … within its batch
@@ -46,7 +50,8 @@ detected:            # a listed string, typed (em.yaml holds each with its outco
   sentences: [string]
 
 em_result:           # em.yaml — per batch (its first sentence id), per detected string
-  outcome: [exact, alias, new, time, skip]
+  outcome: [exact, alias, new, time, description, skip]   # description: a person's description, no one's name (EM² resolves it)
+  sentences: [string] # description: the sentences that hold it
   entity: string     # the chart entity (or time node) it is
   candidates:        # the recommender's best three, by nearness, frequency and shared names
     - id: string
@@ -80,6 +85,38 @@ context:             # contexts.yaml — what the world engine is given for each
     - id: string
       score: number
   facts: [string]    # the latest fact cards before it
+
+pick:                # one EM² answer
+  id: string         # the person or slot it settles on; null: no one, or no one sure (below 0.5)
+  answer: string     # what Jev chose: a person or slot id, a description's text (id: whom it meant), unnamed, none
+  confidence: number
+
+role:                # roles.yaml — per spoken or action sentence (EM²)
+  kind: [spoken, action]
+  who: pick          # who says it / who acts
+  to: pick           # spoken only: who it is said to
+
+reference:           # references.yaml — a description of a person where it stands (EM²)
+  text: string
+  scene: string
+  sentences: [string]
+  entity: string     # a person, a slot, or null (people in general, not a person)
+  answer: string     # a person or slot id, new, general, none
+  confidence: number
+  unsure: string     # not sure: the person it leaned to (a slot was opened)
+
+slot:                # slots.yaml — an unnamed person of one scene; never anyone's name
+  id: string         # slot_<scene number>_<n>
+  scene: string
+  label: string      # the description that opened it
+  names: [string]    # every description that meant it
+  sentences: [string]
+
+habit:               # slots.yaml habits — what a description has meant (a prior for later, never an exact match)
+  text: string
+  entity: string
+  count: integer
+  speakers: { person id: integer }   # in whose lines
 
 log:                 # log.yaml — the run
   sentences: integer

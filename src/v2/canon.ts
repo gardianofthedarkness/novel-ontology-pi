@@ -3,14 +3,22 @@ import type { FlowResult } from "./flow.js";
 /**
  * The v2 reading as a world-first workspace's canon (ontology/*.jsonl, the records every stage step and the engine read), so
  * the world engine runs on it as it is. From the flow, with no model calls:
- * - scenes: the tiles, each with the people its cards name (mentioned, not present: presence is the world loop's) and its
- *   exchange and monologue cards as dialogue cards (their people: the ones the card names);
+ * - scenes: the tiles, each with its cards' people (mentioned, not present: presence is the world loop's) and its
+ *   exchange and monologue cards as dialogue cards (their people: who speaks, who is spoken to, who is named);
  * - entities: the chart's people, places and things (Character, Location, Item), proper names first, descriptions kept apart;
- * - events: the action cards, in reading order, each with the people it names as its actors (PARTICIPATES_IN).
- * Times are not canon yet (EM for times is the calendar's).
+ * - events: the action cards, in reading order, each with its people as its actors (who acts first; PARTICIPATES_IN).
+ * Times are not canon yet (EM for times is the calendar's); slots (unnamed people) are not canon.
  */
 const KIND = { person: "Character", place: "Location", thing: "Item" } as const;
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
+const RANK = { speaks: 0, acts: 0, addressed: 1, named: 2, described: 2 } as const;
+
+/** A card's people of the chart (who speaks or acts first, then who is spoken to, then who is named or described), and its unnamed people (slots). */
+export function cardPeople(result: FlowResult, card: FlowResult["cards"][number]): { people: string[]; extras: string[] } {
+  const rank = (person: FlowResult["cards"][number]["people"][number]) => Math.min(...person.how.map((how) => RANK[how]));
+  const sorted = [...card.people].sort((a, b) => rank(a) - rank(b));
+  return { people: sorted.filter((person) => result.chart.entities.get(person.id)?.category === "person").map((person) => person.id), extras: sorted.filter((person) => person.id.startsWith("slot_")).map((person) => person.id) };
+}
 
 /** The action cards as events, numbered in reading order (the world loop's base layer uses the same ids). */
 export function actionEvents(result: FlowResult): { id: string; card: FlowResult["cards"][number] }[] {
@@ -18,9 +26,8 @@ export function actionEvents(result: FlowResult): { id: string; card: FlowResult
 }
 
 export function canonRecords(result: FlowResult, text: (sentence: string) => string) {
-  const isPerson = (id: string) => result.chart.entities.get(id)?.category === "person";
   const sceneOf = new Map(result.scenes.flatMap((scene) => scene.sentences.map((id) => [id, scene] as const)));
-  const people = (card: FlowResult["cards"][number]) => card.entities.map((hit) => hit.id).filter(isPerson);
+  const people = (card: FlowResult["cards"][number]) => cardPeople(result, card).people;
   const cardsOf = new Map<string, FlowResult["cards"]>();
   for (const card of result.cards) { const scene = sceneOf.get(card.first); if (scene) cardsOf.set(scene.id, [...(cardsOf.get(scene.id) ?? []), card]); }
   const scenes = result.scenes.map((scene) => {

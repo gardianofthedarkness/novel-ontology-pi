@@ -2,6 +2,7 @@ import type { Sentence } from "../digger/intake/sectioning.js";
 import { classifySentences, kindCards, tileScenes, type KindCard, type SentenceKind } from "../digger/autostep/segmentation.js";
 import { Chart, mentions, resolveBatch, type EmResult, type Fact } from "./em.js";
 import type { Lister } from "./listing.js";
+import { resolveRoles, type RolesResult } from "./roles.js";
 import { typeNames, type Decide, type Detected } from "./typing.js";
 
 /**
@@ -14,10 +15,15 @@ import { typeNames, type Decide, type Detected } from "./typing.js";
  * - everything waits for all three; then EM runs batch by batch in reading order (the chart grows as it reads);
  * - System 0 scans every card for the chart's names (string match);
  * - each scene's context is composed: its world cards, the scene before's cards of the same kind in sequence, and the
- *   people the recommender expects from the recent scenes (the world engine adds its view of who is where).
+ *   people the recommender expects from the recent scenes (the world engine adds its view of who is where);
+ * - EM² (roles.ts), scene by scene: who says or does each line, who a line is said to, and who each description of a
+ *   person means where it stands (a person of the chart, or an unnamed person of the scene: a slot); each card's people
+ *   are then the ones it names, and the ones its lines and descriptions point at.
  */
 export interface FlowBlock { id: string; chapter: number; sentences: Sentence[] }
-export interface FlowCard extends KindCard { block: string; sentences: string[]; entities: { id: string; at: string[] }[] }
+/** A card's person: how it is there (named, speaks, acts, addressed, described) and in which of its sentences. */
+export interface CardPerson { id: string; how: ("named" | "speaks" | "acts" | "addressed" | "described")[]; at: string[] }
+export interface FlowCard extends KindCard { block: string; sentences: string[]; entities: { id: string; at: string[] }[]; people: CardPerson[] }
 export interface FlowScene { id: string; index: number; block: string; chapter: number; sentences: string[] }
 export interface SceneContext {
   scene: string;
@@ -27,7 +33,7 @@ export interface SceneContext {
   facts: string[];
 }
 export interface StepLog { step: string; requests: number; ms: number; inputChars: number; detail?: Record<string, unknown> }
-export interface FlowResult {
+export interface FlowResult extends RolesResult {
   scenes: FlowScene[]; cards: FlowCard[]; kinds: Record<string, { kind: SentenceKind; turn: number; confidence: number }>;
   chart: Chart; em: { batch: string; results: EmResult[] }[]; contexts: SceneContext[]; steps: StepLog[];
 }
@@ -39,7 +45,7 @@ export const LIST_AT_ONCE = 8, JEV_AT_ONCE = 12;
 /** Recent scenes the recommender looks back over for a scene's context, and facts a context carries. */
 const RECENT_SCENES = 3, CONTEXT_FACTS = 6;
 
-export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: Lister, options: { onStep?: (log: StepLog) => void } = {}): Promise<FlowResult> {
+export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: Lister, options: { onStep?: (log: StepLog) => void; present?: Map<string, string[]> } = {}): Promise<FlowResult> {
   const steps: StepLog[] = [];
   const meter = (step: string) => { const log: StepLog = { step, requests: 0, ms: 0, inputChars: 0 }; steps.push(log); return log; };
   // One gate for every Jev request of the flow.
@@ -73,13 +79,15 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
       while (next < batches.length) {
         const index = next++, batch = batches[index].sentences;
         listing.requests++; listing.inputChars += batch.reduce((sum, sentence) => sum + sentence.text.length + sentence.id.length + 2, 0);
+        const asked = performance.now();
         const names = await lister(batch);
+        listing.ms += Math.round(performance.now() - asked);
         const started = performance.now();
         detectedOf[index] = await typeNames(typingDecide, batch, names);
         typing.ms += Math.round(performance.now() - started);
       }
     }));
-    listing.ms = Math.round(performance.now() - listingStarted) - typing.ms;
+    listing.detail = { wallMs: Math.round(performance.now() - listingStarted), note: "ms: listing and typing request time summed over the workers" };
     options.onStep?.(listing); options.onStep?.(typing);
   })();
   const [tiles, kinds] = await Promise.all([tiled, classified, listed]);
@@ -90,7 +98,7 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   const cards: FlowCard[] = kinds.flatMap(({ block, kinds: list, turns, confidence }) => {
     const ids = block.sentences.map((sentence) => sentence.id);
     ids.forEach((id, index) => { kindOf[id] = { kind: list[index], turn: Number(turns[index].toFixed(3)), confidence: Number(confidence[index].toFixed(3)) }; });
-    return kindCards(ids, list, turns).map((card) => ({ ...card, block: block.id, sentences: ids.slice(ids.indexOf(card.first), ids.indexOf(card.last) + 1), entities: [] }));
+    return kindCards(ids, list, turns).map((card) => ({ ...card, block: block.id, sentences: ids.slice(ids.indexOf(card.first), ids.indexOf(card.last) + 1), entities: [], people: [] }));
   });
   const facts: Fact[] = cards.filter((card) => card.kind === "fact").map((card) => ({ first: card.first, text: card.sentences.map(text).join("") }));
 
@@ -102,9 +110,9 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
 
   // System 0: every card scanned for the chart's proper names (and the appearances EM recorded, where a description was
   // decided); every appearance recorded on its entity.
-  const scan = meter("card scan");
+  const scan = meter("card scan"), found = new Map<string, { id: string }[]>();
   await timed(scan, async () => {
-    const names = chart.names(), found = new Map<string, { id: string }[]>();
+    const names = chart.names();
     for (const entity of chart.entities.values()) for (const id of entity.seen) found.set(id, [...(found.get(id) ?? []), { id: entity.id }]);
     for (const { sentence } of all) { const hits = mentions(sentence.text, names); found.set(sentence.id, [...(found.get(sentence.id) ?? []), ...hits]); for (const hit of hits) chart.see(hit.id, [sentence.id]); }
     for (const card of cards) {
@@ -132,5 +140,28 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
       facts: cards.filter((card) => card.kind === "fact" && pos(card.first) < start).slice(-CONTEXT_FACTS).map((card) => card.id),
     };
   });
-  return { scenes, cards, kinds: kindOf, chart, em, contexts, steps };
+
+  // EM², scene by scene in reading order; then each card's people.
+  const named = new Map([...found].map(([id, hits]) => [id, [...new Set(hits.map((hit) => hit.id).filter((entity) => chart.entities.get(entity)?.category === "person"))]]));
+  const descriptions = [...new Set(em.flatMap((batch) => batch.results).filter((entry) => entry.outcome === "description").map((entry) => entry.text))];
+  const rolesLog = meter("roles (EM²)"), rolesDecide = decideFor(rolesLog);
+  const resolved = await timed(rolesLog, () => resolveRoles(rolesDecide, { scenes, kinds: kindOf, chart, named, descriptions, recommended: new Map(contexts.map((context) => [context.scene, context.recommended])), facts, text, position: pos, present: options.present }));
+  const describedAt = new Map<string, string[]>();
+  for (const reference of resolved.references) if (reference.entity) for (const id of reference.sentences) describedAt.set(id, [...(describedAt.get(id) ?? []), reference.entity]);
+  for (const card of cards) {
+    const people = new Map<string, { how: Set<CardPerson["how"][number]>; at: Set<string> }>();
+    const mark = (id: string | null | undefined, sentence: string, how: CardPerson["how"][number]) => {
+      if (!id) return;
+      const entry = people.get(id) ?? { how: new Set(), at: new Set() };
+      entry.how.add(how); entry.at.add(sentence); people.set(id, entry);
+    };
+    for (const id of card.sentences) {
+      for (const person of named.get(id) ?? []) mark(person, id, "named");
+      const role = resolved.roles[id];
+      if (role) { mark(role.who.id, id, role.kind === "spoken" ? "speaks" : "acts"); mark(role.to?.id, id, "addressed"); }
+      for (const entity of describedAt.get(id) ?? []) mark(entity, id, "described");
+    }
+    card.people = [...people].map(([id, entry]) => ({ id, how: [...entry.how], at: [...entry.at] }));
+  }
+  return { scenes, cards, kinds: kindOf, chart, em, contexts, steps, ...resolved };
 }
