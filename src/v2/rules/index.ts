@@ -28,6 +28,8 @@ const HERE = "src/v2/rules";
 export const RULES: CodeRule[] = [
   { name: "locative", decides: "a place word with a locative after it (街上) is spatial, not a place", layer: 1, language: true, lives: `${HERE}/typing.ts` },
   { name: "usual type", decides: "a description takes the type most batches gave it; a tie is no place", layer: 1, language: false, lives: `${HERE}/typing.ts` },
+  { name: "part or floor", decides: "a part of a building (高墙, 混凝土支柱) or a floor as a whole word (最上层) is spatial, not a place", layer: 1, language: true, lives: `${HERE}/language.ts (part, floor)` },
+  { name: "settled category", decides: "a named entity takes the category most of its typings gave it (魔法侧 is no place); it moves under an id of that category", layer: 4, language: false, lives: `${HERE}/typing.ts` },
   { name: "levels", decides: "the level of the world a spatial word points at (地下: underground)", layer: 1, language: true, lives: `${HERE}/language.ts` },
   { name: "scale by name", decides: "the scale the generic part of a place's name says (学区: a district), where typing gave none", layer: 2, language: true, lives: `${HERE}/language.ts (its words: src/digger/stage/scale.ts)` },
   { name: "graded law", decides: "a parent is larger than what it holds (a region a region, a building a building)", layer: 2, language: false, lives: `${HERE}/places.ts` },

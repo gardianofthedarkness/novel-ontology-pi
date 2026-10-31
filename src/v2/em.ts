@@ -69,6 +69,18 @@ export class Chart {
     return id ? this.entities.get(id) : undefined;
   }
 
+  /**
+   * An entity moved to another category (its typings settled on it once EM is done): the same names and appearances under
+   * an id of the new category. Returns the new id.
+   */
+  recategorize(id: string, category: Exclude<Category, "time" | "crowd">, type: EntityType): string {
+    const old = this.entities.get(id)!, fresh = `${PREFIX[category]}${String(++this.count[category]).padStart(6, "0")}`;
+    this.entities.delete(id);
+    this.entities.set(fresh, { ...old, id: fresh, category, type });
+    for (const [name, at] of this.byName) if (at === id) this.byName.set(name, fresh);
+    return fresh;
+  }
+
   mint(category: Exclude<Category, "time" | "crowd">, type: EntityType, text: string, sentences: string[], proper = true): ChartEntity {
     const id = `${PREFIX[category]}${String(++this.count[category]).padStart(6, "0")}`;
     const entity: ChartEntity = { id, category, type, names: [], proper: [], first: sentences[0] ?? "", seen: [] };

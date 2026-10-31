@@ -13,6 +13,10 @@ export interface LanguageRules {
   locative: RegExp;
   /** What may stand between two named places for the first to hold the second (X的Y, X，Y, XY). */
   join: RegExp;
+  /** A part of a building (a wall, a pillar, a window): where someone is against it, never a place of its own. */
+  part: RegExp;
+  /** A floor or the top of a building as a whole word (最上层, 第四十四层, 楼顶): a level inside a place, never a place. */
+  floor: RegExp;
   /** Words for each level of the world, the most specific first (地下通道 is underground before it is a passage). */
   levels: [RegExp, Level][];
   /** The scale the generic part of a place's name says (第七学区: a district), or null. */
@@ -23,6 +27,8 @@ export const ZH: LanguageRules = {
   name: "zh",
   locative: /^.+[上下里中内外边旁]$/,
   join: /^(?:的|之|里的|内的|中的|里|内|中|，|、|\s)?$/,
+  part: /(?:墙|墙壁|墙面|围墙|柱|柱子|支柱|地板|天花板|窗|窗户)$/,
+  floor: /^(?:第?[一二三四五六七八九十百\d]+[楼层]|最上层|顶层|楼顶|屋顶|天台|地下[一二三四五六七八九十\d]*层)$/,
   levels: [
     [/地下|地底|下水道|地铁|隧道/, "underground"],
     [/屋顶|楼顶|天台|顶层|最上层|房顶|屋檐/, "roof"],

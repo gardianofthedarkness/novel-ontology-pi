@@ -1,7 +1,7 @@
 import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../ground/connectors/jev.js";
 import type { Sentence } from "../digger/intake/sectioning.js";
 import { sentencesWith } from "./listing.js";
-import { isLocative } from "./rules/typing.js";
+import { isLocative, isPartOrFloor } from "./rules/typing.js";
 
 /**
  * What each listed string is (the user's v2 flow, 2026-10-30; System 1): one structured request a batch. The state holds the
@@ -80,7 +80,7 @@ export async function typeNames(decide: Decide, batch: Sentence[], names: string
   return names.map((text, index) => {
     const answer = answers.find((entry) => entry.key === `type:n${index + 1}`);
     const proper = Number(answers.find((entry) => entry.key === `proper:n${index + 1}`)?.value ?? 0);
-    const typed = (answer?.value && String(answer.value) in ENTITY_TYPES ? String(answer.value) : "none") as EntityType, type: EntityType = isLocative(text, CATEGORY_OF[typed] === "place", proper) ? "spatial" : typed;
+    const typed = (answer?.value && String(answer.value) in ENTITY_TYPES ? String(answer.value) : "none") as EntityType, type: EntityType = isLocative(text, CATEGORY_OF[typed] === "place", proper) || isPartOrFloor(text, CATEGORY_OF[typed] === "place", proper) ? "spatial" : typed;
     return { key: nameKey(index), text, type, category: CATEGORY_OF[type], confidence: Number(answer?.distribution?.[type] ?? answer?.confidence ?? 0), proper, sentences: sentencesWith(batch, text) };
   });
 }

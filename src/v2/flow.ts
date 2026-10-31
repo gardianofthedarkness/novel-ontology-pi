@@ -8,8 +8,8 @@ import { readStoryTime, timeWords, type StoryTime } from "./time.js";
 import { hintsOnce } from "./hints.js";
 import { placeEm, type PlaceResult } from "./placeEm.js";
 import { spatialMentions, type SpatialMention } from "./spatial.js";
-import { CATEGORY_OF, typeNames, type Decide, type Detected } from "./typing.js";
-import { usualType } from "./rules/typing.js";
+import { CATEGORY_OF, typeNames, type Decide, type Detected, type EntityType } from "./typing.js";
+import { settledCategory, usualType } from "./rules/typing.js";
 
 /**
  * The v2 reading flow (the user's sketch, 2026-10-30; docs/v2/world-engine-v2.md §2):
@@ -141,6 +141,17 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   await timed(emLog, async () => {
     for (const [index, batch] of batches.entries()) em.push({ batch: batch.sentences[0]?.id ?? String(index), results: await resolveBatch(emDecide, chart, batch.sentences, detectedOf[index] ?? [], { position: pos, text, facts }) });
   });
+  // Each named entity takes the category most of its typings gave it (rules/typing.ts): 魔法侧, minted a place as a region in
+  // one batch and a concept in another, is no place. It moves under an id of its category, and EM's answers follow it.
+  const typings = new Map<string, Map<string, number>>();
+  for (const result of em.flatMap((batch) => batch.results)) if (result.entity && chart.entities.has(result.entity)) { const votes = typings.get(result.entity) ?? new Map<string, number>(); votes.set(result.type, (votes.get(result.type) ?? 0) + 1); typings.set(result.entity, votes); }
+  const moved = new Map<string, string>();
+  for (const [id, votes] of typings) {
+    const settled = settledCategory(votes, (type) => CATEGORY_OF[type as keyof typeof CATEGORY_OF]), entity = chart.entities.get(id)!;
+    if (settled && settled.category !== entity.category && settled.category !== "time" && settled.category !== "crowd") moved.set(id, chart.recategorize(id, settled.category, settled.type as EntityType));
+  }
+  for (const result of em.flatMap((batch) => batch.results)) { if (result.entity && moved.has(result.entity)) result.entity = moved.get(result.entity)!; result.candidates = result.candidates?.map((candidate) => ({ ...candidate, id: moved.get(candidate.id) ?? candidate.id })); }
+  for (const entity of chart.entities.values()) entity.owners = entity.owners?.map((owner) => ({ ...owner, id: moved.get(owner.id) ?? owner.id }));
 
   // System 0: every sentence scanned for the chart's proper names (and the appearances EM recorded, where a thing's or a
   // place's description was decided); every appearance recorded on its entity, and each card's entities.
