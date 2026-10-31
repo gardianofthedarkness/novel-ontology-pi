@@ -401,7 +401,9 @@ export async function strandDemo(novelDir, options) {
     // A staged building's lot, with room round it; an open place's own ground is its landscape, filled from its middle.
     const gridRadius = () => 22;
     const placeTree = inputs.placeTree ?? inputs.data.places, treePath = new Map(placeTree.map(place => [place.id, place.path ?? [place.id]]));
-    const pathOf = id => treePath.get(id) ?? places.get(id)?.path ?? [id];
+    // Where the place tree gives a place no parent, the terrain step's (stage/terrain.json: which site holds which) is used.
+    const terrainPath = (id, seen = new Set([id])) => { const parent = terrain?.sites?.[id]?.parent; if (!parent || seen.has(parent)) return null; seen.add(parent); return [...(terrainPath(parent, seen) ?? [parent]), id]; };
+    const pathOf = id => { const path = treePath.get(id) ?? places.get(id)?.path ?? [id], above = terrainPath(path[0]); return above ? [...above.slice(0, -1), ...path] : path; };
     // The manifold under each place (groundFor, src/ground/stage/landscape.ts): Jev's landscape (novel stage landscape), or
     // the main agent's answer over it; a place without one is built by the terrain rules as the ground of the nearest
     // larger place that has one, else as its scale suggests, so the world is never bare.
@@ -418,7 +420,7 @@ export async function strandDemo(novelDir, options) {
       C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent) });
     };
     const areaScale = id => { const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };
-    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), parent: place.parentId ?? null, proposed: place.proposedParentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
+    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
     for (const scene of chosen) {
@@ -443,7 +445,9 @@ export async function strandDemo(novelDir, options) {
         continue;
       }
       const holder = C.holderFor(canvas, open.at(-1), scaleOf(scene.placeId) ?? 'building', scene.placeId);
-      C.addUnit(canvas, holder, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) });
+      // Near where the terrain step put the building (the site on the chain it stands for) in this holder.
+      const site = [...chain].reverse().find(at => terrain?.sites?.[at]), near = site && terrain.sites[site].parent === holder ? terrain.sites[site].toward : undefined;
+      C.addUnit(canvas, holder, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) }, near);
     }
     const round = value => Math.round(value * 10) / 10, depthOf = id => { let depth = 0; for (let at = canvas.places[id]; at?.parent; at = canvas.places[at.parent]) depth++; return depth; };
     const nodes = [];
