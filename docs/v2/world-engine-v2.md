@@ -399,6 +399,29 @@ After the whole extraction and the world loop (which says where each scene happe
    question now carries the scene's environment and who is already placed, how far and which way from the middle of the
    map (the red dots).
 
+### 2.0.8 Places in EM and EM², and the place tree from the reading (the user's call, 2026-10-31) — built, run on vol 1
+
+**The check first** (vol 1's reading before this, no requests): of 107 places below a city, a name inside a name or the
+text naming the larger right before gave 12 parents, places named together in environment and fact cards 8 weak ones, and
+87 nothing; and 115 of the chart's 128 places were descriptions EM had kept as places (大楼, 街上, 便利店, even 墙壁), with
+the sink people and things had (五层建筑的屋顶 gathering 楼顶 and 屋顶). So the place tree has to start in EM and EM².
+
+**Built:** EM keeps only named places. EM² settles every place description where it stands, with the scene's environment
+cards as its setting: a named place of the passage, the scene or the scene before, or an unnamed place of the scene (a
+slot of kind place, building or room), and which named place holds it (`within:`). `src/v2/places.ts` makes the tree: a
+named place's parent from a name inside its name, the text naming the larger right before it, EM²'s answers, and Jev once
+(`tree:`) for the rest; never a loop. Canon writes PART_OF, which the stage's place tree and the engine's central build read.
+
+**Measured on vol 1** (`~/claude-world-first/v2-vol1-places`; 303 paid Jev requests, 4.50 M input tokens, $0.19):
+- 13 named places (128 before). The tree: 东京西部的学园都市 ⊂ 东京都 ⊂ 日本; 学园都市第七学区 (by its name), 第十五学区 and
+  第六学区 ⊂ 学园都市; 纽约 ⊂ 合众国. Not placed: 常盘台中学, 飞镖酒吧, 豚草不动产写字楼, 魔道书图书馆 (the text does not say).
+- 418 place descriptions: 43 meant a named place (城市 → 学园都市 22 times, 学校 → 常盘台中学 5), 293 an unnamed place of
+  their scene (165 places, 95 of them held by a named place: 58 by 学园都市, 24 by 第十五学区, 8 by 第七学区), 64 places in
+  general (学校, 建筑物, 医院), 18 not a place (墙壁, 天花板).
+- 36 of the 46 scenes have a place anchored in the tree (named, or an unnamed one a named place holds).
+- Wrong: a part of a place taken for the place itself (走廊, 宿舍 → 常盘台中学; 紧急出口, 办公室 → 飞镖酒吧) where it should be
+  an unnamed place inside it; 70 unnamed places held by nothing.
+
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
 kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record
 it is part of (the book's text is in it: never public).
