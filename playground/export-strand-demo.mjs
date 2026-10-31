@@ -487,19 +487,23 @@ export async function strandDemo(novelDir, options) {
       C.addUnit(canvas, holder, { id: place.id, label: name(place.id), kind, r, ...(picked ? { sampled: area ?? 'build' } : {}) });
       if (!area) { dwellingUnits[place.id] = host; notes.build.dwelling.push(`${name(place.id)} in ${name(host)}`); }
     }
-    // Borrowing (docs/v2/world-engine-v2.md §2.0.12): a pool's member Jev decided borrows its pool's ground where it stands,
-    // a patch of its kind on its median and manifold, sized for its level, claiming lots before the pool's default. A later
-    // member of exactly the same name is the same place: it stands where the first does; with the same kind and median it
-    // is one place, else it merges into the first as a further patch beside it (modern heights merge across them).
+    // Borrowing (docs/v2/world-engine-v2.md §2.0.12, §2.0.13): a pool's member Jev decided borrows its pool's ground in the
+    // box Jev gave it (its offset from the pool and its size, as kept), a patch of its kind on its median and manifold,
+    // claiming lots before the pool's default; its marker stands at the box's middle. A later member of exactly the same
+    // name is the same place: it stands where the first does; with the same kind and median it is one place, else it
+    // merges into the first as a further patch beside it, of its own size (modern heights merge across them).
     const baseName = label => String(label).replace(/ \(scene \d+\)$/, ''), GROUND = { street: 120, district: 400 };
     for (const pool of Object.values(canvas.places).filter(place => place.pool)) {
       const first = new Map(), borrowed = [];
       for (const unit of pool.units) {
         const site = terrain?.sites?.[unit.id];
         if (!site?.ground || !LANDSCAPES[site.ground] || !site.median || !site.manifold) continue;
-        const name = baseName(unit.label), original = first.get(name), half = (GROUND[site.scale] ?? 120) / 2;
-        const made = at => ({ ...patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - half, z0: at[1] - half, x1: at[0] + half, z1: at[1] + half }, { by: 'jev' }, { median: site.median, manifold: site.manifold }), borrowed: true });
-        if (!original) { const patch = made(unit.at); first.set(name, { unit, site, patch }); borrowed.push(patch); unit.borrows = 'own'; notes.build.borrowed = (notes.build.borrowed ?? 0) + 1; continue; }
+        const name = baseName(unit.label), original = first.get(name), [w, depth] = Array.isArray(site.size) ? site.size : [GROUND[site.scale] ?? 120, GROUND[site.scale] ?? 120], half = Math.max(w, depth) / 2;
+        const made = at => ({ ...patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: site.manifold }), borrowed: true });
+        if (!original) {
+          if (Array.isArray(site.toward)) unit.at = [site.toward[0], site.toward[1]];
+          const patch = made(unit.at); first.set(name, { unit, site, patch }); borrowed.push(patch); unit.borrows = 'own'; notes.build.borrowed = (notes.build.borrowed ?? 0) + 1; continue;
+        }
         const own = unit.at, dx = own[0] - original.unit.at[0], dz = own[1] - original.unit.at[1], d = Math.hypot(dx, dz) || 1;
         unit.at = original.unit.at; unit.borrows = original.unit.id;
         if (original.site.ground === site.ground && original.site.median === site.median) continue;

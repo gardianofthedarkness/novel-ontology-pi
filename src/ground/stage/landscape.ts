@@ -217,8 +217,11 @@ export const peakOf = (patch: Patch) => (patch.manifold ? localMedian(patch, 1) 
 /** A patch built from Jev's median on its kind's manifold: its height H is the core's median (for its plots and streets). */
 export function withManifold(patch: Patch, median: number, manifold: Manifold): Patch {
   const made = { ...patch, median: Math.round(median), manifold };
-  return { ...made, H: Math.round(localMedian(made, 1)) };
+  // Underground (a median below the street): nothing stands on it, so its height above the street is none.
+  return { ...made, H: underground(made) ? 1 : Math.round(localMedian(made, 1)) };
 }
+/** A part that lies under the street (its median below 0): its surface is open, its floors a hall that deep (underground.ts). */
+export const underground = (patch: Patch) => (patch.median ?? 0) < 0;
 
 /** A building's height in a patch, at depth s (1 at the centre), by the type's profile; `u` is the building's own draw. */
 export function heightAt(patch: Patch, s: number, u: number): number {
@@ -283,7 +286,7 @@ export function landscapeStyle(landscape: Landscape): FillStyle {
     roadWidth: (superBlock) => { const patch = reaching(superBlock); return patch ? Math.max(...[superBlock.centre, centroid(superBlock.pts), ...superBlock.pts, ...(contains(superBlock.pts, [patch.x, patch.z]) ? [[patch.x, patch.z] as Point] : [])].map((p) => streetsFor(patch, p))) : 1; },
     // A block touching super-tall ground is cut into its big plots; any other into the type's own.
     lotArea: (block) => { const patch = reaching(block); return patch ? Math.max(...[block.centre, ...block.pts].map((p) => lotFor(patch, p))) : null; },
-    keep: (lot) => { const owner = ownerOfLot(landscape, lot); return !!owner && !openGround(owner, lot.centre); },
+    keep: (lot) => { const owner = ownerOfLot(landscape, lot); return !!owner && !underground(owner) && !openGround(owner, lot.centre); },
     building: (lot, rng) => {
       const owner = ownerOfLot(landscape, lot)!, kind = LANDSCAPES[owner.type];
       if (rng() > kind.coverage) return null;
@@ -313,6 +316,7 @@ export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: n
   const owner = Object.fromEntries(fabric.lots.map((lot) => [lot.id, ownerOfLot(landscape, lot)!.id]));
   const walls: [Point, Point][] = [], keeps: Building[] = [], landmarks: Building[] = [], plazas: { x: number; z: number; r: number }[] = [];
   for (const patch of landscape.patches) {
+    if (underground(patch)) continue;
     if (patch.type === "skyscrapers") landmarks.push({ lot: `${patch.id}:landmark`, ...landmarkOf(patch), kind: "skyscraper" });
     if (patch.type === "stadium") { const bowl = bowlOf(patch); landmarks.push({ lot: `${patch.id}:bowl`, x: bowl.x, z: bowl.z, w: bowl.w, d: bowl.d, angle: bowl.angle, floors: Math.round(patch.H / 3), kind: "stadium" }); }
     if (patch.type === "commercial") { const plaza = plazaOf(patch); plazas.push(plaza); landmarks.push({ lot: `${patch.id}:fountain`, x: plaza.x, z: plaza.z, w: 16, d: 16, angle: 0, floors: 3, kind: "fountain" }); fabric.roads.push(boulevardOf(patch)); }

@@ -134,13 +134,20 @@ export function manifoldWords(manifold: NonNullable<TerrainKind["manifold"]>): s
     ...(manifold.tail ? [`one in ${Math.round(1 / manifold.tail)} far above the rest`] : [])].join("; ");
 }
 /**
- * The question's slices for a part of a kind: a built kind's medians (the median roof: the engine draws the spread from
- * its manifold), natural ground's or a shape's tops; each said in floors, or as natural ground.
+ * Below the street, every part may lie (the user's call, 2026-10-31: the underground is sliced and offered too): the
+ * ground stays at 0, and a part answered below it is underground (an underground passage, a mall under the street), its
+ * floors that deep; the engine builds it as a hall there (underground.ts) and leaves its surface open.
+ */
+export const UNDERGROUND: [number, string][] = [[-60, "deep underground"], [-30, "a deep hall"], [-12, "the subway's level"], [-6, "just under the street"]];
+/**
+ * The question's slices for a part of a kind: the underground's, then a built kind's medians (the median roof: the engine
+ * draws the spread from its manifold), or natural ground's or a shape's tops; each said in floors, or as natural ground.
  */
 export function terrainHeights(scale: string, kind: string): { measure: "median" | "top"; slices: { letter: string; y: number; said: string }[] } {
   const entry = terrainKind(scale, kind), median = !!entry?.ground && !!entry.medians;
   const heights = median ? entry!.medians! : entry?.tops ?? SHAPE_TOPS;
-  return { measure: median ? "median" : "top", slices: heights.map((y, k) => ({ letter: "ABCDEFGHIJ"[k], y, said: median ? `about ${Math.max(1, Math.round(y / 3))} floors` : natural(y) })) };
+  const said = (y: number) => (median ? `about ${Math.max(1, Math.round(y / 3))} floors` : natural(y));
+  return { measure: median ? "median" : "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...heights.map((y): [number, string] => [y, said(y)])].map(([y, words], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said: words })) };
 }
 /** A part's options: its level's kinds (each with its manifold in words), then the basic shapes. */
 export const terrainKinds = (scale: string, shapes: Record<string, string>): Record<string, string> => ({ ...Object.fromEntries(Object.entries(levelOf(scale)).map(([kind, entry]) => [kind, entry.manifold ? `${entry.hint}. Its heights: ${manifoldWords(entry.manifold)}` : entry.hint])), ...shapes });
@@ -222,6 +229,22 @@ export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
   budget: BUDGET,
 };
 
+/**
+ * Where a pool's member lies and how large it is (docs/v2/world-engine-v2.md §2.0.13): asked between its kind and its
+ * height, on a map of its pool close up (where sampling put it in grey; the members already kept in white), with what
+ * the text says of it and of the places holding it.
+ */
+export interface AreaFocus extends PartFocus { kind: string }
+export const terrainAreaMode: Mode<AreaFocus, TerrainStores> = {
+  name: "terrain-area",
+  task: (focus) => `Where does ${focus.part.label} (${focus.kind}) lie in ${focus.holder.label}, and how large is it? The text gives it no name of its own; sampling put it where it stands for now (in grey). Box its ground on picture "map": where it lies and as large as it is, from what the text says of it (text) and of the places around it (standing, facts, environment), and the terrain kept for the places holding it (within).`,
+  sources: [...sources<AreaFocus>({ standing: true, facts: true, environment: "part" }), fixed("pictures", "pictures", (focus: AreaFocus) => focus.pictures) as Source<AreaFocus, TerrainStores>],
+  cutOrder: ["environment", "facts", "standing", "text"],
+  probe,
+  questions: (focus) => [box(focus)],
+  budget: BUDGET,
+};
+
 export const terrainZoomMode: Mode<ZoomFocus, TerrainStores> = {
   name: "terrain-zoom",
   task: (focus) => `Where does ${focus.part.label} lie, closer up? The red box is the last answer: ${focus.reasons.join("; ")}.`,
@@ -236,8 +259,8 @@ export const terrainZoomMode: Mode<ZoomFocus, TerrainStores> = {
 export const terrainHeightMode: Mode<HeightFocus, TerrainStores> = {
   name: "terrain-height",
   task: (focus) => `${focus.measure === "median"
-    ? `What is the median height of ${focus.part.label}'s roofs (${focus.kind}): the height half its buildings stand below? Its manifold makes the rest (${manifoldWords(terrainKind(focus.part.scale, focus.kind)!.manifold!)}), so give the median, not the tallest.`
-    : `How high does ${focus.part.label} (${focus.kind}) rise: the height of its top?`} The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), the terrain kept for the places holding it (within).`,
+    ? `What is the median height of ${focus.part.label}'s roofs (${focus.kind}): the height half its buildings stand below? Its manifold makes the rest (${manifoldWords(terrainKind(focus.part.scale, focus.kind)!.manifold!)}), so give the median, not the tallest. If it lies underground (an underground passage, a mall under the street), give how deep its floors lie: the slices below the street.`
+    : `How high does ${focus.part.label} (${focus.kind}) rise: the height of its top? If it lies underground, how deep it goes: the slices below the street.`} The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), the terrain kept for the places holding it (within).`,
   sources: [...sources<HeightFocus>({ standing: true, facts: true, environment: "city" }), fixed("heights", "heights", (focus: HeightFocus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.y} m: ${slice.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
   cutOrder: ["environment", "facts", "standing", "text"],
   probe,

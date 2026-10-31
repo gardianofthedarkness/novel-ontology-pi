@@ -1,4 +1,4 @@
-import { LANDSCAPES, type Landscape, type Patch } from "./landscape.js";
+import { LANDSCAPES, underground, type Landscape, type Patch } from "./landscape.js";
 import { stageStream } from "./stream.js";
 
 /**
@@ -80,8 +80,14 @@ export function boundsOf(hall: Pick<Hall, "boxes" | "bores">) {
  */
 export function hallsOf(landscape: Landscape): Hall[] {
   const halls: Hall[] = [], modern = landscape.patches.filter((patch) => LANDSCAPES[patch.type].era === "modern");
+  // A part that lies under the street (terrain spawning: its median below 0): a hall that deep over its ground, a passage
+  // along a linear part (a box patch: a street), a mall under any other; stairs up at its ends. Its surface is open.
+  for (const patch of modern.filter(underground)) {
+    const depth = Math.max(4, -(patch.median ?? 0)), linear = patch.shape.family === "box", w = round(1.8 * patch.R), d = round(Math.max(8, linear ? 1.8 * patch.R * (patch.shape.aspect ?? 0.3) : 1.2 * patch.R));
+    halls.push({ id: `${patch.id}:under`, kind: linear ? "corridor" : "mall", depth, height: linear ? 4 : 5, boxes: [{ x: round(patch.x), z: round(patch.z), w, d, angle: patch.shape.turn }], bores: [], pillars: linear ? 0 : 8, lined: true, up: ends(patch.x, patch.z, w, patch.shape.turn) });
+  }
   for (const patch of modern) {
-    if (patch.type !== "commercial" && patch.type !== "skyscrapers") continue;
+    if ((patch.type !== "commercial" && patch.type !== "skyscrapers") || underground(patch)) continue;
     const rng = stageStream(landscape.seed, "mall", patch.id), length = 150 + 250 * rng(), angle = patch.shape.turn;
     halls.push({ id: `${patch.id}:mall`, kind: "mall", depth: 7, height: 4.5, boxes: [{ x: round(patch.x), z: round(patch.z), w: round(Math.min(length, 1.6 * patch.R)), d: 20, angle }], bores: [], pillars: 8, lined: true, up: ends(patch.x, patch.z, Math.min(length, 1.6 * patch.R), angle) });
   }

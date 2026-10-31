@@ -229,3 +229,12 @@ test("a pool's member borrows its pool's default ground where it stands: its pat
   assert.equal(owner([pool, { ...square, borrowed: false }]), "p0", "by birth, the default claims first");
   assert.equal(owner([pool, square]), "unnamed:s1", "borrowed, the member claims its own ground first");
 });
+
+test("a part under the street (its median below 0): its surface stays open, and a hall stands that deep over its ground", async () => {
+  const { patchFromBox, LANDSCAPE_VERSION } = await import("../src/ground/stage/landscape.js"), { hallsOf } = await import("../src/ground/stage/underground.js");
+  const passage = { ...patchFromBox("commercial", "unnamed:p", "unnamed:p", { x0: -90, z0: -15, x1: 90, z1: 15 }, undefined, { median: -12, manifold: { gradient: 0, core: 0.3, spread: 0.3, tail: 0, index: 5 } }), borrowed: true };
+  const landscape = { version: LANDSCAPE_VERSION, seed: "pool", patches: [passage] }, fill = fillLandscape(landscape);
+  assert.equal(fill.fabric.buildings.length, 0, "nothing stands on it");
+  const hall = hallsOf(landscape).find((entry) => entry.id === "unnamed:p:under");
+  assert.ok(hall && hall.depth === 12 && hall.up.length === 2, "a hall 12 m down, stairs at its ends");
+});

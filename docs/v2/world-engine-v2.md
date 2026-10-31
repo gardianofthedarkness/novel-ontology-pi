@@ -596,7 +596,11 @@ waterfront, the 大道 avenues at 50 m, 平台 and 停机坪 platforms), but eve
    the members already kept in white), with what the text says of it and of the places holding it. A box out of a
    street's sizes (40 to 400 m), or over another member that is not of the same name, is asked again closer up. The site
    keeps the box; the engine builds the member's borrowed ground on it and stands its marker at its middle (a later
-   member of the same name still stands on the first, §2.0.12).
+   member of the same name still stands on the first, §2.0.12). **The underground is sliced too** (the user, 2026-10-31): every height
+   question offers four slices below the street first (60 m down, a deep hall at 30 m, the subway's level at 12 m, just
+   under the street at 6 m), then the kind's own heights. The ground stays at 0; a part answered below it is underground:
+   its surface stays open (no lot kept, no landmark) and the engine builds a hall that deep over its ground
+   (`underground.ts`: a passage along a street, a mall under any other, stairs up at its ends).
 The user (2026-10-31): steps 2 and 3 are modelling, to fine-tune and polish without a design check from them.
 
 2. **Street manifolds** (next). The street kinds are built today with district landscapes (a shopping
@@ -609,7 +613,7 @@ The user (2026-10-31): steps 2 and 3 are modelling, to fine-tune and polish with
    takes the lower floors of the towers it overlaps and keeps them above; an open kind (square, park, waterfront) clears
    its ground; a low kind (alley, residential) replaces what it overlaps with its own fabric; a linear kind (avenue,
    shopping) cuts its own road through the blocks, which split along it.
-1. **(built in order)** 1, then 2, then 3, each checked on vol 1 with stand-in answers before a run with Jev.
+Built in order, 1 then 2 then 3, each checked on vol 1 with stand-in answers before a run with Jev.
 
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
