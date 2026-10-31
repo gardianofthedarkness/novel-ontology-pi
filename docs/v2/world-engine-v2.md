@@ -582,6 +582,35 @@ districts, 21 streets); 学园都市's pool district the average of its three di
 streets asked as streets; 第七学区's pool street the average of its streets, 第十五学区's empty; 14 members borrowed
 their pool's ground and 3 merged (the four 大道 and two 广场 of different scenes).
 
+### 2.0.13 Street areas: Jev's box, street manifolds, and building into what is there (the user's design, 2026-10-31)
+
+The first real run on pools (2026-10-31, vol 1, stopped at 27 of 28 parts when the user asked for these changes; only the
+empty pool street of 第十五学区 was left): 学园都市 and 纽约 metropolises at a 15 m median; 第七学区 and 第六学区 CBDs at
+50 m, 第十五学区 at 80 m; 学园都市's pool district their average (a CBD at 60 m), 纽约's empty; the 18 unnamed streets typed
+by Jev; 第七学区's pool street an alley at 5 m and 第六学区's an avenue at 35 m, the averages of their streets. Jev typed the streets well (小巷 an alley at 5 m, 站前广场 a station front at 25 m, 大桥 a
+waterfront, the 大道 avenues at 50 m, 平台 and 停机坪 platforms), but every street area had the same size: its marker a
+30 m circle, its borrowed ground a 120 m square, fixed by its level, only its spot sampled. The user's next steps:
+
+1. **Jev boxes a street area** (built). A member of a pool is asked, between its kind and its height, where it lies and
+   how large it is: one box on a map of its pool, close up (its pool in blue, where sampling put it in grey, the boxes of
+   the members already kept in white), with what the text says of it and of the places holding it. A box out of a
+   street's sizes (40 to 400 m), or over another member that is not of the same name, is asked again closer up. The site
+   keeps the box; the engine builds the member's borrowed ground on it and stands its marker at its middle (a later
+   member of the same name still stands on the first, §2.0.12).
+The user (2026-10-31): steps 2 and 3 are modelling, to fine-tune and polish without a design check from them.
+
+2. **Street manifolds** (next). The street kinds are built today with district landscapes (a shopping
+   street as a commercial blob, an avenue as a skyscraper blob). Each needs its own 3D build: a frontage along a line
+   (shopping, avenue, residential, alley), a podium with towers over it (centre), open ground ringed by buildings
+   (square, station front), a deck by the water (waterfront).
+3. **Building into what is there** (next). A street area lands on ground its district or city has already
+   built. Modern cities build things into each other (a commercial centre in the base of a tower), so the street is not
+   simply laid over: what it overlaps is rearranged. A first proposal, to settle: a podium kind (centre, station, shopping)
+   takes the lower floors of the towers it overlaps and keeps them above; an open kind (square, park, waterfront) clears
+   its ground; a low kind (alley, residential) replaces what it overlaps with its own fabric; a linear kind (avenue,
+   shopping) cuts its own road through the blocks, which split along it.
+1. **(built in order)** 1, then 2, then 3, each checked on vol 1 with stand-in answers before a run with Jev.
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by
