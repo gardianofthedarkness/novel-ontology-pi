@@ -346,6 +346,40 @@ Saturday; the listing, typing and kinds changed, the tiling came from the cache)
   over to the 25th, because the lexicon reads 平安夜 as the night of the 24th; and the one flashback is a question in a
   thought ("what happened back then?").
 
+### 2.0.6 The time tree, and option meanings once a request (the user's calls, 2026-10-31) — built, run on vol 1
+
+**The time tree** (`timeTree` in `src/v2/time.ts`), as places have theirs: the story, a year, its days (a date, or "day N"
+while nothing is dated), a day's parts (a part of the day or a clock time), and the past (flashbacks, by how far back).
+The tree walks the present line with a cursor and settles the days of parts of the day itself: one earlier than the last
+the story reached that day is the next day, and a late night after an evening is that night past midnight. So a coarse
+word and a finer one of the same day are containment (the day 12-24, then its 00:00), not a sequence, and a conflict is
+the story going back on the tree without a flashback. With it, three fixes from vol 1: a holiday names its day, not a part
+of it (平安夜 is the 24th, and an evening after it is the 24th's evening); a time word in a spoken line or a thought only
+mentions a time (the sentence kinds decide, before Jev is asked); a past marker in a question is no flashback. Captions
+are the tree's paths; the data page shows the tree. `experiments/v2/time.mjs` reruns story time alone on a reading.
+- **Story time alone, again, on the last vol 1 reading:** 15 paid requests, 17,279 input tokens (under $0.001), 1.6 s. No
+  conflicts and no false flashback (it was a thought); scene 1 at 12-24 › 00:00 (not the heading's 平安夜), 2–14 late
+  night, 15–34 the 24th, 35–46 the 24th's evening (not the 25th's).
+
+**Option meanings once a request** (`src/v2/hints.ts`): a meaning two questions give an option the same way goes into the
+state once (`answerOptions`), a shared yes-and-no once (`yesNo`). Run on vol 1 for every step but the tiling (57 s),
+against the last reading (`experiments/v2/compare.mjs`; the listing came from the same cache, so the same strings):
+- **Price:** Jev 7,242,024 → 5,951,354 input tokens, $0.304 → $0.250 (−18%). By step (Jev reports each request's tokens,
+  and the steps run one after another): kinds and typing 2.73 M → 1.96 M (−28%), EM² 3.83 M → 3.60 M on the same inputs
+  (−6%; a choice option with no meaning is sent with its id as its meaning, so `char_000001` twice instead of the id and
+  a short name: the ids are what costs in EM²). DeepSeek $0 (the listing came from the cache; $0.027 fresh, off-peak).
+- **Precision, judged by hand** on the disagreements (agreement is not precision; the samples are small):
+  - *Typing* (92.7% the same types): of 10 disagreements that could be judged, the old way was right in all 10. With the
+    meanings out of the questions, Jev typed descriptions of people as none of the types (少女, 老师, 少年, 魔术师); EM's
+    descriptions fell from 686 to 605 and its skipped strings rose from 259 to 348.
+  - *Sentence kinds* (91.8% the same): 6 to 5 for the old way, with no pattern: no worse.
+  - *EM², on the same inputs* (81.5% the same speakers or actors, 76.6% listeners, 87% descriptions; sure answers 69.8% and
+    69.4%): most differences are between two unsure answers; where both were sure and differed (29 of 2,144 lines), 11 of
+    the 14 that could be judged were right the old way (in 4 batches), 3 the new way (in 3 batches).
+- **So:** meanings once is kept for the sentence kinds only (`HINTS_ONCE_STEPS`); typing and EM² send them in each
+  question again. The saving that is left in EM² is the ids: short keys for the cast's options (p1, p2 … in the state, the
+  name still with each option) would cut what EM² sends without taking the names out of the questions.
+
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
 kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record
 it is part of (the book's text is in it: never public).

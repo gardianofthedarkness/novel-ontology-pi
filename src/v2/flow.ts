@@ -58,8 +58,17 @@ export const LIST_AT_ONCE = 8, JEV_AT_ONCE = 12;
 /** Recent scenes the recommender looks back over for a scene's context, and facts a context carries. */
 const RECENT_SCENES = 3, CONTEXT_FACTS = 6;
 
-/** `hintsOnce`: answer options' meanings once a request (hints.ts; default on); off sends them in every question, as before. */
-export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: Lister, options: { onStep?: (log: StepLog) => void; present?: Map<string, string[]>; hintsOnce?: boolean } = {}): Promise<FlowResult> {
+/**
+ * Steps that send answer options' meanings once a request (hints.ts) by default: only the sentence kinds. Measured on
+ * vol 1 (2026-10-31): there it saves tokens with the kinds no worse; in typing it made Jev type descriptions of people as
+ * none of the types, and in EM² it saved 6% (the options' ids are what costs there) with its sure answers a little worse.
+ */
+export const HINTS_ONCE_STEPS = ["sentence kinds"];
+
+/** `hintsOnce`: the steps (by their log name) that send meanings once; true every step but the tiling, false none. */
+export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: Lister, options: { onStep?: (log: StepLog) => void; present?: Map<string, string[]>; hintsOnce?: boolean | string[] } = {}): Promise<FlowResult> {
+  const onceSteps = options.hintsOnce === true ? null : options.hintsOnce === false ? [] : options.hintsOnce ?? HINTS_ONCE_STEPS;
+  const once = (step: string) => onceSteps === null || onceSteps.includes(step);
   const steps: StepLog[] = [];
   const meter = (step: string) => { const log: StepLog = { step, requests: 0, ms: 0, inputChars: 0 }; steps.push(log); return log; };
   // One gate for every Jev request of the flow.
@@ -69,7 +78,7 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
     running++;
     try { return await work(); } finally { running--; waiting.shift()?.(); }
   };
-  const decideFor = (log: StepLog, compact = options.hintsOnce !== false): Decide => async (state, questions) => {
+  const decideFor = (log: StepLog, compact = once(log.step)): Decide => async (state, questions) => {
     const sent = compact ? hintsOnce(state, questions) : { state, questions };
     log.requests++; log.inputChars += typeof sent.state === "string" ? sent.state.length : JSON.stringify(sent.state).length;
     log.questionChars = (log.questionChars ?? 0) + JSON.stringify(sent.questions).length;
