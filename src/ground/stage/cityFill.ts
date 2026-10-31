@@ -35,7 +35,8 @@ export interface Road { id: string; a: Point; b: Point; width: number; level: "a
 export interface Lot { id: string; block: string; pts: Point[]; area: number; centre: Point; frontage: { road: string; a: Point; b: Point } }
 export type BuildingKind = "skyscraper" | "tower" | "office" | "house";
 /** kind: a BuildingKind for the plain city; landscapes add their own (hall, keep, farmhouse, …). */
-export interface Building { lot: string; x: number; z: number; w: number; d: number; angle: number; floors: number; kind: string }
+/** base: a building built into another (a street's shops under a tower of the ground it stands on): its lower floors' kind. */
+export interface Building { lot: string; x: number; z: number; w: number; d: number; angle: number; floors: number; kind: string; base?: { floors: number; kind: string } }
 /**
  * How a city is filled: the lot size a block is cut into (null leaves the block empty), which lots are kept, each
  * kept lot's building (null for none: a yard, a field), and which roads are drawn. The plain city fills its whole

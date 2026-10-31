@@ -87,7 +87,7 @@ export function hallsOf(landscape: Landscape): Hall[] {
     halls.push({ id: `${patch.id}:under`, kind: linear ? "corridor" : "mall", depth, height: linear ? 4 : 5, boxes: [{ x: round(patch.x), z: round(patch.z), w, d, angle: patch.shape.turn }], bores: [], pillars: linear ? 0 : 8, lined: true, up: ends(patch.x, patch.z, w, patch.shape.turn) });
   }
   for (const patch of modern) {
-    if ((patch.type !== "commercial" && patch.type !== "skyscrapers") || underground(patch)) continue;
+    if (!["commercial", "skyscrapers", "centre", "station", "shopping"].includes(patch.type) || underground(patch)) continue;
     const rng = stageStream(landscape.seed, "mall", patch.id), length = 150 + 250 * rng(), angle = patch.shape.turn;
     halls.push({ id: `${patch.id}:mall`, kind: "mall", depth: 7, height: 4.5, boxes: [{ x: round(patch.x), z: round(patch.z), w: round(Math.min(length, 1.6 * patch.R)), d: 20, angle }], bores: [], pillars: 8, lined: true, up: ends(patch.x, patch.z, Math.min(length, 1.6 * patch.R), angle) });
   }

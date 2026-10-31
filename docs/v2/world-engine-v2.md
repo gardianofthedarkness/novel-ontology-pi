@@ -603,16 +603,34 @@ waterfront, the 大道 avenues at 50 m, 平台 and 停机坪 platforms), but eve
    (`underground.ts`: a passage along a street, a mall under any other, stairs up at its ends).
 The user (2026-10-31): steps 2 and 3 are modelling, to fine-tune and polish without a design check from them.
 
-2. **Street manifolds** (next). The street kinds are built today with district landscapes (a shopping
-   street as a commercial blob, an avenue as a skyscraper blob). Each needs its own 3D build: a frontage along a line
-   (shopping, avenue, residential, alley), a podium with towers over it (centre), open ground ringed by buildings
-   (square, station front), a deck by the water (waterfront).
-3. **Building into what is there** (next). A street area lands on ground its district or city has already
+2. **Street manifolds** (built). The street kinds were built with district landscapes (a shopping street as a
+   commercial blob), and the city's fill, cut into 180 m super-blocks, cannot make a street: a narrow box got a few
+   buildings facing the fill's roads, not its own. Each street kind is now a landscape of its own (`STREET_TYPES` in
+   `landscape.ts`: shopping, centre, avenue, square, station, alley, terrace, waterfront) whose form lays out its own
+   buildings (`formOf`), their floors drawn from its manifold (a linear street's by the distance from its road), while the
+   city's fill gives way inside it. A shopping street, an avenue, an alley, a terrace: the road down its length (12, 36, 4,
+   8 m) and a row of buildings each side, as wide, deep and far apart as its kind (shops 8–16 m wide and tight; avenue
+   blocks 30–60 m, 8 m apart, set back 6 m; an alley's 4–9 m lots on a 4 m lane); a waterfront: water down its length, a
+   bridge across, warehouses behind an 8 m promenade on each bank; a square: open ground with a monument, a ring of
+   buildings facing it; a centre: its mall podium with one or two towers rising from it (its core's upper tail: on a 45 m
+   median, 294 and 158 m), a plaza before it with a screen; a station front: the long hall at its back, a plaza before
+   it. A form is rectangles that never overlap (the world stands each as a lot of its own, and leaves out one of two that
+   overlap), so a tower rising from a podium is the tower and the podium's wings round it. The city's roads that run
+   along inside a street, or through a square, a compound or a hall, give way; a road that crosses a street stays, and
+   the rows break there, as at a crossing. A mall lies under a centre, a station and a shopping street.
+3. **Building into what is there** (built). A street area lands on ground its district or city has already
    built. Modern cities build things into each other (a commercial centre in the base of a tower), so the street is not
    simply laid over: what it overlaps is rearranged. A first proposal, to settle: a podium kind (centre, station, shopping)
    takes the lower floors of the towers it overlaps and keeps them above; an open kind (square, park, waterfront) clears
    its ground; a low kind (alley, residential) replaces what it overlaps with its own fabric; a linear kind (avenue,
    shopping) cuts its own road through the blocks, which split along it.
+   Built: a street of an `into` kind (shopping, centre, avenue, square, station, waterfront) lands on its pool's default
+   ground (a CBD in 学园都市's pool district); where one of its buildings stands on taller ground, that ground's tower
+   goes on above it and the street's own building is its base (`base`: its floors and kind; the live view draws it as a
+   gold band): on a CBD at an 80 m median, 25 of a shopping street's shops became the bases of towers up to 468 m, and
+   14 of a square's ring. An alley or a terrace keeps its own low fabric. A landmark of the ground (the CBD's tallest
+   tower) that a street lands on moves just clear of the street's form, across its axis or beyond a square's ring, and
+   the city's buildings under its new place give way.
 Built in order, 1 then 2 then 3, each checked on vol 1 with stand-in answers before a run with Jev.
 
 ### 2.1 Sentence kinds — built

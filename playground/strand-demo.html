@@ -518,6 +518,20 @@ let decor = () => {};
   }
   for (const [ax, az, bx, bz] of (data.landscapes ?? []).flatMap((entry) => entry.walls ?? [])) lines.push(ax, 0, az, bx, 0, bz, ax, 6, az, bx, 6, bz);
   if (lines.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3)); world.add(new THREE.LineSegments(geometry, edge)); }
+  // A street form's water (a waterfront: water down its length), and the bases of buildings built into others (a street's
+  // shops under a tower of the ground it landed on), a gold band to their own height (docs/v2/world-engine-v2.md §2.0.13).
+  const waters = (data.landscapes ?? []).flatMap((entry) => entry.waters ?? []);
+  if (waters.length) {
+    const sheets = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshBasicMaterial({ color: 0x2f7dff, transparent: true, opacity: 0.35, depthWrite: false }), waters.length);
+    waters.forEach(([ax, az, bx, bz, width], i) => { q.setFromAxisAngle(up, -Math.atan2(bz - az, bx - ax)); m.compose(new THREE.Vector3((ax + bx) / 2, -0.4, (az + bz) / 2), q, new THREE.Vector3(Math.hypot(bx - ax, bz - az), 1, width)); sheets.setMatrixAt(i, m); });
+    world.add(sheets);
+  }
+  const bases = (data.landscapes ?? []).flatMap((entry) => entry.bases ?? []);
+  if (bases.length) {
+    const bands = new THREE.InstancedMesh(block, new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.12, depthWrite: false }), bases.length);
+    bases.forEach(([x, z, w, d, angle, floors], i) => { q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w + 1, floors * FLOOR, d + 1)); bands.setMatrixAt(i, m); });
+    world.add(bands);
+  }
   const roads = (data.landscapes ?? []).flatMap((entry) => entry.roads);
   if (roads.length) {
     const strips = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshBasicMaterial({ color: 0x1d4a60, transparent: true, opacity: 0.35, depthWrite: false }), roads.length);

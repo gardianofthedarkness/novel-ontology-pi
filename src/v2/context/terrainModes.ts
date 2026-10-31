@@ -104,17 +104,17 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     village: { hint: "a village of an older world: scattered low houses with gardens", ground: "village", manifold: M(0, 0.2), medians: [3, 4, 6, 8] },
     farmland: { hint: "farmland: wide fields with a few farmhouses", ground: "farm", manifold: M(0, 0.15), medians: [3, 4, 6] },
   },
-  // The street level's own kinds (docs/v2/world-engine-v2.md §2.0.12): the street-level land use, each built with an engine
-  // landscape on its own manifold. A crossing is a square; an underground passage is spatial, no street.
+  // The street level's own kinds (docs/v2/world-engine-v2.md §2.0.12, §2.0.13): the street-level land use, each built as its
+  // own street form (landscape.ts STREET_TYPES) on its own manifold. A crossing is a square; an underground passage is spatial, no street.
   street: {
-    shopping: { hint: "a shopping street: shops of a few storeys on both sides, signs, a tower at a corner", ground: "commercial", manifold: M(0, 0.35, 0.05), medians: [6, 9, 12, 18, 25] },
-    centre: { hint: "a modern commercial centre: a mall podium with towers over it, a plaza with screens, wide roads round it", ground: "commercial", manifold: M(0.4, 0.6, 0.1), medians: [12, 20, 30, 45, 70, 100] },
-    avenue: { hint: "an avenue: a wide road lined with offices and towers", ground: "skyscrapers", manifold: M(0.1, 0.5, 0.08), medians: [20, 35, 50, 80, 120] },
-    square: { hint: "a square or a crossing: open ground with buildings round it", ground: "commercial", manifold: M(0, 0.3, 0.03), medians: [6, 10, 15, 25, 40] },
-    station: { hint: "a station front: the station, a plaza, bus stops, shops round it", ground: "commercial", manifold: M(0.3, 0.4, 0.05), medians: [10, 15, 25, 40, 60] },
-    alley: { hint: "an alley or a lane: narrow, low and dense", ground: "residential", manifold: M(0, 0.2), medians: [3, 5, 7, 10] },
-    residential: { hint: "a residential street: flats and houses along it", ground: "residential", manifold: M(0, 0.25, 0.02), medians: [6, 9, 12, 18, 25] },
-    waterfront: { hint: "a waterfront or a bridge: water, a deck, warehouses and walks by it", ground: "harbour", manifold: M(0, 0.3), medians: [4, 6, 10, 15] },
+    shopping: { hint: "a shopping street: shops of a few storeys on both sides, signs, a tower at a corner", ground: "shopping", manifold: M(0, 0.35, 0.05), medians: [6, 9, 12, 18, 25] },
+    centre: { hint: "a modern commercial centre: a mall podium with towers over it, a plaza with screens, wide roads round it", ground: "centre", manifold: M(0.4, 0.6, 0.1), medians: [12, 20, 30, 45, 70, 100] },
+    avenue: { hint: "an avenue: a wide road lined with offices and towers", ground: "avenue", manifold: M(0.1, 0.5, 0.08), medians: [20, 35, 50, 80, 120] },
+    square: { hint: "a square or a crossing: open ground with buildings round it", ground: "square", manifold: M(0, 0.3, 0.03), medians: [6, 10, 15, 25, 40] },
+    station: { hint: "a station front: the station, a plaza, bus stops, shops round it", ground: "station", manifold: M(0.3, 0.4, 0.05), medians: [10, 15, 25, 40, 60] },
+    alley: { hint: "an alley or a lane: narrow, low and dense", ground: "alley", manifold: M(0, 0.2), medians: [3, 5, 7, 10] },
+    residential: { hint: "a residential street: flats and houses along it", ground: "terrace", manifold: M(0, 0.25, 0.02), medians: [6, 9, 12, 18, 25] },
+    waterfront: { hint: "a waterfront or a bridge: water, a deck, warehouses and walks by it", ground: "waterfront", manifold: M(0, 0.3), medians: [4, 6, 10, 15] },
     park: { hint: "a park or an amusement park: lawns, gardens, rides, with a few pavilions", ground: "park", manifold: M(0, 0.4, 0.02), medians: [3, 5, 8, 12, 20] },
     stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium", manifold: M(0, 0.2), medians: [15, 25, 35, 50] },
   },
