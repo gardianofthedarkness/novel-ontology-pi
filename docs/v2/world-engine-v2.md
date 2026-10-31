@@ -745,7 +745,7 @@ where characters are near or it has been broken (the world engine's own streamin
 Built: `modelFor` (`useModels.ts`) gives each building of the fill and of the street forms a model of its use (its own,
 else a stand-in; the fill's kinds as uses by `KIND_USE`, an old town's keep and hall as their own), the one whose height
 over width is nearest its own, stretched to its footprint and height. The terrain view draws them as a faint fill with edges in the
-corridors' light cyan (the user's call) (each model's edges for all its buildings in one draw, fading in the fog), a use with no model as the faint
+hologram's pale blue (the user's call) (each model's edges for all its buildings in one draw, fading in the fog), a use with no model as the faint
 block; a building the world stands as a lot is drawn as the lot. Every underground hall and passage shows in the terrain
 view, reached or not. Jev's overview captions say what the holograms and the volumes below the street are. Vol 1: 29
 models, the page 1.7 MB, a world build 12.6 s, as before.
@@ -776,7 +776,8 @@ ramps, cuts) were saved but never built nor drawn, and only a street kind below 
   models.
 - **One colour** (the user: the underground's colours, and the standing buildings' old ones, did not fit). The page draws
   the city, the standing buildings' rooms, walls and roofs, a waterfront's water and everything under the street in the
-  corridors' light cyan (`HOLO`); the orange stairs, red damage and gold markers keep theirs. What is under the street is
+  pale blue of the fights' holograms (`HOLO` edges #8fd6ff over a faint `HOLO_FILL` #2b86c4; the light cyan was too
+  saturated, the user said); the orange stairs, red damage and gold markers keep theirs. What is under the street is
   dimmer than the city above (its volumes 0.05, its models' edges 0.18) and turns solid (0.55, 0.9) when the street is
   seen through: the Underground button, or anyone shown below it.
 - **Picking up** (the user: run 5 is kept, no fresh run). A part already kept in `stage/terrain.json` stays as it is; a

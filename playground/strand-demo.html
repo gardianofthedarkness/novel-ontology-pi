@@ -241,25 +241,26 @@ controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls
 const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
 new ResizeObserver(resize).observe(host);
 const unit = new THREE.BoxGeometry(1, 1, 1), matrix = new THREE.Matrix4(), color = new THREE.Color();
-// The hologram's one colour (the corridors' light cyan, the user's call, 2026-10-31): the city, its insides and its underground.
-const HOLO = 0x7ce6ff;
+// The hologram's colours (the user's call, 2026-10-31: the pale blue of the fights' holograms, not a saturated cyan): its
+// edges a pale sky blue, its fill a faint deep blue; the city, its insides and its underground alike.
+const HOLO = 0x8fd6ff, HOLO_FILL = 0x2b86c4;
 /** Every line drawn under the street (the hall models' edges), dimmed and brightened with the halls themselves. */
 const underLines = [];
 const mats = {
   // The levels under the street (world.ts), all in the hologram's cyan, dimmer than the city above until the street is seen
   // through (the Underground button, or someone shown below it: xray below), when they turn solid.
-  subway: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
+  subway: new THREE.MeshBasicMaterial({ color: HOLO_FILL, transparent: true, opacity: 0.05, depthWrite: false }),
   // A subway entrance on the street: seen whether or not the street is seen through.
   entrance: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.3, depthWrite: false }),
-  arcade: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
-  under: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
-  water: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
-  deep: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
-  facility: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
+  arcade: new THREE.MeshBasicMaterial({ color: HOLO_FILL, transparent: true, opacity: 0.05, depthWrite: false }),
+  under: new THREE.MeshBasicMaterial({ color: HOLO_FILL, transparent: true, opacity: 0.05, depthWrite: false }),
+  water: new THREE.MeshBasicMaterial({ color: HOLO_FILL, transparent: true, opacity: 0.05, depthWrite: false }),
+  deep: new THREE.MeshBasicMaterial({ color: HOLO_FILL, transparent: true, opacity: 0.05, depthWrite: false }),
+  facility: new THREE.MeshBasicMaterial({ color: HOLO_FILL, transparent: true, opacity: 0.05, depthWrite: false }),
   corridor: new THREE.MeshLambertMaterial({ color: 0x7ce6ff, emissive: 0x0b3a48, transparent: true, opacity: 0.85 }),
   stair: new THREE.MeshLambertMaterial({ color: 0xffb547, emissive: 0x4a2a00, transparent: true, opacity: 0.8 }),
   cut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.9 }),
-  room: new THREE.MeshLambertMaterial({ color: HOLO, transparent: true, opacity: 0.1, depthWrite: false }),
+  room: new THREE.MeshLambertMaterial({ color: HOLO_FILL, transparent: true, opacity: 0.14, depthWrite: false }),
   roomCut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.32, depthWrite: false }),
   // A hit building's units: its walls and roof as panels, and what fell as rubble.
   wall: new THREE.MeshLambertMaterial({ color: HOLO, transparent: true, opacity: 0.15, depthWrite: false }),
@@ -365,7 +366,7 @@ function buildPlace(id) {
       if (hall.pillars.length) { const mesh = instanced(material, hall.pillars.map(([x, z]) => [x, y, z, 1.2, hall.height, 1.2])); show(mesh, hall.pillars[0][0], hall.pillars[0][1]); }
       const model = ["lab", "military", "quantum"].includes(hall.kind) ? shellOf(`kk-${hall.kind}`) : null, box = hall.boxes[0];
       if (model && box) { const shell = new THREE.LineSegments(model.edges, new THREE.LineBasicMaterial({ color: HOLO, transparent: true, opacity: 0.18 })); underLines.push(shell.material); shell.scale.set(box.w * 0.8 / model.size.x, hall.height * 0.8 / model.size.y, box.d * 0.8 / model.size.z); shell.position.set(box.x, -hall.depth, box.z); show(shell, box.x, box.z); }
-      if (box && hall.label) { const tag = label(hall.label, "#7ce6ff", 20); tag.position.set(box.x, -hall.depth + hall.height + 2, box.z); show(tag, box.x, box.z, { under: true }); }
+      if (box && hall.label) { const tag = label(hall.label, "#8fd6ff", 20); tag.position.set(box.x, -hall.depth + hall.height + 2, box.z); show(tag, box.x, box.z, { under: true }); }
       // A subway entrance: the structure over the stairs on the pavement (seen from the street), and the steps down to its passage.
       for (const [sx, sz, ex, ez] of hall.stairs ?? []) {
         const steps = Array.from({ length: 10 }, (_, n) => { const t = (n + 0.5) / 10; return [sx + (ex - sx) * t, -hall.depth * t + 0.2, sz + (ez - sz) * t, 3, 0.45, 3]; });
@@ -531,7 +532,7 @@ for (const id of Object.keys(data.places)) world.add(buildPlace(id).group);
 const sampledSpots = [];
 for (const [id, spot] of macroAt) {
   const guess = !!(spot.sampled || spot.dwelling), strand = !!data.places[id], size = spot.unbuilt ? 1.2 : spot.depth ? 2.4 : 3.4;
-  const pin = placePin(spot.cx, spot.cz, size, guess ? 0xffd36e : strand ? 0xffffff : 0x7ce6ff, strand || guess ? 0.9 : spot.temporary ? 0.3 : 0.6); world.add(pin.group);
+  const pin = placePin(spot.cx, spot.cz, size, guess ? 0xffd36e : strand ? 0xffffff : HOLO, strand || guess ? 0.9 : spot.temporary ? 0.3 : 0.6); world.add(pin.group);
   const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : spot.dwells ? ` · in a building of ${spot.dwells}` : spot.sampled ? ` · sampled in ${spot.sampled}${spot.forJev ? " · for Jev" : ""}` : ""}` : spot.label, guess ? "#ffd36e" : strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, pin.top + size * 1.1, spot.cz - size * 1.3); tag.scale.multiplyScalar(size); world.add(tag);
   if (guess) sampledSpots.push({ pin, tag });
 }
@@ -543,9 +544,8 @@ let decor = () => {};
 // generated from the place's landscape, never on a staged grid; only the buildings the story names are canon. Kept
 // faint so it never hides the people.
 {
-  // The terrain view's holograms in the corridors' light cyan (the user's call, 2026-10-31); the runtime's faint blue.
-  const holo = terrainStage ? 0x7ce6ff : 0x2b86c4;
-  const fill = new THREE.MeshBasicMaterial({ color: holo, transparent: true, opacity: terrainStage ? 0.1 : 0.045, depthWrite: false }), edge = new THREE.LineBasicMaterial({ color: terrainStage ? 0x7ce6ff : 0x8fd6ff, transparent: true, opacity: terrainStage ? 0.5 : 0.2, depthWrite: false });
+  // The terrain view's holograms a little brighter than the runtime's faint city, in the same pale blue.
+  const fill = new THREE.MeshBasicMaterial({ color: HOLO_FILL, transparent: true, opacity: terrainStage ? 0.07 : 0.045, depthWrite: false }), edge = new THREE.LineBasicMaterial({ color: HOLO, transparent: true, opacity: terrainStage ? 0.4 : 0.2, depthWrite: false });
   const block = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), outline = new THREE.EdgesGeometry(block).attributes.position.array, m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v = new THREE.Vector3();
   const buildings = (data.landscapes ?? []).flatMap((entry) => entry.buildings), ids = (data.landscapes ?? []).flatMap((entry) => entry.ids ?? entry.buildings.map(() => null)), lines = [];
   // A building the world has stood up as a lot: from that moment its real lot is drawn instead, so its faint copy goes
@@ -624,7 +624,7 @@ let decor = () => {};
 // as large as its box: a platform a deck on columns, a plateau or a rectangle a block, a hill a dome, a basin a hollow, a
 // cut a trench, a ramp a slope (down to its depth below the street, where its hall is in the underground), a sphere, a donut.
 {
-  const fillLook = new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }), edgeLook = new THREE.LineBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.6 });
+  const fillLook = new THREE.MeshBasicMaterial({ color: HOLO_FILL, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }), edgeLook = new THREE.LineBasicMaterial({ color: HOLO, transparent: true, opacity: 0.6 });
   const part = (geometry, x, y, z, turn = 0) => { const piece = new THREE.Group(); piece.add(new THREE.Mesh(geometry, fillLook), new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 20), edgeLook)); piece.position.set(x, y, z); piece.rotation.y = turn; return piece; };
   for (const shape of data.terrainShapes ?? []) {
     const { x, z, w, d } = shape, top = shape.top ?? 3, h = Math.max(0.5, Math.abs(top)), length = Math.max(w, d), width = Math.min(w, d), turn = w >= d ? 0 : -Math.PI / 2, form = new THREE.Group();
