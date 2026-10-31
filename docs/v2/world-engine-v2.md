@@ -733,6 +733,23 @@ Built, in the order 5, 1, 2, 3, 4:
   On vol 1 with stand-in answers (random street kinds): 8 pins moved off ground they may not share, the 5 named places
   written to the registry, 9 pool buildings dwelling in their streets' buildings, 29 left for Jev.
 
+### 2.0.16 The terrain view: every building as its model, its inside where people are (the user's design, 2026-10-31)
+
+The user asked for every street-level building to be built at the terrain stage (rooms, stairs, corridors, and the
+underground's passages), so Jev sees what is there. Measured on vol 1 (stand-in terrain): standing every kept part's
+buildings as lots of the world is 3,142 lots of the 3,497, 36 s a world build (29 builds a run) and a 16 MB page. The
+user's idea instead: every building is drawn as its 3D model's shape, and its rooms, stairs and corridors become tiles only
+where characters are near or it has been broken (the world engine's own streaming, as at runtime). In the hologram's style
+(the user: a cyan hologram, as everything else).
+
+Built: `modelFor` (`useModels.ts`) gives each building of the fill and of the street forms a model of its use (its own,
+else a stand-in; the fill's kinds as uses by `KIND_USE`, an old town's keep and hall as their own), the one whose height
+over width is nearest its own, stretched to its footprint and height. The terrain view draws them as a faint cyan fill with
+cyan edges (each model's edges for all its buildings in one draw, fading in the fog), a use with no model as the faint
+block; a building the world stands as a lot is drawn as the lot. Every underground hall and passage shows in the terrain
+view, reached or not. Jev's overview captions say what the holograms and the volumes below the street are. Vol 1: 29
+models, the page 1.7 MB, a world build 12.6 s, as before.
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

@@ -58,3 +58,14 @@ test("a street's buildings take their uses from its kind's list (a shopping stre
   const centre = own(street("centre", 220, 220), fill([street("centre", 220, 220)]).landmarks);
   assert.ok(centre.some((b) => b.lot.includes(":podium") && b.use === "mall") && centre.some((b) => b.lot.includes(":tower") && b.use === "office"), "a centre: a mall podium, office towers");
 });
+
+test("the terrain view draws a building as a model of its use whose proportions are nearest its own; a use with no model, a block", async () => {
+  const { modelFor, useOf } = await import("../src/ground/stage/useModels.js");
+  const sizes = { "tower-a": [0.5, 2, 0.5], "block-wide-a": [1, 1.1, 0.5], "office-c": [0.88, 0.89, 1.09], "kk-apartment": [2.01, 2.25, 1.45] };
+  assert.equal(modelFor({ kind: "tower", w: 30, d: 30, floors: 40 }, "a", sizes), "tower-a", "a tall office: a tower");
+  assert.equal(modelFor({ kind: "office", w: 40, d: 40, floors: 10 }, "b", sizes), "office-c", "a low office: the office block");
+  assert.equal(modelFor({ kind: "shop", use: "cafe", w: 10, d: 12, floors: 3 }, "c", sizes), "block-wide-a", "a café: its stand-in");
+  assert.equal(modelFor({ kind: "apartment", w: 20, d: 14, floors: 8 }, "d", sizes), "kk-apartment");
+  assert.equal(modelFor({ kind: "warehouse", w: 30, d: 20, floors: 2 }, "e", sizes), null, "no warehouse model: a block");
+  assert.equal(useOf({ kind: "skyscraper" }), "office");
+});

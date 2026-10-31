@@ -68,7 +68,7 @@ export async function strandDemo(novelDir, options) {
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf, scaleOfName } = await load('dist/src/digger/stage/scale.js');
-  const { continuityTies } = await load('dist/src/v2/pools.js'), { buildingUseOf } = await load('dist/src/v2/rules/language.js');
+  const { continuityTies } = await load('dist/src/v2/pools.js'), { buildingUseOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js');
   // A landscape's fill, made once per landscape (a pool's is read for its streets' buildings, then drawn).
   const fills = new WeakMap(), fillOf = landscape => { const known = fills.get(landscape); if (known?.n === landscape.patches.length) return known.filled; const filled = fillLandscape(landscape); fills.set(landscape, { n: landscape.patches.length, filled }); return filled; };
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -555,6 +555,7 @@ export async function strandDemo(novelDir, options) {
   };
   // Each open place's landscape, filled (src/ground/stage/landscape.ts), in map metres: what stands around the staged grids,
   // never on them (nor on the units and circles built inside it). Derived view data: only nominated buildings are canon.
+  const modelSizes = Object.fromEntries(Object.entries(library.models).map(([id, model]) => [id, model.size]));
   const landscapes = Object.values(canvas.places).filter(place => place.landscape).map(place => {
     const [wx, wz] = C.worldOf(canvas, place.id), round = value => Math.round(value * 10) / 10, filled = fillOf(place.landscape);
     // Not where a child place stands: it has its own ground there.
@@ -565,7 +566,7 @@ export async function strandDemo(novelDir, options) {
     // changes an older one's buildings (damage kept for them in world.json stays theirs). `era`: that patch's.
     const patchOf = b => place.landscape.patches.find(patch => patch.id === (filled.owner[b.lot] ?? String(b.lot).split(':')[0])) ?? place.landscape.patches[0];
     const manifoldOf = patch => createHash('sha256').update(JSON.stringify({ recipe: 1, patch, older: place.landscape.patches.slice(0, place.landscape.patches.indexOf(patch)) })).digest('hex').slice(0, 12);
-    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era: LANDSCAPES[patch.type]?.era ?? 'modern' }; });
+    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era: LANDSCAPES[patch.type]?.era ?? 'modern' }; });
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
@@ -573,7 +574,9 @@ export async function strandDemo(novelDir, options) {
     // and its fingerprint; each building's manifold in `buildings` order.
     const patches = place.landscape.patches.map(patch => ({ id: patch.id, type: patch.type, era: LANDSCAPES[patch.type]?.era ?? 'modern', born: patch.born ?? null, centre: [round(patch.x + wx), round(patch.z + wz)], radius: round(patch.R), height: round(patch.H), manifold: manifoldOf(patch),
       outline: Array.from({ length: 48 }, (_, n) => { const angle = (n / 48) * Math.PI * 2, d = reachOf(patch, [patch.x + Math.cos(angle), patch.z + Math.sin(angle)]); return [round(patch.x + wx + Math.cos(angle) * d), round(patch.z + wz + Math.sin(angle) * d)]; }) }));
-    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width]),
+    // The terrain view (§2.0.16): each building drawn as a model of its use, sized to it, in the hologram's style.
+    const shapes = options.worldOnly ? { models: buildings.map(b => UM.modelFor(b, b.id, modelSizes)) } : {};
+    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), patches, ...shapes, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width]),
       walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })), underground: under } };
   });
   /** The theme of the manifold at a point: the era of the patch reaching it most surely (modern where no landscape does). */
@@ -1112,6 +1115,8 @@ export async function strandDemo(novelDir, options) {
     const worn = new Set(entities.filter(entity => entity.model && entity.placed.length).map(entity => entity.model));
     // A deep facility is dressed in the modern kit's model of its kind (kk-lab, kk-military, kk-quantum).
     for (const hall of world.source.underground?.halls ?? []) if (['lab', 'military', 'quantum'].includes(hall.kind)) worn.add(`kk-${hall.kind}`);
+    // The terrain view draws the city's buildings as their models.
+    for (const entry of landscapes) for (const model of entry.models ?? []) if (model) worn.add(model);
     // One world: a lot is named whichever place named it.
     const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
     const shellOf = (placeId, lot, index) => { if (lot.era === 'ancient' && !named(placeId, index)) { const model = ANCIENT_SHELLS[Math.floor(stream('shell', placeId, index)() * ANCIENT_SHELLS.length)]; worn.add(model); return model; } const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };

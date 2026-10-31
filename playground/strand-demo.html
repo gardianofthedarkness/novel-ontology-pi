@@ -323,7 +323,8 @@ function buildPlace(id) {
     const under = data.world.underground ?? { halls: [], piles: [], dents: [] };
     const reached = new Map(data.world.chunks.map(([ci, cj, born]) => [`${ci},${cj}`, bornAt(born)])), atPoint = (x, z) => reached.get(`${Math.floor(x / (16 * CELL))},${Math.floor(z / (16 * CELL))}`);
     const tint = { station: mats.subway, tunnel: mats.subway, corridor: mats.subway, mall: mats.arcade, tank: mats.water, channel: mats.water, lab: mats.facility, military: mats.facility, quantum: mats.facility };
-    const show = (mesh, x, z, extra = {}) => { const at = atPoint(x, z); if (at === undefined) return; group.add(mesh); chunks.push({ mesh, at, x, z, ...extra }); };
+    // The terrain view shows every hall, reached or not (§2.0.16): what lies below the street is part of the terrain.
+    const show = (mesh, x, z, extra = {}) => { const at = atPoint(x, z) ?? (terrainStage ? 0 : undefined); if (at === undefined) return; group.add(mesh); chunks.push({ mesh, at, x, z, ...extra }); };
     for (const hall of under.halls) {
       const material = tint[hall.kind] ?? mats.deep, y = -hall.depth + hall.height / 2;
       for (const box of hall.boxes) { const mesh = new THREE.Mesh(new THREE.BoxGeometry(box.w, hall.height, box.d), material); mesh.position.set(box.x, y, box.z); mesh.rotation.y = -box.angle; show(mesh, box.x, box.z); }
@@ -516,15 +517,60 @@ let decor = () => {};
   // building, or no room on the grid), so a built street never shows a faint box among its lots.
   const reached = new Map([...(data.world?.lots ?? []).filter((lot) => lot.source).map((lot) => [lot.source, bornAt(lot.born)]), ...(data.world?.dropped ?? []).map(([id, born]) => [id, bornAt(born)])]);
   if (buildings.length) {
-    const mesh = new THREE.InstancedMesh(block, fill, buildings.length), shown = [];
-    buildings.forEach(([x, z, w, d, angle, floors], i) => { q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w, floors * FLOOR, d)); mesh.setMatrixAt(i, m); shown.push(m.clone()); if (reached.has(ids[i])) return; for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); lines.push(v.x, v.y, v.z); } });
-    world.add(mesh);
+    // The terrain view (docs/v2/world-engine-v2.md §2.0.16): each building drawn as its use's model, sized to it, in the
+    // hologram's style (a faint cyan fill, cyan edges); rooms, stairs and corridors come only where the world stands it as a
+    // lot (near people, or broken). A building with no model, and every building at runtime: the faint block, outlined.
+    const models = (data.landscapes ?? []).flatMap((entry) => entry.models ?? entry.buildings.map(() => null));
+    const solid = terrainStage && (data.landscapes ?? []).some((entry) => entry.models);
+    const shown = [], boxes = [], slots = [], groupsOf = new Map();
+    buildings.forEach(([x, z, w, d, angle, floors], i) => {
+      const shell = solid && models[i] ? shellOf(models[i]) : null, key = shell ? models[i] : "block";
+      q.setFromAxisAngle(up, -angle);
+      boxes.push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w, floors * FLOOR, d)));
+      shown.push(shell ? new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w / shell.size.x, floors * FLOOR / shell.size.y, d / shell.size.z)) : boxes[i]);
+      if (!groupsOf.has(key)) groupsOf.set(key, []);
+      slots.push({ key, k: groupsOf.get(key).length }); groupsOf.get(key).push(i);
+      if (key !== "block" || reached.has(ids[i])) return;
+      for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(boxes[i]); lines.push(v.x, v.y, v.z); }
+    });
+    // A model's edges for all its buildings in one draw: its edge lines, each building's matrix an instance (and gone as
+    // the world stands the building, its matrix zeroed), fading in the fog like everything else.
+    const edgeLook = () => new THREE.ShaderMaterial({
+      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { tint: { value: new THREE.Color(0x8fd6ff) }, alpha: { value: edge.opacity } }]), fog: true, transparent: true, depthWrite: false,
+      vertexShader: "attribute vec4 m0; attribute vec4 m1; attribute vec4 m2; attribute vec4 m3;\n#include <fog_pars_vertex>\nvoid main() { vec4 mvPosition = modelViewMatrix * mat4(m0, m1, m2, m3) * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;\n#include <fog_vertex>\n}",
+      fragmentShader: "uniform vec3 tint; uniform float alpha;\n#include <fog_pars_fragment>\nvoid main() { gl_FragColor = vec4(tint, alpha);\n#include <fog_fragment>\n}",
+    });
+    const meshes = new Map(), edgeSets = new Map();
+    for (const [key, list] of groupsOf) {
+      const mesh = new THREE.InstancedMesh(key === "block" ? block : shellOf(key).fill, fill, list.length);
+      list.forEach((i, k) => mesh.setMatrixAt(k, shown[i]));
+      world.add(mesh); meshes.set(key, mesh);
+      if (key === "block") continue;
+      const geometry = new THREE.InstancedBufferGeometry(), columns = [0, 1, 2, 3].map(() => new Float32Array(list.length * 4));
+      geometry.setAttribute("position", shellOf(key).edges.attributes.position);
+      list.forEach((i, k) => shown[i].elements.forEach((value, e) => { columns[Math.floor(e / 4)][k * 4 + (e % 4)] = value; }));
+      columns.forEach((column, c) => geometry.setAttribute(`m${c}`, new THREE.InstancedBufferAttribute(column, 4)));
+      geometry.instanceCount = list.length;
+      const edges = new THREE.LineSegments(geometry, edgeLook()); edges.frustumCulled = false;
+      world.add(edges); edgeSets.set(key, { geometry, columns });
+    }
     const hidden = new THREE.Matrix4().makeScale(0, 0, 0), gone = new Set();
     // A building another line broke that this run never stood up: a red outline on the faint city, so it is known there.
     const ruined = new Set((data.world?.ruins ?? []).map((ruin) => ruin.building)), red = [];
-    ids.forEach((id, i) => { if (!ruined.has(id)) return; mesh.getMatrixAt(i, m); for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); red.push(v.x, v.y, v.z); } });
+    ids.forEach((id, i) => { if (!ruined.has(id)) return; for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(boxes[i]); red.push(v.x, v.y, v.z); } });
     if (red.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(red, 3)); world.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xff5a6a, transparent: true, opacity: 0.7 }))); }
-    decor = (now) => { let changed = false; ids.forEach((id, i) => { const at = reached.get(id); if (at === undefined) return; const off = at <= now; if (off === gone.has(i)) return; mesh.setMatrixAt(i, off ? hidden : shown[i]); if (off) gone.add(i); else gone.delete(i); changed = true; }); if (changed) mesh.instanceMatrix.needsUpdate = true; };
+    decor = (now) => {
+      const changed = new Set();
+      ids.forEach((id, i) => {
+        const at = reached.get(id); if (at === undefined) return;
+        const off = at <= now; if (off === gone.has(i)) return;
+        const { key, k } = slots[i], matrix = off ? hidden : shown[i];
+        meshes.get(key).setMatrixAt(k, matrix);
+        const set = edgeSets.get(key); if (set) matrix.elements.forEach((value, e) => { set.columns[Math.floor(e / 4)][k * 4 + (e % 4)] = value; });
+        if (off) gone.add(i); else gone.delete(i); changed.add(key);
+      });
+      for (const key of changed) { meshes.get(key).instanceMatrix.needsUpdate = true; const set = edgeSets.get(key); if (set) for (let c = 0; c < 4; c++) set.geometry.getAttribute(`m${c}`).needsUpdate = true; }
+    };
   }
   for (const [ax, az, bx, bz] of (data.landscapes ?? []).flatMap((entry) => entry.walls ?? [])) lines.push(ax, 0, az, bx, 0, bz, ax, 6, az, bx, 6, bz);
   if (lines.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3)); world.add(new THREE.LineSegments(geometry, edge)); }

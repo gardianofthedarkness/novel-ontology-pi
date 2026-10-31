@@ -49,6 +49,8 @@ const SCALE_WIDTH = { district: [300, 2400], street: [40, 400], city: [800, 8000
 const OVERVIEW = [1440, 900], MAP = [1024, 1024], ZOOMS = 2, CELL = 2, FLOOR = 3, OPEN = new Set(['district', 'street']);
 /** The core the terrain-height question looks through, half its width over its highest slice (at least 40 m): the slices stand apart, the core reads beside them. */
 const CORE = 0.4, CORE_MIN = 40;
+/** What the terrain view shows (docs/v2/world-engine-v2.md §2.0.16), said with every overview Jev is shown. */
+const SEEN = 'The buildings are cyan holograms of their kinds (towers, office blocks, malls, apartments, schools, shops), as tall as they are; rooms and stairs show only where people are. The volumes below the street are underground halls and passages.';
 /** No fog: a map straight down reads every metre of its ground alike. */
 const CLEAR = { near: 1e6, far: 2e6 };
 
@@ -250,7 +252,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(centre, yaw, up, R * 1.8), target: centre }, areas: areas(), labelScale: R / 32, vague: { near: R * 4, far: R * 9 } });
       const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R }, areas: areas(), labelScale: R / 24, vague: CLEAR });
       const { replies: grounds } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES,
-        pictures: { skyline: `${city.label} from the side and above, as the world stands now.`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white${now ? `; where ${part.label} stands for now, a grey pin` : ''}. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
+        pictures: { skyline: `${city.label} from the side and above, as the world stands now. ${SEEN}`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white${now ? `; where ${part.label} stands for now, a grey pin` : ''}. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
       const where = grounds.find(reply => reply.key === 'box'), what = grounds.find(reply => reply.key === 'kind');
       // The answer as the engine's input: a kind of the part's level (a landscape type, or a shape), or a basic shape.
       const options = T.terrainKinds(part.scale, SHAPES), kind = options[what?.value] ? String(what.value) : Object.keys(options)[isCity ? 1 : part.scale === 'street' ? 0 : 1];
@@ -282,7 +284,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const half = Math.max(160, districtBox ? Math.max(districtBox[2] - districtBox[0], districtBox[3] - districtBox[1]) * 0.6 : dn.r * 1.1, pinAt ? Math.max(Math.abs(pinAt[0] - mid[0]), Math.abs(pinAt[1] - mid[1])) * 1.15 : 0);
         const close = await shoot(MAP, { topdown: { x: mid[0], z: mid[1], half }, areas: areas(), labelScale: half / 24, vague: CLEAR });
         const tied = [...tiedTo].map(([id, n]) => `${name(id)} ×${n}`);
-        ({ replies: [areaReply] } = await ask(decide, T.terrainAreaMode, { ...about, kind, district: name(district), tied, pictures: { map: `${name(district)} straight down, north up, ${Math.round(half * 2)} m across; ${part.label}'s suggested spot a grey pin (where continuity would put it; anywhere in ${name(district)} may do)${tied.length ? `; the places it is tied to marked "tied"` : ''}; the other places pinned, those already kept outlined in white. A pin is a point, not a size.` } }, stores, { request: { images: { map: close.png } } }));
+        ({ replies: [areaReply] } = await ask(decide, T.terrainAreaMode, { ...about, kind, district: name(district), tied, pictures: { map: `${name(district)} straight down, north up, ${Math.round(half * 2)} m across; ${part.label}'s suggested spot a grey pin (where continuity would put it; anywhere in ${name(district)} may do)${tied.length ? `; the places it is tied to marked "tied"` : ''}; the other places pinned, those already kept outlined in white. A pin is a point, not a size. ${SEEN}` } }, stores, { request: { images: { map: close.png } } }));
         top.map = close.map;
       }
       let box = isCity && cityNode ? spotOf(cityNode) : fromMap((sampled ? areaReply : where)?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
@@ -309,7 +311,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         await live.outcome({ subject: part.label, text: `zoom ${zoom}: ${reasons.join('; ')}` });
         const zside = await shoot(OVERVIEW, { view: { fov: 38, position: from(zc, yaw, up, zh * 2.2), target: zc }, areas: areas([mark]), labelScale: zh / 28, vague: { near: zh * 5, far: zh * 11 } });
         const ztop = await shoot(MAP, { topdown: { x: zc[0], z: zc[2], half: zh }, areas: areas([mark]), labelScale: zh / 22, vague: CLEAR });
-        const { replies: [again] } = await ask(decide, T.terrainZoomMode, { ...about, kind, reasons, pictures: { skyline: 'the area from the side and above.', map: `the area straight down, north up, ${Math.round(zh * 2)} m across.` } }, stores, { request: { images: { skyline: zside.png, map: ztop.png } } });
+        const { replies: [again] } = await ask(decide, T.terrainZoomMode, { ...about, kind, reasons, pictures: { skyline: `the area from the side and above. ${SEEN}`, map: `the area straight down, north up, ${Math.round(zh * 2)} m across.` } }, stores, { request: { images: { skyline: zside.png, map: ztop.png } } });
         box = fromMap(again?.box, ztop.map) ?? box;
         if (again?.box) boxBy = again;
       }

@@ -28,7 +28,7 @@ export const USE_MODELS: Record<string, UseModels> = {
   school: { own: ["kk-school"], standIn: ["office-h"] },
   hospital: { own: ["hospital"], standIn: [] },
   clinic: { own: [], standIn: ["hospital"] },
-  station: { own: ["station"], standIn: ["kk-tunnel", "kk-tunnel-bend"], note: "the tunnels for a station below the street" },
+  station: { own: ["station"], standIn: [], note: "a station's passages below the street are drawn as halls (kk-tunnel)" },
   government: { own: [], standIn: ["office-k", "office-h"] },
   church: { own: ["church"], standIn: [] },
   lab: { own: ["kk-lab", "kk-quantum"], standIn: [] },
@@ -36,3 +36,24 @@ export const USE_MODELS: Record<string, UseModels> = {
   warehouse: { own: [], standIn: [], note: "no model: a plain block" },
   parking: { own: [], standIn: [], note: "no model: a plain block" },
 };
+
+/** The fill's building kinds as uses (a CBD's skyscrapers and towers are offices, a terrace's houses homes). */
+export const KIND_USE: Record<string, string> = { skyscraper: "office", tower: "office", office: "office", shop: "shop", mall: "mall", house: "house", townhouse: "house", cottage: "house", farmhouse: "house", apartment: "apartment", warehouse: "warehouse", station: "station" };
+/** Kinds drawn as a model of their own whatever their use (an old town's keep and market hall, a fountain). */
+const KIND_MODELS: Record<string, string[]> = { keep: ["keep"], fountain: ["fountain"], hall: ["market"] };
+/** A building's use: its own (a street's buildings), else its kind's. */
+export const useOf = (building: { kind: string; use?: string }) => building.use ?? KIND_USE[building.kind] ?? null;
+/**
+ * The model a building is drawn as in the terrain view (docs/v2/world-engine-v2.md §2.0.16): of its use's models (its own,
+ * else its stand-ins), the ones whose height over width is nearest its own, one of them by a seed; null when its use has
+ * none in the library (a plain block). `sizes`: each library model's size (architectureModels.json).
+ */
+export function modelFor(building: { kind: string; use?: string; w: number; d: number; floors: number }, seed: string, sizes: Record<string, number[]>): string | null {
+  const use = useOf(building), entry = use ? USE_MODELS[use] : null, has = (model: string) => !!sizes[model];
+  const own = (KIND_MODELS[building.kind] ?? entry?.own ?? []).filter(has), candidates = own.length ? own : (entry?.standIn ?? []).filter(has);
+  if (!candidates.length) return null;
+  const ratio = (building.floors * 3) / Math.max(1, building.w, building.d), fit = (model: string) => Math.abs(Math.log(sizes[model][1] / Math.max(sizes[model][0], sizes[model][2]) / ratio));
+  const best = Math.min(...candidates.map(fit)), near = candidates.filter((model) => fit(model) <= best + 0.4).sort();
+  const hash = [...seed].reduce((sum, char) => (Math.imul(sum, 31) + char.charCodeAt(0)) >>> 0, 7);
+  return near[hash % near.length];
+}
