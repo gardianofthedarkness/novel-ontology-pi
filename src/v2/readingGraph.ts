@@ -55,6 +55,12 @@ export class ReadingGraph {
     return rows.map((row) => String(row.id));
   }
 
+  /** The facts about `id`, those about it alone first (a fact about one thing describes it; one about five only names it), then in reading order. */
+  async factsOf(id: string, limit: number): Promise<{ id: string; subjects: number }[]> {
+    const rows = await this.run("MATCH (f:Fact)-[:ABOUT]->(:Entity {id: $id}) MATCH (f)-[:ABOUT]->(e:Entity) RETURN f.id AS id, f.at AS at, count(e) AS subjects ORDER BY subjects, at LIMIT $limit", { id, limit });
+    return rows.map((row) => ({ id: String(row.id), subjects: Number(row.subjects) }));
+  }
+
   /** Facts about both places (one that names a district and its city), newest first. */
   async factsAboutBoth(a: string, b: string, limit: number): Promise<string[]> {
     const rows = await this.run("MATCH (f:Fact)-[:ABOUT]->(:Entity {id: $a}), (f)-[:ABOUT]->(:Entity {id: $b}) RETURN f.id AS id ORDER BY f.at DESC LIMIT $limit", { a, b, limit });

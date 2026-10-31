@@ -34,3 +34,54 @@ test("the context engine: quotas scaled by the complexity, the budget cut weakes
   assert.deepEqual(tight.questions.map((q) => q.key), ["test:q1", "test:q2"]);
   assert.equal(JSON.stringify(await compose(mode, { asked: ["q1", "q2"], ambiguity: 1 }, { facts }, { budget: 400 })), JSON.stringify(tight), "deterministic");
 });
+
+test("the engine for every Jev request: a task from the focus, a ranked source in its own order, a key always there, a mode's own render, and ask() recording the manifest", async () => {
+  const { ask } = await import("../src/v2/context/engine.js");
+  const ranked: Mode<{ ids: string[] }, null> = {
+    name: "ranked", task: (focus) => `${focus.ids.length} asked`, budget: 10_000, cutOrder: [],
+    sources: [
+      { name: "said", key: "said", quota: 2, ranked: true, collect: (focus) => focus.ids.map((id, n) => ({ id, score: n, fields: id })) },
+      { name: "none", key: "none", quota: 4, always: true, collect: () => [] },
+    ],
+    questions: (focus) => [{ key: "q", primitive: "choice", instructions: "Which?", options: focus.ids }],
+    render: (state) => `${state.task}: ${Object.keys(state.said as object).join(", ")}`,
+  };
+  const composed = await compose(ranked, { ids: ["c", "a", "b"] }, null);
+  assert.deepEqual(composed.state, { task: "3 asked", said: { c: "c", a: "a" }, none: {} }, "the recommender's order, its quota scaled to 2 × 0.75; the empty key kept");
+  assert.equal(composed.document, "3 asked: c, a");
+  const manifests: unknown[] = [], sent: unknown[] = [];
+  const decide = Object.assign(async (state: unknown, questions: unknown, request?: unknown) => { sent.push([state, questions, request]); return [{ key: "q", value: "a", confidence: 1 }]; }, { record: (manifest: unknown) => manifests.push(manifest) });
+  const { replies } = await ask(decide as never, ranked, { ids: ["c", "a", "b"] }, null, { request: { images: {} } });
+  assert.deepEqual([replies[0].value, manifests.length, (sent[0] as unknown[])[0], (sent[0] as unknown[])[2]], ["a", 1, "3 asked: c, a", { images: {} }]);
+});
+
+test("terrain's ground: what stands in the part, the place holding it and its city, the facts by Cypher (those about it alone first), its city's surroundings but not another district's", async () => {
+  const T = await import("../src/v2/context/terrainModes.js");
+  const label = (id: string) => ({ city: "City", d7: "District Seven", d6: "District Six", tokyo: "Tokyo" })[id] ?? id;
+  const parentOf = (id: string) => ({ d7: "city", d6: "city", city: "tokyo" })[id] ?? null;
+  const sentences = [
+    { id: "s1", text: "The station square of District Seven is busy." },
+    { id: "s2", text: "City holds the science of the world." },
+    { id: "s3", text: "A tower of fifty floors stands in City." },
+    { id: "s4", text: "The wind turbines of the city turn slowly." },
+    { id: "s5", text: "District Six is a park of a whole district." },
+    { id: "s6", text: "City." },
+  ];
+  const stores = await T.terrainStores({
+    entities: [{ id: "city", name: "City", kind: "place" }, { id: "d7", name: "District Seven", kind: "place" }, { id: "d6", name: "District Six", kind: "place" }, { id: "tokyo", name: "Tokyo", kind: "place" }, { id: "p1", name: "someone", kind: "person" }],
+    facts: [{ id: "f1", order: 1, sentences: ["s2"], about: [{ id: "city" }] }, { id: "f2", order: 2, sentences: ["s3"], about: [{ id: "city" }, { id: "p1" }] }, { id: "f3", order: 3, sentences: ["s6"], about: [{ id: "city" }] }],
+    slots: [{ label: "dormitory", kind: "building", in: "d7" }, { label: "tower of fifty floors", kind: "building", in: "city" }, { label: "tower of fifty floors", kind: "building", in: "city" }, { label: "office", kind: "room", in: "city" }],
+    settings: [{ scene: "a", place: "d7" }, { scene: "b", place: "city" }, { scene: "c", place: "d6" }],
+    scenes: [{ id: "a", index: 0, environment: [] }, { id: "b", index: 1, environment: [{ id: "environment:s4", first: "s4", text: sentences[3].text }] }, { id: "c", index: 2, environment: [{ id: "environment:s5", first: "s5", text: sentences[4].text }] }],
+  }, sentences, parentOf, label);
+  const focus = { part: { id: "d7", label: "District Seven", scale: "district" }, holder: { id: "city", label: "City" }, city: { id: "city", label: "City" }, kinds: { skyscrapers: "towers", park: "a park" }, pictures: { map: "the map" } };
+  const composed = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, focus, stores);
+  const state = composed.state as Record<string, Record<string, unknown>>;
+  assert.deepEqual(state.part, { name: "District Seven", scale: "district", in: "City" });
+  assert.deepEqual(Object.keys(state.text), ["s1"]);
+  assert.deepEqual(state.standing, { dormitory: "a building", "tower of fifty floors": "a building in City, 2 times" }, "no rooms; the part's own first");
+  assert.deepEqual(Object.keys(state.facts), ["f1", "f2", "f3"], "about the city alone first; a bare name last");
+  assert.deepEqual(Object.keys(state.environment), ["environment:s4"], "the city's surroundings, not District Six's");
+  assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key)], [["skyscrapers", "park"], ["box", "kind"]]);
+  await stores.graph?.close();
+});
