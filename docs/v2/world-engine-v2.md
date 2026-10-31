@@ -664,6 +664,42 @@ an underground square at 12 m down), a station front at 15 m, a centre at 20 m, 
    学园都市's pool Jev has not boxed: the 334 tied pairs 83 m apart on average (161 m before), the 1,746 untied 189 m
    (153 m before).
 
+The run with Jev on both (2026-10-31, f69f6fe, vol 1, 28 parts, 86 requests, about $0.025 of input; kept as
+`stage/terrain.pools-run4.json`): with no circles to copy, Jev boxed the districts tighter (第七学区 537 × 394 m, was
+1,731 × 1,188; 第六学区 597 × 526, was 1,097 × 848; 第十五学区 590 × 663, was 842 × 590), all CBDs at 30 m again; the
+streets took sizes from the text, a few below a street's least (小巷 19 × 7 m after two asks). 12 streets were asked
+again 22 times (7 and 12 the run before): 6 too small, 16 over a neighbour, most of them tied to it in one scene (大道 and
+广场 over 大桥 in scene 26, 大道 and 飞机跑道 over 停机坪 in scene 34), the ties having put their pins side by side. The
+user: good; the next steps (§2.0.15).
+
+### 2.0.15 Pins as suggestions, compatibility, a universe's terrain, street buildings, the terrain view (the user's design, 2026-10-31)
+
+1. **A pin is a suggestion.** The pin sampling gives a member says where continuity would put it (how often the
+   characters carry between it and its neighbours), not where it must lie: Jev may box it anywhere in its district, by
+   what it is (an airfield is not in the middle of a CBD). Its area map shows the whole district holding its pool, its
+   pin, and the members it is tied to.
+2. **Compatibility, and repinning before Jev is asked** (code, no model). Each street kind says which kinds it may
+   overlap: a bridge's waterfront or a station front may cross an avenue, a square or a platform overlaps nothing. Once
+   a member's kind is known, before its area question, a pin on a kept box it may not overlap moves to the nearest open
+   space near it. A box over a compatible neighbour is not asked again; one over any other still is. A first map at the
+   street level; each level's to be worked out later (the user: no commercial street came up this run, fine for now).
+3. **A universe's terrain is reused.** The city and most of its tree carry across the books of a universe: a named
+   place kept in one book is kept, under its exact name, in the universe's registry (`<library>/universe/terrain.json`),
+   so only the first book pays; a later book reuses it without asking Jev (its kind, height and size, and where it lies
+   in its parent when the parent has the same name). Unnamed places and pools stay each book's own (a pool's members
+   already carry across as markers, §2.0.11). A rerun of the same book asks again.
+4. **Street buildings.** Each street kind lists the kinds of buildings in it (a shopping street: shops, cafés,
+   restaurants, convenience stores; an avenue: offices, a hotel, a department store; an alley: houses, small shops, bars;
+   …), and the buildings its form generates take their kinds from that list. At the world engine's runtime, a building
+   near the street a scene is set in (sampled by how tightly continuity ties them) dwells in one of that street's
+   buildings of its kind, so Jev is not needed; only a building of a kind the street does not have is planted by Jev. For
+   now, in the layout: an unnamed building (its kind from its name, by the language profile's words) tied to a street Jev
+   kept dwells in one of that street's buildings of its kind; the rest stay sampled, marked for Jev.
+5. **The terrain view.** The terrain stage does not model each filled building (the runtime does), and its faint
+   blocks were too dim for Jev to see, the far ones too faded to judge sizes and heights by. The terrain stage has its
+   own setting, apart from the runtime world engine's: the fill and its edges brighter, the fog pushed far out, in World ·
+   Live and in Jev's stills alike.
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by
