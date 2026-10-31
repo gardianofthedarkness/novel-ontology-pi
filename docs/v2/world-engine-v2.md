@@ -505,6 +505,9 @@ v2 makes each a structured request:
    visual harness first arrange the terrain: the vol's existing main sites modified with the probabilistic manifold
    ([city-fill-design.md](../city-fill-design.md)), and from each environment and the blocks around it, with the characters
    in them, where the characters spawn. Then the world loop, per strand ([context-engine.md](context-engine.md) §9).
+0b. **Next (the user, 2026-10-31): the visual context engine, debugging by display, the user's own camera, and terrain
+   spawning on it** ([visual-context-engine.md](visual-context-engine.md)); the world engine's run is redesigned after,
+   for the new extraction.
 1. Movement on structured states in the pick loop (each person's spot now from the engine); births and meetings of the
    line's load as structured requests too (one per scene, not one per person on a picture), and kept across the reload
    after models.
