@@ -744,8 +744,8 @@ where characters are near or it has been broken (the world engine's own streamin
 
 Built: `modelFor` (`useModels.ts`) gives each building of the fill and of the street forms a model of its use (its own,
 else a stand-in; the fill's kinds as uses by `KIND_USE`, an old town's keep and hall as their own), the one whose height
-over width is nearest its own, stretched to its footprint and height. The terrain view draws them as a faint fill with edges in the
-hologram's pale blue (the user's call) (each model's edges for all its buildings in one draw, fading in the fog), a use with no model as the faint
+over width is nearest its own, stretched to its footprint and height. The terrain view draws them as a faint cyan fill with
+cyan edges (each model's edges for all its buildings in one draw, fading in the fog), a use with no model as the faint
 block; a building the world stands as a lot is drawn as the lot. Every underground hall and passage shows in the terrain
 view, reached or not. Jev's overview captions say what the holograms and the volumes below the street are. Vol 1: 29
 models, the page 1.7 MB, a world build 12.6 s, as before.
@@ -774,12 +774,14 @@ ramps, cuts) were saved but never built nor drawn, and only a street kind below 
   itch.io: a platform, a tiled corridor, ticket machines, turnstiles), listed as a candidate, not downloaded; no free car
   park, storm-water or basement model found. The compatibility page shows both: underground × street, and underground ×
   models.
-- **One colour** (the user: the underground's colours, and the standing buildings' old ones, did not fit). The page draws
-  the city, the standing buildings' rooms, walls and roofs, a waterfront's water and everything under the street in the
-  pale blue of the fights' holograms (`HOLO` edges #8fd6ff over a faint `HOLO_FILL` #2b86c4; the light cyan was too
-  saturated, the user said); the orange stairs, red damage and gold markers keep theirs. What is under the street is
-  dimmer than the city above (its volumes 0.05, its models' edges 0.18) and turns solid (0.55, 0.9) when the street is
-  seen through: the Underground button, or anyone shown below it.
+- **The look: the fights' lot shells** (the user, 2026-10-31, after a light cyan, then a pale blue, both judged wrong and
+  reverted: find the exact setting the fights used). The terrain view draws each building exactly as the fights draw a
+  standing lot's shell: a fill of #2b86c4 at 0.09, its edges #8fd6ff at 0.5, a line of #7ce6ff at 0.14 round every floor.
+  As in the fights a building in front partly blocks the city behind it: the fills write depth (a hair behind their own
+  edges) and are drawn before every line, so the lines behind a building are hidden while its faint fill lets the rest
+  through. The standing lots, their insides and the shapes keep the fights' own colours. What is under the street is in
+  the same blue (volumes #2b86c4, model edges #8fd6ff), dimmer than the city above (0.05 and 0.15) until the street is
+  seen through (the Underground button, or anyone shown below it), when it turns solid (0.4 and 0.8).
 - **Picking up** (the user: run 5 is kept, no fresh run). A part already kept in `stage/terrain.json` stays as it is; a
   run picks up where the last stopped (World · Live says how many were kept before) and asks only the rest. A fresh run
   moves `terrain.json` aside first.
