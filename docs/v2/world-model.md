@@ -244,6 +244,22 @@ puts nowhere, so the script samples them near that scene), 5 the same as before,
 都市 → 东京西部的学园都市; 飞镖酒吧), 10 no particular place; learned: 城市 and 这座城市 → 东京西部的学园都市. The engine from it:
 no stand-in area, 东京西部的学园都市 931 m across, every unnamed place on the canvas (most gold: held by the setting, a guess).
 
+**Fewer non-places, and an uncached run (2026-10-31, `~/claude-world-first/v2-vol1-uncached`, no cache):** about a dozen of
+those 114 unnamed places were no places (a cradle, a concrete pillar, roadside trees, 街上 and 马路上, the asphalt, a
+carrier typed a vehicle in one batch and a building in another). The cache was not stale (every changed question had been
+asked again); they were typing's answers. So: typing's definitions sharpened (furniture, parts of buildings and trees are
+routine; the ground and 街上 are spatial; a carrier is a vehicle), the locative rule (a place word with 上/下/里/中/内/外/
+边/旁 after it is spatial), and a description takes the type most batches gave it (a tie is no place); the code rules
+moved to `src/v2/rules/`. The whole reading asked again with no cache: **$0.356** off-peak (Jev 837 requests, 8.19 M input
+tokens, $0.344; DeepSeek's listing 177 requests, $0.012, mostly its own cache hits), 82 s. Unnamed places 97 (48
+buildings, 29 rooms, 20 open places); of the earlier non-places only 日本首都 is left; 22 spatial mentions (上条的肩膀 among
+them: a place against a person). What an uncached run changes, being the models' second answers: the listing named
+学园都市 and 第七学区 by their short names, did not list 日本 at all (so 东京都 is a root), and typed 魔法侧 (the side of
+magic, a faction) a region in one batch and a concept in another, so EM minted it a place; a few parts of buildings are
+still places (高墙, 大厦墙壁 as buildings; 最上层 as a room). The tree: 东京都 › 学园都市 › 第七, 第十五, 第六学区, 常盘台中学 in
+学园都市 (0.51), 合众国 › 纽约 (0.63), 魔道书图书馆 in 英国清教第零圣堂区; 14 places, 7 roots, 7 links, the laws hold. Place EM:
+30 questions in 14 requests; Jev found 7 descriptions to be named places (酒吧 and 房子 → 飞镖酒吧, 这座城市 → 学园都市).
+
 ## 9. Questions answered (the user, 2026-10-31)
 
 - Do place descriptions teach the recommender? **Yes**, as for people: habits, a prior and then a rule (§4, §5).
