@@ -88,8 +88,15 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     let step = await readStep();
     await live.line(0, { mode: step.mode });
     if (step.mode === 'run') { seen = step.n ?? seen; return; }
-    await live.phase(`waiting for you: ${why}`);
-    for (;;) { await new Promise(done => setTimeout(done, 700)); step = await readStep(); if (step.mode === 'run' || (step.n ?? 0) > seen) { seen = step.n ?? seen; break; } }
+    // A wait can be hours: the record is written again each minute, or the host takes a silent run for stopped (20 min) and
+    // World · Live hides its buttons.
+    const waiting = `waiting for you: ${why}`;
+    await live.phase(waiting);
+    for (let beat = Date.now(); ;) {
+      await new Promise(done => setTimeout(done, 700)); step = await readStep();
+      if (step.mode === 'run' || (step.n ?? 0) > seen) { seen = step.n ?? seen; break; }
+      if (Date.now() - beat > 60000) { beat = Date.now(); await live.phase(waiting); }
+    }
     await live.line(0, { mode: step.mode }); await live.phase('terrain');
   };
 
