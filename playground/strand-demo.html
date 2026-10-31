@@ -509,7 +509,9 @@ let decor = () => {};
 // generated from the place's landscape, never on a staged grid; only the buildings the story names are canon. Kept
 // faint so it never hides the people.
 {
-  const fill = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: terrainStage ? 0.14 : 0.045, depthWrite: false }), edge = new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: terrainStage ? 0.5 : 0.2, depthWrite: false });
+  // The terrain view's holograms in the corridors' light cyan (the user's call, 2026-10-31); the runtime's faint blue.
+  const holo = terrainStage ? 0x7ce6ff : 0x2b86c4;
+  const fill = new THREE.MeshBasicMaterial({ color: holo, transparent: true, opacity: terrainStage ? 0.1 : 0.045, depthWrite: false }), edge = new THREE.LineBasicMaterial({ color: terrainStage ? 0x7ce6ff : 0x8fd6ff, transparent: true, opacity: terrainStage ? 0.5 : 0.2, depthWrite: false });
   const block = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), outline = new THREE.EdgesGeometry(block).attributes.position.array, m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v = new THREE.Vector3();
   const buildings = (data.landscapes ?? []).flatMap((entry) => entry.buildings), ids = (data.landscapes ?? []).flatMap((entry) => entry.ids ?? entry.buildings.map(() => null)), lines = [];
   // A building the world has stood up as a lot: from that moment its real lot is drawn instead, so its faint copy goes
@@ -536,7 +538,7 @@ let decor = () => {};
     // A model's edges for all its buildings in one draw: its edge lines, each building's matrix an instance (and gone as
     // the world stands the building, its matrix zeroed), fading in the fog like everything else.
     const edgeLook = () => new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { tint: { value: new THREE.Color(0x8fd6ff) }, alpha: { value: edge.opacity } }]), fog: true, transparent: true, depthWrite: false,
+      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { tint: { value: edge.color.clone() }, alpha: { value: edge.opacity } }]), fog: true, transparent: true, depthWrite: false,
       vertexShader: "attribute vec4 m0; attribute vec4 m1; attribute vec4 m2; attribute vec4 m3;\n#include <fog_pars_vertex>\nvoid main() { vec4 mvPosition = modelViewMatrix * mat4(m0, m1, m2, m3) * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;\n#include <fog_vertex>\n}",
       fragmentShader: "uniform vec3 tint; uniform float alpha;\n#include <fog_pars_fragment>\nvoid main() { gl_FragColor = vec4(tint, alpha);\n#include <fog_fragment>\n}",
     });

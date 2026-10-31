@@ -744,8 +744,8 @@ where characters are near or it has been broken (the world engine's own streamin
 
 Built: `modelFor` (`useModels.ts`) gives each building of the fill and of the street forms a model of its use (its own,
 else a stand-in; the fill's kinds as uses by `KIND_USE`, an old town's keep and hall as their own), the one whose height
-over width is nearest its own, stretched to its footprint and height. The terrain view draws them as a faint cyan fill with
-cyan edges (each model's edges for all its buildings in one draw, fading in the fog), a use with no model as the faint
+over width is nearest its own, stretched to its footprint and height. The terrain view draws them as a faint fill with edges in the
+corridors' light cyan (the user's call) (each model's edges for all its buildings in one draw, fading in the fog), a use with no model as the faint
 block; a building the world stands as a lot is drawn as the lot. Every underground hall and passage shows in the terrain
 view, reached or not. Jev's overview captions say what the holograms and the volumes below the street are. Vol 1: 29
 models, the page 1.7 MB, a world build 12.6 s, as before.
