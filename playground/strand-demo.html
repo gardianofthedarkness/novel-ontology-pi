@@ -298,7 +298,9 @@ function instancedEdges(edges, matrices, tint, alpha) {
   const lines = new THREE.LineSegments(geometry, new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { tint: { value: new THREE.Color(tint) }, alpha: { value: alpha } }]), fog: true, transparent: true, depthWrite: false,
     vertexShader: "attribute vec4 m0; attribute vec4 m1; attribute vec4 m2; attribute vec4 m3;\n#include <fog_pars_vertex>\nvoid main() { vec4 mvPosition = modelViewMatrix * mat4(m0, m1, m2, m3) * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;\n#include <fog_vertex>\n}",
-    fragmentShader: "uniform vec3 tint; uniform float alpha;\n#include <fog_pars_fragment>\nvoid main() { gl_FragColor = vec4(tint, alpha);\n#include <fog_fragment>\n}",
+    // As three's own line material ends: tone mapping, the screen's colour space (sRGB: without it the colour comes out in
+    // linear values, darker and deeper than the same colour on a lot), then the fog.
+    fragmentShader: "uniform vec3 tint; uniform float alpha;\n#include <fog_pars_fragment>\nvoid main() { gl_FragColor = vec4(tint, alpha);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n#include <fog_fragment>\n}",
   }));
   lines.frustumCulled = false;
   return { lines, put, flush: () => { for (let c = 0; c < 4; c++) geometry.getAttribute(`m${c}`).needsUpdate = true; } };

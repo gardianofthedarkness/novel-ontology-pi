@@ -799,6 +799,10 @@ fights, with its tiling, destruction and inside switched off for the rest, switc
 - **Drawn as a lot's shell**: the page draws shells with the lot loop's own colours and opacities (fill #2b86c4 at 0.09,
   edges #8fd6ff at 0.5, a #7ce6ff line at 0.14 round every floor), batched by model; a lot's shell is now as tall as its
   building (`height`), its inside walked up to its floors. In terrain mode the faint copies are not drawn.
+- **The colour** (the user: the shading right, the colour still wrong). The shells' and the hall models' edges are drawn by
+  one instanced shader, which wrote its colour in linear values: three's own materials end by converting to the screen's
+  sRGB, and without that step #8fd6ff came out a darker, deeper blue than the same colour on a lot. The shader now ends as
+  three's line material does (tone mapping, the colour space, then the fog), and the shells' edges are the lots' pale blue.
 - **Stills on the GPU** for terrain spawning: a whole city of shells took 16 s a still on SwiftShader (the CPU) and takes
   0.2 s through Metal, the same picture each run; elsewhere SwiftShader stays the default.
 Vol 1's copy: 120 lots and 632 shells; the page 1.1 MB.
