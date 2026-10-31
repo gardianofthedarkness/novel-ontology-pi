@@ -850,8 +850,8 @@ the sky). The steps:
    No box question, no zoom asking again. The pictures stay, for Jev to read the kind and the height off.
 3. **What is there first.** A building pin dwells in a building the ground made of its use (its name's, by the language
    profile; a fill building's by its kind), the nearest to where it was sampled, the scarcest uses first, so the most are
-   held; a street of a pool before that, by its ties (§2.0.15). Next: a street pin onto a road or a form the ground made of
-   its kind (an avenue onto a boulevard), before it is given an area of its own.
+   held; a street of a pool before that, by its ties (§2.0.15). A street is laid on a road or a form the ground made of
+   its kind (an avenue on a boulevard or an arterial road), turned along it, before it is given an area of its own.
 4. **Leftovers to Jev.** A part answered as a shape (a platform, a ramp, a donut, a sphere) is still boxed by Jev, on the
    two zooms; a building of a use no ground near it has is marked for Jev; an area with no free ground for its size.
 
@@ -864,8 +864,19 @@ conflicts, the style and the details, and the heights and every 3D question are 
   the placed places it is tied to, weighted by ties, a third as much the distance from its spot, the share it lies over
   places it may only adjoin), inside its area, over nothing it may not share. Terrain spawning asks a district's or a
   street's kind and height only, sizes and places it so; a shape is still Jev's box.
+- `roomFor` (the zoom engine): an area with no box of its own (a city: its kept parts' span, or its circle) grows round its
+  middle until its parts and the one being placed cover a third of it (`COVER`), within its level's most. Vol 1's stand-in
+  run showed why: a city's first district's span held no second beside it, and the second stood at its spot unplaced.
 - `dwellInGround` (`placeCanvas.ts`): every place's buildings that dwell nowhere yet dwell in its ground's buildings of
   their use (the fill's by kind), the scarcest uses first; the rest marked for Jev.
+- `formsFor` (`landscape.ts`, `STREET_ON`): what a street of a kind may be laid on in the ground built so far: an avenue
+  on a boulevard or an arterial road, a shopping street on a collector, an alley on a local road (points along each road
+  at least half the street long, every 40 m, turned with it), a square or a centre on a plaza, a waterfront on the water;
+  a station and a residential street on none. `placeArea` tries them as well as its grid and takes the least costly form
+  when it costs at most `ONTO_SLACK` (a quarter of a frame half) more than the best open ground, so continuity still
+  says how far a street may go for one. The site keeps its own size (long side first), its `turn` and what it is `on`;
+  its box is the bounds of it turned, and the export turns its patch so (`turnedAs`), its pool's extent and the members'
+  adjoining by those bounds. Each place's ground in the export now carries its roads' levels and its plazas.
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

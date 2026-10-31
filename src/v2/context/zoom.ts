@@ -52,6 +52,21 @@ export function extentOf(kept: Box | null | undefined, parts: Box[], circle?: { 
   if (span) return { box: span, by: "parts" };
   return circle ? { box: [round(circle.x - circle.r), round(circle.z - circle.r), round(circle.x + circle.r), round(circle.z + circle.r)], by: "circle" } : null;
 }
+/** What its parts cover at most of a parent whose own box is not known: the ground between and round them. */
+export const COVER = 1 / 3;
+/**
+ * An extent not kept (its parts' span, its circle) grown round its middle, its proportions kept, until its parts and one
+ * more of `size` cover COVER of it, never past `most` (a city with no box of its own makes room for its next district:
+ * its first district's span alone held no second beside it). A kept extent is as it was kept.
+ */
+export function roomFor(extent: Extent, parts: Box[], size: [number, number], most = Infinity): Extent {
+  if (extent.by === "kept") return extent;
+  const [x0, z0, x1, z1] = extent.box, w = x1 - x0, d = z1 - z0, needs = (parts.reduce((sum, box) => sum + widthOf(box) * (box[3] - box[1]), 0) + size[0] * size[1]) / COVER;
+  const grow = Math.min(Math.sqrt(needs / (w * d)), most / Math.max(w, d));
+  if (grow <= 1) return extent;
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  return { box: [round(cx - (w * grow) / 2), round(cz - (d * grow) / 2), round(cx + (w * grow) / 2), round(cz + (d * grow) / 2)], by: extent.by };
+}
 /**
  * A sampling pool's extent: the span of the members Jev boxed in it (a fifth more all round), within its holder's extent;
  * null when none is boxed (its default ground then stands nowhere: never a sampled square).
@@ -202,25 +217,42 @@ export function sizeByPins(level: Level, usual: [number, number], lot: number, c
 
 /** A placed place an area is tied to by continuity: where it stands and how many ties. */
 export interface Tie { at: [number, number]; ties: number }
+/** A form the ground already made that an area may be laid on (a road for an avenue, a plaza for a square): its middle, its direction. */
+export interface Onto { at: [number, number]; turn: number; what: string }
+/** How much more than the best open ground a form may cost and still be taken (frame halves): what is there first, when near. */
+export const ONTO_SLACK = 0.25;
+/** The bounds of a box of `size` (its long side first) turned by `turn` round its middle. */
+export function turnedBox(at: [number, number], size: [number, number], turn = 0): Box {
+  const c = Math.abs(Math.cos(turn)), s = Math.abs(Math.sin(turn)), w = size[0] * c + size[1] * s, d = size[0] * s + size[1] * c;
+  return [round(at[0] - w / 2), round(at[1] - d / 2), round(at[0] + w / 2), round(at[1] + d / 2)];
+}
 /**
  * Where an area goes (docs/v2/world-engine-v2.md §2.0.21, the user's framing: terrain at 2D is one optimization a part).
  * Over a grid on the frame (`cells` a side), the middle of a box of `size` that sits inside the parent and overlaps none of
  * the `clashes` (places it may not share) nor lies mostly over any `crowds` (places it may only adjoin), at the least cost:
  * the mean distance to the places it is tied to (weighted by their ties), a third as much the distance from its suggested
- * spot (`prior`), and the share it lies over the crowds. Distances are in frame halves. Null when no middle is allowed.
+ * spot (`prior`), and the share it lies over the crowds. Distances are in frame halves. `onto`: forms its ground already
+ * made of its kind, each tried turned along itself; the least costly of them is taken over open ground when it costs at
+ * most ONTO_SLACK more (what is there first). Null when no middle is allowed.
  */
-export function placeArea(frame: Frame, parent: Box | null, size: [number, number], prior: [number, number], tied: Tie[], clashes: Box[], crowds: Box[], cells = 48): { at: [number, number]; cost: number } | null {
+export function placeArea(frame: Frame, parent: Box | null, size: [number, number], prior: [number, number], tied: Tie[], clashes: Box[], crowds: Box[], cells = 48, onto: Onto[] = []): { at: [number, number]; cost: number; onto?: Onto } | null {
   const step = (2 * frame.half) / cells, x0 = frame.x - frame.half, z0 = frame.z - frame.half, weight = tied.reduce((sum, tie) => sum + tie.ties, 0);
-  const boxAt = ([x, z]: [number, number]): Box => [x - size[0] / 2, z - size[1] / 2, x + size[0] / 2, z + size[1] / 2];
-  let best: { at: [number, number]; cost: number } | null = null;
-  for (let j = 0; j < cells; j++) for (let i = 0; i < cells; i++) {
-    const at: [number, number] = [x0 + (i + 0.5) * step, z0 + (j + 0.5) * step], box = boxAt(at);
-    if (parent && !inside(parent, at)) continue;
-    if (clashes.some((other) => overlaps(box, other)) || crowds.some((other) => overlapShare(box, other) > CROWDED)) continue;
+  const costAt = (at: [number, number], box: Box): number | null => {
+    if (parent && !inside(parent, at)) return null;
+    if (clashes.some((other) => overlaps(box, other)) || crowds.some((other) => overlapShare(box, other) > CROWDED)) return null;
     const pull = weight ? tied.reduce((sum, tie) => sum + tie.ties * Math.hypot(at[0] - tie.at[0], at[1] - tie.at[1]), 0) / weight : 0;
     const crowding = crowds.reduce((sum, other) => sum + overlapShare(box, other), 0);
-    const cost = (pull + (weight ? 1 / 3 : 1) * Math.hypot(at[0] - prior[0], at[1] - prior[1])) / frame.half + crowding;
-    if (!best || cost < best.cost) best = { at: [round(at[0]), round(at[1])], cost: Math.round(cost * 1000) / 1000 };
+    return Math.round(((pull + (weight ? 1 / 3 : 1) * Math.hypot(at[0] - prior[0], at[1] - prior[1])) / frame.half + crowding) * 1000) / 1000;
+  };
+  type Placed = { at: [number, number]; cost: number; onto?: Onto };
+  let best: Placed | null = null, laid: Placed | null = null;
+  for (let j = 0; j < cells; j++) for (let i = 0; i < cells; i++) {
+    const at: [number, number] = [x0 + (i + 0.5) * step, z0 + (j + 0.5) * step], cost = costAt(at, turnedBox(at, size));
+    if (cost != null && (!best || cost < best.cost)) best = { at: [round(at[0]), round(at[1])], cost };
   }
-  return best;
+  for (const form of onto) {
+    const cost = costAt(form.at, turnedBox(form.at, size, form.turn));
+    if (cost != null && (!laid || cost < laid.cost)) laid = { at: [round(form.at[0]), round(form.at[1])], cost, onto: form };
+  }
+  return laid && (!best || laid.cost <= best.cost + ONTO_SLACK) ? laid : best;
 }

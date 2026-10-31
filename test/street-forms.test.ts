@@ -80,3 +80,20 @@ test("the underground: a part below the street becomes the hall its name says (a
   assert.equal(U.shapeHall(shape).depth, 6);
   assert.deepEqual(Object.keys(U.LIES_UNDER).sort(), Object.keys(U.HALL_LABEL).sort(), "every kind of hall says what it lies under");
 });
+
+test("what a street is laid on: an avenue along the arterial roads its ground made, a square on a plaza, a station on none", async () => {
+  const { formsFor, STREET_ON } = await import("../src/ground/stage/landscape.js");
+  const ground = {
+    roads: [{ a: [0, 0] as [number, number], b: [200, 200] as [number, number], level: "arterial" }, { a: [0, 300] as [number, number], b: [40, 300] as [number, number], level: "arterial" }, { a: [0, 0] as [number, number], b: [0, 160] as [number, number], level: "local" }],
+    waters: [{ a: [500, 0] as [number, number], b: [500, 400] as [number, number] }],
+    plazas: [{ x: 300, z: 100, r: 30 }],
+  };
+  const avenue = formsFor("avenue", ground, 100);
+  assert.ok(avenue.length >= 5 && avenue.every((form) => form.what === "arterial road" && Math.abs(form.turn - Math.PI / 4) < 0.01), "along the long arterial, turned with it");
+  assert.ok(avenue.every((form) => form.at[1] < 250), "a road shorter than half the street is not one to lay it on");
+  assert.deepEqual(formsFor("alley", ground).map((form) => form.what), ["local road", "local road", "local road", "local road"]);
+  assert.deepEqual(formsFor("square", ground), [{ at: [300, 100], turn: 0, what: "plaza" }]);
+  assert.ok(formsFor("waterfront", ground).every((form) => form.what === "water" && Math.abs(form.turn - Math.PI / 2) < 0.01));
+  assert.deepEqual(formsFor("station", ground), [], "a station front is given an area of its own");
+  assert.ok(Object.keys(STREET_ON).every((kind) => (STREET_TYPES as readonly string[]).includes(kind)), "only street kinds");
+});

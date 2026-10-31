@@ -548,6 +548,33 @@ export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: n
   return { fabric, owner, walls, keeps, landmarks, plazas, radius, waters };
 }
 
+/*
+ * What a street is laid on where its ground already made it (docs/v2/world-engine-v2.md §2.0.21, step 3): an avenue on a
+ * boulevard or an arterial road, a shopping street on a collector, an alley on a local road, a square or a centre on a
+ * plaza, a waterfront on the water. A station or a residential street is laid on none: it is given an area of its own.
+ */
+export const STREET_ON: Partial<Record<(typeof STREET_TYPES)[number], { roads?: Road["level"][]; plazas?: true; waters?: true }>> = {
+  avenue: { roads: ["boulevard", "arterial"] }, shopping: { roads: ["collector"] }, alley: { roads: ["local"] },
+  square: { plazas: true }, centre: { plazas: true }, waterfront: { waters: true },
+};
+/** A form the ground made that a street may be laid on: its middle, its direction (a street's long side along it), what it is. */
+export interface Form { at: Point; turn: number; what: string }
+export interface MadeGround { roads: { a: Point; b: Point; level: string }[]; waters: { a: Point; b: Point }[]; plazas: { x: number; z: number; r: number }[] }
+/** The spots a street of `kind` may be laid on in a made ground: along each road or water of its kind at least `min` long (every `step` metres, the line's direction its turn), and each plaza's middle. */
+export function formsFor(kind: string, ground: MadeGround, min = 0, step = 40): Form[] {
+  const on = STREET_ON[kind as (typeof STREET_TYPES)[number]];
+  if (!on) return [];
+  const along = (a: Point, b: Point, what: string): Form[] => {
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]), turn = round(Math.atan2(b[1] - a[1], b[0] - a[0])), n = Math.max(1, Math.floor(length / step));
+    return length < Math.max(min, 1) ? [] : Array.from({ length: n }, (_, k) => ({ at: [round(a[0] + ((b[0] - a[0]) * (k + 0.5)) / n, 1), round(a[1] + ((b[1] - a[1]) * (k + 0.5)) / n, 1)] as Point, turn, what }));
+  };
+  return [
+    ...(on.roads ? ground.roads.filter((road) => (on.roads as string[]).includes(road.level)).flatMap((road) => along(road.a, road.b, `${road.level} road`)) : []),
+    ...(on.waters ? ground.waters.flatMap((water) => along(water.a, water.b, "water")) : []),
+    ...(on.plazas ? ground.plazas.map((plaza) => ({ at: [plaza.x, plaza.z] as Point, turn: 0, what: "plaza" })) : []),
+  ];
+}
+
 /** The question Jev answers for a place: which landscape its ground is, from what the analysis knows of it. */
 export const LANDSCAPE_HINTS: Record<LandscapeType | "none", string> = { ...Object.fromEntries(LANDSCAPE_TYPES.map((type) => [type, `${type}: ${LANDSCAPES[type].hint}`])) as Record<LandscapeType, string>, none: "none: not open ground (a single building, a room, the sky, the sea)" };
 

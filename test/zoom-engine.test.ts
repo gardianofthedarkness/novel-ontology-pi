@@ -89,3 +89,30 @@ test("placement as one optimization: near what it is tied to, on free ground, ne
   assert.ok(!(box[0] < 700 && 300 < box[2] && box[1] < 700 && 300 < box[3]), `never over a place it may not share: ${blocked.at}`);
   assert.equal(placeArea(frame, parent, [100, 60], [500, 500], [], [[0, 0, 1000, 1000]], []), null, "no room: none");
 });
+
+test("what is there first: a street laid on a form its ground made, turned along it, when near; open ground when the form is far or taken", async () => {
+  const { placeArea, turnedBox, ONTO_SLACK } = await import("../src/v2/context/zoom.js");
+  const frame = { x: 500, z: 500, half: 500, level: "street" as const, purpose: "context" as const, tag: 20 };
+  const parent: Box = [0, 0, 1000, 1000];
+  assert.deepEqual(turnedBox([0, 0], [200, 80], Math.PI / 2), [-40, -100, 40, 100], "a quarter turn swaps its sides");
+  const near = { at: [560, 520] as [number, number], turn: Math.PI / 4, what: "arterial road" };
+  const laid = placeArea(frame, parent, [200, 80], [500, 500], [], [], [], 48, [near])!;
+  assert.equal(laid.onto?.what, "arterial road", `taken: ${laid.at}`);
+  assert.deepEqual(laid.at, [560, 520]);
+  const far = { at: [950, 950] as [number, number], turn: 0, what: "arterial road" };
+  assert.equal(placeArea(frame, parent, [200, 80], [500, 500], [], [], [], 48, [far])!.onto, undefined, `beyond ${ONTO_SLACK} of a frame half more than open ground: not taken`);
+  const taken = placeArea(frame, parent, [200, 80], [500, 500], [], [[520, 480, 620, 560]], [], 48, [near])!;
+  assert.equal(taken.onto, undefined, "a form under a place it may not share is not one to lay it on");
+});
+
+test("room for one more: a city with no box of its own grows round its parts until a second district fits beside its first", async () => {
+  const { roomFor, placeArea, COVER, extentOf } = await import("../src/v2/context/zoom.js");
+  const first: Box = [41.6, 326.1, 641.6, 926.1], span = extentOf(null, [first], null, 0.3)!;
+  const frame = (box: Box) => ({ x: (box[0] + box[2]) / 2, z: (box[1] + box[3]) / 2, half: Math.max(box[2] - box[0], box[3] - box[1]) / 2, level: "district" as const, purpose: "context" as const, tag: 20 });
+  assert.equal(placeArea(frame(span.box), span.box, [600, 600], [-338, 200], [], [first], []), null, "its first district's span alone holds no second beside it (vol 1's second district)");
+  const room = roomFor(span, [first], [600, 600], 8000);
+  assert.ok((room.box[2] - room.box[0]) * (room.box[3] - room.box[1]) * COVER >= 2 * 600 * 600 * 0.99, `room for both at ${COVER}: ${room.box}`);
+  assert.ok(placeArea(frame(room.box), room.box, [600, 600], [-338, 200], [], [first], []), "a second district fits");
+  assert.deepEqual(roomFor({ box: [0, 0, 100, 100], by: "kept" }, [first], [600, 600]).box, [0, 0, 100, 100], "a kept box is as it was kept");
+  assert.ok(roomFor(span, [first], [600, 600], 1000).box[2] - roomFor(span, [first], [600, 600], 1000).box[0] <= 1000.1, "never past its level's most");
+});

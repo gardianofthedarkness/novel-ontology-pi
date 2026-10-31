@@ -63,7 +63,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const { ask } = await load('dist/src/v2/context/engine.js'), T = await load('dist/src/v2/context/terrainModes.js');
   const { continuityTies, universeOf } = await load('dist/src/v2/pools.js');
   // The zoom engine (docs/v2/visual-context-engine.md §4.1): every frame Jev is shown and every box it answers.
-  const Z = await load('dist/src/v2/context/zoom.js'), { LANDSCAPES } = await load('dist/src/ground/stage/landscape.js');
+  const Z = await load('dist/src/v2/context/zoom.js'), { LANDSCAPES, formsFor } = await load('dist/src/ground/stage/landscape.js');
   const inputs = await stageInputs(novelDir), [line] = await simStrandList(novelDir);
   if (!line) throw new Error('Terrain spawning needs the world loop\'s line: a world-first book with its world script and staged scenes.');
   const folder = join(novelDir, 'stage', 'terrain');
@@ -306,7 +306,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const crowds = () => Object.entries(terrain.sites).filter(([id, site]) => id !== part.id && level(site) && Array.isArray(site.box) && site.by !== 'pool' && !clash(id, site) && !(sampled && baseName(site.label) === baseName(part.label))).map(([id, site]) => ({ box: site.box, reason: `it lies mostly over ${name(id)} (${site.kind}): the free ground (faint cyan) has room for it` }));
       // The area the part may lie in and its extent: a pool member's pool's area (§2.0.20), else the place holding it.
       const areaOfPart = sampled ? district : holder, areaExtent = sampled ? districtExtent : isCity ? null : extentFor(holder);
-      let areaReply = null, box = null, boxBy = null;
+      let areaReply = null, box = null, boxBy = null, laid = null;
       if (isCity && cityNode) box = spotOf(cityNode);
       else if (shape) {
         // A shape (a platform, a ramp, a donut, a sphere): what no program makes, so Jev boxes it, on two zooms (§2.0.21).
@@ -345,14 +345,24 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // spot, inside its area, over nothing it may not share, not mostly over what it may only adjoin (Z.placeArea).
         let centre = pinAt ?? (now ? [now.x, now.z] : [at.x, at.z]);
         const tiedPlaced = [...tiedTo].map(([id, ties]) => { const site = terrain.sites[id], node = nodeOf(id), spot = Array.isArray(site?.box) ? Z.middleOf(site.box) : node ? [node.x, node.z] : null; return spot ? { at: spot, ties } : null; }).filter(Boolean);
-        const frames = Z.framesFor(part.scale, centre, areaExtent?.box ?? null, Math.max(w, d), true);
-        const placed = Z.placeArea(frames.context ?? frames.work, areaExtent?.box ?? null, [w, d], centre, tiedPlaced, clashes().map(entry => entry.box), crowds().map(entry => entry.box));
+        // Its area, when that has no box of its own (a city), grown to make room for it beside its kept parts (Z.roomFor).
+        const room = areaExtent ? Z.roomFor(areaExtent, partsOf(areaOfPart), [w, d], Z.LADDER[scaleOf(areaOfPart)]?.sizes[1]).box : null;
+        const frames = Z.framesFor(part.scale, centre, room, Math.max(w, d), true);
+        // What is there first (§2.0.21, step 3): a street may be laid on a form the ground already made of its kind (an
+        // avenue on an arterial road, a square on a plaza, a waterfront on the water), turned along it.
+        const made = part.scale === 'street' && ground ? (data.landscapes ?? []).flatMap(entry => formsFor(ground, {
+          roads: (entry.roads ?? []).map(road => ({ a: [road[0], road[1]], b: [road[2], road[3]], level: road[5] })),
+          waters: (entry.waters ?? []).map(water => ({ a: [water[0], water[1]], b: [water[2], water[3]] })),
+          plazas: (entry.plazas ?? []).map(([x, z, r]) => ({ x, z, r })) }, w / 2)) : [];
+        const placed = Z.placeArea(frames.context ?? frames.work, room, [w, d], centre, tiedPlaced, clashes().map(entry => entry.box), crowds().map(entry => entry.box), 48, made);
         if (placed) {
           const moved = Math.hypot(placed.at[0] - centre[0], placed.at[1] - centre[1]);
-          if (moved > 1) await live.outcome({ subject: part.label, text: `placed ${Math.round(moved)} m from its spot (${tiedPlaced.length ? `near the ${tiedPlaced.length} places it is tied to, ` : ''}on free ground)` });
+          if (placed.onto) await live.outcome({ subject: part.label, text: `laid on its ground's ${placed.onto.what}, ${Math.round(moved)} m from its spot (${made.length} forms of its kind there)` });
+          else if (moved > 1) await live.outcome({ subject: part.label, text: `placed ${Math.round(moved)} m from its spot (${tiedPlaced.length ? `near the ${tiedPlaced.length} places it is tied to, ` : ''}on free ground${made.length ? `; none of the ${made.length} forms of its kind near enough` : ''})` });
           centre = placed.at;
+          if (placed.onto) laid = { turn: placed.onto.turn, size: [w, d], on: placed.onto.what };
         } else await live.outcome({ subject: part.label, text: 'no allowed place for its size in its area: it stands at its spot, for Jev to settle' });
-        box = boxAt(centre);
+        box = laid ? Z.turnedBox(centre, [w, d], laid.turn) : boxAt(centre);
         await live.outcome({ subject: part.label, text: `sized ${w} × ${d} m by its ${pins} building pins (${sized.holds} buildings for ${sized.needs} needed${sized.grown ? ', grown' : ''})` });
       }
       // 2. Conflicts and zooms: only a box Jev drew (a shape's) is asked again; the program's settles its own.
@@ -387,7 +397,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height its terrain may rise to; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
       // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top.
       const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, median = measure === 'median' ? height : null, upTo = measure === 'top' ? height : null;
-        return { where, boxBy, what, rise, kind, entry, shape, ground, box, median, upTo, measure };
+        return { where, boxBy, what, rise, kind, entry, shape, ground, box, laid, median, upTo, measure };
       };
       // Kept in an earlier book of the universe under the same name (§2.0.15): reused as it was, Jev not asked; where it lay
       // in its parent, when its parent has the same name too.
@@ -397,10 +407,11 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const known = T.terrainKind(part.scale, reuse.kind), entry = { ...known, manifold: reuse.manifold ?? known?.manifold }, shape = reuse.shape ?? null;
         const [w, d] = reuse.size ?? [Z.LADDER[part.scale]?.sizes[0] ?? 100, Z.LADDER[part.scale]?.sizes[0] ?? 100];
         const c = reuse.toward && reuse.parentLabel === name(holder) && holderNode ? [holderNode.x + reuse.toward[0], holderNode.z + reuse.toward[1]] : pinAt ?? [(holderNode ?? anchor).x, (holderNode ?? anchor).z];
-        const box = isCity && cityNode ? [round(cityNode.x - cityNode.r), round(cityNode.z - cityNode.r), round(cityNode.x + cityNode.r), round(cityNode.z + cityNode.r)] : [round(c[0] - w / 2), round(c[1] - d / 2), round(c[0] + w / 2), round(c[1] + d / 2)];
-        return { boxBy: null, what: null, rise: null, kind: reuse.kind, entry, shape, ground: shape ? null : reuse.ground ?? known?.ground ?? null, box, median: reuse.median ?? null, upTo: reuse.top ?? null, measure: reuse.median != null ? 'median' : 'top', reusedFrom: reuse.book };
+        const laid = typeof reuse.turn === 'number' ? { turn: reuse.turn, size: [w, d], on: reuse.on } : null;
+        const box = isCity && cityNode ? [round(cityNode.x - cityNode.r), round(cityNode.z - cityNode.r), round(cityNode.x + cityNode.r), round(cityNode.z + cityNode.r)] : laid ? Z.turnedBox(c, [w, d], laid.turn) : [round(c[0] - w / 2), round(c[1] - d / 2), round(c[0] + w / 2), round(c[1] + d / 2)];
+        return { boxBy: null, what: null, rise: null, kind: reuse.kind, entry, shape, ground: shape ? null : reuse.ground ?? known?.ground ?? null, box, laid, median: reuse.median ?? null, upTo: reuse.top ?? null, measure: reuse.median != null ? 'median' : 'top', reusedFrom: reuse.book };
       };
-      const { boxBy, what, rise, kind, entry, shape, ground, box, median, upTo, measure, empty, from: averaged, reusedFrom } = poolOf ? byDefault() : reuse ? reused() : await asked();
+      const { boxBy, what, rise, kind, entry, shape, ground, box, laid, median, upTo, measure, empty, from: averaged, reusedFrom } = poolOf ? byDefault() : reuse ? reused() : await asked();
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
       const proposal = { id: part.id, label: part.label, kind: kind ?? 'empty', box, top: median ?? upTo, measure };
       const said = empty ? `empty (nothing of its level decided in ${name(poolOf)} yet)` : `${kind}${median ? (median < 0 ? `, ${-median} m underground` : `, median ${median} m`) : upTo ? (upTo < 0 ? `, ${-upTo} m down` : `, up to ${upTo} m`) : ''}${averaged ? ` (the average of ${averaged} ${part.scale === 'street' ? 'streets' : 'districts'})` : ''}${reusedFrom ? ` (kept in ${reusedFrom}, reused)` : ''}`;
@@ -414,7 +425,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: reusedFrom ? 'universe' : 'jev', ...(reusedFrom ? { from: reusedFrom } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
         : empty ? { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, empty: true, by: 'pool', pool: poolOf }
         // A pool's member borrows its pool's ground in the box Jev gave it (the engine builds it there).
-        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), ...(sampled ? { member: holder } : {}), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : reusedFrom ? 'universe' : 'jev', ...(poolOf ? { pool: poolOf } : {}), ...(reusedFrom ? { from: reusedFrom } : {}),
+        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), ...(sampled ? { member: holder } : {}), size: laid?.size ?? [round(box[2] - box[0]), round(box[3] - box[1])], ...(laid ? { turn: laid.turn, on: laid.on } : {}), toward, box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : reusedFrom ? 'universe' : 'jev', ...(poolOf ? { pool: poolOf } : {}), ...(reusedFrom ? { from: reusedFrom } : {}),
           confidence: { box: boxBy?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
       if (shape) terrain.shapes[part.id] = { kind: shape, box, ...(upTo ? { top: upTo } : {}) };
       if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
@@ -422,8 +433,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       await replace(terrainFile, JSON.stringify(terrain, null, 1));
       // A named place Jev decided here is the universe's from now on, under its exact name (a later book reuses it).
       if (terrain.sites[part.id].by === 'jev' && !sampled && !part.id.startsWith('unnamed:')) {
-        const { kind: k, shape: sh, ground: g, median: m, manifold, top: t, size, toward: tw, parentLabel } = terrain.sites[part.id];
-        registry.places[part.label] = { book: universe.book, id: part.id, scale: part.scale, kind: k, ...(sh ? { shape: sh } : { ground: g }), ...(m ? { median: m, manifold } : {}), ...(t ? { top: t } : {}), ...(size ? { size, toward: tw, parentLabel } : {}), keptAt: new Date().toISOString() };
+        const { kind: k, shape: sh, ground: g, median: m, manifold, top: t, size, toward: tw, parentLabel, turn: tn, on } = terrain.sites[part.id];
+        registry.places[part.label] = { book: universe.book, id: part.id, scale: part.scale, kind: k, ...(sh ? { shape: sh } : { ground: g }), ...(m ? { median: m, manifold } : {}), ...(t ? { top: t } : {}), ...(size ? { size, toward: tw, parentLabel } : {}), ...(typeof tn === 'number' ? { turn: tn, on } : {}), keptAt: new Date().toISOString() };
         await mkdir(universe.dir, { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
       }
       await live.phase(`building the world with ${part.label}`);
