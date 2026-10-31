@@ -219,8 +219,11 @@ export function sizeByPins(level: Level, usual: [number, number], lot: number, c
 export interface Tie { at: [number, number]; ties: number }
 /** A form the ground already made that an area may be laid on (a road for an avenue, a plaza for a square): its middle, its direction. */
 export interface Onto { at: [number, number]; turn: number; what: string }
-/** How much more than the best open ground a form may cost and still be taken (frame halves): what is there first, when near. */
-export const ONTO_SLACK = 0.25;
+/**
+ * How much further than the best open ground a form may lie and still be taken, in the area's own lengths: what is there
+ * first, when near (a quarter of the frame was a district's half a kilometre, far for a 140 m alley).
+ */
+export const ONTO_REACH = 1;
 /** The bounds of a box of `size` (its long side first) turned by `turn` round its middle. */
 export function turnedBox(at: [number, number], size: [number, number], turn = 0): Box {
   const c = Math.abs(Math.cos(turn)), s = Math.abs(Math.sin(turn)), w = size[0] * c + size[1] * s, d = size[0] * s + size[1] * c;
@@ -233,7 +236,7 @@ export function turnedBox(at: [number, number], size: [number, number], turn = 0
  * the mean distance to the places it is tied to (weighted by their ties), a third as much the distance from its suggested
  * spot (`prior`), and the share it lies over the crowds. Distances are in frame halves. `onto`: forms its ground already
  * made of its kind, each tried turned along itself; the least costly of them is taken over open ground when it costs at
- * most ONTO_SLACK more (what is there first). Null when no middle is allowed.
+ * most ONTO_REACH of its own lengths more (what is there first). Null when no middle is allowed.
  */
 export function placeArea(frame: Frame, parent: Box | null, size: [number, number], prior: [number, number], tied: Tie[], clashes: Box[], crowds: Box[], cells = 48, onto: Onto[] = []): { at: [number, number]; cost: number; onto?: Onto } | null {
   const step = (2 * frame.half) / cells, x0 = frame.x - frame.half, z0 = frame.z - frame.half, weight = tied.reduce((sum, tie) => sum + tie.ties, 0);
@@ -254,5 +257,5 @@ export function placeArea(frame: Frame, parent: Box | null, size: [number, numbe
     const cost = costAt(form.at, turnedBox(form.at, size, form.turn));
     if (cost != null && (!laid || cost < laid.cost)) laid = { at: [round(form.at[0]), round(form.at[1])], cost, onto: form };
   }
-  return laid && (!best || laid.cost <= best.cost + ONTO_SLACK) ? laid : best;
+  return laid && (!best || laid.cost <= best.cost + (ONTO_REACH * Math.max(size[0], size[1])) / frame.half) ? laid : best;
 }

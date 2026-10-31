@@ -348,9 +348,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // Its area, when that has no box of its own (a city), grown to make room for it beside its kept parts (Z.roomFor).
         const room = areaExtent ? Z.roomFor(areaExtent, partsOf(areaOfPart), [w, d], Z.LADDER[scaleOf(areaOfPart)]?.sizes[1]).box : null;
         const frames = Z.framesFor(part.scale, centre, room, Math.max(w, d), true);
-        // What is there first (§2.0.21, step 3): a street may be laid on a form the ground already made of its kind (an
-        // avenue on an arterial road, a square on a plaza, a waterfront on the water), turned along it.
-        const made = part.scale === 'street' && ground ? (data.landscapes ?? []).flatMap(entry => formsFor(ground, {
+        // What is there first (§2.0.21, step 3): a street may be laid on a form the ground it will stand in already made of
+        // its kind (an avenue on an arterial road, a square on a plaza, a waterfront on the water), turned along it; a pool's
+        // member is laid on it again each build, as its pool's ground re-forms (the export's `relaid`).
+        const made = part.scale === 'street' && ground ? (data.landscapes ?? []).filter(entry => entry.place === holder).flatMap(entry => formsFor(ground, {
           roads: (entry.roads ?? []).map(road => ({ a: [road[0], road[1]], b: [road[2], road[3]], level: road[5] })),
           waters: (entry.waters ?? []).map(water => ({ a: [water[0], water[1]], b: [water[2], water[3]] })),
           plazas: (entry.plazas ?? []).map(([x, z, r]) => ({ x, z, r })) }, w / 2)) : [];

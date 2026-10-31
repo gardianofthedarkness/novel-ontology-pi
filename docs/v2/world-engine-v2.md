@@ -873,10 +873,17 @@ conflicts, the style and the details, and the heights and every 3D question are 
   on a boulevard or an arterial road, a shopping street on a collector, an alley on a local road (points along each road
   at least half the street long, every 40 m, turned with it), a square or a centre on a plaza, a waterfront on the water;
   a station and a residential street on none. `placeArea` tries them as well as its grid and takes the least costly form
-  when it costs at most `ONTO_SLACK` (a quarter of a frame half) more than the best open ground, so continuity still
-  says how far a street may go for one. The site keeps its own size (long side first), its `turn` and what it is `on`;
+  when it lies at most `ONTO_REACH` (one of the street's own lengths) further than the best open ground, so continuity
+  still says how far a street may go for one. The site keeps its own size (long side first), its `turn` and what it is `on`;
   its box is the bounds of it turned, and the export turns its patch so (`turnedAs`), its pool's extent and the members'
-  adjoining by those bounds. Each place's ground in the export now carries its roads' levels and its plazas.
+  adjoining by those bounds. Each place's ground in the export now carries its roads' levels and its plazas. The forms
+  are taken from the ground the street will stand in only (its pool's, or its district's).
+- Laid again each build (the export's `relaid`): a pool's ground re-forms as the pool grows (its base patch is its
+  members' span, so its collectors and lanes re-subdivide; its arterials hold, seeded per pool), and vol 1's second
+  stand-in run showed every laid street left beside no road of its kind by the end. So a laid member is laid again on
+  every build, on the nearest road of its kind in its pool's base ground as it is then, within its own length and clear
+  of the members standing, turned along it; with none, it stays as kept. Its own road (an alley's lane, an avenue's
+  boulevard) then runs where that road ran, from one road of the fabric to the next.
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

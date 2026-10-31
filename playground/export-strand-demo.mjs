@@ -63,7 +63,7 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt, BLAST_ENERGY } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, formsFor, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
@@ -540,17 +540,28 @@ export async function strandDemo(novelDir, options) {
         }
         if (Math.hypot(x - site.toward[0], z - site.toward[1]) > 0.5) notes.build.adjoined = (notes.build.adjoined ?? 0) + 1;
         unit.at = [Math.round(x * 10) / 10, Math.round(z * 10) / 10];
-        standing.push({ x, z, w, d });
+        standing.push({ id: unit.id, x, z, w, d });
       }
+      // A street laid on a road of its kind (§2.0.21, step 3) is laid on it again each build: the pool's ground re-forms as
+      // the pool grows (its collectors and lanes with it), so the nearest road of its kind in that ground now, within its own
+      // length and clear of the members standing, carries it, turned along it; with none, it stays as it was kept.
+      const base = pool.landscape?.patches?.length ? fillOf(pool.landscape) : null;
+      const relaid = (unit, site, long, short) => {
+        if (!base || typeof site.turn !== 'number') return null;
+        const clear = ([x, z], turn) => { const [x0, z0, x1, z1] = Z.turnedBox([x, z], [long, short], turn); return standing.every(other => other.id === unit.id || x1 <= other.x - other.w / 2 || other.x + other.w / 2 <= x0 || z1 <= other.z - other.d / 2 || other.z + other.d / 2 <= z0); };
+        return formsFor(site.ground, { roads: base.fabric.roads, waters: base.waters ?? [], plazas: base.plazas }, long / 2).map(form => ({ ...form, d: Math.hypot(form.at[0] - unit.at[0], form.at[1] - unit.at[1]) })).filter(form => form.d <= long && clear(form.at, form.turn)).sort((a, b) => a.d - b.d)[0] ?? null;
+      };
       for (const unit of pool.units) {
         const site = terrain?.sites?.[unit.id];
         if (!site?.ground || !LANDSCAPES[site.ground] || !site.median || !site.manifold) continue;
         const name = baseName(unit.label), original = first.get(name), [w, depth] = Array.isArray(site.size) ? site.size : [GROUND[site.scale] ?? 120, GROUND[site.scale] ?? 120], half = Math.max(w, depth) / 2;
         // Below the street, the hall its name says it is (§2.0.17: 地下停车场 a car park), else by its shape.
         const hall = site.median < 0 ? undergroundKindOf(unit.label) : null;
-        const made = at => ({ ...turnedAs(site, patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: site.manifold })), borrowed: true, ...(hall ? { hall } : {}) });
+        const made = (at, turn = site.turn) => ({ ...turnedAs({ turn }, patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: site.manifold })), borrowed: true, ...(hall ? { hall } : {}) });
         if (!original) {
-          const patch = made(unit.at); first.set(name, { unit, site, patch }); borrowed.push(patch); unit.borrows = 'own'; notes.build.borrowed = (notes.build.borrowed ?? 0) + 1; continue;
+          const road = relaid(unit, site, w, depth);
+          if (road) { unit.at = road.at; notes.build.relaid = (notes.build.relaid ?? 0) + 1; }
+          const patch = made(unit.at, road?.turn); first.set(name, { unit, site, patch }); borrowed.push(patch); unit.borrows = 'own'; notes.build.borrowed = (notes.build.borrowed ?? 0) + 1; continue;
         }
         const own = unit.at, dx = own[0] - original.unit.at[0], dz = own[1] - original.unit.at[1], d = Math.hypot(dx, dz) || 1;
         unit.at = original.unit.at; unit.borrows = original.unit.id;

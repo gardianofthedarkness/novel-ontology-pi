@@ -91,7 +91,7 @@ test("placement as one optimization: near what it is tied to, on free ground, ne
 });
 
 test("what is there first: a street laid on a form its ground made, turned along it, when near; open ground when the form is far or taken", async () => {
-  const { placeArea, turnedBox, ONTO_SLACK } = await import("../src/v2/context/zoom.js");
+  const { placeArea, turnedBox, ONTO_REACH } = await import("../src/v2/context/zoom.js");
   const frame = { x: 500, z: 500, half: 500, level: "street" as const, purpose: "context" as const, tag: 20 };
   const parent: Box = [0, 0, 1000, 1000];
   assert.deepEqual(turnedBox([0, 0], [200, 80], Math.PI / 2), [-40, -100, 40, 100], "a quarter turn swaps its sides");
@@ -100,7 +100,7 @@ test("what is there first: a street laid on a form its ground made, turned along
   assert.equal(laid.onto?.what, "arterial road", `taken: ${laid.at}`);
   assert.deepEqual(laid.at, [560, 520]);
   const far = { at: [950, 950] as [number, number], turn: 0, what: "arterial road" };
-  assert.equal(placeArea(frame, parent, [200, 80], [500, 500], [], [], [], 48, [far])!.onto, undefined, `beyond ${ONTO_SLACK} of a frame half more than open ground: not taken`);
+  assert.equal(placeArea(frame, parent, [200, 80], [500, 500], [], [], [], 48, [far])!.onto, undefined, `further than ${ONTO_REACH} of its own lengths beyond open ground: not taken`);
   const taken = placeArea(frame, parent, [200, 80], [500, 500], [], [[520, 480, 620, 560]], [], 48, [near])!;
   assert.equal(taken.onto, undefined, "a form under a place it may not share is not one to lay it on");
 });
