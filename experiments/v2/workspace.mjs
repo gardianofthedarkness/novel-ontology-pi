@@ -4,6 +4,8 @@
 // reading too (src/v2/script.ts), so no v1 world loop runs before terrain and the world engine.
 // The new workspace must not exist yet; nothing in the source workspace is changed. `--script` writes the world script
 // alone again, into a workspace made from that reading (after the script's rules change; the canon stays as it is).
+// The script's sampling pools (src/v2/pools.ts) are the universe's: its registry (<library>/universe/pools.json) is read,
+// this book's pools and members written into it, and kept for the other books.
 //
 //   node experiments/v2/workspace.mjs <source-novel-dir> <v2-out-dir> <new-novel-dir>
 //   node experiments/v2/workspace.mjs --script <v2-out-dir> <novel-dir>
@@ -25,12 +27,16 @@ async function reading(outDir, textDir) {
 
 /** The world script read off the reading, written into the workspace (stage/world/script.json), with what it came to. */
 export async function writeScript(outDir, novelDir, given = null) {
-  const { readingScript } = await load('dist/src/v2/script.js');
+  const { readingScript } = await load('dist/src/v2/script.js'), { emptyRegistry, universeOf, withPools } = await load('dist/src/v2/pools.js');
   const { result, text } = given ?? await reading(outDir, novelDir);
-  const script = readingScript(result, text);
+  const universe = universeOf(resolve(novelDir)), registryFile = join(universe.dir, 'pools.json');
+  const registry = JSON.parse(await readFile(registryFile, 'utf8').catch(() => 'null')) ?? emptyRegistry();
+  const { script, registry: kept, pools, pooled, picked } = withPools(readingScript(result, text), registry, universe.book);
   await mkdir(join(novelDir, 'stage', 'world'), { recursive: true, mode: 0o700 });
   await writeFile(join(novelDir, 'stage', 'world', 'script.json'), JSON.stringify(script), { mode: 0o600 });
-  return { placed: script.scenes.filter(scene => scene.place).length, by: Object.fromEntries(['environment', 'action', 'named', 'unnamed', 'carried', 'none'].map(by => [by, script.scenes.filter(scene => scene.placeBy === by).length])), past: script.scenes.filter(scene => !scene.clock).length, unnamedPlaces: Object.values(script.places).filter(place => place.unnamed).length };
+  await mkdir(universe.dir, { recursive: true, mode: 0o700 });
+  await writeFile(registryFile, JSON.stringify(kept, null, 1), { mode: 0o600 });
+  return { pools: { made: pools, pooled, picked, registry: registryFile }, placed: script.scenes.filter(scene => scene.place).length, by: Object.fromEntries(['environment', 'action', 'named', 'unnamed', 'carried', 'none'].map(by => [by, script.scenes.filter(scene => scene.placeBy === by).length])), past: script.scenes.filter(scene => !scene.clock).length, unnamedPlaces: Object.values(script.places).filter(place => place.unnamed).length };
 }
 
 export async function v2Workspace(sourceDir, outDir, novelDir) {

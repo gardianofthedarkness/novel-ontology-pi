@@ -20,13 +20,17 @@ export interface Unit { id: string; label: string; kind: "building" | "street" |
 /**
  * temporary: an unnamed area holding what is known only to lie somewhere in a larger place, until the text names it.
  * dwelling: the area of the central build a place the ontology puts in no larger one dwells in, until it is named.
+ * pool: a sampling pool's area (docs/v2/world-engine-v2.md §2.0.11): it holds what that area has that is not nominated,
+ * its members kept POOL_SPACING apart, and grows as they come.
  */
-export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; temporary?: boolean; dwelling?: string }
+export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; temporary?: boolean; dwelling?: string; pool?: string }
 export interface Canvas { places: Record<string, CanvasPlace>; born: number }
 
 /** The least radius of a place of each scale, in metres, before anything is built in it. */
 export const LEAST: Record<string, number> = { region: 300, city: 120, district: 60, street: 30, building: 12, room: 4 };
 const GAP = 10;
+/** How far apart a pool keeps its members, by their kind (metres between their circles). */
+export const POOL_SPACING: Record<Unit["kind"], number> = { street: 40, building: 20, room: 8 };
 export const emptyCanvas = (): Canvas => ({ places: {}, born: 0 });
 /** A place's children; with null, the places at the top of the canvas (each a sibling of the others). */
 const childrenOf = (canvas: Canvas, id: string | null) => Object.values(canvas.places).filter((place) => place.parent === id);
@@ -96,7 +100,7 @@ export function bearChain(canvas: Canvas, chain: { id: string; label: string; sc
 export function addUnit(canvas: Canvas, placeId: string, unit: Omit<Unit, "at"> & { at?: Point }, near?: Point): Canvas {
   const place = canvas.places[placeId];
   if (place.units.some((entry) => entry.id === unit.id)) return canvas;
-  const at = unit.at ?? (() => { const spot = placeBeside([...place.units.map((entry) => ({ x: entry.at[0], z: entry.at[1], r: entry.r })), ...childrenOf(canvas, placeId).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))], unit.r, unit.id, near, 4); return [spot.x, spot.z] as Point; })();
+  const at = unit.at ?? (() => { const spot = placeBeside([...place.units.map((entry) => ({ x: entry.at[0], z: entry.at[1], r: entry.r })), ...childrenOf(canvas, placeId).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))], unit.r, unit.id, near, place.pool ? POOL_SPACING[unit.kind] : 4); return [spot.x, spot.z] as Point; })();
   place.units.push({ ...unit, at });
   return grow(canvas, placeId);
 }
@@ -121,6 +125,9 @@ const RANK: Record<string, number> = { room: 0, building: 1, street: 2, district
  */
 export function holderFor(canvas: Canvas, placeId: string, unitScale: string, unitId: string): string {
   const place = canvas.places[placeId];
+  // The place's sampling pool, when it has one (the user's design: what is not nominated stands in its area's pool).
+  const pool = poolOf(canvas, placeId);
+  if (pool && (RANK[unitScale] ?? 1) <= (RANK[canvas.places[pool].scale] ?? 0)) return pool;
   if ((RANK[place.scale] ?? 0) < RANK.city || (RANK[place.scale] ?? 0) - (RANK[unitScale] ?? 1) < 2) return placeId;
   const inside = (id: string): boolean => { for (let at = canvas.places[id]?.parent; at; at = canvas.places[at]?.parent) if (at === placeId) return true; return false; };
   const areas = Object.values(canvas.places).filter((area) => isArea(area) && inside(area.id) && (RANK[area.scale] ?? 0) > (RANK[unitScale] ?? 1) && (RANK[area.scale] ?? 0) < (RANK[place.scale] ?? 0));
@@ -133,6 +140,8 @@ export function holderFor(canvas: Canvas, placeId: string, unitScale: string, un
   area.temporary = true;
   return id;
 }
+/** An area's sampling pool on the canvas, if it has one. */
+export const poolOf = (canvas: Canvas, areaId: string): string | null => Object.values(canvas.places).find((place) => place.pool === areaId)?.id ?? null;
 /** Whether holderFor sampled the unit into an area inside the place (not the place itself, nor a stand-in made for it). */
 export const sampledIn = (canvas: Canvas, placeId: string, holder: string): boolean => holder !== placeId && !canvas.places[holder]?.temporary;
 /**
@@ -150,7 +159,7 @@ export function adopt(canvas: Canvas, temporaryId: string, named: { id: string; 
 }
 
 /** An area of the central build (a place larger than a building), the place the ontology puts it in, if any, and else the one proposed for it (a pending review), if any. */
-export interface BuildArea { id: string; label: string; scale: string; parent: string | null; proposed?: string | null; landscape?: LandscapeType | null; ground?: Patch | null }
+export interface BuildArea { id: string; label: string; scale: string; parent: string | null; proposed?: string | null; landscape?: LandscapeType | null; ground?: Patch | null; pool?: string }
 /** One of several choices, picked by a seed (a place's id), so the same in every run; the choices' order does not matter. */
 function pickBy(seed: string, choices: string[]): string {
   const sorted = [...choices].sort(), hash = [...seed].reduce((sum, char) => (Math.imul(sum, 31) + char.charCodeAt(0)) >>> 0, 7);
@@ -183,6 +192,7 @@ export function centralBuild(canvas: Canvas, areas: BuildArea[], toward?: (id: s
       const nearest = Math.min(...hosts.map((place) => rank(place.scale))), host = hosts.length ? pickBy(area.id, hosts.filter((place) => rank(place.scale) === nearest).map((place) => place.id)) : null;
       const into = parent ?? host, dwells = host ?? (parent && proposed.has(area.id) ? parent : null);
       bear(canvas, { ...area, parent: into, toward: toward?.(area.id, into) });
+      if (area.pool) canvas.places[area.id].pool = area.pool;
       if (dwells) { canvas.places[area.id].dwelling = dwells; dwelling[area.id] = dwells; }
     }
     if (waiting.length === left.length) break;
@@ -198,6 +208,9 @@ export function centralBuild(canvas: Canvas, areas: BuildArea[], toward?: (id: s
  */
 export function dwellingFor(canvas: Canvas, unitId: string, proposed?: string | null): string | null {
   if (proposed && canvas.places[proposed] && isArea(canvas.places[proposed])) return proposed;
+  // With sampling pools, any pool, each as likely (the user's design); else as before.
+  const pools = Object.values(canvas.places).filter((place) => place.pool && isArea(place));
+  if (pools.length) return pickBy(unitId, pools.map((place) => place.id));
   const areas = Object.values(canvas.places).filter(isArea), own = areas.filter((place) => place.scale === "district" || place.scale === "street");
   const choices = (own.length ? own : areas).map((place) => place.id);
   return choices.length ? pickBy(unitId, choices) : null;

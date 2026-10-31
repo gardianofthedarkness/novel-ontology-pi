@@ -106,8 +106,11 @@ function worldFirstScenes(data: ReturnType<typeof strandProjection>, world: Worl
     data.names[id] = place.label;
   }
 }
-/** A place the world made (a scene's spot, an unnamed place): its scale is the world's, and no stage step asks about it. */
-const worldMade = (id: string) => id.startsWith("spot:") || id.startsWith("unnamed:");
+/**
+ * A place the world made (a scene's spot, an unnamed place, a sampling pool, another book's pool member): its scale is the
+ * world's, and no stage step asks about it.
+ */
+const worldMade = (id: string) => id.startsWith("spot:") || id.startsWith("unnamed:") || id.startsWith("pool:") || id.startsWith("elsewhere:");
 
 /** Everything the stage reads (no model calls): its places, its scenes with cast and events, and the fingerprints. Shared with `novel checklist`. */
 export async function stageInputs(novelDir: string) {

@@ -310,6 +310,11 @@ only the CBD's rests on research (§5.8). Each is to be tuned for its level late
   CBD), which is the spawns' to settle, not terrain's;
 - regions (a country, a state) have no terrain level yet: the loop starts at the cities.
 
+**Sampling pools** ([world-engine-v2.md](world-engine-v2.md) §2.0.11, the user's design): every nominated area has a
+pool one level below, with the area's own terrain by default; what is not nominated stands in it, spaced, growing as it
+fills; the pools are permanent across a universe's books, and terrain visits them at their level, so it always reaches
+the street level.
+
 ## 7. Questions for the user
 
 - Step mode by default for terrain while we debug (the backend waits for you after each answer), or running, with a pause?

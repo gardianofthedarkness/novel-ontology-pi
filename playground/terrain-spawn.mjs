@@ -145,7 +145,15 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const within = (id, city) => { for (let at = parentOf(id), n = 0; at && n < 12; at = parentOf(at), n++) if (at === city) return true; return false; };
     const mentions = label => sentences.filter(sentence => sentence.text.includes(label)).length, firstAt = label => sentences.findIndex(sentence => sentence.text.includes(label));
     const cities = Object.keys(inputs.scale?.places ?? {}).filter(id => scaleOf(id) === 'city').map(id => ({ id, label: name(id), mentions: mentions(name(id)) })).filter(city => city.mentions).sort((a, b) => b.mentions - a.mentions);
-    const open = Object.keys(inputs.scale?.places ?? {}).filter(id => OPEN.has(scaleOf(id))).map(id => ({ id, label: name(id), scale: scaleOf(id), at: firstAt(name(id)) })).filter(part => part.at >= 0);
+    // A sampling pool (docs/v2/world-engine-v2.md §2.0.11) comes where the text first mentions one of its members (an
+    // unnamed place by its scene's first sentence), an empty one where its area is first named.
+    const world = inputs.world?.places ?? {}, sentenceAt = new Map(sentences.map((sentence, n) => [sentence.id, n]));
+    const sceneAt = new Map((data2?.scenes ?? []).map(scene => [scene.id, sentenceAt.get(scene.sentences?.[0]) ?? -1]));
+    const poolAt = id => {
+      const ats = Object.entries(world).filter(([, place]) => place.parent === id || place.near === id).map(([, place]) => (place.scene ? sceneAt.get(place.scene) ?? -1 : firstAt(place.label))).filter(at => at >= 0);
+      return ats.length ? Math.min(...ats) : firstAt(name(world[id]?.pool ?? ''));
+    };
+    const open = Object.keys(inputs.scale?.places ?? {}).filter(id => OPEN.has(scaleOf(id))).map(id => ({ id, label: name(id), scale: scaleOf(id), at: world[id]?.pool ? poolAt(id) : firstAt(name(id)) })).filter(part => part.at >= 0);
     const order = list => list.sort((a, b) => (a.scale === b.scale ? 0 : a.scale === 'district' ? -1 : 1) || a.at - b.at);
     // A part is its nearest city's (学园都市's districts are not also 东京都's).
     const cityOf = id => { for (let at = parentOf(id), n = 0; at && n < 12; at = parentOf(at), n++) if (scaleOf(at) === 'city') return at; return null; };
@@ -190,6 +198,15 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const about = { part: { id: part.id, label: part.label, scale: part.scale }, holder: { id: holder, label: name(holder) }, city: { id: city.id, label: city.label }, within: framing };
       await live.line(0, { status: 'running', part: `${part.label} (${placed + 1} of ${total}, in ${city.label})` });
       focus = { x: round(centre[0]), z: round(centre[2]), r: round(R * 0.6) };
+      // A sampling pool is not asked: its terrain is its area's, the default, at the spot the engine sampled for it; Jev's
+      // questions are the named parts', on maps that show the pools and what stands in them.
+      const poolOf = world[part.id]?.pool ?? null;
+      const byDefault = () => {
+        const site = terrain.sites[poolOf], node = nodeOf(part.id) ?? holderNode ?? anchor;
+        return { where: null, what: null, rise: null, kind: site?.kind ?? 'default', entry: site?.manifold ? { manifold: site.manifold } : null, shape: site?.shape ?? null, ground: site?.ground ?? null,
+          box: [round(node.x - node.r), round(node.z - node.r), round(node.x + node.r), round(node.z + node.r)], median: site?.median ?? null, upTo: site?.top ?? null, measure: site?.median ? 'median' : 'top' };
+      };
+      const asked = async () => {
       // 1. Overview.
       const yaw = -0.62, up = 0.52;
       const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(centre, yaw, up, R * 1.8), target: centre }, areas: areas(), labelScale: R / 32, vague: { near: R * 4, far: R * 9 } });
@@ -239,6 +256,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height its terrain may rise to; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
       // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top.
       const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, median = measure === 'median' ? height : null, upTo = measure === 'top' ? height : null;
+        return { where, what, rise, kind, entry, shape, ground, box, median, upTo, measure };
+      };
+      const { where, what, rise, kind, entry, shape, ground, box, median, upTo, measure } = poolOf ? byDefault() : await asked();
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
       const proposal = { id: part.id, label: part.label, kind, box, y: 0, top: median ?? upTo, measure }, said = `${kind}${median ? `, median ${median} m` : upTo ? `, up to ${upTo} m` : ''}`;
       focus = { x: round((box[0] + box[2]) / 2), z: round((box[1] + box[3]) / 2), r: round(Math.hypot(box[2] - box[0], box[3] - box[1]) * 0.75) };
@@ -249,7 +269,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const toward = parentNode ? [round((box[0] + box[2]) / 2 - parentNode.x), round((box[1] + box[3]) / 2 - parentNode.z)] : null;
       terrain.sites[part.id] = isCity
         ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), y: 0, by: 'jev', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
-        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, y: 0, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: 'jev',
+        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, y: 0, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : 'jev', ...(poolOf ? { pool: poolOf } : {}),
           confidence: { box: where?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
       if (shape) terrain.shapes[part.id] = { kind: shape, box, y: 0, ...(upTo ? { top: upTo } : {}) };
       if (!terrain.order.includes(part.id)) terrain.order.push(part.id);

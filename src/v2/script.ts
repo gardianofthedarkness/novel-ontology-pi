@@ -31,8 +31,13 @@ import { levelOf } from "./spatial.js";
  * the engine shows as sampled, blinking, until the text or Jev says where it is. A reading from before place EM: the tiers
  * below, and EM²'s place slots (`held: "em2"`, or `"scene"` for a guess).
  */
-/** near: a named building or room the tree puts nowhere: the named area its scenes are set in most (where it is sampled first). */
-export interface ScriptPlace { label: string; scale: string | null; parent: string | null; unnamed?: boolean; held?: "stated" | "setting" | "em2" | "scene"; scene?: string; near?: string }
+/**
+ * near: a named building or room the tree puts nowhere: the named area its scenes are set in most (where it is sampled
+ * first); nears: every named area its scenes are set in (its possible pools, pools.ts). pool: a sampling pool's area
+ * (docs/v2/world-engine-v2.md §2.0.11); pools: the pools a thing could be in, when picked among them; elsewhere: a pool
+ * member from another book of the universe, standing as a marker.
+ */
+export interface ScriptPlace { label: string; scale: string | null; parent: string | null; unnamed?: boolean; held?: "stated" | "setting" | "em2" | "scene"; scene?: string; near?: string; nears?: string[]; pool?: string; pools?: string[]; elsewhere?: string }
 export interface ScriptScene {
   id: string; chapter: number; place: string | null; placeBy: "environment" | "action" | "named" | "unnamed" | "carried" | "jev" | "none";
   clock: number[] | null; present: string[]; stayed: string[]; firstSeen: string[];
@@ -135,8 +140,8 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     if (place.unnamed || place.parent || AREA.has(place.scale ?? "")) continue;
     const count = new Map<string, number>();
     for (const scene of scenes) if ((cardsOf.get(scene.id) ?? []).some((card) => card.entities.some((hit) => hit.id === id) || card.people.some((person) => person.id === id))) { const area = areaOf(scene.place); if (area && area !== id) count.set(area, (count.get(area) ?? 0) + 1); }
-    const near = [...count].sort((a, b) => b[1] - a[1])[0]?.[0];
-    if (near) place.near = near;
+    const ranked = [...count].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([area]) => area);
+    if (ranked.length) { place.near = ranked[0]; place.nears = ranked; }
   }
   // An unnamed place nothing holds (its scene is set in a building the tree puts nowhere): near where its scene is.
   for (const place of Object.values(places)) {

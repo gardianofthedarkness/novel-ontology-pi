@@ -493,6 +493,41 @@ says). EM² found 106 unnamed places (165 before): 地面, 地下, 屋顶, 楼�
 words, 21 tied to who is there, most with a level); 马路上 and 街上 were still typed as streets. The engine from it: no
 stand-in area, 学园都市 931 m across, 100 markers, 93 places sampled (gold, blinking).
 
+### 2.0.11 Sampling pools (the user's design, 2026-10-31)
+
+Sampling (§2.0.10) put what the tree held only in a city into one of the city's districts picked by a seed, at the
+smallest boundary that fits: true random sampling. A pool replaces it:
+- **Every nominated area has a pool**: a region a pool city, a city a pool district, a district a pool street (named
+  `<area> · pool`, id `pool:<area>`). A nominated street is the last level of areas: it holds its own. The pool is the
+  area's backup, sampled by default: its terrain is the area's own (its kind, ground, median and manifold: the average
+  of that area), until something says otherwise.
+- **What is not nominated goes into the pool.** Every place the text mentions in an area without a name of its own (place
+  EM's unnamed places held there), and every named building or room the tree puts nowhere, stands in that area's pool,
+  not in a named sibling picked at random. A pool is a sampling area, not a place of the text: it may hold places of its
+  own scale (an alley in 第七学区's pool street), as a region may hold a region.
+- **Apart, and growing.** Members of a pool stand at least a spacing from each other (40 m between street-sized ones, 20 m
+  between buildings); when the pool is too small it grows (the canvas's own growth: a circle holds what is in it, and
+  pushes its siblings aside).
+- **Even chances.** Where a thing could be in several areas (a named building whose scenes are set in more than one), the
+  pools of those areas are even chances, picked by a seed, once: a pick is kept.
+- **Permanent, across the books of one universe.** The pools live in the universe's registry
+  (`<library>/universe/pools.json`, the library a series' volumes are imported into): a pool once made is never dropped,
+  keyed by its area's name, with its members by book in the order they were placed. A later book's members are placed
+  after the earlier ones' (which never move); a book stands the other books' members as markers.
+- **Terrain reaches the street level.** A pool is a part of its level for terrain: a pool district among the districts, a
+  pool street among the streets, so the loop always has a street level. A pool is not asked: its terrain is its default,
+  proposed at the spot the engine sampled for it and kept on the user's step (`by: "pool"`); it comes in the text's
+  order of its first member. Jev builds on top of the sampling: every named part's map shows the pools and what stands
+  in them.
+
+Built (`src/v2/pools.ts`, the canvas's `poolOf`/`POOL_SPACING`, `experiments/v2/workspace.mjs --script`). Vol 1's tree
+rebuilt (2026-10-31): 9 pools, 91 places in them, the registry at `~/claude-world-first/v2-host-state-7/universe/pools.json`.
+学园都市's pool district holds 81 (42 buildings, 16 streets, 23 rooms the text puts only in the city); 第六学区's pool
+street 6, 第七学区's 3 (an alley among them); 合众国's pool city an unnamed city; the pools of 纽约, 第十五学区, 东京都 and
+the others stand empty, ready. Terrain on it (stand-in answers, no paid call): 2 cities, then 5 districts (第七学区,
+学园都市's pool, 第六学区, 第十五学区, 纽约's pool), then 3 streets (the three districts' pools): 10 parts, Jev asked about
+the 5 named ones only.
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

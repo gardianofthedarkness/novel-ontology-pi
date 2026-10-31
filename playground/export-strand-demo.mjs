@@ -411,7 +411,10 @@ export async function strandDemo(novelDir, options) {
     // larger place that has one, else as its scale suggests, so the world is never bare.
     // Terrain spawning's answer for a place, where it was asked (stage/terrain.json): its ground's type wins over the
     // landscape step's, and its first patch is the size of Jev's box.
-    const terrainGround = id => { const site = terrain?.sites?.[id]; return site?.ground && LANDSCAPES[site.ground] ? site : null; };
+    // A sampling pool with no site of its own stands on its area's ground (the area's kind, median and manifold: its
+    // default, docs/v2/world-engine-v2.md §2.0.11), at its own size.
+    const poolArea = id => worldScript?.places?.[id]?.pool ?? null;
+    const terrainGround = id => { const site = terrain?.sites?.[id] ?? (poolArea(id) && terrain?.sites?.[poolArea(id)] ? { ...terrain.sites[poolArea(id)], size: null } : null); return site?.ground && LANDSCAPES[site.ground] ? site : null; };
     // A kept part's ground: its box, built round its median on its kind's manifold (terrain spawning's); a city's (no box) at its kind's own size.
     const groundPatch = id => {
       const site = terrainGround(id), made = site?.median && site.manifold ? { median: site.median, manifold: site.manifold } : null;
@@ -436,7 +439,7 @@ export async function strandDemo(novelDir, options) {
     // Where the place tree said only the city (or nothing held an EM² place but its scene): an area picked by a seed, which the
     // live view shows blinking until the text or Jev says where it is (the user's call, 2026-10-31).
     const guessed = id => ['scene', 'setting'].includes(worldScript?.places?.[id]?.held), sampled = [];
-    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
+    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, ...(poolArea(place.id) ? { pool: poolArea(place.id) } : {}), landscape: landscapeOf(place.id, areaScale(place.id)) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
     for (const scene of chosen) {
@@ -478,7 +481,8 @@ export async function strandDemo(novelDir, options) {
       if (building) { C.addUnit(canvas, building.place.id, { id: place.id, label: `${name(place.id)} · in ${building.unit.label}`, kind, r, ...(guessed(place.id) || building.unit.sampled ? { sampled: building.unit.sampled ?? parent } : {}) }, building.unit.at); continue; }
       const area = parent && canvas.places[parent] ? parent : null, host = area ?? C.dwellingFor(canvas, place.id, place.proposedParentId);
       if (!host) continue;
-      const holder = C.holderFor(canvas, host, scale, place.id), picked = !area || C.sampledIn(canvas, host, holder) || guessed(place.id);
+      // A pool's member is sampled there (blinking) as a place the tree puts only in a city is.
+      const holder = C.holderFor(canvas, host, scale, place.id), picked = !area || C.sampledIn(canvas, host, holder) || guessed(place.id) || !!canvas.places[holder]?.pool;
       C.addUnit(canvas, holder, { id: place.id, label: name(place.id), kind, r, ...(picked ? { sampled: area ?? 'build' } : {}) });
       if (!area) { dwellingUnits[place.id] = host; notes.build.dwelling.push(`${name(place.id)} in ${name(host)}`); }
     }
@@ -486,7 +490,7 @@ export async function strandDemo(novelDir, options) {
     const nodes = [];
     for (const place of Object.values(canvas.places)) {
       const [x, z] = C.worldOf(canvas, place.id), grid = place.units.find(unit => unit.id === `${place.id}#grid`);
-      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}) });
+      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.pool ? { pool: place.pool } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}) });
       for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(unit.sampled ? { sampled: unit.sampled } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
     }
     return { nodes, canvas };

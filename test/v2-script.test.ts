@@ -44,7 +44,7 @@ test("the world script from the reading: each scene's place (its environment fir
   assert.deepEqual([s2.firstSeen, s2.timeline], [["c"], [{ type: "event", id: "evt_000001", actors: ["c"] }]]);
   assert.deepEqual([s3.place, s3.placeBy, s3.clock], ["unnamed:slot_2_1", "carried", [3, 3]], "no place named: it goes on where it was, at the same time");
   assert.deepEqual([s4.clock, s4.present, s4.firstSeen], [null, ["d"], []], "the past: no clock, and no one is first seen there");
-  assert.deepEqual([script.places.d7, script.places.school], [{ label: "学园都市第七学区", parent: "city", scale: "district" }, { label: "常盘台中学", parent: null, scale: "building", near: "d7" }], "the tree's parents; a building by its type, a district by its name; a building the tree puts nowhere is near where its scenes are set");
+  assert.deepEqual([script.places.d7, script.places.school], [{ label: "学园都市第七学区", parent: "city", scale: "district" }, { label: "常盘台中学", parent: null, scale: "building", near: "d7", nears: ["d7"] }], "the tree's parents; a building by its type, a district by its name; a building the tree puts nowhere is near where its scenes are set");
   assert.equal(script.places.jp.scale, "region", "a place its name gives no scale, holding a city: a region");
 });
 
