@@ -633,6 +633,28 @@ The user (2026-10-31): steps 2 and 3 are modelling, to fine-tune and polish with
    the city's buildings under its new place give way.
 Built in order, 1 then 2 then 3, each checked on vol 1 with stand-in answers before a run with Jev.
 
+The run with Jev on all three (2026-10-31, 63469f3, vol 1, 28 parts in 19 minutes, 76 requests, about $0.02 of input; kept
+as `stage/terrain.pools-run3.json`): 学园都市 and 纽约 metropolises at a 10 m median; 第七学区, 第六学区 and 第十五学区
+CBDs at 30 m; 学园都市's pool district their average (a CBD at 30 m), 纽约's and 第十五学区's pools empty; 第七学区's and
+第六学区's pool streets alleys at 5 m. The 18 streets each boxed by Jev and typed: avenues at 20 to 35 m, squares at 10 m (one
+an underground square at 12 m down), a station front at 15 m, a centre at 20 m, alleys at 5 m, a waterfront at 6 m, a cut
+12 m down and four platforms (3, 6, 25 and 50 m). The user: almost exactly what they want; two changes next (§2.0.14).
+
+### 2.0.14 Pins, not circles; pool members near what continuity ties them to (the user's design, 2026-10-31)
+
+1. **Pins.** The canvas's circles are its own bookkeeping (the room a place takes so far), not the place's size, and on
+   Jev's maps they told it how large a place was: the sampled sizes misled its boxes (the user, after the run above). Jev
+   sees what the user can see, so neither sees them: every place of the canvas is a pin with its name above it (gold and
+   blinking where sampled), in World · Live and in Jev's pictures alike, and where the engine has a part for now is a grey
+   pin. The boxes Jev kept stay outlined. A place's extent is only what is built: its terrain and its buildings.
+2. **Continuity.** Sampling puts a pool's member at the free spot nearest the pool's middle, wherever the others are.
+   Members the characters go between should be near each other: two places are tied once for each character who goes
+   from the one's scene to the other's (two scenes in a row of that character's, in story order) and once for each
+   character in one scene set in both. A member is sampled at the free spot nearest the mean of the spots of the members
+   it is tied to, each counted by its ties (a member Jev kept: its box's middle), so the more ties, the nearer; with none,
+   the pool's middle as before. Every member of a pool counts (its buildings and rooms too); members of different pools
+   are not pulled across.
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by
