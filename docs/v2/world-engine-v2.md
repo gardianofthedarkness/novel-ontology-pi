@@ -774,6 +774,11 @@ ramps, cuts) were saved but never built nor drawn, and only a street kind below 
   itch.io: a platform, a tiled corridor, ticket machines, turnstiles), listed as a candidate, not downloaded; no free car
   park, storm-water or basement model found. The compatibility page shows both: underground × street, and underground ×
   models.
+- **One colour** (the user: the underground's colours, and the standing buildings' old ones, did not fit). The page draws
+  the city, the standing buildings' rooms, walls and roofs, a waterfront's water and everything under the street in the
+  corridors' light cyan (`HOLO`); the orange stairs, red damage and gold markers keep theirs. What is under the street is
+  dimmer than the city above (its volumes 0.05, its models' edges 0.18) and turns solid (0.55, 0.9) when the street is
+  seen through: the Underground button, or anyone shown below it.
 - **Picking up** (the user: run 5 is kept, no fresh run). A part already kept in `stage/terrain.json` stays as it is; a
   run picks up where the last stopped (World · Live says how many were kept before) and asks only the rest. A fresh run
   moves `terrain.json` aside first.

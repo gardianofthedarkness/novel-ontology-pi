@@ -241,24 +241,29 @@ controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls
 const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
 new ResizeObserver(resize).observe(host);
 const unit = new THREE.BoxGeometry(1, 1, 1), matrix = new THREE.Matrix4(), color = new THREE.Color();
+// The hologram's one colour (the corridors' light cyan, the user's call, 2026-10-31): the city, its insides and its underground.
+const HOLO = 0x7ce6ff;
+/** Every line drawn under the street (the hall models' edges), dimmed and brightened with the halls themselves. */
+const underLines = [];
 const mats = {
-  // The levels under the street (world.ts), each its own colour, faint until the street is seen through (xray below).
-  subway: new THREE.MeshBasicMaterial({ color: 0x3fd0e0, transparent: true, opacity: 0.25, depthWrite: false }),
+  // The levels under the street (world.ts), all in the hologram's cyan, dimmer than the city above until the street is seen
+  // through (the Underground button, or someone shown below it: xray below), when they turn solid.
+  subway: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
   // A subway entrance on the street: seen whether or not the street is seen through.
-  entrance: new THREE.MeshBasicMaterial({ color: 0x3fd0e0, transparent: true, opacity: 0.3, depthWrite: false }),
-  arcade: new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.25, depthWrite: false }),
-  under: new THREE.MeshBasicMaterial({ color: 0x9a8cff, transparent: true, opacity: 0.25, depthWrite: false }),
-  water: new THREE.MeshBasicMaterial({ color: 0x2f7dff, transparent: true, opacity: 0.25, depthWrite: false }),
-  deep: new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0.25, depthWrite: false }),
-  facility: new THREE.MeshBasicMaterial({ color: 0xff4d6a, transparent: true, opacity: 0.25, depthWrite: false }),
+  entrance: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.3, depthWrite: false }),
+  arcade: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
+  under: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
+  water: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
+  deep: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
+  facility: new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.05, depthWrite: false }),
   corridor: new THREE.MeshLambertMaterial({ color: 0x7ce6ff, emissive: 0x0b3a48, transparent: true, opacity: 0.85 }),
   stair: new THREE.MeshLambertMaterial({ color: 0xffb547, emissive: 0x4a2a00, transparent: true, opacity: 0.8 }),
   cut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.9 }),
-  room: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.18, depthWrite: false }),
+  room: new THREE.MeshLambertMaterial({ color: HOLO, transparent: true, opacity: 0.1, depthWrite: false }),
   roomCut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.32, depthWrite: false }),
   // A hit building's units: its walls and roof as panels, and what fell as rubble.
-  wall: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.2, depthWrite: false }),
-  roof: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.3, depthWrite: false }),
+  wall: new THREE.MeshLambertMaterial({ color: HOLO, transparent: true, opacity: 0.15, depthWrite: false }),
+  roof: new THREE.MeshLambertMaterial({ color: HOLO, transparent: true, opacity: 0.22, depthWrite: false }),
   rubble: new THREE.MeshLambertMaterial({ color: 0x9aa7b2, transparent: true, opacity: 0.85 }),
   // Fragments: warm white, apart from the orange stairs and the blue corridors they broke from.
   debris: new THREE.MeshBasicMaterial({ color: 0xfff1dc, transparent: true, opacity: 0.95 }),
@@ -359,8 +364,8 @@ function buildPlace(id) {
       for (const bore of hall.bores) { const [x, z] = [(bore.a[0] + bore.b[0]) / 2, (bore.a[1] + bore.b[1]) / 2], mesh = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(bore.b[0] - bore.a[0], bore.b[1] - bore.a[1]), hall.height, bore.width), material); mesh.position.set(x, y, z); mesh.rotation.y = -Math.atan2(bore.b[1] - bore.a[1], bore.b[0] - bore.a[0]); show(mesh, x, z); }
       if (hall.pillars.length) { const mesh = instanced(material, hall.pillars.map(([x, z]) => [x, y, z, 1.2, hall.height, 1.2])); show(mesh, hall.pillars[0][0], hall.pillars[0][1]); }
       const model = ["lab", "military", "quantum"].includes(hall.kind) ? shellOf(`kk-${hall.kind}`) : null, box = hall.boxes[0];
-      if (model && box) { const shell = new THREE.LineSegments(model.edges, new THREE.LineBasicMaterial({ color: 0xff8a9a, transparent: true, opacity: 0.6 })); shell.scale.set(box.w * 0.8 / model.size.x, hall.height * 0.8 / model.size.y, box.d * 0.8 / model.size.z); shell.position.set(box.x, -hall.depth, box.z); show(shell, box.x, box.z); }
-      if (box && hall.label) { const tag = label(hall.label, "#ff8a9a", 20); tag.position.set(box.x, -hall.depth + hall.height + 2, box.z); show(tag, box.x, box.z, { under: true }); }
+      if (model && box) { const shell = new THREE.LineSegments(model.edges, new THREE.LineBasicMaterial({ color: HOLO, transparent: true, opacity: 0.18 })); underLines.push(shell.material); shell.scale.set(box.w * 0.8 / model.size.x, hall.height * 0.8 / model.size.y, box.d * 0.8 / model.size.z); shell.position.set(box.x, -hall.depth, box.z); show(shell, box.x, box.z); }
+      if (box && hall.label) { const tag = label(hall.label, "#7ce6ff", 20); tag.position.set(box.x, -hall.depth + hall.height + 2, box.z); show(tag, box.x, box.z, { under: true }); }
       // A subway entrance: the structure over the stairs on the pavement (seen from the street), and the steps down to its passage.
       for (const [sx, sz, ex, ez] of hall.stairs ?? []) {
         const steps = Array.from({ length: 10 }, (_, n) => { const t = (n + 0.5) / 10; return [sx + (ex - sx) * t, -hall.depth * t + 0.2, sz + (ez - sz) * t, 3, 0.45, 3]; });
@@ -370,7 +375,7 @@ function buildPlace(id) {
         canopy.position.set(sx, 1.4, sz); canopy.rotation.y = -Math.atan2(ez - sz, ex - sx); show(canopy, sx, sz);
       }
     }
-    for (const [name, matrices] of underModels) show(instancedEdges(shellOf(name).edges, matrices, 0x7ce6ff, 0.55).lines, 0, 0);
+    for (const [name, matrices] of underModels) { const set = instancedEdges(shellOf(name).edges, matrices, HOLO, 0.18); underLines.push(set.lines.material); show(set.lines, 0, 0); }
     for (const lot of data.world.lots) {
       const floors = lot.height ?? lot.floors, levels = floors >= 20 ? 3 : floors >= 10 ? 2 : floors >= 2 ? 1 : 0;
       if (!levels) continue;
@@ -598,7 +603,7 @@ let decor = () => {};
   // shops under a tower of the ground it landed on), a gold band to their own height (docs/v2/world-engine-v2.md §2.0.13).
   const waters = (data.landscapes ?? []).flatMap((entry) => entry.waters ?? []);
   if (waters.length) {
-    const sheets = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshBasicMaterial({ color: 0x2f7dff, transparent: true, opacity: 0.35, depthWrite: false }), waters.length);
+    const sheets = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshBasicMaterial({ color: HOLO, transparent: true, opacity: 0.25, depthWrite: false }), waters.length);
     waters.forEach(([ax, az, bx, bz, width], i) => { q.setFromAxisAngle(up, -Math.atan2(bz - az, bx - ax)); m.compose(new THREE.Vector3((ax + bx) / 2, -0.4, (az + bz) / 2), q, new THREE.Vector3(Math.hypot(bx - ax, bz - az), 1, width)); sheets.setMatrixAt(i, m); });
     world.add(sheets);
   }
@@ -882,7 +887,9 @@ function frame(now) {
   const below = xray || [...pawns.values()].some(({ pawn }) => pawn.parent && pawn.position.y < -1);
   groundSeen += ((below ? 0.15 : 0.8) - groundSeen) * Math.min(1, dt * 3);
   groundMat.opacity = groundSeen;
-  for (const key of ["subway", "arcade", "under", "water", "deep", "facility"]) mats[key].opacity = 0.18 + (0.8 - groundSeen) * 0.6;
+  const seenBelow = Math.max(0, Math.min(1, (0.8 - groundSeen) / 0.65));
+  for (const key of ["subway", "arcade", "under", "water", "deep", "facility"]) mats[key].opacity = 0.05 + seenBelow * 0.5;
+  for (const material of underLines) { if (material.uniforms) material.uniforms.alpha.value = 0.18 + seenBelow * 0.72; else material.opacity = 0.18 + seenBelow * 0.72; }
   decor(time); blinkProposal(now); blinkSampled(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
