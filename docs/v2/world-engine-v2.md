@@ -774,6 +774,9 @@ ramps, cuts) were saved but never built nor drawn, and only a street kind below 
   itch.io: a platform, a tiled corridor, ticket machines, turnstiles), listed as a candidate, not downloaded; no free car
   park, storm-water or basement model found. The compatibility page shows both: underground × street, and underground ×
   models.
+- **Picking up** (the user: run 5 is kept, no fresh run). A part already kept in `stage/terrain.json` stays as it is; a
+  run picks up where the last stopped (World · Live says how many were kept before) and asks only the rest. A fresh run
+  moves `terrain.json` aside first.
 
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change

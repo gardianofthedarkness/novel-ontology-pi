@@ -202,8 +202,13 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     ];
     const total = queue.length;
     let placed = 0;
+    // A part already kept (a stopped run's stage/terrain.json) stays as it is: the run picks up where it stopped (the user's
+    // call, 2026-10-31). A fresh run moves terrain.json aside first.
+    const before = queue.filter(({ part }) => terrain.sites[part.id]).length;
+    if (before) await live.outcome({ subject: 'terrain', text: `picking up: ${before} of ${total} parts kept before, ${total - before} to go` });
     for (const { part, city } of queue) {
       if (placed >= limit) break;
+      if (terrain.sites[part.id]) continue;
       // A pool's member: Jev is asked its kind, then where it lies (anywhere in its district, its pin a suggestion), then its height.
       const isCity = part.scale === 'city', sampled = isMember(part.id), holder = isCity ? city.id : holderOf(part, city), cityNode = nodeOf(city.id), holderNode = nodeOf(holder) ?? cityNode;
       // The city as the engine stands it now: its node and the districts and streets in it (not the rooms and buildings the
@@ -230,7 +235,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const kept = id => { const site = terrain.sites[id]; return site?.kind ? `${site.kind}${site.median ? `, median ${site.median} m` : site.top ? `, up to ${site.top} m` : ''}` : null; };
       const framing = Object.fromEntries((isCity ? [] : [...new Set([city.id, holder])]).filter(id => kept(id)).map(id => [name(id), kept(id)]));
       const about = { part: { id: part.id, label: part.label, scale: part.scale }, holder: { id: holder, label: name(holder) }, city: { id: city.id, label: city.label }, within: framing, ...(sampled ? { sampled: true } : {}) };
-      await live.line(0, { status: 'running', part: `${part.label} (${placed + 1} of ${total}, in ${city.label})` });
+      await live.line(0, { status: 'running', part: `${part.label} (${before + placed + 1} of ${total}, in ${city.label})` });
       focus = { x: round(centre[0]), z: round(centre[2]), r: round(R * 0.6) };
       // A sampling pool is not asked: its default is the average of the places of its own level decided inside its area (a
       // pool street copies the district's streets, a pool district the city's districts: every level has its own kinds),
