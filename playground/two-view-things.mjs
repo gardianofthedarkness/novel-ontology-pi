@@ -63,6 +63,10 @@ export async function browser({ gpu = false } = {}) {
   const metal = (gpu && process.platform === 'darwin' && process.env.STILLS_GL !== 'swiftshader') || process.env.STILLS_GL === 'metal';
   const gl = metal ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
   const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=800,600', '--hide-scrollbars', ...gl, '--no-first-run', '--no-default-browser-check', 'about:blank'], { stdio: 'ignore' });
+  // A script that ends without closing (an error, a timeout's signal) takes its Chrome with it: a left one keeps drawing,
+  // parented to launchd, and ten of them held the machine at a load of forty.
+  const orphaned = () => chrome.kill(), signalled = signal => { chrome.kill(); process.kill(process.pid, signal); };
+  process.once('exit', orphaned); process.once('SIGINT', signalled); process.once('SIGTERM', signalled);
   let port = null;
   for (let tries = 0; tries < 100 && !port; tries++) { port = await readFile(join(profile, 'DevToolsActivePort'), 'utf8').then(text => text.split('\n'), () => null); if (!port) await new Promise(done => setTimeout(done, 100)); }
   if (!port) throw new Error('Chrome did not start');
@@ -83,7 +87,7 @@ export async function browser({ gpu = false } = {}) {
     /** Stills of another frame from now on (the page's stage is sized to it by its own capture). */
     size: async (width, height) => { frame = [width, height]; await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId); },
     // Chrome writes its profile until it exits; a leftover temporary profile is no reason to lose a run.
-    close: async () => { socket.close(); const exited = new Promise(done => chrome.once('exit', done)); chrome.kill(); await Promise.race([exited, new Promise(done => setTimeout(done, 3000))]); await rm(profile, { recursive: true, force: true }).catch(() => {}); },
+    close: async () => { process.off('exit', orphaned); process.off('SIGINT', signalled); process.off('SIGTERM', signalled); socket.close(); const exited = new Promise(done => chrome.once('exit', done)); chrome.kill(); await Promise.race([exited, new Promise(done => setTimeout(done, 3000))]); await rm(profile, { recursive: true, force: true }).catch(() => {}); },
   };
 }
 
