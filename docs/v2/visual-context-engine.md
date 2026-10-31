@@ -1,7 +1,7 @@
 # The visual context engine, debugging by display, and terrain spawning (design, 2026-10-31)
 
 The user's redesign of how Jev sees the world and how we see what Jev does, starting with the spawning department and
-its first faculty, terrain. Status: **design, for the user's approval.** Nothing here is built yet. It sits beside the text
+its first faculty, terrain. Status: **approved by the user (2026-10-31: step mode, these frames, the basic shapes plus rectangles, spheres and donuts); the live view, the engine page as Jev's player, and terrain spawning are built and were run once on vol 1 (§5.5).** It sits beside the text
 context engine ([context-engine.md](context-engine.md)): that one composes what Jev reads, this one what Jev looks at,
 and every question gets both.
 
@@ -160,6 +160,27 @@ they happen, the replay plays them again.
 `stage/terrain.json` keeps, per city, its parts' manifolds (type, centre, radius, shape numbers, height) and basic shapes,
 with the questions that made them; the engine fills the ground from it, as it fills landscapes now. The holders step of
 the current `terrain.mjs` (which site is in which) stays as the first look of a part whose place in the tree is unknown.
+
+### 5.5 First run, vol 1 (2026-10-31) — built and run
+
+`novel sim terrain` on vol 1, watched on the host's play/terrain page: 4 cities (夜晚的都市, 东京西部的学园都市, 纽约,
+日本首都), 38 questions, 51 shots, 1.5 minutes (the user let it run on after the first step). Which parts are in which
+city: 16 of the 17 districts and streets went to 学园都市 (0.85–0.87 for its districts); 夜晚的都市, a description of the same
+city, got the bridge; 纽约 none. What came out: the bridge a platform; 15 parts commercial ground and 第六学区 a park, all at
+street level but 通道 (a passage) at the subway's 12 m down; heights were sure (0.94–1 for most).
+
+What is wrong, seen on the pictures:
+- **Everything piled in the middle.** Jev boxed nearly every part over the ground already there, one on another, so the
+  city is a stack of outlines round its first patch. No rule stopped it: same-era manifolds may overlap, and no zoom was
+  triggered (no conflicts at all).
+- **Districts the size of streets** (第七学区 180 × 165 m): the size rule was too loose (a district under half its least
+  radius), and districts came after the streets inside them (story order), so they spawned almost nothing (1–3 buildings).
+- **The map is mostly empty dark ground**, framed on a small city with room to grow; nothing on it says how big the city is
+  meant to be.
+
+Next (to be agreed): parts largest first, each district placed in the city and its streets in the district (the holder's
+map); a part over another part is a conflict unless the text puts it inside; districts held to a district's size; the
+city's intended extent drawn on the map.
 
 ## 6. Order of work
 
