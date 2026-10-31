@@ -499,8 +499,8 @@ Sampling (§2.0.10) put what the tree held only in a city into one of the city's
 smallest boundary that fits: true random sampling. A pool replaces it:
 - **Every nominated area has a pool**: a region a pool city, a city a pool district, a district a pool street (named
   `<area> · pool`, id `pool:<area>`). A nominated street is the last level of areas: it holds its own. The pool is the
-  area's backup, sampled by default: its terrain is the area's own (its kind, ground, median and manifold: the average
-  of that area), until something says otherwise.
+  area's backup, sampled by default: its terrain is the average of the places of its own level in the area (§2.0.12;
+  first built as the area's own terrain, which the user corrected).
 - **What is not nominated goes into the pool.** Every place the text mentions in an area without a name of its own (place
   EM's unnamed places held there), and every named building or room the tree puts nowhere, stands in that area's pool,
   not in a named sibling picked at random. A pool is a sampling area, not a place of the text: it may hold places of its
@@ -516,9 +516,8 @@ smallest boundary that fits: true random sampling. A pool replaces it:
   after the earlier ones' (which never move); a book stands the other books' members as markers.
 - **Terrain reaches the street level.** A pool is a part of its level for terrain: a pool district among the districts, a
   pool street among the streets, so the loop always has a street level. A pool is not asked: its terrain is its default,
-  proposed at the spot the engine sampled for it and kept on the user's step (`by: "pool"`); it comes in the text's
-  order of its first member. Jev builds on top of the sampling: every named part's map shows the pools and what stands
-  in them.
+  proposed at the spot the engine sampled for it and kept on the user's step (`by: "pool"`), last in its level
+  (§2.0.12). Jev builds on top of the sampling: every map shows the pools and what stands in them.
 
 Built (`src/v2/pools.ts`, the canvas's `poolOf`/`POOL_SPACING`, `experiments/v2/workspace.mjs --script`). Vol 1's tree
 rebuilt (2026-10-31): 9 pools, 91 places in them, the registry at `~/claude-world-first/v2-host-state-7/universe/pools.json`.
@@ -570,6 +569,18 @@ ground, and the 18 unnamed streets in the pools stood as markers. The user's cor
 | waterfront | a waterfront or a bridge: water, a deck, warehouses and walks by it | harbour | 0, 0.3 |
 | park | a park or an amusement park: lawns, rides, pavilions | park | 0, 0.4, 0.02 |
 | stadium | a stadium or a sports ground | stadium | 0, 0.2 |
+
+**Built (2026-10-31; commits 75614c5 for step 1, dd806c8 for steps 2 to 5).** Terrain spawning keeps no `y` and starts
+a live record of its own (the old one archived in `stage/simulation/live-archive/`); the terrain modes carry the street
+kinds, a member's own sentences (`own`: place EM's sentences for the unnamed place) and no box question for a sampled
+member; terrain spawning queues every pool's member at an area's level by its scene, settles each level's pools last
+with the average of their level (or empty), and keeps a member's site with no box (`member`); the engine gives a pool
+its own default only, builds each decided member's patch where it stands in the pool (`borrowed`: claiming lots before
+the default, `claimOrder` in `landscape.ts`), and stands a later member of the same name on the first, merging a
+different kind or median in as a further patch. On vol 1, with stand-in answers (no paid call): 28 parts (2 cities, 5
+districts, 21 streets); 学园都市's pool district the average of its three districts, 纽约's empty; the 18 unnamed
+streets asked as streets; 第七学区's pool street the average of its streets, 第十五学区's empty; 14 members borrowed
+their pool's ground and 3 merged (the four 大道 and two 广场 of different scenes).
 
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
