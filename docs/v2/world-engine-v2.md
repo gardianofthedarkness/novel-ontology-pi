@@ -832,6 +832,28 @@ time; and compatible parts that merge should expand and move apart rather than o
   one is asked again, pointed at the free ground (`CROWDED`, `sanity`'s crowds). Where compatible parts still overlap, the
   export moves each later one out of those before it, along the axis it is least into them, to stand 4 m beside: the pool
   expands, and no part's buildings vanish under another's. What lies below the street may still lie under anything.
+
+### 2.0.21 Areas sized by their pins; Jev for kind and height; what is there first (the user's design, 2026-10-31)
+
+The user: how large an area is, and so the zoom to look at it, can be told by whether the buildings its ground makes reach
+the density of the building pins it must hold. Jev then picks only its height and its subcategory (both read from the
+environment's descriptions); its box is the program's. Where the ground already made streets and buildings of the kinds
+the lower places need, they are mapped onto them, the mapping holding as many as it can; Jev handles only what is left:
+the unknown, the conflicts the program cannot settle, and the forms no program makes (a platform, a donut, a spaceship in
+the sky). The steps:
+1. **Sized by its pins** (`sizeByPins`, the zoom engine). An area's pins are the buildings and rooms the tree holds under
+   it (a street of a pool: the ones set in its scene). Its kind's usual size (its landscape's radius and proportions)
+   holds so many buildings (its area, its coverage, its kind's lot size); when that is fewer than its pins need (three
+   buildings a pin: the pins are a third of what stands), it grows, its proportions kept, within its level's sizes.
+2. **Jev asked its kind and its height only.** A district's and a street's place is the program's: the canvas's spot (its
+   ties), moved onto free ground when its size there would cover a place it may not share; its box that size round it.
+   No box question, no zoom asking again. The pictures stay, for Jev to read the kind and the height off.
+3. **What is there first.** A building pin dwells in a building the ground made of its use (its name's, by the language
+   profile; a fill building's by its kind), the nearest to where it was sampled, the scarcest uses first, so the most are
+   held; a street of a pool before that, by its ties (§2.0.15). Next: a street pin onto a road or a form the ground made of
+   its kind (an avenue onto a boulevard), before it is given an area of its own.
+4. **Leftovers to Jev.** A part answered as a shape (a platform, a ramp, a donut, a sphere) is still boxed by Jev, on the
+   two zooms; a building of a use no ground near it has is marked for Jev; an area with no free ground for its size.
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by
