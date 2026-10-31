@@ -1,11 +1,12 @@
 // Story time alone, again, on a finished v2 reading (the user asked, 2026-10-31: fix the calendar and rerun it on its own):
 // the reading's scenes, sentence kinds and listed time words go through src/v2/time.ts as it is now; the facts get their
 // periods again. Nothing else is asked again (EM² keeps the facts' ranking it had). The reading's time.yaml is kept as
-// time.previous.yaml; data.json and log.yaml get the new story time; prints what changed.
+// time.previous.yaml; data.json gets the new story time, and the base layer (<out>/base: the world loop's input, each
+// scene's time with it) is written again from it; prints what changed.
 //
 //   npm run build
 //   JEV_MODEL=jev-1.14.0 node experiments/v2/time.mjs <novel-dir> <out-dir>
-import { copyFile, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -13,7 +14,7 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 
 export async function rerunTime(novelDir, outDir, { decisions = null } = {}) {
-  const { loadBlocks } = await load('dist/src/v2/base.js');
+  const { loadBlocks, worldBase } = await load('dist/src/v2/base.js');
   const { readStoryTime, timeWords } = await load('dist/src/v2/time.js');
   const { FactLedger } = await load('dist/src/v2/facts.js');
   const { yamlDocument } = await load('dist/src/v2/yaml.js');
@@ -48,6 +49,11 @@ export async function rerunTime(novelDir, outDir, { decisions = null } = {}) {
     captions: [...new Set(time.scenes.map(scene => scene.when))],
   };
   await copyFile(join(v2, 'time.yaml'), join(v2, 'time.previous.yaml')).catch(() => {});
+  // The base layer again, from the reading with its new story time (the flow's result as worldBase reads it: the chart as maps).
+  const base = worldBase({ ...data, chart: { entities: new Map(data.chart.entities.map(entity => [entity.id, entity])), times: new Map(data.chart.times.map(node => [node.text, node])) } }, id => textOf.get(id) ?? '');
+  const baseDir = join(outDir, 'base');
+  await mkdir(baseDir, { recursive: true, mode: 0o700 });
+  await Promise.all([['scenes.json', JSON.stringify(base.scenes)], ['roster.json', JSON.stringify(base.roster, null, 1)], ['facts.json', JSON.stringify(base.facts)], ['states.json', JSON.stringify(base.states)]].map(([name, body]) => writeFile(join(baseDir, name), body, { mode: 0o600 })));
   await Promise.all([
     writeFile(join(v2, 'time.yaml'), yamlDocument(stored), { mode: 0o600 }),
     writeFile(join(v2, 'data.json'), JSON.stringify(data), { mode: 0o600 }),

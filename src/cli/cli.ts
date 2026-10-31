@@ -63,7 +63,7 @@ import { reviewCommand } from "./commands/extract/reviewCommands.js";
 import { approveBook } from "../solidifier/merge/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
-import { SIM_USAGE, simPick, simRun, simShow, simStrands } from "./commands/extract/simCommands.js";
+import { SIM_USAGE, simPick, simRun, simShow, simStrands, simTerrain } from "./commands/extract/simCommands.js";
 import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js";
 import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
 import { STAGE_USAGE, stageArchitecture, stageLandscape, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
@@ -552,8 +552,8 @@ async function main(): Promise<void> {
 
   if (cmd === "sim") {
     const novelDir = positional[2];
-    if (!["strands", "pick", "run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${SIM_USAGE}`);
-    const valued = sub === "run" ? ["--auto", "--strand", "--pace", "--from"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : [], switches = sub === "run" ? ["--accept", "--force"] : [];
+    if (!["strands", "terrain", "pick", "run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${SIM_USAGE}`);
+    const valued = sub === "run" ? ["--auto", "--strand", "--pace", "--from"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : sub === "terrain" ? ["--turns"] : [], switches = sub === "run" ? ["--accept", "--force"] : [];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];
@@ -568,6 +568,9 @@ async function main(): Promise<void> {
     const pace = flag(positional, "--pace");
     if (pace !== undefined && (!/^\d+(\.\d+)?$/.test(pace) || Number(pace) > 30)) throw new Error("--pace must be seconds per moment, from 0 to 30.");
     const lines = { auto: auto === undefined ? undefined : Number(auto), strand: flag(positional, "--strand") };
+    const turns = flag(positional, "--turns");
+    if (turns !== undefined && (!/^\d+$/.test(turns) || Number(turns) < 1 || Number(turns) > 3)) throw new Error("--turns must be 1, 2 or 3.");
+    if (sub === "terrain") { out(await simTerrain(novelDir, { turns: turns === undefined ? undefined : Number(turns) }), pretty); return; }
     out(await (sub === "strands" ? simStrands(novelDir) : sub === "show" ? simShow(novelDir) : sub === "pick" ? simPick(novelDir, { ...lines, maxCalls: maxCalls === undefined ? undefined : Number(maxCalls) }) : simRun(novelDir, { ...lines, from: flag(positional, "--from"), accept: positional.includes("--accept"), force: positional.includes("--force"), pace: pace === undefined ? undefined : Number(pace) })), pretty);
     return;
   }

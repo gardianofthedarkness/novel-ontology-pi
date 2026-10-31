@@ -85,6 +85,11 @@ export async function strandDemo(novelDir, options) {
   // scene's composed context, where someone first seen starts (the level, then a box on a map of the place), who came to
   // whom when two people talking face to face are apart, and the box a group gathers in. Cached under stage/world/cache.
   const worldScript = inputs.worldFirst ? inputs.world : null, worldScene = new Map((worldScript?.scenes ?? []).map(scene => [scene.id, scene]));
+  // Terrain and spawns (playground/terrain.mjs), when they were asked: where Jev put each main site in the place that holds
+  // it, and which scenes start anew (everyone present placed afresh, with the scene's environment in the question).
+  const terrain = JSON.parse(await readFile(`${novelDir}/stage/terrain.json`, 'utf8').catch(() => 'null'));
+  const spawnPlan = JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
+  const anew = sceneId => spawnPlan?.scenes?.[sceneId]?.spawn === 'new';
   let jev = null;
   if (worldScript) {
     const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
@@ -406,7 +411,8 @@ export async function strandDemo(novelDir, options) {
     };
     const trips = (a, b) => bookTrips.filter(m => m.from && m.to && (pathOf(m.from).includes(a) && pathOf(m.to).includes(b) || pathOf(m.from).includes(b) && pathOf(m.to).includes(a))).length;
     const canvas = C.emptyCanvas();
-    const toward = (id, parent) => Object.values(canvas.places).filter(place => place.parent === parent && place.id !== id).map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0].at;
+    // Toward where the terrain step put it in this parent, else toward the sibling it has the most travel with.
+    const toward = (id, parent) => terrain?.sites?.[id]?.parent === parent ? terrain.sites[id].toward : Object.values(canvas.places).filter(place => place.parent === parent && place.id !== id).map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0].at;
     const birth = (id, parent) => {
       if (canvas.places[id]) return;
       C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent) });
@@ -751,11 +757,12 @@ export async function strandDemo(novelDir, options) {
    * walkable cell of it; outside, the walkable cell nearest the box. Null leaves it to the engine's own start.
    */
   const firstStart = async ({ scene, handoff, carried }) => {
-    const entry = worldScene.get(scene.id);
-    if (!jev || carried || !entry?.firstSeen?.includes(handoff.person)) return null;
+    const entry = worldScene.get(scene.id), fresh = anew(scene.id) && (entry?.present ?? []).includes(handoff.person);
+    // A scene that starts anew (stage/world/spawn.json) places everyone present afresh; otherwise only someone first seen.
+    if (!jev || (!fresh && (carried || !entry?.firstSeen?.includes(handoff.person)))) return null;
     const { anchor } = groups.get(scene.placeId), radius = 48;
     reach(anchor.x, anchor.z, 56);
-    const who = name(handoff.person), context = entry.context ?? '';
+    const who = name(handoff.person), context = [entry.context ?? '', ...startContext(scene, handoff.person, anchor)].filter(Boolean).join('\n\n');
     const around = world.lots.filter(lot => Math.abs((lot.i0 + lot.nx / 2) * 2 - anchor.x) <= radius && Math.abs((lot.j0 + lot.nz / 2) * 2 - anchor.z) <= radius);
     const top = Math.min(12, Math.max(1, ...around.map(lot => lot.floors)));
     // In a room on a floor the text does not give: a floor drawn at random (the same for this person and scene every run)
@@ -797,8 +804,24 @@ export async function strandDemo(novelDir, options) {
     node ??= W.nodeNear(world, built, point.x, point.z, floor === 'roof' && lot ? lot.floors : inside ? floor : 0);
     if (node == null) return null;
     notes.bornInRooms = (notes.bornInRooms ?? 0) + (room && node != null ? 1 : 0);
-    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: level?.value ?? null, ...(inside ? { floor: floor >= 0 ? floor + 1 : floor } : {}), at: [Math.round(point.x), Math.round(point.z)], ...(room ? { room: room.n, building: lot.source } : {}) });
-    return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, [node, 0], `${scene.id}|${handoff.person}`) : [node, 0];
+    (traceOf(scene.id, 'start').boxed ??= []).push({ person: handoff.person, level: level?.value ?? null, ...(inside ? { floor: floor >= 0 ? floor + 1 : floor } : {}), at: [Math.round(point.x), Math.round(point.z)], ...(room ? { room: room.n, building: lot.source } : {}), ...(fresh ? { anew: true } : {}) });
+    if (fresh) notes.freshStarts = (notes.freshStarts ?? 0) + 1;
+    // Placed afresh where a scene starts anew: there, not walked from where they were.
+    return handoff.from && !handoff.samePlace && !fresh ? travel(scene, handoff.person, [node, 0], `${scene.id}|${handoff.person}`) : [node, 0];
+  };
+  /**
+   * What a start question adds to the world loop's context: the scene's surroundings (its environment cards, from the
+   * spawn plan) and who is already placed here, each with how far and which way from the middle of the picture.
+   */
+  const startContext = (scene, person, anchor) => {
+    const plan = spawnPlan?.scenes?.[scene.id], here = [...where.entries()].filter(([id, entry]) => id !== person && entry.place === scene.placeId && entry.at);
+    const side = (dx, dz) => ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'][((Math.round(Math.atan2(dz, dx) / (Math.PI / 4)) % 8) + 8) % 8];
+    const placed = here.map(([id, entry]) => { const p = W.nodePos(world, entry.at[0]), d = Math.hypot(p.x - anchor.x, p.z - anchor.z); return `- ${name(id)}: ${d < 3 ? 'at the middle' : `${Math.round(d)} m ${side(p.x - anchor.x, p.z - anchor.z)} of the middle`}${p.k > 0 ? `, floor ${p.k + 1}` : p.k < 0 ? ', underground' : ''}`; });
+    return [
+      plan?.environment?.length ? `This scene's surroundings, as the text describes them:\n${plan.environment.map(card => `- ${card}`).join('\n')}` : '',
+      plan?.spawn === 'new' ? `This scene starts anew (${plan.why ?? 'time has passed, or the surroundings changed'}): everyone in it is placed afresh.` : '',
+      placed.length ? `Already placed here (the red dots on the map):\n${placed.join('\n')}` : '',
+    ];
   };
   /**
    * Underground (docs/underground-design.md §6.1): what is under a point for one of Jev's three choices, a hall (its index)
