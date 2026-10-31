@@ -528,6 +528,49 @@ the others stand empty, ready. Terrain on it (stand-in answers, no paid call): 2
 学园都市's pool, 第六学区, 第十五学区, 纽约's pool), then 3 streets (the three districts' pools): 10 parts, Jev asked about
 the 5 named ones only.
 
+### 2.0.12 Pools refined: same-level defaults, members as real places, street types, borrowing (the user's design, 2026-10-31)
+
+The first run on pools (§2.0.11) built no street: vol 1 names none, the three pool streets copied their districts' CBD
+ground, and the 18 unnamed streets in the pools stood as markers. The user's corrections, in the order they are built:
+
+1. **No ground level, anywhere.** The ground is at 0, period: no site, shape or proposal keeps a `y`, no question
+   speaks of the ground's height, and every terrain run starts its own live record (the old runs' "at what height is
+   its ground" questions no longer show beside the new ones; they are kept in an archive folder).
+2. **A pool copies its own level.** A pool's default is not its area's terrain but the average of the areas at its own
+   level inside that area, since every level has its own kinds: a pool district copies the city's districts, a pool
+   street the district's streets. The average is the most common kind and the mean of their medians (with that kind's
+   manifold). With no area of its level decided yet, the pool stays empty: no default ground, no default buildings.
+   So a pool is settled last in its level, after the places of that level.
+3. **What a pool holds is a real place.** A place put in a pool has a belonging and a full tree (学园都市 › 学园都市 ·
+   pool › 站前广场), so it is a real place, and Jev processes it at its level like a named one: an unnamed street in a
+   pool is a street part (its kind and median; its spot is the one sampling gave it in the pool), an unnamed district
+   in a city's pool a district part. Its evidence is its own sentences and the terrain kept for the places holding it.
+4. **Street types.** The street level gets its own kinds, each with its manifold and the engine landscape it is built
+   with: a shopping street, a modern commercial centre, an avenue, a square, a station front, an alley, a residential
+   street, a waterfront or a bridge, a park, a stadium (§ table below). A crossing is a square; an underground passage
+   is spatial, not a street.
+5. **Borrowing.** A pool's default ground is there to be borrowed: a member Jev decides borrows the part of its pool's
+   default buildings where it stands and turns it into its own kind (a patch of the pool's ground with its kind, median
+   and manifold; the default fill gives way there). As the city fill borrows lots for a named building and a road for a
+   named street (`cityFill.ts`), a pool's member borrows ground. An already decided member can be borrowed again only by
+   a mention with exactly the same name (the same string, in the same pool). Two of the same name whose kind and median
+   are the same stay one place; when they differ, the later merges into the original: the original keeps its place and
+   gains the later's kind as a further patch, and where both are modern the landscape engine's own merge of height
+   manifolds keeps the modern features of both.
+
+| Street kind | What it is | Built with | Manifold (gradient, spread, tail) |
+|---|---|---|---|
+| shopping | a shopping street: shops of a few storeys on both sides, signs, a tower at a corner | commercial | 0, 0.35, 0.05 |
+| centre | a modern commercial centre: a mall podium, towers over it, a plaza with screens | commercial | 0.4, 0.6, 0.1 |
+| avenue | an avenue: a wide road lined with offices and towers | skyscrapers | 0.1, 0.5, 0.08 |
+| square | a square or a crossing: open ground with buildings round it | commercial | 0, 0.3, 0.03 |
+| station | a station front: the station, a plaza, bus stops, shops round it | commercial | 0.3, 0.4, 0.05 |
+| alley | an alley or a lane: narrow, low and dense | residential | 0, 0.2 |
+| residential | a residential street: flats and houses along it | residential | 0, 0.25, 0.02 |
+| waterfront | a waterfront or a bridge: water, a deck, warehouses and walks by it | harbour | 0, 0.3 |
+| park | a park or an amusement park: lawns, rides, pavilions | park | 0, 0.4, 0.02 |
+| stadium | a stadium or a sports ground | stadium | 0, 0.2 |
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

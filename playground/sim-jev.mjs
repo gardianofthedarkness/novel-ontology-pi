@@ -14,7 +14,7 @@
  * replays. Nothing reads them back. Derived view data like the runs, private with the book.
  */
 import { createHash } from 'node:crypto';
-import { access, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -239,8 +239,10 @@ const round = value => Math.round(value * 10) / 10;
  * `frame()` any other frame (an event's moves). Writes
  * never fail the command: the record is for watching only.
  */
-export async function createLive(novelDir, { command, lines, budget = null, model = null }) {
+export async function createLive(novelDir, { command, lines, budget = null, model = null, fresh = false }) {
   const folder = join(novelDir, 'stage', 'simulation'), recording = join(folder, 'live'), pictures = join(recording, 'frames');
+  // A run that starts its own record (terrain spawning): the record so far is archived, never deleted.
+  if (fresh) await stat(recording).then(async () => { await mkdir(join(folder, 'live-archive'), { recursive: true }); await rename(recording, join(folder, 'live-archive', new Date().toISOString().replace(/[:.]/g, '-'))); }, () => {});
   await mkdir(pictures, { recursive: true });
   const at = () => new Date().toISOString();
   const recorded = await readFile(join(recording, 'frames.jsonl'), 'utf8').catch(() => '');

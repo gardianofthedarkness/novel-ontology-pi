@@ -62,7 +62,7 @@ export interface TerrainPart { id: string; label: string; scale: string }
  * A city is its own holder and city.
  */
 export interface PartFocus { part: TerrainPart; holder: { id: string; label: string }; city: { id: string; label: string }; pictures: Record<string, string>; kind?: string; within?: Record<string, string> }
-/** `shapes`: the basic shapes of ground, at every level, besides the level's kinds. */
+/** `shapes`: the basic shapes, at every level, besides the level's kinds. */
 export interface GroundFocus extends PartFocus { shapes: Record<string, string> }
 export interface ZoomFocus extends PartFocus { kind: string; reasons: string[] }
 /** `tops`: the lettered slices, each a height the terrain may rise to. */
@@ -107,7 +107,7 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium", manifold: M(0, 0.2), medians: [15, 25, 35, 50] },
   },
 };
-/** The heights a basic shape of ground may rise to (metres). */
+/** The heights a basic shape may rise to (metres). */
 const SHAPE_TOPS = [3, 6, 12, 25, 50, 100];
 /** Natural ground by its height. */
 const natural = (y: number) => (y <= 30 ? "a low rise" : y <= 100 ? "a hill" : y <= 250 ? "a high hill" : y <= 500 ? "a mountain" : "a high mountain");
@@ -200,7 +200,7 @@ const box = (focus: PartFocus): DecisionQuestion => ({ key: "box", primitive: "b
 
 export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
   name: "terrain-ground",
-  task: (focus) => `${focus.part.scale === "city" ? `What kind of city is ${focus.part.label}?` : `Where does ${focus.part.label} lie in ${focus.city.label}, and what kind of ${focus.part.scale} is it?`} Terrain only: a kind of ${focus.part.scale} (each with its manifold: how its heights spread; the engine fills in its buildings) or a basic shape of ground, never a building. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), and the terrain kept for the places holding it (within).`,
+  task: (focus) => `${focus.part.scale === "city" ? `What kind of city is ${focus.part.label}?` : `Where does ${focus.part.label} lie in ${focus.city.label}, and what kind of ${focus.part.scale} is it?`} Terrain only: a kind of ${focus.part.scale} (each with its manifold: how its heights spread; the engine fills in its buildings) or a basic shape, never a building. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), and the terrain kept for the places holding it (within).`,
   // The options are the part's level's kinds (TERRAIN_KINDS, each with its manifold), composed with the evidence.
   sources: [...sources<GroundFocus>({ standing: true, facts: true, environment: "city" }), fixed("kinds", "kinds", (focus: GroundFocus) => terrainKinds(focus.part.scale, focus.shapes)) as Source<GroundFocus, TerrainStores>, fixed("pictures", "pictures", (focus: GroundFocus) => focus.pictures) as Source<GroundFocus, TerrainStores>],
   cutOrder: ["environment", "facts", "standing", "text"],
@@ -225,7 +225,7 @@ export const terrainHeightMode: Mode<HeightFocus, TerrainStores> = {
   name: "terrain-height",
   task: (focus) => `${focus.measure === "median"
     ? `What is the median height of ${focus.part.label}'s roofs (${focus.kind}): the height half its buildings stand below? Its manifold makes the rest (${manifoldWords(terrainKind(focus.part.scale, focus.kind)!.manifold!)}), so give the median, not the tallest.`
-    : `How high does ${focus.part.label} (${focus.kind}) rise: the top of its ground?`} Its ground is at the street. The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), the terrain kept for the places holding it (within).`,
+    : `How high does ${focus.part.label} (${focus.kind}) rise: the height of its top?`} The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), the terrain kept for the places holding it (within).`,
   sources: [...sources<HeightFocus>({ standing: true, facts: true, environment: "city" }), fixed("heights", "heights", (focus: HeightFocus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.y} m: ${slice.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
   cutOrder: ["environment", "facts", "standing", "text"],
   probe,

@@ -35,7 +35,7 @@ import { inlineStrand, strandDemo } from './export-strand-demo.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..'), load = path => import(pathToFileURL(`${repository}/${path}`).href);
 const round = value => Math.round(value * 10) / 10;
-/** The basic shapes of ground the terrain faculty may place besides the manifolds (the user's list, 2026-10-31). */
+/** The basic shapes the terrain faculty may place besides the manifolds (the user's list, 2026-10-31). */
 export const SHAPES = {
   plateau: 'a plateau: raised flat ground with sloping sides', basin: 'a basin: a hollow below the ground around it', hill: 'a hill: a rounded rise',
   platform: 'a platform: a flat deck raised above the ground', cut: 'a cut: a trench or a pit dug into the ground', ramp: 'a ramp: ground sloping up from one side to the other',
@@ -71,7 +71,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const data2 = reading ? JSON.parse(await readFile(join(reading, 'v2', 'data.json'), 'utf8').catch(() => 'null')) : null;
   // Jev's own reports of each paid request's tokens (stage/terrain/jev-usage.json), so a terrain run can be priced.
   const client = given ?? jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), jev = cachedDecisions(client, join(folder, 'cache'));
-  const live = await createLive(novelDir, { command: 'sim terrain', lines: [{ id: 'terrain', title: 'Terrain: the ground of the volume\'s places' }], model: jev.modelId });
+  const live = await createLive(novelDir, { command: 'sim terrain', lines: [{ id: 'terrain', title: 'Terrain: the ground of the volume\'s places' }], model: jev.modelId, fresh: true });
   const asking = live.watch(jev);
   let calls = 0;
   const contexts = [];
@@ -260,7 +260,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       };
       const { where, what, rise, kind, entry, shape, ground, box, median, upTo, measure } = poolOf ? byDefault() : await asked();
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
-      const proposal = { id: part.id, label: part.label, kind, box, y: 0, top: median ?? upTo, measure }, said = `${kind}${median ? `, median ${median} m` : upTo ? `, up to ${upTo} m` : ''}`;
+      const proposal = { id: part.id, label: part.label, kind, box, top: median ?? upTo, measure }, said = `${kind}${median ? `, median ${median} m` : upTo ? `, up to ${upTo} m` : ''}`;
       focus = { x: round((box[0] + box[2]) / 2), z: round((box[1] + box[3]) / 2), r: round(Math.hypot(box[2] - box[0], box[3] - box[1]) * 0.75) };
       await show(`${part.label}: proposal`, proposal);
       await live.outcome({ subject: part.label, text: `${part.label}: ${said}, ${Math.round(box[2] - box[0])} × ${Math.round(box[3] - box[1])} m (blinking in World · Live)` });
@@ -268,10 +268,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const parentNode = nodeOf(holder);
       const toward = parentNode ? [round((box[0] + box[2]) / 2 - parentNode.x), round((box[1] + box[3]) / 2 - parentNode.z)] : null;
       terrain.sites[part.id] = isCity
-        ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), y: 0, by: 'jev', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
-        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, y: 0, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : 'jev', ...(poolOf ? { pool: poolOf } : {}),
+        ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: 'jev', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
+        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : 'jev', ...(poolOf ? { pool: poolOf } : {}),
           confidence: { box: where?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
-      if (shape) terrain.shapes[part.id] = { kind: shape, box, y: 0, ...(upTo ? { top: upTo } : {}) };
+      if (shape) terrain.shapes[part.id] = { kind: shape, box, ...(upTo ? { top: upTo } : {}) };
       if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
       terrain.askedAt = new Date().toISOString();
       await replace(terrainFile, JSON.stringify(terrain, null, 1));
