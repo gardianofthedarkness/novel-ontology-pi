@@ -129,23 +129,9 @@ export async function livePicture(workspace, file) {
 }
 
 /**
- * Terrain spawning, live (playground/terrain-spawn.mjs; docs/v2/visual-context-engine.md): the engine page as the user's
- * view, the run's event stream from a line on (whole lines only), its shots, and the user's step: `step` lets a waiting
- * run go on by one, `run` lets it run on, `pause` makes it wait again after each proposal.
+ * Terrain spawning's step (playground/terrain-spawn.mjs; docs/v2/visual-context-engine.md), from World · Live: `step` lets
+ * a run waiting after a proposal go on by one, `run` lets it run on, `pause` makes it wait again after each proposal.
  */
-export async function terrainPage() {
-  const html = await readFile(`${repo}/playground/terrain-world.html`, 'utf8');
-  return { html, policy: pagePolicy(html) };
-}
-export async function terrainStream(workspace, from) {
-  const text = await readFile(resolve(workspace, 'stage', 'terrain', 'stream.jsonl'), 'utf8').catch(() => '');
-  const lines = text.split('\n').slice(0, -1);
-  return lines.slice(Math.max(0, from)).join('\n') + (lines.length > from ? '\n' : '');
-}
-export async function terrainShot(workspace, file) {
-  if (!/^s\d+-[a-z-]+\.png$/.test(file)) return null;
-  return readFile(resolve(workspace, 'stage', 'terrain', 'shots', file)).catch(() => null);
-}
 export async function terrainStep(workspace, mode) {
   if (!['step', 'run', 'pause'].includes(mode)) return null;
   const file = resolve(workspace, 'stage', 'terrain', 'step.json');

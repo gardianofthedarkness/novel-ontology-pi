@@ -231,6 +231,7 @@ window.__stageStarted = true;
 // How far the map reaches (a city's canvas can be kilometres across): the fog, the camera's range and its far plane follow it.
 const mapReach = Math.max(800, ...data.macro.map((node) => Math.max(Math.abs(node.x), Math.abs(node.z)) + node.r));
 const world = new THREE.Scene(); world.background = new THREE.Color(0x060c12); world.fog = new THREE.Fog(0x060c12, 400, Math.max(1600, mapReach * 1.6));
+const defaultFog = world.fog;
 world.add(new THREE.AmbientLight(0xffffff, 0.75)); const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(30, 70, 20); world.add(sun);
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, Math.max(4000, mapReach * 4)), controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = Math.max(1600, mapReach * 1.8);
@@ -516,6 +517,18 @@ let decor = () => {};
     world.add(strips);
   }
 }
+// Terrain spawning's proposal (playground/terrain-spawn.mjs): the ground Jev means to put down, blinking where it would go,
+// until the user steps on and it is kept (the world is then built again with it).
+let blinkProposal = () => {};
+if (data.terrain?.proposal) {
+  const { box: [x0, z0, x1, z1], y, label: name, kind } = data.terrain.proposal, w = x1 - x0, d = z1 - z0, h = Math.max(3, Math.min(w, d) * 0.02), group = new THREE.Group();
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.25, depthWrite: false }));
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, depthTest: false }));
+  edges.renderOrder = 12; group.add(slab, edges);
+  const tag = label(`${name} · ${kind} · ${y} m`, "#ffd36e", 30); tag.scale.multiplyScalar(Math.max(4, Math.max(w, d) / 16)); tag.position.set(0, h / 2 + Math.max(w, d) * 0.1, 0); group.add(tag);
+  group.position.set((x0 + x1) / 2, y + h / 2, (z0 + z1) / 2); world.add(group);
+  blinkProposal = (now) => { const u = 0.5 + 0.5 * Math.sin(now / 180); slab.material.opacity = 0.06 + 0.34 * u; edges.material.opacity = 0.3 + 0.7 * u; };
+}
 /** Where a traveller is, so long into the move between places: on a leg in a place's grid, or on the map's curve. */
 function travelAt(travel, elapsed) {
   const leg = (move, t) => { const entry = built.get(move.place), p = position(data.places[move.place], move, t); return new THREE.Vector3(p.x - entry.cx, p.y, p.z - entry.cz); };
@@ -749,7 +762,7 @@ function frame(now) {
   groundSeen += ((below ? 0.15 : 0.8) - groundSeen) * Math.min(1, dt * 3);
   groundMat.opacity = groundSeen;
   for (const key of ["subway", "arcade", "under", "water", "deep", "facility"]) mats[key].opacity = 0.18 + (0.8 - groundSeen) * 0.6;
-  decor(time);
+  decor(time); blinkProposal(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
@@ -761,7 +774,8 @@ function frame(now) {
 const LOAD = 112, UNLOAD = 160;
 let lastCull = 0;
 function cullByInterest(entry) {
-  if (!entry?.chunks) return;
+  // Terrain spawning (data.terrain): the whole world stays drawn, for the user to wander while Jev works.
+  if (!entry?.chunks || data.terrain) return;
   const focus = data.live.focus ?? { x: 0, z: 0, r: 0 }, points = [{ x: focus.x, z: focus.z, r: focus.r }, ...[...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => ({ x: pawn.position.x, z: pawn.position.z, r: 0 }))];
   const gap = (x, z, r) => Math.min(...points.map((p) => Math.hypot(p.x - x, p.z - z) - p.r)) - r;
   for (const chunk of entry.chunks) { const d = gap(chunk.x, chunk.z, 23); chunk.near = chunk.near === false ? d < LOAD : d < UNLOAD; }
@@ -855,7 +869,8 @@ const label2 = (id) => data.macro.find((node) => node.id === id)?.label ?? data.
 // The Jev trace: what Jev decided at this moment, in the panel and on the stage. Moves: each person's chance of moving,
 // how and which way, and the three likeliest spots (white: the one used). Things: the model pick, the lettered spots
 // and the solved box (gold). Impacts: the lettered spots (red: the pick) and the size.
-let tracing = new URLSearchParams(location.search).has("trace") || liveMode;
+// Terrain spawning (data.terrain) plays no events: its starts are the engine's defaults, so no trace while it runs.
+let tracing = new URLSearchParams(location.search).has("trace") || (liveMode && !data.terrain);
 const traceGroup = new THREE.Group(); world.add(traceGroup);
 const pct = (p) => `${Math.round((p ?? 0) * 100)}%`, nameOf = (id) => data.people[id]?.name ?? id;
 const SIZES = [4, 8, 16, 32];
@@ -969,6 +984,32 @@ if (capture) {
     group.position.set(spot.x - entry.cx, 0, spot.z - entry.cz);
     return group;
   }
+  /**
+   * Terrain spawning's layers (docs/v2/visual-context-engine.md §5): a ghost slice of ground at a height, white and lettered;
+   * a red dotted line where a slice cuts a building; an area outlined and named on the ground. Boxes are in world metres.
+   */
+  function terrainSlice(place, slice, scale) {
+    const entry = built.get(place), [x0, z0, x1, z1] = slice.box, w = x1 - x0, d = z1 - z0, group = new THREE.Group();
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }));
+    plane.rotation.x = -Math.PI / 2; group.add(plane);
+    group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([x, z]) => new THREE.Vector3(x, 0, z))), new THREE.LineBasicMaterial({ color: 0xffffff })));
+    if (slice.label) { const tag = label(slice.label, "#ffffff", 30); tag.scale.multiplyScalar(scale); tag.position.set((slice.side ?? 1) * (w / 2 + w * 0.12), 0, d / 2); group.add(tag); }
+    group.position.set((x0 + x1) / 2 - entry.cx, slice.y, (z0 + z1) / 2 - entry.cz);
+    return group;
+  }
+  function terrainCut(place, cut, dash) {
+    const entry = built.get(place), [x0, z0, x1, z1] = cut.box;
+    const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(([x, z]) => new THREE.Vector3(x - entry.cx, cut.y + 0.15, z - entry.cz))), new THREE.LineDashedMaterial({ color: 0xff4040, dashSize: dash, gapSize: dash * 0.8, depthTest: false, transparent: true }));
+    line.computeLineDistances(); line.renderOrder = 12;
+    return line;
+  }
+  function terrainArea(place, area, scale) {
+    const entry = built.get(place), group = new THREE.Group(), pts = area.pts ?? [[area.box[0], area.box[1]], [area.box[2], area.box[1]], [area.box[2], area.box[3]], [area.box[0], area.box[3]]], y = (area.y ?? 0) + 0.4;
+    const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts.map(([x, z]) => new THREE.Vector3(x - entry.cx, y, z - entry.cz))), new THREE.LineBasicMaterial({ color: area.color ?? 0xffd36e, depthTest: false, transparent: true }));
+    line.renderOrder = 12; group.add(line);
+    if (area.label) { const tag = label(area.label, area.textColor ?? "#ffd36e", 30); tag.scale.multiplyScalar(scale); const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cz = pts.reduce((s, p) => s + p[1], 0) / pts.length; tag.position.set(cx - entry.cx, y + scale * 2, cz - entry.cz); group.add(tag); }
+    return group;
+  }
   /** A spot people may go to (a node of the place's graph): a gold pin with its name, seen through everything. */
   function spotPin(place, pin) {
     const entry = built.get(place), p = at(data.places[place], pin.node), group = new THREE.Group(), color = new THREE.Color("#ffd36e");
@@ -1039,9 +1080,13 @@ if (capture) {
     places: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, kind: place.kind, lots: place.lots.length, world: !!place.world, theme: place.theme ?? null }])),
     scenes: data.scenes.map((scene) => ({ id: scene.id, place: scene.place, events: scene.events.map((event) => event.text) })),
     /** One still: `place` at the start of an event, the reader's camera turned by `yaw` about it; `hide` things, `beams` of earlier boxes, `boxes` and a `solved` 3D box drawn for checking. */
-    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null }) {
+    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], vague = null, labelScale = 1, dash = 2 }) {
       // `play`: that many seconds into the event, its hit's effects on (to look at a destruction as it plays).
       // `at`: any moment of the strand, everything playing (to record a scene).
+      // Terrain spawning (docs/v2/visual-context-engine.md): a frame of its own size, an explicit camera in world metres,
+      // ghost slices, cuts, named areas, and the far city faded by fog; all undone by the next capture without them.
+      host.style.width = frame ? `${frame[0]}px` : ""; host.style.height = frame ? `${frame[1]}px` : ""; resize();
+      world.fog = vague ? new THREE.Fog(0x060c12, vague.near, vague.far) : defaultFog;
       time = at ?? (eventStart.get(`${scene}|${event}`) ?? 0) + (play ?? 0.02); quiet = play === null && at === null; seeing = at !== null; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
       // Just before this event's own hit: the buildings as they stood.
       hitsBefore = beforeHit ? time - 0.02 : null; for (const entry of built.values()) entry.shownHits = -1;
@@ -1064,6 +1109,10 @@ if (capture) {
       for (const pin of pins) { const group = spotPin(place, pin); extras.push(group); world.add(group); }
       // Height poles for the sky: from the ground at each spot up to 60 m, marked at 10, 20, 40 and 60 m.
       for (const pole of poles) { const group = heightPole(place, pole); extras.push(group); world.add(group); }
+      for (const slice of slices) { const group = terrainSlice(place, slice, labelScale); extras.push(group); world.add(group); }
+      for (const cut of cuts) { const line = terrainCut(place, cut, dash); extras.push(line); world.add(line); }
+      for (const area of areas) { const group = terrainArea(place, area, labelScale); extras.push(group); world.add(group); }
+      if (view) { const entry = built.get(place); camera.fov = view.fov ?? camera.fov; camera.updateProjectionMatrix(); camera.position.set(view.position[0] - entry.cx, view.position[1], view.position[2] - entry.cz); controls.target.set(view.target[0] - entry.cx, view.target[1], view.target[2] - entry.cz); camera.far = Math.max(camera.far, 20000); camera.updateProjectionMatrix(); controls.update(); }
       if (solved) { const entry = built.get(place), box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0x5dff8a })); box.position.set((solved.x[0] + solved.x[1]) / 2 - entry.cx, (solved.y[0] + solved.y[1]) / 2, (solved.z[0] + solved.z[1]) / 2 - entry.cz); box.scale.set(solved.x[1] - solved.x[0], solved.y[1] - solved.y[0], solved.z[1] - solved.z[0]); extras.push(box); world.add(box); }
       outline(boxes);
       if (caption) { const ctx = overlay.getContext("2d"), w = overlay.width, h = overlay.height; overlay.hidden = false; ctx.font = "600 17px system-ui, 'PingFang SC', sans-serif"; const lines = []; let line = ""; for (const char of caption) { if (ctx.measureText(line + char).width > w - 40) { lines.push(line); line = ""; } line += char; } lines.push(line); const top = h - 14 - lines.length * 24; ctx.fillStyle = "rgba(6,12,18,.78)"; ctx.fillRect(0, top - 10, w, h - top + 10); ctx.fillStyle = "#e8f1f6"; lines.forEach((text, n) => ctx.fillText(text, 20, top + 14 + n * 24)); }

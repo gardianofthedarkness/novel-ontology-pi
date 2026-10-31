@@ -553,7 +553,7 @@ async function main(): Promise<void> {
   if (cmd === "sim") {
     const novelDir = positional[2];
     if (!["strands", "terrain", "pick", "run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${SIM_USAGE}`);
-    const valued = sub === "run" ? ["--auto", "--strand", "--pace", "--from"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : sub === "terrain" ? ["--turns"] : [], switches = sub === "run" ? ["--accept", "--force"] : sub === "terrain" ? ["--sites", "--run"] : [];
+    const valued = sub === "run" ? ["--auto", "--strand", "--pace", "--from"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : sub === "terrain" ? ["--turns", "--parts"] : [], switches = sub === "run" ? ["--accept", "--force"] : sub === "terrain" ? ["--sites", "--run"] : [];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];
@@ -570,7 +570,9 @@ async function main(): Promise<void> {
     const lines = { auto: auto === undefined ? undefined : Number(auto), strand: flag(positional, "--strand") };
     const turns = flag(positional, "--turns");
     if (turns !== undefined && (!/^\d+$/.test(turns) || Number(turns) < 1 || Number(turns) > 3)) throw new Error("--turns must be 1, 2 or 3.");
-    if (sub === "terrain") { out(await simTerrain(novelDir, { turns: turns === undefined ? undefined : Number(turns), sites: positional.includes("--sites"), run: positional.includes("--run") }), pretty); return; }
+    const parts = flag(positional, "--parts");
+    if (parts !== undefined && (!/^\d+$/.test(parts) || Number(parts) < 1)) throw new Error("--parts must be a whole number, 1 or more.");
+    if (sub === "terrain") { out(await simTerrain(novelDir, { turns: turns === undefined ? undefined : Number(turns), sites: positional.includes("--sites"), run: positional.includes("--run"), parts: parts === undefined ? undefined : Number(parts) }), pretty); return; }
     out(await (sub === "strands" ? simStrands(novelDir) : sub === "show" ? simShow(novelDir) : sub === "pick" ? simPick(novelDir, { ...lines, maxCalls: maxCalls === undefined ? undefined : Number(maxCalls) }) : simRun(novelDir, { ...lines, from: flag(positional, "--from"), accept: positional.includes("--accept"), force: positional.includes("--force"), pace: pace === undefined ? undefined : Number(pace) })), pretty);
     return;
   }

@@ -69,11 +69,15 @@ export async function browser() {
   const send = (method, params = {}, sessionId) => new Promise((done, fail) => { const n = ++id; waiting.set(n, { resolve: done, reject: fail }); socket.send(JSON.stringify({ id: n, method, params, ...(sessionId ? { sessionId } : {}) })); });
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' }), { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
   await send('Emulation.setDeviceMetricsOverride', { width: 800, height: 600, deviceScaleFactor: 1, mobile: false }, sessionId);
+  // The still's frame: 800×600 unless a question asks for another (the visual context engine's overviews and maps).
+  let frame = [800, 600];
   const evaluate = async expression => { const { result, exceptionDetails } = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId); if (exceptionDetails) throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text); return result.value; };
   return {
     open: async url => { await send('Page.navigate', { url }, sessionId); for (let tries = 0; tries < 300; tries++) { if (await evaluate('!!window.__stage').catch(() => false)) return; await new Promise(done => setTimeout(done, 100)); } throw new Error('The page did not start in capture mode'); },
     evaluate,
-    still: async (format = 'png') => (await send('Page.captureScreenshot', { format, ...(format === 'jpeg' ? { quality: 88 } : {}), clip: { x: 0, y: 0, width: 800, height: 600, scale: 1 } }, sessionId)).data,
+    still: async (format = 'png') => (await send('Page.captureScreenshot', { format, ...(format === 'jpeg' ? { quality: 88 } : {}), clip: { x: 0, y: 0, width: frame[0], height: frame[1], scale: 1 } }, sessionId)).data,
+    /** Stills of another frame from now on (the page's stage is sized to it by its own capture). */
+    size: async (width, height) => { frame = [width, height]; await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId); },
     // Chrome writes its profile until it exits; a leftover temporary profile is no reason to lose a run.
     close: async () => { socket.close(); const exited = new Promise(done => chrome.once('exit', done)); chrome.kill(); await Promise.race([exited, new Promise(done => setTimeout(done, 3000))]); await rm(profile, { recursive: true, force: true }).catch(() => {}); },
   };

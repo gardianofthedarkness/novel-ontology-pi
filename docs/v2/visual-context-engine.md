@@ -182,6 +182,34 @@ Next (to be agreed): parts largest first, each district placed in the city and i
 map); a part over another part is a conflict unless the text puts it inside; districts held to a district's size; the
 city's intended extent drawn on the map.
 
+### 5.6 On the engine (the user's call, 2026-10-31: "built on the system we have already built", not beside it)
+
+The first run had its own page (terrain-world.html) and its own little city, which knew nothing of the engine's place
+tree, central build or default spawns. That page is gone; terrain spawning now runs on the world engine:
+
+- **The world is the engine's own.** `strandDemo(…, { worldOnly: true })` builds the line's world with no event played and
+  no question asked: the canvas of places from the place tree, the central build (a place with no detected building gets
+  the centre-sampled default spawn), each place's landscape filled, the streamed lots with their skeleton buildings
+  (about 30 s on vol 1, 513 lots). It is built again after every part kept.
+- **Jev's player is the engine page.** strand-demo.html in capture mode, headless, takes the shots: a frame of its own size
+  (1440×900, 1024×1024), an explicit camera in world metres or a map straight down, and the terrain layers (ghost slices,
+  red dotted cuts, named areas, the far city faded).
+- **The user's view is World · Live.** Each world built, and each proposal (a slab blinking at its height with its name,
+  kind and height), goes to the live record's page; World · Live draws the whole world while terrain runs (no culling
+  round Jev's focus), with the user's camera carried from frame to frame. Next step and Run on are in its bar; Jev's
+  questions, with their pictures, are in its fold-out.
+- **What is kept is the engine's input.** `stage/terrain.json` (version 2): for each part, its parent, its ground (a
+  landscape type) or its basic shape, its size, where in its parent (`toward`), the box, the height and Jev's confidences.
+  The engine reads the ground type and the size into the place's first landscape patch (`placeCanvas.bear`'s `ground`), and
+  `toward` as the direction from its parent's middle: the canvas puts it at the first free spot that way, clear of its
+  siblings, so Jev's box gives a direction and a size, not an exact spot. Heights and basic shapes are kept but not drawn
+  yet (a basic shape keeps the place's landscape as the engine chose it).
+- **Parts come from the place tree**: the open places (districts, streets) the tree puts in each city, districts first,
+  then story order; Jev's membership question only when the tree puts no part in any city. Conflicts: a box over a part
+  the tree does not put it in, a size outside its scale's range, or a quarter of the map.
+- **Places stop at rooms** (the user, 2026-10-31). A large unnamed place (an EM² slot) is not a terrain part: the engine
+  samples it and Jev places it live, in the world engine's redesign.
+
 ## 6. Order of work
 
 1. **The event stream and the live view's skeleton:** the user's own camera and render area, Jev's strip, the frustum,

@@ -63,7 +63,7 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt, BLAST_ENERGY } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, LANDSCAPES } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
@@ -78,7 +78,9 @@ export async function strandDemo(novelDir, options) {
   const lineScenes = all.filter(scene => staged.has(scene.id) && scene.events?.length && byIndex.get(scene.id) >= byIndex.get(options.from) && byIndex.get(scene.id) <= byIndex.get(options.to) && (!fork || fork.get(scene.id) === fork.get(options.fork)));
   // `until` (a scene and an event index): the line only as far as that event, for a loop that decides one event at a time.
   const stop = options.until ? byIndex.get(options.until.scene) : Infinity;
-  const chosen = lineScenes.filter(scene => byIndex.get(scene.id) <= stop).map(scene => (scene.id === options.until?.scene ? { ...scene, events: scene.events.slice(0, options.until.event + 1) } : scene));
+  // `worldOnly` (terrain spawning): the world the line's scenes stand in, built and reached, with no event played and no
+  // question asked (nobody is born by Jev; the engine's own starts reach each scene's place).
+  const chosen = lineScenes.filter(scene => byIndex.get(scene.id) <= stop).map(scene => (options.worldOnly ? { ...scene, events: [] } : scene.id === options.until?.scene ? { ...scene, events: scene.events.slice(0, options.until.event + 1) } : scene));
   const timeline = forkTimeline(chosen, strands);
   // World-first (docs/world-first-design.md): the world script's dialogue nodes come in among each scene's events (a live
   // or a group node moves people: who came to whom, or where the group gathers); and Jev is asked at run time, in the
@@ -91,7 +93,7 @@ export async function strandDemo(novelDir, options) {
   const spawnPlan = JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
   const anew = sceneId => spawnPlan?.scenes?.[sceneId]?.spawn === 'new';
   let jev = null;
-  if (worldScript) {
+  if (worldScript && !options.worldOnly) {
     const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
     // Pinned to the model that answers box questions (1.14): left to the environment, Jev defaults to 1.13, which refuses them.
     jev = cachedDecisions(jevFromEnv({ ...process.env, JEV_MODEL: WORLD_MODEL }), `${novelDir}/stage/world/cache`);
@@ -407,8 +409,12 @@ export async function strandDemo(novelDir, options) {
     // The manifold under each place (groundFor, src/ground/stage/landscape.ts): Jev's landscape (novel stage landscape), or
     // the main agent's answer over it; a place without one is built by the terrain rules as the ground of the nearest
     // larger place that has one, else as its scale suggests, so the world is never bare.
+    // Terrain spawning's answer for a place, where it was asked (stage/terrain.json): its ground's type wins over the
+    // landscape step's, and its first patch is the size of Jev's box.
+    const terrainGround = id => { const site = terrain?.sites?.[id]; return site?.ground && LANDSCAPES[site.ground] ? site : null; };
+    const groundPatch = id => { const site = terrainGround(id); if (!site?.size) return null; const [w, d] = site.size; return patchFromBox(site.ground, 'p0', id, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }); };
     const landscapeOf = (id, scale = scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')) => {
-      if (!ground.has(id)) ground.set(id, groundFor(inputs.landscape?.places[id], pathOf(id).filter(at => at !== id).reverse(), at => inputs.landscape?.places[at], scale));
+      if (!ground.has(id)) ground.set(id, terrainGround(id) ? { type: terrainGround(id).ground, by: 'jev', from: 'terrain' } : groundFor(inputs.landscape?.places[id], pathOf(id).filter(at => at !== id).reverse(), at => inputs.landscape?.places[at], scale));
       return ground.get(id).type;
     };
     const trips = (a, b) => bookTrips.filter(m => m.from && m.to && (pathOf(m.from).includes(a) && pathOf(m.to).includes(b) || pathOf(m.from).includes(b) && pathOf(m.to).includes(a))).length;
@@ -417,10 +423,10 @@ export async function strandDemo(novelDir, options) {
     const toward = (id, parent) => terrain?.sites?.[id]?.parent === parent ? terrain.sites[id].toward : Object.values(canvas.places).filter(place => place.parent === parent && place.id !== id).map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0].at;
     const birth = (id, parent) => {
       if (canvas.places[id]) return;
-      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent) });
+      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent), ground: groundPatch(id) });
     };
     const areaScale = id => { const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };
-    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
+    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
     for (const scene of chosen) {
