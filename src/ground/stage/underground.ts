@@ -9,7 +9,7 @@ import { stageStream } from "./stream.js";
  * Pure: metres and plain data. The world (apps/playground/src/data/world.ts) puts the halls on its 2 m grid and walks them.
  */
 export type Point = [number, number];
-export type HallKind = "tunnel" | "station" | "corridor" | "mall" | "tank" | "channel" | "lab" | "military" | "quantum";
+export type HallKind = "tunnel" | "station" | "corridor" | "mall" | "tank" | "channel" | "lab" | "military" | "quantum" | "parking" | "utility" | "shelter" | "basement";
 /** A rotated box (centre, size, turn about y) and a bore (a segment and its width), in metres. */
 export interface HallBox { x: number; z: number; w: number; d: number; angle: number }
 export interface Bore { a: Point; b: Point; width: number }
@@ -41,7 +41,23 @@ export const INTERVALS = { shallow: [0, 25], subway: [5, 20], deep: [20, 110] } 
 export type Interval = keyof typeof INTERVALS;
 const SUBWAY_KINDS = new Set(["station", "tunnel", "corridor"]);
 export const intervalsOf = (hall: Pick<Hall, "depth" | "height"> & { kind?: string }): Interval[] => (hall.kind && SUBWAY_KINDS.has(hall.kind) ? ["subway"] : (["shallow", "deep"] as Interval[]).filter((key) => hall.depth - hall.height <= INTERVALS[key][1] && hall.depth >= INTERVALS[key][0]));
-export const HALL_LABEL: Record<HallKind, string> = { tunnel: "a subway tunnel", station: "a subway station", corridor: "a subway passage", mall: "an underground mall", tank: "a storm-water tank", channel: "a storm-water channel", lab: "an experiment lab", military: "a military bunker", quantum: "a quantum research facility" };
+export const HALL_LABEL: Record<HallKind, string> = { tunnel: "a subway tunnel", station: "a subway station", corridor: "a subway passage", mall: "an underground mall", tank: "a storm-water tank", channel: "a storm-water channel", lab: "an experiment lab", military: "a military bunker", quantum: "a quantum research facility", parking: "an underground car park", utility: "a utility tunnel", shelter: "a shelter", basement: "a basement" };
+/**
+ * The city's common underground spaces (docs/v2/world-engine-v2.md §2.0.17; the compatibility page) and the street kinds
+ * each usually lies under ("*": any): transport (the subway's tunnels, stations and passages), commerce (an underground
+ * shopping street, under a road or a station's plaza), parking, utilities (a utility tunnel, the storm water), a civil
+ * defence shelter (often a car park too), a building's basement, and the deep facilities. A first map, for reference and
+ * for what a part below the street becomes; each level's to be worked out later.
+ */
+export const LIES_UNDER: Record<HallKind, string[]> = {
+  tunnel: ["*"], station: ["station", "avenue", "square", "centre"], corridor: ["avenue", "station", "square", "shopping", "centre"],
+  mall: ["shopping", "centre", "station", "avenue", "square"], parking: ["centre", "avenue", "square", "park", "residential", "stadium"],
+  utility: ["avenue", "shopping", "alley", "residential"], tank: ["park", "stadium", "square"], channel: ["*"],
+  shelter: ["park", "square", "centre", "residential"], basement: ["centre", "avenue", "shopping", "station", "residential"],
+  lab: ["avenue", "centre", "park", "square"], military: ["park", "square", "stadium"], quantum: ["avenue", "centre", "park"],
+};
+/** How tall each kind of hall is made for a part below the street (metres from its floor). */
+const HALL_HEIGHT: Partial<Record<HallKind, number>> = { corridor: 4, mall: 5, station: 7, tunnel: 6, parking: 3, utility: 3, shelter: 4, basement: 4, channel: 6, tank: 12, lab: 6, military: 6, quantum: 8 };
 
 const round = (value: number) => Math.round(value * 10) / 10;
 const turn = (angle: number, [u, v]: Point): Point => [u * Math.cos(angle) - v * Math.sin(angle), u * Math.sin(angle) + v * Math.cos(angle)];
@@ -84,7 +100,8 @@ export function hallsOf(landscape: Landscape): Hall[] {
   // along a linear part (a box patch: a street), a mall under any other; stairs up at its ends. Its surface is open.
   for (const patch of modern.filter(underground)) {
     const depth = Math.max(4, -(patch.median ?? 0)), linear = patch.shape.family === "box", w = round(1.8 * patch.R), d = round(Math.max(8, linear ? 1.8 * patch.R * (patch.shape.aspect ?? 0.3) : 1.2 * patch.R));
-    halls.push({ id: `${patch.id}:under`, kind: linear ? "corridor" : "mall", depth, height: linear ? 4 : 5, boxes: [{ x: round(patch.x), z: round(patch.z), w, d, angle: patch.shape.turn }], bores: [], pillars: linear ? 0 : 8, lined: true, up: ends(patch.x, patch.z, w, patch.shape.turn) });
+    const kind = (patch.hall && patch.hall in LIES_UNDER ? patch.hall : linear ? "corridor" : "mall") as HallKind;
+    halls.push({ id: `${patch.id}:under`, kind, depth, height: HALL_HEIGHT[kind] ?? 4, boxes: [{ x: round(patch.x), z: round(patch.z), w, d, angle: patch.shape.turn }], bores: [], pillars: ["corridor", "utility", "tunnel"].includes(kind) ? 0 : 8, lined: true, up: ends(patch.x, patch.z, w, patch.shape.turn) });
   }
   for (const patch of modern) {
     if (!["commercial", "skyscrapers", "centre", "station", "shopping"].includes(patch.type) || underground(patch)) continue;
@@ -251,4 +268,16 @@ export function collapse(hall: Pick<Hall, "depth" | "height" | "lined" | "pillar
   for (const n of failed) result.pile[n] = Math.round(height * 10) / 10;
   if (result.stopped === "dent") { const left = Math.max(0, room - fallen) / (open.length * CELL * CELL); for (const cell of open) result.dent[index.get(key(cell.i, cell.j))!] = Math.round(Math.min(3, Math.max(0.5, left)) * 10) / 10; }
   return result;
+}
+
+/**
+ * A terrain shape kept below the street (terrain spawning: a cut, a ramp down, a basin; docs/v2/world-engine-v2.md
+ * §2.0.17): a hall that deep over its box, a passage along a long one (three times as long as wide) and a hall under any
+ * other, stairs up at its ends, so the underground shows what Jev placed there.
+ */
+export function shapeHall(shape: { id: string; x: number; z: number; w: number; d: number; top: number; hall?: string | null }): Hall {
+  const depth = Math.max(4, -shape.top), length = Math.max(shape.w, shape.d), width = Math.max(6, Math.min(shape.w, shape.d)), long = length >= 3 * width, angle = shape.w >= shape.d ? 0 : Math.PI / 2;
+  // Its name's kind when the language profile knows it (a car park, a shelter), else a passage or a hall by its proportions.
+  const kind = (shape.hall && shape.hall in LIES_UNDER ? shape.hall : long ? "corridor" : "mall") as HallKind, narrow = ["corridor", "utility", "tunnel"].includes(kind);
+  return { id: `${shape.id}:shape`, kind, depth, height: HALL_HEIGHT[kind] ?? 4, boxes: [{ x: round(shape.x), z: round(shape.z), w: round(length), d: round(narrow ? Math.min(width, 12) : width), angle }], bores: [], pillars: narrow ? 0 : 8, lined: true, up: ends(shape.x, shape.z, length, angle) };
 }

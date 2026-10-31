@@ -69,3 +69,14 @@ test("the terrain view draws a building as a model of its use whose proportions 
   assert.equal(modelFor({ kind: "warehouse", w: 30, d: 20, floors: 2 }, "e", sizes), null, "no warehouse model: a block");
   assert.equal(useOf({ kind: "skyscraper" }), "office");
 });
+
+test("the underground: a part below the street becomes the hall its name says (a car park, a passage), else one by its proportions; every kind says what it lies under", async () => {
+  const U = await import("../src/ground/stage/underground.js"), { undergroundKindOf } = await import("../src/v2/rules/language.js");
+  assert.deepEqual(["地下停车场", "地下通道 (scene 21)", "地下街", "防空洞", "共同沟", "地铁站", "地下二层", "广场"].map((label) => undergroundKindOf(label)), ["parking", "corridor", "mall", "shelter", "utility", "station", "basement", null]);
+  const shape = { id: "s", x: 0, z: 0, w: 114, d: 22, top: -6 };
+  assert.equal(U.shapeHall(shape).kind, "corridor", "a long shape: a passage");
+  assert.equal(U.shapeHall({ ...shape, w: 40, d: 40 }).kind, "mall", "a square one: a hall");
+  assert.equal(U.shapeHall({ ...shape, hall: "parking" }).kind, "parking", "its name's kind first");
+  assert.equal(U.shapeHall(shape).depth, 6);
+  assert.deepEqual(Object.keys(U.LIES_UNDER).sort(), Object.keys(U.HALL_LABEL).sort(), "every kind of hall says what it lies under");
+});

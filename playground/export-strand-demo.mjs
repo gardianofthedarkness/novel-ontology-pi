@@ -68,7 +68,7 @@ export async function strandDemo(novelDir, options) {
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf, scaleOfName } = await load('dist/src/digger/stage/scale.js');
-  const { continuityTies } = await load('dist/src/v2/pools.js'), { buildingUseOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js');
+  const { continuityTies } = await load('dist/src/v2/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js');
   // A landscape's fill, made once per landscape (a pool's is read for its streets' buildings, then drawn).
   const fills = new WeakMap(), fillOf = landscape => { const known = fills.get(landscape); if (known?.n === landscape.patches.length) return known.filled; const filled = fillLandscape(landscape); fills.set(landscape, { n: landscape.patches.length, filled }); return filled; };
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -513,7 +513,9 @@ export async function strandDemo(novelDir, options) {
         const site = terrain?.sites?.[unit.id];
         if (!site?.ground || !LANDSCAPES[site.ground] || !site.median || !site.manifold) continue;
         const name = baseName(unit.label), original = first.get(name), [w, depth] = Array.isArray(site.size) ? site.size : [GROUND[site.scale] ?? 120, GROUND[site.scale] ?? 120], half = Math.max(w, depth) / 2;
-        const made = at => ({ ...patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: site.manifold }), borrowed: true });
+        // Below the street, the hall its name says it is (§2.0.17: 地下停车场 a car park), else by its shape.
+        const hall = site.median < 0 ? undergroundKindOf(unit.label) : null;
+        const made = at => ({ ...patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: site.manifold }), borrowed: true, ...(hall ? { hall } : {}) });
         if (!original) {
           if (Array.isArray(site.toward)) unit.at = [site.toward[0], site.toward[1]];
           const patch = made(unit.at); first.set(name, { unit, site, patch }); borrowed.push(patch); unit.borrows = 'own'; notes.build.borrowed = (notes.build.borrowed ?? 0) + 1; continue;
@@ -623,7 +625,10 @@ export async function strandDemo(novelDir, options) {
     .concat(anchors.filter(anchor => anchor.own && anchor.role === 'station').map(anchor => ({ id: anchor.place, x: anchor.x, z: anchor.z })));
   const areaAt = (x, z) => macro.filter(node => !node.dwelling && !node.unbuilt && ['city', 'district', 'street'].includes(node.scale) && Math.hypot(x - node.x, z - node.z) <= node.r).sort((a, b) => a.r - b.r)[0]?.id ?? city?.id ?? null;
   // One storm-water system for the city: its own landscape's (a district's landscape keeps its malls and deep facilities).
-  const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city ? U.subwayOf(stops, city.id, city.r) : [])].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
+  // The terrain's shapes (docs/v2/world-engine-v2.md §2.0.17): each shape Jev kept (a platform, a ramp, a cut) stands where
+  // its part is now, as large as its box; one below the street is a hall that deep too (U.shapeHall).
+  const terrainShapes = Object.entries(terrain?.shapes ?? {}).map(([id, shape]) => { const node = macroOf.get(id), [x0, z0, x1, z1] = shape.box; return node ? { id, label: name(id), kind: shape.kind, x: node.x, z: node.z, w: Math.round((x1 - x0) * 10) / 10, d: Math.round((z1 - z0) * 10) / 10, top: shape.top ?? null, hall: (shape.top ?? 0) < 0 ? undergroundKindOf(name(id)) : null } : null; }).filter(Boolean);
+  const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city ? U.subwayOf(stops, city.id, city.r) : []), ...terrainShapes.filter(shape => (shape.top ?? 0) < 0).map(shape => U.shapeHall(shape))].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
   const underground = { halls };
   notes.underground = { halls: Object.fromEntries(Object.entries(halls.reduce((count, hall) => ({ ...count, [hall.kind]: (count[hall.kind] ?? 0) + 1 }), {}))), stops: stops.length, active: {}, hits: 0 };
   world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors, underground });
@@ -1117,6 +1122,8 @@ export async function strandDemo(novelDir, options) {
     for (const hall of world.source.underground?.halls ?? []) if (['lab', 'military', 'quantum'].includes(hall.kind)) worn.add(`kk-${hall.kind}`);
     // The terrain view draws the city's buildings as their models.
     for (const entry of landscapes) for (const model of entry.models ?? []) if (model) worn.add(model);
+    // And its underground as theirs: passages as the tunnel, malls as the mall (§2.0.17).
+    if (options.worldOnly) for (const model of ['kk-tunnel', 'kk-mall', 'kk-military']) worn.add(model);
     // One world: a lot is named whichever place named it.
     const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
     const shellOf = (placeId, lot, index) => { if (lot.era === 'ancient' && !named(placeId, index)) { const model = ANCIENT_SHELLS[Math.floor(stream('shell', placeId, index)() * ANCIENT_SHELLS.length)]; worn.add(model); return model; } const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
@@ -1137,7 +1144,7 @@ export async function strandDemo(novelDir, options) {
         struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
       title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
       migrations: migrations.map(migration => { const route = routes.get(`${migration.scene}|${migration.person}`); return { ...migration, route: route ? { ...route, exit: route.exit?.map(dense) ?? null, entry: route.entry?.map(dense) ?? null } : null }; }),
-      macro, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
+      macro, terrainShapes, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
       people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
       world: { NX, NZ, K, oi, oj, ok, lots: worldLots, earlier, underground: undergroundView(),

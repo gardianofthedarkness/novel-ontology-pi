@@ -37,6 +37,30 @@ export const USE_MODELS: Record<string, UseModels> = {
   parking: { own: [], standIn: [], note: "no model: a plain block" },
 };
 
+/** A free model found on the web that could fill a gap: not in the library (each needs the user's go-ahead to download). */
+export interface Candidate { name: string; licence: string; url: string; has: string }
+const METRO: Candidate = { name: "Metro, by elbolilloduro (itch.io)", licence: "CC0, by its listing (to be checked before use)", url: "https://elbolilloduro.itch.io/metro", has: "a subway platform, a tiled corridor, ticket machines, turnstiles (.fbx, .dae, .glb)" };
+/**
+ * Which models stand for each kind of underground hall (underground.ts; the terrain view dresses passages, tunnels, malls
+ * and shelters in theirs, strand-demo.html UNDER_MODELS). Found on the web (2026-10-31): one CC0 subway kit; no free car
+ * park, storm-water or basement model.
+ */
+export const UNDERGROUND_MODELS: Record<string, UseModels & { candidates?: Candidate[] }> = {
+  tunnel: { own: ["kk-tunnel", "kk-tunnel-bend"], standIn: [] },
+  station: { own: [], standIn: ["kk-tunnel"], candidates: [METRO] },
+  corridor: { own: ["kk-tunnel", "kk-tunnel-bend"], standIn: [], candidates: [METRO] },
+  mall: { own: [], standIn: ["kk-mall"], note: "an underground shopping street: under a road, or under a station's plaza" },
+  parking: { own: [], standIn: [], note: "no free model found: drawn as its volume" },
+  utility: { own: [], standIn: ["kk-tunnel"] },
+  tank: { own: [], standIn: [], note: "drawn as its volume" },
+  channel: { own: [], standIn: [], note: "drawn as its volume" },
+  shelter: { own: [], standIn: ["kk-military"], note: "often a car park in peace" },
+  basement: { own: [], standIn: [], note: "a building's floors below the street: drawn as its volume" },
+  lab: { own: ["kk-lab"], standIn: [] },
+  military: { own: ["kk-military"], standIn: [] },
+  quantum: { own: ["kk-quantum"], standIn: [] },
+};
+
 /** The fill's building kinds as uses (a CBD's skyscrapers and towers are offices, a terrace's houses homes). */
 export const KIND_USE: Record<string, string> = { skyscraper: "office", tower: "office", office: "office", shop: "shop", mall: "mall", house: "house", townhouse: "house", cottage: "house", farmhouse: "house", apartment: "apartment", warehouse: "warehouse", station: "station" };
 /** Kinds drawn as a model of their own whatever their use (an old town's keep and market hall, a fountain). */

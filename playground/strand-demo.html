@@ -280,6 +280,25 @@ function placePin(x, z, size, color, opacity = 0.9, y = 0) {
   group.add(stem, head); group.traverse((part) => { part.renderOrder = 9; });
   return { group, top, fade: (value) => { stem.material.opacity = head.material.opacity = value; } };
 }
+/**
+ * Many copies of one shape's edges in one draw (the terrain view's models): `matrices` place each copy, fading in the fog
+ * like everything else; `put` moves one copy (a zero matrix hides it) and `flush` sends the changes.
+ */
+function instancedEdges(edges, matrices, tint, alpha) {
+  const geometry = new THREE.InstancedBufferGeometry(), columns = [0, 1, 2, 3].map(() => new Float32Array(Math.max(1, matrices.length) * 4));
+  const put = (k, matrix) => matrix.elements.forEach((value, e) => { columns[Math.floor(e / 4)][k * 4 + (e % 4)] = value; });
+  geometry.setAttribute("position", edges.attributes.position);
+  matrices.forEach((matrix, k) => put(k, matrix));
+  columns.forEach((column, c) => geometry.setAttribute(`m${c}`, new THREE.InstancedBufferAttribute(column, 4)));
+  geometry.instanceCount = matrices.length;
+  const lines = new THREE.LineSegments(geometry, new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { tint: { value: new THREE.Color(tint) }, alpha: { value: alpha } }]), fog: true, transparent: true, depthWrite: false,
+    vertexShader: "attribute vec4 m0; attribute vec4 m1; attribute vec4 m2; attribute vec4 m3;\n#include <fog_pars_vertex>\nvoid main() { vec4 mvPosition = modelViewMatrix * mat4(m0, m1, m2, m3) * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;\n#include <fog_vertex>\n}",
+    fragmentShader: "uniform vec3 tint; uniform float alpha;\n#include <fog_pars_fragment>\nvoid main() { gl_FragColor = vec4(tint, alpha);\n#include <fog_fragment>\n}",
+  }));
+  lines.frustumCulled = false;
+  return { lines, put, flush: () => { for (let c = 0; c < 4; c++) geometry.getAttribute(`m${c}`).needsUpdate = true; } };
+}
 function instanced(material, boxes) {
   const mesh = new THREE.InstancedMesh(unit, material, Math.max(1, boxes.length)); mesh.count = boxes.length;
   boxes.forEach(([x, y, z, w, h, d], index) => { matrix.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(w, h, d)); mesh.setMatrixAt(index, matrix); });
@@ -322,11 +341,20 @@ function buildPlace(id) {
     // the moment the ground above it was reached; a facility's name only while the street is seen through.
     const under = data.world.underground ?? { halls: [], piles: [], dents: [] };
     const reached = new Map(data.world.chunks.map(([ci, cj, born]) => [`${ci},${cj}`, bornAt(born)])), atPoint = (x, z) => reached.get(`${Math.floor(x / (16 * CELL))},${Math.floor(z / (16 * CELL))}`);
-    const tint = { station: mats.subway, tunnel: mats.subway, corridor: mats.subway, mall: mats.arcade, tank: mats.water, channel: mats.water, lab: mats.facility, military: mats.facility, quantum: mats.facility };
+    const tint = { station: mats.subway, tunnel: mats.subway, corridor: mats.subway, utility: mats.subway, mall: mats.arcade, tank: mats.water, channel: mats.water, lab: mats.facility, military: mats.facility, quantum: mats.facility, shelter: mats.facility, parking: mats.deep, basement: mats.deep };
     // The terrain view shows every hall, reached or not (§2.0.16): what lies below the street is part of the terrain.
     const show = (mesh, x, z, extra = {}) => { const at = atPoint(x, z) ?? (terrainStage ? 0 : undefined); if (at === undefined) return; group.add(mesh); chunks.push({ mesh, at, x, z, ...extra }); };
+    // The terrain view dresses its passages and malls in their models (docs/v2/world-engine-v2.md §2.0.17): a tunnel along each
+    // box and bore of a passage, the mall over a mall's boxes, all of one model in one draw, in the corridors' light cyan.
+    const UNDER_MODELS = { corridor: "kk-tunnel", tunnel: "kk-tunnel", station: "kk-tunnel", utility: "kk-tunnel", mall: "kk-mall", shelter: "kk-military" }, underModels = new Map();
+    const dress = (name, x, y, z, angle, w, h, d) => { const shell = shellOf(name); if (!shell) return; if (!underModels.has(name)) underModels.set(name, []); underModels.get(name).push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle), new THREE.Vector3(w / shell.size.x, h / shell.size.y, d / shell.size.z))); };
     for (const hall of under.halls) {
       const material = tint[hall.kind] ?? mats.deep, y = -hall.depth + hall.height / 2;
+      const dressing = terrainStage ? UNDER_MODELS[hall.kind] : null;
+      if (dressing) {
+        for (const box of hall.boxes) dress(dressing, box.x, -hall.depth, box.z, box.angle, box.w, hall.height, box.d);
+        for (const bore of hall.bores) dress(dressing, (bore.a[0] + bore.b[0]) / 2, -hall.depth, (bore.a[1] + bore.b[1]) / 2, Math.atan2(bore.b[1] - bore.a[1], bore.b[0] - bore.a[0]), Math.hypot(bore.b[0] - bore.a[0], bore.b[1] - bore.a[1]), hall.height, bore.width);
+      }
       for (const box of hall.boxes) { const mesh = new THREE.Mesh(new THREE.BoxGeometry(box.w, hall.height, box.d), material); mesh.position.set(box.x, y, box.z); mesh.rotation.y = -box.angle; show(mesh, box.x, box.z); }
       for (const bore of hall.bores) { const [x, z] = [(bore.a[0] + bore.b[0]) / 2, (bore.a[1] + bore.b[1]) / 2], mesh = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(bore.b[0] - bore.a[0], bore.b[1] - bore.a[1]), hall.height, bore.width), material); mesh.position.set(x, y, z); mesh.rotation.y = -Math.atan2(bore.b[1] - bore.a[1], bore.b[0] - bore.a[0]); show(mesh, x, z); }
       if (hall.pillars.length) { const mesh = instanced(material, hall.pillars.map(([x, z]) => [x, y, z, 1.2, hall.height, 1.2])); show(mesh, hall.pillars[0][0], hall.pillars[0][1]); }
@@ -342,6 +370,7 @@ function buildPlace(id) {
         canopy.position.set(sx, 1.4, sz); canopy.rotation.y = -Math.atan2(ez - sz, ex - sx); show(canopy, sx, sz);
       }
     }
+    for (const [name, matrices] of underModels) show(instancedEdges(shellOf(name).edges, matrices, 0x7ce6ff, 0.55).lines, 0, 0);
     for (const lot of data.world.lots) {
       const floors = lot.height ?? lot.floors, levels = floors >= 20 ? 3 : floors >= 10 ? 2 : floors >= 2 ? 1 : 0;
       if (!levels) continue;
@@ -535,26 +564,15 @@ let decor = () => {};
       if (key !== "block" || reached.has(ids[i])) return;
       for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(boxes[i]); lines.push(v.x, v.y, v.z); }
     });
-    // A model's edges for all its buildings in one draw: its edge lines, each building's matrix an instance (and gone as
-    // the world stands the building, its matrix zeroed), fading in the fog like everything else.
-    const edgeLook = () => new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { tint: { value: edge.color.clone() }, alpha: { value: edge.opacity } }]), fog: true, transparent: true, depthWrite: false,
-      vertexShader: "attribute vec4 m0; attribute vec4 m1; attribute vec4 m2; attribute vec4 m3;\n#include <fog_pars_vertex>\nvoid main() { vec4 mvPosition = modelViewMatrix * mat4(m0, m1, m2, m3) * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;\n#include <fog_vertex>\n}",
-      fragmentShader: "uniform vec3 tint; uniform float alpha;\n#include <fog_pars_fragment>\nvoid main() { gl_FragColor = vec4(tint, alpha);\n#include <fog_fragment>\n}",
-    });
     const meshes = new Map(), edgeSets = new Map();
     for (const [key, list] of groupsOf) {
       const mesh = new THREE.InstancedMesh(key === "block" ? block : shellOf(key).fill, fill, list.length);
       list.forEach((i, k) => mesh.setMatrixAt(k, shown[i]));
       world.add(mesh); meshes.set(key, mesh);
       if (key === "block") continue;
-      const geometry = new THREE.InstancedBufferGeometry(), columns = [0, 1, 2, 3].map(() => new Float32Array(list.length * 4));
-      geometry.setAttribute("position", shellOf(key).edges.attributes.position);
-      list.forEach((i, k) => shown[i].elements.forEach((value, e) => { columns[Math.floor(e / 4)][k * 4 + (e % 4)] = value; }));
-      columns.forEach((column, c) => geometry.setAttribute(`m${c}`, new THREE.InstancedBufferAttribute(column, 4)));
-      geometry.instanceCount = list.length;
-      const edges = new THREE.LineSegments(geometry, edgeLook()); edges.frustumCulled = false;
-      world.add(edges); edgeSets.set(key, { geometry, columns });
+      // A model's edges for all its buildings in one draw (gone as the world stands a building: its matrix zeroed).
+      const set = instancedEdges(shellOf(key).edges, list.map((i) => shown[i]), edge.color, edge.opacity);
+      world.add(set.lines); edgeSets.set(key, set);
     }
     const hidden = new THREE.Matrix4().makeScale(0, 0, 0), gone = new Set();
     // A building another line broke that this run never stood up: a red outline on the faint city, so it is known there.
@@ -568,10 +586,10 @@ let decor = () => {};
         const off = at <= now; if (off === gone.has(i)) return;
         const { key, k } = slots[i], matrix = off ? hidden : shown[i];
         meshes.get(key).setMatrixAt(k, matrix);
-        const set = edgeSets.get(key); if (set) matrix.elements.forEach((value, e) => { set.columns[Math.floor(e / 4)][k * 4 + (e % 4)] = value; });
+        edgeSets.get(key)?.put(k, matrix);
         if (off) gone.add(i); else gone.delete(i); changed.add(key);
       });
-      for (const key of changed) { meshes.get(key).instanceMatrix.needsUpdate = true; const set = edgeSets.get(key); if (set) for (let c = 0; c < 4; c++) set.geometry.getAttribute(`m${c}`).needsUpdate = true; }
+      for (const key of changed) { meshes.get(key).instanceMatrix.needsUpdate = true; edgeSets.get(key)?.flush(); }
     };
   }
   for (const [ax, az, bx, bz] of (data.landscapes ?? []).flatMap((entry) => entry.walls ?? [])) lines.push(ax, 0, az, bx, 0, bz, ax, 6, az, bx, 6, bz);
@@ -595,6 +613,27 @@ let decor = () => {};
     const strips = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshBasicMaterial({ color: 0x1d4a60, transparent: true, opacity: terrainStage ? 0.55 : 0.35, depthWrite: false }), roads.length);
     roads.forEach(([ax, az, bx, bz, width], i) => { q.setFromAxisAngle(up, -Math.atan2(bz - az, bx - ax)); m.compose(new THREE.Vector3((ax + bx) / 2, -0.2, (az + bz) / 2), q, new THREE.Vector3(Math.hypot(bx - ax, bz - az), 1, width)); strips.setMatrixAt(i, m); });
     world.add(strips);
+  }
+}
+// The terrain's shapes (docs/v2/world-engine-v2.md §2.0.17): each shape Jev kept stands as a hologram where its part is now,
+// as large as its box: a platform a deck on columns, a plateau or a rectangle a block, a hill a dome, a basin a hollow, a
+// cut a trench, a ramp a slope (down to its depth below the street, where its hall is in the underground), a sphere, a donut.
+{
+  const fillLook = new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }), edgeLook = new THREE.LineBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.6 });
+  const part = (geometry, x, y, z, turn = 0) => { const piece = new THREE.Group(); piece.add(new THREE.Mesh(geometry, fillLook), new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 20), edgeLook)); piece.position.set(x, y, z); piece.rotation.y = turn; return piece; };
+  for (const shape of data.terrainShapes ?? []) {
+    const { x, z, w, d } = shape, top = shape.top ?? 3, h = Math.max(0.5, Math.abs(top)), length = Math.max(w, d), width = Math.min(w, d), turn = w >= d ? 0 : -Math.PI / 2, form = new THREE.Group();
+    if (shape.kind === "platform") {
+      form.add(part(new THREE.BoxGeometry(w, 1, d), x, top - 0.5, z));
+      if (top > 1) for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) form.add(part(new THREE.BoxGeometry(1.2, top - 1, 1.2), x + sx * (w / 2 - 2), (top - 1) / 2, z + sz * (d / 2 - 2)));
+    } else if (shape.kind === "hill") form.add(part(new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(w, 2 * h, d), x, 0, z));
+    else if (shape.kind === "basin") form.add(part(new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2).scale(w, 2 * h, d), x, 0, z));
+    else if (shape.kind === "cut") form.add(part(new THREE.BoxGeometry(w, h, d), x, -h / 2, z));
+    else if (shape.kind === "ramp") form.add(part(new THREE.BoxGeometry(Math.hypot(length, top), 0.6, width).rotateZ(Math.atan2(top, length)), x, top / 2, z, turn));
+    else if (shape.kind === "sphere") { const r = Math.min(w, d) / 2; form.add(part(new THREE.SphereGeometry(r, 20, 14), x, top > 0 ? Math.max(r, top - r) : -r, z)); }
+    else if (shape.kind === "donut") { const r = Math.min(w, d) / 2; form.add(part(new THREE.TorusGeometry(r * 0.75, r * 0.25, 10, 32).rotateX(Math.PI / 2), x, r * 0.25, z)); }
+    else form.add(part(new THREE.BoxGeometry(w, h, d), x, top / 2, z));
+    world.add(form);
   }
 }
 // Terrain spawning's proposal (playground/terrain-spawn.mjs): the ground Jev means to put down, blinking where it would go,

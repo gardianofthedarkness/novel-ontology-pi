@@ -96,6 +96,8 @@ export interface Patch {
   id: string; type: LandscapeType; x: number; z: number; R: number; H: number; lot: number; median?: number; manifold?: Manifold;
   /** A pool's member's ground, borrowed from the pool's default where it stands: it claims lots before the default does. */
   borrowed?: boolean;
+  /** A part below the street: the kind of hall its name says it is (a parking garage, a passage), else by its shape. */
+  hall?: string;
   shape: { family: Family; turn: number; terms?: [number, number, number][]; n?: number; aspect?: number; m?: number };
   born?: { strand?: string; volume?: number; scene?: string; by?: "jev" | "drift" | "strand" };
 }

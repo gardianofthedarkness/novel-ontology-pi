@@ -750,6 +750,31 @@ block; a building the world stands as a lot is drawn as the lot. Every undergrou
 view, reached or not. Jev's overview captions say what the holograms and the volumes below the street are. Vol 1: 29
 models, the page 1.7 MB, a world build 12.6 s, as before.
 
+### 2.0.17 Shapes built, and the underground's own kinds (the user's call, 2026-10-31)
+
+Run 5 with Jev (2c6e517, stopped by the user after 15 of 28 parts, kept as `stage/terrain.pools-run5-partial.json`): Jev
+answered 地下通道 with a shape, a ramp 6 m down, and nothing showed: the shapes Jev kept (`terrain.shapes`: platforms,
+ramps, cuts) were saved but never built nor drawn, and only a street kind below the street made a hall. Now:
+- **Shapes built.** The export ships each kept shape where its part stands now, as large as its box (`terrainShapes`);
+  the live page draws it as a hologram in the corridors' light cyan: a platform a deck on columns, a plateau or a
+  rectangle a block, a hill a dome, a basin a hollow, a cut a trench, a ramp a slope, a sphere, a donut.
+- **A shape below the street is a hall** (`U.shapeHall`): that deep over its box, a passage when three times as long as
+  wide, else a hall, stairs up at its ends.
+- **The underground's kinds** (the user: look up the common types). Grouped as the literature on urban underground space
+  does: transport (the subway's tunnels, stations, passages), commerce (an underground shopping street, under a road or a
+  station's plaza, as Japan's 地下街; a department store's food basement is a building's own), parking, utilities (a
+  utility tunnel, the storm water), a civil defence shelter (often a car park in peace), a building's basement, and the
+  deep facilities. New hall kinds `parking`, `utility`, `shelter`, `basement`; `LIES_UNDER` says which street kinds each
+  usually lies under (a first map). A part kept below the street, a street or a shape, becomes the hall its name says by
+  the language profile's `undergroundKinds` (地下停车场 a car park, 地下通道 a passage, 防空洞 a shelter, 共同沟 a utility
+  tunnel), else a passage or a hall by its proportions.
+- **Underground models** (`UNDERGROUND_MODELS`): the terrain view dresses passages, tunnels, stations and utility tunnels
+  in the tunnel model along each box and bore, malls in the mall, shelters in the bunker (one draw a model); a car park,
+  the storm water and a basement are their volumes. Searched on the web: one CC0 subway kit (Metro, by elbolilloduro on
+  itch.io: a platform, a tiled corridor, ticket machines, turnstiles), listed as a candidate, not downloaded; no free car
+  park, storm-water or basement model found. The compatibility page shows both: underground × street, and underground ×
+  models.
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

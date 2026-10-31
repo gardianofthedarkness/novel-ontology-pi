@@ -23,6 +23,8 @@ export interface LanguageRules {
   scaleOfName(label: string): string | null;
   /** What a building is used for, by the words of its name (便利店: a convenience store), the most specific first. */
   buildingUses: [RegExp, BuildingUse][];
+  /** What an underground space is, by the words of its name (地下停车场: a car park), the most specific first. */
+  undergroundKinds: [RegExp, string][];
 }
 /** What a building is used for: the kinds a street's buildings come in (landscape.ts STREET_USES), and a building's own. */
 export type BuildingUse = "convenience" | "shop" | "cafe" | "restaurant" | "bar" | "arcade" | "bank" | "mall" | "department" | "office" | "hotel" | "apartment" | "dormitory" | "house" | "school" | "hospital" | "clinic" | "station" | "government" | "church" | "warehouse" | "workshop" | "lab" | "parking" | "cinema";
@@ -50,6 +52,12 @@ export const ZH: LanguageRules = {
     [/厅$|局$|署$|法院|看守所|警备|派出所|政府/, "government"], [/教会|教堂/, "church"], [/仓库/, "warehouse"], [/研究所|实验室|研究中心|研究设施/, "lab"], [/工厂|作坊|工坊/, "workshop"],
     [/停车场/, "parking"], [/大楼|大厦|写字楼|办公|高楼|塔楼/, "office"], [/商店|店$|铺$|超市/, "shop"],
   ],
+  undergroundKinds: [
+    [/停车场|车库|停车库/, "parking"], [/共同沟|管廊|管道|电缆/, "utility"], [/防空洞|避难所|防空壕|掩体|避难/, "shelter"],
+    [/地下街|商场|商店街|购物|地下商/, "mall"], [/地铁站|站台|检票|车站|站厅/, "station"], [/地下通道|地下道|地道|通道|走廊|连络/, "corridor"],
+    [/隧道|地铁|轨道/, "tunnel"], [/下水道|排水|雨水|调节池|水道/, "channel"], [/研究所|实验室|研究/, "lab"], [/基地|军事|军用/, "military"],
+    [/地下室|地库|地下[一二三四五六七八九十\d]+层/, "basement"],
+  ],
 };
 
 /** The language the reading is in. */
@@ -57,3 +65,5 @@ export const LANGUAGE: LanguageRules = ZH;
 
 /** What a building is used for, by its name in the reading's language, or null. */
 export const buildingUseOf = (label: string, language: LanguageRules = LANGUAGE): BuildingUse | null => language.buildingUses.find(([words]) => words.test(label.replace(/ \(scene \d+\)$/, "")))?.[1] ?? null;
+/** What an underground space is, by its name in the reading's language (a hall kind of underground.ts), or null. */
+export const undergroundKindOf = (label: string, language: LanguageRules = LANGUAGE): string | null => language.undergroundKinds.find(([words]) => words.test(label.replace(/ \(scene \d+\)$/, "")))?.[1] ?? null;
