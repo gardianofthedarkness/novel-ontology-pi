@@ -380,6 +380,25 @@ against the last reading (`experiments/v2/compare.mjs`; the listing came from th
   as before (`HINTS_ONCE_STEPS` is empty; `V2_HINTS=once` turns it on for a comparison). The saving that is left in EM² is the ids: short keys for the cast's options (p1, p2 … in the state, the
   name still with each option) would cut what EM² sends without taking the names out of the questions.
 
+### 2.0.7 Terrain and spawns before the world plays (the user's call, 2026-10-31) — built
+
+After the whole extraction and the world loop (which says where each scene happens), `novel sim terrain`
+(`playground/terrain.mjs`), recorded on the host's live page:
+1. **Terrain.** The book's main sites (the places its scenes happen in), in story order of their first scene, each placed
+   by Jev in the place that holds it on the place tree, on a picture of that place from above: its ground (the
+   landscape the engine fills, the manifold), the sites placed so far by name, and boxes O (over the middle) and A–H
+   (round the edge); then whether the box fits, and a better box if not. Evidence: the sentences that name the site and its
+   scenes' environment cards. Kept in `stage/terrain.json`; the engine bears each site toward where Jev put it (before,
+   toward the sibling it had the most travel with), and its canvas keeps sites clear of one another as before.
+2. **Spawns: carry on, or start anew.** Scene by scene against the scene before: by rule where the time tree and the world
+   loop say it (into or out of the past, or a different node of the time tree: anew; the same place and time node,
+   carrying on, the same chapter: carries on); asked of Jev, eight scenes a request, where they do not, with both scenes'
+   places, times, environment cards, the scene before's end and this scene's opening, and who is still there. Kept in
+   `stage/world/spawn.json`. In a scene that starts anew the engine asks a fresh start (the level, then a box on the map)
+   for everyone present, and places them there instead of walking them from where they were hours before; every start
+   question now carries the scene's environment and who is already placed, how far and which way from the middle of the
+   map (the red dots).
+
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
 kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record
 it is part of (the book's text is in it: never public).
@@ -481,7 +500,7 @@ v2 makes each a structured request:
    rule, and crowds (§2.0.2). Then things: only named things, vehicles and weapons (§2.0.3). Then concepts and their
    owners (§2.0.4, not run yet); the calendar's proposal (§2.0.5) and the context composing engine's design
    ([context-engine.md](context-engine.md)), both for approval. Not yet run through the world engine.
-0a. **Next, after the full extraction run (the user, 2026-10-31):** extraction runs to the end first, then the world
+0a. **Built 2026-10-31 (§2.0.7), after the full extraction run (the user, 2026-10-31):** extraction runs to the end first, then the world
    engine (later text changes earlier results; not in parallel). With every environment extracted, a Jev miniloop and its
    visual harness first arrange the terrain: the vol's existing main sites modified with the probabilistic manifold
    ([city-fill-design.md](../city-fill-design.md)), and from each environment and the blocks around it, with the characters
