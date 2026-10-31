@@ -223,11 +223,11 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const byDefault = () => {
         const node = nodeOf(part.id) ?? holderNode ?? anchor, box = [round(node.x - node.r), round(node.z - node.r), round(node.x + node.r), round(node.z + node.r)];
         const same = terrain.order.filter(id => id !== part.id && terrain.sites[id]?.scale === part.scale && !terrain.sites[id].pool && terrain.sites[id].median && within(id, poolOf)).map(id => terrain.sites[id]);
-        if (!same.length) return { where: null, what: null, rise: null, kind: null, entry: null, shape: null, ground: null, box, median: null, upTo: null, measure: 'median', empty: true };
+        if (!same.length) return { boxBy: null, what: null, rise: null, kind: null, entry: null, shape: null, ground: null, box, median: null, upTo: null, measure: 'median', empty: true };
         const count = new Map(); for (const site of same) count.set(site.kind, (count.get(site.kind) ?? 0) + 1);
         const kind = [...count].sort((a, b) => b[1] - a[1])[0][0], entry = T.terrainKind(part.scale, kind);
         const median = Math.round(same.reduce((sum, site) => sum + site.median, 0) / same.length);
-        return { where: null, what: null, rise: null, kind, entry, shape: null, ground: entry?.ground ?? same.find(site => site.kind === kind).ground, box, median, upTo: null, measure: 'median', from: same.length };
+        return { boxBy: null, what: null, rise: null, kind, entry, shape: null, ground: entry?.ground ?? same.find(site => site.kind === kind).ground, box, median, upTo: null, measure: 'median', from: same.length };
       };
       const asked = async () => {
       // 1. Overview.
@@ -255,6 +255,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       }
       let box = isCity && cityNode ? spotOf(cityNode) : fromMap((sampled ? areaReply : where)?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
       if (sampled && !areaReply?.box && now) box = spotOf(now);
+      // The reply the box came from (a member's area answer, the overview's, or the last zoom's): its confidence is kept.
+      let boxBy = sampled ? areaReply : where;
       // 2. Conflicts and zooms.
       const conflicts = candidate => {
         const reasons = [], across = Math.max(candidate[2] - candidate[0], candidate[3] - candidate[1]);
@@ -275,6 +277,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const ztop = await shoot(MAP, { topdown: { x: zc[0], z: zc[2], half: zh }, areas: areas([mark]), labelScale: zh / 22, vague: CLEAR });
         const { replies: [again] } = await ask(decide, T.terrainZoomMode, { ...about, kind, reasons, pictures: { skyline: 'the area from the side and above.', map: `the area straight down, north up, ${Math.round(zh * 2)} m across.` } }, stores, { request: { images: { skyline: zside.png, map: ztop.png } } });
         box = fromMap(again?.box, ztop.map) ?? box;
+        if (again?.box) boxBy = again;
       }
       // 3. How high the terrain rises (the ground is at 0, always): lettered ghost slices at its kind's own heights (a CBD's
       // from 200 m, a dwelling area's to 60 m: terrainTops), through a core of the area at its middle; red dotted cuts
@@ -291,9 +294,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height its terrain may rise to; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
       // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top.
       const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, median = measure === 'median' ? height : null, upTo = measure === 'top' ? height : null;
-        return { where, what, rise, kind, entry, shape, ground, box, median, upTo, measure };
+        return { where, boxBy, what, rise, kind, entry, shape, ground, box, median, upTo, measure };
       };
-      const { where, what, rise, kind, entry, shape, ground, box, median, upTo, measure, empty, from: averaged } = poolOf ? byDefault() : await asked();
+      const { boxBy, what, rise, kind, entry, shape, ground, box, median, upTo, measure, empty, from: averaged } = poolOf ? byDefault() : await asked();
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
       const proposal = { id: part.id, label: part.label, kind: kind ?? 'empty', box, top: median ?? upTo, measure };
       const said = empty ? `empty (nothing of its level decided in ${name(poolOf)} yet)` : `${kind}${median ? (median < 0 ? `, ${-median} m underground` : `, median ${median} m`) : upTo ? (upTo < 0 ? `, ${-upTo} m down` : `, up to ${upTo} m`) : ''}${averaged ? ` (the average of ${averaged} ${part.scale === 'street' ? 'streets' : 'districts'})` : ''}`;
@@ -308,7 +311,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         : empty ? { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, empty: true, by: 'pool', pool: poolOf }
         // A pool's member borrows its pool's ground in the box Jev gave it (the engine builds it there).
         : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), ...(sampled ? { member: holder } : {}), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : 'jev', ...(poolOf ? { pool: poolOf } : {}),
-          confidence: { box: where?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
+          confidence: { box: boxBy?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
       if (shape) terrain.shapes[part.id] = { kind: shape, box, ...(upTo ? { top: upTo } : {}) };
       if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
       terrain.askedAt = new Date().toISOString();
