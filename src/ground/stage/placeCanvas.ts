@@ -15,7 +15,8 @@ import type { Point } from "./cityFill.js";
  * - when a circle grows into a sibling, the sibling is pushed aside, whole: places move only as rigid circles in
  *   their parent's frame, so nothing inside any place ever moves in its own frame. Growth then carries on up.
  */
-export interface Unit { id: string; label: string; kind: "building" | "street" | "room"; at: Point; r: number }
+/** sampled: the place the tree put it in, when it stands in an area of that place picked by a seed (see holderFor). */
+export interface Unit { id: string; label: string; kind: "building" | "street" | "room"; at: Point; r: number; sampled?: string }
 /**
  * temporary: an unnamed area holding what is known only to lie somewhere in a larger place, until the text names it.
  * dwelling: the area of the central build a place the ontology puts in no larger one dwells in, until it is named.
@@ -112,12 +113,19 @@ const BELOW: Record<string, string> = { region: "city", city: "district", distri
 const RANK: Record<string, number> = { room: 0, building: 1, street: 2, district: 3, city: 4, region: 5 };
 /**
  * Where a building, room or street known only to lie somewhere in a larger place goes: when that place is a city or
- * larger, the level between is missing, so the unit gets an unnamed temporary area one step below it (a district in a
- * city), born like any place and filled with the parent's landscape. Otherwise the place itself holds it.
+ * larger, the level between is missing. It goes into an area already there inside that place at the next larger scale
+ * than its own there is (a street, else a district), picked by a seed (its id), so the same in every run and the city
+ * bounded (the user's call, 2026-10-31: sampled, as a place the tree puts nowhere dwells). Only a place with no such area
+ * inside it gives the unit an unnamed temporary area one step below it (a district in a city), born like any place and
+ * filled with the parent's landscape. Otherwise the place itself holds it. `sampledIn` says which it was.
  */
 export function holderFor(canvas: Canvas, placeId: string, unitScale: string, unitId: string): string {
   const place = canvas.places[placeId];
   if ((RANK[place.scale] ?? 0) < RANK.city || (RANK[place.scale] ?? 0) - (RANK[unitScale] ?? 1) < 2) return placeId;
+  const inside = (id: string): boolean => { for (let at = canvas.places[id]?.parent; at; at = canvas.places[at]?.parent) if (at === placeId) return true; return false; };
+  const areas = Object.values(canvas.places).filter((area) => isArea(area) && inside(area.id) && (RANK[area.scale] ?? 0) > (RANK[unitScale] ?? 1) && (RANK[area.scale] ?? 0) < (RANK[place.scale] ?? 0));
+  const least = Math.min(...areas.map((area) => RANK[area.scale] ?? 0));
+  if (areas.length) return pickBy(unitId, areas.filter((area) => (RANK[area.scale] ?? 0) === least).map((area) => area.id));
   const id = `tmp:${placeId}:${unitId}`;
   if (canvas.places[id]) return id;
   bear(canvas, { id, label: `an area of ${place.label}`, scale: BELOW[place.scale] ?? "district", parent: placeId, landscape: place.landscape?.patches[0]?.type ?? "residential" });
@@ -125,6 +133,8 @@ export function holderFor(canvas: Canvas, placeId: string, unitScale: string, un
   area.temporary = true;
   return id;
 }
+/** Whether holderFor sampled the unit into an area inside the place (not the place itself, nor a stand-in made for it). */
+export const sampledIn = (canvas: Canvas, placeId: string, holder: string): boolean => holder !== placeId && !canvas.places[holder]?.temporary;
 /**
  * When the text names the area a temporary one stood for: the temporary area becomes it, where it is, with all it
  * holds (its id, name and scale change; nothing moves). A named place already on the canvas keeps its own circle, and

@@ -425,7 +425,11 @@ export async function strandDemo(novelDir, options) {
       if (canvas.places[id]) return;
       C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent), ground: groundPatch(id) });
     };
-    const areaScale = id => { const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };
+    // An unnamed place (a v2 reading's EM² place) is never an area of the build: it is a marker in one, until Jev places it.
+    const areaScale = id => { if (String(id).startsWith('unnamed:')) return null; const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };
+    // Where the place tree said only the city (or nothing held an EM² place but its scene): an area picked by a seed, which the
+    // live view shows blinking until the text or Jev says where it is (the user's call, 2026-10-31).
+    const guessed = id => worldScript?.places?.[id]?.held === 'scene', sampled = [];
     const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
@@ -450,17 +454,34 @@ export async function strandDemo(novelDir, options) {
         C.addUnit(canvas, area, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) });
         continue;
       }
-      const holder = C.holderFor(canvas, open.at(-1), scaleOf(scene.placeId) ?? 'building', scene.placeId);
+      const holder = C.holderFor(canvas, open.at(-1), scaleOf(scene.placeId) ?? 'building', scene.placeId), picked = C.sampledIn(canvas, open.at(-1), holder) || guessed(scene.placeId);
       // Near where the terrain step put the building (the site on the chain it stands for) in this holder.
       const site = [...chain].reverse().find(at => terrain?.sites?.[at]), near = site && terrain.sites[site].parent === holder ? terrain.sites[site].toward : undefined;
-      C.addUnit(canvas, holder, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) }, near);
+      C.addUnit(canvas, holder, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId), ...(picked ? { sampled: open.at(-1) } : {}) }, near);
+    }
+    // Every other building, room and unnamed place of the tree (a v2 reading's EM² places among them), laid out as the
+    // scenes' are, buildings before the rooms they hold: in the area the tree puts it in (sampled into one of a city's
+    // areas where it says only the city), beside the building that holds a room, dwelling where it says nothing. Only
+    // what a scene is set in is built; the rest are markers on the map (unbuilt), off the walking lattice.
+    const unitOf = id => { for (const place of Object.values(canvas.places)) { const unit = place.units.find(entry => entry.id === id); if (unit) return { place, unit }; } return null; };
+    const SIZE = { building: 0, street: 1, room: 2 }, unitScale = id => { const scale = scaleOf(id) ?? scaleOfName(name(id)); return scale in SIZE ? scale : null; };
+    for (const place of placeTree.filter(entry => unitScale(entry.id) && !areaScale(entry.id)).sort((a, b) => SIZE[unitScale(a.id)] - SIZE[unitScale(b.id)])) {
+      if (canvas.places[place.id] || unitOf(place.id)) continue;
+      const scale = unitScale(place.id), kind = scale === 'street' ? 'street' : scale === 'room' ? 'room' : 'building', r = C.LEAST[scale];
+      const parent = place.parentId ?? null, building = parent && !canvas.places[parent] ? unitOf(parent) : null;
+      if (building) { C.addUnit(canvas, building.place.id, { id: place.id, label: `${name(place.id)} · in ${building.unit.label}`, kind, r, ...(guessed(place.id) || building.unit.sampled ? { sampled: building.unit.sampled ?? parent } : {}) }, building.unit.at); continue; }
+      const area = parent && canvas.places[parent] ? parent : null, host = area ?? C.dwellingFor(canvas, place.id, place.proposedParentId);
+      if (!host) continue;
+      const holder = C.holderFor(canvas, host, scale, place.id), picked = !area || C.sampledIn(canvas, host, holder) || guessed(place.id);
+      C.addUnit(canvas, holder, { id: place.id, label: name(place.id), kind, r, ...(picked ? { sampled: area ?? 'build' } : {}) });
+      if (!area) { dwellingUnits[place.id] = host; notes.build.dwelling.push(`${name(place.id)} in ${name(host)}`); }
     }
     const round = value => Math.round(value * 10) / 10, depthOf = id => { let depth = 0; for (let at = canvas.places[id]; at?.parent; at = canvas.places[at.parent]) depth++; return depth; };
     const nodes = [];
     for (const place of Object.values(canvas.places)) {
       const [x, z] = C.worldOf(canvas, place.id), grid = place.units.find(unit => unit.id === `${place.id}#grid`);
       nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}) });
-      for (const unit of place.units) if (unit.kind === 'building') nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
+      for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(unit.sampled ? { sampled: unit.sampled } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
     }
     return { nodes, canvas };
   };
@@ -537,9 +558,9 @@ export async function strandDemo(novelDir, options) {
   // streets, not the scenes' own spots) and the stations the story names; across the city through its middle without them.
   // Each hall belongs to the smallest area its middle lies in: its underground comes alive once someone goes down there.
   const city = macro.filter(node => !node.parent && node.scale === 'city').sort((a, b) => b.r - a.r)[0] ?? macro.filter(node => !node.parent).sort((a, b) => b.r - a.r)[0];
-  const stops = macro.filter(node => ['district', 'street'].includes(node.scale) && !node.temporary && !String(node.id).startsWith('spot:')).map(node => ({ id: node.id, x: node.x, z: node.z }))
+  const stops = macro.filter(node => ['district', 'street'].includes(node.scale) && !node.temporary && !node.unbuilt && !String(node.id).startsWith('spot:')).map(node => ({ id: node.id, x: node.x, z: node.z }))
     .concat(anchors.filter(anchor => anchor.own && anchor.role === 'station').map(anchor => ({ id: anchor.place, x: anchor.x, z: anchor.z })));
-  const areaAt = (x, z) => macro.filter(node => !node.dwelling && ['city', 'district', 'street'].includes(node.scale) && Math.hypot(x - node.x, z - node.z) <= node.r).sort((a, b) => a.r - b.r)[0]?.id ?? city?.id ?? null;
+  const areaAt = (x, z) => macro.filter(node => !node.dwelling && !node.unbuilt && ['city', 'district', 'street'].includes(node.scale) && Math.hypot(x - node.x, z - node.z) <= node.r).sort((a, b) => a.r - b.r)[0]?.id ?? city?.id ?? null;
   // One storm-water system for the city: its own landscape's (a district's landscape keeps its malls and deep facilities).
   const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city ? U.subwayOf(stops, city.id, city.r) : [])].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
   const underground = { halls };
@@ -577,7 +598,7 @@ export async function strandDemo(novelDir, options) {
   // place's grid to where they enter the next, each boundary crossed costing more the more slanted the crossing. Inside
   // the two places they walk each place's own graph: out to the edge of the grid where the map path leaves it, and in from
   // where it arrives to where the scene finds them.
-  const boundaries = macro.flatMap(node => [{ x: node.x, z: node.z, r: node.r }, ...(node.own ? [{ x: node.spotX, z: node.spotZ, r: node.own }] : [])]);
+  const boundaries = macro.filter(node => !node.unbuilt).flatMap(node => [{ x: node.x, z: node.z, r: node.r }, ...(node.own ? [{ x: node.spotX, z: node.spotZ, r: node.own }] : [])]);
   // The lattice's cell grows with the map, so a city-sized canvas stays a few hundred cells across.
   const span = Math.max(...boundaries.map(b => Math.abs(b.x) + b.r), ...boundaries.map(b => Math.abs(b.z) + b.r)) * 2 + 80, macroCell = Math.max(4, Math.ceil(span / 260));
   const lattice = macroLattice(boundaries, { cell: macroCell, margin: 40 }), macroKappa = 2, macroT = 0.6 * temperatureBound({ step: macroCell, kappa: macroKappa, lambda, floorHeight: 3, arcCost: 7 });

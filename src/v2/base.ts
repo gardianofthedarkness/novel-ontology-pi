@@ -58,7 +58,7 @@ export function worldBase(result: FlowResult, text: (sentence: string) => string
   const entities = [...result.chart.entities.values()];
   const roster = {
     characters: entities.filter((entity) => entity.category === "person").map((entity) => ({ id: entity.id, names: namesOf(entity) })),
-    places: entities.filter((entity) => entity.category === "place").map((entity) => ({ id: entity.id, names: namesOf(entity), type: entity.type, scale: null, parent: result.places?.places.find((entry) => entry.id === entity.id)?.parent ?? null })),
+    places: entities.filter((entity) => entity.category === "place").map((entity) => ({ id: entity.id, names: namesOf(entity), type: entity.type, scale: result.places?.places.find((entry) => entry.id === entity.id)?.scale ?? null, parent: result.places?.places.find((entry) => entry.id === entity.id)?.parent ?? null })),
     things: [
       ...entities.filter((entity) => entity.category === "thing").map((entity) => ({ id: entity.id, names: namesOf(entity), type: entity.type as string })),
       ...result.slots.filter((slot) => slot.kind === "vehicle" || slot.kind === "weapon").map((slot) => ({ id: slot.id, names: slot.names, type: slot.kind as string, scene: slot.scene })),

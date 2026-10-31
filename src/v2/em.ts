@@ -43,9 +43,9 @@ export interface ChartEntity { id: string; category: Category; type: EntityType;
 export interface TimeNode { id: string; text: string; seen: string[] }
 export interface EmResult {
   key: string; text: string; type: EntityType; category: Category | null;
-  outcome: "exact" | "alias" | "new" | "time" | "description" | "routine" | "skip";
+  outcome: "exact" | "alias" | "new" | "time" | "description" | "routine" | "spatial" | "skip";
   entity?: string; confidence?: number; candidates?: { id: string; score: number }[]; answer?: string; unsure?: string;
-  /** description: the sentences that hold it (EM² resolves each). */
+  /** description: the sentences that hold it (EM² resolves each); spatial: the sentences it says where someone is in. */
   sentences?: string[];
   /** The facts Jev was given for it (fact ids). */
   facts?: string[];
@@ -167,7 +167,7 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
   const pending: { detected: Detected; candidates: string[]; scores: { id: string; score: number }[]; peers: string[] }[] = [];
   for (const entry of detected) {
     const base = { key: entry.key, text: entry.text, type: entry.type, category: entry.category };
-    if (!entry.category) { results.set(entry.key, { ...base, outcome: entry.type === "routine" ? "routine" : "skip" }); continue; }
+    if (!entry.category) { results.set(entry.key, { ...base, ...(entry.type === "spatial" ? { outcome: "spatial", sentences: entry.sentences } : { outcome: entry.type === "routine" ? "routine" : "skip" }) }); continue; }
     if (entry.category === "time") { const node = chart.time(entry.text, entry.sentences); results.set(entry.key, { ...base, outcome: "time", entity: node.id }); continue; }
     const known = chart.exact(entry.text);
     if (known) { chart.see(known.id, entry.sentences); results.set(entry.key, { ...base, outcome: "exact", entity: known.id }); continue; }

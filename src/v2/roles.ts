@@ -58,7 +58,8 @@ export interface Role { kind: "spoken" | "action"; who: Pick; to?: Pick; matters
 /** A description of a person, a crowd, a vehicle or a weapon where it stands, and who or what it means there (an entity, a slot, or none). */
 export interface Reference { text: string; type: DescriptionType; scene: string; sentences: string[]; entity: string | null; answer: string; confidence: number; unsure?: string; facts?: string[] }
 /** An unnamed person, crowd, vehicle or weapon of a scene, known by the descriptions that meant it. Never a name of anything. */
-export interface Slot { id: string; kind: DescriptionType; scene: string; label: string; names: string[]; sentences: string[]; in?: string | null }
+/** `scale`: an unnamed open place's, as typing said it (a street, a district, …). */
+export interface Slot { id: string; kind: DescriptionType; scene: string; label: string; names: string[]; sentences: string[]; in?: string | null; scale?: string }
 /** What EM² said holds a place where a description of it stood: a named place, with how sure. */
 export interface PlaceLink { child: string; parent: string; scene: string; confidence: number; via: string }
 /** What a description has meant: how often, and in whose lines. */
@@ -72,7 +73,7 @@ export interface RolesInput {
   /** The entities named in each sentence (the card scan). */
   named: Map<string, string[]>;
   /** Every string typed as a description of a person, a crowd, or an unnamed vehicle or weapon (EM's description outcome). */
-  descriptions: { text: string; type: DescriptionType }[];
+  descriptions: { text: string; type: DescriptionType; scale?: string }[];
   /** Each scene's people the recommender expects. */
   recommended: Map<string, { id: string; score: number }[]>;
   facts: FactLedger;
@@ -88,7 +89,7 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
   const isPerson = (id: string) => categoryOf(id) === "person";
   const roles: Record<string, Role> = {}, references: Reference[] = [], slots: Slot[] = [], slotOf = new Map<string, Slot>();
   const habits = new Map<string, Habit>();
-  const typeOf = new Map(input.descriptions.map((entry) => [entry.text, entry.type]));
+  const typeOf = new Map(input.descriptions.map((entry) => [entry.text, entry.type])), scaleOf = new Map(input.descriptions.filter((entry) => entry.scale).map((entry) => [entry.text, entry.scale!]));
   // The descriptions a sentence holds, a longer name masking the ones inside it (御坂妹妹 is a name, not 妹妹).
   const lexicon: [string, string][] = [...chart.names(), ...input.descriptions.map((entry): [string, string] => [entry.text, DESCRIPTION])].sort((a, b) => b[0].length - a[0].length);
   const describedCache = new Map<string, string[]>();
@@ -223,7 +224,7 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
         else if (value !== "none" && value !== "general") {
           if (pool.includes(value)) unsure = value;
           const kind: DescriptionType = OF_THINGS.has(desc.type) || ofPlaces ? desc.type : value === "crowd" || (value !== "new" && desc.type === "crowd") ? "crowd" : "person";
-          const slot: Slot = { id: `slot_${scene.id.slice(-6)}_${sceneSlots.length + 1}`, kind, scene: scene.id, label: desc.text, names: [], sentences: [], ...(ofPlaces ? { in: held?.id ?? null } : {}) };
+          const slot: Slot = { id: `slot_${scene.id.slice(-6)}_${sceneSlots.length + 1}`, kind, scene: scene.id, label: desc.text, names: [], sentences: [], ...(ofPlaces ? { in: held?.id ?? null, ...(scaleOf.get(desc.text) ? { scale: scaleOf.get(desc.text) } : {}) } : {}) };
           sceneSlots.push(slot); slots.push(slot); slotOf.set(slot.id, slot); entity = slot.id;
         }
         // A named place a description meant, held by another named place: a link for the place tree.

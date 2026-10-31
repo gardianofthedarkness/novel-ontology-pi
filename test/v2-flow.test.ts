@@ -34,16 +34,18 @@ test("cards: runs of one kind, a new card where the carrier changes, exchanges n
 });
 
 test("typing: one structured document a batch, each string by path, types grouped into EM's categories", async () => {
-  const batch = sentences("上条当麻走进学园都市。第二天早上，他拿起手机。");
+  const batch = sentences("上条当麻走进学园都市。第二天早上，他在屋顶上拿起手机。");
   const document = typingDocument(batch, ["上条当麻", "学园都市", "第二天早上"]);
   assert.deepEqual(Object.keys(document.names), ["n1", "n2", "n3"]);
   assert.deepEqual(document.names.n1.in, [batch[0].id]);
   let asked: DecisionQuestion[] = [];
-  const types: Record<string, string> = { "type:n1": "person", "type:n2": "place", "type:n3": "time", "type:n4": "routine" };
-  const detected = await typeNames(async (_state: DecisionState, questions) => { asked = questions; return questions.map((q) => ({ key: q.key, value: types[q.key] ?? (q.key === "proper:n3" ? 0.1 : 0.9), confidence: 0.9 })); }, batch, ["上条当麻", "学园都市", "第二天早上", "手机"]);
+  const types: Record<string, string> = { "type:n1": "person", "type:n2": "city", "type:n3": "time", "type:n4": "routine", "type:n5": "spatial" };
+  const detected = await typeNames(async (_state: DecisionState, questions) => { asked = questions; return questions.map((q) => ({ key: q.key, value: types[q.key] ?? (q.key === "proper:n3" || q.key === "proper:n5" ? 0.1 : 0.9), confidence: 0.9 })); }, batch, ["上条当麻", "学园都市", "第二天早上", "手机", "屋顶上"]);
   assert.deepEqual(asked.slice(0, 2).map((q) => q.instructions), ["What is names.n1?", "Is names.n1 a proper name?"]);
-  assert.deepEqual(detected.map((entry) => [entry.type, entry.category, entry.proper]), [["person", "person", 0.9], ["place", "place", 0.9], ["time", "time", 0.1], ["routine", null, 0.9]], "an everyday thing is no entity");
+  assert.deepEqual(detected.map((entry) => [entry.type, entry.category, entry.proper]), [["person", "person", 0.9], ["city", "place", 0.9], ["time", "time", 0.1], ["routine", null, 0.9], ["spatial", null, 0.1]], "a place by its scale; an everyday thing and a spatial word are no entities");
   assert.ok(asked[0].options!.includes("concept"), "a concept (an ability, a network) is one of the types");
+  assert.deepEqual(["region", "city", "district", "street", "building", "room", "spatial"].filter((type) => asked[0].options!.includes(type)).length, 7, "the scale ladder and spatial are types; a bare place is not");
+  assert.ok(!asked[0].options!.includes("place"));
 });
 
 test("names: a longer name masks the shorter inside it; overlap of names", () => {

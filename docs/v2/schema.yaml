@@ -45,14 +45,14 @@ card:                # cards.yaml — runs of one kind, a new card where the car
 detected:            # a listed string, typed (em.yaml holds each with its outcome)
   key: string        # n1, n2 … within its batch
   text: string       # word for word as the passage writes it
-  type: [person, crowd, object, routine, weapon, vehicle, place, building, room, concept, time, none]
-  category: [person, crowd, thing, place, concept, time, null]   # a crowd is never a name: EM² places it; routine (an everyday thing): null
+  type: [person, crowd, object, routine, weapon, vehicle, region, city, district, street, building, room, spatial, concept, time, none]   # a place by its scale; place: an open place of a reading before the scales
+  category: [person, crowd, thing, place, concept, time, null]   # a crowd is never a name: EM² places it; routine (an everyday thing) and spatial (where someone is): null
   proper: number     # 0..1: a proper name (a name anywhere) or a description (a name only where EM said it)
   sentences: [string]
 
 em_result:           # em.yaml — per batch (its first sentence id), per detected string
-  outcome: [exact, alias, new, time, description, routine, skip]   # description: of a person, a crowd, or an unnamed vehicle or weapon (EM² resolves it); routine: an everyday or unnamed thing, no entity
-  sentences: [string] # description: the sentences that hold it
+  outcome: [exact, alias, new, time, description, routine, spatial, skip]   # description: of a person, a crowd, an unnamed vehicle, weapon or place (EM² resolves it); routine: an everyday or unnamed thing, no entity; spatial: where someone is (spatial.yaml)
+  sentences: [string] # description and spatial: the sentences that hold it
   facts: [string]    # the facts Jev was given for it (fact ids): the latest about its candidates, and those holding it
   owner: { answer: string, confidence: number }   # a concept: whose it is, as asked in this batch (a person id, many, none)
   entity: string     # the chart entity (or time node) it is
@@ -113,9 +113,11 @@ reference:           # references.yaml — a description of a person, a crowd, a
   unsure: string     # not sure: the person it leaned to (a slot was opened)
   facts: [string]    # the facts holding it that Jev was given
 
-slot:                # slots.yaml — an unnamed person, crowd, vehicle or weapon of one scene; never anyone's name
+slot:                # slots.yaml — an unnamed person, crowd, vehicle, weapon or place of one scene; never anyone's name
   id: string         # slot_<scene number>_<n>
-  kind: [person, crowd, vehicle, weapon]
+  kind: [person, crowd, vehicle, weapon, place, building, room]
+  in: string         # a place, building or room: the named place EM² said holds it
+  scale: string      # an unnamed open place (kind place): its scale as typed (street, district, …)
   scene: string
   label: string      # the description that opened it
   names: [string]    # every description that meant it
@@ -178,3 +180,20 @@ time:                # time.yaml — story time (src/v2/time.ts)
       inherited: boolean   # no time word of its own: it carries on
       when: string   # the caption: when it takes place
   calendar: { entries: [calendar entry], conflicts: [{ ref: string, note: string }] }
+
+places:              # places.yaml — the place tree (src/v2/places.ts)
+  places:
+    - id: string     # a named place (loc_)
+      parent: string # the named place that holds it, or null
+      by: [name, stated, em2, jev, none]
+      confidence: number
+      scale: [region, city, district, street, building, room, null]
+      scaleBy: [typing, name, holds, tree, null]   # holds: a step above what it holds; tree: raised over an open place it holds
+  slots: [{ id: string, kind: string, scene: string, label: string, in: string, scale: string }]
+
+spatial:             # spatial.yaml — spatial words: where someone or something is (src/v2/spatial.ts)
+  - text: string     # 地面, 地下, 屋顶上 … word for word
+    sentence: string
+    scene: string
+    level: [underground, street, inside, roof, wall, sky, null]   # the world's level it points at
+    who: [string]    # who or what acts or speaks in its line (EM²'s role, else the card)

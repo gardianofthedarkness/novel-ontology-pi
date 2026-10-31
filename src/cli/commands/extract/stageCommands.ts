@@ -73,7 +73,7 @@ async function writeReport(path: string, value: unknown) {
  * The world script of a world-first workspace (stage/world/script.json), or null: from a v2 reading (src/v2/script.ts,
  * `from: "v2-reading"`, written with the workspace), or from the v1 world-first loop.
  */
-interface WorldScript { from?: string; places: Record<string, { label: string; scale?: string | null; parent?: string | null; spot?: boolean }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }
+interface WorldScript { from?: string; places: Record<string, { label: string; scale?: string | null; parent?: string | null; spot?: boolean; near?: string }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }
 async function worldScript(novelDir: string): Promise<WorldScript | null> {
   return await worldFirstBook(novelDir) ? readJson<WorldScript>(join(novelDir, "stage", "world", "script.json")) : null;
 }
@@ -158,6 +158,14 @@ export async function stageInputs(novelDir: string) {
   for (const link of await pendingTreeLinks(novelDir)) if (isLocation(link.fromId) && isLocation(link.toId) && !parentOf.has(link.fromId) && !proposedParent.has(link.fromId)) proposedParent.set(link.fromId, link.toId);
   const placeTree = [...data.places.map((place) => ({ id: place.id, label: place.label, parentId: place.parentId, proposedParentId: place.parentId ? null : proposedParent.get(place.id) ?? null, path: place.path ?? [place.id], sceneIds: place.sceneIds })),
     ...entities.filter((entity) => entity.kind === "Location" && !projected.has(entity.id)).map((entity) => ({ id: entity.id, label: names[entity.id] ?? entity.id, parentId: parentOf.get(entity.id) ?? null, proposedParentId: parentOf.has(entity.id) ? null : proposedParent.get(entity.id) ?? null, path: treePath(entity.id), sceneIds: [] as string[] }))];
+  // A v2 reading's script has every unnamed place EM² found, a scene set there or not: the central build lays them all out.
+  if (world?.from === "v2-reading") {
+    const scriptPath = (id: string): string[] => { const path: string[] = [], seen = new Set<string>(); for (let at: string | null | undefined = id; at && !seen.has(at); at = world.places[at]?.parent ?? parentOf.get(at)) { seen.add(at); path.unshift(at); } return path; };
+    const known = new Set(placeTree.map((place) => place.id));
+    for (const [id, place] of Object.entries(world.places)) if (worldMade(id) && !known.has(id)) placeTree.push({ id, label: place.label, parentId: place.parent ?? null, proposedParentId: null, path: scriptPath(id), sceneIds: [] });
+    // A named building the tree puts nowhere is sampled first where its scenes are set (the script's `near`).
+    for (const place of placeTree) if (!place.parentId && !place.proposedParentId && world.places[place.id]?.near) place.proposedParentId = world.places[place.id].near!;
+  }
   const within = (id: string) => placeTree.filter((place) => place.parentId === id && !worldMade(place.id)).map((place) => place.id);
   // Scale: every place in the tree, with scenes of its own or not (the stage's map draws them all).
   const scalePlaces: ScalePlace[] = placeTree.filter((place) => !worldMade(place.id)).map((place) => {

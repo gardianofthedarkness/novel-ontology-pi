@@ -221,7 +221,7 @@ const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low <
 // its own disc (a staged building's on a lot of the place holding it); its circle holds its children. A temporary area (an
 // unnamed district or street of a place, holding what is known only to lie in it) is drawn fainter; a dwelling place (one
 // the ontology puts in no larger place, at a random spot of the central build until it is named) says where it dwells.
-const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale, temporary: !!node.temporary, dwelling: node.dwelling ? data.macro.find((other) => other.id === node.dwelling)?.label ?? node.dwelling : null }]));
+const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale, temporary: !!node.temporary, dwelling: node.dwelling ? data.macro.find((other) => other.id === node.dwelling)?.label ?? node.dwelling : null, sampled: node.sampled ? (node.sampled === "build" ? "the build" : data.macro.find((other) => other.id === node.sampled)?.label ?? node.sampled) : null, unbuilt: !!node.unbuilt }]));
 
 // The 3D stage.
 const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -478,13 +478,21 @@ const blast = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.Mesh
 let shownNotice = false, shownPlace = null, shownSegment = null, pathLines = [], time = 0, speed = 2, playing = true, follow = true, last = performance.now(), shownScene = -1, glide = null;
 for (const id of Object.keys(data.places)) world.add(buildPlace(id).group);
 // The place tree's circles on the ground, and a trace above them for every move between places.
+// A place the text does not put where it stands (sampled into an area by a seed, or dwelling where the tree says nothing)
+// is drawn in gold and blinks until the text or Jev places it (the user's call, 2026-10-31).
+const sampledSpots = [];
 for (const [id, spot] of macroAt) {
-  const strand = !!data.places[id], ring = new THREE.Mesh(new THREE.RingGeometry(spot.r - 0.8, spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: strand ? 0.6 : spot.temporary ? 0.18 : 0.3, side: THREE.DoubleSide, depthWrite: false }));
+  const guess = !!(spot.sampled || spot.dwelling);
+  const strand = !!data.places[id], ring = new THREE.Mesh(new THREE.RingGeometry(spot.r - Math.min(0.8, spot.r * 0.2), spot.r, 128), new THREE.MeshBasicMaterial({ color: guess ? 0xffd36e : 0x7ce6ff, transparent: true, opacity: strand ? 0.6 : spot.temporary ? 0.18 : 0.3, side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2; ring.position.set(spot.cx, -0.3 - spot.depth * 0.05, spot.cz); world.add(ring);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(spot.r, 128), new THREE.MeshBasicMaterial({ color: 0x0a1e2b, transparent: true, opacity: 0.45, depthWrite: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.set(spot.cx, -0.5 - spot.depth * 0.05, spot.cz); world.add(disc);
-  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : ""}` : spot.label, strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.depth ? 2.4 : 3.4); world.add(tag);
+  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : spot.sampled ? ` · sampled in ${spot.sampled}` : ""}` : spot.label, guess ? "#ffd36e" : strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, 4, spot.cz - spot.r + 5); tag.scale.multiplyScalar(spot.unbuilt ? 1.2 : spot.depth ? 2.4 : 3.4); world.add(tag);
+  if (guess) sampledSpots.push({ ring, tag });
 }
+// Jev's stills (capture mode) hold them still at full strength: a picture must not change with the moment it is taken.
+for (const { ring } of sampledSpots) ring.material.opacity = 0.85;
+const blinkSampled = (now) => { if (capture) return; const u = 0.5 + 0.5 * Math.sin(now / 260); for (const { ring, tag } of sampledSpots) { ring.material.opacity = 0.2 + 0.7 * u; tag.material.opacity = 0.5 + 0.5 * u; } };
 let decor = () => {};
 // Each open place's landscape around the staged grids (src/ground/stage/landscape.ts): faint hologram blocks and roads,
 // generated from the place's landscape, never on a staged grid; only the buildings the story names are canon. Kept
@@ -527,7 +535,7 @@ if (data.terrain?.proposal) {
   edges.renderOrder = 12; group.add(slab, edges);
   const tag = label(`${name} · ${kind} · ${y} m`, "#ffd36e", 30); tag.scale.multiplyScalar(Math.max(4, Math.max(w, d) / 16)); tag.position.set(0, h / 2 + Math.max(w, d) * 0.1, 0); group.add(tag);
   group.position.set((x0 + x1) / 2, y + h / 2, (z0 + z1) / 2); world.add(group);
-  blinkProposal = (now) => { const u = 0.5 + 0.5 * Math.sin(now / 180); slab.material.opacity = 0.06 + 0.34 * u; edges.material.opacity = 0.3 + 0.7 * u; };
+  blinkProposal = (now) => { if (capture) return; const u = 0.5 + 0.5 * Math.sin(now / 180); slab.material.opacity = 0.06 + 0.34 * u; edges.material.opacity = 0.3 + 0.7 * u; };
 }
 /** Where a traveller is, so long into the move between places: on a leg in a place's grid, or on the map's curve. */
 function travelAt(travel, elapsed) {
@@ -762,7 +770,7 @@ function frame(now) {
   groundSeen += ((below ? 0.15 : 0.8) - groundSeen) * Math.min(1, dt * 3);
   groundMat.opacity = groundSeen;
   for (const key of ["subway", "arcade", "under", "water", "deep", "facility"]) mats[key].opacity = 0.18 + (0.8 - groundSeen) * 0.6;
-  decor(time); blinkProposal(now);
+  decor(time); blinkProposal(now); blinkSampled(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }

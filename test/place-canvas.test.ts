@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addPart, addUnit, adopt, bear, bearChain, centralBuild, dwellingFor, emptyCanvas, holderFor, LEAST, worldOf, type BuildArea, type Canvas } from "../src/ground/stage/placeCanvas.js";
+import { addPart, addUnit, adopt, bear, bearChain, centralBuild, dwellingFor, emptyCanvas, holderFor, LEAST, sampledIn, worldOf, type BuildArea, type Canvas } from "../src/ground/stage/placeCanvas.js";
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 /** Every child circle lies inside its parent's, and no two siblings overlap. */
@@ -84,6 +84,19 @@ test("a building known only to lie somewhere in a city gets an unnamed temporary
   adopt(canvas, holder, { id: "w23", label: "Ward 23" });
   assert.ok(!canvas.places[holder] && canvas.places.w23 && !canvas.places.w23.temporary, "the temporary area is now Ward 23");
   assert.ok(same([canvas.places.w23.at, canvas.places.w23.units], [before.at, before.units]), "where it was, with what it held");
+});
+
+test("a building held only by a city with districts in it is sampled into one of them (the same every run), never a new area: the city stays bounded", () => {
+  const canvas = bearChain(emptyCanvas(), [city]);
+  bear(canvas, { ...ward, parent: "c" }); bear(canvas, { id: "w15", label: "Ward 15", scale: "district", parent: "c", landscape: "commercial" });
+  const before = Object.keys(canvas.places).length, holders = ["lab", "inn", "shop", "bar"].map((id) => holderFor(canvas, "c", "building", id));
+  assert.ok(holders.every((holder) => holder === "w7" || holder === "w15"), "an area already there");
+  assert.ok(holders.every((holder) => sampledIn(canvas, "c", holder)), "and it says so");
+  assert.equal(Object.keys(canvas.places).length, before, "no area was made");
+  assert.deepEqual(["lab", "inn", "shop", "bar"].map((id) => holderFor(canvas, "c", "building", id)), holders, "the same every run");
+  bear(canvas, { ...street, parent: "w7" });
+  assert.equal(holderFor(canvas, "c", "building", "lab"), "s", "the next larger scale there is: a street before a district");
+  assert.ok(!sampledIn(canvas, "w7", holderFor(canvas, "w7", "building", "inn")), "a district holds its buildings itself: not sampled");
 });
 
 // An invented ontology: two cities, wards in one of them, a street in a ward, and a ward and a street the text puts nowhere.

@@ -450,6 +450,46 @@ On vol 1 (the places reading, 46 scenes): 2 placed by their environment, 4 by th
 in an unnamed room or building, 8 carried on; none left without a place. Most scenes are in 东京西部的学园都市 itself:
 the reading names few places finer than the city. 41 scenes are staged (5 have no events).
 
+### 2.0.10 Scale in EM, spatial words, and sampling in the engine (the user's calls, 2026-10-31) — built
+
+The tree of places drawn from EM and EM² alone showed what was not done: 58 unnamed places held by the city itself, each
+given a stand-in district of its own by the canvas (a city of 58 districts); 地面, 地下, 街上, 马路上 as places; buildings
+the tree put nowhere; 70 unnamed places held by nothing, and so never drawn.
+- **Scale is EM's.** Typing says a place's scale where it reads the name: region, city, district, street, building or
+  room (the open "place" type is gone); no stage step asks it again for a v2 book. The place tree (`places.ts`) checks it:
+  a place its type and name say nothing of is a step above the largest place it holds (日本 holding 东京都: a region),
+  and a parent no larger than an open place it holds is raised (东京都, a city holding 东京西部的学园都市: a region). Jev's
+  tree question offers only larger places. The world engine keeps what is not in the text: how big, what ground, where in
+  its parent (terrain, the canvas).
+- **Spatial words are no places.** Typing has a spatial type (on the ground, underground, on the street, on a roof, in a
+  corridor, at an exit, in the air): no entity, no EM² slot, kept as evidence (`spatial.ts`, `spatial.yaml`): each tied,
+  with no model call, to who or what acts or speaks in its line (EM²'s role, else its card), with the level of the world it
+  points at (underground, street, inside, roof, wall, sky). The world script carries them per scene; the world engine
+  gives them to Jev at run time with the sentence. Rooms stay rooms, the smallest unit; parts of a building (a roof, a
+  corridor, an exit) are spatial.
+- **Sampling keeps the city bounded.** A building or room the tree puts only in a city goes into an area already there
+  at the next larger scale (a street, else a district), picked by a seed, as a place the tree puts nowhere dwells (the
+  canvas's `holderFor`; a stand-in only when the city has no area at all). Every EM² place is on the canvas: in what EM²
+  said holds it, else its scene's named place; big unnamed places as street-sized markers, not ground. What is placed by
+  sampling (a dwelling, a seed's pick, a scene's guess) is drawn gold and blinks in the live view until the text or Jev
+  places it; Jev's stills hold it still (a picture must not change with the moment it is taken). Places no scene is set
+  in are markers only (unbuilt): off the walking lattice and the subway's stops.
+On vol 1's places reading, with the old types (before the rerun): no stand-in areas (58 before), 东京西部的学园都市 about
+1 km across (3 km before), all 165 EM² places on the canvas, 130 of them sampled into the three districts.
+- **A named building the tree puts nowhere** is sampled first where its scenes are set (the named area its scenes are
+  in most: the script's `near`, the stage's proposed parent), not anywhere in the build: 常盘台中学 had dwelt in a London
+  district sampled into 纽约. A district or a city the tree puts nowhere still dwells by step 3 (being talked of somewhere
+  is not being there).
+
+**Rerun on vol 1 (2026-10-31, `~/claude-world-first/v2-vol1-scales`, cache from the places reading):** 52 s, 526 Jev
+requests (5.87 M input tokens: $0.25 at $0.042/M), no work-model request (the listing reused); then one request more for
+the tree once regions could hold regions. Every named place's scale came from typing (14: 4 regions, 2 cities, 4
+districts, 4 buildings; 纽约 a city, 东京都 a region, as Jev's old scale step said). The tree: 日本 › 东京都 ›
+东京西部的学园都市 › 第七, 第十五, 第六学区; 合众国 › 纽约; the buildings and 英国清教第零圣堂区 with no parent (the text never
+says). EM² found 106 unnamed places (165 before): 地面, 地下, 屋顶, 楼顶, 最上层, 走廊, 出口 are spatial now (34 mentions of 23
+words, 21 tied to who is there, most with a level); 马路上 and 街上 were still typed as streets. The engine from it: no
+stand-in area, 学园都市 931 m across, 100 markers, 93 places sampled (gold, blinking).
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

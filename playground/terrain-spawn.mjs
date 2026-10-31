@@ -163,13 +163,13 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const holder = holderOf(part, city), cityNode = nodeOf(city.id), holderNode = nodeOf(holder) ?? cityNode;
       // The city as the engine stands it now: its node and the districts and streets in it (not the rooms and buildings the
       // scenes are set in, nor the canvas's stand-in areas), and the sites so far.
-      const kin = data.macro.filter(node => node.id !== part.id && (node.id === city.id || ((within(node.id, city.id) || member.get(node.id)?.city === city.id) && OPEN.has(node.scale))) && !String(node.id).startsWith('spot:') && !node.temporary);
+      const kin = data.macro.filter(node => node.id !== part.id && (node.id === city.id || ((within(node.id, city.id) || member.get(node.id)?.city === city.id) && OPEN.has(node.scale))) && !String(node.id).startsWith('spot:') && !node.temporary && !node.unbuilt);
       const anchor = cityNode ?? holderNode ?? { x: 0, z: 0 }, centre = [anchor.x, 0, anchor.z];
       const R = Math.max(400, ...kin.map(node => Math.hypot(node.x - centre[0], node.z - centre[2]) + node.r)) * 1.1;
       // Where the engine has the part for now (the canvas's spot for it, or what was kept before), in grey: Jev keeps or moves it.
       const now = nodeOf(part.id);
       const areas = (extra = []) => [
-        ...kin.filter(node => node.id !== city.id).map(node => ({ pts: circle(node.x, node.z, node.r), label: node.label, color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e' })),
+        ...kin.filter(node => node.id !== city.id).map(node => ({ pts: circle(node.x, node.z, node.r), label: node.dwelling ? `${node.label} (sampled: the text puts it nowhere)` : node.label, color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e' })),
         ...(now ? [{ pts: circle(now.x, now.z, now.r), label: `${part.label} · now`, color: 0x9fb4c3, textColor: '#c9d6df' }] : []),
         ...Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && id !== part.id).map(([id, site]) => ({ box: site.box, label: name(id), color: 0xffffff, textColor: '#ffffff' })), ...extra];
       const { text, environment } = evidence(part);

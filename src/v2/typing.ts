@@ -7,10 +7,12 @@ import { sentencesWith } from "./listing.js";
  * types defined once, the batch's sentences keyed by id and the strings keyed by a short key with the sentences that hold
  * them; each question names its string by path and chooses a type. Types fall into EM's categories: a person, a crowd (a
  * group of people who are there: never a name, EM² places it), a thing (a named object, a weapon, a vehicle), a place
- * (place, building, room), a concept (an ability, a network, a plan: someone's, EM asks whose), and a time (EM for times
- * is the calendar's). An everyday thing (a phone, a bag, a cleaning robot
- * at its work) is routine: no category, never an entity (the user's rule, 2026-10-30: only important named things,
- * vehicles and weapons).
+ * by its scale (region, city, district, street, building, room: the user's call, 2026-10-31, scale is EM's, read where
+ * the name stands, so no stage step asks it again), a concept (an ability, a network, a plan: someone's, EM asks whose),
+ * and a time (EM for times is the calendar's). An everyday thing (a phone, a bag, a cleaning robot at its work) is
+ * routine: no category, never an entity (the user's rule, 2026-10-30: only important named things, vehicles and
+ * weapons). A spatial word (on the ground, underground, on the roof, in the corridor) is no place at all but where
+ * someone or something is: no category, kept as evidence of who is where (src/v2/spatial.ts).
  */
 export const ENTITY_TYPES = {
   person: "a person, or a being who acts like one: by name, surname, nickname, title or a description used for them",
@@ -19,19 +21,27 @@ export const ENTITY_TYPES = {
   routine: "an everyday thing: a phone, a bag, food, clothes, furniture, a door or a wall, a machine at its routine work (a cleaning robot)",
   weapon: "a weapon",
   vehicle: "a vehicle or a mech: something people ride, drive or move in",
-  place: "a place in the open: a city, a district, a street, a park, a bridge, a region",
+  region: "a region: a country, a state or a province, a wide natural area (a forest, a desert, an ocean), bigger than a city",
+  city: "a city or a town",
+  district: "a part of a city: a ward, a school district, a downtown, a neighbourhood",
+  street: "an open place in a district: a street, a road, an alley, a square, a park, a bridge, a river bank, a crossing",
   building: "a building or a structure: a school, a dormitory, a shop, a station, a tower",
-  room: "a room or a part inside a building: a classroom, a corridor, a roof, a hall",
+  room: "a room inside a building: a classroom, an office, a ward, a hall, a karaoke box",
+  spatial: "no place of its own but where someone or something is, against what is around: on the ground, underground, on the street or the road, on a roof, in a corridor, at an exit, on the stairs, on a wall, in the air",
   concept: "a concept the story names: an ability, a power, a technique or a spell, a network or a system, a project or a plan (幻想杀手, 御坂网络); something someone has, uses or runs, not a thing in the hand",
   time: "a time: a date, a day, an hour, a part of the day, a season",
   none: "none of these: an organisation as such, an ordinary word",
 } as const;
-export type EntityType = keyof typeof ENTITY_TYPES;
+/** "place": an open place of an earlier reading, before EM said its scale. */
+export type EntityType = keyof typeof ENTITY_TYPES | "place";
 export type Category = "person" | "crowd" | "thing" | "place" | "concept" | "time";
-export const CATEGORY_OF: Record<EntityType, Category | null> = { person: "person", crowd: "crowd", object: "thing", routine: null, weapon: "thing", vehicle: "thing", place: "place", building: "place", room: "place", concept: "concept", time: "time", none: null };
-const TYPE_LABELS: Record<EntityType, string> = {
+export const CATEGORY_OF: Record<EntityType, Category | null> = { person: "person", crowd: "crowd", object: "thing", routine: null, weapon: "thing", vehicle: "thing", region: "place", city: "place", district: "place", street: "place", place: "place", building: "place", room: "place", spatial: null, concept: "concept", time: "time", none: null };
+/** The scale of places, smallest first (a place's scale is its type); a parent is larger than what it holds. */
+export const PLACE_SCALES = ["room", "building", "street", "district", "city", "region"] as const;
+const TYPE_LABELS: Record<keyof typeof ENTITY_TYPES, string> = {
   person: "a person", crowd: "a crowd or a group of people", object: "an important named thing", routine: "an everyday thing", weapon: "a weapon", vehicle: "a vehicle or a mech",
-  place: "a place in the open", building: "a building", room: "a room or a part of a building", concept: "an ability, a network or a plan (a concept)", time: "a time", none: "none of these",
+  region: "a region, bigger than a city", city: "a city or a town", district: "a part of a city", street: "a street or an open place in a district", building: "a building", room: "a room inside a building",
+  spatial: "where someone is (on the ground, underground, on a roof): no place", concept: "an ability, a network or a plan (a concept)", time: "a time", none: "none of these",
 };
 
 /**
