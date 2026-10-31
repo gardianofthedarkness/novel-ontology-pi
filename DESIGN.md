@@ -16,6 +16,13 @@ embedded, no-Docker architecture.
 > details → implementation mapping → open questions for that sector only.
 > This document covers the whole and only summarizes System 1.
 
+> **v2 (2026-10-30 →, branch `v2`) has its own design documents** in
+> [`docs/v2/`](docs/v2/): the frame they all follow is
+> [`docs/v2/world-model.md`](docs/v2/world-model.md) — the world model
+> (places and times are spacetime and form trees; matter moves through it
+> as a graph; spatial relations tie the two), its laws, and the layers
+> that read a novel into it. §6a below summarizes it.
+
 ---
 
 ## 1. Settled decisions (Qiguang, 2026-10-21)
@@ -261,6 +268,40 @@ approved you."
   candidates, foreshadowing, …) and the animated walkthrough are on the
   System 1 page — kept as an **open discussion list** to cut, keep, and
   add to together.
+
+## 6a. v2 — the world model and its layers (2026-10-31)
+
+Detail: [`docs/v2/world-model.md`](docs/v2/world-model.md); the reading
+flow in [`docs/v2/world-engine-v2.md`](docs/v2/world-engine-v2.md), the
+context engine in [`docs/v2/context-engine.md`](docs/v2/context-engine.md),
+the visual context engine and terrain in
+[`docs/v2/visual-context-engine.md`](docs/v2/visual-context-engine.md).
+
+- **The world model.** A novel's world is spacetime and matter. Places
+  and times are spacetime: each is a **tree** (a place has one parent,
+  graded by scale region › city › district › street › building › room; a
+  time sits in story › year › day › part of day). People, crowds, things,
+  vehicles and weapons are matter: movables, related as a general
+  **graph**. **Spatial relations** tie them: a movable is at one place at
+  a time (the occupancy matrix), at a level inside it (on the ground,
+  underground, on the roof). Places and matter are separate entity kinds
+  in every system, because their laws differ.
+- **The laws as checks.** The place tree's containment matrix has one 1
+  per row but the roots', n − r ones, no loops, and is graded by scale;
+  the decision for a place is one parent from a few larger candidates.
+  A movable's occupancy row has at most one 1 at a time; a change of it
+  is a move.
+- **The layers, decoupled.** 1 plain extraction (mentions, typing with a
+  place's scale, spatial words, time words) → 2 entity recommendation
+  (candidates scored by code: the matter recommender, the place
+  recommender) → 3 context composition (modes, sources, budget, manifest;
+  facts by Cypher over the reading's own graph) → 4 decisions (EM, EM²,
+  place EM, story time: Jev on the composed state) → 5 the world model's
+  stores → 6 the world engine (terrain, births, movement), which reads the
+  model and never redoes extraction. No layer does another's job.
+- **Place EM** replaces EM²'s place questions: the tree by the place
+  recommender with Jev only where it is unsure, each scene's setting,
+  unnamed places as leaves under the setting, and occupancy.
 
 ## 7. CLI command surface
 

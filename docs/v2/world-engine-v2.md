@@ -452,6 +452,9 @@ the reading names few places finer than the city. 41 scenes are staged (5 have n
 
 ### 2.0.10 Scale in EM, spatial words, and sampling in the engine (the user's calls, 2026-10-31) — built
 
+(The frame this belongs to, places as spacetime and matter as movables tied by spatial relations, with the layers that
+read a book into it and place EM replacing EM²'s place questions, is [world-model.md](world-model.md).)
+
 The tree of places drawn from EM and EM² alone showed what was not done: 58 unnamed places held by the city itself, each
 given a stand-in district of its own by the canvas (a city of 58 districts); 地面, 地下, 街上, 马路上 as places; buildings
 the tree put nowhere; 70 unnamed places held by nothing, and so never drawn.

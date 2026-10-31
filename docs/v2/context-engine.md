@@ -4,7 +4,9 @@ One engine composes the state of every Jev request in v2, at extraction and in t
 decision, and before composing it measures the surroundings of what is being decided, so that what goes in, and how much,
 follows the place in the book and in the world rather than a fixed recipe. Status: **design; the user agreed to most of
 it on 2026-10-30 and settled the open questions** (a mixed complexity score, widening per batch, facts by graph query
-with retrieval for widening, the world run per strand: §3.1, §6, §7, §9). Nothing here is built yet.
+with retrieval for widening, the world run per strand: §3.1, §6, §7, §9). The core is built first with the place modes
+(2026-10-31: [world-model.md](world-model.md) §6, where this engine is layer 3 of the world model's layers); the other
+modes move onto it after.
 
 ## 1. Why one engine
 
@@ -118,6 +120,9 @@ above 0.66 widens on answers below 0.6 instead of 0.5.
 | `when` | world loop | a scene | the allowed relations (the laws), periods, the scene before | when, against the scene before |
 | `movement` | sim pick loop | an event | units, spots, destinations, positions, things and vehicles there | where each unit goes, which way |
 | `dialogue` | later: talking to a character | a person at a tick | what they know (facts about them, their concepts), who they have talked to, where they are | (free answers) |
+| `place-parent` | place EM ([world-model.md](world-model.md) §5) | named places the place recommender is unsure of | the place's sentences, facts about it and each candidate, co-mentions, stated pairs, the candidates' addresses, narrative adjacency | `tree:<key>` |
+| `setting` | place EM | a scene whose setting is unsure | its environment cards, its opening, the setting before, the candidates' addresses | `setting:<scene>` |
+| `place-ref` | place EM | a scene's descriptions that may be a named place | the passage, the scene's address, the candidates with scales, earlier answers for the same words | `place:<key>` |
 
 Today's documents become the first recipes. The `roles` mode starts as exactly what `roles.ts` sends now, so moving it
 onto the engine is checked by identical documents (and cache hits) before the probe is allowed to change anything.
