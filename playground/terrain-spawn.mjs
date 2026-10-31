@@ -138,7 +138,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const cities = Object.keys(inputs.scale?.places ?? {}).filter(id => scaleOf(id) === 'city').map(id => ({ id, label: name(id), mentions: mentions(name(id)) })).filter(city => city.mentions).sort((a, b) => b.mentions - a.mentions);
     const open = Object.keys(inputs.scale?.places ?? {}).filter(id => OPEN.has(scaleOf(id))).map(id => ({ id, label: name(id), scale: scaleOf(id), at: firstAt(name(id)) })).filter(part => part.at >= 0);
     const order = list => list.sort((a, b) => (a.scale === b.scale ? 0 : a.scale === 'district' ? -1 : 1) || a.at - b.at);
-    const partsOf = new Map(cities.map(city => [city.id, order(open.filter(part => within(part.id, city.id)))]));
+    // A part is its nearest city's (学园都市's districts are not also 东京都's).
+    const cityOf = id => { for (let at = parentOf(id), n = 0; at && n < 12; at = parentOf(at), n++) if (scaleOf(at) === 'city') return at; return null; };
+    const partsOf = new Map(cities.map(city => [city.id, order(open.filter(part => cityOf(part.id) === city.id))]));
     // A flat tree (no part in any city): Jev says which parts are in which city, from the text, once a city.
     const member = new Map();
     if ([...partsOf.values()].every(list => !list.length) && open.length) {
@@ -159,12 +161,16 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     for (const city of cities) for (const part of partsOf.get(city.id) ?? []) {
       if (placed >= limit) break;
       const holder = holderOf(part, city), cityNode = nodeOf(city.id), holderNode = nodeOf(holder) ?? cityNode;
-      // The city as the engine stands it now: its node and every node in it, and the sites so far.
-      const kin = data.macro.filter(node => node.id !== part.id && (node.id === city.id || within(node.id, city.id) || member.get(node.id)?.city === city.id) && !String(node.id).startsWith('spot:') && !node.temporary);
+      // The city as the engine stands it now: its node and the districts and streets in it (not the rooms and buildings the
+      // scenes are set in, nor the canvas's stand-in areas), and the sites so far.
+      const kin = data.macro.filter(node => node.id !== part.id && (node.id === city.id || ((within(node.id, city.id) || member.get(node.id)?.city === city.id) && OPEN.has(node.scale))) && !String(node.id).startsWith('spot:') && !node.temporary);
       const anchor = cityNode ?? holderNode ?? { x: 0, z: 0 }, centre = [anchor.x, 0, anchor.z];
       const R = Math.max(400, ...kin.map(node => Math.hypot(node.x - centre[0], node.z - centre[2]) + node.r)) * 1.1;
+      // Where the engine has the part for now (the canvas's spot for it, or what was kept before), in grey: Jev keeps or moves it.
+      const now = nodeOf(part.id);
       const areas = (extra = []) => [
         ...kin.filter(node => node.id !== city.id).map(node => ({ pts: circle(node.x, node.z, node.r), label: node.label, color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e' })),
+        ...(now ? [{ pts: circle(now.x, now.z, now.r), label: `${part.label} · now`, color: 0x9fb4c3, textColor: '#c9d6df' }] : []),
         ...Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && id !== part.id).map(([id, site]) => ({ box: site.box, label: name(id), color: 0xffffff, textColor: '#ffffff' })), ...extra];
       const { text, environment } = evidence(part);
       const state = { city: city.label, part: { name: part.label, scale: part.scale, in: name(holder) }, text, ...(environment.length ? { environment } : {}) };
@@ -175,7 +181,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(centre, yaw, up, R * 1.8), target: centre }, areas: areas(), labelScale: R / 32, vague: { near: R * 4, far: R * 9 } });
       const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R }, areas: areas(), labelScale: R / 24, vague: CLEAR });
       const [where, what] = await decide({ task: `Where does ${part.label} lie in ${city.label}, and what is its ground? Terrain only: a manifold (a landscape type; the engine fills in its buildings) or a basic shape of ground, never a building.`, ...state, kinds,
-        pictures: { skyline: `${city.label} from the side and above, as the world stands now.`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; the places in it outlined and named (${name(holder)}, which holds ${part.label}, in blue).` } }, [
+        pictures: { skyline: `${city.label} from the side and above, as the world stands now.`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; its districts and streets outlined and named (${name(holder)}, which holds ${part.label}, in blue)${now ? `; where ${part.label} stands for now in grey` : ''}.` } }, [
         { key: 'box', primitive: 'box', instructions: `Box where ${part.label} lies on picture "map", as large as its ground is.` },
         { key: 'kind', primitive: 'choice', instructions: `What is ${part.label}'s ground (the kinds are in kinds)?`, options: Object.keys(kinds), optionHints: kinds },
       ], { images: { skyline: side.png, map: top.png } });

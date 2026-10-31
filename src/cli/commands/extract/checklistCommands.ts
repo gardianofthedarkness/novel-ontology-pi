@@ -203,10 +203,12 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
     counts: { built: !!graph }, next: !graph || graph.mtimeMs < newest ? [`novel graph build ${quote(join(novelDir, "ontology"))}`] : [] });
 
   // A world-first workspace: story time, scene places, the place tree, strands and in-book causality are the world's
-  // (docs/world-first-design.md), done once its world script is written; these faculties are never asked.
+  // (docs/world-first-design.md), done once its world script is written; these faculties are never asked. A v2 reading's
+  // workspace has it from the reading (experiments/v2/workspace.mjs); an older one from the v1 world loop.
   if (manifest.worldFirst) {
     const script = await exists(join(novelDir, "stage", "world", "script.json"));
-    for (const item of items) if (["time-place", "place-tree", "strands", "causality"].includes(item.id)) Object.assign(item, { status: script ? "done" : "todo", next: script ? [] : [`node experiments/world-first/run.mjs <out-dir> --novel ${dir}`], note: `World-first: the world ${script ? "decides" : "will decide"} this (stage/world/script.json).` });
+    const writer = manifest.v2Reading ? `node experiments/v2/workspace.mjs <source-novel-dir> ${quote(manifest.v2Reading.out)} <new-novel-dir>` : `node experiments/world-first/run.mjs <out-dir> --novel ${dir}`;
+    for (const item of items) if (["time-place", "place-tree", "strands", "causality"].includes(item.id)) Object.assign(item, { status: script ? "done" : "todo", next: script ? [] : [writer], note: `World-first: the world ${script ? "decides" : "will decide"} this (stage/world/script.json).` });
   }
   const worldFirst = !!manifest.worldFirst;
   settle(items);

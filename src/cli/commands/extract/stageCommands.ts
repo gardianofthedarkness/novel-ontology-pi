@@ -69,8 +69,11 @@ async function writeReport(path: string, value: unknown) {
   await writeFile(path, JSON.stringify(value, null, 1), { mode: 0o600 });
 }
 
-/** The world script of a world-first workspace (stage/world/script.json, from the world-first loop), or null. */
-interface WorldScript { places: Record<string, { label: string; scale?: string | null; parent?: string | null; spot?: boolean }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }
+/**
+ * The world script of a world-first workspace (stage/world/script.json), or null: from a v2 reading (src/v2/script.ts,
+ * `from: "v2-reading"`, written with the workspace), or from the v1 world-first loop.
+ */
+interface WorldScript { from?: string; places: Record<string, { label: string; scale?: string | null; parent?: string | null; spot?: boolean }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }
 async function worldScript(novelDir: string): Promise<WorldScript | null> {
   return await worldFirstBook(novelDir) ? readJson<WorldScript>(join(novelDir, "stage", "world", "script.json")) : null;
 }
@@ -161,10 +164,13 @@ export async function stageInputs(novelDir: string) {
     const forms = byId.get(place.id)?.names ?? [], canonical = names[place.id] ?? place.label;
     return { id: place.id, label: place.label, aliases: [...new Set(forms.map((form) => form.text).filter((text) => text && text !== canonical))], path: place.path, contains: within(place.id) };
   });
-  const scale = await readJson<ScaleReport>(stageFile(novelDir, "scale"));
-  // The world's own places carry their scale from the world (a spot: a building indoors, a street outdoors).
-  if (world && scale) for (const [id, place] of Object.entries(world.places)) if (worldMade(id) && place.scale) scale.places[id] ??= { label: place.label, inputs: "", scale: place.scale as ScaleReport["places"][string]["scale"], by: "world" as ScaleReport["places"][string]["by"] };
-  const scaleCurrent = scale?.inputs === scaleFingerprint(scalePlaces);
+  const asked = await readJson<ScaleReport>(stageFile(novelDir, "scale"));
+  const scaleCurrent = asked?.inputs === scaleFingerprint(scalePlaces);
+  // A world-first book's places carry the world's scale where the scale step has not answered (or has not run yet): a
+  // spot (a building indoors, a street outdoors), and from a v2 reading's script, a building or a room by its type and
+  // any other place by its name. Jev's answer stands over it; the scale step still asks about every place.
+  const scale = world ? asked ?? { version: 1 as const, inputs: "", model: null, askedAt: "", usage: { calls: 0, reused: 0 }, places: {} } : asked;
+  if (world && scale) for (const [id, place] of Object.entries(world.places)) if (place.scale && (worldMade(id) || world.from === "v2-reading")) scale.places[id] ??= { label: place.label, inputs: "", scale: place.scale as ScaleReport["places"][string]["scale"], by: "world" as ScaleReport["places"][string]["by"] };
   // A world-first book stages every scene: a place no building picture fits is an office building when its scale is a
   // building or a room, and open city ground otherwise (an area, or an unnamed place).
   const kindOf = (placeId: string) => { const kind = architecture?.places[placeId]?.kind; if (kind && kind !== "none") return kind; if (!world) return null; return ["building", "room"].includes(scale?.places[placeId]?.scale ?? "") ? "office" : "city"; };

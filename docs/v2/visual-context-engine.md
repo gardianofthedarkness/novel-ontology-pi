@@ -207,6 +207,11 @@ tree, central build or default spawns. That page is gone; terrain spawning now r
 - **Parts come from the place tree**: the open places (districts, streets) the tree puts in each city, districts first,
   then story order; Jev's membership question only when the tree puts no part in any city. Conflicts: a box over a part
   the tree does not put it in, a size outside its scale's range, or a quarter of the map.
+- **Straight after extraction** (the user, 2026-10-31: terrain comes first, before any world loop). The engine's world
+  reads the reading's own world script ([world-engine-v2.md](world-engine-v2.md) §2.0.9), not the v1 world loop's; a
+  part belongs to its nearest city (学园都市's districts are not also 东京都's). Jev's map names only the city's districts
+  and streets, and the part asked about in grey where the engine has it for now. On vol 1's places reading (mock answers,
+  no paid call): 日本 › 东京都 › 东京西部的学园都市 › 第七, 第十五 and 第六学区; three parts, eight questions, four builds.
 - **Places stop at rooms** (the user, 2026-10-31). A large unnamed place (an EM² slot) is not a terrain part: the engine
   samples it and Jev places it live, in the world engine's redesign.
 

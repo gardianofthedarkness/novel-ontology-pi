@@ -115,8 +115,9 @@ with a composed context, **System 2** is the main model (the work model for list
    come from them.
 10. **Out:** the data and the run's log as YAML (`docs/v2/schema.yaml` is the schema; `<out>/v2/*.yaml`), the world loop's base
    layer (`<out>/base/`), and with `experiments/v2/workspace.mjs` a world-first workspace whose canon is this reading (scenes,
-   entities, events from action cards, who takes part), so the world loop, the stage steps and the engine run on it as they
-   are.
+   entities, events from action cards, who takes part), so the stage steps and the engine run on it as they are. Its world
+   script (`stage/world/script.json`: each scene's place, who is present, the past, its events) is read off the reading
+   too (`src/v2/script.ts`, §2.0.9), so the v1 world loop no longer runs before terrain and the world engine.
 
 **Measured on vol 1, 2026-10-30, before EM²** (5,202 sentences, Jev 1.14, deepseek-chat; a fraction of a dollar in all):
 
@@ -382,7 +383,8 @@ against the last reading (`experiments/v2/compare.mjs`; the listing came from th
 
 ### 2.0.7 Terrain and spawns before the world plays (the user's call, 2026-10-31) — built
 
-After the whole extraction and the world loop (which says where each scene happens), `novel sim terrain`
+After the whole extraction and the world script (which says where each scene happens: the v1 world loop's then, the
+reading's own since §2.0.9), `novel sim terrain`
 (`playground/terrain.mjs`), recorded on the host's live page:
 1. **Terrain.** The book's main sites (the places its scenes happen in), in story order of their first scene, each placed
    by Jev in the place that holds it on the place tree, on a picture of that place from above: its ground (the
@@ -425,6 +427,28 @@ named place's parent from a name inside its name, the text naming the larger rig
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
 kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record
 it is part of (the book's text is in it: never public).
+
+### 2.0.9 The world script from the reading (the user's call, 2026-10-31) — built
+
+Terrain is the first step after extraction, before any world loop. But the engine built its world from the v1 world-first
+loop's script (the main agent deciding presence, place, time and dialogue batch by batch), so a v2 workspace could not
+reach terrain without running that loop first. The reading decides all of it already, so `src/v2/script.ts` reads the
+script off it, with no model call, and `experiments/v2/workspace.mjs` writes it with the canon (`--script` writes it
+again into a workspace made from that reading):
+- **place:** where the scene is set: the deepest named place its environment cards name, else the place its action cards
+  name most, else any it names most (but talk of a place that holds the last scene's place keeps that one: a school or a
+  country named in passing is not where a scene is); then the deepest place under it set in an environment card or named
+  twice; an unnamed building or room an environment card names (an EM² slot) is more specific still, under the place
+  that holds it (rooms are the smallest unit; big unnamed places are left to the world engine, placed live). A scene that
+  names none goes on where the last one was, unless it is in the past or the time tree says it does not go on.
+- **present:** who speaks, acts or is spoken to in its cards; **firstSeen:** present for the first time (where births are);
+  **clock:** null in the past, else its story-time span; **timeline:** its events; **context:** its environment cards.
+- **scales:** a named building or room by its type, any other place by its name; the stage takes them where Jev's scale
+  step has not answered (or has not run), so terrain finds the cities and their districts before any paid stage step.
+
+On vol 1 (the places reading, 46 scenes): 2 placed by their environment, 4 by their action cards, 24 by what they name, 8
+in an unnamed room or building, 8 carried on; none left without a place. Most scenes are in 东京西部的学园都市 itself:
+the reading names few places finer than the city. 41 scenes are staged (5 have no events).
 
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
@@ -530,7 +554,8 @@ v2 makes each a structured request:
    in them, where the characters spawn. Then the world loop, per strand ([context-engine.md](context-engine.md) §9).
 0b. **Next (the user, 2026-10-31): the visual context engine, debugging by display, the user's own camera, and terrain
    spawning on it** ([visual-context-engine.md](visual-context-engine.md)); the world engine's run is redesigned after,
-   for the new extraction.
+   for the new extraction. The order for a book: the reading → its workspace and world script (§2.0.9, no model calls)
+   → scales and landscapes (Jev, cheap) → terrain → the world engine, per strand, with births where people are first seen.
 1. Movement on structured states in the pick loop (each person's spot now from the engine); births and meetings of the
    line's load as structured requests too (one per scene, not one per person on a picture), and kept across the reload
    after models.
