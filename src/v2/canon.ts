@@ -8,6 +8,7 @@ import type { FlowResult } from "./flow.js";
  * - entities: the chart's people, places and things (Character, Location, Item), proper names first, descriptions kept apart;
  * - events: the action cards, in reading order, each with its people as its actors (who acts first; PARTICIPATES_IN);
  * - concepts (Concept) and whose they are (OWNS, from the owner);
+ * - the place tree: each named place PART_OF the place that holds it;
  * - story time: each period a TimePoint (as the v1 time-place faculty writes them, so the calendar builds from them), and
  *   each scene OCCURS_DURING its periods.
  * Slots (unnamed people) are not canon.
@@ -76,6 +77,8 @@ export function canonRecords(result: FlowResult, text: (sentence: string) => str
       properties: { expression: period.label, family: word?.family ?? null, gloss: period.gloss, role: period.role, flashback: period.flashback, toldFromId: period.toldFrom, date: period.date, ...(period.partOfDay ? { partOfDay: period.partOfDay } : {}), sentenceId: period.anchor, storyIndex: period.storyIndex, narrativeIndex: period.narrativeIndex, decidedBy: word?.decidedBy ?? null, source: "v2" },
     };
   });
+  // The place tree: each named place PART_OF the place that holds it (src/v2/places.ts), as the stage's place tree reads it.
+  const partOf = (result.places?.places ?? []).filter((entry) => entry.parent).map((entry) => ({ fromId: entry.id, toId: entry.parent!, type: "PART_OF", properties: { by: entry.by }, confidence: entry.confidence || 0.7 }));
   const occurs = (result.time?.scenes ?? []).flatMap((scene) => scene.periods.map((period) => ({ fromId: scene.scene, toId: period, type: "OCCURS_DURING", properties: { via: scene.inherited ? "inherited" : "anchor" }, confidence: 0.7 })));
-  return { scenes, entities: [...entities, ...timePoints], events, relations: [...relations, ...occurs] };
+  return { scenes, entities: [...entities, ...timePoints], events, relations: [...relations, ...occurs, ...partOf] };
 }

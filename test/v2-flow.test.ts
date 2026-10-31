@@ -14,6 +14,7 @@ import { canonRecords } from "../src/v2/canon.js";
 import { yamlDocument } from "../src/v2/yaml.js";
 import { readStoryTime, timeWords } from "../src/v2/time.js";
 import { hintsOnce } from "../src/v2/hints.js";
+import { placeTree } from "../src/v2/places.js";
 
 const sentences = (text: string, block = 1): Sentence[] => sectionBlock(text, block).sentences;
 const noFacts = () => new FactLedger([], () => "", () => 0);
@@ -98,7 +99,7 @@ test("EM: the recommender's best three go to Jev with the facts that name them; 
   assert.deepEqual(results.map((entry) => entry.facts), [["fact_000001"], ["fact_000001", "fact_000002"]]);
 });
 
-test("EM: a description of a person, a vehicle or a weapon is no one's name (EM² resolves it); everyday things are routine; a place's description is a name only where EM said it", async () => {
+test("EM: a description of a person, a place, a vehicle or a weapon is no one's name (EM² resolves it); everyday things are routine", async () => {
   const chart = new Chart();
   const batch = sentences("上条当麻来到常盘台中学。那个少年拿起手机，跳上那辆车，看向天空之眼。清扫机器人经过学校。");
   const position = (id: string) => batch.findIndex((sentence) => sentence.id === id);
@@ -114,14 +115,12 @@ test("EM: a description of a person, a vehicle or a weapon is no one's name (EM�
     { key: "n5", text: "清扫机器人", type: "routine", category: null, confidence: 1, proper: 0.3, sentences: [batch[2].id] },
     { key: "n6", text: "学校", type: "building", category: "place", confidence: 1, proper: 0.2, sentences: [batch[2].id] },
   ], { position, text: () => "", facts: noFacts() });
-  assert.deepEqual(results.map((entry) => [entry.outcome, entry.entity]), [["description", undefined], ["routine", undefined], ["description", undefined], ["exact", "item_000001"], ["routine", undefined], ["alias", "loc_000001"]]);
+  assert.deepEqual(results.map((entry) => [entry.outcome, entry.entity]), [["description", undefined], ["routine", undefined], ["description", undefined], ["exact", "item_000001"], ["routine", undefined], ["description", undefined]]);
   assert.deepEqual(results[2].sentences, [batch[1].id]);
-  assert.equal(calls, 1, "only the place is asked");
+  assert.equal(calls, 0, "nothing is asked: a place with no name of its own goes to EM²");
   assert.equal([...chart.entities.values()].filter((entity) => entity.category === "thing").length, 1, "no everyday thing joins the chart");
-  assert.deepEqual(chart.entities.get("loc_000001")!.names, ["常盘台中学", "学校"]);
-  assert.equal(chart.exact("学校"), undefined);
+  assert.deepEqual(chart.entities.get("loc_000001")!.names, ["常盘台中学"], "学校 is not a name of the school");
   assert.deepEqual(chart.names().map(([name]) => name).sort(), ["上条当麻", "天空之眼", "常盘台中学"].sort());
-  assert.deepEqual(chart.entities.get("loc_000001")!.seen, [batch[0].id, batch[2].id], "seen where EM decided it");
 });
 
 test("EM: a concept the story names is an entity, and whose it is is asked until it is known; a fact about it is about its owner", async () => {
@@ -291,6 +290,45 @@ test("story time: each time word's role, the periods with their dates, flashback
   assert.deepEqual(facts.holding("", 99, 3).map((fact) => fact.first), [block[5].id, block[0].id, block[3].id], "newest in story time first");
   assert.deepEqual(facts.facts.map((fact) => fact.period), [christmas.id, past.id, morning.id]);
   assert.equal(chart.entities.size, 0);
+});
+
+test("EM² places: a place's description means a named place or an unnamed one of the scene, held by the named place it is in; the place tree from names, the text, EM² and Jev", async () => {
+  const chart = new Chart();
+  const text = sentences("学园都市第七学区的常盘台中学很有名。上条当麻走进那栋大楼。他来到学校的屋顶。", 3);
+  const id = (index: number) => text[index].id;
+  const kinds: Record<string, { kind: string }> = Object.fromEntries(text.map((sentence, index) => [sentence.id, { kind: ["environment", "action", "action"][index] }]));
+  chart.mint("place", "place", "学园都市", []);
+  chart.mint("place", "place", "学园都市第七学区", [id(0)]);
+  chart.mint("place", "building", "常盘台中学", [id(0)]);
+  chart.mint("place", "place", "纽约", []);
+  chart.mint("person", "person", "上条当麻", [id(1)]);
+  const named = new Map([[id(0), ["loc_000002", "loc_000003"]], [id(1), ["char_000001"]]]);
+  const position = (sentence: string) => text.findIndex((entry) => entry.id === sentence);
+  const asked: { state: Record<string, unknown>; questions: DecisionQuestion[] }[] = [];
+  const decide = async (state: DecisionState, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> => {
+    asked.push({ state: state as Record<string, unknown>, questions });
+    const descriptions = (state as { descriptions?: Record<string, { text: string }> }).descriptions ?? {};
+    return questions.map((q) => {
+      const of = q.key.startsWith("ref:") || q.key.startsWith("within:") ? descriptions[q.key.split(":")[1]]?.text : null;
+      const value = q.key.startsWith("tree:") ? "none" : q.key.startsWith("ref:") ? (of === "学校" ? "loc_000003" : "new") : q.key.startsWith("within:") ? "loc_000002" : q.key.startsWith("role:who:") ? "char_000001" : q.primitive === "noul" ? 0.9 : "none";
+      return { key: q.key, value, confidence: 0.9, distribution: typeof value === "string" ? { [value]: 0.9 } : undefined } as DecisionAnswer;
+    });
+  };
+  const descriptions = [{ text: "那栋大楼", type: "building" as const }, { text: "学校", type: "building" as const }, { text: "屋顶", type: "room" as const }];
+  const result = await resolveRoles(decide, { scenes: [{ id: "scene_000001", sentences: text.map((sentence) => sentence.id) }], kinds, chart, named, descriptions, recommended: new Map(), facts: noFacts(), text: (sentence) => text.find((entry) => entry.id === sentence)?.text ?? "", position });
+  const state = asked[0].state as { places: Record<string, unknown>; setting: string[] };
+  assert.deepEqual(Object.keys(state.places), ["loc_000002", "loc_000003"], "the named places of the scene so far");
+  assert.equal(state.setting.length, 1, "the scene's environment cards as its setting");
+  assert.deepEqual(result.references.map((entry) => [entry.text, entry.entity]), [["那栋大楼", "slot_000001_1"], ["学校", "loc_000003"], ["屋顶", "slot_000001_2"]]);
+  assert.deepEqual(result.slots.map((slot) => [slot.kind, slot.label, slot.in]), [["building", "那栋大楼", "loc_000002"], ["room", "屋顶", "loc_000002"]]);
+  assert.deepEqual(result.placeLinks.map((link) => [link.child, link.parent, link.via]), [["loc_000003", "loc_000002", "学校"]], "a named place EM² put in another");
+  const tree = await placeTree(decide, { chart, sentences: text, placeLinks: result.placeLinks, slots: result.slots, text: () => "" });
+  const parent = Object.fromEntries(tree.places.map((entry) => [chart.entities.get(entry.id)!.names[0], [entry.parent ? chart.entities.get(entry.parent)!.names[0] : null, entry.by]]));
+  assert.deepEqual(parent["学园都市第七学区"], ["学园都市", "name"], "a name inside a name");
+  assert.deepEqual(parent["常盘台中学"], ["学园都市第七学区", "stated"], "named right after the place that holds it (and EM² agrees)");
+  assert.deepEqual(parent["纽约"], [null, "none"], "Jev, asked once for the rest, says none");
+  assert.ok(asked.at(-1)!.questions.every((q) => q.key.startsWith("tree:")));
+  assert.deepEqual(tree.slots.map((slot) => slot.in), ["loc_000002", "loc_000002"]);
 });
 
 test("the flow: tiling, kinds and listing at once, then EM, the card scan, contexts and the world loop's base", async () => {

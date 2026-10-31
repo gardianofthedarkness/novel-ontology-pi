@@ -40,7 +40,8 @@ export const FLOW_NODES: FlowNode[] = [
   node("listing", "Listing · v2", "digger", "work", ["v2-listing"], 3.6, 1),
   node("typing", "Typing · v2", "digger", "jev", ["type", "proper"], 3.6, 2),
   node("unified", "Unified EM · v2", "digger", "jev", ["em", "own"], 3.6, 3),
-  node("roles", "Roles · EM² · v2", "digger", "jev", ["role", "ref"], 3.6, 4),
+  node("roles", "Roles · EM² · v2", "digger", "jev", ["role", "ref", "within"], 3.6, 4),
+  node("placetree", "Place tree · v2", "digger", "jev", ["tree"], 3.6, 6),
   node("storytime", "Story time · v2", "digger", "jev", ["time"], 3.6, 5),
 ];
 
@@ -84,6 +85,7 @@ export const FLOW_EDGES: FlowEdge[] = [
   edge("unified", "storytime", "time words"),
   edge("scenes", "storytime", "scenes"),
   edge("storytime", "roles", "facts by story time"),
+  edge("roles", "placetree", "places where they stand, what holds them"),
   edge("scenes", "roles", "scenes"),
   edge("exchanges", "roles", "sentence kinds"),
 ];

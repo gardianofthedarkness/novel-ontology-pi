@@ -83,6 +83,10 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
       };
     })(),
     facts: { facts: result.facts.length, about: result.facts.filter(fact => fact.about.length).length, byDescription: result.facts.filter(fact => fact.about.some(entry => entry.via === 'description')).length, byConcept: result.facts.filter(fact => fact.about.some(entry => entry.via === 'concept')).length, timed: result.facts.filter(fact => fact.time).length, inPeriod: result.facts.filter(fact => fact.period).length },
+    places: (() => {
+      const { places, slots } = result.places, by = places.reduce((sum, entry) => ({ ...sum, [entry.by]: (sum[entry.by] ?? 0) + 1 }), {});
+      return { named: places.length, withParent: places.filter(entry => entry.parent).length, by, unnamed: slots.length, unnamedHeld: slots.filter(slot => slot.in).length, links: result.placeLinks.length, descriptions: result.references.filter(entry => ['place', 'building', 'room'].includes(entry.type)).length };
+    })(),
     time: (() => {
       const { words, periods, scenes, calendar } = result.time, count = (list, key) => list.reduce((sum, entry) => ({ ...sum, [key(entry)]: (sum[key(entry)] ?? 0) + 1 }), {});
       return {
@@ -111,9 +115,10 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     write(v2, 'slots.yaml', yamlDocument({ slots: result.slots, habits: result.habits })),
     write(v2, 'facts.yaml', yamlDocument(result.facts.map(({ text: _, ...fact }) => fact))),
     write(v2, 'time.yaml', yamlDocument(result.time)),
+    write(v2, 'places.yaml', yamlDocument({ ...result.places, links: result.placeLinks })),
     ...((live.usage ?? []).length ? [write(v2, 'jev-usage.json', JSON.stringify(live.usage))] : []),
     // The same data as JSON, for tools (compare.mjs, inspect.mjs, the world loop).
-    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time })),
+    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time, places: result.places, placeLinks: result.placeLinks })),
     write(baseDir, 'scenes.json', JSON.stringify(base.scenes)),
     write(baseDir, 'roster.json', JSON.stringify(base.roster, null, 1)),
     write(baseDir, 'facts.json', JSON.stringify(base.facts)),
