@@ -132,8 +132,8 @@ export function tiedSpot(canvas: Canvas, placeId: string, unit: Pick<Unit, "id" 
  * tied to has is left for Jev to plant (`forJev`); one with no use known, or tied to no street, stays where it was
  * sampled. `streets`: each street's own buildings (its form's), in the place's frame.
  */
-export function dwellInStreets(place: CanvasPlace, streets: Map<string, Building[]>, ties: Record<string, Record<string, number>>, useOf: (unit: Unit) => string | null): { dwells: Record<string, string>; forJev: string[] } {
-  const taken = new Set<string>(), dwells: Record<string, string> = {}, forJev: string[] = [];
+export function dwellInStreets(place: CanvasPlace, streets: Map<string, Building[]>, ties: Record<string, Record<string, number>>, useOf: (unit: Unit) => string | null, taken = new Set<string>()): { dwells: Record<string, string>; forJev: string[] } {
+  const dwells: Record<string, string> = {}, forJev: string[] = [];
   for (const unit of place.units) {
     if (unit.kind !== "building" || streets.has(unit.id)) continue;
     const use = useOf(unit), tied = [...streets.keys()].filter((id) => ties[unit.id]?.[id]).sort((a, b) => ties[unit.id][b] - ties[unit.id][a]);
@@ -142,6 +142,24 @@ export function dwellInStreets(place: CanvasPlace, streets: Map<string, Building
     if (!street) { unit.forJev = true; forJev.push(unit.id); continue; }
     const lot = pickBy(unit.id, streets.get(street)!.filter((b) => b.use === use && !taken.has(b.lot)).map((b) => b.lot)), building = streets.get(street)!.find((b) => b.lot === lot)!;
     taken.add(lot); unit.at = [building.x, building.z]; unit.dwells = street; dwells[unit.id] = street;
+  }
+  return { dwells, forJev };
+}
+
+/**
+ * What is there first (docs/v2/world-engine-v2.md §2.0.21, the user's design): a building of a place that dwells nowhere yet
+ * dwells in one of the buildings the place's ground made of its use (`made`, in the place's frame, each with its use), the
+ * nearest to where it was sampled; the scarcest uses first, one building each, so the most are held. A building of a use the
+ * ground has none of left is marked for Jev. `taken`: the lots already dwelt in (the streets' first).
+ */
+export function dwellInGround(place: CanvasPlace, made: (Building & { use?: string | null })[], useOf: (unit: Unit) => string | null, taken = new Set<string>()): { dwells: Record<string, string>; forJev: string[] } {
+  const dwells: Record<string, string> = {}, forJev: string[] = [], free = (use: string) => made.filter((b) => b.use === use && !taken.has(b.lot));
+  const waiting = place.units.filter((unit) => unit.kind === "building" && !unit.dwells && useOf(unit)).map((unit) => ({ unit, use: useOf(unit)! }));
+  for (const { unit, use } of waiting.sort((a, b) => free(a.use).length - free(b.use).length || a.unit.id.localeCompare(b.unit.id))) {
+    const choices = free(use);
+    if (!choices.length) { unit.forJev = true; forJev.push(unit.id); continue; }
+    const building = choices.reduce((best, b) => (Math.hypot(b.x - unit.at[0], b.z - unit.at[1]) < Math.hypot(best.x - unit.at[0], best.z - unit.at[1]) ? b : best));
+    taken.add(building.lot); unit.at = [building.x, building.z]; unit.dwells = place.id; unit.forJev = false; dwells[unit.id] = place.id;
   }
   return { dwells, forJev };
 }

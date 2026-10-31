@@ -63,10 +63,10 @@ footer { font-size: 12px; color: var(--muted); }
 <header class="top">
   <span class="eyebrow">Novel ontology · v2 · the concepts we invented</span>
   <h1>Concept map</h1>
-  <p>Every abstract concept of the v2 build, in the layer it belongs to, from what the text says to what is seen: what it is, where it lives in code, where it is designed, what it builds on and what builds on it. Made from <code>src/v2/concepts.ts</code> at <code>2e7d57f</code> on 2026-10-31.</p>
-  <span class="status">50 concepts · all 129 pointers hold · 41 of the user's design</span>
+  <p>Every abstract concept of the v2 build, in the layer it belongs to, from what the text says to what is seen: what it is, where it lives in code, where it is designed, what it builds on and what builds on it. Made from <code>src/v2/concepts.ts</code> at <code>cb13422</code> on 2026-10-31.</p>
+  <span class="status">53 concepts · all 136 pointers hold · 44 of the user's design</span>
 </header>
-<nav class="strip" aria-label="Layers"><a class="step reading" href="#layer-reading"><b>reading</b><span>6</span></a><span class="arrow" aria-hidden="true">→</span><a class="step tree" href="#layer-tree"><b>tree</b><span>6</span></a><span class="arrow" aria-hidden="true">→</span><a class="step terrain" href="#layer-terrain"><b>terrain</b><span>14</span></a><span class="arrow" aria-hidden="true">→</span><a class="step world" href="#layer-world"><b>world</b><span>13</span></a><span class="arrow" aria-hidden="true">→</span><a class="step view" href="#layer-view"><b>view</b><span>9</span></a><span class="arrow" aria-hidden="true">·</span><a class="step rules" href="#layer-rules"><b>rules</b><span>2</span></a></nav>
+<nav class="strip" aria-label="Layers"><a class="step reading" href="#layer-reading"><b>reading</b><span>6</span></a><span class="arrow" aria-hidden="true">→</span><a class="step tree" href="#layer-tree"><b>tree</b><span>6</span></a><span class="arrow" aria-hidden="true">→</span><a class="step terrain" href="#layer-terrain"><b>terrain</b><span>16</span></a><span class="arrow" aria-hidden="true">→</span><a class="step world" href="#layer-world"><b>world</b><span>14</span></a><span class="arrow" aria-hidden="true">→</span><a class="step view" href="#layer-view"><b>view</b><span>9</span></a><span class="arrow" aria-hidden="true">·</span><a class="step rules" href="#layer-rules"><b>rules</b><span>2</span></a></nav>
 <div class="tools" role="search">
   <input id="find" type="search" placeholder="Find a concept (pools, zoom, shells…)" aria-label="Find a concept">
   <button type="button" id="mine" aria-pressed="false">Only the user's designs</button>
@@ -146,7 +146,7 @@ footer { font-size: 12px; color: var(--muted); }
   <header><h3>Continuity ties</h3><span class="badge">the user's design</span></header>
   <p>Two places are tied once for each character going from the one's scene to the other's, or in one scene set in both.</p>
   <div class="where"><div><span class="label">code</span><ul><li><code class="path">src/v2/pools.ts</code> <code class="sym">continuityTies</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.14 Pins, not circles</span></li></ul></div></div>
-  <div class="links"><div><span class="label">builds on</span><a class="chip tree" href="#world-script">The world script</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#pins-suggest">Pins as suggestions</a><a class="chip world" href="#tied-sampling">Tied sampling</a><a class="chip world" href="#street-uses">Street uses and dwelling</a></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip tree" href="#world-script">The world script</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#pins-suggest">Pins as suggestions</a><a class="chip terrain" href="#placement">Placement as one optimization</a><a class="chip world" href="#tied-sampling">Tied sampling</a><a class="chip world" href="#street-uses">Street uses and dwelling</a></div></div>
 </article></div>
 </section>
 <section class="layer" id="layer-terrain" data-layer="terrain">
@@ -197,7 +197,7 @@ footer { font-size: 12px; color: var(--muted); }
   <header><h3>Compatibility</h3><span class="badge">the user's design</span></header>
   <p>Which street kinds may adjoin (an avenue a station front, a square nothing): touch, not lie over; below the street, anything.</p>
   <div class="where"><div><span class="label">code</span><ul><li><code class="path">src/v2/context/terrainModes.ts</code> <code class="sym">OVERLAPS</code></li><li><code class="path">src/v2/context/terrainModes.ts</code> <code class="sym">mayOverlap</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.15 Pins as suggestions</span></li></ul></div></div>
-  <div class="links"><div><span class="label">builds on</span><a class="chip terrain" href="#kinds-by-level">Kinds by level</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#repin">Repinning</a><a class="chip terrain" href="#free-ground">Free ground</a><a class="chip world" href="#adjoining">Adjoining</a></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip terrain" href="#kinds-by-level">Kinds by level</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#repin">Repinning</a><a class="chip terrain" href="#free-ground">Free ground</a><a class="chip world" href="#adjoining">Adjoining</a><a class="chip terrain" href="#placement">Placement as one optimization</a></div></div>
 </article>
 <article class="card" id="repin" data-layer="terrain" data-text="repinning before jev is asked, a pin on a kept place its kind may not share moves to the nearest open point near it. repin">
   <header><h3>Repinning</h3><span class="badge">the user's design</span></header>
@@ -221,7 +221,19 @@ footer { font-size: 12px; color: var(--muted); }
   <header><h3>Free ground</h3><span class="badge">the user's design</span></header>
   <p>A pool's member framed in its pool's whole area, two zooms at a time, its spot moved onto free ground, crowding asked again.</p>
   <div class="where"><div><span class="label">code</span><ul><li><code class="path">src/v2/context/zoom.ts</code> <code class="sym">nearestFree</code></li><li><code class="path">src/v2/context/zoom.ts</code> <code class="sym">CROWDED</code></li><li><code class="path">playground/terrain-spawn.mjs</code> <code class="sym">to free ground: its spot was on kept ground</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.20 Free ground, two zooms</span></li></ul></div></div>
-  <div class="links"><div><span class="label">builds on</span><a class="chip view" href="#zoom-engine">The zoom engine</a><a class="chip terrain" href="#compatibility">Compatibility</a></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip view" href="#zoom-engine">The zoom engine</a><a class="chip terrain" href="#compatibility">Compatibility</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#placement">Placement as one optimization</a></div></div>
+</article>
+<article class="card" id="pin-sizing" data-layer="terrain" data-text="sized by pins an area's size is its kind's usual size, grown until its buildings hold three for each building pin under it. pin-sizing">
+  <header><h3>Sized by pins</h3><span class="badge">the user's design</span></header>
+  <p>An area's size is its kind's usual size, grown until its buildings hold three for each building pin under it.</p>
+  <div class="where"><div><span class="label">code</span><ul><li><code class="path">src/v2/context/zoom.ts</code> <code class="sym">sizeByPins</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.21 Areas sized by their pins</span></li></ul></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip view" href="#zoom-engine">The zoom engine</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#placement">Placement as one optimization</a></div></div>
+</article>
+<article class="card" id="placement" data-layer="terrain" data-text="placement as one optimization where an area goes: the least cost of its ties' distances and its spot, inside its area, over nothing it may not share. placement">
+  <header><h3>Placement as one optimization</h3><span class="badge">the user's design</span></header>
+  <p>Where an area goes: the least cost of its ties' distances and its spot, inside its area, over nothing it may not share.</p>
+  <div class="where"><div><span class="label">code</span><ul><li><code class="path">src/v2/context/zoom.ts</code> <code class="sym">placeArea</code></li><li><code class="path">playground/terrain-spawn.mjs</code> <code class="sym">Z.placeArea</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.21 Areas sized by their pins</span></li></ul></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip tree" href="#ties">Continuity ties</a><a class="chip terrain" href="#compatibility">Compatibility</a><a class="chip terrain" href="#pin-sizing">Sized by pins</a><a class="chip terrain" href="#free-ground">Free ground</a></div></div>
 </article>
 <article class="card" id="plain-map" data-layer="terrain" data-text="a plain map terrain starts from the tree's pins alone: no default ground, no scene buildings, no subway, until terrain keeps a place. plain-map">
   <header><h3>A plain map</h3><span class="badge">the user's design</span></header>
@@ -244,6 +256,12 @@ footer { font-size: 12px; color: var(--muted); }
   <div class="where"><div><span class="label">code</span><ul><li><code class="path">playground/export-strand-demo.mjs</code> <code class="sym">Parts Jev boxed over each other adjoin instead</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.20 Free ground, two zooms</span></li></ul></div></div>
   <div class="links"><div><span class="label">builds on</span><a class="chip terrain" href="#borrowing">Borrowing</a><a class="chip terrain" href="#compatibility">Compatibility</a></div></div>
 </article>
+<article class="card" id="ground-first" data-layer="world" data-text="what is there first a building pin dwells in a building its place's ground made of its use, the scarcest uses first; the rest go to jev. ground-first">
+  <header><h3>What is there first</h3><span class="badge">the user's design</span></header>
+  <p>A building pin dwells in a building its place's ground made of its use, the scarcest uses first; the rest go to Jev.</p>
+  <div class="where"><div><span class="label">code</span><ul><li><code class="path">src/ground/stage/placeCanvas.ts</code> <code class="sym">dwellInGround</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.21 Areas sized by their pins</span></li></ul></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip world" href="#street-uses">Street uses and dwelling</a><a class="chip world" href="#landscape-fill">The landscape fill</a></div></div>
+</article>
 <article class="card" id="canvas" data-layer="world" data-text="the canvas of places every place a circle in its parent's frame, born when needed, growing to hold what is in it; the room it takes. canvas">
   <header><h3>The canvas of places</h3></header>
   <p>Every place a circle in its parent's frame, born when needed, growing to hold what is in it; the room it takes.</p>
@@ -260,7 +278,7 @@ footer { font-size: 12px; color: var(--muted); }
   <header><h3>The landscape fill</h3></header>
   <p>Each place's ground filled from its patches: blocks, roads and buildings drawn from its kind's manifold.</p>
   <div class="where"><div><span class="label">code</span><ul><li><code class="path">src/ground/stage/landscape.ts</code> <code class="sym">fillLandscape</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.13 Street areas</span></li></ul></div></div>
-  <div class="links"><div><span class="label">builds on</span><a class="chip terrain" href="#manifold">The median and its manifold</a></div><div><span class="label">built on by</span><a class="chip world" href="#street-forms">Street forms</a><a class="chip world" href="#world-lots">The world's lots</a></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip terrain" href="#manifold">The median and its manifold</a></div><div><span class="label">built on by</span><a class="chip world" href="#ground-first">What is there first</a><a class="chip world" href="#street-forms">Street forms</a><a class="chip world" href="#world-lots">The world's lots</a></div></div>
 </article>
 <article class="card" id="street-forms" data-layer="world" data-text="street forms each street kind lays out its own buildings: rows along its road, a ring round a square, a podium with towers. street-forms">
   <header><h3>Street forms</h3><span class="badge">the user's design</span></header>
@@ -278,7 +296,7 @@ footer { font-size: 12px; color: var(--muted); }
   <header><h3>Street uses and dwelling</h3><span class="badge">the user's design</span></header>
   <p>Each street kind lists its buildings' uses; a pool's building tied to a street dwells in its building of that use.</p>
   <div class="where"><div><span class="label">code</span><ul><li><code class="path">src/ground/stage/placeCanvas.ts</code> <code class="sym">dwellInStreets</code></li><li><code class="path">src/v2/rules/language.ts</code> <code class="sym">buildingUseOf</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.15 Pins as suggestions</span></li></ul></div></div>
-  <div class="links"><div><span class="label">builds on</span><a class="chip world" href="#street-forms">Street forms</a><a class="chip tree" href="#ties">Continuity ties</a></div><div><span class="label">built on by</span><a class="chip world" href="#use-models">Use models</a></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip world" href="#street-forms">Street forms</a><a class="chip tree" href="#ties">Continuity ties</a></div><div><span class="label">built on by</span><a class="chip world" href="#ground-first">What is there first</a><a class="chip world" href="#use-models">Use models</a></div></div>
 </article>
 <article class="card" id="use-models" data-layer="world" data-text="use models which 3d models stand for each building use (own, a stand-in, a gap), chosen by proportions for each building. use-models">
   <header><h3>Use models</h3><span class="badge">the user's design</span></header>
@@ -329,7 +347,7 @@ footer { font-size: 12px; color: var(--muted); }
   <header><h3>The zoom engine</h3><span class="badge">the user's design</span></header>
   <p>One layer for every frame and box: the scale ladder, extents not circles, context and work frames, tiers, free space, sanity.</p>
   <div class="where"><div><span class="label">code</span><ul><li><code class="path">src/v2/context/zoom.ts</code> <code class="sym">framesFor</code></li><li><code class="path">src/v2/context/zoom.ts</code> <code class="sym">extentOf</code></li><li><code class="path">src/v2/context/zoom.ts</code> <code class="sym">freeSpace</code></li><li><code class="path">src/v2/context/zoom.ts</code> <code class="sym">sanity</code></li><li><code class="path">src/v2/context/zoom.ts</code> <code class="sym">poolExtent</code></li></ul></div><div><span class="label">design</span><ul><li><a href="visual-context-engine.md">visual-context-engine.md</a> <span class="head">§ 4.1 The zoom engine</span></li></ul></div></div>
-  <div class="links"><div><span class="label">builds on</span><a class="chip view" href="#visual-context">The visual context engine</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#terrain-loop">The terrain loop</a><a class="chip terrain" href="#pool-defaults">Pool defaults</a><a class="chip terrain" href="#free-ground">Free ground</a><a class="chip view" href="#click-focus">Click to focus</a></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip view" href="#visual-context">The visual context engine</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#terrain-loop">The terrain loop</a><a class="chip terrain" href="#pool-defaults">Pool defaults</a><a class="chip terrain" href="#free-ground">Free ground</a><a class="chip terrain" href="#pin-sizing">Sized by pins</a><a class="chip view" href="#click-focus">Click to focus</a></div></div>
 </article>
 <article class="card" id="pins" data-layer="view" data-text="pins, not circles every place drawn as a pin with its name: a canvas circle is the room a place takes, not its size. pins">
   <header><h3>Pins, not circles</h3><span class="badge">the user's design</span></header>

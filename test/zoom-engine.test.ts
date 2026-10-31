@@ -63,3 +63,29 @@ test("free ground: a spot on kept ground moves to the nearest free stretch; two 
   assert.match(sanity([10, 10, 190, 90], "street", null, [], crowd).join(), /mostly over an avenue/, `over ${CROWDED} of it: asked again`);
   assert.deepEqual(sanity([180, 10, 300, 90], "street", null, [], crowd), [], "touching it: fine");
 });
+
+test("an area sized by its pins: its kind's usual size when that holds three buildings a pin, else grown, proportions kept, within its level", async () => {
+  const { sizeByPins, PER_PIN } = await import("../src/v2/context/zoom.js");
+  const few = sizeByPins("street", [200, 80], 200, 0.9, 5);
+  assert.deepEqual(few.size, [200, 80], `five pins fit a usual street: holds ${few.holds}, needs ${few.needs}`);
+  assert.equal(few.grown, false);
+  const many = sizeByPins("street", [200, 80], 200, 0.9, 60);
+  assert.ok(many.grown && many.size[0] > 200 && Math.abs(many.size[0] / many.size[1] - 2.5) < 0.01, `grown, proportions kept: ${many.size}`);
+  assert.ok(many.holds >= 60 * PER_PIN * 0.98, "now it holds them");
+  assert.ok(sizeByPins("street", [200, 80], 200, 0.9, 5000).size[0] <= 400, "never past a street's most");
+  assert.ok(sizeByPins("district", [100, 100], 2000, 0.9, 0).size[0] >= 300, "never under a district's least");
+});
+
+test("placement as one optimization: near what it is tied to, on free ground, never over what it may not share, inside its parent", async () => {
+  const { placeArea } = await import("../src/v2/context/zoom.js");
+  const frame = { x: 500, z: 500, half: 500, level: "street" as const, purpose: "context" as const, tag: 20 };
+  const parent: Box = [0, 0, 1000, 1000];
+  const free = placeArea(frame, parent, [100, 60], [500, 500], [], [], [])!;
+  assert.ok(Math.hypot(free.at[0] - 500, free.at[1] - 500) < 30, `nothing in the way: at its spot (${free.at})`);
+  const tiedTo = placeArea(frame, parent, [100, 60], [500, 500], [{ at: [850, 850], ties: 4 }], [], [])!;
+  assert.ok(tiedTo.at[0] > 700 && tiedTo.at[1] > 700, `drawn to what it is tied to: ${tiedTo.at}`);
+  const blocked = placeArea(frame, parent, [100, 60], [500, 500], [], [[300, 300, 700, 700]], [])!;
+  const box: Box = [blocked.at[0] - 50, blocked.at[1] - 30, blocked.at[0] + 50, blocked.at[1] + 30];
+  assert.ok(!(box[0] < 700 && 300 < box[2] && box[1] < 700 && 300 < box[3]), `never over a place it may not share: ${blocked.at}`);
+  assert.equal(placeArea(frame, parent, [100, 60], [500, 500], [], [[0, 0, 1000, 1000]], []), null, "no room: none");
+});

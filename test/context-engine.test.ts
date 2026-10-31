@@ -84,7 +84,8 @@ test("terrain's ground: what stands in the part, the place holding it and its ci
   assert.deepEqual(Object.keys(state.environment), ["environment:s4"], "the city's surroundings, not District Six's");
   // The kinds go by level (the user's call): a district's, then the basic shapes; a commercial centre or a park is a street's.
   const district = ["cbd", "dwelling", "industrial", "harbour", "mountain", "oldtown", "village", "farmland", "donut"];
-  assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key), composed.questions[1].options], [district, ["box", "kind"], district]);
+  // Its kind only: where it lies and how large it is are the program's (docs/v2/world-engine-v2.md §2.0.21).
+  assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key), composed.questions[0].options], [district, ["kind"], district]);
   const street = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { ...focus.part, scale: "street" } }, stores);
   assert.deepEqual(Object.keys((street.state as Record<string, object>).kinds), ["shopping", "centre", "avenue", "square", "station", "alley", "residential", "waterfront", "park", "stadium", "donut"]);
   // A pool's member (sampled): asked its kind, not where it lies; its own sentences are its text (it has no name to find).

@@ -181,3 +181,46 @@ export function sanity(box: Box, level: Level, parent: { box: Box; name: string 
   if (parent && areaOf(box) > MOST_OF_PARENT * areaOf(parent.box)) reasons.push(`it takes more than a third of ${parent.name}`);
   return reasons;
 }
+
+/** How many buildings an area must hold for each of its pins: the pins are a third of what stands there. */
+export const PER_PIN = 3;
+/**
+ * An area's size from its pins (docs/v2/world-engine-v2.md §2.0.21, the user's design): its kind's usual size (`usual`:
+ * length and width, metres) holds `area × coverage / lot` buildings (`lot`: its kind's mean lot, m²); when that is fewer than
+ * PER_PIN buildings a pin, it grows, its proportions kept, within its level's sizes. Says how many it holds and needs.
+ */
+export function sizeByPins(level: Level, usual: [number, number], lot: number, coverage: number, pins: number): { size: [number, number]; holds: number; needs: number; grown: boolean } {
+  const holdsAt = ([w, d]: [number, number]) => Math.floor((w * d * coverage) / Math.max(1, lot)), needs = pins * PER_PIN;
+  let size: [number, number] = [usual[0], usual[1]];
+  const grown = holdsAt(size) < needs;
+  if (grown) { const scale = Math.sqrt(needs / Math.max(1, holdsAt(size))); size = [size[0] * scale, size[1] * scale]; }
+  // Within its level's sizes: its longer side at most the most, at least the least.
+  const [least, most] = LADDER[level].sizes, long = Math.max(size[0], size[1]), fit = long > most ? most / long : long < least ? least / long : 1;
+  size = [round(size[0] * fit), round(size[1] * fit)];
+  return { size, holds: holdsAt(size), needs, grown };
+}
+
+/** A placed place an area is tied to by continuity: where it stands and how many ties. */
+export interface Tie { at: [number, number]; ties: number }
+/**
+ * Where an area goes (docs/v2/world-engine-v2.md §2.0.21, the user's framing: terrain at 2D is one optimization a part).
+ * Over a grid on the frame (`cells` a side), the middle of a box of `size` that sits inside the parent and overlaps none of
+ * the `clashes` (places it may not share) nor lies mostly over any `crowds` (places it may only adjoin), at the least cost:
+ * the mean distance to the places it is tied to (weighted by their ties), a third as much the distance from its suggested
+ * spot (`prior`), and the share it lies over the crowds. Distances are in frame halves. Null when no middle is allowed.
+ */
+export function placeArea(frame: Frame, parent: Box | null, size: [number, number], prior: [number, number], tied: Tie[], clashes: Box[], crowds: Box[], cells = 48): { at: [number, number]; cost: number } | null {
+  const step = (2 * frame.half) / cells, x0 = frame.x - frame.half, z0 = frame.z - frame.half, weight = tied.reduce((sum, tie) => sum + tie.ties, 0);
+  const boxAt = ([x, z]: [number, number]): Box => [x - size[0] / 2, z - size[1] / 2, x + size[0] / 2, z + size[1] / 2];
+  let best: { at: [number, number]; cost: number } | null = null;
+  for (let j = 0; j < cells; j++) for (let i = 0; i < cells; i++) {
+    const at: [number, number] = [x0 + (i + 0.5) * step, z0 + (j + 0.5) * step], box = boxAt(at);
+    if (parent && !inside(parent, at)) continue;
+    if (clashes.some((other) => overlaps(box, other)) || crowds.some((other) => overlapShare(box, other) > CROWDED)) continue;
+    const pull = weight ? tied.reduce((sum, tie) => sum + tie.ties * Math.hypot(at[0] - tie.at[0], at[1] - tie.at[1]), 0) / weight : 0;
+    const crowding = crowds.reduce((sum, other) => sum + overlapShare(box, other), 0);
+    const cost = (pull + (weight ? 1 / 3 : 1) * Math.hypot(at[0] - prior[0], at[1] - prior[1])) / frame.half + crowding;
+    if (!best || cost < best.cost) best = { at: [round(at[0]), round(at[1])], cost: Math.round(cost * 1000) / 1000 };
+  }
+  return best;
+}

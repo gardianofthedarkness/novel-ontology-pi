@@ -515,6 +515,7 @@ export async function strandDemo(novelDir, options) {
     // name is the same place: it stands where the first does; with the same kind and median it is one place, else it
     // merges into the first as a further patch beside it, of its own size (modern heights merge across them).
     const baseName = label => String(label).replace(/ \(scene \d+\)$/, ''), GROUND = { street: 120, district: 400 };
+    const dwelt = new Map();
     for (const pool of Object.values(canvas.places).filter(place => place.pool)) {
       const first = new Map(), borrowed = [];
       // Parts Jev boxed over each other adjoin instead (the user's call, §2.0.20: compatible parts merge by moving apart, the
@@ -561,8 +562,15 @@ export async function strandDemo(novelDir, options) {
       // Street buildings (§2.0.15): a building of the pool tied to one of its streets dwells in that street's building of its
       // use (by the words of its name), Jev not asked; one of a use its streets do not have is left for Jev.
       const filled = fillOf(pool.landscape), streets = new Map(pool.units.filter(unit => unit.borrows === 'own').map(unit => [unit.id, filled.landmarks.filter(b => String(b.lot).startsWith(`${unit.id}:`) && b.use)]));
-      const { dwells, forJev } = C.dwellInStreets(pool, streets, ties, unit => buildingUseOf(unit.label));
+      const { dwells, forJev } = C.dwellInStreets(pool, streets, ties, unit => buildingUseOf(unit.label), dwelt.get(pool.id) ?? dwelt.set(pool.id, new Set()).get(pool.id));
       notes.build.dwells = (notes.build.dwells ?? 0) + Object.keys(dwells).length; notes.build.forJev = (notes.build.forJev ?? 0) + forJev.length;
+    }
+    // What is there first (§2.0.21): every place's buildings not dwelling yet dwell in the buildings its ground made of
+    // their use (a form's by its street, the fill's by its kind), the scarcest uses first; the rest are left for Jev.
+    for (const place of Object.values(canvas.places).filter(place => place.landscape?.patches.length && place.units.some(unit => unit.kind === 'building' && !unit.dwells))) {
+      const filled = fillOf(place.landscape), made = [...filled.landmarks, ...filled.fabric.buildings].map(b => ({ ...b, use: UM.useOf(b) }));
+      const { dwells, forJev } = C.dwellInGround(place, made, unit => buildingUseOf(unit.label), dwelt.get(place.id) ?? dwelt.set(place.id, new Set()).get(place.id));
+      notes.build.dwellsInGround = (notes.build.dwellsInGround ?? 0) + Object.keys(dwells).length; notes.build.forJev = (notes.build.forJev ?? 0) + forJev.length;
     }
     const round = value => Math.round(value * 10) / 10, depthOf = id => { let depth = 0; for (let at = canvas.places[id]; at?.parent; at = canvas.places[at.parent]) depth++; return depth; };
     const nodes = [];

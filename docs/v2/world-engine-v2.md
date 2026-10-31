@@ -854,6 +854,18 @@ the sky). The steps:
    its kind (an avenue onto a boulevard), before it is given an area of its own.
 4. **Leftovers to Jev.** A part answered as a shape (a platform, a ramp, a donut, a sphere) is still boxed by Jev, on the
    two zooms; a building of a use no ground near it has is marked for Jev; an area with no free ground for its size.
+
+The user's framing: the mathematics is plain. With the full tree down to its buildings, the compatibility matrix, the
+area-to-building map and the distances the characters' continuity makes, terrain at 2D is one optimization a part; the
+conflicts, the style and the details, and the heights and every 3D question are Jev's, by its sense of the text. Built:
+- `sizeByPins` (the zoom engine): the kind's usual size (a district at least 600 m), grown until it holds three buildings
+  a pin, within its level.
+- `placeArea` (the zoom engine): over a grid on the area's whole frame, the middle at the least cost (the mean distance to
+  the placed places it is tied to, weighted by ties, a third as much the distance from its spot, the share it lies over
+  places it may only adjoin), inside its area, over nothing it may not share. Terrain spawning asks a district's or a
+  street's kind and height only, sizes and places it so; a shape is still Jev's box.
+- `dwellInGround` (`placeCanvas.ts`): every place's buildings that dwell nowhere yet dwell in its ground's buildings of
+  their use (the fill's by kind), the scarcest uses first; the rest marked for Jev.
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

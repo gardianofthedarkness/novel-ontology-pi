@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addUnit, centralBuild, dwellInStreets, dwellingFor, emptyCanvas, holderFor, POOL_SPACING, tiedSpot } from "../src/ground/stage/placeCanvas.js";
+import { addUnit, centralBuild, dwellInGround, dwellInStreets, dwellingFor, emptyCanvas, holderFor, POOL_SPACING, tiedSpot } from "../src/ground/stage/placeCanvas.js";
 import { buildingUseOf } from "../src/v2/rules/language.js";
 import { continuityTies, emptyRegistry, evenPick, withPools } from "../src/v2/pools.js";
 import type { ReadingScript } from "../src/v2/script.js";
@@ -110,4 +110,22 @@ test("a pool's building tied to one of its streets dwells in that street's build
   assert.deepEqual(forJev, ["hospital"], "a hospital on a street with none: for Jev");
   assert.equal(canvas.places["pool:City"].units.find((unit) => unit.id === "lonely")!.dwells, undefined, "tied to no street: stays");
   assert.deepEqual(["便利店 (scene 3)", "高层公寓", "检察厅", "地铁站", "办公大楼", "研究所", "神社"].map((label) => buildingUseOf(label)), ["convenience", "apartment", "government", "station", "office", "lab", null]);
+});
+
+test("what is there first: a building dwells in the nearest building its place's ground made of its use, the scarcest uses first; the rest for Jev", () => {
+  const canvas = emptyCanvas();
+  centralBuild(canvas, [{ id: "district", label: "District", scale: "district", parent: null, landscape: "skyscrapers" }]);
+  for (const [id, label, at] of [["cafe", "咖啡店", [0, 0]], ["office", "办公大楼", [500, 0]], ["school", "学校", [0, 0]], ["bank", "银行", [0, 0]]] as const) addUnit(canvas, "district", { id, label, kind: "building", r: 12, at: [at[0], at[1]] });
+  const made = [
+    { lot: "a", x: 10, z: 0, w: 10, d: 10, angle: 0, floors: 3, kind: "shop", use: "cafe" },
+    { lot: "b", x: 400, z: 0, w: 30, d: 30, angle: 0, floors: 30, kind: "tower", use: "office" },
+    { lot: "c", x: 900, z: 0, w: 30, d: 30, angle: 0, floors: 30, kind: "tower", use: "office" },
+    { lot: "d", x: 50, z: 0, w: 40, d: 30, angle: 0, floors: 4, kind: "school", use: "school" },
+  ];
+  const { dwells, forJev } = dwellInGround(canvas.places.district, made, (unit) => buildingUseOf(unit.label));
+  const at = (id: string) => canvas.places.district.units.find((unit) => unit.id === id)!.at;
+  assert.deepEqual(Object.keys(dwells).sort(), ["cafe", "office", "school"]);
+  assert.deepEqual(at("office"), [400, 0], "the nearest office of the two");
+  assert.deepEqual(at("cafe"), [10, 0]);
+  assert.deepEqual(forJev, ["bank"], "no bank in the ground: for Jev");
 });
