@@ -552,6 +552,11 @@ for (const id of Object.keys(data.places)) world.add(buildPlace(id).group);
 // A place the text does not put where it stands (sampled into an area by a seed, or dwelling where the tree says nothing)
 // is drawn in gold and blinks until the text or Jev places it (the user's call, 2026-10-31).
 const sampledSpots = [], clickable = [];
+/**
+ * The names in the sky by level: how high they hang (metres) and how large they are on the screen (a share of its height,
+ * the same at any zoom), and their colour.
+ */
+const SKY = { region: { height: 1100, size: 0.075, colour: "#ffffff" }, city: { height: 750, size: 0.06, colour: "#ffffff" }, district: { height: 380, size: 0.042, colour: "#8fd6ff" }, street: { height: 150, size: 0.026, colour: "#c9e9f5" } };
 // A place's name is as large as its level (the zoom engine's tiers, docs/v2/visual-context-engine.md §4.1): a city's and a
 // district's large, so it is plain which district a place is in; a street's middling; a building's and a room's small.
 const TAG_SIZE = { region: 4, city: 4, district: 3.4, street: 1.8 };
@@ -561,6 +566,16 @@ for (const [id, spot] of macroAt) {
   const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : spot.dwells ? ` · in a building of ${spot.dwells}` : spot.sampled ? ` · sampled in ${spot.sampled}${spot.forJev ? " · for Jev" : ""}` : ""}` : spot.label, guess ? "#ffd36e" : strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, pin.top + size * 1.1, spot.cz - size * 1.3); tag.scale.multiplyScalar(size); world.add(tag);
   if (guess) sampledSpots.push({ pin, tag });
   pin.group.traverse((part) => { part.userData.place = id; }); tag.userData.place = id; clickable.push(pin.group, tag);
+  // A street's, a district's, a city's (a region's) name in the sky (the user's call, 2026-10-31): the higher its level, the
+  // higher and larger, a faint line down to its middle, so each range is found and picked at any zoom. The live view's
+  // only (Jev's stills carry their own names, sized by the zoom engine), unless a still asks for them (?sky).
+  const sky = SKY[spot.scale];
+  if (sky && (!capture || new URLSearchParams(location.search).has("sky"))) {
+    const name = label(spot.label, sky.colour, 40), aspect = name.scale.x / name.scale.y;
+    name.material.sizeAttenuation = false; name.scale.set(aspect * sky.size, sky.size, 1); name.position.set(spot.cx, sky.height, spot.cz); name.material.opacity = 0.85; name.userData.place = id;
+    const tether = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(spot.cx, 0, spot.cz), new THREE.Vector3(spot.cx, sky.height, spot.cz)]), new THREE.LineBasicMaterial({ color: sky.colour, transparent: true, opacity: 0.25, depthTest: false }));
+    tether.renderOrder = 8; world.add(name, tether); clickable.push(name);
+  }
 }
 /**
  * Clicking a place, of any level (its pin, its name, or the ground inside it), turns the camera about it and frames it (the
@@ -569,8 +584,18 @@ for (const [id, spot] of macroAt) {
  */
 let focusGlide = null;
 const extentOf = (spot) => (spot.size ? Math.hypot(spot.size[0], spot.size[1]) / 2 : Math.max(spot.r, 6));
+// The picked place's range on the ground: its kept size outlined in gold while it is picked (none for a place not yet boxed).
+let range = null;
+function showRange(spot) {
+  if (range) { world.remove(range); range = null; }
+  if (!spot.size) return;
+  const [w, d] = spot.size, corners = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([x, z]) => new THREE.Vector3(spot.cx + x, 0.6, spot.cz + z));
+  range = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.9, depthTest: false }));
+  range.renderOrder = 12; world.add(range);
+}
 function focusOn(id) {
   const spot = macroAt.get(id); if (!spot) return;
+  showRange(spot);
   const toTarget = new THREE.Vector3(spot.cx, 0, spot.cz), direction = camera.position.clone().sub(controls.target).normalize(), reach = extentOf(spot) * 1.2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   focusGlide = { start: performance.now(), fromTarget: controls.target.clone(), toTarget, fromCamera: camera.position.clone(), toCamera: toTarget.clone().addScaledVector(direction, Math.max(24, reach)) };
   follow = false; glide = null;

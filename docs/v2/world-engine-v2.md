@@ -814,6 +814,24 @@ landscape step's ground or a ground by its scale, no scene's place stands as a b
 ground (and so buildings, and halls under them) only once terrain spawning has kept it, or a pool's member has borrowed it.
 Built as the export's `plain` option, which terrain spawning always sets; the world engine at runtime keeps its own ways.
 On vol 1 with no terrain kept: no landscape, no building, no hall, no staged building; only the pins.
+
+### 2.0.20 Free ground, two zooms, and compatible parts adjoining (the user's design, 2026-10-31)
+
+Run 6 (from the plain map, 2e7d57f; stopped by the user at 27 of 28, kept as `stage/terrain.run6-partial.json`): Jev put
+all sixteen streets of 学园都市's pool inside some 210 × 215 m, one over another. The cause: a member's area was its
+pool's extent, the span of the members boxed before it, so each new one was framed in the old ones' cluster. The user:
+redirect Jev to free space; the compatibility map and the zoom engine must help it see the bigger picture, two zooms at a
+time; and compatible parts that merge should expand and move apart rather than one's buildings vanishing. Built:
+- **A member's area is its pool's area**: the district a pool street is of, the whole city a pool district is of (a city's
+  extent its kept parts' span and three tenths more), never the members' span.
+- **Two zooms at a time**: the whole area, its free ground and its neighbours named large, with the work map's square
+  drawn on it ("the map"); and the work map at a street's scale, where the box is drawn.
+- **Redirected to free ground**: before Jev is asked, a suggested spot on kept ground of any kind moves to the nearest free
+  stretch a street's usual size wide (`nearestFree`); the captions say to build on the free ground.
+- **Compatibility is adjoining**: a compatible kept place may be touched, not lain mostly over: a box more than half over
+  one is asked again, pointed at the free ground (`CROWDED`, `sanity`'s crowds). Where compatible parts still overlap, the
+  export moves each later one out of those before it, along the axis it is least into them, to stand 4 m beside: the pool
+  expands, and no part's buildings vanish under another's. What lies below the street may still lie under anything.
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

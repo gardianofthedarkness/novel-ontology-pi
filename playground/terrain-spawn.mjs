@@ -222,13 +222,15 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // is in, or the pool district itself), by what it is; the places continuity ties it to are marked.
       const now = nodeOf(part.id);
       let pinAt = now ? [now.x, now.z] : null;
-      const district = sampled ? (scaleOf(holder) === 'street' && world[holder]?.pool ? world[holder].pool : holder) : null;
+      // A pool's member may lie anywhere in its pool's area (the user's call, §2.0.20): the district a pool street is of, the
+      // whole city a pool district is of; never the span of the members boxed before it (which kept them squeezed together).
+      const district = sampled ? world[holder]?.pool ?? holder : null;
       const tiedTo = new Map(Object.entries(ties[part.id] ?? {}).filter(([id]) => id !== part.id && (nodeOf(id) || terrain.sites[id])).sort((a, b) => b[1] - a[1]).slice(0, 8));
       const tag = (id, label) => (tiedTo.has(id) ? `${label} · tied` : label);
       // Extents, not circles (the zoom engine): an area's kept box, else the span of its kept parts, else its circle (a guess).
       const keptBox = id => { const site = terrain.sites[id]; return site && ['jev', 'universe'].includes(site.by) && Array.isArray(site.box) ? site.box : null; };
       const partsOf = id => Object.values(terrain.sites).filter(site => site.parent === id && Array.isArray(site.box) && site.by !== 'pool').map(site => site.box);
-      const extentFor = id => (id ? Z.extentOf(keptBox(id), partsOf(id), nodeOf(id)) : null);
+      const extentFor = id => (id ? Z.extentOf(keptBox(id), partsOf(id), nodeOf(id), scaleOf(id) === 'city' ? 0.3 : 0.1) : null);
       const levelOf = scale => (['city', 'district', 'street', 'building'].includes(scale) ? scale : null);
       const tierOf = scale => Z.tagScale(levelOf(scale), levelOf(part.scale) ?? 'street');
       const areas = (extra = []) => [
@@ -298,16 +300,29 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // scale), the free ground in the work frame, and the parent a box is checked against.
       const districtExtent = district ? extentFor(district) : null, districtBox = districtExtent && districtExtent.by !== 'circle' ? districtExtent.box : null;
       const clashes = () => Object.entries(terrain.sites).filter(([id, site]) => clash(id, site)).map(([id, site]) => ({ box: site.box, reason: why(id, site) }));
+      // The kept places of its level it may adjoin (compatible), which it may not lie mostly over: there is free ground.
+      const crowds = () => Object.entries(terrain.sites).filter(([id, site]) => id !== part.id && level(site) && Array.isArray(site.box) && site.by !== 'pool' && !clash(id, site) && !(sampled && baseName(site.label) === baseName(part.label))).map(([id, site]) => ({ box: site.box, reason: `it lies mostly over ${name(id)} (${site.kind}): the free ground (faint cyan) has room for it` }));
       let areaReply = null;
       if (sampled) {
-        const spot = pinAt ?? (districtExtent ? Z.middleOf(districtExtent.box) : [anchor.x, anchor.z]), { work, context } = Z.framesFor('street', spot, districtExtent?.box ?? null);
-        const free = Z.freeSpace(work, districtExtent?.box ?? null, clashes().map(clash => clash.box)), largest = free.largest ? `${Math.round(Z.widthOf(free.largest))} × ${Math.round(Z.depthOf(free.largest))} m` : null;
+        // Redirected to free ground (the user's call, §2.0.20): a suggested spot on kept ground of any kind moves to the
+        // nearest free stretch a street's usual size wide, in its whole area.
+        const usual = Z.usualSize('street'), taken = [...clashes(), ...crowds()].map(entry => entry.box), whole = Z.framesFor('street', pinAt ?? [anchor.x, anchor.z], districtExtent?.box ?? null, usual, true);
+        const wholeFrame = whole.context ?? whole.work;
+        if (pinAt && taken.some(box => Z.inside(box, pinAt))) {
+          const open = Z.nearestFree(wholeFrame, districtExtent?.box ?? null, taken, pinAt, usual);
+          if (open) { await live.outcome({ subject: part.label, text: `moved ${Math.round(Math.hypot(open[0] - pinAt[0], open[1] - pinAt[1]))} m to free ground: its spot was on kept ground` }); pinAt = open; }
+        }
+        // Two zooms at a time (the user's call): the whole area, its free ground and its neighbours named large, with the work
+        // map's square on it; and the work map at a street's scale round the suggested spot, where the box is drawn.
+        const spot = pinAt ?? (districtExtent ? Z.middleOf(districtExtent.box) : [anchor.x, anchor.z]), { work, context } = Z.framesFor('street', spot, districtExtent?.box ?? null, usual, true);
+        const free = Z.freeSpace(work, districtExtent?.box ?? null, taken), largest = free.largest ? `${Math.round(Z.widthOf(free.largest))} × ${Math.round(Z.depthOf(free.largest))} m` : null;
         const close = await shoot(MAP, { topdown: { x: work.x, z: work.z, half: work.half }, areas: areas(), free: free.rects, labelScale: work.tag, vague: CLEAR });
-        const wide = context ? await shoot(MAP, { topdown: { x: context.x, z: context.z, half: context.half }, areas: areas(), labelScale: context.tag, vague: CLEAR }) : null;
+        const square = { box: [round(work.x - work.half), round(work.z - work.half), round(work.x + work.half), round(work.z + work.half)], label: 'the map', color: 0x8fd6ff, textColor: '#8fd6ff' };
+        const wide = context ? await shoot(MAP, { topdown: { x: context.x, z: context.z, half: context.half }, areas: areas([square]), free: Z.freeSpace(context, districtExtent?.box ?? null, taken).rects, labelScale: context.tag, vague: CLEAR }) : null;
         const tied = [...tiedTo].map(([id, n]) => `${name(id)} ×${n}`);
         ({ replies: [areaReply] } = await ask(decide, T.terrainAreaMode, { ...about, kind, district: name(district), tied, pictures: {
-          map: `${context ? `part of ${name(district)}` : name(district)} straight down, north up, ${Math.round(work.half * 2)} m across (a street is usually ${Z.LADDER.street.sizes[0]} to ${Z.LADDER.street.sizes[1]} m); ${part.label}'s suggested spot a grey pin (where continuity would put it; anywhere in ${name(district)} may do)${tied.length ? `; the places it is tied to marked "tied"` : ''}; the other places pinned, those already kept outlined in white; free ground to build on in faint cyan squares${largest ? ` (the largest free stretch ${largest})` : ''}. A pin is a point, not a size. ${SEEN}`,
-          ...(wide ? { context: `${name(district)} as a whole, straight down, north up, ${Math.round(context.half * 2)} m across, its neighbours named large: where the map's part of it lies.` } : {}) } }, stores, { request: { images: { map: close.png, ...(wide ? { context: wide.png } : {}) } } }));
+          map: `${context ? `part of ${name(district)}` : name(district)} straight down, north up, ${Math.round(work.half * 2)} m across (a street is usually ${Z.LADDER.street.sizes[0]} to ${Z.LADDER.street.sizes[1]} m); ${part.label}'s suggested spot a grey pin (where continuity would put it, moved onto free ground; anywhere in ${name(district)} may do)${tied.length ? `; the places it is tied to marked "tied"` : ''}; the other places pinned, those already kept outlined in white; free ground to build on in faint cyan squares${largest ? ` (the largest free stretch ${largest})` : ''}: build there, not over what is kept. A pin is a point, not a size. ${SEEN}`,
+          ...(wide ? { context: `${name(district)} as a whole, straight down, north up, ${Math.round(context.half * 2)} m across, its neighbours named large and its free ground in faint cyan: the square marked "the map" is where picture "map" looks.` } : {}) } }, stores, { request: { images: { map: close.png, ...(wide ? { context: wide.png } : {}) } } }));
         top.map = close.map;
       }
       let box = isCity && cityNode ? spotOf(cityNode) : fromMap((sampled ? areaReply : where)?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
@@ -318,7 +333,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // The zoom engine's sanity: its level's sizes, its middle in its parent, a third of its parent at most, and no kept place
       // it may not share. Its parent: a member's district, else the place holding it when that was boxed.
       const parentBox = sampled ? (districtBox ? { box: districtBox, name: name(district) } : null) : keptBox(holder) ? { box: keptBox(holder), name: name(holder) } : null;
-      const conflicts = candidate => Z.sanity(candidate, part.scale, parentBox, clashes());
+      const conflicts = candidate => Z.sanity(candidate, part.scale, parentBox, clashes(), sampled ? crowds() : []);
       for (let zoom = 1; zoom <= (isCity ? 0 : ZOOMS); zoom++) {
         const reasons = conflicts(box);
         if (!reasons.length) break;

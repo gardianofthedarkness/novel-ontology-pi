@@ -135,9 +135,9 @@ footer { font-size: 12px; color: var(--muted); }
 </div>
 
 <section>
-  <h2>Street × street: may they share ground?</h2>
-  <p>Before Jev boxes a pool's member, its pin moves off any kept place its kind may not overlap; a box over such a place is asked again. Either side may name the other. Anything kept below the street overlaps anything. Across levels the tree decides: a street may not lie over a district that does not hold it. Source: <code>OVERLAPS</code>, <code>mayOverlap</code> in <code>src/v2/context/terrainModes.ts</code>.</p>
-  <div class="legend"><span>● may share ground</span><span>· may not</span></div>
+  <h2>Street × street: may they adjoin?</h2>
+  <p>Compatible kinds may touch, not lie over each other: a box mostly over a compatible kept place is asked again, and compatible parts still overlapping are moved beside each other (the pool expanding, nothing vanishing). Before Jev boxes a pool's member, its suggested spot moves onto free ground; a box over an incompatible place is asked again. Either side may name the other. Anything kept below the street lies under anything. Across levels the tree decides: a street may not lie over a district that does not hold it. Source: <code>OVERLAPS</code>, <code>mayOverlap</code> in <code>src/v2/context/terrainModes.ts</code>; <code>CROWDED</code>, <code>nearestFree</code> in <code>src/v2/context/zoom.ts</code>.</p>
+  <div class="legend"><span>● may adjoin</span><span>· may not touch</span></div>
   <div class="scroll"><table class="matrix"><thead><tr><th></th>${across.map(id => `<th scope="col">${esc(id)}</th>`).join('')}</tr></thead><tbody>${overlapRows}</tbody></table></div>
 </section>
 

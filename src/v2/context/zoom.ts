@@ -43,12 +43,12 @@ export function clip(box: Box, within: Box): Box | null {
 /** An area's extent and how it is known: its kept box, the span of its kept parts, or its canvas circle (a guess). */
 export interface Extent { box: Box; by: "kept" | "parts" | "circle" }
 /**
- * An area's extent: its kept box (Jev's, or a book before's), else the span of its kept parts (a tenth more all round),
- * else its canvas circle, a guess; null with none of them.
+ * An area's extent: its kept box (Jev's, or a book before's), else the span of its kept parts (`margin` more all round: a
+ * tenth, a city's more, for what lies between and round its districts), else its canvas circle, a guess; null with none.
  */
-export function extentOf(kept: Box | null | undefined, parts: Box[], circle?: { x: number; z: number; r: number } | null): Extent | null {
+export function extentOf(kept: Box | null | undefined, parts: Box[], circle?: { x: number; z: number; r: number } | null, margin = 0.1): Extent | null {
   if (kept) return { box: kept, by: "kept" };
-  const span = spanOf(parts, 0.1);
+  const span = spanOf(parts, margin);
   if (span) return { box: span, by: "parts" };
   return circle ? { box: [round(circle.x - circle.r), round(circle.z - circle.r), round(circle.x + circle.r), round(circle.z + circle.r)], by: "circle" } : null;
 }
@@ -73,15 +73,19 @@ const tagOf = (half: number) => round(half / 24);
  * usual size takes about a sixth (kept within the parent where the parent is larger), and, when the parent does not fit it
  * at that scale, a context frame of the parent's extent and a margin. One frame (`work` only) when the parent fits.
  */
-export function framesFor(level: Level, spot: [number, number], parent: Box | null, size = usualSize(level)): { work: Frame; context: Frame | null } {
+export function framesFor(level: Level, spot: [number, number], parent: Box | null, size = usualSize(level), both = false): { work: Frame; context: Frame | null } {
   let half = size / SHARE.aim / 2;
   if (parent) {
     const parentHalf = Math.max(widthOf(parent), depthOf(parent)) / 2 * 1.1, [px, pz] = middleOf(parent);
-    // The parent fits while the part still takes at least a twelfth: one frame, the whole parent.
-    if (parentHalf <= size / SHARE.least / 2) return { work: { x: round(px), z: round(pz), half: round(Math.max(parentHalf, half)), level, purpose: "work", tag: tagOf(Math.max(parentHalf, half)) }, context: null };
+    // The parent fits while the part still takes at least a twelfth: one frame, the whole parent (unless `both` are wanted:
+    // two zooms at a time, the whole area and the part's own scale, the user's call).
+    if (!both && parentHalf <= size / SHARE.least / 2) return { work: { x: round(px), z: round(pz), half: round(Math.max(parentHalf, half)), level, purpose: "work", tag: tagOf(Math.max(parentHalf, half)) }, context: null };
     // Else the work frame at the part's scale, kept inside the parent, and the parent as its context.
-    const x = Math.min(Math.max(spot[0], parent[0] + half), parent[2] - half), z = Math.min(Math.max(spot[1], parent[1] + half), parent[3] - half);
-    return { work: { x: round(x), z: round(z), half: round(half), level, purpose: "work", tag: tagOf(half) }, context: { x: round(px), z: round(pz), half: round(parentHalf), level: LADDER[level].parent ?? level, purpose: "context", tag: tagOf(parentHalf) } };
+    const keep = (value: number, low: number, high: number) => (low > high ? (low + high) / 2 : Math.min(Math.max(value, low), high));
+    const x = keep(spot[0], parent[0] + half, parent[2] - half), z = keep(spot[1], parent[1] + half, parent[3] - half);
+    // The context is always the bigger picture: the whole parent, and at least two and a half times the work frame.
+    const wide = Math.max(parentHalf, half * 2.5);
+    return { work: { x: round(x), z: round(z), half: round(half), level, purpose: "work", tag: tagOf(half) }, context: { x: round(px), z: round(pz), half: round(wide), level: LADDER[level].parent ?? level, purpose: "context", tag: tagOf(wide) } };
   }
   half = Math.max(half, size);
   return { work: { x: round(spot[0]), z: round(spot[1]), half: round(half), level, purpose: "work", tag: tagOf(half) }, context: null };
@@ -137,10 +141,40 @@ export function freeSpace(frame: Frame, parent: Box | null, taken: Box[], cells 
   return { rects, largest };
 }
 
-/** What is wrong with a box Jev answered, in words; none when it is sane. `clashes`: kept places it may not share, by name. */
-export function sanity(box: Box, level: Level, parent: { box: Box; name: string } | null, clashes: { box: Box; reason: string }[] = []): string[] {
+/** How much of the smaller of two boxes they share (0: apart, 1: one inside the other). */
+export function overlapShare(a: Box, b: Box): number {
+  const meet = clip(a, b);
+  return meet ? areaOf(meet) / Math.max(1, Math.min(areaOf(a), areaOf(b))) : 0;
+}
+/** More than this share of a box over a kept place it may adjoin (a compatible one) is crowding: it is asked again. */
+export const CROWDED = 0.5;
+/**
+ * The nearest point to `point` with a free square of `size` round it: free of the `taken` boxes and inside the parent, on a
+ * grid over the frame (`cells` a side); null with none. Where a suggested spot lies on kept ground, it moves there.
+ */
+export function nearestFree(frame: Frame, parent: Box | null, taken: Box[], point: [number, number], size: number, cells = 48): [number, number] | null {
+  const step = (2 * frame.half) / cells, x0 = frame.x - frame.half, z0 = frame.z - frame.half, reach = Math.max(1, Math.ceil(size / step / 2));
+  const free = (i: number, j: number) => { const cell: Box = [x0 + i * step, z0 + j * step, x0 + (i + 1) * step, z0 + (j + 1) * step]; return (!parent || inside(parent, middleOf(cell))) && !taken.some((box) => overlaps(cell, box)); };
+  const grid = Array.from({ length: cells }, (_, j) => Array.from({ length: cells }, (_, i) => free(i, j)));
+  let best: [number, number] | null = null, bestDistance = Infinity;
+  for (let j = reach; j < cells - reach; j++) for (let i = reach; i < cells - reach; i++) {
+    let open = true;
+    for (let b = j - reach; b <= j + reach && open; b++) for (let a = i - reach; a <= i + reach; a++) if (!grid[b][a]) { open = false; break; }
+    if (!open) continue;
+    const at: [number, number] = [x0 + (i + 0.5) * step, z0 + (j + 0.5) * step], distance = Math.hypot(at[0] - point[0], at[1] - point[1]);
+    if (distance < bestDistance) { bestDistance = distance; best = [round(at[0]), round(at[1])]; }
+  }
+  return best;
+}
+
+/**
+ * What is wrong with a box Jev answered, in words; none when it is sane. `clashes`: kept places it may not share, by name;
+ * `crowds`: kept places it may adjoin, which it may not lie mostly over (CROWDED): there is free ground for it.
+ */
+export function sanity(box: Box, level: Level, parent: { box: Box; name: string } | null, clashes: { box: Box; reason: string }[] = [], crowds: { box: Box; reason: string }[] = []): string[] {
   const reasons: string[] = [], across = Math.max(widthOf(box), depthOf(box)), [least, most] = LADDER[level].sizes;
   for (const clash of clashes) if (overlaps(box, clash.box)) reasons.push(clash.reason);
+  for (const crowd of crowds) if (overlapShare(box, crowd.box) > CROWDED) reasons.push(crowd.reason);
   if (across > most) reasons.push(`${Math.round(across)} m across is too big for a ${level}`);
   if (across < least) reasons.push(`${Math.round(across)} m across is too small for a ${level}`);
   if (parent && !inside(parent.box, middleOf(box))) reasons.push(`its middle is outside ${parent.name}`);

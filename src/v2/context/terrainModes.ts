@@ -120,9 +120,11 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
   },
 };
 /**
- * Which kinds of a level a part may overlap (docs/v2/world-engine-v2.md §2.0.15): a first map at the street level, each
- * level's to be worked out later. Either side may name the other; what lies below the street (a cut, a basin, a part
- * answered underground) overlaps anything; a square, a park, a stadium, nothing else of its level.
+ * Which kinds of a level a part may adjoin (docs/v2/world-engine-v2.md §2.0.15, §2.0.20): a first map at the street level,
+ * each level's to be worked out later. Either side may name the other. Adjoining is touching, not lying over: a box mostly
+ * over a compatible kept place is asked again, and compatible parts still overlapping are moved beside each other by the
+ * export. What lies below the street (a cut, a basin, a part answered underground) lies under anything; a square, a park,
+ * a stadium adjoin nothing else of their level.
  */
 export const OVERLAPS: Record<string, string[]> = {
   avenue: ["shopping", "station", "alley", "waterfront", "platform", "ramp"],

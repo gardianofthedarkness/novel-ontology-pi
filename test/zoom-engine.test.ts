@@ -48,3 +48,18 @@ test("sanity: too big or small for its level, its middle outside its parent, mor
   assert.match(sanity([700, 100, 800, 150], "street", parent).join(), /outside District Seven/);
   assert.match(sanity([100, 100, 200, 150], "street", parent, [{ box: [150, 120, 300, 200], reason: "it is over a square" }]).join(), /over a square/);
 });
+
+test("free ground: a spot on kept ground moves to the nearest free stretch; two zooms when asked; crowding a compatible place is asked again", async () => {
+  const { nearestFree, overlapShare, CROWDED } = await import("../src/v2/context/zoom.js");
+  const frame = { x: 500, z: 500, half: 500, level: "street" as const, purpose: "context" as const, tag: 20 };
+  const kept: Box[] = [[0, 0, 600, 1000]];
+  const open = nearestFree(frame, [0, 0, 1000, 1000], kept, [300, 500], 126)!;
+  assert.ok(open[0] - 63 >= 600 - 1 && Math.abs(open[1] - 500) < 60, `beside the kept ground, near the spot: ${open}`);
+  assert.equal(nearestFree(frame, [0, 0, 1000, 1000], [[0, 0, 1000, 1000]], [300, 500], 126), null, "no free ground: none");
+  const both = framesFor("street", [100, 100], [0, 0, 540, 400], undefined, true);
+  assert.ok(both.context && both.work.half < both.context.half, "two zooms at a time, even where one would do");
+  assert.ok(overlapShare([0, 0, 100, 100], [50, 0, 150, 100]) === 0.5 && overlapShare([0, 0, 100, 100], [200, 0, 300, 100]) === 0);
+  const crowd = [{ box: [0, 0, 200, 100] as Box, reason: "it lies mostly over an avenue" }];
+  assert.match(sanity([10, 10, 190, 90], "street", null, [], crowd).join(), /mostly over an avenue/, `over ${CROWDED} of it: asked again`);
+  assert.deepEqual(sanity([180, 10, 300, 90], "street", null, [], crowd), [], "touching it: fine");
+});

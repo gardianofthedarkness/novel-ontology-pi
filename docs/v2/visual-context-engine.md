@@ -142,6 +142,14 @@ through it (`src/v2/context/zoom.ts`; code, no model):
   the largest free rectangle.
 - **Sanity.** A box is asked again when its size is out of its level's range, its middle is outside its parent, it covers
   a kept place it may not share, or it takes more than a third of its parent; each reason said in words.
+- **Free ground and two zooms** (the user, after run 6: Jev squeezed a pool's streets together). A pool's member is framed
+  in its pool's whole area (the city for a pool district), shown in two zooms at a time (the whole area with its free
+  ground, the work map at a street's scale), its suggested spot moved onto free ground first, and a box mostly over a kept
+  place it may only adjoin asked again ([world-engine-v2.md](world-engine-v2.md) §2.0.20).
+- **Names in the sky** (the user: ranges shown and picked easily). Every street, district and city (and region) has its name
+  hanging in the sky over its middle, the higher its level the higher and larger (a street's at 150 m, a district's at
+  380, a city's at 750; on the screen the same size at any zoom), with a faint line down; clicking one picks the place, its
+  kept range outlined in gold on the ground. The live view's only; a still may ask for them (`?sky`).
 - **Click to focus** (the user, 2026-10-31: any level). In World · Live a click on a place of any level (its pin, its name,
   or the ground inside it: the smallest place holding the point) glides the orbit's pivot to its middle and the camera as
   near as frames its extent (its kept size, else the room it takes); following stops. The names are as large as their

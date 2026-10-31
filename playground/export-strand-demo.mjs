@@ -517,6 +517,27 @@ export async function strandDemo(novelDir, options) {
     const baseName = label => String(label).replace(/ \(scene \d+\)$/, ''), GROUND = { street: 120, district: 400 };
     for (const pool of Object.values(canvas.places).filter(place => place.pool)) {
       const first = new Map(), borrowed = [];
+      // Parts Jev boxed over each other adjoin instead (the user's call, §2.0.20: compatible parts merge by moving apart, the
+      // pool expanding, no part's buildings vanishing under another's): each kept member above the street, in the order
+      // kept, moves out of those before it along the axis it is least into them, to stand 4 m beside; the first of a name
+      // stands for its later namesakes, and what lies below the street may lie under anything.
+      const order = new Map((terrain?.order ?? []).map((id, n) => [id, n])), standing = [], named = new Set();
+      for (const unit of [...pool.units].sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity))) {
+        const site = terrain?.sites?.[unit.id];
+        if (!Array.isArray(site?.size) || !Array.isArray(site.toward) || (site.median ?? site.top ?? 0) < 0 || named.has(baseName(unit.label))) continue;
+        named.add(baseName(unit.label));
+        let [x, z] = site.toward;
+        const [w, d] = site.size;
+        for (let push = 0; push < 16; push++) {
+          const hit = standing.find(other => Math.abs(x - other.x) < (w + other.w) / 2 && Math.abs(z - other.z) < (d + other.d) / 2);
+          if (!hit) break;
+          const alongX = (w + hit.w) / 2 + 4 - Math.abs(x - hit.x), alongZ = (d + hit.d) / 2 + 4 - Math.abs(z - hit.z);
+          if (alongX < alongZ) x += (Math.sign(x - hit.x) || 1) * alongX; else z += (Math.sign(z - hit.z) || 1) * alongZ;
+        }
+        if (Math.hypot(x - site.toward[0], z - site.toward[1]) > 0.5) notes.build.adjoined = (notes.build.adjoined ?? 0) + 1;
+        unit.at = [Math.round(x * 10) / 10, Math.round(z * 10) / 10];
+        standing.push({ x, z, w, d });
+      }
       for (const unit of pool.units) {
         const site = terrain?.sites?.[unit.id];
         if (!site?.ground || !LANDSCAPES[site.ground] || !site.median || !site.manifold) continue;
@@ -525,7 +546,6 @@ export async function strandDemo(novelDir, options) {
         const hall = site.median < 0 ? undergroundKindOf(unit.label) : null;
         const made = at => ({ ...patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: site.manifold }), borrowed: true, ...(hall ? { hall } : {}) });
         if (!original) {
-          if (Array.isArray(site.toward)) unit.at = [site.toward[0], site.toward[1]];
           const patch = made(unit.at); first.set(name, { unit, site, patch }); borrowed.push(patch); unit.borrows = 'own'; notes.build.borrowed = (notes.build.borrowed ?? 0) + 1; continue;
         }
         const own = unit.at, dx = own[0] - original.unit.at[0], dz = own[1] - original.unit.at[1], d = Math.hypot(dx, dz) || 1;
