@@ -42,7 +42,7 @@ export const SLENDER = 8;
  * its type's own plots and streets (regular buildings keep the density they had before the rule).
  */
 export const SUPER_TALL = 250;
-export const superTallAt = (patch: Patch, p: Point) => { if (patch.type !== "skyscrapers" || patch.H < SUPER_TALL) return 0; const mean = patch.H * depthOf(patch, p); return mean >= Math.max(SUPER_TALL, 0.7 * patch.H) ? mean : 0; };
+export const superTallAt = (patch: Patch, p: Point) => { if ((patch.type !== "skyscrapers" && !patch.manifold) || patch.H < SUPER_TALL) return 0; const mean = patch.manifold ? localMedian(patch, depthOf(patch, p)) : patch.H * depthOf(patch, p); return mean >= Math.max(SUPER_TALL, 0.7 * patch.H) ? mean : 0; };
 /** How much wider streets are at a point: 1 + h/400 on super-tall ground (h the mean height there; 2.5 times at a 600 m peak), else 1. */
 export const streetsFor = (patch: Patch, p: Point = [patch.x, patch.z]) => { const tall = superTallAt(patch, p); return tall ? 1 + tall / 400 : 1; };
 export const LANDSCAPES: Record<LandscapeType, Kind> = {
@@ -59,11 +59,20 @@ export const LANDSCAPES: Record<LandscapeType, Kind> = {
 };
 
 /**
+ * A manifold: how a part's heights spread over its ground round the median Jev gives it (the user's calls, 2026-10-31:
+ * every level's kinds have their own manifold; no hard caps; docs/v2/visual-context-engine.md §5.8). The local median
+ * falls from the core to the edge as (r + core)^−gradient (r: 0 at the core, 1 at the edge), scaled so the median over
+ * the patch's area is Jev's; a building is log-normal round it (σ = spread), or, one in 1/tail, from a Pareto tail of
+ * index `index` above the local 90th percentile. Research: height falls with distance as a power (elasticity −0.25 to
+ * −0.3 city-wide, steeper for commercial), heights are log-normal with a heavy Pareto tail (shape about 0.2).
+ */
+export interface Manifold { gradient: number; core: number; spread: number; tail: number; index: number }
+/**
  * One patch of landscape, everything needed to draw it again: the numbers drawn for its shape are kept, not re-drawn.
- * `top`: how high its terrain rises where terrain spawning said so (the patch's height; its type's cap gives way to it).
+ * `median` and `manifold`, where terrain spawning gave them: its heights are drawn from them, with no cap.
  */
 export interface Patch {
-  id: string; type: LandscapeType; x: number; z: number; R: number; H: number; lot: number; top?: number;
+  id: string; type: LandscapeType; x: number; z: number; R: number; H: number; lot: number; median?: number; manifold?: Manifold;
   shape: { family: Family; turn: number; terms?: [number, number, number][]; n?: number; aspect?: number; m?: number };
   born?: { strand?: string; volume?: number; scene?: string; by?: "jev" | "drift" | "strand" };
 }
@@ -186,15 +195,38 @@ export function addPatch(landscape: Landscape, type: LandscapeType, toward: Poin
   return { ...landscape, patches: [...landscape.patches, placed] };
 }
 
+/** A manifold's shape at r (0 at the core, 1 at the edge), and its median over the area (half the area lies within r = 1/√2). */
+const shapeOf = (manifold: Manifold, r: number) => (Math.max(0, r) + manifold.core) ** -manifold.gradient;
+/** A manifold patch's median at depth s (1 at the centre): Jev's median, by the manifold's shape. */
+export const localMedian = (patch: Patch, s: number) => (patch.median ?? patch.H) * shapeOf(patch.manifold!, 1 - s) / shapeOf(patch.manifold!, Math.SQRT1_2);
+const gaussian = (rng: () => number) => Math.sqrt(-2 * Math.log(Math.max(1e-9, rng()))) * Math.cos(2 * Math.PI * rng());
+/** The z of a probability (a logistic approximation, close enough for a profile). */
+const probit = (u: number) => Math.log(Math.max(1e-6, u) / Math.max(1e-6, 1 - u)) / 1.702;
+/** A building's height on a manifold patch at depth s: log-normal round the local median, or from its Pareto tail; never capped. */
+export function manifoldHeight(patch: Patch, s: number, rng: () => number): number {
+  const manifold = patch.manifold!, local = localMedian(patch, s);
+  if (manifold.tail > 0 && rng() < manifold.tail) return local * Math.exp(1.2816 * manifold.spread) * Math.max(1e-6, rng()) ** (-1 / manifold.index);
+  return local * Math.exp(manifold.spread * gaussian(rng));
+}
+/** The tallest a manifold patch stands: its core's 99th percentile (its landmark). */
+export const peakOf = (patch: Patch) => (patch.manifold ? localMedian(patch, 1) * Math.exp(2.326 * patch.manifold.spread) : Math.min(patch.H, PEAK));
+/** A patch built from Jev's median on its kind's manifold: its height H is the core's median (for its plots and streets). */
+export function withManifold(patch: Patch, median: number, manifold: Manifold): Patch {
+  const made = { ...patch, median: Math.round(median), manifold };
+  return { ...made, H: Math.round(localMedian(made, 1)) };
+}
+
 /** A building's height in a patch, at depth s (1 at the centre), by the type's profile; `u` is the building's own draw. */
 export function heightAt(patch: Patch, s: number, u: number): number {
+  if (patch.manifold) return localMedian(patch, s) * Math.exp(patch.manifold.spread * probit(u));
   const kind = LANDSCAPES[patch.type];
   return kind.profile === "core" ? patch.H * (0.22 + 0.78 * s ** 1.4) * (0.75 + 0.5 * u) : kind.profile === "keep" ? patch.H * (0.18 + 0.12 * u) : patch.H * (0.6 + 0.4 * u);
 }
 /** The height manifold's mean at depth s: the profile without the building's own spread. */
 export const meanHeight = (patch: Patch, s: number) => heightAt(patch, s, 0.5);
-/** A building's height drawn from a patch's height manifold at depth s: log-normal around the mean (σ = 0.25). */
+/** A building's height drawn from a patch's height manifold at depth s: log-normal around the mean (σ = 0.25); a manifold patch's from its own. */
 export function drawHeight(patch: Patch, s: number, rng: () => number): number {
+  if (patch.manifold) return manifoldHeight(patch, s, rng);
   const normal = Math.sqrt(-2 * Math.log(Math.max(1e-9, rng()))) * Math.cos(2 * Math.PI * rng());
   return meanHeight(patch, s) * Math.exp(0.25 * normal);
 }
@@ -221,7 +253,7 @@ export function boulevardOf(patch: Patch): Road {
 }
 export const bowlOf = (patch: Patch) => ({ x: patch.x, z: patch.z, w: Math.round(0.62 * patch.R), d: Math.round(0.46 * patch.R), angle: patch.shape.turn });
 /** A skyscraper core's signature tower at its centre: as tall as the core's peak, H / SLENDER wide, with open ground round it. */
-export const landmarkOf = (patch: Patch) => { const side = Math.max(30, Math.round(patch.H / SLENDER)); return { x: patch.x, z: patch.z, w: side, d: side, angle: patch.shape.turn, floors: Math.round(Math.min(patch.H, PEAK) / 3) }; };
+export const landmarkOf = (patch: Patch) => { const peak = peakOf(patch), side = Math.max(30, Math.round(peak / SLENDER)); return { x: patch.x, z: patch.z, w: side, d: side, angle: patch.shape.turn, floors: Math.round(peak / 3) }; };
 function openGround(patch: Patch, p: Point): boolean {
   const from: Point = [p[0] - patch.x, p[1] - patch.z];
   if (patch.type === "castle") return Math.hypot(...from) < 22;
@@ -255,13 +287,14 @@ export function landscapeStyle(landscape: Landscape): FillStyle {
       // the chance that ground's height manifold reaches it (the older patch passed over this lot, but its heights
       // still reach it: farther for a taller core), else from its own. So heights meet across the seam, past this type's cap if the older ground is
       // taller, never past the peak. Only the newer part's lots draw this way; the older part's never change.
-      let from = owner, cap = Math.max(kind.cap, owner.top ?? 0);
+      let from = owner, cap = kind.cap;
       if (kind.era === "modern") for (const older of landscape.patches.slice(0, landscape.patches.indexOf(owner))) {
-        if (LANDSCAPES[older.type].era === "modern" && rng() < reachOfHeights(older, lot.centre)) { from = older; cap = Math.max(cap, LANDSCAPES[older.type].cap, older.top ?? 0); break; }
+        if (LANDSCAPES[older.type].era === "modern" && rng() < reachOfHeights(older, lot.centre)) { from = older; cap = Math.max(cap, LANDSCAPES[older.type].cap); break; }
       }
       // No taller than SLENDER times its footprint's width: tall buildings need wide lots.
       const width = Math.max(4, Math.sqrt(lot.area) - 2 * kind.back), h = drawHeight(from, Math.max(0.02, depthOf(from, lot.centre)), rng);
-      const floors = Math.max(1, Math.round(Math.min(h, cap, PEAK, SLENDER * width) / 3));
+      // A manifold's heights are its own: no type cap, no peak, no cut for the lot (tall ground has wider plots already).
+      const floors = Math.max(1, Math.round((from.manifold ? h : Math.min(h, cap, PEAK, SLENDER * width)) / 3));
       return { floors, kind: LANDSCAPES[from.type].building(floors), back: kind.back };
     },
     road: (road, faced) => faced || landscape.patches.some((patch) => insideBy(patch, [(road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2]) > -LANDSCAPES[patch.type].soft),
@@ -318,9 +351,10 @@ export function defaultBox(type: LandscapeType, centre: Point = [0, 0]): MapBox 
  * A patch from a box Jev drew: centred in it and as large as fits it (its shorter side, or both for the boxy
  * families, which take the box's proportions), its outline still drawn from its own seed.
  */
-export function patchFromBox(type: LandscapeType, id: string, seed: string, box: MapBox, born?: Patch["born"], top?: number | null): Patch {
+export function patchFromBox(type: LandscapeType, id: string, seed: string, box: MapBox, born?: Patch["born"], made?: { median: number; manifold: Manifold } | null): Patch {
   const draft = samplePatch(type, id, seed, [(box.x0 + box.x1) / 2, (box.z0 + box.z1) / 2], born), w = Math.abs(box.x1 - box.x0), d = Math.abs(box.z1 - box.z0);
   const R = Math.round(Math.max(40, Math.min(1500, LANDSCAPES[type].family === "box" ? Math.max(w, d) / 2 : Math.min(w, d) / 2)));
   const shape = LANDSCAPES[type].family === "box" ? { ...draft.shape, turn: w >= d ? 0 : Math.PI / 2, aspect: round(Math.max(0.3, Math.min(w, d) / Math.max(w, d)), 2) } : draft.shape;
-  return { ...draft, R, shape, ...(top ? { H: Math.round(top), top: Math.round(top) } : {}) };
+  const patch = { ...draft, R, shape };
+  return made ? withManifold(patch, made.median, made.manifold) : patch;
 }

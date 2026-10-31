@@ -88,12 +88,19 @@ test("terrain's ground: what stands in the part, the place holding it and its ci
   const street = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { ...focus.part, scale: "street" } }, stores);
   assert.deepEqual(Object.keys((street.state as Record<string, object>).kinds), ["commercial", "park", "stadium", "donut"]);
   assert.equal(T.TERRAIN_KINDS.district.cbd.ground, "skyscrapers");
-  // How high the terrain rises: the city's evidence in the state, a slice a height.
-  const tops = [{ letter: "A", y: 10, said: "three floors" }, { letter: "B", y: 150, said: "fifty floors" }];
-  const height = await (await import("../src/v2/context/engine.js")).compose(T.terrainHeightMode, { ...focus, kind: "cbd", tops }, stores);
+  // Each kind its own manifold, and Jev gives its median (the user's calls): a CBD's medians, a mountain's tops.
+  const cbd = T.terrainHeights("district", "cbd");
+  assert.deepEqual([cbd.measure, cbd.slices[0], T.terrainHeights("district", "mountain").measure, T.terrainHeights("district", "mountain").slices[0].said, T.terrainHeights("district", "donut").slices[0].y],
+    ["median", { letter: "A", y: 30, said: "about 10 floors" }, "top", "a hill", 3]);
+  assert.match(String(state.kinds.cbd), /highest at its core \(about 2\.1 times its edge\); a wide spread .*; one in 10 far above the rest/);
+  // The city level: its own kinds, asked its kind only (it is the map); a district is told its city's kept terrain (within).
+  const city = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { id: "city", label: "City", scale: "city" } }, stores);
+  assert.deepEqual([Object.keys((city.state as Record<string, object>).kinds).slice(0, 4), city.questions.map((question) => question.key)], [["metropolis", "city", "town", "oldcity"], ["kind"]]);
+  const height = await (await import("../src/v2/context/engine.js")).compose(T.terrainHeightMode, { ...focus, kind: "cbd", ...cbd, within: { City: "metropolis, median 15 m" } }, stores);
   const said = height.state as Record<string, Record<string, unknown>>;
-  assert.ok(said.standing["tower of fifty floors"] && Object.keys(said.facts).length && said.tops.B === "150 m: fifty floors");
-  assert.deepEqual(height.questions.map((question) => [question.key, question.options]), [["top", ["A", "B"]]]);
+  assert.ok(said.standing["tower of fifty floors"] && Object.keys(said.facts).length && said.heights.A === "30 m: about 10 floors" && said.within.City === "metropolis, median 15 m");
+  assert.match(String(height.state.task), /median height .* not the tallest/);
+  assert.deepEqual(height.questions.map((question) => [question.key, question.options?.length]), [["height", 6]]);
   await stores.graph?.close();
 });
 

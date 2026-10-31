@@ -63,7 +63,7 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt, BLAST_ENERGY } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
@@ -412,7 +412,13 @@ export async function strandDemo(novelDir, options) {
     // Terrain spawning's answer for a place, where it was asked (stage/terrain.json): its ground's type wins over the
     // landscape step's, and its first patch is the size of Jev's box.
     const terrainGround = id => { const site = terrain?.sites?.[id]; return site?.ground && LANDSCAPES[site.ground] ? site : null; };
-    const groundPatch = id => { const site = terrainGround(id); if (!site?.size) return null; const [w, d] = site.size; return patchFromBox(site.ground, 'p0', id, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }, site.top ?? null); };
+    // A kept part's ground: its box, built round its median on its kind's manifold (terrain spawning's); a city's (no box) at its kind's own size.
+    const groundPatch = id => {
+      const site = terrainGround(id), made = site?.median && site.manifold ? { median: site.median, manifold: site.manifold } : null;
+      if (!site) return null;
+      if (!site.size) return made ? withManifold(samplePatch(site.ground, 'p0', id, [0, 0], { by: 'jev' }), made.median, made.manifold) : null;
+      const [w, d] = site.size; return patchFromBox(site.ground, 'p0', id, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }, made);
+    };
     const landscapeOf = (id, scale = scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')) => {
       if (!ground.has(id)) ground.set(id, terrainGround(id) ? { type: terrainGround(id).ground, by: 'jev', from: 'terrain' } : groundFor(inputs.landscape?.places[id], pathOf(id).filter(at => at !== id).reverse(), at => inputs.landscape?.places[at], scale));
       return ground.get(id).type;

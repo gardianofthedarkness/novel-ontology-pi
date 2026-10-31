@@ -44,11 +44,8 @@ export const SHAPES = {
 /** How wide a part's ground is, by its scale (metres): a box far from it is asked about again. */
 const SCALE_WIDTH = { district: [300, 2400], street: [40, 400], city: [800, 8000] };
 const OVERVIEW = [1440, 900], MAP = [1024, 1024], ZOOMS = 2, CELL = 2, FLOOR = 3, OPEN = new Set(['district', 'street']);
-/** The heights a part's terrain may rise to, in metres (the user's call, 2026-10-31: the ground is at 0, always). */
-const BUILT_TOPS = [[10, 'three floors'], [20, 'six floors'], [40, 'a dozen floors'], [80, 'twenty-five floors'], [150, 'fifty floors'], [250, 'eighty floors'], [400, 'a hundred and thirty floors']];
-const NATURAL_TOPS = [[30, 'a low rise'], [80, 'a hill'], [200, 'a high hill'], [400, 'a mountain'], [800, 'a high mountain']];
-/** Half the core the terrain-height question looks through (metres): wide enough to read beside slices hundreds of metres up. */
-const CORE = 150;
+/** The core the terrain-height question looks through, half its width over its highest slice (at least 40 m): the slices stand apart, the core reads beside them. */
+const CORE = 0.4, CORE_MIN = 40;
 /** No fog: a map straight down reads every metre of its ground alike. */
 const CLEAR = { near: 1e6, far: 2e6 };
 
@@ -164,11 +161,17 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       for (const city of cities) partsOf.set(city.id, order(open.filter(part => member.get(part.id)?.city === city.id)));
     }
     const holderOf = (part, city) => { const parent = parentOf(part.id); return parent && parent !== part.id && (within(parent, city.id) || parent === city.id) ? parent : city.id; };
-    const total = [...partsOf.values()].reduce((sum, list) => sum + list.length, 0);
+    // The order (the user's call, 2026-10-31): the largest level first, every city, then every district, then every
+    // street; within a level, the order the text first names them. A city is asked its kind and height only (it is the map).
+    const queue = [
+      ...cities.map(city => ({ part: { id: city.id, label: city.label, scale: 'city', at: firstAt(city.label) }, city })).sort((a, b) => a.part.at - b.part.at),
+      ...['district', 'street'].flatMap(level => cities.flatMap(city => (partsOf.get(city.id) ?? []).filter(part => part.scale === level).map(part => ({ part, city }))).sort((a, b) => a.part.at - b.part.at)),
+    ];
+    const total = queue.length;
     let placed = 0;
-    for (const city of cities) for (const part of partsOf.get(city.id) ?? []) {
+    for (const { part, city } of queue) {
       if (placed >= limit) break;
-      const holder = holderOf(part, city), cityNode = nodeOf(city.id), holderNode = nodeOf(holder) ?? cityNode;
+      const isCity = part.scale === 'city', holder = isCity ? city.id : holderOf(part, city), cityNode = nodeOf(city.id), holderNode = nodeOf(holder) ?? cityNode;
       // The city as the engine stands it now: its node and the districts and streets in it (not the rooms and buildings the
       // scenes are set in, nor the canvas's stand-in areas), and the sites so far.
       const kin = data.macro.filter(node => node.id !== part.id && (node.id === city.id || ((within(node.id, city.id) || member.get(node.id)?.city === city.id) && OPEN.has(node.scale))) && !String(node.id).startsWith('spot:') && !node.temporary && !node.unbuilt);
@@ -181,21 +184,26 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         ...kin.filter(node => node.id !== city.id && !Array.isArray(terrain.sites[node.id]?.box)).map(node => ({ pts: circle(node.x, node.z, node.r), label: node.dwelling ? `${node.label} (sampled: the text puts it nowhere)` : node.label, color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e' })),
         ...(now ? [{ pts: circle(now.x, now.z, now.r), label: `${part.label} · now`, color: 0x9fb4c3, textColor: '#c9d6df' }] : []),
         ...Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && id !== part.id).map(([id, site]) => ({ box: site.box, label: name(id), color: 0xffffff, textColor: '#ffffff' })), ...extra];
-      const about = { part: { id: part.id, label: part.label, scale: part.scale }, holder: { id: holder, label: name(holder) }, city: { id: city.id, label: city.label } };
+      // The terrain kept for the places holding the part (its city, the place between), larger first: its manifold frames the part's.
+      const kept = id => { const site = terrain.sites[id]; return site?.kind ? `${site.kind}${site.median ? `, median ${site.median} m` : site.top ? `, up to ${site.top} m` : ''}` : null; };
+      const framing = Object.fromEntries((isCity ? [] : [...new Set([city.id, holder])]).filter(id => kept(id)).map(id => [name(id), kept(id)]));
+      const about = { part: { id: part.id, label: part.label, scale: part.scale }, holder: { id: holder, label: name(holder) }, city: { id: city.id, label: city.label }, within: framing };
       await live.line(0, { status: 'running', part: `${part.label} (${placed + 1} of ${total}, in ${city.label})` });
       focus = { x: round(centre[0]), z: round(centre[2]), r: round(R * 0.6) };
       // 1. Overview.
       const yaw = -0.62, up = 0.52;
       const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(centre, yaw, up, R * 1.8), target: centre }, areas: areas(), labelScale: R / 32, vague: { near: R * 4, far: R * 9 } });
       const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R }, areas: areas(), labelScale: R / 24, vague: CLEAR });
-      const { replies: [where, what] } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES,
+      const { replies: grounds } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES,
         pictures: { skyline: `${city.label} from the side and above, as the world stands now.`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; its districts and streets outlined and named (${name(holder)}, which holds ${part.label}, in blue)${now ? `; where ${part.label} stands for now in grey` : ''}.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
+      const where = grounds.find(reply => reply.key === 'box'), what = grounds.find(reply => reply.key === 'kind');
       // The answer as the engine's input: a kind of the part's level (a landscape type, or a shape), or a basic shape.
-      const options = T.terrainKinds(part.scale, SHAPES), kind = options[what?.value] ? String(what.value) : part.scale === 'street' ? 'commercial' : 'dwelling';
-      const entry = (T.TERRAIN_KINDS[part.scale] ?? T.TERRAIN_KINDS.district)[kind], shape = entry?.shape ?? (SHAPES[kind] ? kind : null), ground = shape ? null : entry?.ground ?? null;
+      const options = T.terrainKinds(part.scale, SHAPES), kind = options[what?.value] ? String(what.value) : Object.keys(options)[isCity ? 1 : part.scale === 'street' ? 0 : 1];
+      const entry = T.terrainKind(part.scale, kind), shape = entry?.shape ?? (SHAPES[kind] ? kind : null), ground = shape ? null : entry?.ground ?? null;
       const fromMap = (box, map) => (box && map ? [round(map.x - map.halfX + box.left * 2 * map.halfX), round(map.z - map.halfZ + box.top * 2 * map.halfZ), round(map.x - map.halfX + box.right * 2 * map.halfX), round(map.z - map.halfZ + box.bottom * 2 * map.halfZ)] : null);
       const width = SCALE_WIDTH[part.scale] ?? [60, 600], fallback = (width[0] + width[1]) / 4, at = holderNode ?? anchor;
-      let box = fromMap(where?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
+      // A city's box is its own circle as the engine has it (the map is the city).
+      let box = isCity && cityNode ? [round(cityNode.x - cityNode.r), round(cityNode.z - cityNode.r), round(cityNode.x + cityNode.r), round(cityNode.z + cityNode.r)] : fromMap(where?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
       // 2. Conflicts and zooms.
       const conflicts = candidate => {
         const reasons = [], across = Math.max(candidate[2] - candidate[0], candidate[3] - candidate[1]);
@@ -206,7 +214,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         if ((candidate[2] - candidate[0]) * (candidate[3] - candidate[1]) > 0.25 * (2 * R) ** 2) reasons.push('it takes more than a quarter of the map');
         return reasons;
       };
-      for (let zoom = 1; zoom <= ZOOMS; zoom++) {
+      for (let zoom = 1; zoom <= (isCity ? 0 : ZOOMS); zoom++) {
         const reasons = conflicts(box);
         if (!reasons.length) break;
         const zc = [(box[0] + box[2]) / 2, 0, (box[1] + box[3]) / 2], zh = Math.max(width[0], Math.max(box[2] - box[0], box[3] - box[1])) * 0.95;
@@ -217,29 +225,32 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const { replies: [again] } = await ask(decide, T.terrainZoomMode, { ...about, kind, reasons, pictures: { skyline: 'the area from the side and above.', map: `the area straight down, north up, ${Math.round(zh * 2)} m across.` } }, stores, { request: { images: { skyline: zside.png, map: ztop.png } } });
         box = fromMap(again?.box, ztop.map) ?? box;
       }
-      // 3. How high the terrain rises (the ground is at 0, always): lettered ghost slices at fixed heights, from three floors
-      // to a hundred and thirty (a hill's or a mountain's to 800 m), through a core of the area at its middle; red dotted cuts
+      // 3. How high the terrain rises (the ground is at 0, always): lettered ghost slices at its kind's own heights (a CBD's
+      // from 200 m, a dwelling area's to 60 m: terrainTops), through a core of the area at its middle; red dotted cuts
       // through the buildings the engine stands there for now.
-      const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, CORE), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
+      const { measure, slices: tops } = T.terrainHeights(part.scale, kind), span = tops.at(-1).y;
+      const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, Math.max(CORE_MIN, span * CORE)), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
       const sample = [round(cc[0] - core), round(cc[1] - core), round(cc[0] + core), round(cc[1] + core)];
       const lots = data.world.lots.map(lot => ({ box: [lot.i0 * CELL, lot.j0 * CELL, (lot.i0 + lot.nx) * CELL, (lot.j0 + lot.nz) * CELL], top: (lot.floors ?? 1) * FLOOR })).filter(lot => lot.box[0] < sample[2] && sample[0] < lot.box[2] && lot.box[1] < sample[3] && sample[1] < lot.box[3]);
-      const tops = (shape ? NATURAL_TOPS : BUILT_TOPS).map(([y, said], k) => ({ letter: 'ABCDEFGHIJ'[k], y, said }));
-      const span = tops.at(-1).y, distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [cc[0], span / 2, cc[1]];
+      const distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [cc[0], span / 2, cc[1]];
       const heights = await shoot(OVERVIEW, { view: { fov: 40, position: from(mid, yaw, 0.3, distance), target: mid },
         slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${entry.y} m · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.flatMap(entry => lots.filter(lot => lot.top > entry.y).slice(0, 80).map(lot => ({ box: lot.box, y: entry.y }))),
         labelScale: Math.max(2.5, distance / 75), dash: Math.max(1, distance / 160), vague: { near: distance * 0.9, far: distance * 2.6 } });
-      const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, tops, pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height its terrain may rise to; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
-      const upTo = tops.find(entry => entry.letter === rise?.value)?.y ?? null;
+      const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height its terrain may rise to; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
+      // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top.
+      const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, median = measure === 'median' ? height : null, upTo = measure === 'top' ? height : null;
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
-      const proposal = { id: part.id, label: part.label, kind, box, y: 0, top: upTo }, said = `${kind}${upTo ? `, up to ${upTo} m` : ''}`;
+      const proposal = { id: part.id, label: part.label, kind, box, y: 0, top: median ?? upTo, measure }, said = `${kind}${median ? `, median ${median} m` : upTo ? `, up to ${upTo} m` : ''}`;
       focus = { x: round((box[0] + box[2]) / 2), z: round((box[1] + box[3]) / 2), r: round(Math.hypot(box[2] - box[0], box[3] - box[1]) * 0.75) };
       await show(`${part.label}: proposal`, proposal);
       await live.outcome({ subject: part.label, text: `${part.label}: ${said}, ${Math.round(box[2] - box[0])} × ${Math.round(box[3] - box[1])} m (blinking in World · Live)` });
       await wait(`${part.label}: ${said}. Look around, then step on to keep it.`);
       const parentNode = nodeOf(holder);
       const toward = parentNode ? [round((box[0] + box[2]) / 2 - parentNode.x), round((box[1] + box[3]) / 2 - parentNode.z)] : null;
-      terrain.sites[part.id] = { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, y: 0, ...(upTo ? { top: upTo } : {}), by: 'jev',
-        confidence: { box: where?.confidence ?? null, kind: what?.confidence ?? null, top: rise?.confidence ?? null } };
+      terrain.sites[part.id] = isCity
+        ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), y: 0, by: 'jev', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
+        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, y: 0, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: 'jev',
+          confidence: { box: where?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
       if (shape) terrain.shapes[part.id] = { kind: shape, box, y: 0, ...(upTo ? { top: upTo } : {}) };
       if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
       terrain.askedAt = new Date().toISOString();

@@ -530,11 +530,11 @@ let decor = () => {};
 let blinkProposal = () => {};
 if (data.terrain?.proposal) {
   // Its ground at the street; a terrain said to rise to a height stands as a block up to it.
-  const { box: [x0, z0, x1, z1], y = 0, top = null, label: name, kind } = data.terrain.proposal, w = x1 - x0, d = z1 - z0, h = top ?? Math.max(3, Math.min(w, d) * 0.02), group = new THREE.Group();
+  const { box: [x0, z0, x1, z1], y = 0, top = null, measure = "top", label: name, kind } = data.terrain.proposal, w = x1 - x0, d = z1 - z0, h = top ?? Math.max(3, Math.min(w, d) * 0.02), group = new THREE.Group();
   const slab = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.25, depthWrite: false }));
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, depthTest: false }));
   edges.renderOrder = 12; group.add(slab, edges);
-  const tag = label(`${name} · ${kind}${top ? ` · up to ${top} m` : ""}`, "#ffd36e", 30); tag.scale.multiplyScalar(Math.max(4, Math.max(w, d) / 16)); tag.position.set(0, h / 2 + Math.max(w, d) * 0.1, 0); group.add(tag);
+  const tag = label(`${name} · ${kind}${top ? (measure === "median" ? ` · median ${top} m` : ` · up to ${top} m`) : ""}`, "#ffd36e", 30); tag.scale.multiplyScalar(Math.max(4, Math.max(w, d) / 16)); tag.position.set(0, h / 2 + Math.max(w, d) * 0.1, 0); group.add(tag);
   group.position.set((x0 + x1) / 2, y + h / 2, (z0 + z1) / 2); world.add(group);
   blinkProposal = (now) => { if (capture) return; const u = 0.5 + 0.5 * Math.sin(now / 180); slab.material.opacity = 0.06 + 0.34 * u; edges.material.opacity = 0.3 + 0.7 * u; };
 }

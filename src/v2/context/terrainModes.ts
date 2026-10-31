@@ -56,41 +56,82 @@ export async function terrainStores(reading: TerrainReading, sentences: { id: st
 }
 
 export interface TerrainPart { id: string; label: string; scale: string }
-export interface PartFocus { part: TerrainPart; holder: { id: string; label: string }; city: { id: string; label: string }; pictures: Record<string, string>; kind?: string }
+/**
+ * `within`: the terrain already kept for the places holding the part (its city, then the place between), by their labels:
+ * the larger level comes first (the user's call: city, then district, then street), and its manifold frames the part's.
+ * A city is its own holder and city.
+ */
+export interface PartFocus { part: TerrainPart; holder: { id: string; label: string }; city: { id: string; label: string }; pictures: Record<string, string>; kind?: string; within?: Record<string, string> }
 /** `shapes`: the basic shapes of ground, at every level, besides the level's kinds. */
 export interface GroundFocus extends PartFocus { shapes: Record<string, string> }
 export interface ZoomFocus extends PartFocus { kind: string; reasons: string[] }
 /** `tops`: the lettered slices, each a height the terrain may rise to. */
-export interface HeightFocus extends PartFocus { kind: string; tops: { letter: string; y: number; said: string }[] }
+/** `measure`: a built kind's median (its manifold makes the rest), or natural ground's or a shape's top; `slices` the heights offered. */
+export interface HeightFocus extends PartFocus { kind: string; measure: "median" | "top"; slices: { letter: string; y: number; said: string }[] }
 export interface MemberFocus { city: { id: string; label: string }; parts: { key: string; label: string; scale: string }[] }
 
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
 const BUDGET = 9000;
 
+/** A manifold (src/ground/stage/landscape.ts): gradient, core, spread, tail share, tail index. */
+const M = (gradient: number, spread: number, tail = 0) => ({ gradient, core: 0.3, spread, tail, index: 5 });
 /**
- * The kinds of terrain a part may be, by its level (the user's call, 2026-10-31): a district is what a whole quarter is
- * built as; a commercial centre, a park or a stadium is a street's. Each is the engine's ground (a landscape type, built
- * to the height Jev says it rises to) or a shape (kept, not drawn yet). The old-world kinds stay districts' for older worlds.
+ * The kinds of terrain a part may be, by its level (the user's calls, 2026-10-31): a city is what kind of city it is; a
+ * district what a whole quarter is built as; a commercial centre, a park or a stadium is a street's. A built kind is the
+ * engine's ground (a landscape type) with its own manifold (docs/v2/visual-context-engine.md §5.8): Jev gives its median
+ * (`medians`, the slices it is offered), the engine draws the spread, with no cap. Natural ground and shapes are asked
+ * their top (`tops`). The old-world kinds stay for older worlds. The gradients follow the research: about 0.3 city-wide,
+ * steeper for a commercial core; the spreads are wide where heights vary most (a CBD, a city's whole skyline).
  */
-export const TERRAIN_KINDS: Record<string, Record<string, { hint: string; ground?: string; shape?: string }>> = {
+export interface TerrainKind { hint: string; ground?: string; shape?: string; manifold?: { gradient: number; core: number; spread: number; tail: number; index: number }; medians?: number[]; tops?: number[] }
+export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
+  city: {
+    metropolis: { hint: "a metropolis: a big modern city round one centre, towers at its heart", ground: "skyscrapers", manifold: M(0.3, 0.7, 0.05), medians: [6, 10, 15, 25, 40, 60] },
+    city: { hint: "a city: flats, offices and shops round a modest centre", ground: "residential", manifold: M(0.25, 0.45, 0.03), medians: [6, 9, 12, 18, 25] },
+    town: { hint: "a town: low houses along a main street", ground: "residential", manifold: M(0.15, 0.3), medians: [4, 6, 8, 11] },
+    oldcity: { hint: "an old city of an older world: walls, a keep, crowded lanes", ground: "castle", manifold: M(0.2, 0.3, 0.02), medians: [5, 8, 11, 15] },
+  },
   district: {
-    cbd: { hint: "a CBD: a dense core of high-rise towers (offices, hotels, malls and flats in towers)", ground: "skyscrapers" },
-    dwelling: { hint: "a dwelling area: apartment blocks and houses with their schools, shops and stations; the city, not so tall", ground: "residential" },
-    industrial: { hint: "an industrial area: factories, warehouses, plants and yards on large plots", ground: "industrial" },
-    harbour: { hint: "a harbour or a port: docks, piers, cranes and warehouses by the water", ground: "harbour" },
-    mountain: { hint: "a mountain or high hills: natural ground rising, wooded or bare", shape: "mountain" },
-    oldtown: { hint: "an old town of an older world: a castle's keep within walls and a crowded town round it", ground: "castle" },
-    village: { hint: "a village of an older world: scattered low houses with gardens", ground: "village" },
-    farmland: { hint: "farmland: wide fields with a few farmhouses", ground: "farm" },
+    cbd: { hint: "a CBD: a dense core of high-rise towers (offices, hotels, malls and flats in towers)", ground: "skyscrapers", manifold: M(0.5, 0.5, 0.1), medians: [30, 50, 80, 120, 180, 250] },
+    dwelling: { hint: "a dwelling area: apartment blocks and houses with their schools, shops and stations; the city, not so tall", ground: "residential", manifold: M(0.1, 0.25, 0.02), medians: [8, 12, 18, 25, 35, 50] },
+    industrial: { hint: "an industrial area: factories, warehouses, plants and yards on large plots", ground: "industrial", manifold: M(0, 0.2, 0.02), medians: [6, 9, 12, 18, 25] },
+    harbour: { hint: "a harbour or a port: docks, piers, cranes and warehouses by the water", ground: "harbour", manifold: M(0, 0.3, 0.03), medians: [6, 9, 12, 18, 25] },
+    mountain: { hint: "a mountain or high hills: natural ground rising, wooded or bare", shape: "mountain", tops: [80, 200, 400, 600, 800] },
+    oldtown: { hint: "an old town of an older world: a castle's keep within walls and a crowded town round it", ground: "castle", manifold: M(0.2, 0.3, 0.02), medians: [5, 8, 11, 15] },
+    village: { hint: "a village of an older world: scattered low houses with gardens", ground: "village", manifold: M(0, 0.2), medians: [3, 4, 6, 8] },
+    farmland: { hint: "farmland: wide fields with a few farmhouses", ground: "farm", manifold: M(0, 0.15), medians: [3, 4, 6] },
   },
   street: {
-    commercial: { hint: "a modern commercial centre: a mall podium with towers over it, a plaza with screens, wide roads round it", ground: "commercial" },
-    park: { hint: "a park or an amusement park: lawns, gardens, rides, with a few pavilions", ground: "park" },
-    stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium" },
+    commercial: { hint: "a modern commercial centre: a mall podium with towers over it, a plaza with screens, wide roads round it", ground: "commercial", manifold: M(0.4, 0.6, 0.1), medians: [12, 20, 30, 45, 70, 100] },
+    park: { hint: "a park or an amusement park: lawns, gardens, rides, with a few pavilions", ground: "park", manifold: M(0, 0.4, 0.02), medians: [3, 5, 8, 12, 20] },
+    stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium", manifold: M(0, 0.2), medians: [15, 25, 35, 50] },
   },
 };
-/** A part's options: its level's kinds, then the basic shapes. */
-export const terrainKinds = (scale: string, shapes: Record<string, string>): Record<string, string> => ({ ...Object.fromEntries(Object.entries(TERRAIN_KINDS[scale] ?? TERRAIN_KINDS.district).map(([kind, entry]) => [kind, entry.hint])), ...shapes });
+/** The heights a basic shape of ground may rise to (metres). */
+const SHAPE_TOPS = [3, 6, 12, 25, 50, 100];
+/** Natural ground by its height. */
+const natural = (y: number) => (y <= 30 ? "a low rise" : y <= 100 ? "a hill" : y <= 250 ? "a high hill" : y <= 500 ? "a mountain" : "a high mountain");
+/** A part's level's kinds (a level without its own, a district's). */
+const levelOf = (scale: string) => TERRAIN_KINDS[scale] ?? TERRAIN_KINDS.district;
+export const terrainKind = (scale: string, kind: string): TerrainKind | undefined => levelOf(scale)[kind];
+/** A manifold in Jev's words, from the same numbers the engine draws with. */
+export function manifoldWords(manifold: NonNullable<TerrainKind["manifold"]>): string {
+  const ratio = ((1 + manifold.core) / manifold.core) ** manifold.gradient, high = Math.exp(1.2816 * manifold.spread);
+  return [ratio >= 1.15 ? `highest at its core (about ${ratio.toFixed(1)} times its edge)` : "about as high across it",
+    high >= 1.6 ? `a wide spread (one building in ten over ${high.toFixed(1)} times the median)` : high >= 1.3 ? `some spread (one in ten over ${high.toFixed(1)} times the median)` : "even heights",
+    ...(manifold.tail ? [`one in ${Math.round(1 / manifold.tail)} far above the rest`] : [])].join("; ");
+}
+/**
+ * The question's slices for a part of a kind: a built kind's medians (the median roof: the engine draws the spread from
+ * its manifold), natural ground's or a shape's tops; each said in floors, or as natural ground.
+ */
+export function terrainHeights(scale: string, kind: string): { measure: "median" | "top"; slices: { letter: string; y: number; said: string }[] } {
+  const entry = terrainKind(scale, kind), median = !!entry?.ground && !!entry.medians;
+  const heights = median ? entry!.medians! : entry?.tops ?? SHAPE_TOPS;
+  return { measure: median ? "median" : "top", slices: heights.map((y, k) => ({ letter: "ABCDEFGHIJ"[k], y, said: median ? `about ${Math.max(1, Math.round(y / 3))} floors` : natural(y) })) };
+}
+/** A part's options: its level's kinds (each with its manifold in words), then the basic shapes. */
+export const terrainKinds = (scale: string, shapes: Record<string, string>): Record<string, string> => ({ ...Object.fromEntries(Object.entries(levelOf(scale)).map(([kind, entry]) => [kind, entry.manifold ? `${entry.hint}. Its heights: ${manifoldWords(entry.manifold)}` : entry.hint])), ...shapes });
 /** Characters a fact needs to say something of a place (a sentence, not the name and a full stop). */
 const SAYS = 16;
 /** How near a place is to the part: itself, the place that holds it, its city (the farther, the weaker). */
@@ -103,6 +144,7 @@ const fixed = (name: string, key: string, of: (focus: never) => Record<string, u
 function sources<F extends PartFocus>(use: { standing?: boolean; environment: "city" | "part"; facts?: boolean }): Source<F, TerrainStores>[] {
   const list: Source<F, TerrainStores>[] = [
     fixed("part", "part", (focus: F) => ({ name: focus.part.label, scale: focus.part.scale, in: focus.holder.label, ...(focus.holder.id !== focus.city.id ? { city: focus.city.label } : {}), ...(focus.kind ? { ground: focus.kind } : {}) })) as Source<F, TerrainStores>,
+    fixed("within", "within", (focus: F) => focus.within ?? {}) as Source<F, TerrainStores>,
     { name: "text", key: "text", quota: 4, ranked: true, collect: (focus, stores) => ownText(focus, stores).map((sentence) => ({ id: sentence.id, score: 1, fields: clip(sentence.text, 160) })) },
   ];
   if (use.standing) list.push({
@@ -158,12 +200,13 @@ const box = (focus: PartFocus): DecisionQuestion => ({ key: "box", primitive: "b
 
 export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
   name: "terrain-ground",
-  task: (focus) => `Where does ${focus.part.label} lie in ${focus.city.label}, and what kind of ${focus.part.scale} is it? Terrain only: a kind of ${focus.part.scale} (the engine fills in its buildings) or a basic shape of ground, never a building. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment).`,
-  // The options are the part's level's kinds (TERRAIN_KINDS), composed with the evidence.
+  task: (focus) => `${focus.part.scale === "city" ? `What kind of city is ${focus.part.label}?` : `Where does ${focus.part.label} lie in ${focus.city.label}, and what kind of ${focus.part.scale} is it?`} Terrain only: a kind of ${focus.part.scale} (each with its manifold: how its heights spread; the engine fills in its buildings) or a basic shape of ground, never a building. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), and the terrain kept for the places holding it (within).`,
+  // The options are the part's level's kinds (TERRAIN_KINDS, each with its manifold), composed with the evidence.
   sources: [...sources<GroundFocus>({ standing: true, facts: true, environment: "city" }), fixed("kinds", "kinds", (focus: GroundFocus) => terrainKinds(focus.part.scale, focus.shapes)) as Source<GroundFocus, TerrainStores>, fixed("pictures", "pictures", (focus: GroundFocus) => focus.pictures) as Source<GroundFocus, TerrainStores>],
   cutOrder: ["environment", "facts", "standing", "text"],
   probe,
-  questions: (focus, kept) => [box(focus), { key: "kind", primitive: "choice", instructions: `What kind of ${focus.part.scale} is ${focus.part.label} (the kinds are in kinds)?`, options: kept.kinds.map((item) => item.id), optionHints: Object.fromEntries(kept.kinds.map((item) => [item.id, String(item.fields)])) }],
+  // A city is the map itself: it is asked its kind, not where it lies.
+  questions: (focus, kept) => [...(focus.part.scale === "city" ? [] : [box(focus)]), { key: "kind", primitive: "choice", instructions: `What kind of ${focus.part.scale} is ${focus.part.label} (the kinds are in kinds)?`, options: kept.kinds.map((item) => item.id), optionHints: Object.fromEntries(kept.kinds.map((item) => [item.id, String(item.fields)])) }],
   budget: BUDGET,
 };
 
@@ -176,15 +219,17 @@ export const terrainZoomMode: Mode<ZoomFocus, TerrainStores> = {
   budget: BUDGET,
 };
 
-// How high the terrain rises (the user's call, 2026-10-31: the ground is at 0, always): the roofs of its tallest
-// buildings, the top of its hill; what the text says of the part and its city says it.
+// How high the terrain stands (the user's calls, 2026-10-31: the ground is at 0, always; Jev gives a built kind's median,
+// its manifold makes the spread): the median roof, or natural ground's top; what the text says of the part and its city says it.
 export const terrainHeightMode: Mode<HeightFocus, TerrainStores> = {
   name: "terrain-height",
-  task: (focus) => `How high does ${focus.part.label}'s terrain (${focus.kind}) rise: the roofs of its tallest buildings, or the top of its ground if it is a hill or a mountain? Its ground is at the street. The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment).`,
-  sources: [...sources<HeightFocus>({ standing: true, facts: true, environment: "city" }), fixed("tops", "tops", (focus: HeightFocus) => Object.fromEntries(focus.tops.map((top) => [top.letter, `${top.y} m: ${top.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
+  task: (focus) => `${focus.measure === "median"
+    ? `What is the median height of ${focus.part.label}'s roofs (${focus.kind}): the height half its buildings stand below? Its manifold makes the rest (${manifoldWords(terrainKind(focus.part.scale, focus.kind)!.manifold!)}), so give the median, not the tallest.`
+    : `How high does ${focus.part.label} (${focus.kind}) rise: the top of its ground?`} Its ground is at the street. The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), the terrain kept for the places holding it (within).`,
+  sources: [...sources<HeightFocus>({ standing: true, facts: true, environment: "city" }), fixed("heights", "heights", (focus: HeightFocus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.y} m: ${slice.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
   cutOrder: ["environment", "facts", "standing", "text"],
   probe,
-  questions: (focus) => [{ key: "top", primitive: "choice", instructions: `Which lettered slice is the top of ${focus.part.label}'s terrain?`, options: focus.tops.map((top) => top.letter), optionHints: Object.fromEntries(focus.tops.map((top) => [top.letter, `${top.letter}: ${top.y} m, ${top.said}`])) }],
+  questions: (focus) => [{ key: "height", primitive: "choice", instructions: `Which lettered slice is ${focus.measure === "median" ? `the median of ${focus.part.label}'s roofs` : `the top of ${focus.part.label}'s ground`}?`, options: focus.slices.map((slice) => slice.letter), optionHints: Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.letter}: ${slice.y} m, ${slice.said}`])) }],
   budget: BUDGET,
 };
 

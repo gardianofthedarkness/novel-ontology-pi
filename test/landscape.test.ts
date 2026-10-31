@@ -203,13 +203,20 @@ test("the manifold under a place: its own landscape (the main agent's over Jev's
   assert.deepEqual(groundFor(undefined, [], pickOf, "region"), { type: null, by: "none" });
 });
 
-test("a patch built to the height terrain spawning said its terrain rises to: its buildings pass its type's cap", async () => {
-  const { patchFromBox, LANDSCAPE_VERSION } = await import("../src/ground/stage/landscape.js");
-  const box = { x0: -300, z0: -300, x1: 300, z1: 300 }, tallest = (top?: number) => {
-    const patch = patchFromBox("residential", "p0", "loc_top", box, undefined, top);
-    return { patch, floors: Math.max(...fillLandscape({ version: LANDSCAPE_VERSION, seed: "loc_top", patches: [patch] }).fabric.buildings.map((building) => building.floors)) };
+test("a patch on its kind's manifold, round Jev's median: a CBD's wide spread and heavy tail, its landmark at the core's 99th percentile, no cap", async () => {
+  const { patchFromBox, peakOf, LANDSCAPE_VERSION } = await import("../src/ground/stage/landscape.js");
+  const box = { x0: -300, z0: -300, x1: 300, z1: 300 }, median = (list: number[]) => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)];
+  const heights = (type: LandscapeType, made: { median: number; manifold: { gradient: number; core: number; spread: number; tail: number; index: number } }) => {
+    const patch = patchFromBox(type, "p0", "loc_manifold", box, undefined, made), fill = fillLandscape({ version: LANDSCAPE_VERSION, seed: "loc_manifold", patches: [patch] });
+    return { patch, metres: fill.fabric.buildings.map((building) => building.floors * 3), landmark: fill.landmarks.map((building) => building.floors * 3) };
   };
-  const low = tallest(), high = tallest(150);
-  assert.deepEqual([high.patch.H, high.patch.top], [150, 150]);
-  assert.ok(low.floors * 3 <= LANDSCAPES.residential.cap && high.floors * 3 > LANDSCAPES.residential.cap, `${low.floors} floors, then ${high.floors}`);
+  const cbd = heights("skyscrapers", { median: 150, manifold: { gradient: 0.5, core: 0.3, spread: 0.5, tail: 0.1, index: 5 } });
+  const m = median(cbd.metres), tallest = Math.max(...cbd.metres);
+  assert.ok(m > 100 && m < 220, `the buildings' median near Jev's 150 m: ${m}`);
+  assert.ok(tallest > 2.5 * m, `a heavy tail: the tallest ${tallest} m over a median of ${m}`);
+  assert.equal(cbd.landmark[0], Math.round(peakOf(cbd.patch) / 3) * 3, "the landmark at the core's 99th percentile");
+  assert.ok(peakOf(cbd.patch) > 600, "past the old peak: no cap");
+  const dwelling = heights("residential", { median: 60, manifold: { gradient: 0.1, core: 0.3, spread: 0.25, tail: 0, index: 5 } });
+  assert.ok(median(dwelling.metres) > LANDSCAPES.residential.cap, `a dwelling area's median past its type's old cap: ${median(dwelling.metres)}`);
+  assert.ok(Math.max(...dwelling.metres) < 3 * median(dwelling.metres), "and an even one, without a tail");
 });

@@ -242,7 +242,9 @@ user's answer:
   rises**: the roofs of its tallest buildings, the top of its hill. The ghost slices ask that (fixed bands, from three
   floors to a hundred and thirty; for a mountain, up to 800 m), with what the text says of the part and its city in
   the state (what stands there, the facts, the surroundings). The answer is the site's `top`, and the engine builds the
-  part's ground to it (its landscape patch's height; the type's cap gives way where the text says it is taller).
+  part's ground to it. On the first rerun Jev called 第七学区 a CBD (0.79) and put it at the text's fifty floors (150 m);
+  the user saw it was a median, not a top: §5.8 (each kind's manifold, Jev's median, the spread drawn by the engine)
+  replaces the tops and the type caps.
 - **The kinds go by level.** A district is what a whole quarter is: a **CBD** (a core of towers), a **dwelling area**
   (the city, not so tall), **industrial**, a **harbour or port**, or a **mountain**; the engine's old-world kinds (an
   old town, a village, farmland) stay district options for older worlds. A **commercial centre**, a **park** (an
@@ -252,6 +254,41 @@ user's answer:
 - **Commercial is modern.** What Jev means by a commercial centre is a modern one: a mall podium with towers over it, a
   plaza with screens, wide roads round it (the user's picture). The engine's `commercial` landscape still builds low
   shops along a boulevard; it is to be rebuilt as that, for the street level.
+
+### 5.8 The median, and each kind's manifold (the user's call, 2026-10-31)
+
+The user saw why the CBD stayed low: Jev is shown each kind as a manifold and answers with its **median** height (the
+roofs most of it stands at), not the tallest. So the question asks the median, the kinds tell Jev their manifolds, and
+the engine makes the spread. A CBD's spread is wide: researched, not guessed.
+
+- **Research.** Building height falls with distance from the business centre as a power: an elasticity of about −0.25
+  to −0.3 for world cities in 1900 and 2015, steeper for commercial than for residential buildings and in North America
+  (Ahlfeldt & Barr; Ahlfeldt et al.). Within a city, heights are log-normal with a heavy upper tail approximated by a
+  power law (Batty et al., Greater London); the tallest towers follow a generalised Pareto with shape about 0.2
+  (extreme value fits to 325 skyscrapers in 81 cities). Average height within 2 km of the centre scales as N^0.34 with
+  the city's population; across a whole city the tallest stands 45–90 times its average (New York, Chicago, Toronto;
+  Schläpfer, Lee & Bettencourt).
+- **The CBD manifold** (`manifoldHeight` in `src/ground/stage/landscape.ts`). At a fraction r of the way from the core to
+  the edge, the local median is M · ((r + 0.3)^−0.5 / (0.707 + 0.3)^−0.5): the power gradient, steeper than the
+  city-wide −0.3 for a commercial core (0.3 keeps the core finite), scaled so the median over the district's area
+  (r = 1/√2) is Jev's M. Each
+  building: log-normal round the local median, σ = 0.5 (a wide spread); one in ten from the Pareto tail above the local
+  90th percentile, index 5 (shape 0.2); the landmark at the core at the 99th percentile there. Filled at M = 150 m on
+  第七学区's box: 94 buildings, p10 69 m, median 150 m, p90 312 m, the tallest 933 m, the landmark 879 m (the core's
+  median 275 m).
+- **Every level, no hard caps** (the user's call). A city, a district and a street each have their kinds, and each kind
+  its manifold (`TERRAIN_KINDS`: gradient, spread, tail): a metropolis 0.3 city-wide with a wide spread (σ 0.7) and a
+  tail, a city or a town flatter and tighter, a dwelling area nearly even (σ 0.25), industrial ground and a harbour
+  even, a street's commercial centre steep with a tail (a podium and its towers), a park and a stadium even. A
+  manifold's heights are drawn as they come: no type cap, no peak, no cut for a lot's width (tall ground has wider plots
+  already). Jev reads each kind's manifold in words made from the same numbers.
+- **The order: the largest level first** (the user's call). Every city, then every district, then every street; within
+  a level, the order the text first names them. A city is asked its kind and its median (it is the map, so no box); a
+  district is told the terrain kept for its city (`within`), so the larger manifold frames the smaller.
+- **Basic shapes and mountains** are asked their top instead of a median.
+- **The question**: the slices are the kind's medians (a CBD's from 30 to 250 m), each kind's hint says its manifold,
+  and the site keeps `median` and `manifold` (or `top` for natural ground and shapes); the engine builds the part's
+  ground patch from them.
 
 ## 6. Order of work
 
