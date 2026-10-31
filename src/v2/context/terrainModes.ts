@@ -23,13 +23,15 @@ export interface TerrainStores {
   cards: { id: string; first: string; text: string; setting: string | null }[];
   /** The sentences naming a place, in reading order. */
   naming: (label: string) => { id: string; text: string }[];
+  /** A place's own sentences where the text gives it no name to find it by (a pool's member: place EM's unnamed place). */
+  own: (id: string) => { id: string; text: string }[];
   /** The named places. */
   places: { id: string; label: string }[];
 }
 export interface TerrainReading {
   entities: { id: string; name: string; kind: string }[];
   facts: { id: string; order: number; sentences: string[]; about: { id: string }[] }[];
-  slots: { label: string; kind: string; in: string | null }[];
+  slots: { id?: string; label: string; kind: string; in: string | null; sentences?: string[] }[];
   settings: { scene: string; place: string | null }[];
   scenes: { id: string; index: number; environment?: { id: string; first: string; text: string }[] }[];
 }
@@ -51,6 +53,7 @@ export async function terrainStores(reading: TerrainReading, sentences: { id: st
     standing: (place) => reading.slots.filter((slot) => slot.in === place && slot.kind !== "room").map((slot) => ({ label: slot.label, kind: slot.kind })),
     cards: [...reading.scenes].sort((a, b) => a.index - b.index).flatMap((scene) => (scene.environment ?? []).map((card) => ({ ...card, setting: settingOf.get(scene.id) ?? null }))),
     naming: (name) => sentences.filter((sentence) => sentence.text.includes(name)),
+    own: (id) => (reading.slots.find((slot) => slot.id && `unnamed:${slot.id}` === id)?.sentences ?? []).map((sentence) => ({ id: sentence, text: text.get(sentence) ?? "" })).filter((sentence) => sentence.text),
     places: reading.entities.filter((entity) => entity.kind === "place").map((entity) => ({ id: entity.id, label: label(entity.id) })),
   };
 }
@@ -61,7 +64,7 @@ export interface TerrainPart { id: string; label: string; scale: string }
  * the larger level comes first (the user's call: city, then district, then street), and its manifold frames the part's.
  * A city is its own holder and city.
  */
-export interface PartFocus { part: TerrainPart; holder: { id: string; label: string }; city: { id: string; label: string }; pictures: Record<string, string>; kind?: string; within?: Record<string, string> }
+export interface PartFocus { part: TerrainPart; holder: { id: string; label: string }; city: { id: string; label: string }; pictures: Record<string, string>; kind?: string; within?: Record<string, string>; sampled?: boolean }
 /** `shapes`: the basic shapes, at every level, besides the level's kinds. */
 export interface GroundFocus extends PartFocus { shapes: Record<string, string> }
 export interface ZoomFocus extends PartFocus { kind: string; reasons: string[] }
@@ -101,8 +104,17 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     village: { hint: "a village of an older world: scattered low houses with gardens", ground: "village", manifold: M(0, 0.2), medians: [3, 4, 6, 8] },
     farmland: { hint: "farmland: wide fields with a few farmhouses", ground: "farm", manifold: M(0, 0.15), medians: [3, 4, 6] },
   },
+  // The street level's own kinds (docs/v2/world-engine-v2.md §2.0.12): the street-level land use, each built with an engine
+  // landscape on its own manifold. A crossing is a square; an underground passage is spatial, no street.
   street: {
-    commercial: { hint: "a modern commercial centre: a mall podium with towers over it, a plaza with screens, wide roads round it", ground: "commercial", manifold: M(0.4, 0.6, 0.1), medians: [12, 20, 30, 45, 70, 100] },
+    shopping: { hint: "a shopping street: shops of a few storeys on both sides, signs, a tower at a corner", ground: "commercial", manifold: M(0, 0.35, 0.05), medians: [6, 9, 12, 18, 25] },
+    centre: { hint: "a modern commercial centre: a mall podium with towers over it, a plaza with screens, wide roads round it", ground: "commercial", manifold: M(0.4, 0.6, 0.1), medians: [12, 20, 30, 45, 70, 100] },
+    avenue: { hint: "an avenue: a wide road lined with offices and towers", ground: "skyscrapers", manifold: M(0.1, 0.5, 0.08), medians: [20, 35, 50, 80, 120] },
+    square: { hint: "a square or a crossing: open ground with buildings round it", ground: "commercial", manifold: M(0, 0.3, 0.03), medians: [6, 10, 15, 25, 40] },
+    station: { hint: "a station front: the station, a plaza, bus stops, shops round it", ground: "commercial", manifold: M(0.3, 0.4, 0.05), medians: [10, 15, 25, 40, 60] },
+    alley: { hint: "an alley or a lane: narrow, low and dense", ground: "residential", manifold: M(0, 0.2), medians: [3, 5, 7, 10] },
+    residential: { hint: "a residential street: flats and houses along it", ground: "residential", manifold: M(0, 0.25, 0.02), medians: [6, 9, 12, 18, 25] },
+    waterfront: { hint: "a waterfront or a bridge: water, a deck, warehouses and walks by it", ground: "harbour", manifold: M(0, 0.3), medians: [4, 6, 10, 15] },
     park: { hint: "a park or an amusement park: lawns, gardens, rides, with a few pavilions", ground: "park", manifold: M(0, 0.4, 0.02), medians: [3, 5, 8, 12, 20] },
     stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium", manifold: M(0, 0.2), medians: [15, 25, 35, 50] },
   },
@@ -138,7 +150,7 @@ const SAYS = 16;
 const nearness = (focus: PartFocus, place: string) => (place === focus.part.id ? 3 : place === focus.holder.id && focus.holder.id !== focus.city.id ? 2 : 1);
 const around = (focus: PartFocus) => [...new Set([focus.part.id, focus.holder.id, focus.city.id])];
 /** The part's own sentences (as many as the old evidence gave): what is asked about. */
-const ownText = (focus: PartFocus, stores: TerrainStores) => stores.naming(focus.part.label).filter((sentence) => sentence.text.length >= focus.part.label.length + 6);
+const ownText = (focus: PartFocus, stores: TerrainStores) => { const own = stores.own(focus.part.id); return own.length ? own : stores.naming(focus.part.label).filter((sentence) => sentence.text.length >= focus.part.label.length + 6); };
 const fixed = (name: string, key: string, of: (focus: never) => Record<string, unknown>): Source<never, TerrainStores> => ({ name, key, quota: 0, keep: true, collect: (focus) => Object.entries(of(focus)).map(([id, fields]) => ({ id, score: 1, fields })) });
 
 function sources<F extends PartFocus>(use: { standing?: boolean; environment: "city" | "part"; facts?: boolean }): Source<F, TerrainStores>[] {
@@ -200,13 +212,13 @@ const box = (focus: PartFocus): DecisionQuestion => ({ key: "box", primitive: "b
 
 export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
   name: "terrain-ground",
-  task: (focus) => `${focus.part.scale === "city" ? `What kind of city is ${focus.part.label}?` : `Where does ${focus.part.label} lie in ${focus.city.label}, and what kind of ${focus.part.scale} is it?`} Terrain only: a kind of ${focus.part.scale} (each with its manifold: how its heights spread; the engine fills in its buildings) or a basic shape, never a building. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), and the terrain kept for the places holding it (within).`,
+  task: (focus) => `${focus.part.scale === "city" ? `What kind of city is ${focus.part.label}?` : focus.sampled ? `What kind of ${focus.part.scale} is ${focus.part.label}? The text gives it no name of its own; it stands where sampling put it, in ${focus.holder.label}.` : `Where does ${focus.part.label} lie in ${focus.city.label}, and what kind of ${focus.part.scale} is it?`} Terrain only: a kind of ${focus.part.scale} (each with its manifold: how its heights spread; the engine fills in its buildings) or a basic shape, never a building. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment), and the terrain kept for the places holding it (within).`,
   // The options are the part's level's kinds (TERRAIN_KINDS, each with its manifold), composed with the evidence.
   sources: [...sources<GroundFocus>({ standing: true, facts: true, environment: "city" }), fixed("kinds", "kinds", (focus: GroundFocus) => terrainKinds(focus.part.scale, focus.shapes)) as Source<GroundFocus, TerrainStores>, fixed("pictures", "pictures", (focus: GroundFocus) => focus.pictures) as Source<GroundFocus, TerrainStores>],
   cutOrder: ["environment", "facts", "standing", "text"],
   probe,
   // A city is the map itself: it is asked its kind, not where it lies.
-  questions: (focus, kept) => [...(focus.part.scale === "city" ? [] : [box(focus)]), { key: "kind", primitive: "choice", instructions: `What kind of ${focus.part.scale} is ${focus.part.label} (the kinds are in kinds)?`, options: kept.kinds.map((item) => item.id), optionHints: Object.fromEntries(kept.kinds.map((item) => [item.id, String(item.fields)])) }],
+  questions: (focus, kept) => [...(focus.part.scale === "city" || focus.sampled ? [] : [box(focus)]), { key: "kind", primitive: "choice", instructions: `What kind of ${focus.part.scale} is ${focus.part.label} (the kinds are in kinds)?`, options: kept.kinds.map((item) => item.id), optionHints: Object.fromEntries(kept.kinds.map((item) => [item.id, String(item.fields)])) }],
   budget: BUDGET,
 };
 

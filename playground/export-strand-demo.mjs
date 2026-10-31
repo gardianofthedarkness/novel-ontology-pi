@@ -411,10 +411,10 @@ export async function strandDemo(novelDir, options) {
     // larger place that has one, else as its scale suggests, so the world is never bare.
     // Terrain spawning's answer for a place, where it was asked (stage/terrain.json): its ground's type wins over the
     // landscape step's, and its first patch is the size of Jev's box.
-    // A sampling pool with no site of its own stands on its area's ground (the area's kind, median and manifold: its
-    // default, docs/v2/world-engine-v2.md §2.0.11), at its own size.
+    // A sampling pool's ground is its default (the average of the places of its level in its area, terrain spawning's), and
+    // with none decided it stays empty: no ground, no default buildings (docs/v2/world-engine-v2.md §2.0.12).
     const poolArea = id => worldScript?.places?.[id]?.pool ?? null;
-    const terrainGround = id => { const site = terrain?.sites?.[id] ?? (poolArea(id) && terrain?.sites?.[poolArea(id)] ? { ...terrain.sites[poolArea(id)], size: null } : null); return site?.ground && LANDSCAPES[site.ground] ? site : null; };
+    const terrainGround = id => { const site = terrain?.sites?.[id]; return site?.ground && LANDSCAPES[site.ground] ? site : null; };
     // A kept part's ground: its box, built round its median on its kind's manifold (terrain spawning's); a city's (no box) at its kind's own size.
     const groundPatch = id => {
       const site = terrainGround(id), made = site?.median && site.manifold ? { median: site.median, manifold: site.manifold } : null;
@@ -423,6 +423,7 @@ export async function strandDemo(novelDir, options) {
       const [w, d] = site.size; return patchFromBox(site.ground, 'p0', id, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }, made);
     };
     const landscapeOf = (id, scale = scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')) => {
+      if (!ground.has(id) && poolArea(id) && !terrainGround(id)) ground.set(id, { type: null, by: 'none' });
       if (!ground.has(id)) ground.set(id, terrainGround(id) ? { type: terrainGround(id).ground, by: 'jev', from: 'terrain' } : groundFor(inputs.landscape?.places[id], pathOf(id).filter(at => at !== id).reverse(), at => inputs.landscape?.places[at], scale));
       return ground.get(id).type;
     };
@@ -485,6 +486,30 @@ export async function strandDemo(novelDir, options) {
       const holder = C.holderFor(canvas, host, scale, place.id), picked = !area || C.sampledIn(canvas, host, holder) || guessed(place.id) || !!canvas.places[holder]?.pool;
       C.addUnit(canvas, holder, { id: place.id, label: name(place.id), kind, r, ...(picked ? { sampled: area ?? 'build' } : {}) });
       if (!area) { dwellingUnits[place.id] = host; notes.build.dwelling.push(`${name(place.id)} in ${name(host)}`); }
+    }
+    // Borrowing (docs/v2/world-engine-v2.md §2.0.12): a pool's member Jev decided borrows its pool's ground where it stands,
+    // a patch of its kind on its median and manifold, sized for its level, claiming lots before the pool's default. A later
+    // member of exactly the same name is the same place: it stands where the first does; with the same kind and median it
+    // is one place, else it merges into the first as a further patch beside it (modern heights merge across them).
+    const baseName = label => String(label).replace(/ \(scene \d+\)$/, ''), GROUND = { street: 120, district: 400 };
+    for (const pool of Object.values(canvas.places).filter(place => place.pool)) {
+      const first = new Map(), borrowed = [];
+      for (const unit of pool.units) {
+        const site = terrain?.sites?.[unit.id];
+        if (!site?.ground || !LANDSCAPES[site.ground] || !site.median || !site.manifold) continue;
+        const name = baseName(unit.label), original = first.get(name), half = (GROUND[site.scale] ?? 120) / 2;
+        const made = at => ({ ...patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - half, z0: at[1] - half, x1: at[0] + half, z1: at[1] + half }, { by: 'jev' }, { median: site.median, manifold: site.manifold }), borrowed: true });
+        if (!original) { const patch = made(unit.at); first.set(name, { unit, site, patch }); borrowed.push(patch); unit.borrows = 'own'; notes.build.borrowed = (notes.build.borrowed ?? 0) + 1; continue; }
+        const own = unit.at, dx = own[0] - original.unit.at[0], dz = own[1] - original.unit.at[1], d = Math.hypot(dx, dz) || 1;
+        unit.at = original.unit.at; unit.borrows = original.unit.id;
+        if (original.site.ground === site.ground && original.site.median === site.median) continue;
+        const reach = original.patch.R + half * 0.8;
+        borrowed.push(made([Math.round((original.unit.at[0] + (dx / d) * reach) * 10) / 10, Math.round((original.unit.at[1] + (dz / d) * reach) * 10) / 10]));
+        notes.build.merged = (notes.build.merged ?? 0) + 1;
+      }
+      if (!borrowed.length) continue;
+      pool.landscape = { version: pool.landscape?.version ?? 1, seed: pool.id, patches: [...(pool.landscape?.patches ?? []), ...borrowed] };
+      C.grow(canvas, pool.id);
     }
     const round = value => Math.round(value * 10) / 10, depthOf = id => { let depth = 0; for (let at = canvas.places[id]; at?.parent; at = canvas.places[at.parent]) depth++; return depth; };
     const nodes = [];

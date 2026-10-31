@@ -86,7 +86,10 @@ test("terrain's ground: what stands in the part, the place holding it and its ci
   const district = ["cbd", "dwelling", "industrial", "harbour", "mountain", "oldtown", "village", "farmland", "donut"];
   assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key), composed.questions[1].options], [district, ["box", "kind"], district]);
   const street = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { ...focus.part, scale: "street" } }, stores);
-  assert.deepEqual(Object.keys((street.state as Record<string, object>).kinds), ["commercial", "park", "stadium", "donut"]);
+  assert.deepEqual(Object.keys((street.state as Record<string, object>).kinds), ["shopping", "centre", "avenue", "square", "station", "alley", "residential", "waterfront", "park", "stadium", "donut"]);
+  // A pool's member (sampled): asked its kind, not where it lies; its own sentences are its text (it has no name to find).
+  const sampled = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { id: "unnamed:s1", label: "a square (scene 1)", scale: "street" }, sampled: true }, { ...stores, own: (id: string) => (id === "unnamed:s1" ? [{ id: "s1", text: sentences[0].text }] : []) });
+  assert.deepEqual([sampled.questions.map((question) => question.key), Object.keys((sampled.state as Record<string, object>).text)], [["kind"], ["s1"]]);
   assert.equal(T.TERRAIN_KINDS.district.cbd.ground, "skyscrapers");
   // Each kind its own manifold, and Jev gives its median (the user's calls): a CBD's medians, a mountain's tops.
   const cbd = T.terrainHeights("district", "cbd");

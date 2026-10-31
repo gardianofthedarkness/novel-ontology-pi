@@ -153,7 +153,11 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const ats = Object.entries(world).filter(([, place]) => place.parent === id || place.near === id).map(([, place]) => (place.scene ? sceneAt.get(place.scene) ?? -1 : firstAt(place.label))).filter(at => at >= 0);
       return ats.length ? Math.min(...ats) : firstAt(name(world[id]?.pool ?? ''));
     };
-    const open = Object.keys(inputs.scale?.places ?? {}).filter(id => OPEN.has(scaleOf(id))).map(id => ({ id, label: name(id), scale: scaleOf(id), at: world[id]?.pool ? poolAt(id) : firstAt(name(id)) })).filter(part => part.at >= 0);
+    // What a pool holds at an area's level is a real place (it has a belonging and a full tree: docs/v2/world-engine-v2.md
+    // §2.0.12): Jev processes it like a named one, where its scene first comes. Another book's members are only markers.
+    const isMember = id => id.startsWith('unnamed:') && String(world[id]?.parent ?? '').startsWith('pool:');
+    const atOf = id => (world[id]?.pool ? poolAt(id) : isMember(id) ? sceneAt.get(world[id].scene) ?? -1 : firstAt(name(id)));
+    const open = Object.keys(inputs.scale?.places ?? {}).filter(id => OPEN.has(scaleOf(id)) && !id.startsWith('elsewhere:') && (!id.startsWith('unnamed:') || isMember(id))).map(id => ({ id, label: name(id), scale: scaleOf(id), at: atOf(id) })).filter(part => part.at >= 0);
     const order = list => list.sort((a, b) => (a.scale === b.scale ? 0 : a.scale === 'district' ? -1 : 1) || a.at - b.at);
     // A part is its nearest city's (学园都市's districts are not also 东京都's).
     const cityOf = id => { for (let at = parentOf(id), n = 0; at && n < 12; at = parentOf(at), n++) if (scaleOf(at) === 'city') return at; return null; };
@@ -173,13 +177,15 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     // street; within a level, the order the text first names them. A city is asked its kind and height only (it is the map).
     const queue = [
       ...cities.map(city => ({ part: { id: city.id, label: city.label, scale: 'city', at: firstAt(city.label) }, city })).sort((a, b) => a.part.at - b.part.at),
-      ...['district', 'street'].flatMap(level => cities.flatMap(city => (partsOf.get(city.id) ?? []).filter(part => part.scale === level).map(part => ({ part, city }))).sort((a, b) => a.part.at - b.part.at)),
+      // Within a level the real places first, in the text's order; its pools last, as each copies the places of its level.
+      ...['district', 'street'].flatMap(level => cities.flatMap(city => (partsOf.get(city.id) ?? []).filter(part => part.scale === level).map(part => ({ part, city }))).sort((a, b) => Number(!!world[a.part.id]?.pool) - Number(!!world[b.part.id]?.pool) || a.part.at - b.part.at)),
     ];
     const total = queue.length;
     let placed = 0;
     for (const { part, city } of queue) {
       if (placed >= limit) break;
-      const isCity = part.scale === 'city', holder = isCity ? city.id : holderOf(part, city), cityNode = nodeOf(city.id), holderNode = nodeOf(holder) ?? cityNode;
+      // A pool's member keeps the spot sampling gave it: Jev is asked its kind and height, not where it lies.
+      const isCity = part.scale === 'city', sampled = isMember(part.id), holder = isCity ? city.id : holderOf(part, city), cityNode = nodeOf(city.id), holderNode = nodeOf(holder) ?? cityNode;
       // The city as the engine stands it now: its node and the districts and streets in it (not the rooms and buildings the
       // scenes are set in, nor the canvas's stand-in areas), and the sites so far.
       const kin = data.macro.filter(node => node.id !== part.id && (node.id === city.id || ((within(node.id, city.id) || member.get(node.id)?.city === city.id) && OPEN.has(node.scale))) && !String(node.id).startsWith('spot:') && !node.temporary && !node.unbuilt);
@@ -195,16 +201,22 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // The terrain kept for the places holding the part (its city, the place between), larger first: its manifold frames the part's.
       const kept = id => { const site = terrain.sites[id]; return site?.kind ? `${site.kind}${site.median ? `, median ${site.median} m` : site.top ? `, up to ${site.top} m` : ''}` : null; };
       const framing = Object.fromEntries((isCity ? [] : [...new Set([city.id, holder])]).filter(id => kept(id)).map(id => [name(id), kept(id)]));
-      const about = { part: { id: part.id, label: part.label, scale: part.scale }, holder: { id: holder, label: name(holder) }, city: { id: city.id, label: city.label }, within: framing };
+      const about = { part: { id: part.id, label: part.label, scale: part.scale }, holder: { id: holder, label: name(holder) }, city: { id: city.id, label: city.label }, within: framing, ...(sampled ? { sampled: true } : {}) };
       await live.line(0, { status: 'running', part: `${part.label} (${placed + 1} of ${total}, in ${city.label})` });
       focus = { x: round(centre[0]), z: round(centre[2]), r: round(R * 0.6) };
-      // A sampling pool is not asked: its terrain is its area's, the default, at the spot the engine sampled for it; Jev's
-      // questions are the named parts', on maps that show the pools and what stands in them.
+      // A sampling pool is not asked: its default is the average of the places of its own level decided inside its area (a
+      // pool street copies the district's streets, a pool district the city's districts: every level has its own kinds),
+      // the most common kind and the mean of their medians; with none decided yet it stays empty. At the spot the engine
+      // sampled for it; Jev's questions are the real places', on maps that show the pools and what stands in them.
       const poolOf = world[part.id]?.pool ?? null;
       const byDefault = () => {
-        const site = terrain.sites[poolOf], node = nodeOf(part.id) ?? holderNode ?? anchor;
-        return { where: null, what: null, rise: null, kind: site?.kind ?? 'default', entry: site?.manifold ? { manifold: site.manifold } : null, shape: site?.shape ?? null, ground: site?.ground ?? null,
-          box: [round(node.x - node.r), round(node.z - node.r), round(node.x + node.r), round(node.z + node.r)], median: site?.median ?? null, upTo: site?.top ?? null, measure: site?.median ? 'median' : 'top' };
+        const node = nodeOf(part.id) ?? holderNode ?? anchor, box = [round(node.x - node.r), round(node.z - node.r), round(node.x + node.r), round(node.z + node.r)];
+        const same = terrain.order.filter(id => id !== part.id && terrain.sites[id]?.scale === part.scale && !terrain.sites[id].pool && terrain.sites[id].median && within(id, poolOf)).map(id => terrain.sites[id]);
+        if (!same.length) return { where: null, what: null, rise: null, kind: null, entry: null, shape: null, ground: null, box, median: null, upTo: null, measure: 'median', empty: true };
+        const count = new Map(); for (const site of same) count.set(site.kind, (count.get(site.kind) ?? 0) + 1);
+        const kind = [...count].sort((a, b) => b[1] - a[1])[0][0], entry = T.terrainKind(part.scale, kind);
+        const median = Math.round(same.reduce((sum, site) => sum + site.median, 0) / same.length);
+        return { where: null, what: null, rise: null, kind, entry, shape: null, ground: entry?.ground ?? same.find(site => site.kind === kind).ground, box, median, upTo: null, measure: 'median', from: same.length };
       };
       const asked = async () => {
       // 1. Overview.
@@ -220,7 +232,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const fromMap = (box, map) => (box && map ? [round(map.x - map.halfX + box.left * 2 * map.halfX), round(map.z - map.halfZ + box.top * 2 * map.halfZ), round(map.x - map.halfX + box.right * 2 * map.halfX), round(map.z - map.halfZ + box.bottom * 2 * map.halfZ)] : null);
       const width = SCALE_WIDTH[part.scale] ?? [60, 600], fallback = (width[0] + width[1]) / 4, at = holderNode ?? anchor;
       // A city's box is its own circle as the engine has it (the map is the city).
-      let box = isCity && cityNode ? [round(cityNode.x - cityNode.r), round(cityNode.z - cityNode.r), round(cityNode.x + cityNode.r), round(cityNode.z + cityNode.r)] : fromMap(where?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
+      const spotOf = node => [round(node.x - node.r), round(node.z - node.r), round(node.x + node.r), round(node.z + node.r)];
+      let box = isCity && cityNode ? spotOf(cityNode) : sampled && now ? spotOf(now) : fromMap(where?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
       // 2. Conflicts and zooms.
       const conflicts = candidate => {
         const reasons = [], across = Math.max(candidate[2] - candidate[0], candidate[3] - candidate[1]);
@@ -231,7 +244,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         if ((candidate[2] - candidate[0]) * (candidate[3] - candidate[1]) > 0.25 * (2 * R) ** 2) reasons.push('it takes more than a quarter of the map');
         return reasons;
       };
-      for (let zoom = 1; zoom <= (isCity ? 0 : ZOOMS); zoom++) {
+      for (let zoom = 1; zoom <= (isCity || sampled ? 0 : ZOOMS); zoom++) {
         const reasons = conflicts(box);
         if (!reasons.length) break;
         const zc = [(box[0] + box[2]) / 2, 0, (box[1] + box[3]) / 2], zh = Math.max(width[0], Math.max(box[2] - box[0], box[3] - box[1])) * 0.95;
@@ -258,9 +271,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, median = measure === 'median' ? height : null, upTo = measure === 'top' ? height : null;
         return { where, what, rise, kind, entry, shape, ground, box, median, upTo, measure };
       };
-      const { where, what, rise, kind, entry, shape, ground, box, median, upTo, measure } = poolOf ? byDefault() : await asked();
+      const { where, what, rise, kind, entry, shape, ground, box, median, upTo, measure, empty, from: averaged } = poolOf ? byDefault() : await asked();
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
-      const proposal = { id: part.id, label: part.label, kind, box, top: median ?? upTo, measure }, said = `${kind}${median ? `, median ${median} m` : upTo ? `, up to ${upTo} m` : ''}`;
+      const proposal = { id: part.id, label: part.label, kind: kind ?? 'empty', box, top: median ?? upTo, measure };
+      const said = empty ? `empty (nothing of its level decided in ${name(poolOf)} yet)` : `${kind}${median ? `, median ${median} m` : upTo ? `, up to ${upTo} m` : ''}${averaged ? ` (the average of ${averaged} ${part.scale === 'street' ? 'streets' : 'districts'})` : ''}`;
       focus = { x: round((box[0] + box[2]) / 2), z: round((box[1] + box[3]) / 2), r: round(Math.hypot(box[2] - box[0], box[3] - box[1]) * 0.75) };
       await show(`${part.label}: proposal`, proposal);
       await live.outcome({ subject: part.label, text: `${part.label}: ${said}, ${Math.round(box[2] - box[0])} × ${Math.round(box[3] - box[1])} m (blinking in World · Live)` });
@@ -269,7 +283,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const toward = parentNode ? [round((box[0] + box[2]) / 2 - parentNode.x), round((box[1] + box[3]) / 2 - parentNode.z)] : null;
       terrain.sites[part.id] = isCity
         ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: 'jev', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
-        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : 'jev', ...(poolOf ? { pool: poolOf } : {}),
+        : empty ? { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, empty: true, by: 'pool', pool: poolOf }
+        // A pool's member keeps its sampled spot and borrows its pool's ground there (the engine): no box of its own.
+        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), ...(sampled ? { member: holder } : { size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box }), ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : 'jev', ...(poolOf ? { pool: poolOf } : {}),
           confidence: { box: where?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
       if (shape) terrain.shapes[part.id] = { kind: shape, box, ...(upTo ? { top: upTo } : {}) };
       if (!terrain.order.includes(part.id)) terrain.order.push(part.id);

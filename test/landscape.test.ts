@@ -220,3 +220,12 @@ test("a patch on its kind's manifold, round Jev's median: a CBD's wide spread an
   assert.ok(median(dwelling.metres) > LANDSCAPES.residential.cap, `a dwelling area's median past its type's old cap: ${median(dwelling.metres)}`);
   assert.ok(Math.max(...dwelling.metres) < 3 * median(dwelling.metres), "and an even one, without a tail");
 });
+
+test("a pool's member borrows its pool's default ground where it stands: its patch claims those lots first", async () => {
+  const { patchFromBox, ownerOfLot, LANDSCAPE_VERSION } = await import("../src/ground/stage/landscape.js");
+  const pool = patchFromBox("skyscrapers", "p0", "pool", { x0: -200, z0: -200, x1: 200, z1: 200 });
+  const square = { ...patchFromBox("park", "unnamed:s1", "unnamed:s1", { x0: 40, z0: 40, x1: 160, z1: 160 }), borrowed: true };
+  const owner = (patches: typeof pool[]) => ownerOfLot({ version: LANDSCAPE_VERSION, seed: "pool", patches }, { id: "lot", centre: [100, 100] })?.id;
+  assert.equal(owner([pool, { ...square, borrowed: false }]), "p0", "by birth, the default claims first");
+  assert.equal(owner([pool, square]), "unnamed:s1", "borrowed, the member claims its own ground first");
+});

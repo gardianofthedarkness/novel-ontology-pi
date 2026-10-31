@@ -73,6 +73,8 @@ export interface Manifold { gradient: number; core: number; spread: number; tail
  */
 export interface Patch {
   id: string; type: LandscapeType; x: number; z: number; R: number; H: number; lot: number; median?: number; manifold?: Manifold;
+  /** A pool's member's ground, borrowed from the pool's default where it stands: it claims lots before the default does. */
+  borrowed?: boolean;
   shape: { family: Family; turn: number; terms?: [number, number, number][]; n?: number; aspect?: number; m?: number };
   born?: { strand?: string; volume?: number; scene?: string; by?: "jev" | "drift" | "strand" };
 }
@@ -127,8 +129,10 @@ export const membership = (patch: Patch, p: Point) => 1 / (1 + Math.exp(-insideB
  * (each patch with its own draw for the lot). The first claim wins; with none, the lot is open ground. A newer patch
  * only ever draws for lots every older patch passed over, so it never takes one an older patch has.
  */
+/** Patches in the order they claim ground: borrowed ones first (docs/v2/world-engine-v2.md §2.0.12), then by birth. */
+export const claimOrder = (landscape: Landscape) => [...landscape.patches.filter((patch) => patch.borrowed), ...landscape.patches.filter((patch) => !patch.borrowed)];
 export function ownerOfLot(landscape: Landscape, lot: { id: string; centre: Point }): Patch | null {
-  for (const patch of landscape.patches) if (insideBy(patch, lot.centre) > -fringe(patch) && skeletonStream(landscape.seed, "own", lot.id, patch.id)() < membership(patch, lot.centre)) return patch;
+  for (const patch of claimOrder(landscape)) if (insideBy(patch, lot.centre) > -fringe(patch) && skeletonStream(landscape.seed, "own", lot.id, patch.id)() < membership(patch, lot.centre)) return patch;
   return null;
 }
 /**
@@ -271,7 +275,7 @@ function openGround(patch: Patch, p: Point): boolean {
 export function landscapeStyle(landscape: Landscape): FillStyle {
   // Ground is cut by the oldest patch that reaches any of it: a super-block to that patch's block size, a block to its
   // lot size. So a newer patch never re-cuts ground an older one already reaches.
-  const reaching = (region: { centre: Point; pts: Point[] }) => landscape.patches.find((patch) => [region.centre, ...region.pts].some((p) => insideBy(patch, p) > -fringe(patch))) ?? null;
+  const reaching = (region: { centre: Point; pts: Point[] }) => claimOrder(landscape).find((patch) => [region.centre, ...region.pts].some((p) => insideBy(patch, p) > -fringe(patch))) ?? null;
   return {
     // A super-block is cut to the largest lot any of it needs (the core's middle needs the biggest plots).
     blockArea: (superBlock) => { const patch = reaching(superBlock); return !patch ? 5200 : Math.max(LANDSCAPES[patch.type].block, 3 * Math.max(...[superBlock.centre, centroid(superBlock.pts), ...superBlock.pts, ...(contains(superBlock.pts, [patch.x, patch.z]) ? [[patch.x, patch.z] as Point] : [])].filter((p) => insideBy(patch, p) > -fringe(patch)).map((p) => lotFor(patch, p)))); },
