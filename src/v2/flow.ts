@@ -8,7 +8,7 @@ import { readStoryTime, timeWords, type StoryTime } from "./time.js";
 import { hintsOnce } from "./hints.js";
 import { placeEm, type PlaceResult } from "./placeEm.js";
 import { spatialMentions, type SpatialMention } from "./spatial.js";
-import { typeNames, type Decide, type Detected } from "./typing.js";
+import { CATEGORY_OF, typeNames, type Decide, type Detected } from "./typing.js";
 
 /**
  * The v2 reading flow (the user's sketch, 2026-10-30; docs/v2/world-engine-v2.md §2):
@@ -189,11 +189,22 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   // EM², scene by scene in reading order.
   const named = new Map([...found].map(([id, hits]) => [id, [...new Set(hits.map((hit) => hit.id))]]));
   const described = new Map<string, DescriptionType>();
-  // Descriptions of matter go to EM²; descriptions of places (街上, 大楼, 这座城市) to place EM, with every sentence that holds each.
+  // Descriptions of matter go to EM²; descriptions of places (大楼, 便利店, 这座城市) to place EM, with every sentence that holds
+  // each, by the type most batches gave the words (直升机航空母舰: a vehicle in most, a building in one, is no place).
+  const typeVotes = new Map<string, Map<string, number>>();
+  for (const entry of em.flatMap((batch) => batch.results)) { const votes = typeVotes.get(entry.text) ?? new Map<string, number>(); votes.set(entry.type, (votes.get(entry.type) ?? 0) + 1); typeVotes.set(entry.text, votes); }
+  // A tie is no place (a place needs most of the votes).
+  const usualType = (text: string) => [...(typeVotes.get(text) ?? new Map<string, number>())].sort((a, b) => b[1] - a[1] || Number(CATEGORY_OF[a[0] as keyof typeof CATEGORY_OF] === "place") - Number(CATEGORY_OF[b[0] as keyof typeof CATEGORY_OF] === "place") || a[0].localeCompare(b[0]))[0]?.[0];
   const placeDescriptions = new Map<string, { text: string; type: string; sentences: string[] }>();
   for (const entry of em.flatMap((batch) => batch.results)) {
     if (entry.outcome !== "description") continue;
-    if (entry.category === "place") { const found = placeDescriptions.get(entry.text) ?? { text: entry.text, type: entry.type, sentences: [] }; for (const id of entry.sentences ?? []) if (!found.sentences.includes(id)) found.sentences.push(id); placeDescriptions.set(entry.text, found); continue; }
+    if (entry.category === "place") {
+      const usual = usualType(entry.text) ?? entry.type;
+      if (CATEGORY_OF[usual as keyof typeof CATEGORY_OF] !== "place") continue;
+      const found = placeDescriptions.get(entry.text) ?? { text: entry.text, type: usual, sentences: [] };
+      for (const id of entry.sentences ?? []) if (!found.sentences.includes(id)) found.sentences.push(id);
+      placeDescriptions.set(entry.text, found); continue;
+    }
     if (!described.has(entry.text)) described.set(entry.text, entry.category === "crowd" ? "crowd" : entry.category === "thing" ? (entry.type as "vehicle" | "weapon") : "person");
   }
   const rolesLog = meter("roles (EM²)"), rolesDecide = decideFor(rolesLog);

@@ -18,16 +18,16 @@ export const ENTITY_TYPES = {
   person: "a person, or a being who acts like one: by name, surname, nickname, title or a description used for them",
   crowd: "a crowd or a group of people who are there and act together: officers, a crowd, the students, a gang (an organisation as such is none)",
   object: "an important thing the story names or singles out: a named device, artifact, book or machine (天空之眼)",
-  routine: "an everyday thing: a phone, a bag, food, clothes, furniture, a door or a wall, a machine at its routine work (a cleaning robot)",
+  routine: "an everyday thing: a phone, a bag, food, clothes, furniture (a bed, a cradle), a door, a wall or a pillar (a part of a building), a tree or a plant, a machine at its routine work (a cleaning robot)",
   weapon: "a weapon",
-  vehicle: "a vehicle or a mech: something people ride, drive or move in",
+  vehicle: "a vehicle or a mech: something people ride, drive or move in (a car, a train, a ship, an aircraft carrier)",
   region: "a region: a country, a state or a province, a wide natural area (a forest, a desert, an ocean), bigger than a city",
   city: "a city or a town",
   district: "a part of a city: a ward, a school district, a downtown, a neighbourhood",
-  street: "an open place in a district: a street, a road, an alley, a square, a park, a bridge, a river bank, a crossing",
+  street: "an open place in a district: a street, a road, an alley, a square, a park, a bridge, a river bank, a crossing (but 街上, on the street, is spatial)",
   building: "a building or a structure: a school, a dormitory, a shop, a station, a tower",
   room: "a room inside a building: a classroom, an office, a ward, a hall, a karaoke box",
-  spatial: "no place of its own but where someone or something is, against what is around: on the ground, underground, on the street or the road, on a roof, in a corridor, at an exit, on the stairs, on a wall, in the air",
+  spatial: "no place of its own but where someone or something is, against what is around: on the ground (the asphalt, the earth), underground, on the street or the road (街上, 马路上), on a roof, in a corridor, at an exit, on the stairs, on a wall, in the air, beside or under something",
   concept: "a concept the story names: an ability, a power, a technique or a spell, a network or a system, a project or a plan (幻想杀手, 御坂网络); something someone has, uses or runs, not a thing in the hand",
   time: "a time: a date, a day, an hour, a part of the day, a season",
   none: "none of these: an organisation as such, an ordinary word",
@@ -70,6 +70,13 @@ export function typingDocument(batch: Sentence[], names: string[]) {
   };
 }
 
+/**
+ * A place word with a locative after it (街上, 马路上, 店里, 楼下, 门外, 路边): where someone is against that place, so spatial,
+ * not a place (rule zero: code says it exactly). Only for a word that is not a proper name.
+ */
+const LOCATIVE = /^.+[上下里中内外边旁]$/;
+export const locative = (text: string, type: string, proper: number) => CATEGORY_OF[type as EntityType] === "place" && proper < 0.5 && LOCATIVE.test(text);
+
 export async function typeNames(decide: Decide, batch: Sentence[], names: string[]): Promise<Detected[]> {
   if (!names.length) return [];
   const answers = await decide(typingDocument(batch, names), names.flatMap((_, index) => [
@@ -78,8 +85,8 @@ export async function typeNames(decide: Decide, batch: Sentence[], names: string
   ]));
   return names.map((text, index) => {
     const answer = answers.find((entry) => entry.key === `type:n${index + 1}`);
-    const type = (answer?.value && String(answer.value) in ENTITY_TYPES ? String(answer.value) : "none") as EntityType;
     const proper = Number(answers.find((entry) => entry.key === `proper:n${index + 1}`)?.value ?? 0);
+    const typed = (answer?.value && String(answer.value) in ENTITY_TYPES ? String(answer.value) : "none") as EntityType, type: EntityType = locative(text, typed, proper) ? "spatial" : typed;
     return { key: nameKey(index), text, type, category: CATEGORY_OF[type], confidence: Number(answer?.distribution?.[type] ?? answer?.confidence ?? 0), proper, sentences: sentencesWith(batch, text) };
   });
 }

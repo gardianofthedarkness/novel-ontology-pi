@@ -47,6 +47,9 @@ test("typing: one structured document a batch, each string by path, types groupe
   assert.ok(asked[0].options!.includes("concept"), "a concept (an ability, a network) is one of the types");
   assert.deepEqual(["region", "city", "district", "street", "building", "room", "spatial"].filter((type) => asked[0].options!.includes(type)).length, 7, "the scale ladder and spatial are types; a bare place is not");
   assert.ok(!asked[0].options!.includes("place"));
+  // A place word with a locative after it is where someone is, not a place: spatial, by code.
+  const street = await typeNames(async (_state, questions) => questions.map((q) => ({ key: q.key, value: q.key.startsWith("type:") ? "street" : 0.1, confidence: 0.9 })), sentences("他走在街上，又穿过马路。"), ["街上", "马路"]);
+  assert.deepEqual(street.map((entry) => [entry.text, entry.type, entry.category]), [["街上", "spatial", null], ["马路", "street", "place"]]);
 });
 
 test("names: a longer name masks the shorter inside it; overlap of names", () => {
