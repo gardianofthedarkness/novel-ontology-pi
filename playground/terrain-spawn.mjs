@@ -68,7 +68,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const sentences = [...(await loadWorkspaceSentences(novelDir)).values()];
   const name = id => inputs.names[id] ?? id, scaleOf = id => inputs.scale?.places[id]?.scale ?? null;
   const tree = new Map(inputs.placeTree.map(place => [place.id, place]));
-  const jev = cachedDecisions(given ?? jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), join(folder, 'cache'));
+  // Jev's own reports of each paid request's tokens (stage/terrain/jev-usage.json), so a terrain run can be priced.
+  const client = given ?? jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), jev = cachedDecisions(client, join(folder, 'cache'));
   const live = await createLive(novelDir, { command: 'sim terrain', lines: [{ id: 'terrain', title: 'Terrain: the ground of the volume\'s places' }], model: jev.modelId });
   const asking = live.watch(jev);
   let calls = 0;
@@ -169,7 +170,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // Where the engine has the part for now (the canvas's spot for it, or what was kept before), in grey: Jev keeps or moves it.
       const now = nodeOf(part.id);
       const areas = (extra = []) => [
-        ...kin.filter(node => node.id !== city.id).map(node => ({ pts: circle(node.x, node.z, node.r), label: node.dwelling ? `${node.label} (sampled: the text puts it nowhere)` : node.label, color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e' })),
+        // A part already kept is drawn once, as its kept box (below), not again as the engine's circle.
+        ...kin.filter(node => node.id !== city.id && !Array.isArray(terrain.sites[node.id]?.box)).map(node => ({ pts: circle(node.x, node.z, node.r), label: node.dwelling ? `${node.label} (sampled: the text puts it nowhere)` : node.label, color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e' })),
         ...(now ? [{ pts: circle(now.x, now.z, now.r), label: `${part.label} · now`, color: 0x9fb4c3, textColor: '#c9d6df' }] : []),
         ...Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && id !== part.id).map(([id, site]) => ({ box: site.box, label: name(id), color: 0xffffff, textColor: '#ffffff' })), ...extra];
       const { text, environment } = evidence(part);
@@ -248,7 +250,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       await live.outcome({ subject: part.label, text: `${part.label} kept: the world built again, ${data.world.lots.length} lots${after ? `, ${part.label} at ${Math.round(after.x)}, ${Math.round(after.z)} (r ${Math.round(after.r)} m)` : ''}` });
       log(`${city.label} › ${part.label}: ${kind} at ${y} m`);
     }
-    await live.line(0, { status: 'done', placed }); await live.finish('done', { calls });
+    if (client.usage?.length) await writeFile(join(folder, 'jev-usage.json'), JSON.stringify(client.usage), { mode: 0o644 });
+    await live.line(0, { status: 'done', placed }); await live.finish('done', { calls, paid: client.usage?.length ?? null });
     return { calls, placed, cities: cities.length, builds };
   } catch (error) {
     await live.finish('failed', { error: String(error?.message ?? error).slice(0, 300) });
