@@ -647,6 +647,10 @@ an underground square at 12 m down), a station front at 15 m, a centre at 20 m, 
    sees what the user can see, so neither sees them: every place of the canvas is a pin with its name above it (gold and
    blinking where sampled), in World · Live and in Jev's pictures alike, and where the engine has a part for now is a grey
    pin. The boxes Jev kept stay outlined. A place's extent is only what is built: its terrain and its buildings.
+   Built: the live page draws every place of the canvas as a pin (`placePin` in `strand-demo.html`: a stem and a head,
+   seen through everything, its name just north of it), in World · Live and in Jev's stills; terrain spawning's maps pin
+   every place not kept, and a kept pool too (its box is its circle's, not Jev's); the captions and the area question say
+   a pin is a point, not a size.
 2. **Continuity.** Sampling puts a pool's member at the free spot nearest the pool's middle, wherever the others are.
    Members the characters go between should be near each other: two places are tied once for each character who goes
    from the one's scene to the other's (two scenes in a row of that character's, in story order) and once for each
@@ -654,6 +658,11 @@ an underground square at 12 m down), a station front at 15 m, a centre at 20 m, 
    it is tied to, each counted by its ties (a member Jev kept: its box's middle), so the more ties, the nearer; with none,
    the pool's middle as before. Every member of a pool counts (its buildings and rooms too); members of different pools
    are not pulled across.
+   Built: `continuityTies` (`src/v2/pools.ts`) over the script's scenes, `tiedSpot` (`placeCanvas.ts`: the free spot
+   nearest the tied mean, as far from the others as any member); the export lays out the members Jev kept first, each at
+   its box's middle, then samples the rest by their ties. On vol 1 with the run above's terrain, the 65 members of
+   学园都市's pool Jev has not boxed: the 334 tied pairs 83 m apart on average (161 m before), the 1,746 untied 189 m
+   (153 m before).
 
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change

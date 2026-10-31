@@ -290,6 +290,15 @@ the engine makes the spread. A CBD's spread is wide: researched, not guessed.
   and the site keeps `median` and `manifold` (or `top` for natural ground and shapes); the engine builds the part's
   ground patch from them.
 
+### 5.9 Pins, not circles (the user's call, 2026-10-31)
+
+After the run on street areas the user saw the sampled sizes mislead Jev's boxes: a canvas circle is the room a place
+takes so far, not how large it is. Jev sees what the user can see, so neither sees the circles: every place is a pin
+with its name, in World · Live and in every still Jev is shown; on terrain spawning's maps a place not kept (and a kept
+pool, whose box is its circle's) is a pin, the part asked about a grey pin, and only the boxes Jev drew are outlined. The
+captions say a pin is a point, not a size. Members of a pool are sampled near what continuity ties them to
+([world-engine-v2.md](world-engine-v2.md) §2.0.14).
+
 ## 6. Order of work
 
 1. **The event stream and the live view's skeleton:** the user's own camera and render area, Jev's strip, the frustum,

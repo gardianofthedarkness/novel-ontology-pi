@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addUnit, centralBuild, dwellingFor, emptyCanvas, holderFor, POOL_SPACING } from "../src/ground/stage/placeCanvas.js";
-import { emptyRegistry, evenPick, withPools } from "../src/v2/pools.js";
+import { addUnit, centralBuild, dwellingFor, emptyCanvas, holderFor, POOL_SPACING, tiedSpot } from "../src/ground/stage/placeCanvas.js";
+import { continuityTies, emptyRegistry, evenPick, withPools } from "../src/v2/pools.js";
 import type { ReadingScript } from "../src/v2/script.js";
 
 const script = (): ReadingScript => ({
@@ -53,4 +53,41 @@ test("a pool on the canvas: what a city holds goes into its pool, not a random d
   assert.ok(Math.min(...gaps) >= POOL_SPACING.building - 0.5, `members apart: ${Math.min(...gaps).toFixed(1)} m`);
   assert.ok(canvas.places["pool:City"].r > before, `the pool grew to hold them: ${before} m, then ${canvas.places["pool:City"].r} m`);
   assert.equal(dwellingFor(canvas, "nowhere"), "pool:City");
+});
+
+test("continuity ties places: once for each character going from the one's scene to the other's, and for each character in one scene set in both", () => {
+  const scene = (id: string, place: string | null, present: string[]) => ({ id, chapter: 0, place, placeBy: "named" as const, clock: null, present, stayed: [], firstSeen: [], timeline: [] });
+  const ties = continuityTies({
+    version: 2, from: "v2-reading",
+    places: {
+      city: { label: "City", scale: "city", parent: null },
+      "unnamed:alley": { label: "alley", scale: "street", parent: "pool:City", unnamed: true, held: "setting", scene: "s1" },
+      "unnamed:square": { label: "square", scale: "street", parent: "pool:City", unnamed: true, held: "setting", scene: "s2" },
+      "unnamed:hall": { label: "hall", scale: "building", parent: "pool:City", unnamed: true, held: "setting", scene: "s2" },
+      "unnamed:pier": { label: "pier", scale: "street", parent: "pool:City", unnamed: true, held: "setting", scene: "s4" },
+    },
+    scenes: [scene("s1", "city", ["kamijou", "index"]), scene("s2", "city", ["kamijou"]), scene("s3", null, ["misaka"]), scene("s4", "city", ["misaka"])],
+  });
+  assert.equal(ties["unnamed:alley"]["unnamed:square"], 1, "kamijou goes from the alley's scene to the square's");
+  assert.equal(ties["unnamed:square"]["unnamed:alley"], 1, "symmetric");
+  assert.equal(ties["unnamed:square"]["unnamed:hall"], 1, "one character in a scene set in both");
+  assert.equal(ties["unnamed:alley"]["unnamed:pier"], undefined, "no character goes between them");
+  assert.equal(ties["unnamed:alley"].city, 3, "both characters in one scene set in both, and kamijou going on to the city's next");
+});
+
+test("a pool samples a member nearest the members continuity ties it to, the more ties the nearer; one tied to none, nearest the middle", () => {
+  const canvas = emptyCanvas();
+  centralBuild(canvas, [
+    { id: "city", label: "City", scale: "city", parent: null, landscape: "residential" },
+    { id: "pool:City", label: "City · pool", scale: "district", parent: "city", landscape: "residential", pool: "city" },
+  ]);
+  addUnit(canvas, "pool:City", { id: "east", label: "east", kind: "street", r: 30, at: [400, 0] });
+  addUnit(canvas, "pool:City", { id: "west", label: "west", kind: "street", r: 30, at: [-400, 0] });
+  const member = { id: "m", kind: "street" as const, r: 30 };
+  assert.equal(tiedSpot(canvas, "pool:City", member, undefined), undefined, "tied to none: the pool's middle, as before");
+  const east = tiedSpot(canvas, "pool:City", member, { east: 3 })!, d = (at: number[], x: number) => Math.hypot(at[0] - x, at[1]);
+  assert.ok(d(east, 400) < 30 + 30 + POOL_SPACING.street + 8, `right beside the one it is tied to: ${east}`);
+  assert.ok(d(east, 400) >= 30 + 30 + POOL_SPACING.street - 0.5, "kept apart as any member");
+  const leaning = tiedSpot(canvas, "pool:City", member, { east: 3, west: 1 })!;
+  assert.ok(d(leaning, 400) < d(leaning, -400), `nearer the one with more ties: ${leaning}`);
 });

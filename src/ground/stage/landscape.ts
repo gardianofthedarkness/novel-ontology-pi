@@ -546,15 +546,15 @@ export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: n
 export const LANDSCAPE_HINTS: Record<LandscapeType | "none", string> = { ...Object.fromEntries(LANDSCAPE_TYPES.map((type) => [type, `${type}: ${LANDSCAPES[type].hint}`])) as Record<LandscapeType, string>, none: "none: not open ground (a single building, a room, the sky, the sea)" };
 
 /**
- * A place beside others (a district by its city's filled centre): the nearest spot to the middle, in the direction of
- * `toward` when given, where its circle clears every circle already there by a gap. The enclosing place's circle
- * then grows to hold it; nothing already placed moves.
+ * A place beside others (a district by its city's filled centre): the nearest spot to the middle (or to `from`), in the
+ * direction of `toward` when given, where its circle clears every circle already there by a gap. The enclosing place's
+ * circle then grows to hold it; nothing already placed moves.
  */
-export function placeBeside(occupied: { x: number; z: number; r: number }[], r: number, seed: string, toward?: Point, gap = 12): { x: number; z: number; r: number } {
+export function placeBeside(occupied: { x: number; z: number; r: number }[], r: number, seed: string, toward?: Point, gap = 12, from: Point = [0, 0]): { x: number; z: number; r: number } {
   const turn = toward && Math.hypot(...toward) > 1 ? Math.atan2(toward[1], toward[0]) : skeletonStream(seed, "beside")() * Math.PI * 2;
   for (let d = 0; d < 20000; d += 6) for (let k = 0; k < 48; k++) {
     // Try the preferred direction first, then fan out to both sides of it.
-    const angle = turn + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 24), c = { x: Math.cos(angle) * d, z: Math.sin(angle) * d, r };
+    const angle = turn + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 24), c = { x: from[0] + Math.cos(angle) * d, z: from[1] + Math.sin(angle) * d, r };
     if (occupied.every((o) => Math.hypot(o.x - c.x, o.z - c.z) >= o.r + r + gap)) return { x: Math.round(c.x * 10) / 10, z: Math.round(c.z * 10) / 10, r };
   }
   return { x: 0, z: 0, r };

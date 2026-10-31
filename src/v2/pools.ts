@@ -36,6 +36,30 @@ export function evenPick(seed: string, choices: string[]): string {
 }
 
 /**
+ * How closely continuity ties places (docs/v2/world-engine-v2.md §2.0.14, the user's design, 2026-10-31): a scene's places
+ * are where it is set and the places set in it (place EM's unnamed places); two places are tied once for each character
+ * who goes from the one's scene to the other's (two scenes in a row of that character's, in story order), and once for
+ * each character in one scene set in both. Symmetric: ties[a][b] === ties[b][a].
+ */
+export function continuityTies(script: ReadingScript): Record<string, Record<string, number>> {
+  const setIn = new Map<string, string[]>();
+  for (const [id, place] of Object.entries(script.places)) if (place.scene) setIn.set(place.scene, [...(setIn.get(place.scene) ?? []), id]);
+  const placesOf = (scene: ReadingScript["scenes"][number]) => [...new Set([...(scene.place ? [scene.place] : []), ...(setIn.get(scene.id) ?? [])])];
+  const ties: Record<string, Record<string, number>> = {};
+  const tie = (a: string, b: string) => { if (a === b) return; (ties[a] ??= {})[b] = (ties[a][b] ?? 0) + 1; (ties[b] ??= {})[a] = (ties[b][a] ?? 0) + 1; };
+  const last = new Map<string, string[]>();
+  for (const scene of script.scenes) {
+    const here = placesOf(scene);
+    for (const person of new Set(scene.present)) {
+      here.forEach((a, n) => here.slice(n + 1).forEach((b) => tie(a, b)));
+      for (const a of last.get(person) ?? []) for (const b of here) if (!here.includes(a)) tie(a, b);
+      if (here.length) last.set(person, here);
+    }
+  }
+  return ties;
+}
+
+/**
  * The universe a workspace belongs to: the library its volumes are imported into (a host's state: catalog.json, job.json),
  * with the book's key there (vol-1); a workspace in no library is a universe of its own.
  */

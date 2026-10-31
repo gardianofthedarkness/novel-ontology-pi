@@ -96,13 +96,30 @@ export function bearChain(canvas: Canvas, chain: { id: string; label: string; sc
   return canvas;
 }
 
+/** What already stands in a place, in its own frame: its units and its children's circles. */
+const occupiedIn = (canvas: Canvas, placeId: string) => [...canvas.places[placeId].units.map((entry) => ({ x: entry.at[0], z: entry.at[1], r: entry.r })), ...childrenOf(canvas, placeId).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))];
+
 /** A named building, street or room built inside a place (in its own frame, at the free spot nearest `near`); the circle grows to hold it. */
 export function addUnit(canvas: Canvas, placeId: string, unit: Omit<Unit, "at"> & { at?: Point }, near?: Point): Canvas {
   const place = canvas.places[placeId];
   if (place.units.some((entry) => entry.id === unit.id)) return canvas;
-  const at = unit.at ?? (() => { const spot = placeBeside([...place.units.map((entry) => ({ x: entry.at[0], z: entry.at[1], r: entry.r })), ...childrenOf(canvas, placeId).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))], unit.r, unit.id, near, place.pool ? POOL_SPACING[unit.kind] : 4); return [spot.x, spot.z] as Point; })();
+  const at = unit.at ?? (() => { const spot = placeBeside(occupiedIn(canvas, placeId), unit.r, unit.id, near, place.pool ? POOL_SPACING[unit.kind] : 4); return [spot.x, spot.z] as Point; })();
   place.units.push({ ...unit, at });
   return grow(canvas, placeId);
+}
+
+/**
+ * Where a pool samples a member (docs/v2/world-engine-v2.md §2.0.14, the user's design): the free spot nearest the members
+ * already in it that continuity ties it to, the more ties the nearer (nearest the mean of their spots, each counted by
+ * its ties, leaning toward the pool's middle), kept as far from the others as any member; undefined when it is tied to
+ * none of them, and it takes the free spot nearest the pool's middle.
+ */
+export function tiedSpot(canvas: Canvas, placeId: string, unit: Pick<Unit, "id" | "kind" | "r">, ties: Record<string, number> | undefined): Point | undefined {
+  const place = canvas.places[placeId], tied = (place?.units ?? []).filter((entry) => ties?.[entry.id]), weight = tied.reduce((sum, entry) => sum + ties![entry.id], 0);
+  if (!weight) return undefined;
+  const mean = [0, 1].map((axis) => tied.reduce((sum, entry) => sum + entry.at[axis] * ties![entry.id], 0) / weight) as Point;
+  const spot = placeBeside(occupiedIn(canvas, placeId), unit.r, unit.id, [-mean[0], -mean[1]], place.pool ? POOL_SPACING[unit.kind] : 4, mean);
+  return [spot.x, spot.z];
 }
 
 /** A new part of a place's ground where a scene drifted past its edge (landscape.ts); the circle grows to hold it. */

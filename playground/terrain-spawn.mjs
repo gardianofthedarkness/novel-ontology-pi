@@ -9,9 +9,10 @@
  *
  * For each city-grade place of the volume (by how much the text names it), the open places the place tree puts in it
  * (its districts and streets; with no tree, Jev says which are its parts), in story order:
- *   1. overview: the city from the side and above (1440×900) and straight down (1024×1024), the places so far outlined and
- *      named; Jev boxes where the part lies on the map and picks its ground: a manifold (a landscape type, whose buildings
- *      the engine fills in) or a basic shape (plateau, basin, hill, platform, cut, ramp, rectangle, sphere, donut);
+ *   1. overview: the city from the side and above (1440×900) and straight down (1024×1024), the places so far pinned and
+ *      named (a pin is a point: the canvas's circles are not their sizes), those kept outlined; Jev boxes where the part
+ *      lies on the map and picks its ground: a manifold (a landscape type, whose buildings the engine fills in) or a
+ *      basic shape (plateau, basin, hill, platform, cut, ramp, rectangle, sphere, donut);
  *   2. conflicts (code): over a part the tree does not put it in, a size far from its scale, or a box over a quarter of the
  *      map: zoom into the box and ask again, twice at most;
  *   3. height: the area from the side and above, lettered ghost slices at every height the world has, the city faded
@@ -135,7 +136,6 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     return { png: await chrome.still(), map: result.map ?? null };
   };
   const nodeOf = id => data.macro.find(node => node.id === id) ?? null;
-  const circle = (x, z, r) => Array.from({ length: 48 }, (_, n) => { const t = n / 48 * Math.PI * 2; return [round(x + r * Math.cos(t)), round(z + r * Math.sin(t))]; });
   const from = (centre, yaw, up, distance) => [centre[0] + Math.sin(yaw) * distance * Math.cos(up), (centre[1] ?? 0) + distance * Math.sin(up), centre[2] + Math.cos(yaw) * distance * Math.cos(up)];
 
   try {
@@ -200,13 +200,15 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const kin = data.macro.filter(node => node.id !== part.id && (node.id === city.id || ((within(node.id, city.id) || member.get(node.id)?.city === city.id) && OPEN.has(node.scale))) && !String(node.id).startsWith('spot:') && !node.temporary && !node.unbuilt);
       const anchor = cityNode ?? holderNode ?? { x: 0, z: 0 }, centre = [anchor.x, 0, anchor.z];
       const R = Math.max(400, ...kin.map(node => Math.hypot(node.x - centre[0], node.z - centre[2]) + node.r)) * 1.1;
-      // Where the engine has the part for now (the canvas's spot for it, or what was kept before), in grey: Jev keeps or moves it.
+      // Where the engine has the part for now (the canvas's spot for it, or what was kept before), a grey pin: Jev keeps or moves it.
       const now = nodeOf(part.id);
       const areas = (extra = []) => [
-        // A part already kept is drawn once, as its kept box (below), not again as the engine's circle.
-        ...kin.filter(node => node.id !== city.id && !Array.isArray(terrain.sites[node.id]?.box)).map(node => ({ pts: circle(node.x, node.z, node.r), label: node.dwelling ? `${node.label} (sampled: the text puts it nowhere)` : node.label, color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e' })),
-        ...(now ? [{ pts: circle(now.x, now.z, now.r), label: `${part.label} · now`, color: 0x9fb4c3, textColor: '#c9d6df' }] : []),
-        ...Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && id !== part.id).map(([id, site]) => ({ box: site.box, label: name(id), color: 0xffffff, textColor: '#ffffff' })), ...extra];
+        // A place not kept yet is a pin where the engine has it (its circle is the room it takes, not its size: the user's
+        // call, docs/v2/world-engine-v2.md §2.0.14); a part already kept is drawn once, as its kept box (below).
+        ...kin.filter(node => node.id !== city.id && !Array.isArray(terrain.sites[node.id]?.box)).map(node => ({ pin: [node.x, node.z], label: node.dwelling ? `${node.label} (sampled: the text puts it nowhere)` : node.label, color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e' })),
+        ...(now ? [{ pin: [now.x, now.z], label: `${part.label} · now`, color: 0x9fb4c3, textColor: '#c9d6df' }] : []),
+        // A kept pool's box is its circle's (sampled, not Jev's): a pin where the engine has it now; the boxes Jev drew, outlined.
+        ...Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && id !== part.id).map(([id, site]) => ({ ...(site.by === 'pool' ? { pin: nodeOf(id) ? [nodeOf(id).x, nodeOf(id).z] : [(site.box[0] + site.box[2]) / 2, (site.box[1] + site.box[3]) / 2] } : { box: site.box }), label: name(id), color: 0xffffff, textColor: '#ffffff' })), ...extra];
       // The terrain kept for the places holding the part (its city, the place between), larger first: its manifold frames the part's.
       const kept = id => { const site = terrain.sites[id]; return site?.kind ? `${site.kind}${site.median ? `, median ${site.median} m` : site.top ? `, up to ${site.top} m` : ''}` : null; };
       const framing = Object.fromEntries((isCity ? [] : [...new Set([city.id, holder])]).filter(id => kept(id)).map(id => [name(id), kept(id)]));
@@ -233,7 +235,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(centre, yaw, up, R * 1.8), target: centre }, areas: areas(), labelScale: R / 32, vague: { near: R * 4, far: R * 9 } });
       const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R }, areas: areas(), labelScale: R / 24, vague: CLEAR });
       const { replies: grounds } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES,
-        pictures: { skyline: `${city.label} from the side and above, as the world stands now.`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; its districts and streets outlined and named (${name(holder)}, which holds ${part.label}, in blue)${now ? `; where ${part.label} stands for now in grey` : ''}.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
+        pictures: { skyline: `${city.label} from the side and above, as the world stands now.`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white${now ? `; where ${part.label} stands for now, a grey pin` : ''}. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
       const where = grounds.find(reply => reply.key === 'box'), what = grounds.find(reply => reply.key === 'kind');
       // The answer as the engine's input: a kind of the part's level (a landscape type, or a shape), or a basic shape.
       const options = T.terrainKinds(part.scale, SHAPES), kind = options[what?.value] ? String(what.value) : Object.keys(options)[isCity ? 1 : part.scale === 'street' ? 0 : 1];
@@ -243,12 +245,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // A city's box is its own circle as the engine has it (the map is the city).
       const spotOf = node => [round(node.x - node.r), round(node.z - node.r), round(node.x + node.r), round(node.z + node.r)];
       // A pool's member (docs/v2/world-engine-v2.md §2.0.13): between its kind and its height, Jev boxes where it lies and
-      // how large it is, on a map of its pool close up (where sampling put it in grey).
+      // how large it is, on a map of its pool close up (where sampling put it, a grey pin).
       let areaReply = null;
       if (sampled) {
         const poolNode = holderNode ?? anchor, half = Math.max(160, poolNode.r * 1.25);
         const close = await shoot(MAP, { topdown: { x: poolNode.x, z: poolNode.z, half }, areas: areas(), labelScale: half / 24, vague: CLEAR });
-        ({ replies: [areaReply] } = await ask(decide, T.terrainAreaMode, { ...about, kind, pictures: { map: `${name(holder)} straight down, north up, ${Math.round(half * 2)} m across; where ${part.label} stands for now (sampled) in grey; the places of its pool already kept in white.` } }, stores, { request: { images: { map: close.png } } }));
+        ({ replies: [areaReply] } = await ask(decide, T.terrainAreaMode, { ...about, kind, pictures: { map: `${name(holder)} straight down, north up, ${Math.round(half * 2)} m across; where ${part.label} stands for now (sampled), a grey pin; the other places pinned, those already kept outlined in white. A pin is a point, not a size.` } }, stores, { request: { images: { map: close.png } } }));
         top.map = close.map;
       }
       let box = isCity && cityNode ? spotOf(cityNode) : fromMap((sampled ? areaReply : where)?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];

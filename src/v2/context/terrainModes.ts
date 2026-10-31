@@ -231,13 +231,13 @@ export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
 
 /**
  * Where a pool's member lies and how large it is (docs/v2/world-engine-v2.md §2.0.13): asked between its kind and its
- * height, on a map of its pool close up (where sampling put it in grey; the members already kept in white), with what
- * the text says of it and of the places holding it.
+ * height, on a map of its pool close up (where sampling put it, a grey pin; the members already kept outlined in white;
+ * a pin is a point, never a size), with what the text says of it and of the places holding it.
  */
 export interface AreaFocus extends PartFocus { kind: string }
 export const terrainAreaMode: Mode<AreaFocus, TerrainStores> = {
   name: "terrain-area",
-  task: (focus) => `Where does ${focus.part.label} (${focus.kind}) lie in ${focus.holder.label}, and how large is it? The text gives it no name of its own; sampling put it where it stands for now (in grey). Box its ground on picture "map": where it lies and as large as it is, from what the text says of it (text) and of the places around it (standing, facts, environment), and the terrain kept for the places holding it (within).`,
+  task: (focus) => `Where does ${focus.part.label} (${focus.kind}) lie in ${focus.holder.label}, and how large is it? The text gives it no name of its own; sampling put it where it stands for now (the grey pin: a point, not its size). Box its ground on picture "map": where it lies and as large as it is, from what the text says of it (text) and of the places around it (standing, facts, environment), and the terrain kept for the places holding it (within).`,
   sources: [...sources<AreaFocus>({ standing: true, facts: true, environment: "part" }), fixed("pictures", "pictures", (focus: AreaFocus) => focus.pictures) as Source<AreaFocus, TerrainStores>],
   cutOrder: ["environment", "facts", "standing", "text"],
   probe,
