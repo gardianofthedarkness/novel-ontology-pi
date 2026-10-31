@@ -163,7 +163,7 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   // Story time, scene by scene in reading order; then the facts rank by it.
   const timeLog = meter("story time"), timeDecide = decideFor(timeLog);
   const listedTimes = em.flatMap((batch) => batch.results).filter((entry) => entry.outcome === "time").map((entry) => entry.text);
-  const time = await timed(timeLog, () => readStoryTime(timeDecide, { scenes: scenes.map((scene) => ({ id: scene.id, chapter: scene.chapter, sentences: scene.sentences })), words: blocks.flatMap((block) => timeWords(block.sentences, listedTimes)), text, position: pos }));
+  const time = await timed(timeLog, () => readStoryTime(timeDecide, { scenes: scenes.map((scene) => ({ id: scene.id, chapter: scene.chapter, sentences: scene.sentences })), words: blocks.flatMap((block) => timeWords(block.sentences, listedTimes)), text, position: pos, kind: (id) => kindOf[id]?.kind }));
   facts.byStory(time.periodOf);
 
   // EM², scene by scene in reading order.

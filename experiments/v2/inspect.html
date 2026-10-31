@@ -116,6 +116,10 @@ main > *, .files > *, .tiles > *, .frame > *, .card > * { min-width: 0; }
 .m-time sup { font: 600 0.62rem var(--ui); color: var(--time); margin-left: 1px; }
 .when { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--time) 14%, var(--surface)); color: var(--ink); font: 600 0.8rem/1.4 var(--ui); }
 .when small { font: 0.7rem var(--ui); color: var(--muted); }
+.tree { display: grid; gap: 2px; padding: 8px 0; font: 0.82rem/1.5 var(--ui); }
+.tree .node { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.tree .node b { font-weight: 600; }
+.tree .node small { color: var(--muted); font-size: 0.72rem; }
 .m-concept { color: var(--concept); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--concept) 40%, transparent); }
 .m-time { color: var(--time); border: 1px dashed color-mix(in srgb, var(--time) 60%, transparent); border-radius: 4px; padding: 0 2px; }
 .m-d { border-bottom: 2px dashed var(--person); }
@@ -145,6 +149,7 @@ footer { color: var(--muted); font-size: 0.78rem; padding-block: 0 32px; }
     <h1>Vol 1, as the reading leaves it</h1>
     <p class="lede">Each scene's text, tiled into the cards it was cut into and coloured by sentence kind. Names, descriptions and times are marked where they stand, and under each line is who says or does it (EM²). Tap a sentence to see every record it belongs to, as the YAML files hold them.</p>
     <div id="run" class="run"></div>
+    <details id="tree-box" hidden><summary class="eyebrow">Time tree</summary><div id="tree" class="tree" lang="zh-Hans"></div></details>
     <details id="steps-box"><summary class="eyebrow">Steps of this run</summary><div class="scroll"><table class="steps" id="steps"></table></div></details>
   </div>
 </header>
@@ -401,6 +406,19 @@ if (log) {
   ].map(([name, value]) => `<span>${name} <b>${value}</b></span>`).join('');
   $('steps').innerHTML = '<tr><th>step</th><th>requests (cached included)</th><th>ms</th></tr>' + (log.steps ?? []).map((step) => `<tr><td>${esc(step.step)}</td><td>${fmt(step.requests)}</td><td>${fmt(step.ms)}</td></tr>`).join('');
 } else $('steps-box').hidden = true;
+
+// The time tree: each node with its periods and the scenes it holds (scene numbers), indented by depth.
+if (DATA.time?.tree?.length) {
+  const kids = new Map();
+  for (const node of DATA.time.tree) kids.set(node.parent, [...(kids.get(node.parent) ?? []), node]);
+  const number = new Map(DATA.scenes.map((scene, index) => [scene.id, index + 1]));
+  const span = (ids) => { const list = ids.map((id) => number.get(id)).filter(Boolean).sort((a, b) => a - b); return list.length ? `scenes ${list.length > 1 ? `${list[0]}–${list.at(-1)} (${list.length})` : list[0]}` : ''; };
+  const rows = [];
+  const walk = (parent, depth) => { for (const node of kids.get(parent) ?? []) { rows.push(`<div class="node" style="padding-left:${depth * 14}px"><b>${esc(node.label)}</b><small>${esc(node.level)}</small><small>${esc(span(node.scenes))}</small>${node.periods.length ? `<small>${node.periods.map((id) => esc(PERIOD.get(id)?.label ?? id)).join(' · ')}</small>` : ''}</div>`); walk(node.id, depth + 1); } };
+  walk(null, 0);
+  $('tree').innerHTML = rows.join('') + (DATA.time.treeConflicts?.length ? `<div class="node"><small>conflicts: ${DATA.time.treeConflicts.map((entry) => esc(entry.note)).join(' · ')}</small></div>` : '');
+  $('tree-box').hidden = false;
+}
 
 $('pick').innerHTML = DATA.scenes.map((scene, index) => `<option value="${index}">${index + 1} · ${scene.id} · ch ${scene.chapter} · ${scene.sentences.length} sentences</option>`).join('');
 $('pick').addEventListener('change', (event) => { render(Number(event.target.value)); window.scrollTo({ top: $('head').offsetTop - 70 }); });

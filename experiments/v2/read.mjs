@@ -82,7 +82,8 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     time: (() => {
       const { words, periods, scenes, calendar } = result.time, count = (list, key) => list.reduce((sum, entry) => ({ ...sum, [key(entry)]: (sum[key(entry)] ?? 0) + 1 }), {});
       return {
-        words: words.length, roles: count(words, word => word.role), decidedBy: count(words, word => word.decidedBy), downgraded: words.filter(word => word.downgraded).length,
+        words: words.length, roles: count(words, word => word.role), decidedBy: count(words, word => word.decidedBy), notAsked: count(words.filter(word => word.why), word => word.why), downgraded: words.filter(word => word.downgraded).length,
+        treeNodes: result.time.tree.length, treeConflicts: result.time.treeConflicts.length,
         periods: periods.length, flashbackPeriods: periods.filter(period => period.flashback).length, dated: periods.filter(period => period.date?.month && period.date?.day && !period.date.derived).length, derived: periods.filter(period => period.date?.derived).length,
         calendar: count(calendar.entries, entry => entry.placed), conflicts: calendar.conflicts.length,
         scenesWithTime: scenes.filter(scene => scene.periods.length).length, flashbackScenes: scenes.filter(scene => scene.flashback).length, continuations: scenes.filter(scene => scene.continuation).length,

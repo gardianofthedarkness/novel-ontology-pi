@@ -88,7 +88,8 @@ export function seedFrom(periods: StoryPeriod[], lastSceneTimes: string[] = []):
 
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
-function shiftDate(date: NonNullable<StoryPeriod["date"]>, days: number): StoryPeriod["date"] {
+/** A date moved by whole days (derived). */
+export function shiftDate(date: NonNullable<StoryPeriod["date"]>, days: number): StoryPeriod["date"] {
   if (!date.month || !date.day) return null;
   const leap = (year?: number) => !!year && (year % 4 === 0 && year % 100 !== 0 || year % 400 === 0);
   let { year, month, day } = date;

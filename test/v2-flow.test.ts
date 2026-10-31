@@ -267,8 +267,21 @@ test("story time: each time word's role, the periods with their dates, flashback
   assert.equal(past.flashback, true);
   assert.deepEqual([next.date, morning.date, morning.partOfDay], [{ month: 12, day: 25, derived: true }, { month: 12, day: 25, derived: true }, "morning"], "the next day, derived from the stated date");
   assert.ok(past.storyIndex < christmas.storyIndex, "the flashback is earlier in the story");
-  assert.deepEqual(time.scenes.map((scene) => scene.when), ["Year 1 · 12-24", "the past: 3 years before", "Year 1 · 12-25"], "each scene's caption");
+  assert.deepEqual(time.scenes.map((scene) => scene.when), ["Year 1 › 12-24", "the past › 3 years before", "Year 1 › 12-25 › morning"], "each scene's caption: its node's path on the time tree");
   assert.equal(morning.when, "Year 1 · 12-25 · morning");
+  assert.deepEqual(time.tree.map((node) => [node.id, node.parent]), [["t:story", null], ["t:y1", "t:story"], ["t:y1:12-24", "t:y1"], ["t:past", "t:story"], ["t:past:3year", "t:past"], ["t:y1:12-25", "t:y1"], ["t:y1:12-25:morning", "t:y1:12-25"]]);
+  assert.deepEqual(time.treeConflicts, []);
+
+  // A holiday names its day: a heading's 平安夜, then 00:00 and an evening of the same day, is containment, not a conflict
+  // or a new day; a time word in a thought only mentions a time.
+  const eve = sentences("序章 平安夜的街道。十二月二十四日，凌晨0点0分，城市被雪覆盖。当时究竟发生了什么？时间到了傍晚。", 2);
+  const eveScenes = [{ id: "scene_000010", chapter: 1, sentences: eve.slice(0, 3).map((sentence) => sentence.id) }, { id: "scene_000011", chapter: 1, sentences: [eve[3].id] }];
+  const eveText = (id: string) => eve.find((sentence) => sentence.id === id)?.text ?? "", evePosition = (id: string) => eve.findIndex((sentence) => sentence.id === id);
+  const eveTime = await readStoryTime(decide, { scenes: eveScenes, words: timeWords(eve, []), text: eveText, position: evePosition, kind: (id) => id === eve[2].id ? "thought" : "narration" });
+  assert.deepEqual(eveTime.words.filter((word) => word.text === "当时").map((word) => [word.role, word.why]), [["REFERENCE", "kind"]]);
+  assert.deepEqual(eveTime.periods.filter((period) => period.label === "傍晚").map((period) => period.date), [{ month: 12, day: 24, derived: true }], "the evening of the 24th");
+  assert.deepEqual(eveTime.scenes.map((scene) => scene.when), ["Year 1 › 12-24 › 00:00", "Year 1 › 12-24 › evening"]);
+  assert.deepEqual([eveTime.treeConflicts, eveTime.calendar.conflicts], [[], []]);
   assert.equal(time.periodOf(block[1].id)?.id, christmas.id);
   // Facts rank by story time: the flashback's fact is the earliest, though it is read second.
   const facts = new FactLedger([0, 3, 5].map((index) => ({ id: `fact:${index}`, first: block[index].id, last: block[index].id, sentences: [block[index].id] })), text, position);

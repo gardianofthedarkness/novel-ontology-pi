@@ -57,7 +57,7 @@ export async function inspect(novelDir, outDir) {
     times: data.chart.times.map(({ seen, ...node }) => ({ ...node, seenCount: seen.length })),
     roles: data.roles ?? {}, references: data.references ?? [], slots: data.slots ?? [], habits: data.habits ?? [],
     facts: (data.facts ?? []).map(fact => ({ ...fact, text: fact.sentences.map(id => text.get(id) ?? '').join('') })),
-    time: data.time ? { words: data.time.words, periods: data.time.periods, scenes: data.time.scenes, conflicts: data.time.calendar.conflicts } : null,
+    time: data.time ? { words: data.time.words, periods: data.time.periods, scenes: data.time.scenes, conflicts: data.time.calendar.conflicts, tree: data.time.tree ?? [], treeConflicts: data.time.treeConflicts ?? [] } : null,
   };
   const html = (await readFile(join(repository, 'experiments', 'v2', 'inspect.html'), 'utf8')).replace('/*DATA*/null', JSON.stringify(page).replace(/</g, '\\u003c'));
   const file = join(outDir, 'v2', 'inspect.html');
