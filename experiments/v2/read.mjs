@@ -53,7 +53,8 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     lister = modelLister(cached);
   }
   const started = Date.now();
-  const result = await readFlow(blocks, (state, questions) => jev.decide(state, questions), lister, { onStep: step => console.error(`${step.step}: ${step.requests} requests, ${step.ms} ms`) });
+  // V2_HINTS=inline sends each option's meaning in every question, as before hints.ts (for comparing readings).
+  const result = await readFlow(blocks, (state, questions) => jev.decide(state, questions), lister, { hintsOnce: process.env.V2_HINTS !== 'inline', onStep: step => console.error(`${step.step}: ${step.requests} requests, ${step.ms} ms`) });
   const text = new Map(blocks.flatMap(block => block.sentences.map(sentence => [sentence.id, sentence.text])));
   const base = worldBase(result, id => text.get(id) ?? '');
   const v2 = join(outDir, 'v2'), baseDir = join(outDir, 'base');

@@ -5,6 +5,7 @@ import { FactLedger, type FactEntry } from "./facts.js";
 import type { Lister } from "./listing.js";
 import { resolveRoles, type DescriptionType, type RolesResult } from "./roles.js";
 import { readStoryTime, timeWords, type StoryTime } from "./time.js";
+import { hintsOnce } from "./hints.js";
 import { typeNames, type Decide, type Detected } from "./typing.js";
 
 /**
@@ -39,7 +40,7 @@ export interface SceneContext {
   recommended: { id: string; score: number }[];
   facts: string[];
 }
-export interface StepLog { step: string; requests: number; ms: number; inputChars: number; detail?: Record<string, unknown> }
+export interface StepLog { step: string; requests: number; ms: number; inputChars: number; questionChars?: number; detail?: Record<string, unknown> }
 export interface FlowResult extends RolesResult {
   /** `was`: the kind the classifier gave, where the action rule changed it (nothing that matters acts); `actor`: the thing that did. */
   scenes: FlowScene[]; cards: FlowCard[]; kinds: Record<string, { kind: SentenceKind; turn: number; confidence: number; was?: SentenceKind; actor?: string }>;
@@ -57,7 +58,8 @@ export const LIST_AT_ONCE = 8, JEV_AT_ONCE = 12;
 /** Recent scenes the recommender looks back over for a scene's context, and facts a context carries. */
 const RECENT_SCENES = 3, CONTEXT_FACTS = 6;
 
-export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: Lister, options: { onStep?: (log: StepLog) => void; present?: Map<string, string[]> } = {}): Promise<FlowResult> {
+/** `hintsOnce`: answer options' meanings once a request (hints.ts; default on); off sends them in every question, as before. */
+export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: Lister, options: { onStep?: (log: StepLog) => void; present?: Map<string, string[]>; hintsOnce?: boolean } = {}): Promise<FlowResult> {
   const steps: StepLog[] = [];
   const meter = (step: string) => { const log: StepLog = { step, requests: 0, ms: 0, inputChars: 0 }; steps.push(log); return log; };
   // One gate for every Jev request of the flow.
@@ -67,9 +69,11 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
     running++;
     try { return await work(); } finally { running--; waiting.shift()?.(); }
   };
-  const decideFor = (log: StepLog): Decide => async (state, questions) => {
-    log.requests++; log.inputChars += typeof state === "string" ? state.length : JSON.stringify(state).length;
-    return gate(() => decideRaw(state, questions));
+  const decideFor = (log: StepLog, compact = options.hintsOnce !== false): Decide => async (state, questions) => {
+    const sent = compact ? hintsOnce(state, questions) : { state, questions };
+    log.requests++; log.inputChars += typeof sent.state === "string" ? sent.state.length : JSON.stringify(sent.state).length;
+    log.questionChars = (log.questionChars ?? 0) + JSON.stringify(sent.questions).length;
+    return gate(() => decideRaw(sent.state, sent.questions));
   };
   const timed = async <T>(log: StepLog, work: () => Promise<T>): Promise<T> => { const started = performance.now(); try { return await work(); } finally { log.ms = Math.round(performance.now() - started); options.onStep?.(log); } };
 
@@ -80,7 +84,8 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
 
   // 1–3 at once.
   const tiling = meter("scene tiling"), kindsLog = meter("sentence kinds"), listing = meter("listing (work model)"), typing = meter("typing");
-  const tiled = timed(tiling, () => Promise.all(blocks.map(async (block) => ({ block, ...(await tileScenes(block.sentences, decideFor(tiling), { stateSummary: `Processing block ${block.id}.`, gates: { accept: 0.85, reask: 0.55 } })) }))));
+  // The tiling's requests stay as they were (its answers come from the cache, so a comparison of readings keeps its scenes).
+  const tiled = timed(tiling, () => Promise.all(blocks.map(async (block) => ({ block, ...(await tileScenes(block.sentences, decideFor(tiling, false), { stateSummary: `Processing block ${block.id}.`, gates: { accept: 0.85, reask: 0.55 } })) }))));
   const classified = timed(kindsLog, () => Promise.all(blocks.map(async (block) => ({ block, ...(await classifySentences(block.sentences, decideFor(kindsLog), { stateSummary: `Processing block ${block.id}.` })) }))));
   const batches = blocks.flatMap((block) => Array.from({ length: Math.ceil(block.sentences.length / LIST_BATCH) }, (_, index) => ({ block, sentences: block.sentences.slice(index * LIST_BATCH, (index + 1) * LIST_BATCH) })));
   const listingStarted = performance.now(), typingDecide = decideFor(typing);

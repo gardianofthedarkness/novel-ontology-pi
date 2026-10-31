@@ -13,6 +13,7 @@ import { worldBase } from "../src/v2/base.js";
 import { canonRecords } from "../src/v2/canon.js";
 import { yamlDocument } from "../src/v2/yaml.js";
 import { readStoryTime, timeWords } from "../src/v2/time.js";
+import { hintsOnce } from "../src/v2/hints.js";
 
 const sentences = (text: string, block = 1): Sentence[] => sectionBlock(text, block).sentences;
 const noFacts = () => new FactLedger([], () => "", () => 0);
@@ -345,6 +346,21 @@ test("the flow: tiling, kinds and listing at once, then EM, the card scan, conte
   assert.deepEqual(canon.entities.filter((entity) => entity.kind === "Character").map((entity) => [entity.kind, entity.names[0]]), [["Character", { text: "上条当麻", lang: "zh", kind: "canonical" }], ["Character", { text: "白井黒子", lang: "zh", kind: "canonical" }]]);
   assert.ok(canon.relations.every((relation) => relation.type === "PARTICIPATES_IN" && canon.events.some((event) => event.id === relation.toId)));
   assert.equal(canon.scenes[0].dialogues.length, 1);
+});
+
+test("hints once: a meaning two questions share goes into the state once; one that differs stays in its question", () => {
+  const yes = { true: "it matters", false: "background" };
+  const { state, questions } = hintsOnce({ passage: { s1: "…" } }, [
+    { key: "role:who:s1", primitive: "choice", instructions: "Who says passage.s1?", options: ["char_000001", "unnamed", "none"], optionHints: { char_000001: "上条当麻", unnamed: "someone unnamed", none: "no one can tell" } },
+    { key: "role:to:s1", primitive: "choice", instructions: "Who is passage.s1 said to?", options: ["char_000001", "unnamed", "none"], optionHints: { char_000001: "上条当麻", unnamed: "someone unnamed", none: "no one in particular" } },
+    { key: "role:matters:s2", primitive: "noul", instructions: "Does passage.s2 matter?", noulCriteria: yes },
+    { key: "role:matters:s3", primitive: "noul", instructions: "Does passage.s3 matter?", noulCriteria: yes },
+  ]);
+  assert.deepEqual((state as Record<string, unknown>).answerOptions, { char_000001: "上条当麻", unnamed: "someone unnamed" });
+  assert.deepEqual((state as Record<string, unknown>).yesNo, { c1: yes });
+  assert.deepEqual(questions.map((q) => q.optionHints), [{ none: "no one can tell" }, { none: "no one in particular" }, undefined, undefined]);
+  assert.deepEqual(questions.slice(2).map((q) => [q.instructions, q.noulCriteria]), [["Does passage.s2 matter? (Yes and no: yesNo.c1.)", undefined], ["Does passage.s3 matter? (Yes and no: yesNo.c1.)", undefined]]);
+  assert.deepEqual(hintsOnce("a text state", questions).state, "a text state", "a text state is left as it is");
 });
 
 test("YAML: blocks, inline short lists, quoted strings", () => {
