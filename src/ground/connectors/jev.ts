@@ -80,6 +80,8 @@ export interface JevConfig {
 /** Live Jev client. Translates the internal question shape to the System One wire format; keys resolve through src/connectors/secrets.ts. */
 export class JevClient implements DecisionModel {
   readonly modelId: string;
+  /** What the provider reports about each request's use, when it reports any (the response's `usage`), for metering. */
+  readonly usage: unknown[] = [];
   constructor(private cfg: JevConfig) {
     this.modelId = cfg.model;
   }
@@ -114,7 +116,8 @@ export class JevClient implements DecisionModel {
           signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
         });
         if (res.ok) {
-          const payload = (await res.json()) as { answers?: Record<string, WireAnswer> };
+          const payload = (await res.json()) as { answers?: Record<string, WireAnswer>; usage?: unknown };
+          if (payload.usage !== undefined) this.usage.push(payload.usage);
           return fromWireAnswers(questions, payload.answers ?? {});
         }
         const detail = (await res.text()).slice(0, 300);

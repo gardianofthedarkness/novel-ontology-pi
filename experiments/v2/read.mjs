@@ -28,14 +28,28 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
   const blocks = range ? all.filter(block => { const n = Number(block.id.slice(1)); return n >= range[0] && n <= range[1]; }) : all;
   // Real calls are counted below the cache.
   const paid = { jev: 0, work: 0 };
-  const live = decisions ?? jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid.jev++; return live.decide(...args); } }, join(outDir, 'cache'));
+  // What the paid requests carried, for their price: Jev bills input tokens and reports none here, so its states and
+  // questions are measured as sent (characters, and how many are CJK); the work model reports its own tokens.
+  const usage = { jev: { requests: 0, chars: 0, cjk: 0, reported: [] }, work: { requests: 0, promptTokens: 0, completionTokens: 0, cacheHitTokens: 0 } };
+  const live = decisions ?? jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (state, questions, ...rest) => {
+    paid.jev++;
+    const sent = JSON.stringify({ state, questions });
+    usage.jev.requests++; usage.jev.chars += sent.length; usage.jev.cjk += (sent.match(/[\u3000-\u9fff\uff00-\uffef]/g) ?? []).length;
+    return live.decide(state, questions, ...rest);
+  } }, join(outDir, 'cache'));
   let lister;
   if (listerKind === 'lexicon') {
     const roster = JSON.parse(await readFile(lexicon, 'utf8'));
     lister = lexiconLister([...(roster.characters ?? []), ...(roster.places ?? []), ...(roster.things ?? [])].flatMap(entry => entry.names ?? []));
   } else {
     const { workModelFromEnv } = await load('dist/src/ground/connectors/workModel.js');
-    const model = work ?? workModelFromEnv(process.env), cached = cachedWork({ modelId: model.modelId, generate: request => { paid.work++; return model.generate(request); } }, join(outDir, 'cache'));
+    const model = work ?? workModelFromEnv(process.env), cached = cachedWork({ modelId: model.modelId, generate: async request => {
+      paid.work++;
+      if (!model.generateWithInfo) return model.generate(request);
+      const reply = await model.generateWithInfo(request);
+      usage.work.requests++; usage.work.promptTokens += reply.usage.promptTokens ?? 0; usage.work.completionTokens += reply.usage.completionTokens ?? 0; usage.work.cacheHitTokens += reply.usage.cacheHitTokens ?? 0;
+      return reply.text;
+    } }, join(outDir, 'cache'));
     lister = modelLister(cached);
   }
   const started = Date.now();
@@ -49,6 +63,7 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
   const outcomes = result.em.flatMap(batch => batch.results).reduce((sum, entry) => ({ ...sum, [entry.outcome]: (sum[entry.outcome] ?? 0) + 1 }), {});
   const summary = {
     book: novelDir, blocks: blocks.map(block => block.id), sentences: text.size, lister: listerKind, jev: live.modelId, wallMs: Date.now() - started, paidRequests: paid,
+    usage: { ...usage, jev: { ...usage.jev, reported: usage.jev.reported.length ? usage.jev.reported : (live.usage ?? []).slice(0, 3), reportedCount: (live.usage ?? []).length } },
     scenes: result.scenes.length, cards: Object.fromEntries([...new Set(result.cards.map(card => card.kind))].map(kind => [kind, result.cards.filter(card => card.kind === kind).length])),
     detected: result.em.reduce((sum, batch) => sum + batch.results.length, 0), em: outcomes,
     roles: (() => {
@@ -91,6 +106,7 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     write(v2, 'slots.yaml', yamlDocument({ slots: result.slots, habits: result.habits })),
     write(v2, 'facts.yaml', yamlDocument(result.facts.map(({ text: _, ...fact }) => fact))),
     write(v2, 'time.yaml', yamlDocument(result.time)),
+    ...((live.usage ?? []).length ? [write(v2, 'jev-usage.json', JSON.stringify(live.usage))] : []),
     // The same data as JSON, for tools (compare.mjs, inspect.mjs, the world loop).
     write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time })),
     write(baseDir, 'scenes.json', JSON.stringify(base.scenes)),
