@@ -94,7 +94,10 @@ export async function terrainAndSpawns(novelDir, { jev: given = null, turns = 1,
   };
   const work = await mkdtemp(join(tmpdir(), 'terrain-'));
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
-  const page = (await readFile(join(repository, 'playground', 'landscape-mock.html'), 'utf8')).replace('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js', './vendor/three.module.js').replace('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/', './vendor/addons/');
+  // The page starts from a first map (its models are the ones every later map draws with): the first site's parent.
+  const firstParent = parentOf(order[0]) ?? script.scenes.map(scene => scene.place).find(id => id && !String(id).startsWith('spot:'));
+  const page = (await readFile(join(repository, 'playground', 'landscape-mock.html'), 'utf8')).replace('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js', './vendor/three.module.js').replace('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/', './vendor/addons/')
+    .replace('<script type="application/json" id="fill-data">null</script>', () => `<script type="application/json" id="fill-data">${JSON.stringify(mapData(firstParent, HALF[scaleOf(firstParent) ?? 'city'] ?? 300, [], [])).replace(/</g, '\\u003c')}</script>`);
   await writeFile(join(work, 'index.html'), page);
   const { server, url } = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser();
   const draw = async (data, view) => { await chrome.evaluate(`window.__stage.load(${JSON.stringify(data)})`); await chrome.evaluate(`window.__stage.view(${JSON.stringify(view)})`); return chrome.still('png'); };
@@ -102,7 +105,7 @@ export async function terrainAndSpawns(novelDir, { jev: given = null, turns = 1,
   const terrainFile = join(novelDir, 'stage', 'terrain.json'), spawnFile = join(novelDir, 'stage', 'world', 'spawn.json');
   const terrain = { version: 1, model: jev.modelId, askedAt: new Date().toISOString(), sites: {}, order: [] };
   try {
-    await chrome.open(url);
+    await chrome.open(`${url}?capture=1`);
     // 1. Terrain, parent by parent as sites come in story order; each parent's canvas holds what is placed in it.
     await live.line(0, { status: 'running', sites: order.length }); await live.phase('terrain');
     const canvases = new Map();
