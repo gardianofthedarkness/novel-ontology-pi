@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addUnit, centralBuild, dwellingFor, emptyCanvas, holderFor, POOL_SPACING, tiedSpot } from "../src/ground/stage/placeCanvas.js";
+import { addUnit, centralBuild, dwellInStreets, dwellingFor, emptyCanvas, holderFor, POOL_SPACING, tiedSpot } from "../src/ground/stage/placeCanvas.js";
+import { buildingUseOf } from "../src/v2/rules/language.js";
 import { continuityTies, emptyRegistry, evenPick, withPools } from "../src/v2/pools.js";
 import type { ReadingScript } from "../src/v2/script.js";
 
@@ -90,4 +91,23 @@ test("a pool samples a member nearest the members continuity ties it to, the mor
   assert.ok(d(east, 400) >= 30 + 30 + POOL_SPACING.street - 0.5, "kept apart as any member");
   const leaning = tiedSpot(canvas, "pool:City", member, { east: 3, west: 1 })!;
   assert.ok(d(leaning, 400) < d(leaning, -400), `nearer the one with more ties: ${leaning}`);
+});
+
+test("a pool's building tied to one of its streets dwells in that street's building of its use; one of a use the street lacks is left for Jev; one tied to none stays", () => {
+  const canvas = emptyCanvas();
+  centralBuild(canvas, [
+    { id: "city", label: "City", scale: "city", parent: null, landscape: "residential" },
+    { id: "pool:City", label: "City · pool", scale: "district", parent: "city", landscape: "residential", pool: "city" },
+  ]);
+  for (const id of ["street", "cafe", "hospital", "lonely"]) addUnit(canvas, "pool:City", { id, label: { street: "大道", cafe: "西点屋", hospital: "医院", lonely: "咖啡店" }[id]!, kind: id === "street" ? "street" : "building", r: 12 });
+  const building = (lot: string, use: string, x: number) => ({ lot: `street:${lot}`, x, z: 40, w: 10, d: 12, angle: 0, floors: 3, kind: "shop", use });
+  const streets = new Map([["street", [building("row0", "cafe", 100), building("row1", "shop", 120), building("row2", "cafe", 140)]]]);
+  const ties = { cafe: { street: 2 }, street: { cafe: 2, hospital: 1 }, hospital: { street: 1 } };
+  const { dwells, forJev } = dwellInStreets(canvas.places["pool:City"], streets, ties, (unit) => buildingUseOf(unit.label));
+  const cafe = canvas.places["pool:City"].units.find((unit) => unit.id === "cafe")!;
+  assert.deepEqual(dwells, { cafe: "street" });
+  assert.ok([100, 140].includes(cafe.at[0]) && cafe.at[1] === 40, `in one of the street's cafés: ${cafe.at}`);
+  assert.deepEqual(forJev, ["hospital"], "a hospital on a street with none: for Jev");
+  assert.equal(canvas.places["pool:City"].units.find((unit) => unit.id === "lonely")!.dwells, undefined, "tied to no street: stays");
+  assert.deepEqual(["便利店 (scene 3)", "高层公寓", "检察厅", "地铁站", "办公大楼", "研究所", "神社"].map((label) => buildingUseOf(label)), ["convenience", "apartment", "government", "station", "office", "lab", null]);
 });

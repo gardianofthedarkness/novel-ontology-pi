@@ -31,6 +31,7 @@ export const RULES: CodeRule[] = [
   { name: "part or floor", decides: "a part of a building (高墙, 混凝土支柱) or a floor as a whole word (最上层) is spatial, not a place", layer: 1, language: true, lives: `${HERE}/language.ts (part, floor)` },
   { name: "settled category", decides: "a named entity takes the category most of its typings gave it (魔法侧 is no place); it moves under an id of that category", layer: 4, language: false, lives: `${HERE}/typing.ts` },
   { name: "levels", decides: "the level of the world a spatial word points at (地下: underground)", layer: 1, language: true, lives: `${HERE}/language.ts` },
+  { name: "building use by name", decides: "what a building is used for by the words of its name (便利店: a convenience store), so it can dwell in a street's building of that use without Jev", layer: 2, language: true, lives: `${HERE}/language.ts (buildingUses)` },
   { name: "scale by name", decides: "the scale the generic part of a place's name says (学区: a district), where typing gave none", layer: 2, language: true, lives: `${HERE}/language.ts (its words: src/digger/stage/scale.ts)` },
   { name: "graded law", decides: "a parent is larger than what it holds (a region a region, a building a building)", layer: 2, language: false, lives: `${HERE}/places.ts` },
   { name: "name inside a name", decides: "a place whose name holds another's holds it (学园都市第七学区 in 学园都市)", layer: 2, language: false, lives: `${HERE}/places.ts` },

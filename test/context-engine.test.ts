@@ -122,3 +122,12 @@ test("the reading's prompts of plain text, composed by the engine, are the digge
   const composed = await compose(R.continuationMode, opening, null);
   assert.deepEqual([composed.document, composed.questions[0].key], [continuationDocument([], lines), "time_continuation"]);
 });
+
+test("compatibility at the street level: an avenue may carry a station front or a waterfront, a square nothing; what lies below the street overlaps anything", async () => {
+  const { mayOverlap } = await import("../src/v2/context/terrainModes.js");
+  assert.ok(mayOverlap("avenue", "station") && mayOverlap("station", "avenue"), "either side may name the other");
+  assert.ok(mayOverlap("waterfront", "avenue") && mayOverlap("platform", "centre"));
+  assert.ok(!mayOverlap("square", "avenue") && !mayOverlap("square", "square") && !mayOverlap("park", "shopping"), "a square, a park: nothing");
+  assert.ok(mayOverlap("cut", "square") && mayOverlap("square", "avenue", true), "below the street: anything");
+  assert.ok(!mayOverlap(null, "avenue"), "an unknown kind: no");
+});

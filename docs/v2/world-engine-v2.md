@@ -700,6 +700,39 @@ user: good; the next steps (§2.0.15).
    own setting, apart from the runtime world engine's: the fill and its edges brighter, the fog pushed far out, in World ·
    Live and in Jev's stills alike.
 
+Built, in the order 5, 1, 2, 3, 4:
+- **5.** Terrain spawning marks its world `stage: "terrain"`; the live page then draws the fill at 0.14 (0.045 at
+  runtime), its edges at 0.5 (0.2) and its roads at 0.55 (0.35), the fog from 1.5 to 4 times the map's reach (from 400 m),
+  and the height question fades the city behind from 1.6 to 4.5 times its distance (0.9 to 2.6).
+- **1.** A member's area map is its district (the named district its pool street is in, or the pool district itself),
+  framed on the district's kept box, else on its node, wide enough to hold the pin; the pin is labelled "suggested", the
+  places continuity ties it to "tied", and the area question names them (with their ties) and says the pin is only a
+  suggestion, anywhere in the district may do. A box whose middle falls outside a district Jev boxed (here or in an earlier book) is asked again.
+- **2.** `OVERLAPS` and `mayOverlap` (`terrainModes.ts`): an avenue may carry a shopping street, a station front, an
+  alley, a waterfront, a platform or a ramp; a shopping street an alley or a centre; a centre a platform; a station front
+  a platform or a ramp; an alley a residential street; a cut or a basin, and any part kept below the street, anything; a
+  square, a park, a stadium, nothing. Before the area question, a member's pin within a street's half-width of a kept box
+  its kind may not overlap moves to the nearest open point (rings 8 m apart, 32 directions); the move is logged. The
+  zooms ask again only over a box the kind may not overlap (of its own level; across levels the tree's rule stands, as before: a
+  street over a district that does not hold it).
+- **3.** The universe's terrain registry (`<library>/universe/terrain.json`, `places` by exact name): every named place
+  Jev decides is written there with its book; a later book's part of the same name and scale takes it (`by: "universe"`,
+  `from`: the book) without a question, at its kept offset in a parent of the same name. A same-book rerun asks again.
+- **4.** `uses` for each street kind in `LANDSCAPES` (shopping: shops, a convenience store, cafés, restaurants, a bar,
+  an arcade, a bank; centre: its mall, a cinema, restaurants, cafés, a hotel, offices; avenue: offices, a hotel, a
+  department store, a bank, restaurants, a government office, a hospital; square, station, alley, terrace, waterfront
+  likewise), each form building's `use` drawn from it by a stream of its own (the layouts are as they were); a centre's
+  podium is its mall and its towers offices, a station's hall the station. A building's use by its name is a rule of the
+  language profile (`buildingUses`, `buildingUseOf`: 便利店 a convenience store, 公寓 apartments, 检察厅 a government
+  office). `dwellInStreets` (`placeCanvas.ts`): a pool's building tied to one of the pool's kept streets dwells in one of
+  that street's buildings of its use (the most tied street first, one building each); one whose use its tied streets do
+  not have is marked for Jev; the live page labels them "in a building of …" and "for Jev". Which models of the 3D library
+  stand for each use (own, a stand-in, or a gap) is `USE_MODELS` (`src/ground/stage/useModels.ts`). The reference page
+  [street-compatibility.html](street-compatibility.html), made from these tables by `experiments/v2/compat-page.mjs`
+  (`npm run build && node experiments/v2/compat-page.mjs`), shows street × street, street × use and use × model.
+  On vol 1 with stand-in answers (random street kinds): 8 pins moved off ground they may not share, the 5 named places
+  written to the registry, 9 pool buildings dwelling in their streets' buildings, 29 left for Jev.
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

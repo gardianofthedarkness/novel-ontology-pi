@@ -47,3 +47,14 @@ test("a street in a CBD: the city's roads give way along it, a shopping street's
   assert.equal(own(alley, fill([cbd(), alley]).landmarks).filter((b) => b.base).length, 0, "an alley keeps its own low fabric");
   assert.ok(hallsOf({ version: LANDSCAPE_VERSION, seed: "pool", patches: [street("centre", 220, 220, 45)] }).some((hall) => hall.kind === "mall"), "a mall under a centre");
 });
+
+test("a street's buildings take their uses from its kind's list (a shopping street's shops and cafés, a centre's mall and offices), the same each time", () => {
+  for (const type of STREET_TYPES) {
+    const patch = street(type, type === "square" || type === "centre" ? 220 : 300, type === "square" || type === "centre" ? 220 : 110), mine = own(patch, fill([patch]).landmarks), uses = mine.map((b) => b.use).filter(Boolean);
+    assert.ok(uses.length, `${type}: its buildings have uses`);
+    const allowed = new Set([...(LANDSCAPES[type].uses ?? []), "mall", "office", "station"]);
+    assert.ok(uses.every((use) => allowed.has(use!)), `${type}: only its own uses (${[...new Set(uses)].join(", ")})`);
+  }
+  const centre = own(street("centre", 220, 220), fill([street("centre", 220, 220)]).landmarks);
+  assert.ok(centre.some((b) => b.lot.includes(":podium") && b.use === "mall") && centre.some((b) => b.lot.includes(":tower") && b.use === "office"), "a centre: a mall podium, office towers");
+});

@@ -1,5 +1,5 @@
 import { addPatch, circleOf, firstLandscape, LANDSCAPE_VERSION, placeBeside, type Landscape, type LandscapeType, type Patch } from "./landscape.js";
-import type { Point } from "./cityFill.js";
+import type { Building, Point } from "./cityFill.js";
 
 /**
  * The canvas of places, built from the bottom up. Every recognised place (a city, a district like 第七学区, a street,
@@ -15,8 +15,11 @@ import type { Point } from "./cityFill.js";
  * - when a circle grows into a sibling, the sibling is pushed aside, whole: places move only as rigid circles in
  *   their parent's frame, so nothing inside any place ever moves in its own frame. Growth then carries on up.
  */
-/** sampled: the place the tree put it in, when it stands in an area of that place picked by a seed (see holderFor). */
-export interface Unit { id: string; label: string; kind: "building" | "street" | "room"; at: Point; r: number; sampled?: string }
+/**
+ * sampled: the place the tree put it in, when it stands in an area of that place picked by a seed (see holderFor).
+ * dwells: the street whose building it dwells in (dwellInStreets); forJev: a building of a use its streets do not have.
+ */
+export interface Unit { id: string; label: string; kind: "building" | "street" | "room"; at: Point; r: number; sampled?: string; dwells?: string; forJev?: boolean }
 /**
  * temporary: an unnamed area holding what is known only to lie somewhere in a larger place, until the text names it.
  * dwelling: the area of the central build a place the ontology puts in no larger one dwells in, until it is named.
@@ -120,6 +123,27 @@ export function tiedSpot(canvas: Canvas, placeId: string, unit: Pick<Unit, "id" 
   const mean = [0, 1].map((axis) => tied.reduce((sum, entry) => sum + entry.at[axis] * ties![entry.id], 0) / weight) as Point;
   const spot = placeBeside(occupiedIn(canvas, placeId), unit.r, unit.id, [-mean[0], -mean[1]], place.pool ? POOL_SPACING[unit.kind] : 4, mean);
   return [spot.x, spot.z];
+}
+
+/**
+ * Street buildings (docs/v2/world-engine-v2.md §2.0.15, the user's design): a building of a pool that continuity ties to
+ * one of the pool's streets dwells in one of that street's buildings of its own use (a café in a café), the most tied
+ * street first, one building each, picked by its id: no model is asked. A building whose use none of the streets it is
+ * tied to has is left for Jev to plant (`forJev`); one with no use known, or tied to no street, stays where it was
+ * sampled. `streets`: each street's own buildings (its form's), in the place's frame.
+ */
+export function dwellInStreets(place: CanvasPlace, streets: Map<string, Building[]>, ties: Record<string, Record<string, number>>, useOf: (unit: Unit) => string | null): { dwells: Record<string, string>; forJev: string[] } {
+  const taken = new Set<string>(), dwells: Record<string, string> = {}, forJev: string[] = [];
+  for (const unit of place.units) {
+    if (unit.kind !== "building" || streets.has(unit.id)) continue;
+    const use = useOf(unit), tied = [...streets.keys()].filter((id) => ties[unit.id]?.[id]).sort((a, b) => ties[unit.id][b] - ties[unit.id][a]);
+    if (!use || !tied.length) continue;
+    const street = tied.find((id) => streets.get(id)!.some((b) => b.use === use && !taken.has(b.lot)));
+    if (!street) { unit.forJev = true; forJev.push(unit.id); continue; }
+    const lot = pickBy(unit.id, streets.get(street)!.filter((b) => b.use === use && !taken.has(b.lot)).map((b) => b.lot)), building = streets.get(street)!.find((b) => b.lot === lot)!;
+    taken.add(lot); unit.at = [building.x, building.z]; unit.dwells = street; dwells[unit.id] = street;
+  }
+  return { dwells, forJev };
 }
 
 /** A new part of a place's ground where a scene drifted past its edge (landscape.ts); the circle grows to hold it. */

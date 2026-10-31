@@ -21,7 +21,11 @@ export interface LanguageRules {
   levels: [RegExp, Level][];
   /** The scale the generic part of a place's name says (第七学区: a district), or null. */
   scaleOfName(label: string): string | null;
+  /** What a building is used for, by the words of its name (便利店: a convenience store), the most specific first. */
+  buildingUses: [RegExp, BuildingUse][];
 }
+/** What a building is used for: the kinds a street's buildings come in (landscape.ts STREET_USES), and a building's own. */
+export type BuildingUse = "convenience" | "shop" | "cafe" | "restaurant" | "bar" | "arcade" | "bank" | "mall" | "department" | "office" | "hotel" | "apartment" | "dormitory" | "house" | "school" | "hospital" | "clinic" | "station" | "government" | "church" | "warehouse" | "workshop" | "lab" | "parking" | "cinema";
 
 export const ZH: LanguageRules = {
   name: "zh",
@@ -38,7 +42,18 @@ export const ZH: LanguageRules = {
     [/地面|地表|地上|街上|路上|马路|路边|街头|路面/, "street"],
   ],
   scaleOfName: (label) => { const scale = scaleOfName(label); return scale && scale !== "none" ? scale : null; },
+  buildingUses: [
+    [/便利店/, "convenience"], [/咖啡|西点|甜品|茶馆|奶茶/, "cafe"], [/餐厅|餐馆|饭馆|食堂|拉面|快餐|料理/, "restaurant"], [/酒吧|居酒屋/, "bar"],
+    [/游戏厅|游戏中心|电玩/, "arcade"], [/银行/, "bank"], [/百货/, "department"], [/商场|购物中心|商城/, "mall"], [/电影院|影院/, "cinema"],
+    [/酒店|宾馆|旅馆|饭店/, "hotel"], [/宿舍|寮/, "dormitory"], [/公寓/, "apartment"], [/住宅|民居|房子|家$/, "house"],
+    [/学校|中学|小学|大学|学院|学园|学舍/, "school"], [/医院|医疗/, "hospital"], [/诊所/, "clinic"], [/车站|地铁站|站台|站$/, "station"],
+    [/厅$|局$|署$|法院|看守所|警备|派出所|政府/, "government"], [/教会|教堂/, "church"], [/仓库/, "warehouse"], [/研究所|实验室|研究中心|研究设施/, "lab"], [/工厂|作坊|工坊/, "workshop"],
+    [/停车场/, "parking"], [/大楼|大厦|写字楼|办公|高楼|塔楼/, "office"], [/商店|店$|铺$|超市/, "shop"],
+  ],
 };
 
 /** The language the reading is in. */
 export const LANGUAGE: LanguageRules = ZH;
+
+/** What a building is used for, by its name in the reading's language, or null. */
+export const buildingUseOf = (label: string, language: LanguageRules = LANGUAGE): BuildingUse | null => language.buildingUses.find(([words]) => words.test(label.replace(/ \(scene \d+\)$/, "")))?.[1] ?? null;

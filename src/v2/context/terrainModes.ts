@@ -119,6 +119,22 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium", manifold: M(0, 0.2), medians: [15, 25, 35, 50] },
   },
 };
+/**
+ * Which kinds of a level a part may overlap (docs/v2/world-engine-v2.md §2.0.15): a first map at the street level, each
+ * level's to be worked out later. Either side may name the other; what lies below the street (a cut, a basin, a part
+ * answered underground) overlaps anything; a square, a park, a stadium, nothing else of its level.
+ */
+export const OVERLAPS: Record<string, string[]> = {
+  avenue: ["shopping", "station", "alley", "waterfront", "platform", "ramp"],
+  shopping: ["alley", "centre"],
+  centre: ["platform"],
+  station: ["platform", "ramp"],
+  alley: ["residential"],
+};
+const BELOW = new Set(["cut", "basin"]);
+/** Whether two parts of one level may overlap, by their kinds (a part below the street, `below`, overlaps any). */
+export const mayOverlap = (a: string | null | undefined, b: string | null | undefined, below = false): boolean =>
+  below || BELOW.has(a ?? "") || BELOW.has(b ?? "") || !!(a && b && (OVERLAPS[a]?.includes(b) || OVERLAPS[b]?.includes(a)));
 /** The heights a basic shape may rise to (metres). */
 const SHAPE_TOPS = [3, 6, 12, 25, 50, 100];
 /** Natural ground by its height. */
@@ -234,10 +250,11 @@ export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
  * height, on a map of its pool close up (where sampling put it, a grey pin; the members already kept outlined in white;
  * a pin is a point, never a size), with what the text says of it and of the places holding it.
  */
-export interface AreaFocus extends PartFocus { kind: string }
+export interface AreaFocus extends PartFocus { kind: string; district?: string; tied?: string[] }
 export const terrainAreaMode: Mode<AreaFocus, TerrainStores> = {
   name: "terrain-area",
-  task: (focus) => `Where does ${focus.part.label} (${focus.kind}) lie in ${focus.holder.label}, and how large is it? The text gives it no name of its own; sampling put it where it stands for now (the grey pin: a point, not its size). Box its ground on picture "map": where it lies and as large as it is, from what the text says of it (text) and of the places around it (standing, facts, environment), and the terrain kept for the places holding it (within).`,
+  // The pin is a suggestion (the user's call, §2.0.15): where continuity would put it; Jev may box it anywhere in its district.
+  task: (focus) => `Where does ${focus.part.label} (${focus.kind}) lie in ${focus.district ?? focus.holder.label}, and how large is it? The text gives it no name of its own. The grey pin is only a suggestion, a point and not a size: where the characters going between it and the places it is tied to would put it${focus.tied?.length ? ` (${focus.tied.join(", ")})` : ""}. Put it anywhere in ${focus.district ?? focus.holder.label} that suits what it is (an airfield is not in the middle of towers). Box its ground on picture "map": where it lies and as large as it is, from what the text says of it (text) and of the places around it (standing, facts, environment), and the terrain kept for the places holding it (within).`,
   sources: [...sources<AreaFocus>({ standing: true, facts: true, environment: "part" }), fixed("pictures", "pictures", (focus: AreaFocus) => focus.pictures) as Source<AreaFocus, TerrainStores>],
   cutOrder: ["environment", "facts", "standing", "text"],
   probe,

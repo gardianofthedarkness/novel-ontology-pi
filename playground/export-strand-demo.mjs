@@ -68,7 +68,9 @@ export async function strandDemo(novelDir, options) {
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf, scaleOfName } = await load('dist/src/digger/stage/scale.js');
-  const { continuityTies } = await load('dist/src/v2/pools.js');
+  const { continuityTies } = await load('dist/src/v2/pools.js'), { buildingUseOf } = await load('dist/src/v2/rules/language.js');
+  // A landscape's fill, made once per landscape (a pool's is read for its streets' buildings, then drawn).
+  const fills = new WeakMap(), fillOf = landscape => { const known = fills.get(landscape); if (known?.n === landscape.patches.length) return known.filled; const filled = fillLandscape(landscape); fills.set(landscape, { n: landscape.patches.length, filled }); return filled; };
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
   const { solveWalk, sampleWalk: walkSample, temperatureBound, directionOf } = await load('dist/apps/playground/src/data/pathIntegral.js');
   const { navGrid } = await load('dist/src/ground/stage/holoNav.js');
@@ -526,13 +528,18 @@ export async function strandDemo(novelDir, options) {
       if (!borrowed.length) continue;
       pool.landscape = { version: pool.landscape?.version ?? 1, seed: pool.id, patches: [...(pool.landscape?.patches ?? []), ...borrowed] };
       C.grow(canvas, pool.id);
+      // Street buildings (§2.0.15): a building of the pool tied to one of its streets dwells in that street's building of its
+      // use (by the words of its name), Jev not asked; one of a use its streets do not have is left for Jev.
+      const filled = fillOf(pool.landscape), streets = new Map(pool.units.filter(unit => unit.borrows === 'own').map(unit => [unit.id, filled.landmarks.filter(b => String(b.lot).startsWith(`${unit.id}:`) && b.use)]));
+      const { dwells, forJev } = C.dwellInStreets(pool, streets, ties, unit => buildingUseOf(unit.label));
+      notes.build.dwells = (notes.build.dwells ?? 0) + Object.keys(dwells).length; notes.build.forJev = (notes.build.forJev ?? 0) + forJev.length;
     }
     const round = value => Math.round(value * 10) / 10, depthOf = id => { let depth = 0; for (let at = canvas.places[id]; at?.parent; at = canvas.places[at.parent]) depth++; return depth; };
     const nodes = [];
     for (const place of Object.values(canvas.places)) {
       const [x, z] = C.worldOf(canvas, place.id), grid = place.units.find(unit => unit.id === `${place.id}#grid`);
       nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.pool ? { pool: place.pool } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}) });
-      for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(unit.sampled ? { sampled: unit.sampled } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
+      for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(unit.sampled && !unit.dwells ? { sampled: unit.sampled } : {}), ...(unit.dwells ? { dwells: unit.dwells } : {}), ...(unit.forJev ? { forJev: true } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
     }
     return { nodes, canvas };
   };
@@ -549,7 +556,7 @@ export async function strandDemo(novelDir, options) {
   // Each open place's landscape, filled (src/ground/stage/landscape.ts), in map metres: what stands around the staged grids,
   // never on them (nor on the units and circles built inside it). Derived view data: only nominated buildings are canon.
   const landscapes = Object.values(canvas.places).filter(place => place.landscape).map(place => {
-    const [wx, wz] = C.worldOf(canvas, place.id), round = value => Math.round(value * 10) / 10, filled = fillLandscape(place.landscape);
+    const [wx, wz] = C.worldOf(canvas, place.id), round = value => Math.round(value * 10) / 10, filled = fillOf(place.landscape);
     // Not where a child place stands: it has its own ground there.
     const keep = Object.values(canvas.places).filter(child => child.parent === place.id).map(child => ({ at: child.at, r: child.r }));
     const clear = (x, z, margin = 3) => keep.every(({ at, r }) => Math.hypot(x - at[0], z - at[1]) > r + margin);
