@@ -105,6 +105,16 @@ tree, what an unnamed place description means, and each scene's setting (§5). S
 Each layer is tested alone with fixtures: a recommender test needs no model, a context test checks the document byte for
 byte, a decision test runs on a mock Jev.
 
+**The code rules live in one folder, `src/v2/rules/`** (the user's call, 2026-10-31), so they can be generalized: rule
+zero (never ask a model what code can compute exactly) is what the layers call there, and no rule calls a model or
+writes. What is particular to a language is a profile (`language.ts`: the locatives that make 街上 spatial, what joins two
+places in X的Y, the words for each level of the world, the scale a place's name says; zh first, and a new language is a
+new profile); typing's rules (a locative makes a word spatial; a description takes the type most batches gave it, a tie
+being no place); presence; the place rules (the graded law, the recommender's weights, the sure parent, the setting
+tiers, the holder, the same words, the habit). `RULES` (index.ts) lists every rule with what it decides, the layer it
+serves and where it lives, including those still in other files (the longest name in `em.ts`, the action rule in
+`flow.ts`, time words in `time.ts`) until they move there.
+
 ## 4. The place recommender (layer 2)
 
 Code over the stores, no model call. It answers three kinds of question, each with candidates scored by evidence:

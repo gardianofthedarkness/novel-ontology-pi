@@ -4,7 +4,8 @@ import { placeParentMode, placeRefMode, settingMode, type PlaceStores } from "./
 import { mentions, type Chart } from "./em.js";
 import type { FactEntry } from "./facts.js";
 import type { FlowCard, FlowScene } from "./flow.js";
-import { describedCandidates, fallbackParents, mayHold, placeIndex, rankOf, recommendParents, SCALES, settingTiers, type Candidate } from "./placeRecommend.js";
+import { describedCandidates, fallbackParents, placeIndex, recommendParents, settingTiers, type Candidate } from "./placeRecommend.js";
+import { ACCEPT, chooseSetting, deeperByUnnamed, HABIT, holderIn, isPresent, mayHold, rankOf, sameWords, SCALES, sureParent } from "./rules/index.js";
 import { ReadingGraph } from "./readingGraph.js";
 import type { SpatialMention } from "./spatial.js";
 import type { Decide } from "./typing.js";
@@ -60,10 +61,8 @@ export interface PlaceEmInput {
   descriptions: { text: string; type: string; sentences: string[] }[];
   spatial?: SpatialMention[];
 }
-const ACCEPT = 0.5, BATCH = 12;
-/** Jev's same answer this many times, and no other, and the words are taken by rule from then on. */
-const HABIT = 2;
-const PRESENT = new Set(["speaks", "acts", "addressed"]);
+/** Questions a request asks at most. */
+const BATCH = 12;
 const round = (value: number) => Number(value.toFixed(3));
 const pick = (replies: DecisionAnswer[], key: string) => { const reply = replies.find((entry) => entry.key === key), value = String(reply?.value ?? "none"); return { value, confidence: Number(reply?.distribution?.[value] ?? reply?.confidence ?? 0) }; };
 
@@ -91,9 +90,8 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
     type Choice = { id: string; parent: string | null; by: PlaceParent["by"]; confidence: number; candidates: Candidate[] };
     const choices: Choice[] = [], unsure: { key: string; id: string; candidates: Candidate[] }[] = [];
     for (const place of places) {
-      const candidates = await recommendParents(index, place.id, graph), [top, second] = candidates;
-      const strong = top?.evidence.some((entry) => entry.kind === "name" || entry.kind === "stated");
-      if (top && strong && top.score >= 2 && (!second || top.score >= 2 * second.score)) choices.push({ id: place.id, parent: top.id, by: top.evidence.some((entry) => entry.kind === "name") ? "name" : "stated", confidence: Math.min(1, top.score / 3), candidates });
+      const candidates = await recommendParents(index, place.id, graph), sure = sureParent(candidates);
+      if (sure) choices.push({ id: place.id, parent: sure.candidate.id, by: sure.by, confidence: Math.min(1, sure.candidate.score / 3), candidates });
       else { const offered = candidates.length ? candidates : fallbackParents(index, place.id); if (offered.length) unsure.push({ key: "q" + (unsure.length + 1), id: place.id, candidates: offered }); else choices.push({ id: place.id, parent: null, by: "none", confidence: 1, candidates: [] }); }
     }
     const assemble = (list: Choice[]) => {
@@ -133,17 +131,9 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
     let previous: string | null = null;
     for (const scene of input.scenes) {
       const when = timeOf.get(scene.id), past = !!when?.flashback, tiers = settingTiers(index, scene.id);
-      const most = (list: [string, number][]) => [...list].sort((a, b) => b[1] - a[1] || depth(b[0]) - depth(a[0]) || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
-      const set = new Map(tiers.environment), any = new Map(tiers.any);
-      let place: string | null = null, by: Setting["by"] = "none";
-      if (set.size) {
-        place = [...set.keys()].sort((a, b) => depth(b) - depth(a) || (set.get(b) ?? 0) - (set.get(a) ?? 0) || a.localeCompare(b))[0]; by = "environment";
-        // Places its environment names on two branches of the tree: which one is Jev's to say.
-        if ([...set.keys()].some((id) => id !== place && !under(place!, id))) branched.push({ key: "s" + (branched.length + 1), scene: scene.id, before: previous, candidates: [...[...set].map(([id, count]): Candidate => ({ id, score: count, evidence: [{ kind: "setting", weight: count, count }] })), ...(previous && !set.has(previous) ? [{ id: previous, score: 0.5, evidence: [{ kind: "adjacent" as const, weight: 0.5, count: 1 }] }] : [])].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)) });
-      } else if ((place = most(tiers.action))) by = "action";
-      else if ((place = most(tiers.any))) { by = "named"; if (previous && !past && under(previous, place)) { place = previous; by = "carried"; } }
-      if (place && (by === "action" || by === "named")) { const deeper = [...any].filter(([id, count]) => under(id, place!) && (set.has(id) || count >= 2)).sort((a, b) => depth(b[0]) - depth(a[0]))[0]; if (deeper) place = deeper[0]; }
-      if (!place && !past && previous && when?.continuation?.continues !== false) { place = previous; by = "carried"; }
+      const { place, by, branched: off } = chooseSetting({ ...tiers, previous, past, continues: when?.continuation?.continues !== false, depth, under });
+      // Places its environment names on two branches of the tree: which one is Jev's to say.
+      if (off.length) branched.push({ key: "s" + (branched.length + 1), scene: scene.id, before: previous, candidates: [...tiers.environment.map(([id, count]): Candidate => ({ id, score: count, evidence: [{ kind: "setting", weight: count, count }] })), ...(previous && !tiers.environment.some(([id]) => id === previous) ? [{ id: previous, score: 0.5, evidence: [{ kind: "adjacent" as const, weight: 0.5, count: 1 }] }] : [])].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)) });
       settings.set(scene.id, { scene: scene.id, place, by });
       if (!past && place) previous = place;
     }
@@ -166,8 +156,6 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
     }
     const names = places.flatMap((place) => place.names.map((name): [string, string] => [name, place.id])).sort((a, b) => b[0].length - a[0].length);
     const slots: UnnamedPlace[] = [], references: PlaceReference[] = [], habits = new Map<string, string[]>(), slotsOf = new Map<string, UnnamedPlace[]>();
-    // The holder of an unnamed place: the deepest place on the address larger than it.
-    const holderIn = (path: string[], own: string | null) => [...path].reverse().find((id) => rankOf(own) < 0 || rankOf(scale(id)) < 0 || rankOf(scale(id)) > rankOf(own) || (own === "region" && scale(id) === "region")) ?? null;
     let previousSlots: UnnamedPlace[] = [];
     for (const scene of input.scenes) {
       const here = [...(groups.get(scene.id) ?? new Map<string, { type: string; sentences: string[] }>())].sort((a, b) => a[0].localeCompare(b[0]));
@@ -181,7 +169,7 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
       const toAsk: { key: string; text: string; scale: string | null; type: string; sentences: string[]; candidates: Candidate[] }[] = [];
       for (const [text, entry] of here) {
         const own = SCALES.includes(entry.type) ? entry.type : null;
-        const same = [...sceneSlots, ...previousSlots].find((slot) => slot.names.includes(text));
+        const same = sameWords(text, [...sceneSlots, ...previousSlots]);
         if (same) { for (const id of entry.sentences) if (!same.sentences.includes(id)) same.sentences.push(id); references.push({ text, scene: scene.id, sentences: entry.sentences, entity: same.id, answer: same.id, confidence: 1, by: "rule" }); continue; }
         const inWords = mentions(text, names).map((hit) => hit.id).find((id) => rankOf(own) < 0 || rankOf(scale(id)) < 0 || rankOf(scale(id)) > rankOf(own));
         // May it be a named place? A district, a city or a region may (这座城市); so may one of the same scale as a named place
@@ -196,7 +184,7 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
           continue;
         }
         if (candidates.length && (rankOf(own) >= SCALES.indexOf("district") || entry.type === "place" || candidates.some((candidate) => rankOf(scale(candidate.id)) === rankOf(own)))) { toAsk.push({ key: "d" + (toAsk.length + 1), text, scale: own, type: entry.type, sentences: entry.sentences, candidates }); continue; }
-        open(text, entry.type, entry.sentences, inWords ?? holderIn(path, own), inWords ? "stated" : "setting");
+        open(text, entry.type, entry.sentences, inWords ?? holderIn(path, own, scale), inWords ? "stated" : "setting");
       }
       if (toAsk.length) {
         const replies = await ask(placeRefMode, { scene: scene.id, address: path, asked: toAsk }, Object.fromEntries(toAsk.map((entry) => [entry.key, `${scene.id}:${entry.text}`])));
@@ -206,7 +194,7 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
             references.push({ text: entry.text, scene: scene.id, sentences: entry.sentences, entity: value, answer: value, confidence: round(confidence), by: "jev" });
             habits.set(entry.text, [...(habits.get(entry.text) ?? []), value]);
           } else if (value === "general" && confidence >= ACCEPT) references.push({ text: entry.text, scene: scene.id, sentences: entry.sentences, entity: null, answer: "general", confidence: round(confidence), by: "jev" });
-          else open(entry.text, entry.type, entry.sentences, holderIn(path, entry.scale), "setting");
+          else open(entry.text, entry.type, entry.sentences, holderIn(path, entry.scale, scale), "setting");
         }
       }
       slotsOf.set(scene.id, sceneSlots);
@@ -215,8 +203,7 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
     // A building or a room the environment names, in the setting: where the scene is, more closely (rooms first).
     for (const scene of input.scenes) {
       const environment = new Set(scene.sentences.filter((id) => input.kinds[id]?.kind === "environment")), setting = settings.get(scene.id)!;
-      const inner = (slotsOf.get(scene.id) ?? []).filter((slot) => slot.kind !== "place" && slot.sentences.some((id) => environment.has(id)) && (!setting.place || !slot.in || slot.in === setting.place || address(setting.place).includes(slot.in)))
-        .sort((a, b) => (a.kind === "room" ? 0 : 1) - (b.kind === "room" ? 0 : 1) || b.sentences.length - a.sentences.length)[0];
+      const inner = deeperByUnnamed(slotsOf.get(scene.id) ?? [], environment, setting.place, (holder) => !!setting.place && address(setting.place).includes(holder));
       if (inner) settings.set(scene.id, { scene: scene.id, place: inner.id, by: "unnamed" });
     }
 
@@ -227,7 +214,7 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
     for (const scene of input.scenes) {
       const place = settings.get(scene.id)?.place, time = timeOf.get(scene.id)?.node ?? null;
       if (!place) continue;
-      const present = new Set((cardsOf.get(scene.id) ?? []).flatMap((card) => card.people.filter((person) => chart.entities.get(person.id)?.category === "person" && person.how.some((how) => PRESENT.has(how))).map((person) => person.id)));
+      const present = new Set((cardsOf.get(scene.id) ?? []).flatMap((card) => card.people.filter((person) => chart.entities.get(person.id)?.category === "person" && isPresent(person)).map((person) => person.id)));
       for (const who of [...present].sort()) occupancy.push({ who, place, scene: scene.id, time, by: "setting" });
       for (const mention of (input.spatial ?? []).filter((entry) => entry.scene === scene.id)) for (const who of mention.who) occupancy.push({ who, place, scene: scene.id, time, by: "spatial", level: mention.level, sentence: mention.sentence });
     }

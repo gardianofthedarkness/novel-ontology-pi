@@ -1,6 +1,6 @@
-import { scaleOfName } from "../digger/stage/scale.js";
 import { actionEvents, cardPeople } from "./canon.js";
 import type { FlowResult } from "./flow.js";
+import { isPresent, LANGUAGE, SCALES } from "./rules/index.js";
 import { levelOf } from "./spatial.js";
 
 /**
@@ -42,8 +42,7 @@ export interface ScriptScene {
 }
 export interface ReadingScript { version: 2; from: "v2-reading"; places: Record<string, ScriptPlace>; scenes: ScriptScene[] }
 
-const PRESENT = new Set(["speaks", "acts", "addressed"]);
-const SIZES = ["room", "building", "street", "district", "city", "region"];
+const SIZES = SCALES;
 const CONTEXT = 600;
 
 export function readingScript(result: FlowResult, text: (sentence: string) => string): ReadingScript {
@@ -65,7 +64,7 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
   const treeScale = new Map((result.places?.places ?? []).filter((entry) => entry.scale).map((entry) => [entry.id, entry.scale!]));
   const places: Record<string, ScriptPlace> = Object.fromEntries([...result.chart.entities.values()].filter((place) => place.category === "place").map((place) => [place.id, {
     label: label(place.id), parent: parentOf.get(place.id) ?? null,
-    scale: treeScale.get(place.id) ?? (SIZES.includes(place.type) ? place.type : (() => { const scale = scaleOfName(label(place.id)); return scale && scale !== "none" ? scale : null; })()),
+    scale: treeScale.get(place.id) ?? (SIZES.includes(place.type) ? place.type : LANGUAGE.scaleOfName(label(place.id))),
   }]));
   for (let pass = 0; pass < SIZES.length; pass++) for (const [id, place] of Object.entries(places)) {
     if (place.scale) continue;
@@ -116,7 +115,7 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     // Its story-time span; a scene the tree gives no period keeps the one before.
     const indices = (time?.periods ?? []).map((id) => storyIndex.get(id)).filter((value): value is number => typeof value === "number");
     if (!past) clock = indices.length ? [Math.min(...indices), Math.max(...indices)] : clock ?? [0, 0];
-    const present = [...new Set(cards.flatMap((card) => card.people.filter((person) => category(person.id) === "person" && person.how.some((how) => PRESENT.has(how))).map((person) => person.id)))];
+    const present = [...new Set(cards.flatMap((card) => card.people.filter((person) => category(person.id) === "person" && isPresent(person)).map((person) => person.id)))];
     const firstSeen = past ? [] : present.filter((id) => !seen.has(id));
     if (!past) for (const id of present) seen.add(id);
     const environment = cards.filter((card) => card.kind === "environment").map((card) => card.sentences.map(text).join("")).join(" ");

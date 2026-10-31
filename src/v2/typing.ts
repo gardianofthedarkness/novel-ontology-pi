@@ -1,6 +1,7 @@
 import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../ground/connectors/jev.js";
 import type { Sentence } from "../digger/intake/sectioning.js";
 import { sentencesWith } from "./listing.js";
+import { isLocative } from "./rules/typing.js";
 
 /**
  * What each listed string is (the user's v2 flow, 2026-10-30; System 1): one structured request a batch. The state holds the
@@ -37,7 +38,7 @@ export type EntityType = keyof typeof ENTITY_TYPES | "place";
 export type Category = "person" | "crowd" | "thing" | "place" | "concept" | "time";
 export const CATEGORY_OF: Record<EntityType, Category | null> = { person: "person", crowd: "crowd", object: "thing", routine: null, weapon: "thing", vehicle: "thing", region: "place", city: "place", district: "place", street: "place", place: "place", building: "place", room: "place", spatial: null, concept: "concept", time: "time", none: null };
 /** The scale of places, smallest first (a place's scale is its type); a parent is larger than what it holds. */
-export const PLACE_SCALES = ["room", "building", "street", "district", "city", "region"] as const;
+export { PLACE_SCALES } from "./rules/places.js";
 const TYPE_LABELS: Record<keyof typeof ENTITY_TYPES, string> = {
   person: "a person", crowd: "a crowd or a group of people", object: "an important named thing", routine: "an everyday thing", weapon: "a weapon", vehicle: "a vehicle or a mech",
   region: "a region, bigger than a city", city: "a city or a town", district: "a part of a city", street: "a street or an open place in a district", building: "a building", room: "a room inside a building",
@@ -70,13 +71,6 @@ export function typingDocument(batch: Sentence[], names: string[]) {
   };
 }
 
-/**
- * A place word with a locative after it (街上, 马路上, 店里, 楼下, 门外, 路边): where someone is against that place, so spatial,
- * not a place (rule zero: code says it exactly). Only for a word that is not a proper name.
- */
-const LOCATIVE = /^.+[上下里中内外边旁]$/;
-export const locative = (text: string, type: string, proper: number) => CATEGORY_OF[type as EntityType] === "place" && proper < 0.5 && LOCATIVE.test(text);
-
 export async function typeNames(decide: Decide, batch: Sentence[], names: string[]): Promise<Detected[]> {
   if (!names.length) return [];
   const answers = await decide(typingDocument(batch, names), names.flatMap((_, index) => [
@@ -86,7 +80,7 @@ export async function typeNames(decide: Decide, batch: Sentence[], names: string
   return names.map((text, index) => {
     const answer = answers.find((entry) => entry.key === `type:n${index + 1}`);
     const proper = Number(answers.find((entry) => entry.key === `proper:n${index + 1}`)?.value ?? 0);
-    const typed = (answer?.value && String(answer.value) in ENTITY_TYPES ? String(answer.value) : "none") as EntityType, type: EntityType = locative(text, typed, proper) ? "spatial" : typed;
+    const typed = (answer?.value && String(answer.value) in ENTITY_TYPES ? String(answer.value) : "none") as EntityType, type: EntityType = isLocative(text, CATEGORY_OF[typed] === "place", proper) ? "spatial" : typed;
     return { key: nameKey(index), text, type, category: CATEGORY_OF[type], confidence: Number(answer?.distribution?.[type] ?? answer?.confidence ?? 0), proper, sentences: sentencesWith(batch, text) };
   });
 }

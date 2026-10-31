@@ -302,6 +302,10 @@ the visual context engine and terrain in
   place EM, story time: Jev on the composed state) → 5 the world model's
   stores → 6 the world engine (terrain, births, movement), which reads the
   model and never redoes extraction. No layer does another's job.
+- **Code rules in one folder** (`src/v2/rules/`): every rule code
+  computes instead of a model (rule zero), with what is particular to a
+  language in a profile (zh first), and a catalogue of every rule and
+  where it lives, so they can be generalized to other languages and books.
 - **Place EM** replaces EM²'s place questions: the tree by the place
   recommender with Jev only where it is unsure, each scene's setting,
   unnamed places as leaves under the setting, what descriptions mean

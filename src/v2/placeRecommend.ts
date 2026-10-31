@@ -1,8 +1,7 @@
-import { scaleOfName } from "../digger/stage/scale.js";
 import { mentions, type Chart, type ChartEntity } from "./em.js";
 import type { FlowCard, FlowScene } from "./flow.js";
 import type { ReadingGraph } from "./readingGraph.js";
-import { PLACE_SCALES } from "./typing.js";
+import { EVIDENCE_WEIGHTS as WEIGHTS, FAR_LEVELS, LANGUAGE, mayHold, nameHolds, NEXT_SCALE, rankOf, SCALES } from "./rules/index.js";
 
 /**
  * The place recommender (docs/v2/world-model.md §4; layer 2): code over the stores, no model call. Places are a tree graded
@@ -11,20 +10,10 @@ import { PLACE_SCALES } from "./typing.js";
  * the context engine (layer 3) composing what Jev sees. The matter recommender (em.ts `recommend`) is its sibling for
  * people and things, whose relations are a graph and are ranked by other evidence.
  */
-export const SCALES: readonly string[] = PLACE_SCALES;
-export const rankOf = (scale: string | null | undefined) => (scale ? SCALES.indexOf(scale) : -1);
-/** The graded law: a place holds only a larger one (a region may hold a region, a building a building); an unknown scale may. */
-export const mayHold = (outer: string | null | undefined, inner: string | null | undefined) =>
-  rankOf(outer) < 0 || rankOf(inner) < 0 || rankOf(outer) > rankOf(inner) || (outer === inner && (inner === "region" || inner === "building"));
+export { mayHold, rankOf, SCALES };
 
 export interface Evidence { kind: "name" | "stated" | "sentence" | "setting" | "adjacent" | "fact" | "scale"; weight: number; count: number; at?: string[] }
 export interface Candidate { id: string; score: number; evidence: Evidence[] }
-/** How much each kind of evidence weighs, each time it is seen (a cap on how many times counts). */
-export const WEIGHTS = { name: [3, 1], stated: [2, 3], sentence: [0.5, 4], setting: [0.5, 4], adjacent: [0.25, 4], fact: [1, 3] } as const;
-const NEXT_SCALE = 0.3;
-/** Between two named places in a sentence: nothing, 的/之/里/中/内, or a comma: the first holds the second. */
-const JOIN = /^(?:的|之|里的|内的|中的|里|内|中|，|、|\s)?$/;
-
 export interface PlaceIndex {
   places: ChartEntity[];
   label: (id: string) => string;
@@ -50,11 +39,11 @@ export function placeIndex(input: { chart: Chart; scenes: FlowScene[]; cards: Fl
   const scale = new Map<string, string | null>(), scaleBy = new Map<string, "typing" | "name" | null>();
   for (const place of places) {
     if (SCALES.includes(place.type)) { scale.set(place.id, place.type); scaleBy.set(place.id, "typing"); continue; }
-    const named = scaleOfName(label(place.id));
+    const named = LANGUAGE.scaleOfName(label(place.id));
     scale.set(place.id, named && SCALES.includes(named) ? named : null); scaleBy.set(place.id, named && SCALES.includes(named) ? "name" : null);
   }
   const contained = new Map<string, Set<string>>();
-  for (const outer of places) for (const inner of places) if (outer !== inner && inner.names.some((a) => outer.names.some((b) => b.length >= 2 && a !== b && a.includes(b)))) contained.set(inner.id, (contained.get(inner.id) ?? new Set()).add(outer.id));
+  for (const outer of places) for (const inner of places) if (outer !== inner && nameHolds(outer.names, inner.names)) contained.set(inner.id, (contained.get(inner.id) ?? new Set()).add(outer.id));
   const names = places.flatMap((place) => place.names.map((name): [string, string] => [name, place.id])).sort((a, b) => b[0].length - a[0].length);
   const sentencesOf = new Map<string, string[]>(), stated = new Map<string, Map<string, string[]>>(), together = new Map<string, string[]>();
   const push = <K>(map: Map<K, string[]>, key: K, sentence: string) => { const list = map.get(key) ?? []; if (!list.includes(sentence)) list.push(sentence); map.set(key, list); };
@@ -62,7 +51,7 @@ export function placeIndex(input: { chart: Chart; scenes: FlowScene[]; cards: Fl
     const hits = mentions(sentence.text, names);
     for (const hit of hits) push(sentencesOf, hit.id, sentence.id);
     const right = new Set<string>();
-    for (let k = 1; k < hits.length; k++) if (hits[k - 1].id !== hits[k].id && JOIN.test(sentence.text.slice(hits[k - 1].at + hits[k - 1].name.length, hits[k].at))) {
+    for (let k = 1; k < hits.length; k++) if (hits[k - 1].id !== hits[k].id && LANGUAGE.join.test(sentence.text.slice(hits[k - 1].at + hits[k - 1].name.length, hits[k].at))) {
       const of = stated.get(hits[k].id) ?? new Map<string, string[]>(); push(of, hits[k - 1].id, sentence.id); stated.set(hits[k].id, of);
       right.add(`${hits[k - 1].id}|${hits[k].id}`).add(`${hits[k].id}|${hits[k - 1].id}`);
     }
@@ -106,7 +95,7 @@ export async function recommendParents(index: PlaceIndex, id: string, graph?: Re
     let found = (await Promise.all(evidence)).filter((entry): entry is Evidence => !!entry);
     if (!found.length) continue;
     // Weak evidence (talk, nearness, facts) counts half for a place three levels up or more (a school and its country).
-    if (rankOf(index.scale.get(other.id)) - rankOf(own) >= 3 && rankOf(own) >= 0) found = found.map((entry) => (entry.kind === "name" || entry.kind === "stated" ? entry : { ...entry, weight: Number((entry.weight / 2).toFixed(3)) }));
+    if (rankOf(index.scale.get(other.id)) - rankOf(own) >= FAR_LEVELS && rankOf(own) >= 0) found = found.map((entry) => (entry.kind === "name" || entry.kind === "stated" ? entry : { ...entry, weight: Number((entry.weight / 2).toFixed(3)) }));
     if (rankOf(index.scale.get(other.id)) === rankOf(own) + 1 && rankOf(own) >= 0) found.push({ kind: "scale", weight: NEXT_SCALE, count: 1 });
     out.push({ id: other.id, score: Number(found.reduce((sum, entry) => sum + entry.weight, 0).toFixed(3)), evidence: found });
   }

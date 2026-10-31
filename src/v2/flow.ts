@@ -9,6 +9,7 @@ import { hintsOnce } from "./hints.js";
 import { placeEm, type PlaceResult } from "./placeEm.js";
 import { spatialMentions, type SpatialMention } from "./spatial.js";
 import { CATEGORY_OF, typeNames, type Decide, type Detected } from "./typing.js";
+import { usualType } from "./rules/typing.js";
 
 /**
  * The v2 reading flow (the user's sketch, 2026-10-30; docs/v2/world-engine-v2.md §2):
@@ -193,15 +194,14 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   // each, by the type most batches gave the words (直升机航空母舰: a vehicle in most, a building in one, is no place).
   const typeVotes = new Map<string, Map<string, number>>();
   for (const entry of em.flatMap((batch) => batch.results)) { const votes = typeVotes.get(entry.text) ?? new Map<string, number>(); votes.set(entry.type, (votes.get(entry.type) ?? 0) + 1); typeVotes.set(entry.text, votes); }
-  // A tie is no place (a place needs most of the votes).
-  const usualType = (text: string) => [...(typeVotes.get(text) ?? new Map<string, number>())].sort((a, b) => b[1] - a[1] || Number(CATEGORY_OF[a[0] as keyof typeof CATEGORY_OF] === "place") - Number(CATEGORY_OF[b[0] as keyof typeof CATEGORY_OF] === "place") || a[0].localeCompare(b[0]))[0]?.[0];
+  const usual = (text: string) => usualType(typeVotes.get(text) ?? new Map<string, number>(), (type) => CATEGORY_OF[type as keyof typeof CATEGORY_OF] === "place");
   const placeDescriptions = new Map<string, { text: string; type: string; sentences: string[] }>();
   for (const entry of em.flatMap((batch) => batch.results)) {
     if (entry.outcome !== "description") continue;
     if (entry.category === "place") {
-      const usual = usualType(entry.text) ?? entry.type;
-      if (CATEGORY_OF[usual as keyof typeof CATEGORY_OF] !== "place") continue;
-      const found = placeDescriptions.get(entry.text) ?? { text: entry.text, type: usual, sentences: [] };
+      const type = usual(entry.text) ?? entry.type;
+      if (CATEGORY_OF[type as keyof typeof CATEGORY_OF] !== "place") continue;
+      const found = placeDescriptions.get(entry.text) ?? { text: entry.text, type, sentences: [] };
       for (const id of entry.sentences ?? []) if (!found.sentences.includes(id)) found.sentences.push(id);
       placeDescriptions.set(entry.text, found); continue;
     }
