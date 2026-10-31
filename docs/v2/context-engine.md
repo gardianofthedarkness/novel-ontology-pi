@@ -172,32 +172,39 @@ are reveals, where the story names someone it has been describing. Streaming doe
 reader meets them: the girl is an unnamed person until the book says who she is, and then the world records a reveal (the
 slot is that person from then on, and back to where she first appeared) rather than silently rewriting the past.
 
+**Decided (the user, 2026-10-31): extraction first, then the world.** Since later text changes what was established
+earlier, the whole book's extraction runs to the end before the world engine starts; the two do not run in parallel. The
+gate below was the first design and is kept only as the record of it.
+
 **The design:**
-- **The gate.** The world engine takes a scene only when three things are done for it: its tiling (its block's scenes),
-  its extraction (every listing, typing and EM batch up to the scene's last sentence, in order; EM² for the scene), and its
-  sentence kinds. Listing, typing, kinds and tiling run ahead in parallel; EM is the one chain, batch by batch.
+- **The gate (first design, not used).** The world engine would take a scene only when three things are done for it: its
+  tiling (its block's scenes), its extraction (every listing, typing and EM batch up to the scene's last sentence, in
+  order; EM² for the scene), and its sentence kinds.
 - **One strand at a time.** A strand is a line of scenes linked by the people in them (the v1 strands: a scene joins the
   strand it shares people with; a new strand starts where it shares no one). The world engine runs each strand on its
   own, scene by scene in narrative order; two strands are never simulated in one world at once, so neither can disturb the
   other.
-- **What the user sees.** The strands play live in narrative order as their scenes pass the gate. A small caption shows,
+- **What the user sees.** The strands play live in narrative order, once extraction is done. A small caption shows,
   for a few seconds at each scene, when it takes place (from the calendar: "Year 1 · 12-24 · evening", or "between 12-24
   and 12-25", or "the past" in a flashback).
-- **Reveals.** A later result that changes an earlier one (a reveal, a fact's new owner) is a record of its own on the
-  strand at the scene where it is learned.
+- **Reveals.** With extraction finished first, the world already knows who the girl is; a reveal stays a record of its own
+  on the strand at the scene where the book names her, so the live view can still show the moment the reader learns it.
 - **One world, later.** Rendering every strand together in one world, ordered by the calendar, is released only when all
   of the above works and the whole book is read, so nothing it shows can still change.
 
 ## 10. Order of work
 
-1. The calendar in the v2 reading (§2.0.5 of the v2 design; built, to be run on vol 1); the scene time caption reads
-   from it.
+1. The calendar in the v2 reading (§2.0.5 of the v2 design; built, run on vol 1 on 2026-10-31); the scene time caption
+   reads from it.
+1a. Terrain before the world (the user's next step after the extraction run): a Jev miniloop with its visual harness
+   arranges the vol's terrain, modifying its existing main sites with the manifold method, and from each environment and
+   the blocks around it, with the characters there, says where characters spawn.
 2. The engine with the `roles` mode, reproducing today's EM² documents exactly (test: same bytes on vol 1's cache).
 3. `identity` and `ownership` on it; the manifest written beside each answer; the data page shows "what Jev saw".
 4. Facts in the graph (Cypher sources); the probe and the complexity score, measured over vol 1 with equal weights; then
    the weights fitted.
 5. Widening per batch, with retrieval.
-6. The gate and the per-strand world runs, with the live view and its caption; reveals.
+6. The per-strand world runs after the whole extraction, with the live view and its caption; reveals.
 7. The world loop's `presence` and `when` as documents instead of prose (compose.mjs retired), then `movement`.
 8. The one-world rendering on the calendar.
 

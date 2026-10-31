@@ -270,7 +270,7 @@ tiling was asked again: 177 work-model requests, 602 Jev, 81 s):
 - The sentence kinds' definition of an action names everyday things as narration; the run used a longer short label for
   action than the one kept (labels stay under 50 characters).
 
-### 2.0.4 Concepts, and whose they are (the user's call, 2026-10-30) — built, not run
+### 2.0.4 Concepts, and whose they are (the user's call, 2026-10-30) — built, run on vol 1
 
 Typing took an ability (幻想杀手) and a network (御坂网络) for named objects. A concept is now one of the options: an
 ability, a power, a technique or a spell, a network or a system, a project or a plan, which someone has, uses or runs. The
@@ -283,7 +283,7 @@ owner too: EM and EM² get it among the owner's facts, and the ledger lists the 
 concepts of its passage with their owners as context; a concept never acts, its owner does. Canon has the concepts
 (`Concept`) and `OWNS` from the owner; the world base has them in its roster.
 
-### 2.0.5 Story time and the calendar — built, not run
+### 2.0.5 Story time and the calendar — built, run on vol 1
 
 **Before (2026-10-30, until this was built), in the v2 reading:** a time word is listed, typed `time`, and EM keeps it as a time node keyed by its exact text,
 with the sentences it is in. So 早上 in chapter 1 and 早上 in chapter 5 are one node, and nothing reads its value. A fact's
@@ -326,6 +326,25 @@ unsure flashback stays a mention). Each scene gets a caption ("Year 1 · 12-24",
 stated"), each fact its period, and the ledger ranks facts by story order. Canon writes TimePoints and OCCURS_DURING, so
 `novel calendar build` works on the workspace; the world base carries each scene's time and caption. The data page
 shows the caption at each scene and marks each time word with its role.
+
+**Measured on vol 1, concepts and story time together** (`~/claude-world-first/v2-vol1-time`, 2026-10-31 00:37 UTC, a
+Saturday; the listing, typing and kinds changed, the tiling came from the cache):
+- **Time and price:** 83 s wall (listing 24 s, EM 14 s, story time 2.7 s, EM² 42 s). Jev: 673 paid requests, 7,242,024
+  input tokens as TypeSafe reports them (and 2,328,220 output tokens), $0.30 at $0.042 per million input tokens. DeepSeek:
+  177 requests, 158,028 prompt tokens (25,344 from its cache) and 11,250 completion tokens, $0.027 off-peak ($0.053 at
+  peak). About $0.33 in all; a run from nothing also pays for the 224 tiling requests, a few cents more.
+- **Where Jev's tokens go:** the states of the paid requests are 2.3 million characters, but 17.6 million were sent: the
+  questions, each repeating its options' hints (EM² repeats the whole cast's), are most of the input. Hints once in the
+  state is the largest saving there is (context-engine.md §2, render).
+- **Concepts:** 33, 18 with an owner (心理掌握 → 食蜂操祈, 超电磁炮 → 御坂美琴, 幻想杀手 → 上条当麻, 御坂网络 → many, the
+  named spells and weapons of 根丘 → 根丘). The chart's things are down to 10; 38 people, still with titles and epithets
+  as people of their own (第五位"心理掌握", 圣诞少女, 魔神) and the cat.
+- **Story time:** 229 time words: 157 only mentioned without asking (in a quote, or deep in a scene), 68 asked, 4 by rule;
+  8 move the story on, 1 flashback. 7 periods (3 dated, 3 derived, 1 in the past); every scene has a caption, three in
+  all: Year 1 · 12-24 · late night (scenes 2–14), 12-24 · night (1, 15–34), 12-25 · evening (35–46). One conflict, reported:
+  the opening heading's 平安夜 set scene 1 at night before its own "12-24, 00:00". Probably wrong: 傍晚 after 平安夜 rolled
+  over to the 25th, because the lexicon reads 平安夜 as the night of the 24th; and the one flashback is a question in a
+  thought ("what happened back then?").
 
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
 kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record
@@ -428,6 +447,11 @@ v2 makes each a structured request:
    rule, and crowds (§2.0.2). Then things: only named things, vehicles and weapons (§2.0.3). Then concepts and their
    owners (§2.0.4, not run yet); the calendar's proposal (§2.0.5) and the context composing engine's design
    ([context-engine.md](context-engine.md)), both for approval. Not yet run through the world engine.
+0a. **Next, after the full extraction run (the user, 2026-10-31):** extraction runs to the end first, then the world
+   engine (later text changes earlier results; not in parallel). With every environment extracted, a Jev miniloop and its
+   visual harness first arrange the terrain: the vol's existing main sites modified with the probabilistic manifold
+   ([city-fill-design.md](../city-fill-design.md)), and from each environment and the blocks around it, with the characters
+   in them, where the characters spawn. Then the world loop, per strand ([context-engine.md](context-engine.md) §9).
 1. Movement on structured states in the pick loop (each person's spot now from the engine); births and meetings of the
    line's load as structured requests too (one per scene, not one per person on a picture), and kept across the reload
    after models.
