@@ -391,10 +391,11 @@ function buildPlace(id) {
   for (let cell = 0; cell < (place.world ? 0 : place.NX * place.NZ); cell++) { const i = cell % place.NX, j = Math.floor(cell / place.NX); matrix.compose(new THREE.Vector3((i + 0.5) * CELL - cx, -0.05, (j + 0.5) * CELL - cz), new THREE.Quaternion(), new THREE.Vector3(CELL * 0.98, 0.1, CELL * 0.98)); tiles.setMatrixAt(cell, matrix); tiles.setColorAt(cell, color.set(GROUND_COLOR[Number(place.ground[cell])] ?? 0x112532)); }
   group.add(tiles);
   if (!place.world) group.add(instanced(new THREE.MeshLambertMaterial({ color: 0x9fb4c3, transparent: true, opacity: 0.5 }), place.clutter.map((cell) => [(cell % place.NX + 0.5) * CELL - cx, 0.45, (Math.floor(cell / place.NX) + 0.5) * CELL - cz, 1.2, 0.9, 1.2])));
-  // Each lot's drawn parts and its box, so a still can see through the buildings in front of what it looks at.
+  // Each lot's drawn parts and its box, so a still can see through the buildings in front of what it looks at. Its shell is
+  // as tall as its building (`height`); its inside is walked up to `floors`.
   const lots = [], start = () => group.children.length;
   for (const lot of place.lots) {
-    const w = lot.nx * CELL, d = lot.nz * CELL, h = lot.floors * FLOOR, x = lot.i0 * CELL + w / 2 - cx, z = lot.j0 * CELL + d / 2 - cz, first = start();
+    const w = lot.nx * CELL, d = lot.nz * CELL, levels = lot.height ?? lot.floors, h = levels * FLOOR, x = lot.i0 * CELL + w / 2 - cx, z = lot.j0 * CELL + d / 2 - cz, first = start();
     // The building's artistic shell, stretched to its lot and height, with the walkable skeleton glowing inside; a plain box when no model is shipped.
     const shell = lot.model ? shellOf(lot.model) : null;
     if (shell) {
@@ -407,13 +408,34 @@ function buildPlace(id) {
       envelope.position.set(x, h / 2, z); group.add(envelope);
     }
     const slabs = [];
-    for (let k = 1; k <= lot.floors; k++) { const y = k * FLOOR, [x0, x1, z0, z1] = [x - w / 2, x + w / 2, z - d / 2, z + d / 2]; slabs.push(x0, y, z0, x1, y, z0, x1, y, z0, x1, y, z1, x1, y, z1, x0, y, z1, x0, y, z1, x0, y, z0); }
+    for (let k = 1; k <= levels; k++) { const y = k * FLOOR, [x0, x1, z0, z1] = [x - w / 2, x + w / 2, z - d / 2, z + d / 2]; slabs.push(x0, y, z0, x1, y, z0, x1, y, z0, x1, y, z1, x1, y, z1, x0, y, z1, x0, y, z1, x0, y, z0); }
     group.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(slabs, 3)), new THREE.LineBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.14 })));
     if (lot.label) { const tag = label(lot.label); tag.position.set(x, h + 2.4, z); group.add(tag); }
     // A building the story names lights up the first time it is mentioned.
     if (lot.detected) { const tag = label(lot.detected.name.slice(0, 14), "#ffd36e"); tag.position.set(x, h + 2.4, z); tag.visible = false; group.add(tag); reveals.push({ tag, time: eventStart.get(`${lot.detected.scene}|${lot.detected.event}`) ?? Infinity }); }
     const parts = group.children.slice(first).filter((part) => part.material).map((part) => ({ part, opacity: part.material.opacity }));
     lots.push({ parts, box: new THREE.Box3(new THREE.Vector3(x - w / 2, 0, z - d / 2), new THREE.Vector3(x + w / 2, h + 3, z + d / 2)) });
+  }
+  // The terrain stage (docs/v2/world-engine-v2.md §2.0.18): every building no one has reached yet stands as its shell, the
+  // world's lot with its tiling, destruction and inside switched off, drawn exactly as a lot's shell above (the same
+  // colours and opacities, its edges, a line round every floor), batched by model so thousands draw as fast as a few lots.
+  // When people come near, its chunk materializes and it stands as a lot, inside and all.
+  if (place.world && data.world.shells?.length) {
+    const shellFill = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: 0.09, depthWrite: false }), byModel = new Map(), floorsAt = [], boxes = [];
+    for (const lot of data.world.shells) {
+      const w = lot.nx * CELL, d = lot.nz * CELL, levels = lot.height ?? lot.floors, h = levels * FLOOR, x = lot.i0 * CELL + w / 2 - cx, z = lot.j0 * CELL + d / 2 - cz, shell = lot.model ? shellOf(lot.model) : null;
+      if (shell) { if (!byModel.has(lot.model)) byModel.set(lot.model, []); byModel.get(lot.model).push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), new THREE.Quaternion(), new THREE.Vector3(w / shell.size.x, h / shell.size.y, d / shell.size.z))); }
+      else boxes.push(new THREE.Matrix4().compose(new THREE.Vector3(x, h / 2, z), new THREE.Quaternion(), new THREE.Vector3(w, h, d)));
+      for (let k = 1; k <= levels; k++) floorsAt.push(new THREE.Matrix4().compose(new THREE.Vector3(x, k * FLOOR, z), new THREE.Quaternion(), new THREE.Vector3(w, 1, d)));
+    }
+    for (const [model, matrices] of byModel) {
+      const shell = shellOf(model), fills = new THREE.InstancedMesh(shell.fill, shellFill, matrices.length);
+      matrices.forEach((matrix, k) => fills.setMatrixAt(k, matrix));
+      group.add(fills, instancedEdges(shell.edges, matrices, 0x8fd6ff, 0.5).lines);
+    }
+    if (boxes.length) group.add(instancedEdges(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), boxes, 0x7ce6ff, 0.4).lines);
+    const ring = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([-0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0, 0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, -0.5, 0, -0.5], 3));
+    if (floorsAt.length) group.add(instancedEdges(ring, floorsAt, 0x7ce6ff, 0.14).lines);
   }
   const entry = { group, cx, cz, dynamic: null, shownHits: -1, lots, masked: new Set(), chunks, bornAt: place.world ? place.lots.map((lot) => bornAt(lot.born)) : null };
   built.set(id, entry);
@@ -542,74 +564,24 @@ let decor = () => {};
 // generated from the place's landscape, never on a staged grid; only the buildings the story names are canon. Kept
 // faint so it never hides the people.
 {
-  // The terrain view draws each building as the fights draw a standing lot's shell (the user's call, 2026-10-31): a 0.09 fill
-  // of 0x2b86c4, 0.5 edges of 0x8fd6ff, a 0.14 line of 0x7ce6ff round every floor. Its fill writes depth and is drawn before
-  // the lines (a hair behind its own edges), so a building in front hides the lines behind it while its faint fill still
-  // lets the city through.
-  const fill = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: terrainStage ? 0.09 : 0.045, depthWrite: terrainStage, polygonOffset: terrainStage, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), edge = new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: terrainStage ? 0.5 : 0.2, depthWrite: false });
+  const fill = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: terrainStage ? 0.14 : 0.045, depthWrite: false }), edge = new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: terrainStage ? 0.5 : 0.2, depthWrite: false });
   const block = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), outline = new THREE.EdgesGeometry(block).attributes.position.array, m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v = new THREE.Vector3();
   const buildings = (data.landscapes ?? []).flatMap((entry) => entry.buildings), ids = (data.landscapes ?? []).flatMap((entry) => entry.ids ?? entry.buildings.map(() => null)), lines = [];
   // A building the world has stood up as a lot: from that moment its real lot is drawn instead, so its faint copy goes
   // (and has no outline, which could not be taken away). So does one the world settled will never stand (under a staged
   // building, or no room on the grid), so a built street never shows a faint box among its lots.
   const reached = new Map([...(data.world?.lots ?? []).filter((lot) => lot.source).map((lot) => [lot.source, bornAt(lot.born)]), ...(data.world?.dropped ?? []).map(([id, born]) => [id, bornAt(born)])]);
-  if (buildings.length) {
-    // The terrain view (docs/v2/world-engine-v2.md §2.0.16): each building drawn as its use's model, sized to it, in the
-    // hologram's style (a faint cyan fill, cyan edges); rooms, stairs and corridors come only where the world stands it as a
-    // lot (near people, or broken). A building with no model, and every building at runtime: the faint block, outlined.
-    const models = (data.landscapes ?? []).flatMap((entry) => entry.models ?? entry.buildings.map(() => null));
-    const solid = terrainStage && (data.landscapes ?? []).some((entry) => entry.models);
-    const shown = [], boxes = [], slots = [], groupsOf = new Map();
-    buildings.forEach(([x, z, w, d, angle, floors], i) => {
-      const shell = solid && models[i] ? shellOf(models[i]) : null, key = shell ? models[i] : "block";
-      q.setFromAxisAngle(up, -angle);
-      boxes.push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w, floors * FLOOR, d)));
-      shown.push(shell ? new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w / shell.size.x, floors * FLOOR / shell.size.y, d / shell.size.z)) : boxes[i]);
-      if (!groupsOf.has(key)) groupsOf.set(key, []);
-      slots.push({ key, k: groupsOf.get(key).length }); groupsOf.get(key).push(i);
-      if (key !== "block" || reached.has(ids[i])) return;
-      for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(boxes[i]); lines.push(v.x, v.y, v.z); }
-    });
-    const meshes = new Map(), edgeSets = new Map();
-    for (const [key, list] of groupsOf) {
-      const mesh = new THREE.InstancedMesh(key === "block" ? block : shellOf(key).fill, fill, list.length);
-      list.forEach((i, k) => mesh.setMatrixAt(k, shown[i]));
-      mesh.renderOrder = solid ? -1 : 0; world.add(mesh); meshes.set(key, mesh);
-      if (key === "block") continue;
-      // A model's edges for all its buildings in one draw (gone as the world stands a building: its matrix zeroed).
-      const set = instancedEdges(shellOf(key).edges, list.map((i) => shown[i]), edge.color, edge.opacity);
-      world.add(set.lines); edgeSets.set(key, set);
-    }
-    // Every floor of every building a line round it, as a lot's floors are drawn (one draw for them all; a building the world
-    // stands is drawn as its lot, its floors' lines zeroed).
-    const floorsOf = new Map(), floorMatrices = [];
-    if (solid) buildings.forEach(([x, z, w, d, angle, floors], i) => {
-      const own = [];
-      for (let k = 1; k <= floors; k++) { own.push(floorMatrices.length); floorMatrices.push(new THREE.Matrix4().compose(new THREE.Vector3(x, k * FLOOR, z), new THREE.Quaternion().setFromAxisAngle(up, -angle), new THREE.Vector3(w, 1, d))); }
-      floorsOf.set(i, own);
-    });
-    const ring = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([-0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0, 0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, -0.5, 0, -0.5], 3));
-    const floorLines = floorMatrices.length ? instancedEdges(ring, floorMatrices, 0x7ce6ff, 0.14) : null;
-    if (floorLines) world.add(floorLines.lines);
+  // The terrain stage draws no faint copies: every building stands as a lot or as its shell (§2.0.18).
+  if (buildings.length && !(terrainStage && data.world?.shells?.length)) {
+    const mesh = new THREE.InstancedMesh(block, fill, buildings.length), shown = [];
+    buildings.forEach(([x, z, w, d, angle, floors], i) => { q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w, floors * FLOOR, d)); mesh.setMatrixAt(i, m); shown.push(m.clone()); if (reached.has(ids[i])) return; for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); lines.push(v.x, v.y, v.z); } });
+    world.add(mesh);
     const hidden = new THREE.Matrix4().makeScale(0, 0, 0), gone = new Set();
     // A building another line broke that this run never stood up: a red outline on the faint city, so it is known there.
     const ruined = new Set((data.world?.ruins ?? []).map((ruin) => ruin.building)), red = [];
-    ids.forEach((id, i) => { if (!ruined.has(id)) return; for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(boxes[i]); red.push(v.x, v.y, v.z); } });
+    ids.forEach((id, i) => { if (!ruined.has(id)) return; mesh.getMatrixAt(i, m); for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); red.push(v.x, v.y, v.z); } });
     if (red.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(red, 3)); world.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xff5a6a, transparent: true, opacity: 0.7 }))); }
-    decor = (now) => {
-      const changed = new Set();
-      ids.forEach((id, i) => {
-        const at = reached.get(id); if (at === undefined) return;
-        const off = at <= now; if (off === gone.has(i)) return;
-        const { key, k } = slots[i], matrix = off ? hidden : shown[i];
-        meshes.get(key).setMatrixAt(k, matrix);
-        edgeSets.get(key)?.put(k, matrix);
-        if (floorLines) for (const n of floorsOf.get(i) ?? []) floorLines.put(n, off ? hidden : floorMatrices[n]);
-        if (off) gone.add(i); else gone.delete(i); changed.add(key);
-      });
-      for (const key of changed) { meshes.get(key).instanceMatrix.needsUpdate = true; edgeSets.get(key)?.flush(); }
-      if (changed.size) floorLines?.flush();
-    };
+    decor = (now) => { let changed = false; ids.forEach((id, i) => { const at = reached.get(id); if (at === undefined) return; const off = at <= now; if (off === gone.has(i)) return; mesh.setMatrixAt(i, off ? hidden : shown[i]); if (off) gone.add(i); else gone.delete(i); changed = true; }); if (changed) mesh.instanceMatrix.needsUpdate = true; };
   }
   for (const [ax, az, bx, bz] of (data.landscapes ?? []).flatMap((entry) => entry.walls ?? [])) lines.push(ax, 0, az, bx, 0, bz, ax, 6, az, bx, 6, bz);
   if (lines.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3)); world.add(new THREE.LineSegments(geometry, edge)); }

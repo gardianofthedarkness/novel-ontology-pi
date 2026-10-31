@@ -568,7 +568,7 @@ export async function strandDemo(novelDir, options) {
     // changes an older one's buildings (damage kept for them in world.json stays theirs). `era`: that patch's.
     const patchOf = b => place.landscape.patches.find(patch => patch.id === (filled.owner[b.lot] ?? String(b.lot).split(':')[0])) ?? place.landscape.patches[0];
     const manifoldOf = patch => createHash('sha256').update(JSON.stringify({ recipe: 1, patch, older: place.landscape.patches.slice(0, place.landscape.patches.indexOf(patch)) })).digest('hex').slice(0, 12);
-    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era: LANDSCAPES[patch.type]?.era ?? 'modern' }; });
+    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor(b, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era: LANDSCAPES[patch.type]?.era ?? 'modern' }; });
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
@@ -576,9 +576,7 @@ export async function strandDemo(novelDir, options) {
     // and its fingerprint; each building's manifold in `buildings` order.
     const patches = place.landscape.patches.map(patch => ({ id: patch.id, type: patch.type, era: LANDSCAPES[patch.type]?.era ?? 'modern', born: patch.born ?? null, centre: [round(patch.x + wx), round(patch.z + wz)], radius: round(patch.R), height: round(patch.H), manifold: manifoldOf(patch),
       outline: Array.from({ length: 48 }, (_, n) => { const angle = (n / 48) * Math.PI * 2, d = reachOf(patch, [patch.x + Math.cos(angle), patch.z + Math.sin(angle)]); return [round(patch.x + wx + Math.cos(angle) * d), round(patch.z + wz + Math.sin(angle) * d)]; }) }));
-    // The terrain view (§2.0.16): each building drawn as a model of its use, sized to it, in the hologram's style.
-    const shapes = options.worldOnly ? { models: buildings.map(b => UM.modelFor(b, b.id, modelSizes)) } : {};
-    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), patches, ...shapes, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width]),
+    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width]),
       walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })), underground: under } };
   });
   /** The theme of the manifold at a point: the era of the patch reaching it most surely (modern where no landscape does). */
@@ -1068,6 +1066,14 @@ export async function strandDemo(novelDir, options) {
     return outcome;
   };
   const detected = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
+  // The world's shells as it stands (W.shellsOf), worked out once for each set of chunks reached: every snapshot shares them.
+  let shellsKey = -1, shellsMade = [];
+  const shellsNow = () => {
+    if (world.chunks.size === shellsKey) return shellsMade;
+    shellsKey = world.chunks.size;
+    shellsMade = W.shellsOf(world).map(shell => { const model = shell.model && library.models[shell.model] ? shell.model : (() => { const choices = shell.era === 'ancient' ? ANCIENT_SHELLS : SHELLS[shell.role === 'office' && shell.floors >= 7 ? 'tall' : shell.role] ?? SHELLS.office; return choices[Math.floor(stream('shell', 'shell', shell.source)() * choices.length)]; })(); return { ...shell, model }; });
+    return shellsMade;
+  };
   /**
    * The page's data from the walk (`runs`: each scene's starts and where people were after each event), or, with `upto` (a
    * moment, `<scene>|<event>`), the line as far as that moment, for a live view while the walk goes on.
@@ -1120,14 +1126,18 @@ export async function strandDemo(novelDir, options) {
     const worn = new Set(entities.filter(entity => entity.model && entity.placed.length).map(entity => entity.model));
     // A deep facility is dressed in the modern kit's model of its kind (kk-lab, kk-military, kk-quantum).
     for (const hall of world.source.underground?.halls ?? []) if (['lab', 'military', 'quantum'].includes(hall.kind)) worn.add(`kk-${hall.kind}`);
-    // The terrain view draws the city's buildings as their models.
-    for (const entry of landscapes) for (const model of entry.models ?? []) if (model) worn.add(model);
+    // A lot is drawn as its building's model (its use's, useModels.ts), else as its role's (SHELLS).
+    const sourceModel = new Map(world.source.buildings.map(b => [b.id, b.model]));
     // And its underground as theirs: passages as the tunnel, malls as the mall (§2.0.17).
     if (options.worldOnly) for (const model of ['kk-tunnel', 'kk-mall', 'kk-military']) worn.add(model);
     // One world: a lot is named whichever place named it.
     const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
-    const shellOf = (placeId, lot, index) => { if (lot.era === 'ancient' && !named(placeId, index)) { const model = ANCIENT_SHELLS[Math.floor(stream('shell', placeId, index)() * ANCIENT_SHELLS.length)]; worn.add(model); return model; } const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
+    const shellOf = (placeId, lot, index) => { const own = !named(placeId, index) && sourceModel.get(lot.source); if (own && library.models[own]) { worn.add(own); return own; } if (lot.era === 'ancient' && !named(placeId, index)) { const model = ANCIENT_SHELLS[Math.floor(stream('shell', placeId, index)() * ANCIENT_SHELLS.length)]; worn.add(model); return model; } const role = named(placeId, index) ? (ROLE_FOR[named(placeId, index).model] ?? lot.role) : lot.role, choices = SHELLS[role === 'office' && (lot.floors >= 7 || named(placeId, index)?.model === 'skyscraper') ? 'tall' : role] ?? SHELLS.office, model = choices[Math.floor(stream('shell', placeId, index)() * choices.length)]; worn.add(model); return model; };
     const shells = world.lots.map((lot, index) => shellOf('world', lot, index));
+    // The terrain stage (§2.0.18): every building no one has reached yet stands as its shell (the engine's lot with its
+    // tiling, destruction and inside switched off), drawn as a lot's shell is; reached, it stands as a full lot.
+    const worldShells = options.worldOnly ? shellsNow() : [];
+    for (const shell of worldShells) worn.add(shell.model);
     // The world as the page draws it: one grid over everything explored (oi, oj: the offset of world cell 0, 0 on it), its nodes
     // as that grid's dense cells, each lot and chunk with the moment it was first reached.
     const bounds = W.worldBounds(world), NX = bounds.i1 - bounds.i0, NZ = bounds.j1 - bounds.j0, oi = -bounds.i0, oj = -bounds.j0;
@@ -1137,7 +1147,7 @@ export async function strandDemo(novelDir, options) {
     const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
     const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
       i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
-    notes.world = { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
+    notes.world = { chunks: world.chunks.size, lots: world.lots.length, shells: worldShells.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
     return {
       models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
       things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, model: entity.model, theme: entity.theme ?? null, switched: entity.switched, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
@@ -1147,7 +1157,7 @@ export async function strandDemo(novelDir, options) {
       macro, terrainShapes, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
       people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
-      world: { NX, NZ, K, oi, oj, ok, lots: worldLots, earlier, underground: undergroundView(),
+      world: { NX, NZ, K, oi, oj, ok, lots: worldLots, shells: worldShells, earlier, underground: undergroundView(),
         ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]),
         // Landscape buildings that never stood as lots (under a staged building, or no room on the grid), and when that was settled.
         dropped: [...world.dropped] },

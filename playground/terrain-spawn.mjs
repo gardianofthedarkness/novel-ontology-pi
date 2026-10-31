@@ -118,7 +118,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const work = await mkdtemp(join(tmpdir(), 'terrain-engine-'));
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   await writeFile(join(work, 'index.html'), '');
-  const { server, url } = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser();
+  const { server, url } = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser({ gpu: true });
   live.encoder(png => chrome.evaluate(`(async () => { const image = new Image(); image.src = 'data:image/png;base64,${png}'; await image.decode(); const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight; canvas.getContext('2d').drawImage(image, 0, 0); return canvas.toDataURL('image/jpeg', 0.78).split(',')[1]; })()`));
   // World · Live is told where to look (the focus): the proposal, or the place just kept; `terrain` keeps the whole world drawn.
   let data = null, snapshot = null, reference = null, builds = 0, focus = null;

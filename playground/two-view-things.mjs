@@ -56,9 +56,13 @@ export async function serve(page, vendor) {
 }
 
 /** Headless Chrome over the DevTools protocol: one page, evaluate and screenshot. */
-export async function browser() {
+export async function browser({ gpu = false } = {}) {
   const profile = await mkdtemp(join(tmpdir(), 'two-view-'));
-  const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=800,600', '--hide-scrollbars', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check', 'about:blank'], { stdio: 'ignore' });
+  // SwiftShader (the CPU) by default, the same picture every run; `gpu` (or STILLS_GL=metal) draws on a Mac's GPU through
+  // Metal, as alike run to run and some fifty times faster for a whole city of shells (terrain spawning, §2.0.18).
+  const metal = (gpu && process.platform === 'darwin' && process.env.STILLS_GL !== 'swiftshader') || process.env.STILLS_GL === 'metal';
+  const gl = metal ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+  const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=800,600', '--hide-scrollbars', ...gl, '--no-first-run', '--no-default-browser-check', 'about:blank'], { stdio: 'ignore' });
   let port = null;
   for (let tries = 0; tries < 100 && !port; tries++) { port = await readFile(join(profile, 'DevToolsActivePort'), 'utf8').then(text => text.split('\n'), () => null); if (!port) await new Promise(done => setTimeout(done, 100)); }
   if (!port) throw new Error('Chrome did not start');

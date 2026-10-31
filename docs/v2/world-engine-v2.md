@@ -786,6 +786,22 @@ ramps, cuts) were saved but never built nor drawn, and only a street kind below 
   run picks up where the last stopped (World · Live says how many were kept before) and asks only the rest. A fresh run
   moves `terrain.json` aside first.
 
+
+### 2.0.18 One engine: every building a lot, its inside switched on near people (the user's design, 2026-10-31)
+
+The emulations of the fights' look (§2.0.17's "look") still differed. The user: use the exact same engine as the tiled
+fights, with its tiling, destruction and inside switched off for the rest, switched on at runtime when needed. Built:
+- **Shells** (`shellsOf`, `apps/playground/src/data/world.ts`): every source building no one has reached yet, as the lot
+  it will stand as: its footprint placed as `materialize` places a lot (the largest free part, kept when at least half is
+  left), its floors and full height, its role, and its model (its use's, `modelFor`, else its role's). No skeleton, no
+  tiles, no walk nodes, no damage. When people come near, its chunk materializes and the building stands as a full lot,
+  inside and all, as before. The export ships them in terrain mode (`world.shells`) and a lot takes its building's model.
+- **Drawn as a lot's shell**: the page draws shells with the lot loop's own colours and opacities (fill #2b86c4 at 0.09,
+  edges #8fd6ff at 0.5, a #7ce6ff line at 0.14 round every floor), batched by model; a lot's shell is now as tall as its
+  building (`height`), its inside walked up to its floors. In terrain mode the faint copies are not drawn.
+- **Stills on the GPU** for terrain spawning: a whole city of shells took 16 s a still on SwiftShader (the CPU) and takes
+  0.2 s through Metal, the same picture each run; elsewhere SwiftShader stays the default.
+Vol 1's copy: 120 lots and 632 shells; the page 1.1 MB.
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

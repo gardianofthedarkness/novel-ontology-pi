@@ -54,7 +54,8 @@ export const HALL_LOT = 1_000_000;
 export const hallsAt = (world: World, i: number, j: number) => world.under.get(cellKey(i, j)) ?? [];
 
 /** `manifold`: a fingerprint of the landscape it was filled from, so damage kept for it applies only while that landscape stands. */
-export interface SourceBuilding { id: string; x: number; z: number; w: number; d: number; angle: number; floors: number; kind: string; manifold?: string; era?: string }
+/** `model`: the 3D model its use is drawn as (useModels.ts modelFor), kept when it stands as a lot. */
+export interface SourceBuilding { id: string; x: number; z: number; w: number; d: number; angle: number; floors: number; kind: string; manifold?: string; era?: string; model?: string | null }
 export interface SourceRoad { a: [number, number]; b: [number, number]; width: number; level: string }
 /** A staged place where the canvas put it: a building of its own (`own`, a site) on its spot, or the middle of an open place. */
 export interface Anchor { place: string; label: string; x: number; z: number; own: boolean; role: BuildingRole; floors: number; era?: string }
@@ -126,12 +127,12 @@ function cellsFor(b: SourceBuilding): Cells {
   const across = Math.abs(Math.sin(b.angle)) > Math.SQRT1_2, [w, d] = across ? [b.d, b.w] : [b.w, b.d];
   return cells(w * 0.45, d * 0.45);
 }
-/** The largest rectangle (3 cells across at least) of cells no lot and no road holds, inside a rectangle of cells; null with none. */
-function largestFree(world: World, { i0, j0, nx, nz }: Cells): Cells | null {
+/** The largest rectangle (3 cells across at least) of cells no lot and no road holds (nor any `taken`), inside a rectangle of cells; null with none. */
+function largestFree(world: World, { i0, j0, nx, nz }: Cells, taken?: Set<number>): Cells | null {
   const heights = new Array<number>(nx).fill(0);
   let best: Cells | null = null, area = 0;
   for (let j = 0; j < nz; j++) {
-    for (let i = 0; i < nx; i++) heights[i] = !world.lotAt.has(cellKey(i0 + i, j0 + j)) && !onRoad(world, (i0 + i + 0.5) * SKELETON_CELL, (j0 + j + 0.5) * SKELETON_CELL) ? heights[i] + 1 : 0;
+    for (let i = 0; i < nx; i++) heights[i] = !world.lotAt.has(cellKey(i0 + i, j0 + j)) && !taken?.has(cellKey(i0 + i, j0 + j)) && !onRoad(world, (i0 + i + 0.5) * SKELETON_CELL, (j0 + j + 0.5) * SKELETON_CELL) ? heights[i] + 1 : 0;
     // The largest rectangle standing on this row: for each run of columns, as tall as its shortest.
     const stack: number[] = [];
     for (let i = 0; i <= nx; i++) {
@@ -190,6 +191,29 @@ function materialize(world: World, ci: number, cj: number, born: number | string
   // Clutter on open ground (one cell in ten), never on a road or in front of a door.
   const draw = skeletonStream("world-clutter", ci, cj);
   for (let j = j0; j < j0 + CHUNK; j++) for (let i = i0; i < i0 + CHUNK; i++) { const key = cellKey(i, j); if (world.ground.get(key) === GROUND.street && !world.lotAt.has(key) && !world.lotAt.has(cellKey(i, j - 1)) && draw() < 0.06) world.clutter.add(key); }
+}
+
+/**
+ * A building of the world no one has reached yet, as the lot it will stand as (docs/v2/world-engine-v2.md §2.0.18, the
+ * user's design): its footprint on the grid, its floors, its role and model, and nothing inside it. The same engine with
+ * its tiling, its destruction and its inside (rooms, stairs, corridors) switched off: when people come near, its chunk
+ * materializes and the building stands as a full lot, as ever.
+ */
+export interface ShellLot { source: string; i0: number; j0: number; nx: number; nz: number; floors: number; height: number; role: BuildingRole; era: string; model: string | null }
+/**
+ * Every source building that does not stand yet, as its shell: placed as `materialize` places a lot (the largest free part of
+ * its footprint, kept when at least half is left), clear of the roads, the lots and each other.
+ */
+export function shellsOf(world: World): ShellLot[] {
+  const taken = new Set<number>(), shells: ShellLot[] = [];
+  for (const b of world.source.buildings) {
+    if (world.claimed.has(b.id)) continue;
+    const cells = cellsFor(b), spot = cells.nx >= 3 && cells.nz >= 3 ? largestFree(world, cells, taken) : null;
+    if (!spot || spot.nx * spot.nz * 2 < cells.nx * cells.nz) continue;
+    for (let j = spot.j0; j < spot.j0 + spot.nz; j++) for (let i = spot.i0; i < spot.i0 + spot.nx; i++) taken.add(cellKey(i, j));
+    shells.push({ source: b.id, ...spot, floors: Math.max(1, Math.min(WALK_FLOORS, b.floors)), height: b.floors, role: roleOf(b.kind, b.floors), era: b.era ?? "modern", model: b.model ?? null });
+  }
+  return shells;
 }
 
 /** Materialize every chunk within `radius` metres of (x, z) at moment `born`; how many were new. */
