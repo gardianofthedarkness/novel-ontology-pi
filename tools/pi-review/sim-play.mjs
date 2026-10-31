@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { repo } from './config.mjs';
@@ -126,4 +126,33 @@ export async function livePicture(workspace, file) {
   if (!framePicture.test(file)) return null;
   const body = await readFile(resolve(workspace, 'stage', 'simulation', 'live', file)).catch(() => null);
   return body && { body, type: file.endsWith('.jpg') ? 'image/jpeg' : 'image/png' };
+}
+
+/**
+ * Terrain spawning, live (playground/terrain-spawn.mjs; docs/v2/visual-context-engine.md): the engine page as the user's
+ * view, the run's event stream from a line on (whole lines only), its shots, and the user's step: `step` lets a waiting
+ * run go on by one, `run` lets it run on, `pause` makes it wait again after each proposal.
+ */
+export async function terrainPage() {
+  const html = await readFile(`${repo}/playground/terrain-world.html`, 'utf8');
+  return { html, policy: pagePolicy(html) };
+}
+export async function terrainStream(workspace, from) {
+  const text = await readFile(resolve(workspace, 'stage', 'terrain', 'stream.jsonl'), 'utf8').catch(() => '');
+  const lines = text.split('\n').slice(0, -1);
+  return lines.slice(Math.max(0, from)).join('\n') + (lines.length > from ? '\n' : '');
+}
+export async function terrainShot(workspace, file) {
+  if (!/^s\d+-[a-z-]+\.png$/.test(file)) return null;
+  return readFile(resolve(workspace, 'stage', 'terrain', 'shots', file)).catch(() => null);
+}
+export async function terrainStep(workspace, mode) {
+  if (!['step', 'run', 'pause'].includes(mode)) return null;
+  const file = resolve(workspace, 'stage', 'terrain', 'step.json');
+  const step = await readFile(file, 'utf8').then(JSON.parse, () => ({ mode: 'step', n: 0 }));
+  if (mode === 'step') step.n = (step.n ?? 0) + 1; else step.mode = mode === 'run' ? 'run' : 'step';
+  const temporary = `${file}.${process.pid}.tmp`;
+  await writeFile(temporary, JSON.stringify(step), { mode: 0o644 });
+  await rename(temporary, file);
+  return step;
 }

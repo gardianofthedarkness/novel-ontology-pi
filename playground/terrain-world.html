@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Terrain · Live</title>
+<style>
+:root { --bg: #0d1016; --panel: rgba(16, 20, 28, 0.92); --ink: #e9ecf1; --muted: #9aa3b2; --line: #2a3140; --accent: #7cc4ff; --warn: #ff5a5a; --lit: #ffd666; --step: #8be28b;
+  --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Noto Sans SC", sans-serif; --cjk: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--ui); overflow: hidden; }
+canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+body.jev #ui { display: none; }
+#ui { position: fixed; inset: 0; pointer-events: none; padding: calc(env(safe-area-inset-top, 0px) + 8px) max(10px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 8px) max(10px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 8px; }
+.panel { pointer-events: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; backdrop-filter: blur(6px); }
+#top { display: grid; gap: 6px; max-width: 760px; }
+#top .eyebrow { font: 600 0.7rem/1 var(--ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+#status { font-size: 0.95rem; }
+#status b { color: var(--ink); }
+#status small { color: var(--muted); }
+.buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: 600 0.82rem var(--ui); padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: #1b2230; color: var(--ink); cursor: pointer; }
+button.go { border-color: var(--step); color: var(--step); }
+button.go.waiting { background: color-mix(in srgb, var(--step) 22%, #1b2230); animation: pulse 1s infinite alternate; }
+button.on { border-color: var(--accent); color: var(--accent); }
+@keyframes pulse { from { box-shadow: 0 0 0 0 transparent; } to { box-shadow: 0 0 0 4px color-mix(in srgb, var(--step) 35%, transparent); } }
+.spacer { flex: 1; }
+#bottom { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 8px; align-items: end; }
+@media (max-width: 760px) { #bottom { grid-template-columns: minmax(0, 1fr); } }
+#jev { display: grid; gap: 6px; max-height: 46vh; overflow: auto; }
+#jev h3, #text h3 { margin: 0; font: 600 0.7rem/1.2 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+#shots { display: flex; gap: 6px; overflow-x: auto; }
+#shots img { height: 96px; border-radius: 6px; border: 1px solid var(--line); cursor: zoom-in; flex: none; }
+#question { font-size: 0.85rem; color: var(--ink); }
+#answer { font: 0.78rem/1.45 ui-monospace, Menlo, monospace; color: var(--muted); overflow-wrap: anywhere; }
+#answer b { color: var(--lit); }
+#text { display: grid; gap: 4px; max-height: 46vh; overflow: auto; }
+.card { border-left: 4px solid var(--k); padding: 3px 8px; border-radius: 0 6px 6px 0; font: 0.88rem/1.6 var(--cjk); background: rgba(255,255,255,0.03); overflow-wrap: anywhere; }
+.card small { display: block; font: 600 0.6rem/1.2 var(--ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--k); }
+.card.lit { background: color-mix(in srgb, var(--lit) 16%, transparent); outline: 1px solid var(--lit); }
+.k-spoken { --k: var(--spoken); } .k-thought { --k: var(--thought); } .k-fact { --k: var(--fact); } .k-action { --k: var(--action); } .k-environment { --k: var(--environment); } .k-narration { --k: var(--narration); }
+#big { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; pointer-events: auto; z-index: 5; padding: 16px; }
+#big img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+#big.show { display: flex; }
+.collapsed #jev > :not(h3), .collapsed #text > :not(h3) { display: none; }
+</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="ui">
+  <section class="panel" id="top">
+    <div class="eyebrow">Terrain · live · your camera</div>
+    <div id="status">Waiting for the terrain run…</div>
+    <div class="buttons">
+      <button class="go" id="next" disabled>Next step</button>
+      <button id="run">Run on</button>
+      <button id="look">Look from Jev</button>
+      <button id="fit">Whole city</button>
+      <span class="spacer"></span>
+      <button id="fold">Fold panels</button>
+    </div>
+  </section>
+  <div class="spacer"></div>
+  <section id="bottom">
+    <div class="panel" id="jev"><h3>What Jev sees and says</h3><div id="shots"></div><div id="question"></div><div id="answer"></div></div>
+    <div class="panel" id="text"><h3>What Jev reads (the cards it looks at lit)</h3><div id="cards"></div></div>
+  </section>
+</div>
+<div id="big"><img alt="Jev's picture"></div>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+// One page, two players (docs/v2/visual-context-engine.md): with ?jev=1 it is Jev's renderer, headless, drawing each shot
+// at its own frame as the backend asks (window.__world); otherwise it is the user's live view with the user's own camera,
+// building the same world from the run's event stream (terrain/stream.jsonl) and showing what Jev saw, said and read.
+const params = new URLSearchParams(location.search), JEV = params.has("jev"), volume = params.get("volume") ?? "1";
+if (JEV) document.body.classList.add("jev");
+const $ = (id) => document.getElementById(id), esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+const canvas = $("view"), renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: JEV });
+renderer.setPixelRatio(JEV ? 1 : Math.min(2, devicePixelRatio));
+const scene = new THREE.Scene(), BG = new THREE.Color(0x0d1016);
+scene.background = BG;
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x1a1d24, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(-0.6, 1, 0.4); scene.add(sun);
+const camera = new THREE.PerspectiveCamera(45, 1, 1, 60000);
+camera.position.set(-900, 1100, 1400);
+const controls = JEV ? null : new OrbitControls(camera, canvas);
+if (controls) { controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.495; }
+
+// The ground and the city's parts, by type: modern ground cool, ancient warm; basic shapes their own colour.
+const TYPE_COLOR = { skyscrapers: 0x4f8dff, commercial: 0x46b6d6, residential: 0x6fb38a, industrial: 0x8f8f9e, harbour: 0x3fa1a8, park: 0x5fbf5a, stadium: 0x9d7bd8, village: 0xc9a46a, castle: 0xc77a4a, farm: 0xb8b45a, shape: 0xe0b45a };
+const world = { cities: new Map(), buildings: [], roads: [], rising: [], patches: new Map(), shapes: new Map() };
+const groups = { ground: new THREE.Group(), roads: new THREE.Group(), outlines: new THREE.Group(), shapes: new THREE.Group(), proposal: new THREE.Group(), conflict: new THREE.Group(), frusta: new THREE.Group(), shot: new THREE.Group() };
+for (const group of Object.values(groups)) scene.add(group);
+
+// Buildings: one instanced mesh, grown as the world grows; new ones rise from the ground over a second and a half.
+const boxGeometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+const buildingMaterial = new THREE.MeshLambertMaterial({ vertexColors: false });
+let buildingMesh = null, capacity = 0;
+const matrix = new THREE.Matrix4(), quaternion = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), colour = new THREE.Color();
+function ensureCapacity(count) {
+  if (count <= capacity) return;
+  capacity = Math.max(4096, capacity * 2, count);
+  if (buildingMesh) { scene.remove(buildingMesh); buildingMesh.dispose(); }
+  buildingMesh = new THREE.InstancedMesh(boxGeometry, buildingMaterial, capacity);
+  buildingMesh.count = 0; buildingMesh.frustumCulled = false; scene.add(buildingMesh);
+  world.buildings.forEach((_, index) => placeBuilding(index, 1));
+}
+function placeBuilding(index, grown) {
+  const b = world.buildings[index], h = Math.max(0.01, b.h * grown);
+  quaternion.setFromAxisAngle(up, -(b.angle ?? 0));
+  matrix.compose(new THREE.Vector3(b.x, b.y ?? 0, b.z), quaternion, new THREE.Vector3(b.w, h, b.d));
+  buildingMesh.setMatrixAt(index, matrix);
+  const t = Math.min(1, b.h / 180);
+  colour.setRGB(0.18 + 0.12 * t, 0.36 + 0.28 * t, 0.56 + 0.3 * t);
+  buildingMesh.setColorAt(index, colour);
+}
+function addBuildings(list, rise) {
+  const start = world.buildings.length, now = performance.now();
+  for (const [x, z, w, d, angle, floors, , y = 0] of list) world.buildings.push({ x, z, w, d, angle, h: Math.max(3, floors * 3), y });
+  ensureCapacity(world.buildings.length);
+  for (let index = start; index < world.buildings.length; index++) {
+    if (rise && !JEV) { const b = world.buildings[index]; world.rising.push({ index, at: now + Math.min(1800, Math.hypot(b.x - rise[0], b.z - rise[1]) * 3) }); placeBuilding(index, 0); }
+    else placeBuilding(index, 1);
+  }
+  buildingMesh.count = world.buildings.length; buildingMesh.instanceMatrix.needsUpdate = true; if (buildingMesh.instanceColor) buildingMesh.instanceColor.needsUpdate = true;
+}
+const roadMaterial = new THREE.MeshBasicMaterial({ color: 0x3a4250 });
+function addRoads(list) {
+  for (const [ax, az, bx, bz, width] of list) {
+    const length = Math.hypot(bx - ax, bz - az); if (length < 1) continue;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(length, Math.max(2, width)), roadMaterial);
+    mesh.rotation.x = -Math.PI / 2; mesh.rotation.z = -Math.atan2(bz - az, bx - ax); mesh.position.set((ax + bx) / 2, 0.15, (az + bz) / 2);
+    groups.roads.add(mesh);
+  }
+}
+
+// Labels: text on a sprite, sized in metres so they read at the distance they are seen from.
+// With `screen`, a label keeps its size on the picture wherever it stands (Jev's shots): a share of the frame's height.
+let screenLabels = 0;
+function label(text, at, { size = 24, colour = "#e9ecf1", back = "rgba(10,14,20,0.78)" } = {}) {
+  const c = document.createElement("canvas"), g = c.getContext("2d"), font = "600 44px system-ui, 'PingFang SC', sans-serif";
+  g.font = font; const width = Math.ceil(g.measureText(text).width) + 28; c.width = width; c.height = 64;
+  g.font = font; g.fillStyle = back; g.beginPath(); g.roundRect(0, 0, width, 64, 14); g.fill(); g.fillStyle = colour; g.textBaseline = "middle"; g.fillText(text, 14, 34);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+  if (screenLabels) { sprite.material.sizeAttenuation = false; sprite.scale.set(screenLabels * width / 64, screenLabels, 1); }
+  else sprite.scale.set(size * width / 64, size, 1);
+  sprite.position.set(at[0], at[1], at[2]); sprite.renderOrder = 10;
+  return sprite;
+}
+const loop = (pts, y, material) => { const geometry = new THREE.BufferGeometry().setFromPoints(pts.map(([x, z]) => new THREE.Vector3(x, y, z))); const line = new THREE.LineLoop(geometry, material); if (material.isLineDashedMaterial) line.computeLineDistances(); return line; };
+const rect = (box, y, material) => loop([[box[0], box[1]], [box[2], box[1]], [box[2], box[3]], [box[0], box[3]]], y, material);
+function fillShape(pts, y, colourValue, opacity) {
+  const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
+  const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: colourValue, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
+  mesh.rotation.x = -Math.PI / 2; mesh.position.y = y; return mesh;
+}
+
+// A part of the ground (a manifold: its outline) or a basic shape, at its height.
+function partObject({ kind, outline, box, y = 0, shape = null, label: text }, { colourValue, opacity = 0.22, edge = 0xffffff } = {}) {
+  const group = new THREE.Group(), c = colourValue ?? TYPE_COLOR[kind] ?? TYPE_COLOR.shape;
+  if (shape) group.add(shapeMesh(shape, box, y, c, opacity + 0.35));
+  else if (outline) { group.add(fillShape(outline, y + 0.3, c, opacity)); group.add(loop(outline, y + 0.6, new THREE.LineBasicMaterial({ color: edge }))); }
+  if (text) { const at = box ? [(box[0] + box[2]) / 2, y + 30, (box[1] + box[3]) / 2] : outline ? [outline.reduce((s, p) => s + p[0], 0) / outline.length, y + 30, outline.reduce((s, p) => s + p[1], 0) / outline.length] : [0, 0, 0]; group.add(label(text, at, { size: Math.max(12, Math.min(40, ((box?.[2] ?? 200) - (box?.[0] ?? 0)) / 8)) })); }
+  return group;
+}
+function shapeMesh(shape, box, y, c, opacity) {
+  const [x0, z0, x1, z1] = box, w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, h = shape.height ?? 20;
+  const material = new THREE.MeshLambertMaterial({ color: c, transparent: opacity < 1, opacity: Math.min(1, opacity) });
+  let geometry;
+  switch (shape.kind) {
+    case "plateau": geometry = new THREE.CylinderGeometry(0.42, 0.5, 1, 6, 1).scale(w * 1.4, h, d * 1.4).translate(0, h / 2, 0); break;
+    case "basin": geometry = new THREE.CylinderGeometry(0.5, 0.36, 1, 24, 1, true).scale(w, h, d).translate(0, -h / 2, 0); break;
+    case "hill": geometry = new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2).scale(w, h * 2, d); break;
+    case "platform": geometry = new THREE.BoxGeometry(w, Math.max(1.5, h * 0.12), d); break;
+    case "cut": geometry = new THREE.BoxGeometry(w, h, d).translate(0, -h / 2, 0); break;
+    case "ramp": { const g = new THREE.BufferGeometry(), v = [-w/2,0,-d/2, w/2,0,-d/2, w/2,h,d/2, -w/2,h,d/2, -w/2,0,d/2, w/2,0,d/2]; g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.setIndex([0,1,2, 0,2,3, 4,3,2, 4,2,5, 0,4,5, 0,5,1, 0,3,4, 1,5,2]); g.computeVertexNormals(); geometry = g; break; }
+    case "sphere": { const r = Math.min(w, d) / 2; geometry = new THREE.SphereGeometry(r, 32, 16).translate(0, r, 0); break; }
+    case "donut": { const r = Math.min(w, d) / 2; geometry = new THREE.TorusGeometry(r * 0.78, r * 0.2, 16, 48).rotateX(Math.PI / 2).translate(0, r * 0.2, 0); break; }
+    default: geometry = new THREE.BoxGeometry(w, h, d).translate(0, h / 2, 0);
+  }
+  const mesh = new THREE.Mesh(geometry, material); mesh.position.set(cx, y, cz); return mesh;
+}
+
+// The world's events, the same for both players: a city's base, a part committed (its fill rising), a proposal, a conflict.
+const state = { proposal: null, proposalAt: 0, lastShot: null, part: null, waiting: false, mode: "step" };
+function apply(event) {
+  if (event.t === "city") {
+    const city = event.city; world.cities.set(city.id, city);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(city.radius * 1.25, 96), new THREE.MeshLambertMaterial({ color: 0x151a22 }));
+    disc.rotation.x = -Math.PI / 2; disc.position.set(city.offset[0], -0.2, city.offset[1]); groups.ground.add(disc);
+    groups.outlines.add(label(city.label, [city.offset[0], city.radius * 0.35 + 60, city.offset[1] - city.radius * 1.1], { size: Math.max(30, city.radius / 14), colour: "#7cc4ff" }));
+    for (const patch of event.patches ?? []) groups.outlines.add(partObject({ kind: patch.type, outline: patch.outline, label: null }, { opacity: 0.1 }));
+    addRoads(event.fill.roads); addBuildings(event.fill.buildings, null);
+  }
+  if (event.t === "proposal") { clearGroup(groups.proposal); groups.proposal.add(partObject({ ...event.part, label: `${event.part.label} · ${event.part.kind} · ${event.part.y} m` }, { opacity: 0.35 })); state.proposal = event; state.proposalAt = performance.now(); }
+  if (event.t === "conflict") { clearGroup(groups.conflict); const red = new THREE.LineDashedMaterial({ color: 0xff5a5a, dashSize: 8, gapSize: 6 }); for (const box of event.boxes ?? []) groups.conflict.add(rect(box, (event.y ?? 0) + 2, red)); if (event.zoom) groups.conflict.add(rect(event.zoom, 3, new THREE.LineBasicMaterial({ color: 0xffd666 }))); }
+  if (event.t === "commit") {
+    clearGroup(groups.proposal); clearGroup(groups.conflict); state.proposal = null;
+    const part = event.part;
+    (part.shape ? groups.shapes : groups.outlines).add(partObject({ ...part, label: part.label }, { opacity: part.shape ? 0.7 : 0.16 }));
+    addRoads(event.spawn?.roads ?? []); addBuildings(event.spawn?.buildings ?? [], part.box ? [(part.box[0] + part.box[2]) / 2, (part.box[1] + part.box[3]) / 2] : null);
+  }
+}
+function clearGroup(group) { for (const child of [...group.children]) { group.remove(child); child.traverse?.((o) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); }); } }
+
+// A camera from a shot's spec: perspective (from a position toward a target) or straight down (orthographic, north up).
+function cameraOf(spec, aspect) {
+  if (spec.kind === "top") { const h = spec.half, cam = new THREE.OrthographicCamera(-h * aspect, h * aspect, h, -h, 1, 20000); cam.position.set(spec.target[0], 6000, spec.target[2]); cam.up.set(0, 0, -1); cam.lookAt(spec.target[0], 0, spec.target[2]); cam.updateProjectionMatrix(); return cam; }
+  const cam = new THREE.PerspectiveCamera(spec.fov ?? 40, aspect, 1, 60000); cam.position.set(...spec.position); cam.lookAt(...spec.target); cam.updateProjectionMatrix(); return cam;
+}
+
+// The layers only a shot draws: lettered ghosts at their heights, the cuts through buildings (red, dotted), outlines and
+// labels of the parts asked about, a grid in metres, the vague background (fog round the focus).
+function shotLayers(layers = {}) {
+  clearGroup(groups.shot);
+  screenLabels = layers.screenLabels ?? 0;
+  (layers.ghosts ?? []).forEach((ghost, index) => {
+    const plane = fillShape([[ghost.box[0], ghost.box[1]], [ghost.box[2], ghost.box[1]], [ghost.box[2], ghost.box[3]], [ghost.box[0], ghost.box[3]]], ghost.y, 0xffffff, 0.16);
+    groups.shot.add(plane, rect(ghost.box, ghost.y, new THREE.LineBasicMaterial({ color: 0xffffff })));
+    // Labels alternate between the slice's two far corners, so close heights do not cover each other.
+    const w = ghost.box[2] - ghost.box[0], right = index % 2 === 0, at = right ? [ghost.box[2] + w * 0.1, ghost.y, ghost.box[3]] : [ghost.box[0] - w * 0.1, ghost.y, ghost.box[3]];
+    groups.shot.add(label(ghost.label, at, { size: layers.labelSize ?? 16, colour: "#ffffff", back: "rgba(20,24,32,0.9)" }));
+  });
+  // A see-through ground, so slices below the street show through it.
+  const ground = layers.seeThrough ? 0.35 : 1;
+  groups.ground.traverse((o) => { if (o.material) { o.material.transparent = ground < 1; o.material.opacity = ground; } });
+  const red = new THREE.LineDashedMaterial({ color: 0xff4040, dashSize: layers.dash ?? 2.5, gapSize: (layers.dash ?? 2.5) * 0.8 });
+  for (const cut of layers.cuts ?? []) groups.shot.add(rect(cut.box, cut.y + 0.2, red));
+  for (const outline of layers.outlines ?? []) { groups.shot.add(loop(outline.pts, 1, new THREE.LineBasicMaterial({ color: outline.colour ?? 0xffd666 }))); if (outline.label) groups.shot.add(label(outline.label, [outline.at[0], 40, outline.at[1]], { size: layers.labelSize ?? 22, colour: "#ffd666" })); }
+  for (const box of layers.boxes ?? []) { groups.shot.add(rect(box.box, (box.y ?? 0) + 1, new THREE.LineBasicMaterial({ color: box.colour ?? 0xffffff }))); if (box.label) groups.shot.add(label(box.label, [(box.box[0] + box.box[2]) / 2, (box.y ?? 0) + 30, (box.box[1] + box.box[3]) / 2], { size: layers.labelSize ?? 22 })); }
+  if (layers.grid) {
+    const { x0, z0, x1, z1, step } = layers.grid, material = new THREE.LineBasicMaterial({ color: 0x3c4658, transparent: true, opacity: 0.8 }), pts = [];
+    for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) pts.push(new THREE.Vector3(x, 0.5, z0), new THREE.Vector3(x, 0.5, z1));
+    for (let z = Math.ceil(z0 / step) * step; z <= z1; z += step) pts.push(new THREE.Vector3(x0, 0.5, z), new THREE.Vector3(x1, 0.5, z));
+    groups.shot.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), material));
+  }
+  scene.fog = layers.vague ? new THREE.Fog(BG, layers.vague.near, layers.vague.far) : null;
+}
+
+// Jev's renderer (headless): the backend resets the world, applies the same events, and asks for shots.
+window.__world = window.__stage = {
+  ready: true,
+  apply(event) { apply(event); return true; },
+  async shot(spec) {
+    const [w, h] = spec.frame;
+    renderer.setSize(w, h, false);
+    const cam = cameraOf(spec.camera, w / h);
+    shotLayers(spec.layers);
+    groups.proposal.visible = spec.layers?.proposal !== false;
+    renderer.render(scene, cam);
+    const data = renderer.domElement.toDataURL("image/png").split(",")[1];
+    clearGroup(groups.shot); scene.fog = null; groups.proposal.visible = true;
+    groups.ground.traverse((o) => { if (o.material) { o.material.transparent = false; o.material.opacity = 1; } });
+    screenLabels = 0;
+    return data;
+  },
+};
+
+// The user's view: its own camera, the stream played as it comes, the proposal blinking, buildings rising, Jev's frustum.
+function resize() { if (JEV) return; renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener("resize", resize); resize();
+function frame(now) {
+  if (!JEV) {
+    if (state.proposal) { const pulse = 0.5 + 0.5 * Math.sin((now - state.proposalAt) / 160); groups.proposal.traverse((o) => { if (o.material && "opacity" in o.material) { o.material.transparent = true; o.material.opacity = 0.15 + 0.75 * pulse; } }); }
+    if (world.rising.length && buildingMesh) {
+      world.rising = world.rising.filter(({ index, at }) => { const grown = Math.max(0, Math.min(1, (now - at) / 1500)); placeBuilding(index, grown); return grown < 1; });
+      buildingMesh.instanceMatrix.needsUpdate = true;
+    }
+    controls.update(); renderer.render(scene, camera);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+if (!JEV) {
+  const show = (html, id) => { $(id).innerHTML = html; };
+  let lines = 0, shots = [], lastCamera = null;
+  const fitCity = (city) => { if (!city) return; camera.position.set(city.offset[0] - city.radius * 0.9, city.radius * 1.1, city.offset[1] + city.radius * 1.5); controls.target.set(city.offset[0], 0, city.offset[1]); };
+  const frustum = (spec) => {
+    clearGroup(groups.frusta);
+    const cam = cameraOf(spec.camera, spec.frame[0] / spec.frame[1]);
+    if (spec.camera.kind !== "top") { cam.far = Math.hypot(...spec.camera.position.map((v, i) => v - spec.camera.target[i])) * 1.2; cam.updateProjectionMatrix(); }
+    const helper = new THREE.CameraHelper(cam); groups.frusta.add(helper); lastCamera = spec.camera;
+  };
+  const statusLine = (text) => show(text, "status");
+  const handle = (event) => {
+    apply(event);
+    if (event.t === "run") statusLine(`Terrain for <b>${esc(event.cities.join(", "))}</b> <small>· ${event.model}</small>`);
+    if (event.t === "city" && world.cities.size === 1) fitCity(event.city);
+    if (event.t === "part") { state.part = event; statusLine(`<b>${esc(event.part.label)}</b> <small>(${esc(event.part.scale)}) · in ${esc(event.city)} · part ${event.n} of ${event.of}</small>`); show(event.cards.map((card) => `<div class="card k-${esc(card.kind)}${card.lit ? " lit" : ""}"><small>${esc(card.kind)}</small>${esc(card.text)}</div>`).join(""), "cards"); }
+    if (event.t === "shot") { shots.push(event); frustum(event); }
+    if (event.t === "ask") { const mine = shots.filter((shot) => event.shots.includes(shot.id)); show(mine.map((shot) => `<img src="terrain/${esc(shot.file)}?volume=${volume}" alt="${esc(shot.mode)}" data-full="terrain/${esc(shot.file)}?volume=${volume}">`).join(""), "shots"); show(event.questions.map((q) => `<div><b>${esc(q.key)}</b> · ${esc(q.instructions)}</div>`).join(""), "question"); show("<i>Jev is looking…</i>", "answer"); statusLine(`${state.part ? `<b>${esc(state.part.part.label)}</b> · ` : ""}<small>${esc(event.phase)}</small>`); }
+    if (event.t === "answer") show(event.answers.map((a) => `${esc(a.key)}: <b>${esc(a.value)}</b>${a.confidence != null ? ` (${Number(a.confidence).toFixed(2)})` : ""}${a.top ? ` · ${a.top.map(([o, p]) => `${esc(o)} ${Math.round(p * 100)}%`).join(", ")}` : ""}${a.box ? ` · box ${["left", "top", "right", "bottom"].map((s) => a.box[s].toFixed(2)).join(" ")}` : ""}`).join("<br>"), "answer");
+    if (event.t === "conflict") show(`${$("answer").innerHTML}<br><span style="color:var(--warn)">conflict: ${esc(event.reasons.join("; "))} → zoom in</span>`, "answer");
+    if (event.t === "wait") { state.waiting = true; $("next").disabled = false; $("next").classList.add("waiting"); statusLine(`${state.part ? `<b>${esc(state.part.part.label)}</b> · ` : ""}waiting for you: <small>${esc(event.why)}</small>`); }
+    if (event.t === "resume" || event.t === "commit") { state.waiting = false; $("next").classList.remove("waiting"); $("next").disabled = true; }
+    if (event.t === "mode") { state.mode = event.mode; $("run").classList.toggle("on", event.mode === "run"); $("run").textContent = event.mode === "run" ? "Pause (step)" : "Run on"; }
+    if (event.t === "done") { statusLine(`Terrain done: <b>${event.parts}</b> parts placed in ${event.cities} cities <small>· ${event.calls} questions</small>`); }
+  };
+  const poll = async () => {
+    try {
+      const response = await fetch(`terrain/stream.jsonl?volume=${volume}&from=${lines}`, { cache: "no-store" });
+      if (response.ok) { const text = await response.text(); for (const line of text.split("\n").filter(Boolean)) { lines++; try { handle(JSON.parse(line)); } catch { /* a half-written line comes again */ lines--; break; } } }
+    } catch { /* the next poll */ }
+    setTimeout(poll, 1200);
+  };
+  poll();
+  const send = (mode) => fetch(`terrain/step?volume=${volume}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) }).catch(() => {});
+  $("next").addEventListener("click", () => { send("step"); $("next").classList.remove("waiting"); $("next").disabled = true; });
+  $("run").addEventListener("click", () => send(state.mode === "run" ? "pause" : "run"));
+  $("look").addEventListener("click", () => { if (!lastCamera) return; if (lastCamera.kind === "top") { camera.position.set(lastCamera.target[0], lastCamera.half * 2.2, lastCamera.target[2] + 1); controls.target.set(lastCamera.target[0], 0, lastCamera.target[2]); } else { camera.position.set(...lastCamera.position); controls.target.set(...lastCamera.target); } });
+  $("fit").addEventListener("click", () => fitCity(state.part ? world.cities.get(state.part.cityId) : [...world.cities.values()][0]));
+  $("fold").addEventListener("click", () => document.body.classList.toggle("collapsed"));
+  $("shots").addEventListener("click", (event) => { const img = event.target.closest("img"); if (!img) return; $("big").querySelector("img").src = img.dataset.full; $("big").classList.add("show"); });
+  $("big").addEventListener("click", () => $("big").classList.remove("show"));
+}
+</script>
+</body>
+</html>

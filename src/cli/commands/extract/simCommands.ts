@@ -61,13 +61,19 @@ async function repository(): Promise<string> {
   }
 }
 /**
- * `novel sim terrain`: before the world plays, Jev places the book's main sites in the places that hold them, on pictures
- * (stage/terrain.json), and says which scenes carry on and which start anew (stage/world/spawn.json); recorded on the live
- * page. Needs the world loop's script (a world-first book). playground/terrain.mjs.
+ * `novel sim terrain`: terrain spawning on the visual context engine (playground/terrain-spawn.mjs): the volume's cities
+ * one by one, each part's ground placed by Jev on its own pictures (overview, zoom on a conflict, height on ghost slices),
+ * watched live on the host's play/terrain page with the user's own camera; in step mode (the default) the run waits for
+ * the user after each proposal, `--run` runs on. `--sites` is the earlier step instead (which site holds which, and the
+ * spawn plan: playground/terrain.mjs). Needs the world loop's script (a world-first book).
  */
-export async function simTerrain(novelDir: string, options: { turns?: number } = {}) {
-  const { terrainAndSpawns } = await import(pathToFileURL(join(await repository(), "playground", "terrain.mjs")).href) as { terrainAndSpawns(novelDir: string, options: { turns?: number }): Promise<unknown> };
-  return terrainAndSpawns(novelDir, { turns: options.turns ?? 1 });
+export async function simTerrain(novelDir: string, options: { turns?: number; sites?: boolean; run?: boolean } = {}) {
+  if (options.sites) {
+    const { terrainAndSpawns } = await import(pathToFileURL(join(await repository(), "playground", "terrain.mjs")).href) as { terrainAndSpawns(novelDir: string, options: { turns?: number }): Promise<unknown> };
+    return terrainAndSpawns(novelDir, { turns: options.turns ?? 1 });
+  }
+  const { terrainSpawn } = await import(pathToFileURL(join(await repository(), "playground", "terrain-spawn.mjs")).href) as { terrainSpawn(novelDir: string, options: { run?: boolean }): Promise<unknown> };
+  return terrainSpawn(novelDir, { run: options.run });
 }
 const engine = async (): Promise<Engine> => import(pathToFileURL(join(await repository(), "playground", "export-strand-demo.mjs")).href) as Promise<Engine>;
 const pickers = async (): Promise<Pickers> => import(pathToFileURL(join(await repository(), "playground", "sim-jev.mjs")).href) as Promise<Pickers>;
@@ -234,4 +240,4 @@ export async function simCurrent(novelDir: string): Promise<{ current: boolean; 
   return { current: status.lines.length > 0 && status.lines.every((line) => line.playable && (line.current || line.newerCurrent)), lines: status.lines.length };
 }
 
-export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim terrain <novel-dir> [--turns N] | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id> [--from <scene-id>]] [--accept] [--pace seconds] [--force] | novel sim show <novel-dir>";
+export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim terrain <novel-dir> [--run] [--sites [--turns N]] | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id> [--from <scene-id>]] [--accept] [--pace seconds] [--force] | novel sim show <novel-dir>";

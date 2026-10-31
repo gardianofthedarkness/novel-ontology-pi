@@ -11,7 +11,7 @@ import { bookCatalog } from './book-catalog.mjs';
 import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
-import { liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage } from './sim-play.mjs';
+import { liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainPage, terrainShot, terrainStep, terrainStream } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -177,7 +177,7 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
       const route = url.pathname.match(/^\/view\/([a-zA-Z0-9_-]+)(\/.*)$/);
       if (!route || Buffer.byteLength(route[1]) !== Buffer.byteLength(access) || !timingSafeEqual(Buffer.from(route[1]), Buffer.from(access))) { send(401); return; }
       const scopedPath = route[2];
-      const allowed = scopedPath === '/api/pi/messages' ? 'POST' : scopedPath === '/api/live/stream' ? 'GET' : 'GET, HEAD';
+      const allowed = scopedPath === '/api/pi/messages' || scopedPath === '/play/terrain/step' ? 'POST' : scopedPath === '/api/live/stream' ? 'GET' : 'GET, HEAD';
       if (!allowed.split(', ').includes(request.method)) { send(405, undefined, { Allow: allowed }); request.resume(); return; }
       if (scopedPath === '/api/pi/messages') {
         if (!piConsole) { send(404); request.resume(); return; }
@@ -198,6 +198,25 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         if (!asset) { send(404); return; }
         send(200, await readFile(asset.filename), { 'Content-Type': asset.type });
         return;
+      }
+      if (scopedPath === '/play/terrain' || scopedPath.startsWith('/play/terrain/')) {
+        // Terrain spawning, live (playground/terrain-spawn.mjs): the engine page with the user's own camera, the run's event
+        // stream and shots, and the user's step for a run waiting after a proposal.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); request.resume(); return; }
+        if (scopedPath === '/play/terrain') { const page = await terrainPage(); send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy }); return; }
+        if (scopedPath === '/play/terrain/stream.jsonl') { const from = Number(url.searchParams.get('from') ?? 0); send(200, await bounded(async () => terrainStream(await resolveWorkspace(volume), Number.isSafeInteger(from) ? from : 0)), { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath === '/play/terrain/step') {
+          let body = '';
+          for await (const chunk of request) { body += chunk; if (body.length > 512) { send(413); return; } }
+          let mode = null; try { mode = JSON.parse(body).mode; } catch { /* a bad body */ }
+          const step = await bounded(async () => terrainStep(await resolveWorkspace(volume), mode));
+          if (!step) { send(400); return; }
+          send(200, JSON.stringify(step), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          return;
+        }
+        if (scopedPath.startsWith('/play/terrain/shots/')) { const body = await bounded(async () => terrainShot(await resolveWorkspace(volume), scopedPath.slice('/play/terrain/shots/'.length))); if (!body) { send(404); return; } send(200, body, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=86400' }); return; }
+        send(404); return;
       }
       if (scopedPath === '/play/' || scopedPath === '/play/live' || scopedPath === '/play/world' || scopedPath === '/play/now' || scopedPath === '/play/live.json' || scopedPath.startsWith('/play/live/')) {
         // The stage simulation: the player (the selected book's accepted runs, or with newest=1 its latest; novel sim run) in the
