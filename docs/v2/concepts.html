@@ -63,10 +63,10 @@ footer { font-size: 12px; color: var(--muted); }
 <header class="top">
   <span class="eyebrow">Novel ontology · v2 · the concepts we invented</span>
   <h1>Concept map</h1>
-  <p>Every abstract concept of the v2 build, in the layer it belongs to, from what the text says to what is seen: what it is, where it lives in code, where it is designed, what it builds on and what builds on it. Made from <code>src/v2/concepts.ts</code> at <code>bb97125</code> on 2026-10-31.</p>
-  <span class="status">46 concepts · all 117 pointers hold · 37 of the user's design</span>
+  <p>Every abstract concept of the v2 build, in the layer it belongs to, from what the text says to what is seen: what it is, where it lives in code, where it is designed, what it builds on and what builds on it. Made from <code>src/v2/concepts.ts</code> at <code>bc2f915</code> on 2026-10-31.</p>
+  <span class="status">47 concepts · all 120 pointers hold · 38 of the user's design</span>
 </header>
-<nav class="strip" aria-label="Layers"><a class="step reading" href="#layer-reading"><b>reading</b><span>6</span></a><span class="arrow" aria-hidden="true">→</span><a class="step tree" href="#layer-tree"><b>tree</b><span>6</span></a><span class="arrow" aria-hidden="true">→</span><a class="step terrain" href="#layer-terrain"><b>terrain</b><span>12</span></a><span class="arrow" aria-hidden="true">→</span><a class="step world" href="#layer-world"><b>world</b><span>12</span></a><span class="arrow" aria-hidden="true">→</span><a class="step view" href="#layer-view"><b>view</b><span>8</span></a><span class="arrow" aria-hidden="true">·</span><a class="step rules" href="#layer-rules"><b>rules</b><span>2</span></a></nav>
+<nav class="strip" aria-label="Layers"><a class="step reading" href="#layer-reading"><b>reading</b><span>6</span></a><span class="arrow" aria-hidden="true">→</span><a class="step tree" href="#layer-tree"><b>tree</b><span>6</span></a><span class="arrow" aria-hidden="true">→</span><a class="step terrain" href="#layer-terrain"><b>terrain</b><span>13</span></a><span class="arrow" aria-hidden="true">→</span><a class="step world" href="#layer-world"><b>world</b><span>12</span></a><span class="arrow" aria-hidden="true">→</span><a class="step view" href="#layer-view"><b>view</b><span>8</span></a><span class="arrow" aria-hidden="true">·</span><a class="step rules" href="#layer-rules"><b>rules</b><span>2</span></a></nav>
 <div class="tools" role="search">
   <input id="find" type="search" placeholder="Find a concept (pools, zoom, shells…)" aria-label="Find a concept">
   <button type="button" id="mine" aria-pressed="false">Only the user's designs</button>
@@ -155,7 +155,7 @@ footer { font-size: 12px; color: var(--muted); }
   <header><h3>The terrain loop</h3><span class="badge">the user's design</span></header>
   <p>Cities, then districts, then streets, each in the text's order, pools last: Jev asked each part's kind, area and height.</p>
   <div class="where"><div><span class="label">code</span><ul><li><code class="path">playground/terrain-spawn.mjs</code> <code class="sym">terrainSpawn</code></li></ul></div><div><span class="label">design</span><ul><li><a href="visual-context-engine.md">visual-context-engine.md</a> <span class="head">§ 5.3 The loop for one part</span></li><li><a href="visual-context-engine.md">visual-context-engine.md</a> <span class="head">§ 5.7 Terrain by level</span></li></ul></div></div>
-  <div class="links"><div><span class="label">builds on</span><a class="chip reading" href="#context-engine">The context engine</a><a class="chip view" href="#zoom-engine">The zoom engine</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#pick-up">Picking up</a></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip reading" href="#context-engine">The context engine</a><a class="chip view" href="#zoom-engine">The zoom engine</a></div><div><span class="label">built on by</span><a class="chip terrain" href="#plain-map">A plain map</a><a class="chip terrain" href="#pick-up">Picking up</a></div></div>
 </article>
 <article class="card" id="kinds-by-level" data-layer="terrain" data-text="kinds by level each level its own kinds: a city a metropolis, a district a cbd or a harbour, a street an avenue or a square. kinds-by-level">
   <header><h3>Kinds by level</h3><span class="badge">the user's design</span></header>
@@ -216,6 +216,12 @@ footer { font-size: 12px; color: var(--muted); }
   <p>A named place Jev decided is kept under its exact name for every later book, so only the first pays.</p>
   <div class="where"><div><span class="label">code</span><ul><li><code class="path">playground/terrain-spawn.mjs</code> <code class="sym">registryFile</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.15 Pins as suggestions</span></li></ul></div></div>
   <div class="links"><div><span class="label">builds on</span><a class="chip tree" href="#pool-registry">A universe's pools</a></div></div>
+</article>
+<article class="card" id="plain-map" data-layer="terrain" data-text="a plain map terrain starts from the tree's pins alone: no default ground, no scene buildings, no subway, until terrain keeps a place. plain-map">
+  <header><h3>A plain map</h3><span class="badge">the user's design</span></header>
+  <p>Terrain starts from the tree's pins alone: no default ground, no scene buildings, no subway, until terrain keeps a place.</p>
+  <div class="where"><div><span class="label">code</span><ul><li><code class="path">playground/export-strand-demo.mjs</code> <code class="sym">options.plain</code></li><li><code class="path">playground/terrain-spawn.mjs</code> <code class="sym">plain: true</code></li></ul></div><div><span class="label">design</span><ul><li><a href="world-engine-v2.md">world-engine-v2.md</a> <span class="head">§ 2.0.19 A plain map</span></li></ul></div></div>
+  <div class="links"><div><span class="label">builds on</span><a class="chip terrain" href="#terrain-loop">The terrain loop</a></div></div>
 </article>
 <article class="card" id="pick-up" data-layer="terrain" data-text="picking up a run picks up where the last stopped: the parts kept stay, only the rest are asked; step mode waits for the user. pick-up">
   <header><h3>Picking up</h3><span class="badge">the user's design</span></header>

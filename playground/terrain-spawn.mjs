@@ -125,7 +125,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const show = (moment, proposal = null) => (snapshot ? live.world({ ...snapshot, moment, ...(focus ? { focus } : {}) }, { ...data, terrain: { proposal } }) : null);
   const build = async (kept = null) => {
     const started = Date.now();
-    data = await strandDemo(novelDir, { from: line.from, to: line.to, worldOnly: true, title: 'Terrain', live: shot => { snapshot = shot; } });
+    // A plain map (the user's call, §2.0.19): the tree from the reading, its places as pins, and only the ground terrain kept.
+    data = await strandDemo(novelDir, { from: line.from, to: line.to, worldOnly: true, plain: true, title: 'Terrain', live: shot => { snapshot = shot; } });
     // The terrain stage's own view (brighter fill, far fog), in World · Live and Jev's stills alike.
     data.stage = 'terrain';
     // A part just kept: World · Live looks where the engine put it (its canvas keeps it clear of its siblings).

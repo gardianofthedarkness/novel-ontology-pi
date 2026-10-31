@@ -430,7 +430,10 @@ export async function strandDemo(novelDir, options) {
       if (!site.size) return made ? withManifold(samplePatch(site.ground, 'p0', id, [0, 0], { by: 'jev' }), made.median, made.manifold) : null;
       const [w, d] = site.size; return patchFromBox(site.ground, 'p0', id, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }, made);
     };
+    // `plain` (terrain spawning, docs/v2/world-engine-v2.md §2.0.19): the map starts as the plain tree: a place has ground
+    // only once terrain kept it; no landscape step's ground, no ground by scale.
     const landscapeOf = (id, scale = scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')) => {
+      if (options.plain && !terrainGround(id)) { ground.set(id, { type: null, by: 'none' }); return null; }
       if (!ground.has(id) && poolArea(id) && !terrainGround(id)) ground.set(id, { type: null, by: 'none' });
       if (!ground.has(id)) ground.set(id, terrainGround(id) ? { type: terrainGround(id).ground, by: 'jev', from: 'terrain' } : groundFor(inputs.landscape?.places[id], pathOf(id).filter(at => at !== id).reverse(), at => inputs.landscape?.places[at], scale));
       return ground.get(id).type;
@@ -565,7 +568,8 @@ export async function strandDemo(novelDir, options) {
   // Each open place's landscape, filled (src/ground/stage/landscape.ts), in map metres: what stands around the staged grids,
   // never on them (nor on the units and circles built inside it). Derived view data: only nominated buildings are canon.
   const modelSizes = Object.fromEntries(Object.entries(library.models).map(([id, model]) => [id, model.size]));
-  const landscapes = Object.values(canvas.places).filter(place => place.landscape).map(place => {
+  // On a plain map only terrain's ground stands: what terrain kept, and what a pool's members borrowed (no stand-in area's).
+  const landscapes = Object.values(canvas.places).filter(place => place.landscape && (!options.plain || terrain?.sites?.[place.id]?.ground || place.landscape.patches.some(patch => patch.borrowed))).map(place => {
     const [wx, wz] = C.worldOf(canvas, place.id), round = value => Math.round(value * 10) / 10, filled = fillOf(place.landscape);
     // Not where a child place stands: it has its own ground there.
     const keep = Object.values(canvas.places).filter(child => child.parent === place.id).map(child => ({ at: child.at, r: child.r }));
@@ -618,7 +622,8 @@ export async function strandDemo(novelDir, options) {
   }
   // A named building's role and floors by its kind (architecture); a world-first spot's by the building the world said it is.
   const anchors = [...ownGrids].map(id => {
-    const node = macroOf.get(id), own = kindOf(id) === 'site', kind = inputs.architecture?.places[id]?.kind, [role, floors] = BUILDING_OF[worldScript?.places?.[id]?.building] ?? [ROLE_OF[kind] ?? 'office', FLOORS_OF[kind] ?? 6];
+    // On a plain map no scene's building stands either: the places are pins until terrain builds them.
+    const node = macroOf.get(id), own = !options.plain && kindOf(id) === 'site', kind = inputs.architecture?.places[id]?.kind, [role, floors] = BUILDING_OF[worldScript?.places?.[id]?.building] ?? [ROLE_OF[kind] ?? 'office', FLOORS_OF[kind] ?? 6];
     return { place: id, label: keptOf.get(id)?.label ?? name(id), x: node?.spotX ?? 0, z: node?.spotZ ?? 0, own, role, floors, era: themeAt(node?.spotX ?? 0, node?.spotZ ?? 0) };
   });
   notes.buildings = Object.fromEntries(Object.entries(anchors.filter(anchor => anchor.own).reduce((count, anchor) => ({ ...count, [anchor.role]: (count[anchor.role] ?? 0) + 1 }), {})));
@@ -633,7 +638,7 @@ export async function strandDemo(novelDir, options) {
   // The terrain's shapes (docs/v2/world-engine-v2.md §2.0.17): each shape Jev kept (a platform, a ramp, a cut) stands where
   // its part is now, as large as its box; one below the street is a hall that deep too (U.shapeHall).
   const terrainShapes = Object.entries(terrain?.shapes ?? {}).map(([id, shape]) => { const node = macroOf.get(id), [x0, z0, x1, z1] = shape.box; return node ? { id, label: name(id), kind: shape.kind, x: node.x, z: node.z, w: Math.round((x1 - x0) * 10) / 10, d: Math.round((z1 - z0) * 10) / 10, top: shape.top ?? null, hall: (shape.top ?? 0) < 0 ? undergroundKindOf(name(id)) : null } : null; }).filter(Boolean);
-  const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city ? U.subwayOf(stops, city.id, city.r) : []), ...terrainShapes.filter(shape => (shape.top ?? 0) < 0).map(shape => U.shapeHall(shape))].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
+  const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city && !options.plain ? U.subwayOf(stops, city.id, city.r) : []), ...terrainShapes.filter(shape => (shape.top ?? 0) < 0).map(shape => U.shapeHall(shape))].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
   const underground = { halls };
   notes.underground = { halls: Object.fromEntries(Object.entries(halls.reduce((count, hall) => ({ ...count, [hall.kind]: (count[hall.kind] ?? 0) + 1 }), {}))), stops: stops.length, active: {}, hits: 0 };
   world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors, underground });

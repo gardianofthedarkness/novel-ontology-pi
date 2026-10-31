@@ -806,6 +806,14 @@ fights, with its tiling, destruction and inside switched off for the rest, switc
 - **Stills on the GPU** for terrain spawning: a whole city of shells took 16 s a still on SwiftShader (the CPU) and takes
   0.2 s through Metal, the same picture each run; elsewhere SwiftShader stays the default.
 Vol 1's copy: 120 lots and 632 shells; the page 1.1 MB.
+
+### 2.0.19 A plain map (the user's call, 2026-10-31)
+
+Terrain starts from a plain map: the place tree from the reading, its places as pins, and nothing else. No place takes the
+landscape step's ground or a ground by its scale, no scene's place stands as a building, no subway is laid: a place has
+ground (and so buildings, and halls under them) only once terrain spawning has kept it, or a pool's member has borrowed it.
+Built as the export's `plain` option, which terrain spawning always sets; the world engine at runtime keeps its own ways.
+On vol 1 with no terrain kept: no landscape, no building, no hall, no staged building; only the pins.
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by
