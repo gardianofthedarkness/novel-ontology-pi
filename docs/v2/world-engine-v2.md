@@ -376,8 +376,8 @@ against the last reading (`experiments/v2/compare.mjs`; the listing came from th
   - *EM², on the same inputs* (81.5% the same speakers or actors, 76.6% listeners, 87% descriptions; sure answers 69.8% and
     69.4%): most differences are between two unsure answers; where both were sure and differed (29 of 2,144 lines), 11 of
     the 14 that could be judged were right the old way (in 4 batches), 3 the new way (in 3 batches).
-- **So:** meanings once is kept for the sentence kinds only (`HINTS_ONCE_STEPS`); typing and EM² send them in each
-  question again. The saving that is left in EM² is the ids: short keys for the cast's options (p1, p2 … in the state, the
+- **So** (the user's call): the saving is not worth the correctness. Every step sends the meanings in each question again,
+  as before (`HINTS_ONCE_STEPS` is empty; `V2_HINTS=once` turns it on for a comparison). The saving that is left in EM² is the ids: short keys for the cast's options (p1, p2 … in the state, the
   name still with each option) would cut what EM² sends without taking the names out of the questions.
 
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
