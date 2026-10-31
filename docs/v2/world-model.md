@@ -7,7 +7,7 @@ spacetime itself (a tree), matter moves through it (a graph). The systems that r
 extraction, entity recommendation, the context engine, EM and EM², the world engine) are separate layers, each with its
 own job and interface, each supporting the others and none doing another's work. Status: **design for review; the place
 layer (§4–§6) is built against it** (`placeRecommend.ts`, `readingGraph.ts`, `context/`, `placeEm.ts`; EM² no longer asks
-about places), tested on fixtures and on vol 1's saved reading with a stand-in Jev (§8); not yet run with Jev.
+about places) and run on vol 1 with Jev (§8).
 
 ## 1. The world model
 
@@ -219,6 +219,20 @@ questions in 11 requests (2 `place-parent`, 9 `place-ref`), against ≈546 in 27
 action, 1 by environment; none needed Jev. 110 descriptions of places: 131 unnamed places (115 held by the setting, 1 by
 the text, 15 by nothing yet: their setting has no larger place until Jev answers the tree), 5 the same as one before.
 Occupancy: 126 by setting, 21 by spatial words.
+
+**Run with Jev on vol 1 (2026-10-31, `~/claude-world-first/v2-vol1-placeem`, cache from `v2-vol1-scales`):** $0.172 (4.1 M
+Jev input tokens, 43 s): EM² 263 requests (272 before; its references 1,206, the 273 of places gone), place EM 11 requests
+for 26 questions. Then one change and a rerun of place EM alone ($0.001, 9 requests): the parent question had told Jev
+"nothing in the text links them" of every candidate without textual evidence, which steered it to none (纽约 lost
+合众国); it now says such a candidate is a larger place the text does not link, and that a place may hold another as it is
+known to (a city in its country). The tree: 日本 › 东京都 › 东京西部的学园都市 › 第七, 第十五, 第六学区 (第七 by its name, the
+rest by Jev at 0.81–0.93), 常盘台中学 in 东京西部的学园都市 (0.51), 合众国 › 纽约 (0.71), 魔道书图书馆 in 英国清教第零圣堂区
+(0.88); the laws hold (14 places, 6 roots, 8 links, no loop, all graded). Settings: 21 by what the scene names, 12 carried,
+7 an unnamed room or building of its environment, 4 by action, 2 by environment; none needed Jev. Descriptions: 114 new
+unnamed places by rule (held by the setting but 1 by the text and 5 by nothing: their scene is set in a building the tree
+puts nowhere, so the script samples them near that scene), 5 the same as before, 7 a named place by Jev (城市, 这座城市, 夜晚的
+都市 → 东京西部的学园都市; 飞镖酒吧), 10 no particular place; learned: 城市 and 这座城市 → 东京西部的学园都市. The engine from it:
+no stand-in area, 东京西部的学园都市 931 m across, every unnamed place on the canvas (most gold: held by the setting, a guess).
 
 ## 9. Questions answered (the user, 2026-10-31)
 

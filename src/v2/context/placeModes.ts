@@ -24,7 +24,7 @@ const CLIP = 140, BUDGET = 9000, LATEST = Number.MAX_SAFE_INTEGER;
 const clip = (text: string, size = CLIP) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
 const SAY: Record<string, string> = { name: "its name holds the other's", stated: "named right after it", sentence: "named in one sentence with it", setting: "set in one scene with it", adjacent: "in scenes side by side", fact: "facts about both" };
 /** Why a candidate was put forward, in words. */
-export const why = (candidate: Candidate) => candidate.evidence.filter((entry) => entry.kind !== "scale").map((entry) => `${SAY[entry.kind]}${entry.count > 1 ? ` ${entry.count}×` : ""}`).join("; ") || "nothing in the text links them";
+export const why = (candidate: Candidate) => candidate.evidence.filter((entry) => entry.kind !== "scale").map((entry) => `${SAY[entry.kind]}${entry.count > 1 ? ` ${entry.count}×` : ""}`).join("; ") || "a larger place; the text does not link them";
 const place = (stores: PlaceStores, id: string) => ({ name: stores.index.label(id), scale: stores.index.scale.get(id) ?? "not said", ...(stores.address(id).length > 1 ? { in: stores.address(id).slice(0, -1).join(" › ") } : {}) });
 const candidateItems = (stores: PlaceStores, candidates: Candidate[]): Item[] => [...new Map(candidates.map((candidate) => [candidate.id, candidate])).values()].map((candidate) => ({ id: candidate.id, fields: place(stores, candidate.id), score: candidate.score }));
 const options = (candidates: Candidate[], top: number) => candidates.slice(0, top).map((candidate) => candidate.id);
@@ -36,7 +36,7 @@ export interface ParentFocus { asked: { key: string; id: string; candidates: Can
 export const PARENT_TOP = 4;
 export const placeParentMode: Mode<ParentFocus, PlaceStores> = {
   name: "place-parent",
-  task: "Named places of a novel. Places nest: a room in a building, a building on a street, a street in a district, a district in a city, a city in a region. For each place asked about, say which of its candidates holds it (the place it lies in, one level up or more), or none: none of them does, or the text does not say. Each candidate comes with why it was put forward.",
+  task: "Named places of a novel. Places nest: a room in a building, a building on a street, a street in a district, a district in a city, a city in a region. For each place asked about, say which of its candidates holds it (the place it lies in, one level up or more), or none: none of them does, or it cannot be told. Each candidate comes with why it was put forward; a place may also hold another as it is known to (a city in its country) where the text does not say so.",
   sources: [
     { name: "asked", key: "asked", quota: 0, keep: true, collect: (focus, stores) => focus.asked.map((entry) => ({ id: entry.key, score: 1, fields: { ...place(stores, entry.id), named: (stores.index.sentencesOf.get(entry.id) ?? []).slice(0, 2).map((id) => clip(stores.text(id))), candidates: Object.fromEntries(entry.candidates.slice(0, PARENT_TOP).map((candidate) => [candidate.id, why(candidate)])) } })) },
     { name: "candidates", key: "places", quota: 0, keep: true, collect: (focus, stores) => candidateItems(stores, focus.asked.flatMap((entry) => entry.candidates.slice(0, PARENT_TOP))) },

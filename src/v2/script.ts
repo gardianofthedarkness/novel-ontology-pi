@@ -139,6 +139,12 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     const near = [...count].sort((a, b) => b[1] - a[1])[0]?.[0];
     if (near) place.near = near;
   }
+  // An unnamed place nothing holds (its scene is set in a building the tree puts nowhere): near where its scene is.
+  for (const place of Object.values(places)) {
+    if (!place.unnamed || place.parent || !place.scene) continue;
+    const at = scenes.find((scene) => scene.id === place.scene)?.place ?? null, near = areaOf(at) ?? (at ? places[at]?.near : undefined);
+    if (near) place.near = near;
+  }
   // A reading from before place EM: every other unnamed place EM² found, in what holds it, else in its scene's named place.
   const sceneAt = new Map(scenes.map((scene) => [scene.id, scene]));
   const namedOf = (id: string | null) => { for (let at = id, n = 0; at && n < 16; at = places[at]?.parent ?? null, n++) if (!places[at]?.unnamed) return at; return null; };
