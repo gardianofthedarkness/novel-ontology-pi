@@ -4,7 +4,7 @@ import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../src/gro
 import { sectionBlock } from "../src/digger/intake/sectioning.js";
 import { Chart } from "../src/v2/em.js";
 import type { FlowResult } from "../src/v2/flow.js";
-import { placeTree } from "../src/v2/places.js";
+import { placeEm } from "../src/v2/placeEm.js";
 import { readingScript } from "../src/v2/script.js";
 import { levelOf, spatialMentions } from "../src/v2/spatial.js";
 
@@ -59,15 +59,16 @@ test("scale is EM's: a place's type, else its name, else a step above what it ho
   chart.mint("place", "room", "七号房", []);
   const asked: DecisionQuestion[][] = [];
   const decide = async (_state: DecisionState, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> => { asked.push(questions); return questions.map((q) => ({ key: q.key, value: "none", confidence: 0.9, distribution: { none: 0.9 } }) as DecisionAnswer); };
-  const tree = await placeTree(decide, { chart, sentences: text, placeLinks: [], slots: [], text: () => "" });
-  const of = (name: string) => tree.places.find((entry) => chart.entities.get(entry.id)!.names[0] === name)!;
+  const result = await placeEm(decide, { chart, scenes: [{ id: "s1", index: 0, block: "b1", chapter: 0, sentences: text.map((sentence) => sentence.id) }], cards: [], sentences: text, kinds: {}, text: (id) => text.find((sentence) => sentence.id === id)?.text ?? "", facts: [], descriptions: [] });
+  const of = (name: string) => result.places.find((entry) => chart.entities.get(entry.id)!.names[0] === name)!;
   const name = (id: string | null) => (id ? chart.entities.get(id)!.names[0] : null);
   assert.deepEqual([name(of("东京西部的学园都市").parent), name(of("东京都").parent), name(of("第七学区").parent)], ["东京都", "日本", "东京西部的学园都市"], "stated, one after the other");
   assert.deepEqual([of("东京西部的学园都市").scale, of("东京西部的学园都市").scaleBy], ["city", "typing"]);
   assert.deepEqual([of("东京都").scale, of("东京都").scaleBy], ["region", "tree"], "named a city, holding a city: raised");
   assert.deepEqual([of("日本").scale, of("日本").scaleBy], ["region", "holds"], "its name says nothing: a step above what it holds");
   assert.deepEqual([of("七号房").scale, name(of("七号房").parent)], ["room", "常盘台中学"], "a room in its building");
-  const offered = asked.flat().find((q) => q.instructions.includes("常盘台中学"))?.options ?? [];
+  const school = result.asked.find((entry) => Object.values(entry.keys).includes(of("常盘台中学").id))!, key = Object.entries(school.keys).find(([, id]) => id === of("常盘台中学").id)![0];
+  const offered = asked.flat().find((q) => q.key === `tree:${key}`)?.options ?? [];
   assert.ok(offered.length && !offered.includes(of("七号房").id), "a room is never offered to hold a building");
   assert.ok(offered.includes(of("日本").id), "a region is");
 });

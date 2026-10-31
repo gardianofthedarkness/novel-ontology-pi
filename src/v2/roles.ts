@@ -13,6 +13,8 @@ import type { Decide } from "./typing.js";
  *   story or is background (an everyday thing is never an actor: the user's rule, 2026-10-30);
  * - of each description of a person or a crowd, who it means here; of each unnamed vehicle or weapon (那辆车, 手枪), which
  *   one it is here: a named one of the passage, or one of the scene's (a slot of its own, as an unnamed person's).
+ * Places are not EM²'s (docs/v2/world-model.md §5): they are spacetime, a tree, and place EM (placeEm.ts) decides them;
+ * EM² decides matter, whose relations are a graph.
  * The choices are the scene's cast: the people named in the passage, the scene and the one before, the people the
  * recommender expects, the world engine's present people when it has them, the people a description has meant before
  * (habits), and the scene's slots. A description that means someone not in the cast opens a slot: an unnamed person or an
@@ -39,12 +41,8 @@ const MATTERS = {
   false: "background: a passer-by, an everyday thing (a phone, a door, a machine at its routine work), the weather, the sounds and lights of the scene; nothing that matters acts",
 };
 /** What a description is of: a person or a crowd (the cast), or an unnamed vehicle or weapon (the things). */
-export type DescriptionType = "person" | "crowd" | "vehicle" | "weapon" | "place" | "building" | "room";
+export type DescriptionType = "person" | "crowd" | "vehicle" | "weapon";
 const OF_THINGS = new Set<string>(["vehicle", "weapon"]);
-/** Descriptions of places (the user's call, 2026-10-31): which place each means where it stands, and which named place holds it. */
-const OF_PLACES = new Set<string>(["place", "building", "room"]);
-/** Named places a place question offers (the passage's, the scene's, the scene before's), and the environment cards shown as the scene's setting. */
-export const CAST_PLACES = 10, SETTING_CARDS = 3;
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
 
 /**
@@ -58,13 +56,10 @@ export interface Role { kind: "spoken" | "action"; who: Pick; to?: Pick; matters
 /** A description of a person, a crowd, a vehicle or a weapon where it stands, and who or what it means there (an entity, a slot, or none). */
 export interface Reference { text: string; type: DescriptionType; scene: string; sentences: string[]; entity: string | null; answer: string; confidence: number; unsure?: string; facts?: string[] }
 /** An unnamed person, crowd, vehicle or weapon of a scene, known by the descriptions that meant it. Never a name of anything. */
-/** `scale`: an unnamed open place's, as typing said it (a street, a district, …). */
-export interface Slot { id: string; kind: DescriptionType; scene: string; label: string; names: string[]; sentences: string[]; in?: string | null; scale?: string }
-/** What EM² said holds a place where a description of it stood: a named place, with how sure. */
-export interface PlaceLink { child: string; parent: string; scene: string; confidence: number; via: string }
+export interface Slot { id: string; kind: DescriptionType; scene: string; label: string; names: string[]; sentences: string[] }
 /** What a description has meant: how often, and in whose lines. */
 export interface Habit { text: string; entity: string; count: number; speakers: Record<string, number> }
-export interface RolesResult { roles: Record<string, Role>; references: Reference[]; slots: Slot[]; habits: Habit[]; placeLinks: PlaceLink[] }
+export interface RolesResult { roles: Record<string, Role>; references: Reference[]; slots: Slot[]; habits: Habit[] }
 
 export interface RolesInput {
   scenes: { id: string; sentences: string[] }[];
@@ -73,7 +68,7 @@ export interface RolesInput {
   /** The entities named in each sentence (the card scan). */
   named: Map<string, string[]>;
   /** Every string typed as a description of a person, a crowd, or an unnamed vehicle or weapon (EM's description outcome). */
-  descriptions: { text: string; type: DescriptionType; scale?: string }[];
+  descriptions: { text: string; type: DescriptionType }[];
   /** Each scene's people the recommender expects. */
   recommended: Map<string, { id: string; score: number }[]>;
   facts: FactLedger;
@@ -89,7 +84,7 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
   const isPerson = (id: string) => categoryOf(id) === "person";
   const roles: Record<string, Role> = {}, references: Reference[] = [], slots: Slot[] = [], slotOf = new Map<string, Slot>();
   const habits = new Map<string, Habit>();
-  const typeOf = new Map(input.descriptions.map((entry) => [entry.text, entry.type])), scaleOf = new Map(input.descriptions.filter((entry) => entry.scale).map((entry) => [entry.text, entry.scale!]));
+  const typeOf = new Map(input.descriptions.map((entry) => [entry.text, entry.type]));
   // The descriptions a sentence holds, a longer name masking the ones inside it (御坂妹妹 is a name, not 妹妹).
   const lexicon: [string, string][] = [...chart.names(), ...input.descriptions.map((entry): [string, string] => [entry.text, DESCRIPTION])].sort((a, b) => b[0].length - a[0].length);
   const describedCache = new Map<string, string[]>();
@@ -104,9 +99,7 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
     const [speaker, times] = Object.entries(habit.speakers).sort((a, b) => b[1] - a[1])[0] ?? [];
     return `${label(habit.entity)} ×${habit.count}${speaker ? ` (in lines of ${label(speaker)} ×${times})` : ""}`;
   }).join("; ");
-  let previous = new Map<string, number>(), previousSlots: Slot[] = [], previousPlaces: string[] = [];
-  const placeLinks: PlaceLink[] = [];
-  const isPlace = (id: string) => categoryOf(id) === "place";
+  let previous = new Map<string, number>(), previousSlots: Slot[] = [];
   for (const scene of input.scenes) {
     const named = new Map<string, number>(), here = new Map<string, number>(), sceneSlots: Slot[] = [];
     for (const id of scene.sentences) for (const entity of input.named.get(id) ?? []) if (isPerson(entity)) tally(named, entity);
@@ -138,15 +131,7 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
       const concepts = [...new Set(passage.flatMap((id) => input.named.get(id) ?? []).filter((id) => categoryOf(id) === "concept"))];
       // The things a vehicle's or a weapon's description may mean: the named ones of its type, and the scene's unnamed ones.
       const ofType = (type: string) => things.filter((id) => chart.entities.get(id)?.type === type || slotOf.get(id)?.kind === type);
-      const lineDescs = descs.filter((desc) => !OF_THINGS.has(desc.type) && !OF_PLACES.has(desc.type));
-      // The places a place's description may mean: the named places of the passage, of the scene so far and of the scene
-      // before, and the scene's (and the scene before's) unnamed places; its setting, from the scene's environment cards.
-      const placeDescs = descs.filter((desc) => OF_PLACES.has(desc.type));
-      const upTo = scene.sentences.slice(0, scene.sentences.indexOf(batch[batch.length - 1]) + 1);
-      const namedPlaces = [...new Set([...passage, ...upTo].flatMap((id) => input.named.get(id) ?? []).filter(isPlace).concat(previousPlaces))].slice(0, CAST_PLACES);
-      const offeredPlaces = [...previousSlots, ...sceneSlots].filter((slot) => OF_PLACES.has(slot.kind)).slice(-CAST_SLOTS);
-      const placeOptions = [...namedPlaces, ...offeredPlaces.map((slot) => slot.id)];
-      const setting = placeDescs.length ? scene.sentences.filter((id) => input.kinds[id]?.kind === "environment").slice(0, SETTING_CARDS).map((id) => clip(text(id), 140)) : [];
+      const lineDescs = descs.filter((desc) => !OF_THINGS.has(desc.type));
       const at = position(passage[0]);
       const facts = factEvidence([
         ...cast.slice(0, CAST_FACTS).flatMap((id) => input.facts.about(chart, [id], at).map((fact) => ({ fact, for: id }))),
@@ -166,11 +151,6 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
           ...namedThings.map((id) => [id, { name: label(id), is: chart.entities.get(id)!.type }]),
           ...offeredThings.map((slot) => [slot.id, { name: `(unnamed ${slot.kind}) ${slot.label}`, ...(slot.names.length > 1 ? { also: slot.names.slice(1, 4) } : {}), from: slot.scene === scene.id ? "this scene" : "the scene before" }]),
         ]) } : {}),
-        ...(placeOptions.length && placeDescs.length ? { places: Object.fromEntries([
-          ...namedPlaces.map((id) => [id, { name: label(id), is: chart.entities.get(id)!.type }]),
-          ...offeredPlaces.map((slot) => [slot.id, { name: `(unnamed ${slot.kind}) ${slot.label}`, ...(slot.in ? { in: label(slot.in) } : {}), from: slot.scene === scene.id ? "this scene" : "the scene before" }]),
-        ]) } : {}),
-        ...(setting.length ? { setting } : {}),
         ...(concepts.length ? { concepts: Object.fromEntries(concepts.map((id) => { const owner = chart.entities.get(id)!.owners?.at(-1)?.id; return [id, { name: label(id), ...(owner ? { of: owner === "many" ? "many people, or a group" : label(owner) } : {}) }]; })) } : {}),
         ...(Object.keys(facts).length ? { facts } : {}),
         ...(before.length ? { before: Object.fromEntries(before.map((id) => { const role = roles[id]; return [id, { text: clip(text(id), 60), who: role.who.id ? label(role.who.id) : role.who.answer === "time" ? "a flashback" : "no one", ...(role.to ? { to: role.to.id ? label(role.to.id) : "no one" } : {}) }]; })) } : {}),
@@ -179,19 +159,14 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
       };
       const hints: Record<string, string> = Object.fromEntries([
         ...cast.map((id) => [id, [label(id), ...chart.entities.get(id)!.proper.slice(1, 3)].join(" / ")]),
-        ...[...offered, ...offeredThings, ...offeredPlaces].map((slot) => [slot.id, `the unnamed ${slot.kind} ${slot.scene === scene.id ? "this scene" : "the scene before"} called ${slot.label}`]),
-        ...namedPlaces.map((id) => [id, `${label(id)} (a named ${chart.entities.get(id)!.type})`]),
+        ...[...offered, ...offeredThings].map((slot) => [slot.id, `the unnamed ${slot.kind} ${slot.scene === scene.id ? "this scene" : "the scene before"} called ${slot.label}`]),
         ...namedThings.map((id) => [id, `${label(id)} (${categoryOf(id) === "place" ? "a building or a place" : `a ${chart.entities.get(id)!.type === "object" ? "named thing" : chart.entities.get(id)!.type}`})`]),
-        ...descs.map((desc) => [desc.key, `${OF_THINGS.has(desc.type) || OF_PLACES.has(desc.type) ? "whichever" : "whoever"} descriptions.${desc.key} (${desc.text}) means here`]),
+        ...descs.map((desc) => [desc.key, `${OF_THINGS.has(desc.type) ? "whichever" : "whoever"} descriptions.${desc.key} (${desc.text}) means here`]),
       ]);
       const line = [...people, ...lineDescs.map((desc) => desc.key), "unnamed", "none"];
       const acting = [...people, ...things, ...descs.map((desc) => desc.key), "unnamed", "time", "none"];
       const questions: DecisionQuestion[] = [
-        ...placeDescs.flatMap((desc): DecisionQuestion[] => [
-          { key: `ref:${desc.key}`, primitive: "choice", instructions: `Which place does descriptions.${desc.key} mean here?`, options: [...placeOptions, "new", "general", "none"], optionHints: { ...hints, new: "a place here that is not in places and the story has not named", general: "places of this kind in general, not one here", none: "not a place here: a word for something else" } },
-          ...(namedPlaces.length ? [{ key: `within:${desc.key}`, primitive: "choice" as const, instructions: `Which named place is the place descriptions.${desc.key} means in?`, options: [...namedPlaces, "none"], optionHints: { ...hints, none: "none of these, or the passage does not say" } }] : []),
-        ]),
-        ...descs.filter((desc) => !OF_PLACES.has(desc.type)).map((desc): DecisionQuestion => OF_THINGS.has(desc.type)
+        ...descs.map((desc): DecisionQuestion => OF_THINGS.has(desc.type)
           ? { key: `ref:${desc.key}`, primitive: "choice", instructions: `Which ${desc.type} does descriptions.${desc.key} mean here?`, options: [...ofType(desc.type), "new", "general", "none"], optionHints: { ...hints, new: `one ${desc.type} here that is not in things and the story has not named`, general: `${desc.type}s in general or a kind of ${desc.type}, not one here`, none: `not a ${desc.type} here` } }
           : { key: `ref:${desc.key}`, primitive: "choice", instructions: `Who does descriptions.${desc.key} mean here?`, options: [...people, "new", "crowd", "general", "none"], optionHints: { ...hints, new: "one person not in the cast, who is here and the story has not named", crowd: "a crowd or a group of people not in the cast, who are here", general: "people in general or a kind of person, not anyone here (学生 as students at large)", none: "not a person here" } }),
         ...batch.filter((id) => ROLE_KINDS.has(input.kinds[id]?.kind)).flatMap((id): DecisionQuestion[] => input.kinds[id].kind === "spoken" ? [
@@ -217,19 +192,14 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
       for (const desc of descs) {
         const { value, confidence } = answer(`ref:${desc.key}`);
         let entity: string | null = null, unsure: string | undefined;
-        const ofPlaces = OF_PLACES.has(desc.type), pool = OF_THINGS.has(desc.type) ? ofType(desc.type) : ofPlaces ? placeOptions : people;
-        // What holds a place: the named place EM² said it is in, else a named place its own words name (第七学区的便利店).
-        const held = ofPlaces ? (() => { const { value: holder, confidence: sure } = answer(`within:${desc.key}`); if (namedPlaces.includes(holder) && sure >= ROLE_ACCEPT) return { id: holder, confidence: sure }; const inside = mentions(desc.text, chart.names()).map((hit) => hit.id).find(isPlace); return inside ? { id: inside, confidence: 1 } : null; })() : null;
+        const pool = OF_THINGS.has(desc.type) ? ofType(desc.type) : people;
         if (pool.includes(value) && confidence >= ROLE_ACCEPT) entity = value;
         else if (value !== "none" && value !== "general") {
           if (pool.includes(value)) unsure = value;
-          const kind: DescriptionType = OF_THINGS.has(desc.type) || ofPlaces ? desc.type : value === "crowd" || (value !== "new" && desc.type === "crowd") ? "crowd" : "person";
-          const slot: Slot = { id: `slot_${scene.id.slice(-6)}_${sceneSlots.length + 1}`, kind, scene: scene.id, label: desc.text, names: [], sentences: [], ...(ofPlaces ? { in: held?.id ?? null, ...(scaleOf.get(desc.text) ? { scale: scaleOf.get(desc.text) } : {}) } : {}) };
+          const kind: DescriptionType = OF_THINGS.has(desc.type) ? desc.type : value === "crowd" || (value !== "new" && desc.type === "crowd") ? "crowd" : "person";
+          const slot: Slot = { id: `slot_${scene.id.slice(-6)}_${sceneSlots.length + 1}`, kind, scene: scene.id, label: desc.text, names: [], sentences: [] };
           sceneSlots.push(slot); slots.push(slot); slotOf.set(slot.id, slot); entity = slot.id;
         }
-        // A named place a description meant, held by another named place: a link for the place tree.
-        if (ofPlaces && entity && isPlace(entity) && held && held.id !== entity) placeLinks.push({ child: entity, parent: held.id, scene: scene.id, confidence: Number(held.confidence.toFixed(3)), via: desc.text });
-        if (ofPlaces && entity && slotOf.get(entity) && !slotOf.get(entity)!.in && held) slotOf.get(entity)!.in = held.id;
         const slot = entity ? slotOf.get(entity) : undefined;
         if (slot) { if (!slot.names.includes(desc.text)) slot.names.push(desc.text); for (const id of desc.sentences) if (!slot.sentences.includes(id)) slot.sentences.push(id); }
         if (entity && chart.entities.has(entity)) input.facts.link(desc.sentences, entity);
@@ -269,7 +239,6 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
     previous = new Map(named);
     for (const [id, count] of here) previous.set(id, (previous.get(id) ?? 0) + count);
     previousSlots = sceneSlots;
-    previousPlaces = [...new Set(scene.sentences.flatMap((id) => input.named.get(id) ?? []).filter(isPlace))].slice(0, CAST_PLACES);
   }
-  return { roles, references, slots, habits: [...habits.values()].sort((a, b) => b.count - a.count), placeLinks };
+  return { roles, references, slots, habits: [...habits.values()].sort((a, b) => b.count - a.count) };
 }

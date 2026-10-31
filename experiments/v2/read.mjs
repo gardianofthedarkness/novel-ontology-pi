@@ -88,7 +88,10 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
       const tally = (list, key) => list.reduce((sum, entry) => ({ ...sum, [key(entry) ?? 'none']: (sum[key(entry) ?? 'none'] ?? 0) + 1 }), {}), spatial = result.spatial ?? [];
       return { scales: tally(places, entry => entry.scale), scaleBy: tally(places, entry => entry.scaleBy), slotScales: tally(slots, slot => slot.scale ?? slot.kind),
         spatial: { mentions: spatial.length, words: new Set(spatial.map(entry => entry.text)).size, tied: spatial.filter(entry => entry.who.length).length, levels: tally(spatial, entry => entry.level) },
-        named: places.length, withParent: places.filter(entry => entry.parent).length, by, unnamed: slots.length, unnamedHeld: slots.filter(slot => slot.in).length, links: result.placeLinks.length, descriptions: result.references.filter(entry => ['place', 'building', 'room'].includes(entry.type)).length };
+        named: places.length, withParent: places.filter(entry => entry.parent).length, by, unnamed: slots.length, unnamedHeld: slots.filter(slot => slot.in).length, held: tally(slots, slot => slot.held),
+        settings: tally(result.places.settings ?? [], setting => setting.by), occupancy: tally(result.places.occupancy ?? [], entry => entry.by),
+        descriptions: tally(result.places.references ?? [], entry => entry.by === 'rule' ? `rule: ${entry.answer === 'unnamed' ? 'unnamed' : 'same'}` : entry.entity?.startsWith('loc_') ? 'jev: named' : `jev: ${entry.entity ? 'unnamed' : entry.answer}`),
+        asked: tally(result.places.asked ?? [], entry => entry.mode), questions: (result.places.asked ?? []).reduce((sum, entry) => sum + Object.keys(entry.keys).length, 0), laws: result.places.laws };
     })(),
     time: (() => {
       const { words, periods, scenes, calendar } = result.time, count = (list, key) => list.reduce((sum, entry) => ({ ...sum, [key(entry)]: (sum[key(entry)] ?? 0) + 1 }), {});
@@ -118,11 +121,11 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     write(v2, 'slots.yaml', yamlDocument({ slots: result.slots, habits: result.habits })),
     write(v2, 'facts.yaml', yamlDocument(result.facts.map(({ text: _, ...fact }) => fact))),
     write(v2, 'time.yaml', yamlDocument(result.time)),
-    write(v2, 'places.yaml', yamlDocument({ ...result.places, links: result.placeLinks })),
+    write(v2, 'places.yaml', yamlDocument(result.places)),
     write(v2, 'spatial.yaml', yamlDocument(result.spatial ?? [])),
     ...((live.usage ?? []).length ? [write(v2, 'jev-usage.json', JSON.stringify(live.usage))] : []),
     // The same data as JSON, for tools (compare.mjs, inspect.mjs, the world loop).
-    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time, places: result.places, placeLinks: result.placeLinks, spatial: result.spatial })),
+    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time, places: result.places, spatial: result.spatial })),
     write(baseDir, 'scenes.json', JSON.stringify(base.scenes)),
     write(baseDir, 'roster.json', JSON.stringify(base.roster, null, 1)),
     write(baseDir, 'facts.json', JSON.stringify(base.facts)),

@@ -279,12 +279,15 @@ the visual context engine and terrain in
 
 - **The world model.** A novel's world is spacetime and matter. Places
   and times are spacetime: each is a **tree** (a place has one parent,
-  graded by scale region › city › district › street › building › room; a
-  time sits in story › year › day › part of day). People, crowds, things,
+  graded by scale region › city › district › street › building › room;
+  time is an ordered tree, story › year › day › part of day, its children in
+  story order). People, crowds, things,
   vehicles and weapons are matter: movables, related as a general
   **graph**. **Spatial relations** tie them: a movable is at one place at
   a time (the occupancy matrix), at a level inside it (on the ground,
-  underground, on the roof). Places and matter are separate entity kinds
+  underground, on the roof). The world engine holds occupancy by scene
+  continuity; the text's spatial relations interrupt or correct it when
+  they come in. Places and matter are separate entity kinds
   in every system, because their laws differ.
 - **The laws as checks.** The place tree's containment matrix has one 1
   per row but the roots', n − r ones, no loops, and is graded by scale;
@@ -301,7 +304,10 @@ the visual context engine and terrain in
   model and never redoes extraction. No layer does another's job.
 - **Place EM** replaces EM²'s place questions: the tree by the place
   recommender with Jev only where it is unsure, each scene's setting,
-  unnamed places as leaves under the setting, and occupancy.
+  unnamed places as leaves under the setting, what descriptions mean
+  (learned as the book goes, like EM²'s habits), and occupancy evidence.
+  On vol 1's saved reading: 26 place questions in 11 requests, against
+  about 546 in EM²'s.
 
 ## 7. CLI command surface
 

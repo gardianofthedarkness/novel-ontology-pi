@@ -6,14 +6,15 @@ relations**. Places and matter obey different laws, so they are different kinds 
 spacetime itself (a tree), matter moves through it (a graph). The systems that read a novel into this model (plain
 extraction, entity recommendation, the context engine, EM and EM², the world engine) are separate layers, each with its
 own job and interface, each supporting the others and none doing another's work. Status: **design for review; the place
-layer (§4–§6) is being built against it**.
+layer (§4–§6) is built against it** (`placeRecommend.ts`, `readingGraph.ts`, `context/`, `placeEm.ts`; EM² no longer asks
+about places), tested on fixtures and on vol 1's saved reading with a stand-in Jev (§8); not yet run with Jev.
 
 ## 1. The world model
 
 | Kind | What it is | Its shape | Examples |
 |---|---|---|---|
 | **Place** (spacetime) | where things can be; it never moves | a **tree** by containment, graded by scale | 日本 › 东京都 › 东京西部的学园都市 › 第七学区 › 公寓 › 房间 |
-| **Time** (spacetime) | when things are | a **tree** (story › year › day › part of day; the past) | Year 1 › 12-24 › 00:00 (`time.ts`) |
+| **Time** (spacetime) | when things are | an **ordered tree** (story › year › day › part of day; the past), its children in story order | Year 1 › 12-24 › 00:00 (`time.ts`) |
 | **Matter** (movables) | what is somewhere at some time and can move | a **graph** of relations, no shape imposed | 上条当麻, 御坂美琴, a crowd of officers, a car, a mech |
 | **Spatial relation** (the middle layer) | that a movable is at a place at a time, and how | a **relation** matter × place × time (× level) | 美琴 is on the roof of a five-storey building in 第七学区 at 12-24 00:00 |
 | Concept | abstract, owned by matter | no place, no time of its own | 幻想杀手 (上条's) |
@@ -51,6 +52,10 @@ for places, and the reverse.
 ### 2.3 Spatial relations: the occupancy matrix
 
 For each time node t, let O(t) be the occupancy matrix, movables × places: O(t)[m][p] = 1 when movable m is at place p.
+**Occupancy is the world engine's** (the user's call, 2026-10-31): its scene continuity holds it (everyone stays where they
+were until something moves them). What extraction gives is evidence (a scene's setting, a spatial word tied to who it is
+about), which interrupts or corrects the engine's occupancy at the step it comes in; place EM writes that evidence
+(`occupancy`, by setting or by spatial word), never the matrix itself.
 
 | Law | In the matrix | What the system does with it |
 |---|---|---|
@@ -58,6 +63,15 @@ For each time node t, let O(t) be the occupancy matrix, movables × places: O(t)
 | Being somewhere is being in its ancestors | O(t)[m][p] = 1 implies m is in every place on p's address | a question about where m is only asks the finest place |
 | Change is movement | a row that differs between t and the next time node is a move (a trip) | the world engine's movement is the change of this matrix, not a new fact |
 | Level within a place | a spatial word gives the level inside p (underground, street, inside, roof, wall, sky) | the engine's height slices; births and moves read it |
+
+### 2.4 Time is an ordered tree
+
+The time tree (`time.ts`: story › year › season › day › part of day, and the past as a branch of its own) has the place
+tree's laws, by level instead of scale: one parent each, n − r links, no loop, graded (a part of day in a day, a day in a
+year). It is also **ordered** (the user's call, 2026-10-31): a node's children stand in story order, so the tree is a plane
+tree whose left-to-right order of scenes is the story's order; reading order may differ from it (a flashback sits in the
+past branch; a scene told later can come earlier on the tree). Where the story goes back on the tree without a flashback,
+the order law is broken, and `time.ts` records it (`treeConflicts`).
 
 ## 3. The engineering layers
 
@@ -105,11 +119,17 @@ Code over the stores, no model call. It answers three kinds of question, each wi
 | set in the same scene's environment cards | 0.5 each | |
 | narrative adjacency: scenes set in it sit next to scenes set in the candidate | 0.25 each | a scene in 第七学区 right after one in 学园都市 |
 | facts about both (the ledger's `about`) | 1 each | a fact that names both |
-| scale distance | +0.3 for the next scale up | a district's city before its region |
+| scale distance | +0.3 for the next scale up; weak evidence (sentence, setting, adjacency, facts) halved three levels up or more | a district's city before its region; a school's country far below its city |
+
+A candidate must be larger (the graded law). The text's own word outranks typing at equal scale: a place whose name holds
+the other's, or that the text states right before it, is a candidate even when typing gave both the same scale (东京都 and
+东京西部的学园都市, both typed cities); the tree then raises the parent (§5). A smaller place never is.
 
 **What a place description means** (街上, 大楼, 这座城市, 便利店). Candidates: a named place on the scene's address of a
 compatible scale (这座城市 → the city on the address), an unnamed place of this scene or the one before with the same
-words, or a new unnamed place.
+words, or a new unnamed place. **The recommender learns** (the user's call, 2026-10-31), as EM²'s habits do for people:
+what the same words have meant is a prior (这座城市 has meant 东京西部的学园都市 three times), and words Jev has given one
+named place twice, and nothing else, are taken by rule from then on, with no question (`habits` in the result).
 
 **A scene's setting.** Candidates: the named places its environment cards name (deepest first), its action cards name,
 it names at all, the setting before it; then an unnamed building or room its environment names.
@@ -138,10 +158,12 @@ setting.
    one before are that place; words that name a named place (第七学区的便利店) are held by it; a building, room or street is a
    new unnamed place held by the scene's setting (the deepest place on its address larger than it). Jev (mode
    `place-ref`, one request a scene) only for a description that may be a named place (a city, a district, a region:
-   这座城市, 学区), with the recommender's candidates. Unnamed places are leaves (the tree's law); a room the environment
+   这座城市, 学区; or one of the same scale as a named place on the scene's address: 学校 in a scene set in 常盘台中学), with
+   the recommender's candidates. Unnamed places are leaves (the tree's law); a room the environment
    names deepens the setting.
-4. **Occupancy.** Everyone present in a scene is at its setting at its time (`by: setting`); each spatial word adds a level
-   for who its line ties it to (`by: spatial`).
+4. **Occupancy evidence.** Everyone present in a scene is at its setting at its time (`by: setting`); each spatial word
+   adds a level for who its line ties it to (`by: spatial`). This is the text's evidence; the world engine's scene
+   continuity holds occupancy and takes it as an interruption or a correction at that step (§2.3).
 
 **Outputs** (the reading's `places`): the tree (each named place's parent, scale, what said each), the unnamed places
 (label, scene, scale, parent, held by what), the settings, the occupancy, and each question's manifest. The world script
@@ -187,12 +209,20 @@ modes move onto it one by one (each checked by identical documents before anythi
 
 Against the reading of 2026-10-31 (`v2-vol1-scales`): place questions asked (≈546 in EM²), requests, named places with a
 parent (5 of 14), unnamed places held (52 of 106), descriptions found to be named places (40), scenes whose setting needed
-Jev, and the tree's law checks (links = n − r, no loop, graded). The data page shows each place answer with its manifest.
+Jev, and the tree's law checks (links = n − r, no loop, graded; `laws` in the result). The data page shows each place
+answer with its manifest.
 
-## 9. Open questions
+**First measure, no paid call** (place EM on that reading's saved data, a stand-in Jev answering none and unnamed): 26
+questions in 11 requests (2 `place-parent`, 9 `place-ref`), against ≈546 in 272 EM² requests; 0.6 s of code. By rule alone:
+学园都市第七学区 in 东京西部的学园都市 (its name); the other parents go to Jev with their candidates (东京西部的学园都市: 东京都
+2.3, 日本 1.3). Settings: 26 by what the scene names, 8 an unnamed room or building of its environment, 7 carried, 4 by
+action, 1 by environment; none needed Jev. 110 descriptions of places: 131 unnamed places (115 held by the setting, 1 by
+the text, 15 by nothing yet: their setting has no larger place until Jev answers the tree), 5 the same as one before.
+Occupancy: 126 by setting, 21 by spatial words.
 
-- Should a place description that means a named place also teach the recommender (a habit: 这座城市 has meant 学园都市
-  three times), as EM²'s habits do for people?
-- Occupancy over time: is a scene's setting enough for every present person, or should a person who only phones in (on
-  the line, elsewhere) be asked where they are?
-- Time is a tree too: the same law-checks (one parent, graded by level) could validate the time tree.
+## 9. Questions answered (the user, 2026-10-31)
+
+- Do place descriptions teach the recommender? **Yes**, as for people: habits, a prior and then a rule (§4, §5).
+- Who holds occupancy over time? **The world engine**, by scene continuity; the text's spatial relations interrupt or
+  correct it when they come in (§2.3, §5).
+- Is time a tree? **An ordered tree** (§2.4).

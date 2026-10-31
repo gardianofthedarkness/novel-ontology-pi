@@ -429,7 +429,7 @@ export async function strandDemo(novelDir, options) {
     const areaScale = id => { if (String(id).startsWith('unnamed:')) return null; const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };
     // Where the place tree said only the city (or nothing held an EM² place but its scene): an area picked by a seed, which the
     // live view shows blinking until the text or Jev says where it is (the user's call, 2026-10-31).
-    const guessed = id => worldScript?.places?.[id]?.held === 'scene', sampled = [];
+    const guessed = id => ['scene', 'setting'].includes(worldScript?.places?.[id]?.held), sampled = [];
     const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, landscape: landscapeOf(place.id, areaScale(place.id)) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };

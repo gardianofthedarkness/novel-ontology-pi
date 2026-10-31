@@ -14,7 +14,8 @@ import { canonRecords } from "../src/v2/canon.js";
 import { yamlDocument } from "../src/v2/yaml.js";
 import { readStoryTime, timeWords } from "../src/v2/time.js";
 import { hintsOnce } from "../src/v2/hints.js";
-import { placeTree } from "../src/v2/places.js";
+import { placeEm } from "../src/v2/placeEm.js";
+import type { FlowResult } from "../src/v2/flow.js";
 
 const sentences = (text: string, block = 1): Sentence[] => sectionBlock(text, block).sentences;
 const noFacts = () => new FactLedger([], () => "", () => 0);
@@ -294,43 +295,58 @@ test("story time: each time word's role, the periods with their dates, flashback
   assert.equal(chart.entities.size, 0);
 });
 
-test("EM² places: a place's description means a named place or an unnamed one of the scene, held by the named place it is in; the place tree from names, the text, EM² and Jev", async () => {
+test("place EM: the tree by the place recommender (Jev only where unsure), the setting, unnamed places as leaves of it, descriptions that mean a named place, occupancy", async () => {
   const chart = new Chart();
-  const text = sentences("学园都市第七学区的常盘台中学很有名。上条当麻走进那栋大楼。他来到学校的屋顶。", 3);
+  const text = sentences("学园都市第七学区的常盘台中学很有名。上条当麻走进那栋大楼。这座城市很大，他回到学校的教室。第十五学区和学园都市都很冷。", 3);
   const id = (index: number) => text[index].id;
-  const kinds: Record<string, { kind: string }> = Object.fromEntries(text.map((sentence, index) => [sentence.id, { kind: ["environment", "action", "action"][index] }]));
-  chart.mint("place", "place", "学园都市", []);
-  chart.mint("place", "place", "学园都市第七学区", [id(0)]);
-  chart.mint("place", "building", "常盘台中学", [id(0)]);
-  chart.mint("place", "place", "纽约", []);
-  chart.mint("person", "person", "上条当麻", [id(1)]);
-  const named = new Map([[id(0), ["loc_000002", "loc_000003"]], [id(1), ["char_000001"]]]);
-  const position = (sentence: string) => text.findIndex((entry) => entry.id === sentence);
+  const kinds: Record<string, { kind: string }> = Object.fromEntries(text.map((sentence, index) => [sentence.id, { kind: ["environment", "action", "action", "narration"][index] }]));
+  const [city, d7, school, newYork, d15] = [chart.mint("place", "city", "学园都市", []), chart.mint("place", "district", "学园都市第七学区", [id(0)]), chart.mint("place", "building", "常盘台中学", [id(0)]), chart.mint("place", "city", "纽约", []), chart.mint("place", "district", "第十五学区", [id(3)])].map((entity) => entity.id);
+  const kamijou = chart.mint("person", "person", "上条当麻", [id(1)]).id;
+  const card = (kind: string, at: number, entities: string[], people: [string, string[]][] = []) => ({ id: `${kind}:${id(at)}`, kind, home: "world", first: id(at), last: id(at), block: "b3", sentences: [id(at)], entities: entities.map((entity) => ({ id: entity, at: [id(at)] })), people: people.map(([who, how]) => ({ id: who, how, at: [id(at)] })) }) as unknown as FlowResult["cards"][number];
+  const cards = [card("environment", 0, [d7, school]), card("action", 1, [kamijou], [[kamijou, ["named", "acts"]]]), card("action", 2, [], [[kamijou, ["acts"]]]), card("narration", 3, [d15, city])];
+  const scenes = [{ id: "scene_000001", index: 0, block: "b3", chapter: 0, sentences: text.map((sentence) => sentence.id) }];
   const asked: { state: Record<string, unknown>; questions: DecisionQuestion[] }[] = [];
   const decide = async (state: DecisionState, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> => {
     asked.push({ state: state as Record<string, unknown>, questions });
-    const descriptions = (state as { descriptions?: Record<string, { text: string }> }).descriptions ?? {};
+    const described = (state as { descriptions?: Record<string, { text: string }> }).descriptions ?? {};
     return questions.map((q) => {
-      const of = q.key.startsWith("ref:") || q.key.startsWith("within:") ? descriptions[q.key.split(":")[1]]?.text : null;
-      const value = q.key.startsWith("tree:") ? "none" : q.key.startsWith("ref:") ? (of === "学校" ? "loc_000003" : "new") : q.key.startsWith("within:") ? "loc_000002" : q.key.startsWith("role:who:") ? "char_000001" : q.primitive === "noul" ? 0.9 : "none";
-      return { key: q.key, value, confidence: 0.9, distribution: typeof value === "string" ? { [value]: 0.9 } : undefined } as DecisionAnswer;
+      const of = q.key.startsWith("place:") ? described[q.key.slice("place:".length)]?.text : null;
+      const value = q.key.startsWith("tree:") ? city : of === "这座城市" ? city : of === "学校" ? school : "unnamed";
+      return { key: q.key, value, confidence: 0.9, distribution: { [value]: 0.9 } } as DecisionAnswer;
     });
   };
-  const descriptions = [{ text: "那栋大楼", type: "building" as const }, { text: "学校", type: "building" as const }, { text: "屋顶", type: "room" as const }];
-  const result = await resolveRoles(decide, { scenes: [{ id: "scene_000001", sentences: text.map((sentence) => sentence.id) }], kinds, chart, named, descriptions, recommended: new Map(), facts: noFacts(), text: (sentence) => text.find((entry) => entry.id === sentence)?.text ?? "", position });
-  const state = asked[0].state as { places: Record<string, unknown>; setting: string[] };
-  assert.deepEqual(Object.keys(state.places), ["loc_000002", "loc_000003"], "the named places of the scene so far");
-  assert.equal(state.setting.length, 1, "the scene's environment cards as its setting");
-  assert.deepEqual(result.references.map((entry) => [entry.text, entry.entity]), [["那栋大楼", "slot_000001_1"], ["学校", "loc_000003"], ["屋顶", "slot_000001_2"]]);
-  assert.deepEqual(result.slots.map((slot) => [slot.kind, slot.label, slot.in]), [["building", "那栋大楼", "loc_000002"], ["room", "屋顶", "loc_000002"]]);
-  assert.deepEqual(result.placeLinks.map((link) => [link.child, link.parent, link.via]), [["loc_000003", "loc_000002", "学校"]], "a named place EM² put in another");
-  const tree = await placeTree(decide, { chart, sentences: text, placeLinks: result.placeLinks, slots: result.slots, text: () => "" });
-  const parent = Object.fromEntries(tree.places.map((entry) => [chart.entities.get(entry.id)!.names[0], [entry.parent ? chart.entities.get(entry.parent)!.names[0] : null, entry.by]]));
-  assert.deepEqual(parent["学园都市第七学区"], ["学园都市", "name"], "a name inside a name");
-  assert.deepEqual(parent["常盘台中学"], ["学园都市第七学区", "stated"], "named right after the place that holds it (and EM² agrees)");
-  assert.deepEqual(parent["纽约"], [null, "none"], "Jev, asked once for the rest, says none");
-  assert.ok(asked.at(-1)!.questions.every((q) => q.key.startsWith("tree:")));
-  assert.deepEqual(tree.slots.map((slot) => slot.in), ["loc_000002", "loc_000002"]);
+  const descriptions = [{ text: "那栋大楼", type: "building", sentences: [id(1)] }, { text: "这座城市", type: "city", sentences: [id(2)] }, { text: "学校", type: "building", sentences: [id(2)] }, { text: "教室", type: "room", sentences: [id(2)] }];
+  const result = await placeEm(decide, { chart, scenes, cards, sentences: text, kinds, text: (sentence) => text.find((entry) => entry.id === sentence)?.text ?? "", facts: [], time: null, descriptions });
+  const of = (place: string) => result.places.find((entry) => entry.id === place)!;
+  assert.deepEqual([of(d7).parent, of(d7).by], [city, "name"], "a name inside a name: taken by rule");
+  assert.deepEqual([of(school).parent, of(school).by], [d7, "stated"], "named right after the place that holds it: taken by rule");
+  assert.deepEqual([of(d15).parent, of(d15).by], [city, "jev"], "named in one sentence only: Jev, on the composed context");
+  assert.deepEqual([of(city).parent, of(newYork).parent], [null, null], "no larger place: a root, never asked");
+  const tree = asked.find((entry) => entry.questions.some((q) => q.key.startsWith("tree:")))!;
+  assert.deepEqual(tree.questions.map((q) => q.options), [[city, "none"]], "only larger places are offered");
+  assert.ok((tree.state.asked as Record<string, { candidates: Record<string, string> }>).q1.candidates[city].includes("one sentence"), "each candidate with why");
+  assert.deepEqual(result.settings, [{ scene: "scene_000001", place: school, by: "environment" }], "the deepest place its environment names");
+  assert.deepEqual(result.references.filter((entry) => entry.by === "jev" && entry.entity?.startsWith("loc_")).map((entry) => [entry.text, entry.entity]), [["学校", school], ["这座城市", city]].sort((a, b) => a[0].localeCompare(b[0])), "descriptions that mean a named place on the address");
+  assert.deepEqual(result.slots.map((slot) => [slot.label, slot.kind, slot.in, slot.held]).sort(), [["教室", "room", school, "setting"], ["那栋大楼", "building", d7, "setting"]].sort(), "unnamed places: leaves under the deepest larger place of the setting");
+  assert.ok(!asked.some((entry) => Object.values((entry.state.descriptions ?? {}) as Record<string, { text: string }>).some((desc) => desc.text === "教室")), "a room with no room on the address is not asked");
+  assert.deepEqual(result.occupancy.map((entry) => [entry.who, entry.place, entry.by]), [[kamijou, school, "setting"]], "who is there is at the setting");
+  assert.ok(result.asked.every((entry) => entry.manifest.entries.length), "every question keeps what Jev saw");
+  assert.deepEqual(result.laws, { places: 5, roots: 2, links: 3, linksAreNMinusR: true, loops: 0, ungraded: [] }, "the tree's laws hold");
+});
+
+test("place EM learns: words Jev has given the same named place twice are that place from then on, with no question", async () => {
+  const chart = new Chart();
+  const text = sentences("学园都市的街头。这座城市很冷。学园都市的车站。这座城市很大。学园都市的公园。这座城市很静。", 4);
+  const city = chart.mint("place", "city", "学园都市", [text[0].id, text[2].id, text[4].id]).id;
+  const kinds: Record<string, { kind: string }> = Object.fromEntries(text.map((sentence, index) => [sentence.id, { kind: index % 2 ? "narration" : "environment" }]));
+  const card = (at: number) => ({ id: `environment:${text[at].id}`, kind: "environment", home: "world", first: text[at].id, last: text[at].id, block: "b4", sentences: [text[at].id], entities: [{ id: city, at: [text[at].id] }], people: [] }) as unknown as FlowResult["cards"][number];
+  const scenes = [0, 1, 2].map((n) => ({ id: `scene_00000${n + 1}`, index: n, block: "b4", chapter: 0, sentences: [text[2 * n].id, text[2 * n + 1].id] }));
+  let questions = 0;
+  const decide = async (_state: DecisionState, asked: DecisionQuestion[]): Promise<DecisionAnswer[]> => { questions += asked.length; return asked.map((q) => ({ key: q.key, value: city, confidence: 0.9, distribution: { [city]: 0.9 } }) as DecisionAnswer); };
+  const result = await placeEm(decide, { chart, scenes, cards: [0, 2, 4].map(card), sentences: text, kinds, text: (id) => text.find((sentence) => sentence.id === id)?.text ?? "", facts: [], descriptions: [{ text: "这座城市", type: "city", sentences: [text[1].id, text[3].id, text[5].id] }] });
+  assert.deepEqual(result.references.map((entry) => [entry.scene, entry.entity, entry.by]), [["scene_000001", city, "jev"], ["scene_000002", city, "jev"], ["scene_000003", city, "habit"]]);
+  assert.equal(questions, 2, "asked twice, then learned");
+  assert.deepEqual(result.habits, [{ text: "这座城市", place: city, count: 3 }]);
 });
 
 test("the flow: tiling, kinds and listing at once, then EM, the card scan, contexts and the world loop's base", async () => {

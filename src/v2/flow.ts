@@ -6,7 +6,7 @@ import type { Lister } from "./listing.js";
 import { resolveRoles, type DescriptionType, type RolesResult } from "./roles.js";
 import { readStoryTime, timeWords, type StoryTime } from "./time.js";
 import { hintsOnce } from "./hints.js";
-import { placeTree, type PlaceTree } from "./places.js";
+import { placeEm, type PlaceResult } from "./placeEm.js";
 import { spatialMentions, type SpatialMention } from "./spatial.js";
 import { typeNames, type Decide, type Detected } from "./typing.js";
 
@@ -51,8 +51,8 @@ export interface FlowResult extends RolesResult {
   facts: FactEntry[];
   /** Story time: the time words and their roles, the periods, each scene's time, the calendar. */
   time: Omit<StoryTime, "periodOf">;
-  /** The place tree: each named place's parent and what says it, and each unnamed place of a scene with what holds it. */
-  places: PlaceTree;
+  /** Place EM: the tree (each named place's parent and scale, and what said so), the unnamed places as leaves, each scene's setting, occupancy. */
+  places: PlaceResult;
   /** Spatial words (on the ground, underground, on the roof): who or what each says is where, and at what level. */
   spatial: SpatialMention[];
 }
@@ -189,15 +189,15 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   // EM², scene by scene in reading order.
   const named = new Map([...found].map(([id, hits]) => [id, [...new Set(hits.map((hit) => hit.id))]]));
   const described = new Map<string, DescriptionType>();
-  // An unnamed open place keeps the scale typing gave it (a street, a district, …) on its slot.
-  const describedScale = new Map<string, string>();
-  for (const entry of em.flatMap((batch) => batch.results)) if (entry.outcome === "description" && !described.has(entry.text)) {
-    const building = entry.type === "building" || entry.type === "room";
-    described.set(entry.text, entry.category === "crowd" ? "crowd" : entry.category === "thing" ? (entry.type as "vehicle" | "weapon") : entry.category === "place" ? (building ? entry.type as "building" | "room" : "place") : "person");
-    if (entry.category === "place" && !building && entry.type !== "place") describedScale.set(entry.text, entry.type);
+  // Descriptions of matter go to EM²; descriptions of places (街上, 大楼, 这座城市) to place EM, with every sentence that holds each.
+  const placeDescriptions = new Map<string, { text: string; type: string; sentences: string[] }>();
+  for (const entry of em.flatMap((batch) => batch.results)) {
+    if (entry.outcome !== "description") continue;
+    if (entry.category === "place") { const found = placeDescriptions.get(entry.text) ?? { text: entry.text, type: entry.type, sentences: [] }; for (const id of entry.sentences ?? []) if (!found.sentences.includes(id)) found.sentences.push(id); placeDescriptions.set(entry.text, found); continue; }
+    if (!described.has(entry.text)) described.set(entry.text, entry.category === "crowd" ? "crowd" : entry.category === "thing" ? (entry.type as "vehicle" | "weapon") : "person");
   }
   const rolesLog = meter("roles (EM²)"), rolesDecide = decideFor(rolesLog);
-  const resolved = await timed(rolesLog, () => resolveRoles(rolesDecide, { scenes, kinds: kindOf, chart, named, descriptions: [...described].map(([text, type]) => ({ text, type, ...(describedScale.has(text) ? { scale: describedScale.get(text) } : {}) })), recommended: new Map(contexts.map((context) => [context.scene, context.recommended])), facts, text, position: pos, present: options.present }));
+  const resolved = await timed(rolesLog, () => resolveRoles(rolesDecide, { scenes, kinds: kindOf, chart, named, descriptions: [...described].map(([text, type]) => ({ text, type })), recommended: new Map(contexts.map((context) => [context.scene, context.recommended])), facts, text, position: pos, present: options.present }));
 
   // The user's rule for actions: an action is something that matters acting or moving (a person, a crowd, a vehicle, a
   // weapon, a thing with a name of its own, a building or a place), or the story going back in time. One where nothing that
@@ -229,9 +229,10 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
     card.people = [...people].map(([id, entry]) => ({ id, how: [...entry.how], at: [...entry.at] }));
   }
   facts.settle(chart, pos);
-  // The place tree: named places' parents from their names, the text and EM², Jev for the rest; unnamed places where EM² put them.
-  const treeLog = meter("place tree");
-  const places = await timed(treeLog, () => placeTree(decideFor(treeLog), { chart, sentences: all.map(({ sentence }) => sentence), placeLinks: resolved.placeLinks, slots: resolved.slots, text }));
+  // Place EM (docs/v2/world-model.md §5): the tree, the settings, the unnamed places and occupancy, apart from matter.
+  const spatial = spatialMentions({ em, cards, roles: resolved.roles, scenes });
+  const placesLog = meter("place EM");
+  const places = await timed(placesLog, () => placeEm(decideFor(placesLog), { chart, scenes, cards, sentences: all.map(({ sentence }) => sentence), kinds: kindOf, text, facts: facts.facts, time, descriptions: [...placeDescriptions.values()], spatial }));
   const { periodOf: _, ...storyTime } = time;
-  return { scenes, cards, kinds: kindOf, chart, em, contexts, steps, facts: facts.facts, time: storyTime, places, spatial: spatialMentions({ em, cards, roles: resolved.roles, scenes }), ...resolved };
+  return { scenes, cards, kinds: kindOf, chart, em, contexts, steps, facts: facts.facts, time: storyTime, places, spatial, ...resolved };
 }

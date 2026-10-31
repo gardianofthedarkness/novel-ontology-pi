@@ -25,14 +25,16 @@ import { levelOf } from "./spatial.js";
  * - spatial: who or what its spatial words (on the ground, underground, on the roof) say is where, and at what level.
  * places: every named place with its parent in the place tree and its scale as far as the reading says it (a building or a
  * room by its type, else by its name, else one step above the largest place it holds: 日本 holding 东京都 is a region), and
- * every unnamed place EM² found (a place, a building or a room of a scene: a big unnamed place as a street), held by what
- * EM² said holds it, else by its scene's named place (`held: "scene"`: a guess, which the engine shows as sampled, blinking,
- * until the text or Jev says where it is).
+ * every unnamed place found (a place, a building or a room of a scene: a big unnamed place as a street) with what holds it.
+ * Since place EM (src/v2/placeEm.ts, docs/v2/world-model.md §5) the settings and the unnamed places are its: an unnamed
+ * place the text puts in a place is `held: "stated"`; one place EM put in its scene's setting is `held: "setting"`, which
+ * the engine shows as sampled, blinking, until the text or Jev says where it is. A reading from before place EM: the tiers
+ * below, and EM²'s place slots (`held: "em2"`, or `"scene"` for a guess).
  */
 /** near: a named building or room the tree puts nowhere: the named area its scenes are set in most (where it is sampled first). */
-export interface ScriptPlace { label: string; scale: string | null; parent: string | null; unnamed?: boolean; held?: "em2" | "scene"; scene?: string; near?: string }
+export interface ScriptPlace { label: string; scale: string | null; parent: string | null; unnamed?: boolean; held?: "stated" | "setting" | "em2" | "scene"; scene?: string; near?: string }
 export interface ScriptScene {
-  id: string; chapter: number; place: string | null; placeBy: "environment" | "action" | "named" | "unnamed" | "carried" | "none";
+  id: string; chapter: number; place: string | null; placeBy: "environment" | "action" | "named" | "unnamed" | "carried" | "jev" | "none";
   clock: number[] | null; present: string[]; stayed: string[]; firstSeen: string[];
   timeline: { type: "event"; id: string; actors: string[] }[]; context?: string;
   /** Who or what its spatial words say is where (src/v2/spatial.ts): evidence for Jev at run time. */
@@ -56,6 +58,8 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
   const eventOf = new Map(actionEvents(result).map(({ id, card }) => [card.id, id]));
   const when = new Map((result.time?.scenes ?? []).map((scene) => [scene.scene, scene]));
   const storyIndex = new Map((result.time?.periods ?? []).map((period) => [period.id, period.storyIndex]));
+  // EM²'s place slots, in a reading from before place EM.
+  const legacy = result.slots as unknown as { id: string; kind: string; scene: string; label: string; sentences: string[]; in?: string | null; scale?: string }[];
 
   // The tree's scale (EM's, checked against the tree: src/v2/places.ts); a reading from before it: by type and name.
   const treeScale = new Map((result.places?.places ?? []).filter((entry) => entry.scale).map((entry) => [entry.id, entry.scale!]));
@@ -68,10 +72,19 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     const largest = Math.max(-1, ...Object.values(places).filter((other) => other.parent === id && other.scale).map((other) => SIZES.indexOf(other.scale!)));
     if (largest >= 0) place.scale = SIZES[Math.min(largest + 1, SIZES.length - 1)];
   }
+  // Place EM's unnamed places and settings, when the reading has them.
+  const index = new Map(result.scenes.map((scene) => [scene.id, scene.index]));
+  const settings = result.places?.settings ? new Map(result.places.settings.map((setting) => [setting.scene, setting])) : null;
+  if (settings) for (const slot of result.places.slots) places[`unnamed:${slot.id}`] = { label: `${slot.label} (scene ${(index.get(slot.scene) ?? 0) + 1})`, scale: slot.kind === "place" ? slot.scale ?? "street" : slot.kind, parent: slot.in, unnamed: true, ...(slot.in ? { held: slot.held === "setting" ? "setting" as const : "stated" as const } : {}), scene: slot.scene };
+  const placeOf = (id: string | null) => (id && places[`unnamed:${id}`] ? `unnamed:${id}` : id);
   const seen = new Set<string>();
   let previous: string | null = null, clock: number[] | null = null;
   const scenes = result.scenes.map((scene): ScriptScene => {
     const cards = cardsOf.get(scene.id) ?? [], time = when.get(scene.id), past = !!time?.flashback;
+    const setting = settings?.get(scene.id);
+    let place: string | null = null, by: ScriptScene["placeBy"] = "none";
+    if (settings) { place = placeOf(setting?.place ?? null); by = setting?.by ?? "none"; }
+    else {
     // The named places it names or describes: in its environment cards, in its action cards, anywhere (how often).
     const named = (kinds: string[] | null) => {
       const count = new Map<string, number>();
@@ -80,8 +93,8 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     };
     const set = named(["environment"]), acted = named(["action"]), any = named(null);
     const most = (count: Map<string, number>) => [...count].sort((a, b) => b[1] - a[1] || depth(b[0]) - depth(a[0]))[0]?.[0] ?? null;
-    let place = [...set.keys()].sort((a, b) => depth(b) - depth(a) || (set.get(b) ?? 0) - (set.get(a) ?? 0))[0] ?? null;
-    let by: ScriptScene["placeBy"] = place ? "environment" : "none";
+    place = [...set.keys()].sort((a, b) => depth(b) - depth(a) || (set.get(b) ?? 0) - (set.get(a) ?? 0))[0] ?? null;
+    by = place ? "environment" : "none";
     if (!place && (place = most(acted))) by = "action";
     if (!place && (place = most(any))) by = "named";
     if (by === "named" && place && previous && !past && under(previous, place)) { place = previous; by = "carried"; }
@@ -90,7 +103,7 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     // An unnamed building or room the environment cards name, in the place (or under it), rooms first.
     const setting = new Set(cards.filter((card) => card.kind === "environment").flatMap((card) => card.sentences));
     const fits = (holder: string | null | undefined) => !holder || !place || holder === place || under(holder, place) || under(place, holder);
-    const unnamed = result.slots.filter((slot) => slot.scene === scene.id && (slot.kind === "room" || slot.kind === "building") && slot.sentences.some((id) => setting.has(id)) && fits(slot.in))
+    const unnamed = legacy.filter((slot) => slot.scene === scene.id && (slot.kind === "room" || slot.kind === "building") && slot.sentences.some((id) => setting.has(id)) && fits(slot.in))
       .sort((a, b) => (a.kind === "room" ? 0 : 1) - (b.kind === "room" ? 0 : 1) || b.sentences.length - a.sentences.length)[0];
     if (unnamed) {
       const id = `unnamed:${unnamed.id}`, holder = unnamed.in && place && under(unnamed.in, place) ? unnamed.in : place ?? unnamed.in ?? null;
@@ -98,6 +111,7 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
       place = id; by = "unnamed";
     }
     if (!place && !past && previous && time?.continuation?.continues !== false) { place = previous; by = "carried"; }
+    }
     if (!past && place) previous = place;
     // Its story-time span; a scene the tree gives no period keeps the one before.
     const indices = (time?.periods ?? []).map((id) => storyIndex.get(id)).filter((value): value is number => typeof value === "number");
@@ -125,10 +139,10 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     const near = [...count].sort((a, b) => b[1] - a[1])[0]?.[0];
     if (near) place.near = near;
   }
-  // Every other unnamed place EM² found: in what holds it, else in its scene's named place.
-  const sceneAt = new Map(scenes.map((scene) => [scene.id, scene])), index = new Map(result.scenes.map((scene) => [scene.id, scene.index]));
+  // A reading from before place EM: every other unnamed place EM² found, in what holds it, else in its scene's named place.
+  const sceneAt = new Map(scenes.map((scene) => [scene.id, scene]));
   const namedOf = (id: string | null) => { for (let at = id, n = 0; at && n < 16; at = places[at]?.parent ?? null, n++) if (!places[at]?.unnamed) return at; return null; };
-  for (const slot of result.slots) {
+  if (!settings) for (const slot of legacy) {
     const id = `unnamed:${slot.id}`;
     if (places[id] || !["place", "building", "room"].includes(slot.kind)) continue;
     const holder = slot.in ?? namedOf(sceneAt.get(slot.scene)?.place ?? null);
