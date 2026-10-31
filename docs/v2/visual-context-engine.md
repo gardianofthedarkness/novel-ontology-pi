@@ -212,6 +212,11 @@ tree, central build or default spawns. That page is gone; terrain spawning now r
   part belongs to its nearest city (学园都市's districts are not also 东京都's). Jev's map names only the city's districts
   and streets, and the part asked about in grey where the engine has it for now. On vol 1's places reading (mock answers,
   no paid call): 日本 › 东京都 › 东京西部的学园都市 › 第七, 第十五 and 第六学区; three parts, eight questions, four builds.
+- **Run with Jev on vol 1 (2026-10-31)**, on the place EM reading (`~/claude-world-first/v2-host-state-7`), watched in
+  World · Live (the user stepped once, then ran on): 6 questions, 4 world builds. 第七学区 commercial ground, 692 × 736 m, boxed
+  almost where the engine had it; 第六学区 a park, 672 × 594 m; 第十五学区 commercial, 594 × 620 m; all at street level (Jev
+  sure of the heights, 0.98–1). A kept part was drawn twice on the next map (circle and box), now once; its tokens were not
+  recorded, now they are (`stage/terrain/jev-usage.json`).
 - **Places stop at rooms** (the user, 2026-10-31). A large unnamed place (an EM² slot) is not a terrain part: the engine
   samples it and Jev places it live, in the world engine's redesign.
 
