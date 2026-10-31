@@ -301,6 +301,15 @@ the engine makes the spread. A CBD's spread is wide: researched, not guessed.
 4. **Births and things move onto it** (and the world-map PNG writer and the landscape mock page retire for questions).
 5. **Then the world engine's redesign** for the new extraction (no line replay per event).
 
+**Later (the user's call, 2026-10-31): fine-tune the area types of each place level.** The kinds of a city, a district
+and a street, and their manifolds (`TERRAIN_KINDS`: gradient, spread, tail, the medians offered), are first settings;
+only the CBD's rests on research (§5.8). Each is to be tuned for its level later. Beside it:
+- the street level's modern commercial centre (a mall podium with towers, a plaza with screens: the user's picture) is
+  still built by the engine's old `commercial` landscape of low shops;
+- a district's landmark tower can be dropped where a scene's start spot was placed on its core (seen on 第七学区 as a
+  CBD), which is the spawns' to settle, not terrain's;
+- regions (a country, a state) have no terrain level yet: the loop starts at the cities.
+
 ## 7. Questions for the user
 
 - Step mode by default for terrain while we debug (the backend waits for you after each answer), or running, with a pause?
