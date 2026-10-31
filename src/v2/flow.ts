@@ -1,4 +1,7 @@
+import type { DecisionQuestion, DecisionState } from "../ground/connectors/jev.js";
 import type { Sentence } from "../digger/intake/sectioning.js";
+import { ask, type Asker, type Manifest } from "./context/engine.js";
+import { kindsMode, tilingSeamMode, tilingWindowMode } from "./context/readingModes.js";
 import { classifySentences, kindCards, tileScenes, type KindCard, type SentenceKind } from "../digger/autostep/segmentation.js";
 import { Chart, mentions, resolveBatch, type EmResult } from "./em.js";
 import { FactLedger, type FactEntry } from "./facts.js";
@@ -43,7 +46,8 @@ export interface SceneContext {
   recommended: { id: string; score: number }[];
   facts: string[];
 }
-export interface StepLog { step: string; requests: number; ms: number; inputChars: number; questionChars?: number; detail?: Record<string, unknown> }
+/** `contexts`: what the context engine composed for the step's requests, by mode: requests, items kept and cut, characters. */
+export interface StepLog { step: string; requests: number; ms: number; inputChars: number; questionChars?: number; detail?: Record<string, unknown>; contexts?: Record<string, { requests: number; kept: number; cut: number; chars: number }> }
 export interface FlowResult extends RolesResult {
   /** `was`: the kind the classifier gave, where the action rule changed it (nothing that matters acts); `actor`: the thing that did. */
   scenes: FlowScene[]; cards: FlowCard[]; kinds: Record<string, { kind: SentenceKind; turn: number; confidence: number; was?: SentenceKind; actor?: string }>;
@@ -85,12 +89,19 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
     running++;
     try { return await work(); } finally { running--; waiting.shift()?.(); }
   };
-  const decideFor = (log: StepLog, compact = once(log.step)): Decide => async (state, questions) => {
+  // Each step's way to Jev; the context engine's manifests of its requests are tallied in its log.
+  const decideFor = (log: StepLog, compact = once(log.step)): Asker => Object.assign(async (state: DecisionState, questions: DecisionQuestion[]) => {
     const sent = compact ? hintsOnce(state, questions) : { state, questions };
     log.requests++; log.inputChars += typeof sent.state === "string" ? sent.state.length : JSON.stringify(sent.state).length;
     log.questionChars = (log.questionChars ?? 0) + JSON.stringify(sent.questions).length;
     return gate(() => decideRaw(sent.state, sent.questions));
-  };
+  }, {
+    record: (manifest: Manifest) => {
+      const tally = ((log.contexts ??= {})[manifest.mode] ??= { requests: 0, kept: 0, cut: 0, chars: 0 });
+      tally.requests++; tally.chars += manifest.used;
+      for (const entry of manifest.entries) entry.kept ? tally.kept++ : tally.cut++;
+    },
+  });
   const timed = async <T>(log: StepLog, work: () => Promise<T>): Promise<T> => { const started = performance.now(); try { return await work(); } finally { log.ms = Math.round(performance.now() - started); options.onStep?.(log); } };
 
   const all = blocks.flatMap((block) => block.sentences.map((sentence) => ({ sentence, block })));
@@ -101,8 +112,14 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   // 1–3 at once.
   const tiling = meter("scene tiling"), kindsLog = meter("sentence kinds"), listing = meter("listing (work model)"), typing = meter("typing");
   // The tiling's requests stay as they were (its answers come from the cache, so a comparison of readings keeps its scenes).
-  const tiled = timed(tiling, () => Promise.all(blocks.map(async (block) => ({ block, ...(await tileScenes(block.sentences, decideFor(tiling, false), { stateSummary: `Processing block ${block.id}.`, gates: { accept: 0.85, reask: 0.55 } })) }))));
-  const classified = timed(kindsLog, () => Promise.all(blocks.map(async (block) => ({ block, ...(await classifySentences(block.sentences, decideFor(kindsLog), { stateSummary: `Processing block ${block.id}.` })) }))));
+  const tiled = timed(tiling, () => Promise.all(blocks.map(async (block) => {
+    const decide = decideFor(tiling, false);
+    return { block, ...(await tileScenes(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, gates: { accept: 0.85, reask: 0.55 }, ask: async (request) => (await (request.kind === "seam" ? ask(decide, tilingSeamMode, request, null) : ask(decide, tilingWindowMode, request, null))).replies })) };
+  })));
+  const classified = timed(kindsLog, () => Promise.all(blocks.map(async (block) => {
+    const decide = decideFor(kindsLog);
+    return { block, ...(await classifySentences(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, ask: async (window) => (await ask(decide, kindsMode, window, null)).replies })) };
+  })));
   const batches = blocks.flatMap((block) => Array.from({ length: Math.ceil(block.sentences.length / LIST_BATCH) }, (_, index) => ({ block, sentences: block.sentences.slice(index * LIST_BATCH, (index + 1) * LIST_BATCH) })));
   const listingStarted = performance.now(), typingDecide = decideFor(typing);
   const detectedOf: Detected[][] = new Array(batches.length);

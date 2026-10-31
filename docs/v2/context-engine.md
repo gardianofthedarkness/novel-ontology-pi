@@ -127,6 +127,35 @@ above 0.66 widens on answers below 0.6 instead of 0.5.
 Today's documents become the first recipes. The `roles` mode starts as exactly what `roles.ts` sends now, so moving it
 onto the engine is checked by identical documents (and cache hits) before the probe is allowed to change anything.
 
+### 4.1 Every Jev request, built (the user's call, 2026-10-31: "context engine should serve any jev input we have today")
+
+Every request the reading and terrain send Jev is composed by the engine (`ask(decide, mode, focus, stores)` composes,
+hands the manifest to the asker's `record`, and asks). The reading's modes take what a request offers (EM's candidates,
+EM²'s cast, the facts) from the step's recommender, and its questions from the step (how answers are read stays the
+step's, layer 4); the engine writes the document, in the order the steps wrote it.
+
+| Mode | File | Step | Sources |
+|---|---|---|---|
+| `tiling-window`, `tiling-seam` | `context/readingModes.ts` | scene tiling (the digger's `tileScenes`, through its `ask` hook) | the window's sentences; the open scene's tail and the next batch's head (a prompt of plain text, the mode's `render`) |
+| `sentence-kinds` | `context/readingModes.ts` | sentence kinds (`classifySentences`, through its `ask` hook) | the sentences before (context), the passage |
+| `typing` | `context/readingModes.ts` | typing | the passage, the names |
+| `em`, `owners` | `context/readingModes.ts` | EM; whose a concept is | the passage, the names, the candidates (always there), the facts; the concepts, the people (always there) |
+| `story-time`, `continuation` | `context/readingModes.ts` | story time; whether a scene goes on with a flashback | the story's time so far, the passage, the time words; the scene before's tail and the opening (plain text) |
+| `roles` | `context/readingModes.ts` | EM² | the cast, the things, the concepts, the facts, the lines before, the passage, the descriptions |
+| `place-parent`, `setting`, `place-ref` | `context/placeModes.ts` | place EM | as in §4 |
+| `terrain-member`, `terrain-ground`, `terrain-zoom`, `terrain-height` | `context/terrainModes.ts` | terrain spawning ([visual-context-engine.md](visual-context-engine.md) §5.6) | the part, its own sentences, what stands in it and around it, the facts by Cypher, its scenes' surroundings, the kinds, the pictures, the heights |
+
+What the engine gained for them: a task and definitions read from the focus; a `ranked` source (the recommender's order,
+still cut by quota and budget); an `always` source (its key there even with no items); a mode's own `render` (the
+digger's prompts of plain text). Every step's log carries the engine's tally by mode (requests, items kept and cut,
+characters).
+
+**Checked by identical documents.** The vol 1 reading (`v2-vol1-settled`) run again through the engine with clients that
+refuse any request the cache does not hold (no keys): all 1,013 Jev requests of the nine steps were cache hits, nothing
+was sent, and every output was the same. A flashback's continuation was not asked on vol 1; a test pins its document
+and the tiling's to the digger's own. Only the terrain modes changed their documents, on purpose (§5.6 of the visual
+design).
+
 ## 5. Budget and cutting
 
 A request carries one budget (characters, set under Jev's 32k-token state limit). The plan divides it among the sources by

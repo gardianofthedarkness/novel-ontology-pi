@@ -1,5 +1,7 @@
 import type { DecisionQuestion } from "../ground/connectors/jev.js";
 import { mentions, type Chart } from "./em.js";
+import { ask } from "./context/engine.js";
+import { rolesMode } from "./context/readingModes.js";
 import { factEvidence, type FactLedger } from "./facts.js";
 import type { Decide } from "./typing.js";
 
@@ -43,7 +45,6 @@ const MATTERS = {
 /** What a description is of: a person or a crowd (the cast), or an unnamed vehicle or weapon (the things). */
 export type DescriptionType = "person" | "crowd" | "vehicle" | "weapon";
 const OF_THINGS = new Set<string>(["vehicle", "weapon"]);
-const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
 
 /**
  * One answer: `id` is the person, slot, thing or place it settles on (null: no one, or no one sure); `answer` is what it
@@ -99,6 +100,8 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
     const [speaker, times] = Object.entries(habit.speakers).sort((a, b) => b[1] - a[1])[0] ?? [];
     return `${label(habit.entity)} ×${habit.count}${speaker ? ` (in lines of ${label(speaker)} ×${times})` : ""}`;
   }).join("; ");
+  // What the context engine writes the cast, the things and the lines before from (context/readingModes.ts).
+  const stores = { chart, label, text, named: input.named, roles, meantBefore };
   let previous = new Map<string, number>(), previousSlots: Slot[] = [];
   for (const scene of input.scenes) {
     const named = new Map<string, number>(), here = new Map<string, number>(), sceneSlots: Slot[] = [];
@@ -138,25 +141,6 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
         ...descs.flatMap((desc) => input.facts.holding(desc.text, at).map((fact) => ({ fact, for: `descriptions.${desc.key}` }))),
       ]);
 
-      const state = {
-        task: "A passage of a novel and its cast: the people of this scene and around it, keyed by id (an unnamed one is a person or a crowd the story has not named), and the named things, vehicles, weapons and places it names. For each sentence asked about, say who says it or who or what acts in it, and who a spoken line is said to; for each description of a person or a crowd, say who it means here, and of a vehicle or a weapon, which one it is here. The facts are what the book has stated so far about the cast and the descriptions: they are the truth, trust them.",
-        cast: Object.fromEntries([
-          ...cast.map((id) => {
-            const entity = chart.entities.get(id)!, there = passage.filter((sentence) => input.named.get(sentence)?.includes(id));
-            return [id, { name: label(id), ...(entity.proper.length > 1 ? { also: entity.proper.slice(1, 4) } : {}), ...(there.length ? { named: there } : {}) }];
-          }),
-          ...offered.map((slot) => [slot.id, { name: `(unnamed ${slot.kind}) ${slot.label}`, ...(slot.names.length > 1 ? { also: slot.names.slice(1, 4) } : {}), from: slot.scene === scene.id ? "this scene" : "the scene before" }]),
-        ]),
-        ...(things.length ? { things: Object.fromEntries([
-          ...namedThings.map((id) => [id, { name: label(id), is: chart.entities.get(id)!.type }]),
-          ...offeredThings.map((slot) => [slot.id, { name: `(unnamed ${slot.kind}) ${slot.label}`, ...(slot.names.length > 1 ? { also: slot.names.slice(1, 4) } : {}), from: slot.scene === scene.id ? "this scene" : "the scene before" }]),
-        ]) } : {}),
-        ...(concepts.length ? { concepts: Object.fromEntries(concepts.map((id) => { const owner = chart.entities.get(id)!.owners?.at(-1)?.id; return [id, { name: label(id), ...(owner ? { of: owner === "many" ? "many people, or a group" : label(owner) } : {}) }]; })) } : {}),
-        ...(Object.keys(facts).length ? { facts } : {}),
-        ...(before.length ? { before: Object.fromEntries(before.map((id) => { const role = roles[id]; return [id, { text: clip(text(id), 60), who: role.who.id ? label(role.who.id) : role.who.answer === "time" ? "a flashback" : "no one", ...(role.to ? { to: role.to.id ? label(role.to.id) : "no one" } : {}) }]; })) } : {}),
-        passage: Object.fromEntries(passage.map((id) => [id, text(id)])),
-        ...(descs.length ? { descriptions: Object.fromEntries(descs.map((desc) => { const meant = meantBefore(desc.text); return [desc.key, { text: desc.text, type: desc.type, in: desc.sentences, ...(meant ? { meant } : {}) }]; })) } : {}),
-      };
       const hints: Record<string, string> = Object.fromEntries([
         ...cast.map((id) => [id, [label(id), ...chart.entities.get(id)!.proper.slice(1, 3)].join(" / ")]),
         ...[...offered, ...offeredThings].map((slot) => [slot.id, `the unnamed ${slot.kind} ${slot.scene === scene.id ? "this scene" : "the scene before"} called ${slot.label}`]),
@@ -178,7 +162,7 @@ export async function resolveRoles(decide: Decide, input: RolesInput): Promise<R
         ]),
       ];
       if (!questions.length) continue;
-      const replies = await decide(state, questions);
+      const { replies } = await ask(decide, rolesMode, { scene: scene.id, passage, cast, offered, namedThings, offeredThings, concepts, facts, before, descs, questions }, stores);
       const answer = (key: string, avoid?: string) => {
         const reply = replies.find((entry) => entry.key === key);
         let value = String(reply?.value ?? "none");

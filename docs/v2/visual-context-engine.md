@@ -217,6 +217,18 @@ tree, central build or default spawns. That page is gone; terrain spawning now r
   almost where the engine had it; 第六学区 a park, 672 × 594 m; 第十五学区 commercial, 594 × 620 m; all at street level (Jev
   sure of the heights, 0.98–1). A kept part was drawn twice on the next map (circle and box), now once; its tokens were not
   recorded, now they are (`stage/terrain/jev-usage.json`).
+- **Composed by the context engine (2026-10-31).** The user saw the first run's grounds and said they were off: the text
+  says 学园都市 is a city of high technology and towers, and its districts came out commercial and a park. Jev had been
+  given, for 第七学区, the three sentences naming it and two environment cards (wind turbines, the weather); for
+  第十五学区, no environment at all. The reading held what was missing: 35 facts about the city (17 of what the city is)
+  and 78 unnamed places place EM holds in it, among them towers of fifty floors, tower apartments and helipads. The
+  `commercial` kind says "a few storeys", so with a station street and nothing else it was the literal match. Terrain's
+  requests are now the engine's terrain modes (`src/v2/context/terrainModes.ts`): the part and its own sentences; what
+  stands there (the unnamed places in the part, then in what holds it, then in its city; no rooms); the facts by Cypher
+  (`factsOf`: about the place alone first, a bare name counting little); the surroundings of the scenes set in it and in
+  its city (a card naming another of the city's places is that place's); the kinds; the pictures. Zoom and height take the
+  part's own scenes only. Every request's manifest is in `stage/terrain/contexts.json`. Composed offline on vol 1, each
+  district's ground request is about 4,100 characters of the 9,000 budget.
 - **Places stop at rooms** (the user, 2026-10-31). A large unnamed place (an EM² slot) is not a terrain part: the engine
   samples it and Jev places it live, in the world engine's redesign.
 

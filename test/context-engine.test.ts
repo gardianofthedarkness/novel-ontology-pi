@@ -85,3 +85,17 @@ test("terrain's ground: what stands in the part, the place holding it and its ci
   assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key)], [["skyscrapers", "park"], ["box", "kind"]]);
   await stores.graph?.close();
 });
+
+test("the reading's prompts of plain text, composed by the engine, are the digger's own: the tiling window and seam, and a flashback's continuation", async () => {
+  const { tilingDocument } = await import("../src/digger/autostep/segmentation.js");
+  const { continuationDocument, continuationQuestion } = await import("../src/digger/timeplace/roles.js");
+  const R = await import("../src/v2/context/readingModes.js");
+  const lines = [{ id: "s1", text: "One." }, { id: "s2", text: "Two." }, { id: "s3", text: "Three." }];
+  const window = { kind: "window" as const, summary: "Processing block b0001.", context: lines, questions: [] };
+  const seam = { kind: "seam" as const, summary: "Processing block b0001.", open: "s1", tail: lines.slice(0, 2), head: lines.slice(2), questions: [] };
+  assert.equal((await compose(R.tilingWindowMode, window, null)).document, tilingDocument(window));
+  assert.equal((await compose(R.tilingSeamMode, seam, null)).document, tilingDocument(seam));
+  const opening = { previousTail: [], opening: lines, questions: [continuationQuestion("long ago")] };
+  const composed = await compose(R.continuationMode, opening, null);
+  assert.deepEqual([composed.document, composed.questions[0].key], [continuationDocument([], lines), "time_continuation"]);
+});

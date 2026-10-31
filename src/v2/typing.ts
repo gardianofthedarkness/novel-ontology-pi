@@ -1,5 +1,7 @@
 import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../ground/connectors/jev.js";
 import type { Sentence } from "../digger/intake/sectioning.js";
+import { ask } from "./context/engine.js";
+import { typingMode } from "./context/readingModes.js";
 import { sentencesWith } from "./listing.js";
 import { isLocative, isPartOrFloor } from "./rules/typing.js";
 
@@ -62,21 +64,12 @@ const nameKey = (index: number) => "n" + (index + 1);
 export type Decide = (state: DecisionState, questions: DecisionQuestion[]) => Promise<DecisionAnswer[]>;
 
 /** The structured document a batch's typing questions are about. */
-export function typingDocument(batch: Sentence[], names: string[]) {
-  return {
-    task: "Strings from a passage of a novel, each with the sentences that hold it. Say what each one is (the types are defined in types).",
-    types: { ...ENTITY_TYPES },
-    passage: Object.fromEntries(batch.map((sentence) => [sentence.id, sentence.text])),
-    names: Object.fromEntries(names.map((text, index) => [nameKey(index), { text, in: sentencesWith(batch, text) }])),
-  };
-}
-
 export async function typeNames(decide: Decide, batch: Sentence[], names: string[]): Promise<Detected[]> {
   if (!names.length) return [];
-  const answers = await decide(typingDocument(batch, names), names.flatMap((_, index) => [
+  const { replies: answers } = await ask(decide, typingMode, { batch, names, questions: names.flatMap((_, index) => [
     { key: `type:n${index + 1}`, primitive: "choice" as const, instructions: `What is names.n${index + 1}?`, options: Object.keys(ENTITY_TYPES), optionHints: { ...TYPE_LABELS } },
     { key: `proper:n${index + 1}`, primitive: "noul" as const, instructions: `Is names.n${index + 1} a proper name?`, noulCriteria: PROPER },
-  ]));
+  ]) }, null);
   return names.map((text, index) => {
     const answer = answers.find((entry) => entry.key === `type:n${index + 1}`);
     const proper = Number(answers.find((entry) => entry.key === `proper:n${index + 1}`)?.value ?? 0);

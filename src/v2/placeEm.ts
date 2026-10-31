@@ -1,5 +1,5 @@
 import type { DecisionAnswer } from "../ground/connectors/jev.js";
-import { compose, type Manifest } from "./context/engine.js";
+import { ask as askJev, type Manifest, type Mode } from "./context/engine.js";
 import { placeParentMode, placeRefMode, settingMode, type PlaceStores } from "./context/placeModes.js";
 import { mentions, type Chart } from "./em.js";
 import type { FactEntry } from "./facts.js";
@@ -80,10 +80,10 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
     const loops = (child: string, parent: string) => address(parent).includes(child);
     const factOf = new Map(input.facts.map((fact) => [fact.id, fact]));
     const stores: PlaceStores = { index, graph, text: input.text, fact: (id) => factOf.get(id), address: (id) => address(id).map(label), scenes: new Map(input.scenes.map((scene) => [scene.id, scene])), kinds: input.kinds };
-    const ask = async <F>(mode: Parameters<typeof compose<F, PlaceStores>>[0], focus: F, keys: Record<string, string>) => {
-      const composed = await compose(mode, focus, stores);
+    const ask = async <F>(mode: Mode<F, PlaceStores>, focus: F, keys: Record<string, string>) => {
+      const { replies, composed } = await askJev(decide, mode, focus, stores);
       asked.push({ mode: mode.name, keys, manifest: composed.manifest });
-      return composed.questions.length ? decide(composed.state, composed.questions) : [];
+      return replies;
     };
 
     // 1. The tree.

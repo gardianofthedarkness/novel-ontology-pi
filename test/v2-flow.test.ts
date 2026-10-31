@@ -5,7 +5,9 @@ import { sectionBlock, type Sentence } from "../src/digger/intake/sectioning.js"
 import { kindCards, type SentenceKind } from "../src/digger/autostep/segmentation.js";
 import { Chart, mentions, nameOverlap, recommend, resolveBatch } from "../src/v2/em.js";
 import { lexiconLister } from "../src/v2/listing.js";
-import { typeNames, typingDocument } from "../src/v2/typing.js";
+import { compose } from "../src/v2/context/engine.js";
+import { typingMode } from "../src/v2/context/readingModes.js";
+import { typeNames } from "../src/v2/typing.js";
 import { readFlow } from "../src/v2/flow.js";
 import { resolveRoles } from "../src/v2/roles.js";
 import { FactLedger } from "../src/v2/facts.js";
@@ -36,7 +38,7 @@ test("cards: runs of one kind, a new card where the carrier changes, exchanges n
 
 test("typing: one structured document a batch, each string by path, types grouped into EM's categories", async () => {
   const batch = sentences("上条当麻走进学园都市。第二天早上，他在屋顶上拿起手机。");
-  const document = typingDocument(batch, ["上条当麻", "学园都市", "第二天早上"]);
+  const document = (await compose(typingMode, { batch, names: ["上条当麻", "学园都市", "第二天早上"], questions: [] }, null)).state as { names: Record<string, { in: string[] }> };
   assert.deepEqual(Object.keys(document.names), ["n1", "n2", "n3"]);
   assert.deepEqual(document.names.n1.in, [batch[0].id]);
   let asked: DecisionQuestion[] = [];

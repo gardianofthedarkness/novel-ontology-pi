@@ -27,7 +27,7 @@ export interface Source<F, S> {
 export interface Mode<F, S> {
   name: string;
   task: string | ((focus: F) => string);
-  definitions?: Record<string, unknown>;
+  definitions?: Record<string, unknown> | ((focus: F) => Record<string, unknown>);
   sources: Source<F, S>[];
   /** Over budget, cut from these sources in this order. */
   cutOrder: string[];
@@ -68,7 +68,7 @@ export async function compose<F, S>(mode: Mode<F, S>, focus: F, stores: S, optio
     });
   }
   const render = () => {
-    const state: Record<string, unknown> = { task: typeof mode.task === "function" ? mode.task(focus) : mode.task, ...(mode.definitions ?? {}) };
+    const state: Record<string, unknown> = { task: typeof mode.task === "function" ? mode.task(focus) : mode.task, ...(typeof mode.definitions === "function" ? mode.definitions(focus) : mode.definitions ?? {}) };
     for (const source of mode.sources) if (kept[source.name].length || source.always) state[source.key] = { ...(state[source.key] as Record<string, unknown> ?? {}), ...Object.fromEntries(kept[source.name].map((item) => [item.id, item.fields])) };
     return state;
   };

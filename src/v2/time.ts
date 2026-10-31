@@ -2,8 +2,10 @@ import type { DecisionQuestion } from "../ground/connectors/jev.js";
 import type { Sentence } from "../digger/intake/sectioning.js";
 import { describeTime, detectTimeMentions, leadingDateCue, needsRoleCheck, parseTimeText, quoteMasks, strongAdvanceCue, type TimeMention } from "../digger/timeplace/lexicon.js";
 import { assemblePeriods, dateFor, isMicroJump, shiftDate, type AnchoredMention, type SceneTime, type StoryPeriod } from "../digger/timeplace/periods.js";
-import { decideContinuation, ROLE_OPTIONS, verdict, type RoleVerdict, type TimeRole } from "../digger/timeplace/roles.js";
+import { continuationOf, continuationQuestion, ROLE_OPTIONS, verdict, type RoleVerdict, type TimeRole } from "../digger/timeplace/roles.js";
 import { describeEntry, placeOnCalendar, type CalendarFile } from "../solidifier/calendar/calendar.js";
+import { ask } from "./context/engine.js";
+import { continuationMode, storyTimeMode } from "./context/readingModes.js";
 import type { Decide } from "./typing.js";
 
 /**
@@ -104,15 +106,13 @@ export async function readStoryTime(decide: Decide, input: { scenes: { id: strin
         const [before, after] = mention.family === "past-marker" || (mention.value.offset?.amount ?? 0) < 0 ? AROUND_PAST : AROUND;
         for (let at = Math.max(0, index - before); at <= Math.min(scene.sentences.length - 1, index + after); at++) shown.add(at);
       }
-      const state = {
-        task: "Time words in a passage of a novel. For each, say what it does to WHEN the narrated scene happens (the roles are defined in roles). The story's time so far is in story.",
-        roles: { ...ROLES },
+      const focus = {
         story: { now: current ? `${current.text} (${current.gloss})` : "not yet established", ...(dateText(storyDate) ? { date: `${dateText(storyDate)}: a time word naming this same date is not a flashback, though a later part of the same day can still move the scene forward` } : {}), narration: flashback ? `inside a flashback that began with ${flashback.text}` : "in the story's present (no flashback open)" },
-        passage: Object.fromEntries([...shown].sort((a, b) => a - b).map((at) => [scene.sentences[at], text(scene.sentences[at])])),
-        times: Object.fromEntries(asked.map(({ mention }, index) => [keys[index], { text: mention.text, means: describeTime(mention), in: mention.sentenceId }])),
+        passage: [...shown].sort((a, b) => a - b).map((at) => ({ id: scene.sentences[at], text: text(scene.sentences[at]) })),
+        times: asked.map(({ mention }, index) => ({ key: keys[index], text: mention.text, means: describeTime(mention), in: mention.sentenceId })),
       };
       const questions: DecisionQuestion[] = asked.map((_, index) => ({ key: `time:${keys[index]}`, primitive: "choice", instructions: `What does times.${keys[index]} do to when the scene happens?`, options: [...ROLE_OPTIONS], optionHints: { ...ROLE_LABELS } }));
-      const replies = await decide(state, questions);
+      const { replies } = await ask(decide, storyTimeMode, { ...focus, questions }, null);
       asked.forEach(({ mention }, index) => verdicts.set(mention, verdict(replies.find((reply) => reply.key === `time:${keys[index]}`), mention)));
     }
     const anchored: AnchoredMention[] = located.map(({ mention, index }) => ({ ...mention, sceneId: scene.id, sentenceIndexInScene: index, verdict: verdicts.get(mention) ?? { role: "REFERENCE", flashback: 0, confidence: null, decidedBy: "default" } }));
@@ -132,13 +132,13 @@ export async function readStoryTime(decide: Decide, input: { scenes: { id: strin
   }
 
   const sceneIndex = new Map(input.scenes.map((scene, index) => [scene.id, index]));
-  const model = { modelId: "v2", decide: (state: Parameters<Decide>[0], questions: DecisionQuestion[]) => decide(state, questions) };
   const assembled = await assemblePeriods(
     input.scenes.map((scene) => ({ id: scene.id, chapterIndex: scene.chapter, sentenceCount: scene.sentences.length })),
     anchorsByScene,
     async (scene, open) => {
       const index = sceneIndex.get(scene.id)!, sentences = (ids: string[]) => ids.map((id) => ({ id, text: text(id) }));
-      return decideContinuation({ decisions: model, opening: sentences(input.scenes[index].sentences.slice(0, 4)), previousTail: index > 0 ? sentences(input.scenes[index - 1].sentences.slice(-3)) : [], flashbackText: open.label });
+      const { replies: [answer] } = await ask(decide, continuationMode, { opening: sentences(input.scenes[index].sentences.slice(0, 4)), previousTail: index > 0 ? sentences(input.scenes[index - 1].sentences.slice(-3)) : [], questions: [continuationQuestion(open.label)] }, null);
+      return continuationOf(answer);
     },
   );
   // The time tree first: it settles the days of parts of the day, and the calendar places what it settled.

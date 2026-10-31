@@ -182,8 +182,10 @@ setting.
 ## 6. The context engine (layer 3), built for places first
 
 The engine of [context-engine.md](context-engine.md) (approved 2026-10-30, not built until now): `compose(mode, focus,
-stores) → { state, questions, manifest }`. Built now as the core with the place modes, then EM, EM² and the world loop's
-modes move onto it one by one (each checked by identical documents before anything changes).
+stores) → { state, questions, manifest }`. Built first with the place modes; since 2026-10-31 it composes every Jev
+request (the user's call): scene tiling, sentence kinds, typing, EM, owners, story time, EM², place EM and terrain
+([context-engine.md](context-engine.md) §4.1), the reading's moved over with identical documents (a cached rerun of vol 1
+with no keys: every request a cache hit).
 
 | Mode | Focus | Sources | Questions |
 |---|---|---|---|
@@ -213,6 +215,7 @@ modes move onto it one by one (each checked by identical documents before anythi
 | `src/v2/placeEm.ts` (new; `places.ts` folds into it) | place EM: tree, settings, unnamed places, occupancy |
 | `src/v2/roles.ts` | EM² no longer asks about places (no `ref:`/`within:` for place descriptions; no `placeLinks`) |
 | `src/v2/flow.ts` | place EM after EM²; the result carries `places` (tree, unnamed, settings, occupancy) |
+| `src/v2/context/readingModes.ts`, `terrainModes.ts` (2026-10-31) | every other Jev request's document: the reading's steps and terrain spawning |
 | `src/v2/script.ts` | the world script takes settings and occupancy from place EM; its own tiers stay only for older readings |
 
 ## 8. How it is measured (vol 1)

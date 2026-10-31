@@ -55,8 +55,20 @@ const LOOKBACK = 20;
 const STEP = 60;
 const SEAM_TAIL = 12;
 
-const render = (sentences: Sentence[]): string =>
+const render = (sentences: Pick<Sentence, "id" | "text">[]): string =>
   sentences.map((s) => `${s.id}: ${s.text}`).join("\n");
+
+/** A tiling request: a window of sentences (where a scene ends, where the next begins), or a seam between two batches. */
+type Lines = Pick<Sentence, "id" | "text">[];
+export type TilingRequest =
+  | { kind: "window"; summary: string; context: Lines; questions: DecisionQuestion[] }
+  | { kind: "seam"; summary: string; open: string; tail: Lines; head: Lines; questions: DecisionQuestion[] };
+/** A tiling request's prompt, as tileScenes sends it. */
+export function tilingDocument(request: TilingRequest): string {
+  return request.kind === "window"
+    ? `${request.summary}\n---\n${render(request.context)}`
+    : `${request.summary}\nPREVIOUS SCENE (began at ${request.open}, still open) — its most recent sentences:\n${render(request.tail)}\n---\nFOLLOWING PASSAGE:\n${render(request.head)}`;
+}
 
 function choiceValue(
   answers: DecisionAnswer[],
@@ -95,6 +107,8 @@ export async function tileScenes(
     stateSummary: string;
     gates: SegmentationGates;
     onSpan?: (spans: string[][]) => Promise<void>;
+    /** Where a caller composes the request's document itself (the v2 reading's context engine), else tilingDocument. */
+    ask?: (request: TilingRequest) => Promise<DecisionAnswer[]>;
   },
 ): Promise<{
   spans: string[][];
@@ -110,6 +124,7 @@ export async function tileScenes(
   const spansNow = (): string[][] =>
     closed.map(([a, b]) => sentences.slice(a, b + 1).map((s) => s.id));
   const idxOf = new Map(sentences.map((s, i) => [s.id, i]));
+  const ask = opts.ask ?? ((request: TilingRequest) => decide(tilingDocument(request), request.questions));
 
   // The one open scene: its tiling start, and the provisional end Jev
   // picked for it (advisory until a seam ratifies it).
@@ -122,17 +137,14 @@ export async function tileScenes(
     const options = sentences.slice(from, regionEnd).map((s) => s.id);
     if (options.length === 0) return;
     const context = sentences.slice(Math.max(0, from - LOOKBACK), regionEnd);
-    const answers = await decide(
-      `${opts.stateSummary}\n---\n${render(context)}`,
-      [
+    const answers = await ask({ kind: "window", summary: opts.stateSummary, context, questions: [
         {
           key,
           primitive: "choice",
           instructions: `A scene begins at sentence ${startId}: one continuous place, time and viewpoint. Which sentence id is the LAST sentence of this scene? If the scene continues past the last numbered sentence (${options[options.length - 1]}), pick that last sentence.`,
           options,
         },
-      ],
-    );
+      ] });
     const a = choiceValue(answers, key);
     const conf = a?.confidence ?? 0;
     unitConfidences[startId] = conf;
@@ -156,9 +168,7 @@ export async function tileScenes(
       const tail = sentences.slice(tailFrom, batchStart);
       const head = sentences.slice(batchStart, batchStart + SEAM_TAIL);
       const key = `scene_seam:${sentences[batchStart].id}`;
-      const answers = await decide(
-        `${opts.stateSummary}\nPREVIOUS SCENE (began at ${sentences[cur.start].id}, still open) — its most recent sentences:\n${render(tail)}\n---\nFOLLOWING PASSAGE:\n${render(head)}`,
-        [
+      const answers = await ask({ kind: "seam", summary: opts.stateSummary, open: sentences[cur.start].id, tail, head, questions: [
           {
             key,
             primitive: "choice",
@@ -166,8 +176,7 @@ export async function tileScenes(
               "The previous scene's most recent sentences are shown first, then the passage that follows them. Does the previous scene CONTINUE into the following passage (same place, time and viewpoint flowing on), or did it END before the passage begins?",
             options: ["continues", "ended"],
           },
-        ],
-      );
+        ] });
       const a = choiceValue(answers, key);
       const conf = a?.confidence ?? 0;
       unitConfidences[key] = conf;
@@ -196,7 +205,6 @@ export async function tileScenes(
       Math.max(0, batchStart - LOOKBACK),
       regionEnd,
     );
-    const state = `${opts.stateSummary}\n---\n${render(context)}`;
     let local = batchStart;
     for (let iter = 0; iter < 12 && local < regionEnd; iter++) {
       const anchorId = sentences[local].id;
@@ -205,14 +213,14 @@ export async function tileScenes(
         ...sentences.slice(local, regionEnd).map((s) => s.id),
         "NONE",
       ];
-      const answers = await decide(state, [
+      const answers = await ask({ kind: "window", summary: opts.stateSummary, context, questions: [
         {
           key,
           primitive: "choice",
           instructions: `A new scene begins where the place changes, time skips, or the viewpoint shifts. Which sentence id BEGINS the next scene at or after ${anchorId}? Pick the first sentence of the next scene, or NONE if no new scene begins in the rest of this passage.`,
           options,
         },
-      ]);
+      ] });
       const a = choiceValue(answers, key);
       const conf = a?.confidence ?? 0;
       if (conf < opts.gates.reask) {
@@ -301,20 +309,29 @@ const QUIET = 8;
 const ASIDE = 2;
 
 /** The structured document a window's questions are about (the request's state). */
+/** What a change of carrier is, as the document says it. */
+export const SENTENCE_CHANGE = `A sentence's carrier is who speaks it, who acts in it, or what it is about. It changes when ${TURN.true}.`;
 export function sentenceDocument(task: string, before: Sentence[], asked: Sentence[]) {
   return {
     task: `${task} Classify every sentence of the passage (sentences keyed by id, in reading order).`.trim(),
     kinds: { ...SENTENCE_KINDS },
-    change: `A sentence's carrier is who speaks it, who acts in it, or what it is about. It changes when ${TURN.true}.`,
+    change: SENTENCE_CHANGE,
     ...(before.length ? { before: Object.fromEntries(before.map((sentence) => [sentence.id, sentence.text])) } : {}),
     passage: Object.fromEntries(asked.map((sentence) => [sentence.id, sentence.text])),
   };
 }
 
+/** A window's questions: each sentence's kind, and whether the carrier changes at it. */
+export const sentenceQuestions = (asked: Sentence[]): DecisionQuestion[] => asked.flatMap((sentence) => [
+  { key: `dlg_kind:${sentence.id}`, primitive: "choice" as const, instructions: `What kind of sentence is passage.${sentence.id}? (The kinds are defined in kinds.)`, options: Object.keys(SENTENCE_KINDS), optionHints: { ...KIND_LABELS } },
+  { key: `dlg_turn:${sentence.id}`, primitive: "noul" as const, instructions: `At passage.${sentence.id}, does the carrier change?`, noulCriteria: TURN },
+]);
+
+/** `ask`, where a caller composes the window's document itself (the v2 reading's context engine), else sentenceDocument. */
 export async function classifySentences(
   sentences: Sentence[],
   decide: DecideFn,
-  opts: { stateSummary: string; onBatch?: (through: number, kinds: SentenceKind[], turns: number[]) => Promise<void> },
+  opts: { stateSummary: string; onBatch?: (through: number, kinds: SentenceKind[], turns: number[]) => Promise<void>; ask?: (window: { summary: string; before: Sentence[]; asked: Sentence[]; questions: DecisionQuestion[] }) => Promise<DecisionAnswer[]> },
 ): Promise<{ kinds: SentenceKind[]; confidence: number[]; turns: number[] }> {
   const kinds: SentenceKind[] = [], confidence: number[] = [], turns: number[] = [];
   const windows = Array.from({ length: Math.ceil(sentences.length / CLASSIFY) }, (_, w) => w * CLASSIFY);
@@ -337,10 +354,8 @@ export async function classifySentences(
   await Promise.all(Array.from({ length: Math.min(WINDOWS_AT_ONCE, windows.length) }, async () => {
     while (next < windows.length) {
       const b = windows[next++], asked = sentences.slice(b, b + CLASSIFY), before = sentences.slice(Math.max(0, b - CONTEXT), b);
-      done.set(b, await decide(sentenceDocument(opts.stateSummary, before, asked), asked.flatMap((sentence) => [
-        { key: `dlg_kind:${sentence.id}`, primitive: "choice" as const, instructions: `What kind of sentence is passage.${sentence.id}? (The kinds are defined in kinds.)`, options: Object.keys(SENTENCE_KINDS), optionHints: { ...KIND_LABELS } },
-        { key: `dlg_turn:${sentence.id}`, primitive: "noul" as const, instructions: `At passage.${sentence.id}, does the carrier change?`, noulCriteria: TURN },
-      ])));
+      const questions = sentenceQuestions(asked);
+      done.set(b, await (opts.ask ? opts.ask({ summary: opts.stateSummary, before, asked, questions }) : decide(sentenceDocument(opts.stateSummary, before, asked), questions)));
       publishing = publishing.then(publish);
       await publishing;
     }

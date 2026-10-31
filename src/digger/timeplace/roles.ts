@@ -102,23 +102,30 @@ export async function decideRoles(input: {
  * flashback or return to the present? Most flashbacks end silently at a
  * scene break, so this is asked rather than assumed.
  */
+/** The continuation question after a flashback that began with `flashbackText`. */
+export const continuationQuestion = (flashbackText: string): DecisionQuestion => ({
+  key: "time_continuation",
+  primitive: "choice",
+  instructions: `The previous scene was a flashback that began with "${flashbackText}". Does the NEW SCENE continue that flashback, or return to the story's present?`,
+  criteria: "CONTINUES_FLASHBACK: the new scene still narrates the past episode. RETURNS_TO_PRESENT: the new scene is back in the story's present time. Choose RETURNS_TO_PRESENT when the opening does not clearly stay in the past.",
+  options: ["CONTINUES_FLASHBACK", "RETURNS_TO_PRESENT"],
+});
+/** The continuation's prompt: the end of the scene before and the new scene's opening, a sentence a line. */
+export const continuationDocument = (previousTail: { id: string; text: string }[], opening: { id: string; text: string }[]) => `END OF PREVIOUS SCENE:\n${previousTail.map((sentence) => `${sentence.id}: ${sentence.text}`).join("\n")}\n\nNEW SCENE OPENING:\n${opening.map((sentence) => `${sentence.id}: ${sentence.text}`).join("\n")}`;
+/** Whether the answer says the new scene continues the flashback, and how likely. */
+export function continuationOf(answer: DecisionAnswer | undefined): { continues: boolean; probability: number } {
+  const probability = answer?.distribution?.CONTINUES_FLASHBACK ?? (answer?.value === "CONTINUES_FLASHBACK" ? answer.confidence ?? 1 : 0);
+  return { continues: answer?.value === "CONTINUES_FLASHBACK", probability };
+}
+
 export async function decideContinuation(input: {
   decisions: DecisionModel;
   opening: { id: string; text: string }[];
   flashbackText: string;
   previousTail: { id: string; text: string }[];
 }): Promise<{ continues: boolean; probability: number }> {
-  const question: DecisionQuestion = {
-    key: "time_continuation",
-    primitive: "choice",
-    instructions: `The previous scene was a flashback that began with "${input.flashbackText}". Does the NEW SCENE continue that flashback, or return to the story's present?`,
-    criteria: "CONTINUES_FLASHBACK: the new scene still narrates the past episode. RETURNS_TO_PRESENT: the new scene is back in the story's present time. Choose RETURNS_TO_PRESENT when the opening does not clearly stay in the past.",
-    options: ["CONTINUES_FLASHBACK", "RETURNS_TO_PRESENT"],
-  };
-  const state = `END OF PREVIOUS SCENE:\n${input.previousTail.map((sentence) => `${sentence.id}: ${sentence.text}`).join("\n")}\n\nNEW SCENE OPENING:\n${input.opening.map((sentence) => `${sentence.id}: ${sentence.text}`).join("\n")}`;
-  const [answer] = await input.decisions.decide(state, [question]);
-  const probability = answer?.distribution?.CONTINUES_FLASHBACK ?? (answer?.value === "CONTINUES_FLASHBACK" ? answer.confidence ?? 1 : 0);
-  return { continues: answer?.value === "CONTINUES_FLASHBACK", probability };
+  const [answer] = await input.decisions.decide(continuationDocument(input.previousTail, input.opening), [continuationQuestion(input.flashbackText)]);
+  return continuationOf(answer);
 }
 
 /**

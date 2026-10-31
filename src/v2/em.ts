@@ -1,4 +1,6 @@
 import type { Sentence } from "../digger/intake/sectioning.js";
+import { ask } from "./context/engine.js";
+import { emMode, ownersMode } from "./context/readingModes.js";
 import { factEvidence, FACT_RECENT, type FactLedger } from "./facts.js";
 import type { Category, Decide, Detected, EntityType } from "./typing.js";
 
@@ -159,17 +161,6 @@ const describe = (entity: ChartEntity, chart?: Chart) => entity.names.slice(0, 4
 export const OWNER_PEOPLE = 12;
 
 /** The structured document a group's EM questions are about. */
-export function emDocument(chart: Chart, batch: Sentence[], group: { detected: Detected; candidates: string[]; peers: string[] }[], facts: Record<string, { about: string[]; text: string }>, text: (sentence: string) => string) {
-  const ids = [...new Set(group.flatMap((entry) => entry.candidates))];
-  return {
-    task: "Names found in a passage of a novel. For each, say who or what it is: one of its candidates (the people, things and places the story has had so far), the same as another name of this passage, or new. The facts are what the book has stated so far about the candidates and the names (each says what it is about): they are the truth, trust them over how the names look.",
-    passage: Object.fromEntries(batch.map((sentence) => [sentence.id, sentence.text])),
-    names: Object.fromEntries(group.map(({ detected }) => [detected.key, { text: detected.text, type: detected.type, in: detected.sentences }])),
-    candidates: Object.fromEntries(ids.map((id) => { const entity = chart.entities.get(id)!; const last = entity.seen[entity.seen.length - 1]; return [id, { names: entity.names, type: entity.type, ...(entity.owners?.length ? { of: label(chart, entity.owners[entity.owners.length - 1].id) } : {}), seen: entity.seen.length, last: last ? text(last).slice(0, 160) : "" }]; })),
-    ...(Object.keys(facts).length ? { facts } : {}),
-  };
-}
-
 /**
  * EM for one batch's detected strings, in place on the chart. `position` gives a sentence's place in the book, `text` its
  * text, `facts` the ledger (every fact of the book; only those before a string are ever given for it).
@@ -205,12 +196,12 @@ export async function resolveBatch(decide: Decide, chart: Chart, batch: Sentence
     const facts = factEvidence(found);
     for (const entry of group) given.set(entry.detected.key, Object.keys(facts).filter((id) => facts[id].about.some((key) => key === `names.${entry.detected.key}` || entry.candidates.includes(key))));
     const peerText = new Map(pending.map((entry) => [entry.detected.key, entry.detected.text]));
-    const replies = await decide(emDocument(chart, batch, group, facts, context.text), group.map((entry) => ({
+    const { replies } = await ask(decide, emMode, { batch, group, facts, questions: group.map((entry) => ({
       key: `em:${entry.detected.key}`, primitive: "choice" as const,
       instructions: `Who or what is names.${entry.detected.key}? One of its candidates (in candidates), the same as another name of the passage, or new.`,
       options: [...entry.candidates, ...entry.peers, "new"],
       optionHints: Object.fromEntries([...entry.candidates.map((id) => [id, describe(chart.entities.get(id)!, chart)]), ...entry.peers.map((key) => [key, `the same as names.${key} (${peerText.get(key)})`]), ["new", "not one of these: someone or something new"]]),
-    })));
+    })) }, { chart, text: context.text, label: (id) => label(chart, id) });
     for (const entry of group) {
       const reply = replies.find((item) => item.key === `em:${entry.detected.key}`);
       const value = String(reply?.value ?? "new");
@@ -265,17 +256,10 @@ async function askOwners(decide: Decide, chart: Chart, batch: Sentence[], result
   const sentencesOf = (id: string) => [...new Set(asked.get(id)!.flatMap((result) => batch.filter((sentence) => sentence.text.includes(result.text)).map((sentence) => sentence.id)))];
   const before = context.position(batch[0]?.id ?? "");
   const facts = factEvidence([...asked.keys()].flatMap((id) => chart.entities.get(id)!.proper.flatMap((name) => context.facts.holding(name, before, FACT_RECENT).map((fact) => ({ fact, for: id })))));
-  const state = {
-    task: "Concepts a passage of a novel names: abilities, powers, techniques, networks, systems, plans. For each, say whose it is: the person who has it, uses it or runs it; many people or a group; or no one's (it is general, or the passage does not say). The facts are what the book has stated so far about them: trust them.",
-    passage: Object.fromEntries(batch.map((sentence) => [sentence.id, sentence.text])),
-    concepts: Object.fromEntries([...asked.keys()].map((id) => [id, { name: label(chart, id), in: sentencesOf(id) }])),
-    people: Object.fromEntries(people.map((id) => [id, label(chart, id)])),
-    ...(Object.keys(facts).length ? { facts } : {}),
-  };
-  const replies = await decide(state, [...asked.keys()].map((id) => ({
+  const { replies } = await ask(decide, ownersMode, { batch, concepts: [...asked.keys()].map((id) => ({ id, name: label(chart, id), in: sentencesOf(id) })), people: people.map((id) => ({ id, name: label(chart, id) })), facts, questions: [...asked.keys()].map((id) => ({
     key: `own:${id}`, primitive: "choice" as const, instructions: `Whose is concepts.${id}?`, options: [...people, "many", "none"],
     optionHints: { ...Object.fromEntries(people.map((person) => [person, label(chart, person)])), many: "many people share it, or a group runs it", none: "no one's: it is general, or the passage does not say whose" },
-  })));
+  })) }, null);
   for (const [id, entries] of asked) {
     const reply = replies.find((entry) => entry.key === `own:${id}`), value = String(reply?.value ?? "none");
     const confidence = Number(Number(reply?.distribution?.[value] ?? reply?.confidence ?? 0).toFixed(3));
