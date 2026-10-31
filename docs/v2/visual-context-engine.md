@@ -117,6 +117,40 @@ Like the text context engine: a question comes in with a **mode** and a **focus*
   then the map), `thing` (the candidates and sky ghosts we have, moved onto the engine), `gather` (where a group stands),
   `move` (destinations off the spots).
 
+### 4.1 The zoom engine (the user's design, 2026-10-31)
+
+Run 5 showed what scattered framing loses: the size of the districts overall, names too small to tell which district a
+place is in, pools as large as their canvas circles (1.2 and 1.6 km squares), and no measure of how much room is free. The
+user: one unified layer of zoom control in the visual context engine, giving Jev free space to build in, and a sanity
+check and an adequate area for the scale it should look at. Every frame Jev is shown, and every box it answers, goes
+through it (`src/v2/context/zoom.ts`; code, no model):
+- **The scale ladder.** Each level has its sizes (a city 800 to 8,000 m across, a district 300 to 2,400, a street 40 to
+  400, a building 8 to 80) and its parent (a street's district, a district's city). The ladder replaces terrain
+  spawning's own table.
+- **Extents, not circles.** An area's extent is its kept box (Jev's, or a book before's), else the boxes its kept parts
+  span, else its canvas circle, said to be a guess. A pool's extent is the span of the members Jev boxed in it (a margin
+  round them), within its holder; with none boxed it has none, so its default ground is never a sampled square.
+- **Frames.** A question is shown its part in two frames when one cannot hold both: the *context* (the parent's extent and
+  its neighbours, every area of the parent's level outlined and tagged large, so it is plain which district this is) and
+  the *work* frame (sized so the part's usual size is about a sixth of it, between a twelfth and a third, centred on its
+  suggested spot and kept within the parent). When the parent fits the work frame at that scale, one frame does both. A
+  zoom frames the proposed box; the height question keeps its own camera.
+- **Tags by tier.** The labels' size is the frame's, scaled by what they name: the parent's level largest, the part's
+  siblings middling, smaller places small, the part itself (its pin) large.
+- **Free space.** In the work frame, the parent's ground not covered by a kept place the part may not share (the
+  compatibility map, §5.9 of world-engine-v2's §2.0.15) is shown, a faint layer, for Jev to build in; the engine also names
+  the largest free rectangle.
+- **Sanity.** A box is asked again when its size is out of its level's range, its middle is outside its parent, it covers
+  a kept place it may not share, or it takes more than a third of its parent; each reason said in words.
+- **Click to focus** (the user, 2026-10-31: any level). In World · Live a click on a place of any level (its pin, its name,
+  or the ground inside it: the smallest place holding the point) glides the orbit's pivot to its middle and the camera as
+  near as frames its extent (its kept size, else the room it takes); following stops. The names are as large as their
+  level (a city's and a district's large, a street's middling, a building's small).
+Built: `zoom.ts` (`LADDER`, `extentOf`, `poolExtent`, `framesFor`, `detailFrame`, `tagScale`, `freeSpace`, `sanity`);
+terrain spawning asks a member's area on its work frame with the free ground drawn (and the district for context when it
+does not fit), checks every box with `sanity`, draws every tag by its tier, and boxes a pool by its members; the export
+grounds a pool on its members' span; the live page's names by level and `focusOn`.
+
 ## 5. Terrain spawning (the first faculty of the spawning department)
 
 ### 5.1 What it may place

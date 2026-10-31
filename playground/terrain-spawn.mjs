@@ -44,8 +44,6 @@ export const SHAPES = {
   platform: 'a platform: a flat deck raised above the ground', cut: 'a cut: a trench or a pit dug into the ground', ramp: 'a ramp: ground sloping up from one side to the other',
   rectangle: 'a rectangle: a plain block of ground', sphere: 'a sphere', donut: 'a donut: a ring, as a torus',
 };
-/** How wide a part's ground is, by its scale (metres): a box far from it is asked about again. */
-const SCALE_WIDTH = { district: [300, 2400], street: [40, 400], city: [800, 8000] };
 const OVERVIEW = [1440, 900], MAP = [1024, 1024], ZOOMS = 2, CELL = 2, FLOOR = 3, OPEN = new Set(['district', 'street']);
 /** The core the terrain-height question looks through, half its width over its highest slice (at least 40 m): the slices stand apart, the core reads beside them. */
 const CORE = 0.4, CORE_MIN = 40;
@@ -64,6 +62,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // Every Jev request is composed by the context engine (the user's call): the terrain modes, from the reading's stores.
   const { ask } = await load('dist/src/v2/context/engine.js'), T = await load('dist/src/v2/context/terrainModes.js');
   const { continuityTies, universeOf } = await load('dist/src/v2/pools.js');
+  // The zoom engine (docs/v2/visual-context-engine.md §4.1): every frame Jev is shown and every box it answers.
+  const Z = await load('dist/src/v2/context/zoom.js');
   const inputs = await stageInputs(novelDir), [line] = await simStrandList(novelDir);
   if (!line) throw new Error('Terrain spawning needs the world loop\'s line: a world-first book with its world script and staged scenes.');
   const folder = join(novelDir, 'stage', 'terrain');
@@ -224,13 +224,19 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const district = sampled ? (scaleOf(holder) === 'street' && world[holder]?.pool ? world[holder].pool : holder) : null;
       const tiedTo = new Map(Object.entries(ties[part.id] ?? {}).filter(([id]) => id !== part.id && (nodeOf(id) || terrain.sites[id])).sort((a, b) => b[1] - a[1]).slice(0, 8));
       const tag = (id, label) => (tiedTo.has(id) ? `${label} · tied` : label);
+      // Extents, not circles (the zoom engine): an area's kept box, else the span of its kept parts, else its circle (a guess).
+      const keptBox = id => { const site = terrain.sites[id]; return site && ['jev', 'universe'].includes(site.by) && Array.isArray(site.box) ? site.box : null; };
+      const partsOf = id => Object.values(terrain.sites).filter(site => site.parent === id && Array.isArray(site.box) && site.by !== 'pool').map(site => site.box);
+      const extentFor = id => (id ? Z.extentOf(keptBox(id), partsOf(id), nodeOf(id)) : null);
+      const levelOf = scale => (['city', 'district', 'street', 'building'].includes(scale) ? scale : null);
+      const tierOf = scale => Z.tagScale(levelOf(scale), levelOf(part.scale) ?? 'street');
       const areas = (extra = []) => [
         // A place not kept yet is a pin where the engine has it (its circle is the room it takes, not its size: the user's
         // call, docs/v2/world-engine-v2.md §2.0.14); a part already kept is drawn once, as its kept box (below).
-        ...kin.filter(node => node.id !== city.id && !Array.isArray(terrain.sites[node.id]?.box)).map(node => ({ pin: [node.x, node.z], label: tag(node.id, node.dwelling ? `${node.label} (sampled: the text puts it nowhere)` : node.label), color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e' })),
-        ...(pinAt ? [{ pin: pinAt, label: `${part.label} · ${sampled ? 'suggested' : 'now'}`, color: 0x9fb4c3, textColor: '#c9d6df' }] : []),
+        ...kin.filter(node => node.id !== city.id && !Array.isArray(terrain.sites[node.id]?.box)).map(node => ({ pin: [node.x, node.z], label: tag(node.id, node.dwelling ? `${node.label} (sampled: the text puts it nowhere)` : node.label), color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e', tag: tierOf(node.scale) })),
+        ...(pinAt ? [{ pin: pinAt, label: `${part.label} · ${sampled ? 'suggested' : 'now'}`, color: 0x9fb4c3, textColor: '#c9d6df', tag: Z.tagScale(null, 'street', true) }] : []),
         // A kept pool's box is its circle's (sampled, not Jev's): a pin where the engine has it now; the boxes Jev drew, outlined.
-        ...Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && id !== part.id).map(([id, site]) => ({ ...(site.by === 'pool' ? { pin: nodeOf(id) ? [nodeOf(id).x, nodeOf(id).z] : [(site.box[0] + site.box[2]) / 2, (site.box[1] + site.box[3]) / 2] } : { box: site.box }), label: tag(id, name(id)), color: 0xffffff, textColor: '#ffffff' })), ...extra];
+        ...Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && id !== part.id).map(([id, site]) => ({ ...(site.by === 'pool' ? { pin: nodeOf(id) ? [nodeOf(id).x, nodeOf(id).z] : [(site.box[0] + site.box[2]) / 2, (site.box[1] + site.box[3]) / 2] } : { box: site.box }), label: tag(id, name(id)), color: 0xffffff, textColor: '#ffffff', tag: tierOf(site.scale) })), ...extra];
       // The terrain kept for the places holding the part (its city, the place between), larger first: its manifold frames the part's.
       const kept = id => { const site = terrain.sites[id]; return site?.kind ? `${site.kind}${site.median ? `, median ${site.median} m` : site.top ? `, up to ${site.top} m` : ''}` : null; };
       const framing = Object.fromEntries((isCity ? [] : [...new Set([city.id, holder])]).filter(id => kept(id)).map(id => [name(id), kept(id)]));
@@ -243,7 +249,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // sampled for it; Jev's questions are the real places', on maps that show the pools and what stands in them.
       const poolOf = world[part.id]?.pool ?? null;
       const byDefault = () => {
-        const node = nodeOf(part.id) ?? holderNode ?? anchor, box = [round(node.x - node.r), round(node.z - node.r), round(node.x + node.r), round(node.z + node.r)];
+        // Its extent is its members' span (the zoom engine's pool extent), within its holder; with none boxed, a pin's worth.
+        const node = nodeOf(part.id) ?? holderNode ?? anchor, span = Z.poolExtent(partsOf(part.id), extentFor(holder)?.box ?? null);
+        const box = span ?? [round(node.x - 10), round(node.z - 10), round(node.x + 10), round(node.z + 10)];
         const same = terrain.order.filter(id => id !== part.id && terrain.sites[id]?.scale === part.scale && !terrain.sites[id].pool && terrain.sites[id].median && within(id, poolOf)).map(id => terrain.sites[id]);
         if (!same.length) return { boxBy: null, what: null, rise: null, kind: null, entry: null, shape: null, ground: null, box, median: null, upTo: null, measure: 'median', empty: true };
         const count = new Map(); for (const site of same) count.set(site.kind, (count.get(site.kind) ?? 0) + 1);
@@ -255,15 +263,17 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // 1. Overview.
       const yaw = -0.62, up = 0.52;
       const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(centre, yaw, up, R * 1.8), target: centre }, areas: areas(), labelScale: R / 32, vague: { near: R * 4, far: R * 9 } });
-      const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R }, areas: areas(), labelScale: R / 24, vague: CLEAR });
+      // The city as the context frame (a district's), its free ground: what no kept place of another branch of the tree covers.
+      const cityFree = isCity ? { rects: [] } : Z.freeSpace({ x: centre[0], z: centre[2], half: R, level: 'city', purpose: 'context', tag: R / 24 }, null, Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && site.by !== 'pool' && id !== part.id && !within(part.id, id) && !within(id, part.id)).map(([, site]) => site.box));
+      const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R }, areas: areas(), free: cityFree.rects, labelScale: R / 24, vague: CLEAR });
       const { replies: grounds } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES,
-        pictures: { skyline: `${city.label} from the side and above, as the world stands now. ${SEEN}`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white${now ? `; where ${part.label} stands for now, a grey pin` : ''}. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
+        pictures: { skyline: `${city.label} from the side and above, as the world stands now. ${SEEN}`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white${now ? `; where ${part.label} stands for now, a grey pin` : ''}${cityFree.rects.length ? '; free ground in faint cyan squares' : ''}. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
       const where = grounds.find(reply => reply.key === 'box'), what = grounds.find(reply => reply.key === 'kind');
       // The answer as the engine's input: a kind of the part's level (a landscape type, or a shape), or a basic shape.
       const options = T.terrainKinds(part.scale, SHAPES), kind = options[what?.value] ? String(what.value) : Object.keys(options)[isCity ? 1 : part.scale === 'street' ? 0 : 1];
       const entry = T.terrainKind(part.scale, kind), shape = entry?.shape ?? (SHAPES[kind] ? kind : null), ground = shape ? null : entry?.ground ?? null;
       const fromMap = (box, map) => (box && map ? [round(map.x - map.halfX + box.left * 2 * map.halfX), round(map.z - map.halfZ + box.top * 2 * map.halfZ), round(map.x - map.halfX + box.right * 2 * map.halfX), round(map.z - map.halfZ + box.bottom * 2 * map.halfZ)] : null);
-      const width = SCALE_WIDTH[part.scale] ?? [60, 600], fallback = (width[0] + width[1]) / 4, at = holderNode ?? anchor;
+      const width = Z.LADDER[part.scale]?.sizes ?? [60, 600], fallback = (width[0] + width[1]) / 4, at = holderNode ?? anchor;
       // A city's box is its own circle as the engine has it (the map is the city).
       const spotOf = node => [round(node.x - node.r), round(node.z - node.r), round(node.x + node.r), round(node.z + node.r)];
       // Compatibility (docs/v2/world-engine-v2.md §2.0.15, code, before Jev is asked): a kept place this one's kind may not
@@ -282,14 +292,21 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       }
       // A pool's member (docs/v2/world-engine-v2.md §2.0.13, §2.0.15): between its kind and its height, Jev boxes where it
       // lies and how large it is, on a map of its whole district (its pin a suggestion, the places it is tied to marked).
-      const districtBox = district && ['jev', 'universe'].includes(terrain.sites[district]?.by) && Array.isArray(terrain.sites[district].box) ? terrain.sites[district].box : null;
+      // The zoom engine: the district's extent (kept, else its kept parts' span, else its circle), the frames for a street there
+      // (one when the district fits at a street's scale, else the district for context and a work frame at the street's
+      // scale), the free ground in the work frame, and the parent a box is checked against.
+      const districtExtent = district ? extentFor(district) : null, districtBox = districtExtent && districtExtent.by !== 'circle' ? districtExtent.box : null;
+      const clashes = () => Object.entries(terrain.sites).filter(([id, site]) => clash(id, site)).map(([id, site]) => ({ box: site.box, reason: why(id, site) }));
       let areaReply = null;
       if (sampled) {
-        const dn = nodeOf(district) ?? holderNode ?? anchor, mid = districtBox ? [(districtBox[0] + districtBox[2]) / 2, (districtBox[1] + districtBox[3]) / 2] : [dn.x, dn.z];
-        const half = Math.max(160, districtBox ? Math.max(districtBox[2] - districtBox[0], districtBox[3] - districtBox[1]) * 0.6 : dn.r * 1.1, pinAt ? Math.max(Math.abs(pinAt[0] - mid[0]), Math.abs(pinAt[1] - mid[1])) * 1.15 : 0);
-        const close = await shoot(MAP, { topdown: { x: mid[0], z: mid[1], half }, areas: areas(), labelScale: half / 24, vague: CLEAR });
+        const spot = pinAt ?? (districtExtent ? Z.middleOf(districtExtent.box) : [anchor.x, anchor.z]), { work, context } = Z.framesFor('street', spot, districtExtent?.box ?? null);
+        const free = Z.freeSpace(work, districtExtent?.box ?? null, clashes().map(clash => clash.box)), largest = free.largest ? `${Math.round(Z.widthOf(free.largest))} × ${Math.round(Z.depthOf(free.largest))} m` : null;
+        const close = await shoot(MAP, { topdown: { x: work.x, z: work.z, half: work.half }, areas: areas(), free: free.rects, labelScale: work.tag, vague: CLEAR });
+        const wide = context ? await shoot(MAP, { topdown: { x: context.x, z: context.z, half: context.half }, areas: areas(), labelScale: context.tag, vague: CLEAR }) : null;
         const tied = [...tiedTo].map(([id, n]) => `${name(id)} ×${n}`);
-        ({ replies: [areaReply] } = await ask(decide, T.terrainAreaMode, { ...about, kind, district: name(district), tied, pictures: { map: `${name(district)} straight down, north up, ${Math.round(half * 2)} m across; ${part.label}'s suggested spot a grey pin (where continuity would put it; anywhere in ${name(district)} may do)${tied.length ? `; the places it is tied to marked "tied"` : ''}; the other places pinned, those already kept outlined in white. A pin is a point, not a size. ${SEEN}` } }, stores, { request: { images: { map: close.png } } }));
+        ({ replies: [areaReply] } = await ask(decide, T.terrainAreaMode, { ...about, kind, district: name(district), tied, pictures: {
+          map: `${context ? `part of ${name(district)}` : name(district)} straight down, north up, ${Math.round(work.half * 2)} m across (a street is usually ${Z.LADDER.street.sizes[0]} to ${Z.LADDER.street.sizes[1]} m); ${part.label}'s suggested spot a grey pin (where continuity would put it; anywhere in ${name(district)} may do)${tied.length ? `; the places it is tied to marked "tied"` : ''}; the other places pinned, those already kept outlined in white; free ground to build on in faint cyan squares${largest ? ` (the largest free stretch ${largest})` : ''}. A pin is a point, not a size. ${SEEN}`,
+          ...(wide ? { context: `${name(district)} as a whole, straight down, north up, ${Math.round(context.half * 2)} m across, its neighbours named large: where the map's part of it lies.` } : {}) } }, stores, { request: { images: { map: close.png, ...(wide ? { context: wide.png } : {}) } } }));
         top.map = close.map;
       }
       let box = isCity && cityNode ? spotOf(cityNode) : fromMap((sampled ? areaReply : where)?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
@@ -297,25 +314,18 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // The reply the box came from (a member's area answer, the overview's, or the last zoom's): its confidence is kept.
       let boxBy = sampled ? areaReply : where;
       // 2. Conflicts and zooms.
-      const conflicts = candidate => {
-        const reasons = [], across = Math.max(candidate[2] - candidate[0], candidate[3] - candidate[1]);
-        const overlap = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
-        for (const [id, site] of Object.entries(terrain.sites)) if (clash(id, site) && overlap(candidate, site.box)) reasons.push(why(id, site));
-        const middle = [(candidate[0] + candidate[2]) / 2, (candidate[1] + candidate[3]) / 2];
-        if (districtBox && !(middle[0] > districtBox[0] && middle[0] < districtBox[2] && middle[1] > districtBox[1] && middle[1] < districtBox[3])) reasons.push(`its middle is outside ${name(district)}`);
-        if (across > width[1]) reasons.push(`${Math.round(across)} m across is too big for a ${part.scale}`);
-        if (across < width[0]) reasons.push(`${Math.round(across)} m across is too small for a ${part.scale}`);
-        if ((candidate[2] - candidate[0]) * (candidate[3] - candidate[1]) > 0.25 * (2 * R) ** 2) reasons.push('it takes more than a quarter of the map');
-        return reasons;
-      };
+      // The zoom engine's sanity: its level's sizes, its middle in its parent, a third of its parent at most, and no kept place
+      // it may not share. Its parent: a member's district, else the place holding it when that was boxed.
+      const parentBox = sampled ? (districtBox ? { box: districtBox, name: name(district) } : null) : keptBox(holder) ? { box: keptBox(holder), name: name(holder) } : null;
+      const conflicts = candidate => Z.sanity(candidate, part.scale, parentBox, clashes());
       for (let zoom = 1; zoom <= (isCity ? 0 : ZOOMS); zoom++) {
         const reasons = conflicts(box);
         if (!reasons.length) break;
-        const zc = [(box[0] + box[2]) / 2, 0, (box[1] + box[3]) / 2], zh = Math.max(width[0], Math.max(box[2] - box[0], box[3] - box[1])) * 0.95;
+        const detail = Z.detailFrame(box, part.scale), zc = [detail.x, 0, detail.z], zh = detail.half;
         const mark = { box, label: `${part.label}?`, color: 0xff4040, textColor: '#ff6060' };
         await live.outcome({ subject: part.label, text: `zoom ${zoom}: ${reasons.join('; ')}` });
         const zside = await shoot(OVERVIEW, { view: { fov: 38, position: from(zc, yaw, up, zh * 2.2), target: zc }, areas: areas([mark]), labelScale: zh / 28, vague: { near: zh * 5, far: zh * 11 } });
-        const ztop = await shoot(MAP, { topdown: { x: zc[0], z: zc[2], half: zh }, areas: areas([mark]), labelScale: zh / 22, vague: CLEAR });
+        const ztop = await shoot(MAP, { topdown: { x: zc[0], z: zc[2], half: zh }, areas: areas([mark]), labelScale: detail.tag, vague: CLEAR });
         const { replies: [again] } = await ask(decide, T.terrainZoomMode, { ...about, kind, reasons, pictures: { skyline: `the area from the side and above. ${SEEN}`, map: `the area straight down, north up, ${Math.round(zh * 2)} m across.` } }, stores, { request: { images: { skyline: zside.png, map: ztop.png } } });
         box = fromMap(again?.box, ztop.map) ?? box;
         if (again?.box) boxBy = again;
@@ -343,7 +353,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const reuse = earlier && earlier.book !== universe.book && earlier.scale === part.scale ? earlier : null;
       const reused = () => {
         const known = T.terrainKind(part.scale, reuse.kind), entry = { ...known, manifold: reuse.manifold ?? known?.manifold }, shape = reuse.shape ?? null;
-        const [w, d] = reuse.size ?? [SCALE_WIDTH[part.scale]?.[0] ?? 100, SCALE_WIDTH[part.scale]?.[0] ?? 100];
+        const [w, d] = reuse.size ?? [Z.LADDER[part.scale]?.sizes[0] ?? 100, Z.LADDER[part.scale]?.sizes[0] ?? 100];
         const c = reuse.toward && reuse.parentLabel === name(holder) && holderNode ? [holderNode.x + reuse.toward[0], holderNode.z + reuse.toward[1]] : pinAt ?? [(holderNode ?? anchor).x, (holderNode ?? anchor).z];
         const box = isCity && cityNode ? [round(cityNode.x - cityNode.r), round(cityNode.z - cityNode.r), round(cityNode.x + cityNode.r), round(cityNode.z + cityNode.r)] : [round(c[0] - w / 2), round(c[1] - d / 2), round(c[0] + w / 2), round(c[1] + d / 2)];
         return { boxBy: null, what: null, rise: null, kind: reuse.kind, entry, shape, ground: shape ? null : reuse.ground ?? known?.ground ?? null, box, median: reuse.median ?? null, upTo: reuse.top ?? null, measure: reuse.median != null ? 'median' : 'top', reusedFrom: reuse.book };

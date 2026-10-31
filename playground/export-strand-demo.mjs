@@ -68,7 +68,7 @@ export async function strandDemo(novelDir, options) {
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf, scaleOfName } = await load('dist/src/digger/stage/scale.js');
-  const { continuityTies } = await load('dist/src/v2/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js');
+  const { continuityTies } = await load('dist/src/v2/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js'), Z = await load('dist/src/v2/context/zoom.js');
   // A landscape's fill, made once per landscape (a pool's is read for its streets' buildings, then drawn).
   const fills = new WeakMap(), fillOf = landscape => { const known = fills.get(landscape); if (known?.n === landscape.patches.length) return known.filled; const filled = fillLandscape(landscape); fills.set(landscape, { n: landscape.patches.length, filled }); return filled; };
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -419,9 +419,14 @@ export async function strandDemo(novelDir, options) {
     const poolArea = id => worldScript?.places?.[id]?.pool ?? null;
     const terrainGround = id => { const site = terrain?.sites?.[id]; return site?.ground && LANDSCAPES[site.ground] ? site : null; };
     // A kept part's ground: its box, built round its median on its kind's manifold (terrain spawning's); a city's (no box) at its kind's own size.
+    // A pool's extent in its own frame: the span of the boxes its members were kept in (each at its offset in the pool, its
+    // size), a fifth more all round (Z.poolExtent); null with none boxed.
+    const poolExtentOf = id => Z.poolExtent(Object.values(terrain?.sites ?? {}).filter(site => site.parent === id && Array.isArray(site.toward) && Array.isArray(site.size)).map(site => [site.toward[0] - site.size[0] / 2, site.toward[1] - site.size[1] / 2, site.toward[0] + site.size[0] / 2, site.toward[1] + site.size[1] / 2]), null);
     const groundPatch = id => {
       const site = terrainGround(id), made = site?.median && site.manifold ? { median: site.median, manifold: site.manifold } : null;
       if (!site) return null;
+      // A pool's ground is its members' span in its own frame (the zoom engine's pool extent), never a sampled square.
+      if (site.pool) { const extent = poolExtentOf(id); return extent && made ? patchFromBox(site.ground, 'p0', id, { x0: extent[0], z0: extent[1], x1: extent[2], z1: extent[3] }, { by: 'pool' }, made) : null; }
       if (!site.size) return made ? withManifold(samplePatch(site.ground, 'p0', id, [0, 0], { by: 'jev' }), made.median, made.manifold) : null;
       const [w, d] = site.size; return patchFromBox(site.ground, 'p0', id, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }, made);
     };
@@ -540,8 +545,10 @@ export async function strandDemo(novelDir, options) {
     const nodes = [];
     for (const place of Object.values(canvas.places)) {
       const [x, z] = C.worldOf(canvas, place.id), grid = place.units.find(unit => unit.id === `${place.id}#grid`);
-      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.pool ? { pool: place.pool } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}) });
-      for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(unit.sampled && !unit.dwells ? { sampled: unit.sampled } : {}), ...(unit.dwells ? { dwells: unit.dwells } : {}), ...(unit.forJev ? { forJev: true } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
+      // Its kept size (terrain spawning's box), for framing it when it is clicked (the zoom engine's extent).
+      const span = place.pool ? poolExtentOf(place.id) : null, kept = span ? [Z.widthOf(span), Z.depthOf(span)] : terrain?.sites?.[place.id]?.size ?? null;
+      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(kept ? { size: kept } : {}), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.pool ? { pool: place.pool } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}) });
+      for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(terrain?.sites?.[unit.id]?.size ? { size: terrain.sites[unit.id].size } : {}), ...(unit.sampled && !unit.dwells ? { sampled: unit.sampled } : {}), ...(unit.dwells ? { dwells: unit.dwells } : {}), ...(unit.forJev ? { forJev: true } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
     }
     return { nodes, canvas };
   };
