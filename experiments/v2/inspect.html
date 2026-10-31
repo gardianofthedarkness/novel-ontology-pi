@@ -113,6 +113,9 @@ main > *, .files > *, .tiles > *, .frame > *, .card > * { min-width: 0; }
 .m-char { color: var(--person); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--person) 40%, transparent); }
 .m-loc { color: var(--place); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--place) 40%, transparent); }
 .m-item { color: var(--thing); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--thing) 40%, transparent); }
+.m-time sup { font: 600 0.62rem var(--ui); color: var(--time); margin-left: 1px; }
+.when { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--time) 14%, var(--surface)); color: var(--ink); font: 600 0.8rem/1.4 var(--ui); }
+.when small { font: 0.7rem var(--ui); color: var(--muted); }
 .m-concept { color: var(--concept); font-weight: 600; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--concept) 40%, transparent); }
 .m-time { color: var(--time); border: 1px dashed color-mix(in srgb, var(--time) 60%, transparent); border-radius: 4px; padding: 0 2px; }
 .m-d { border-bottom: 2px dashed var(--person); }
@@ -197,6 +200,9 @@ for (const card of DATA.cards) {
 }
 const FACT_OF_CARD = new Map(DATA.facts.map((fact) => [fact.card, fact]));
 const FACT = new Map(DATA.facts.map((fact) => [fact.id, fact]));
+const PERIOD = new Map((DATA.time?.periods ?? []).map((period) => [period.id, period]));
+const WHEN = new Map((DATA.time?.scenes ?? []).map((scene) => [scene.scene, scene]));
+const ROLE_MARK = { ADVANCE: '→ now', FLASHBACK: '↶ past', RETURN: '↷ back' };
 const refsAt = new Map();
 for (const reference of DATA.references) for (const id of reference.sentences) refsAt.set(id, [...(refsAt.get(id) ?? []), reference]);
 const label = (id) => SLOT.has(id) ? SLOT.get(id).names[0] : ENTITY.get(id)?.proper[0] ?? ENTITY.get(id)?.names[0] ?? TIME.get(id)?.text ?? id;
@@ -242,6 +248,7 @@ function marked(id) {
     const slot = SLOT.get(ref), ofThings = slot && (slot.kind === 'vehicle' || slot.kind === 'weapon');
     if (kind === 'd') out += ref ? `<span class="m-d${ofThings || ref.startsWith('item_') ? ' thing' : slot ? ' open' : ''}" title="${esc(ref)}">${word}<sup>→ ${esc(slot ? (slot.kind === 'person' ? 'unnamed' : slot.kind === 'crowd' ? 'a crowd' : `unnamed ${slot.kind}`) : label(ref))}</sup></span>` : `<span class="m-d open" title="description, not resolved here">${word}</span>`;
     else if (kind === 'r') out += `<span class="m-r" title="an everyday thing: no entity, never an actor">${word}</span>`;
+    else if (kind === 'time' && ref?.startsWith('time:')) { const [, role, ...gloss] = ref.split(':'); out += `<span class="m-time" title="${esc(`${role}: ${gloss.join(':')}`)}">${word}${ROLE_MARK[role] ? `<sup>${ROLE_MARK[role]}</sup>` : ''}</span>`; }
     else out += `<span class="m-${kind}" title="${esc(ref)}">${word}</span>`;
     at = start + length;
   }
@@ -306,6 +313,7 @@ function render(index) {
   const kinds = leaves.reduce((sum, card) => ({ ...sum, [card.kind]: (sum[card.kind] ?? 0) + 1 }), {});
   $('head').innerHTML = `
     <div><p class="eyebrow">Scene ${index + 1} of ${DATA.scenes.length} · block ${esc(scene.block)} · chapter ${esc(scene.chapter)}</p>
+    ${WHEN.has(scene.id) ? `<p><span class="when" title="${esc(WHEN.get(scene.id).periods.join(', '))}">${esc(WHEN.get(scene.id).when)}${WHEN.get(scene.id).inherited ? '<small>carried on</small>' : ''}${WHEN.get(scene.id).continuation ? `<small>flashback ${WHEN.get(scene.id).continuation.continues ? 'goes on' : 'ends'} · ${pct(WHEN.get(scene.id).continuation.probability)}</small>` : ''}</span></p>` : ''}
     <h2>${esc(scene.id)} <span class="cf">${scene.sentences.length} sentences</span></h2>
     <p class="ids">${esc(scene.sentences[0])} → ${esc(scene.sentences[scene.sentences.length - 1])} · ${leaves.length} run cards (${Object.entries(kinds).map(([kind, n]) => `${n} ${kind}`).join(', ')}) · ${frames.length} exchanges and monologues · ${sceneFacts.length} facts · ${scene.sentences.filter((id) => DATA.kinds[id]?.was).length} actions turned narration</p></div>
     <div class="sub">People here (EM²: says, acts, to · card scan: named · descriptions: desc)</div>
@@ -339,6 +347,7 @@ function render(index) {
     ['roles.yaml', 'per spoken or action sentence: who says or acts (who) and who a line is said to (to); id null = no one sure', Object.keys(DATA.roles).length, Object.fromEntries(roles.map((id) => [id, DATA.roles[id]]))],
     ['references.yaml', 'each description of a person, a crowd, a vehicle or a weapon where it stands, and who or what it means there', DATA.references.length, references.slice(0, 2)],
     ['slots.yaml', 'unnamed people, crowds, vehicles and weapons (one scene each), and habits: what a description has meant, in whose lines', DATA.slots.length, { slots: slots.slice(0, 2), habits: DATA.habits.slice(0, 2) }],
+    ...(DATA.time ? [['time.yaml', 'story time: each time word where it stands and its role (moves the scene on, jumps into the past, comes back, or only mentions), the story periods, each scene\'s time, the calendar', DATA.time.periods.length, { words: DATA.time.words.filter((word) => ids.has(word.sentence)).slice(0, 2), periods: (WHEN.get(scene.id)?.periods ?? []).map((id) => PERIOD.get(id)).filter(Boolean).slice(0, 2), scene: WHEN.get(scene.id) }]] : []),
     ['facts.yaml', 'the fact ledger, in reading order: each fact card, who it is about (by name, or by a description EM² resolved), and its time; EM and EM² get the latest ones as evidence', DATA.facts.length, sceneFacts.slice(0, 2).map(({ text: _, ...rest }) => rest)],
   ];
   $('files').innerHTML = `<h2>This scene in each file</h2><p class="lede">One real record from each output file (under &lt;out&gt;/v2/), taken from this scene where the file has one.</p>` + files.map(([name, what, count, record]) => `<details class="file"><summary><code>${name}</code><span>${esc(what)}${count !== null ? ` · ${fmt(count)} records` : ''}</span></summary><pre lang="zh-Hans"></pre></details>`).join('');
@@ -388,6 +397,7 @@ if (log) {
     ['paid in this run (a rerun from the cache pays nothing)', `${fmt(log.paidRequests.jev)} Jev · ${fmt(log.paidRequests.work)} work model`], ['wall, this run', `${(log.wallMs / 1000).toFixed(1)} s`],
     ...(log.roles ? [['lines with a sure speaker or actor', `${fmt(log.roles.whoSettled)} of ${fmt(log.roles.lines)}`], ['slots: people · crowds · vehicles · weapons', `${fmt(log.roles.slots - (log.roles.crowds ?? 0) - (log.roles.vehicles ?? 0) - (log.roles.weapons ?? 0))} · ${fmt(log.roles.crowds ?? 0)} · ${fmt(log.roles.vehicles ?? 0)} · ${fmt(log.roles.weapons ?? 0)}`], ['actions turned narration', fmt(log.roles.actionsToNarration ?? 0)]] : []),
     ...(log.facts ? [['facts (about someone)', `${fmt(log.facts.facts)} (${fmt(log.facts.about)})`]] : []),
+    ...(log.time ? [['time words: moves · flashbacks · returns', `${fmt(log.time.words)}: ${fmt(log.time.roles.ADVANCE ?? 0)} · ${fmt(log.time.roles.FLASHBACK ?? 0)} · ${fmt(log.time.roles.RETURN ?? 0)}`], ['story periods (in the past) · dated · derived', `${fmt(log.time.periods)} (${fmt(log.time.flashbackPeriods)}) · ${fmt(log.time.dated)} · ${fmt(log.time.derived)}`], ['calendar conflicts', fmt(log.time.conflicts)]] : []),
   ].map(([name, value]) => `<span>${name} <b>${value}</b></span>`).join('');
   $('steps').innerHTML = '<tr><th>step</th><th>requests (cached included)</th><th>ms</th></tr>' + (log.steps ?? []).map((step) => `<tr><td>${esc(step.step)}</td><td>${fmt(step.requests)}</td><td>${fmt(step.ms)}</td></tr>`).join('');
 } else $('steps-box').hidden = true;

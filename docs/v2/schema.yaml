@@ -133,8 +133,10 @@ fact:                # facts.yaml — the fact ledger: the source of truth for E
   first: string
   last: string
   sentences: [string]
-  order: integer     # its place in reading order (story-time order once the calendar places time nodes)
+  order: integer     # its place in reading order
   time: string       # the latest time node at or before it
+  period: string     # the story period it is told in (time.yaml)
+  story: integer     # that period's story order: the ledger ranks facts by it, then by reading order
   about:             # who and what it is about
     - id: string
       via: [name, description, concept]   # a name in it (the chart's names at the end), a description EM² resolved in it, or the owner of a concept it names
@@ -148,3 +150,31 @@ log:                 # log.yaml — the run
       requests: integer
       ms: integer
       inputChars: integer
+
+time:                # time.yaml — story time (src/v2/time.ts)
+  words:             # every time word where it stands
+    - key: string    # <sentence id>:<start>
+      text: string
+      sentence: string
+      family: string # date, clock, relative-day, relative-span, time-of-day, holiday, season, weekday, past-marker
+      gloss: string  # its value, read by the time lexicon
+      role: [ADVANCE, FLASHBACK, RETURN, REFERENCE]
+      decidedBy: [rule, jev, default]
+      confidence: number
+      downgraded: string   # an unsure move or flashback kept as a mention
+  periods:           # story periods: a time word that set the scene's time, until the next
+    - id: string     # time_<sentence id>_<start>
+      label: string
+      flashback: boolean
+      toldFrom: string     # a flashback: the present period it was told from
+      date: { year: integer, month: integer, day: integer, derived: boolean }   # stated, or derived from stated words; never guessed
+      storyIndex: integer  # story order (a flashback before the period it was told from)
+      scenes: [string]
+      when: string   # on the calendar: "Year 1 · 12-24 · evening", or "between …"
+  scenes:
+    - scene: string
+      periods: [string]
+      flashback: boolean
+      inherited: boolean   # no time word of its own: it carries on
+      when: string   # the caption: when it takes place
+  calendar: { entries: [calendar entry], conflicts: [{ ref: string, note: string }] }

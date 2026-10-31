@@ -8,8 +8,10 @@ import { mentions, type Chart } from "./em.js";
  * network) is about its owner too. EM and EM² ask the ledger, as they run,
  * for the latest facts about each candidate and about the string being decided, before the place they decide, and give
  * them to Jev as evidence.
- * A fact's time is the latest time node read at or before it. Facts are ordered by reading order for now; once the calendar
- * places the time nodes, a later fact about the same thing (an update) is ordered by story time instead.
+ * A fact's time is the latest time node read at or before it, and its period the story period it is told in (time.ts).
+ * Once story time is read, the ledger ranks facts by story time (byStory): the latest facts before a decision are the ones
+ * latest in the story among those read before it, a flashback's facts sort into the past, and a later fact about the same
+ * thing (an update) comes after what it updates. Before that, and for ties, reading order.
  */
 export const FACT_RECENT = 2;
 /** Characters of a fact's text a request carries. */
@@ -21,6 +23,9 @@ export interface FactEntry {
   order: number;
   /** The latest time node at or before it (settle). */
   time: string | null;
+  /** The story period it is told in, and that period's place in story order (byStory). */
+  period: string | null;
+  story: number | null;
   /** Who and what it is about (settle): by a name in it, by a description EM² resolved in it, or as the owner of a concept it names. */
   about: { id: string; via: "name" | "description" | "concept" }[];
 }
@@ -29,12 +34,21 @@ export class FactLedger {
   readonly facts: FactEntry[];
   private readonly linked = new Map<string, Set<string>>();
   private readonly scanned = new Map<string, { size: number; ids: Set<string> }>();
+  /** The facts in the order "latest" means: reading order, or story time once it is known. */
+  private ranked: FactEntry[];
 
   constructor(cards: { id: string; first: string; last: string; sentences: string[] }[], text: (sentence: string) => string, position: (sentence: string) => number) {
     this.facts = [...cards].sort((a, b) => position(a.first) - position(b.first)).map((card, index) => ({
       id: `fact_${String(index + 1).padStart(6, "0")}`, card: card.id, first: card.first, last: card.last, sentences: card.sentences,
-      text: card.sentences.map(text).join(""), order: position(card.first), time: null, about: [],
+      text: card.sentences.map(text).join(""), order: position(card.first), time: null, period: null, story: null, about: [],
     }));
+    this.ranked = this.facts;
+  }
+
+  /** Rank the facts by story time: each fact's period from its first sentence. */
+  byStory(periodOf: (sentence: string) => { id: string; storyIndex: number } | null): void {
+    for (const fact of this.facts) { const period = periodOf(fact.first); fact.period = period?.id ?? null; fact.story = period?.storyIndex ?? null; }
+    this.ranked = [...this.facts].sort((a, b) => (a.story ?? -1) - (b.story ?? -1) || a.order - b.order);
   }
 
   /** The entities a fact names, with the chart's names as they are now (rescanned when the chart has more names). */
@@ -50,8 +64,8 @@ export class FactLedger {
   about(chart: Chart, ids: string[], before: number, limit = FACT_RECENT): FactEntry[] {
     const names = chart.names(), out: FactEntry[] = [];
     ids = [...ids, ...[...chart.entities.values()].filter((entity) => entity.owners?.some((owner) => ids.includes(owner.id))).map((entity) => entity.id)];
-    for (let index = this.facts.length - 1; index >= 0 && out.length < limit; index--) {
-      const fact = this.facts[index];
+    for (let index = this.ranked.length - 1; index >= 0 && out.length < limit; index--) {
+      const fact = this.ranked[index];
       if (fact.order >= before) continue;
       const named = this.named(fact, names), linked = this.linked.get(fact.id);
       if (ids.some((id) => named.has(id) || linked?.has(id))) out.push(fact);
@@ -62,7 +76,7 @@ export class FactLedger {
   /** The latest facts before `before` whose text holds `text`, newest first. */
   holding(text: string, before: number, limit = FACT_RECENT): FactEntry[] {
     const out: FactEntry[] = [];
-    for (let index = this.facts.length - 1; index >= 0 && out.length < limit; index--) if (this.facts[index].order < before && this.facts[index].text.includes(text)) out.push(this.facts[index]);
+    for (let index = this.ranked.length - 1; index >= 0 && out.length < limit; index--) if (this.ranked[index].order < before && this.ranked[index].text.includes(text)) out.push(this.ranked[index]);
     return out;
   }
 

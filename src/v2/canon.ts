@@ -7,8 +7,10 @@ import type { FlowResult } from "./flow.js";
  *   exchange and monologue cards as dialogue cards (their people: who speaks, who is spoken to, who is named);
  * - entities: the chart's people, places and things (Character, Location, Item), proper names first, descriptions kept apart;
  * - events: the action cards, in reading order, each with its people as its actors (who acts first; PARTICIPATES_IN);
- * - concepts (Concept) and whose they are (OWNS, from the owner).
- * Times are not canon yet (EM for times is the calendar's); slots (unnamed people) are not canon.
+ * - concepts (Concept) and whose they are (OWNS, from the owner);
+ * - story time: each period a TimePoint (as the v1 time-place faculty writes them, so the calendar builds from them), and
+ *   each scene OCCURS_DURING its periods.
+ * Slots (unnamed people) are not canon.
  */
 const KIND = { person: "Character", place: "Location", thing: "Item", concept: "Concept" } as const;
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
@@ -65,5 +67,15 @@ export function canonRecords(result: FlowResult, text: (sentence: string) => str
     ...events.flatMap((event) => event.primaryActors.map((actor) => ({ fromId: actor, toId: event.id, type: "PARTICIPATES_IN", properties: {}, confidence: 0.7 }))),
     ...[...result.chart.entities.values()].flatMap((entity) => (entity.owners ?? []).filter((owner) => result.chart.entities.has(owner.id)).map((owner) => ({ fromId: owner.id, toId: entity.id, type: "OWNS", properties: { from: owner.from }, confidence: owner.confidence }))),
   ];
-  return { scenes, entities, events, relations };
+  const words = new Map((result.time?.words ?? []).map((word) => [`${word.sentence}:${word.start}`, word]));
+  const timePoints = (result.time?.periods ?? []).map((period) => {
+    const word = [...words.values()].find((entry) => entry.sentence === period.anchor && `time_${entry.sentence}_${entry.start}` === period.id);
+    return {
+      id: period.id, kind: "TimePoint", confidence: word?.confidence ?? 0.7,
+      names: [{ text: period.label, lang: "zh", kind: "canonical" }],
+      properties: { expression: period.label, family: word?.family ?? null, gloss: period.gloss, role: period.role, flashback: period.flashback, toldFromId: period.toldFrom, date: period.date, ...(period.partOfDay ? { partOfDay: period.partOfDay } : {}), sentenceId: period.anchor, storyIndex: period.storyIndex, narrativeIndex: period.narrativeIndex, decidedBy: word?.decidedBy ?? null, source: "v2" },
+    };
+  });
+  const occurs = (result.time?.scenes ?? []).flatMap((scene) => scene.periods.map((period) => ({ fromId: scene.scene, toId: period, type: "OCCURS_DURING", properties: { via: scene.inherited ? "inherited" : "anchor" }, confidence: 0.7 })));
+  return { scenes, entities: [...entities, ...timePoints], events, relations: [...relations, ...occurs] };
 }

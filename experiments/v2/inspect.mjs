@@ -24,7 +24,8 @@ export async function inspect(novelDir, outDir) {
   const lexicon = [
     ...data.chart.entities.flatMap(entity => entity.proper.map(name => [name, entity.id])),
     ...[...new Set(data.em.flatMap(batch => batch.results).filter(entry => entry.outcome === 'description').map(entry => entry.text))].map(name => [name, `desc:${name}`]),
-    ...data.chart.times.map(node => [node.text, node.id]),
+    // Time words come from story time where the reading has it (each where it stands, with its role).
+    ...(data.time ? [] : data.chart.times.map(node => [node.text, node.id])),
   ].sort((a, b) => b[0].length - a[0].length);
   // Everyday things (EM's routine outcome: no entity), marked only where no name, description or time stands.
   const routine = [...new Set(data.em.flatMap(batch => batch.results).filter(entry => entry.outcome === 'routine').map(entry => entry.text))].map(name => [name, 'routine']).sort((a, b) => b[0].length - a[0].length);
@@ -33,6 +34,7 @@ export async function inspect(novelDir, outDir) {
   const spans = {};
   for (const [id, sentence] of text) {
     const found = mentions(sentence, lexicon).map(hit => hit.id.startsWith('desc:') ? [hit.at, hit.name.length, 'd', meant.get(`${id}\u0000${hit.name}`) ?? null] : [hit.at, hit.name.length, hit.id.slice(0, hit.id.indexOf('_')), hit.id]);
+    for (const word of data.time?.words ?? []) if (word.sentence === id && !found.some(([at, length]) => word.start < at + length && at < word.end)) found.push([word.start, word.end - word.start, 'time', `time:${word.role}:${word.gloss}`]);
     const taken = found.map(([at, length]) => [at, at + length]);
     for (const hit of mentions(sentence, routine)) if (!taken.some(([from, to]) => hit.at < to && hit.at + hit.name.length > from)) found.push([hit.at, hit.name.length, 'r', 'routine']);
     if (found.length) spans[id] = found;
@@ -55,6 +57,7 @@ export async function inspect(novelDir, outDir) {
     times: data.chart.times.map(({ seen, ...node }) => ({ ...node, seenCount: seen.length })),
     roles: data.roles ?? {}, references: data.references ?? [], slots: data.slots ?? [], habits: data.habits ?? [],
     facts: (data.facts ?? []).map(fact => ({ ...fact, text: fact.sentences.map(id => text.get(id) ?? '').join('') })),
+    time: data.time ? { words: data.time.words, periods: data.time.periods, scenes: data.time.scenes, conflicts: data.time.calendar.conflicts } : null,
   };
   const html = (await readFile(join(repository, 'experiments', 'v2', 'inspect.html'), 'utf8')).replace('/*DATA*/null', JSON.stringify(page).replace(/</g, '\\u003c'));
   const file = join(outDir, 'v2', 'inspect.html');

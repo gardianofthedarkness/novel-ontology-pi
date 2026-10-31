@@ -63,7 +63,8 @@ const SOFT = new Set(["season", "holiday", "time-of-day", "weekday"]);
  * when the FLASHBACK probability itself is at least this. */
 export const PAST_MARKER_FLASHBACK_MIN_PROBABILITY = 0.5;
 
-function verdict(answer: DecisionAnswer | undefined, mention: Pick<TimeMention, "family">): RoleVerdict {
+/** A role answer as a verdict: an unsure move (below its floor) or an unsure flashback stays a reference. */
+export function verdict(answer: DecisionAnswer | undefined, mention: Pick<TimeMention, "family">): RoleVerdict {
   const chosen = ROLE_OPTIONS.includes(answer?.value as TimeRole) ? answer!.value as TimeRole : "REFERENCE";
   const confidence = answer?.confidence ?? null;
   const flashback = answer?.distribution?.FLASHBACK ?? (chosen === "FLASHBACK" ? confidence ?? 1 : 0);

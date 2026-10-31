@@ -4,6 +4,7 @@ import { Chart, mentions, resolveBatch, type EmResult } from "./em.js";
 import { FactLedger, type FactEntry } from "./facts.js";
 import type { Lister } from "./listing.js";
 import { resolveRoles, type DescriptionType, type RolesResult } from "./roles.js";
+import { readStoryTime, timeWords, type StoryTime } from "./time.js";
 import { typeNames, type Decide, type Detected } from "./typing.js";
 
 /**
@@ -17,6 +18,8 @@ import { typeNames, type Decide, type Detected } from "./typing.js";
  * - System 0 scans every card for the chart's names (string match);
  * - each scene's context is composed: its world cards, the scene before's cards of the same kind in sequence, and the
  *   people the recommender expects from the recent scenes (the world engine adds its view of who is where);
+ * - story time (time.ts), scene by scene: each time word's role, the story periods, the calendar; the facts are ranked by
+ *   story time from here on;
  * - EM² (roles.ts), scene by scene: who says or does each line, who a line is said to, and who each description of a
  *   person or a crowd means where it stands (a person of the chart, or an unnamed person or crowd of the scene: a slot),
  *   and which vehicle or weapon an unnamed one is (a named one, or the scene's own: a slot);
@@ -41,8 +44,10 @@ export interface FlowResult extends RolesResult {
   /** `was`: the kind the classifier gave, where the action rule changed it (nothing that matters acts); `actor`: the thing that did. */
   scenes: FlowScene[]; cards: FlowCard[]; kinds: Record<string, { kind: SentenceKind; turn: number; confidence: number; was?: SentenceKind; actor?: string }>;
   chart: Chart; em: { batch: string; results: EmResult[] }[]; contexts: SceneContext[]; steps: StepLog[];
-  /** The fact ledger, in reading order: who each fact is about, and its time. */
+  /** The fact ledger, in reading order: who each fact is about, its time, and its story period. */
   facts: FactEntry[];
+  /** Story time: the time words and their roles, the periods, each scene's time, the calendar. */
+  time: Omit<StoryTime, "periodOf">;
 }
 
 /** Sentences a listing batch holds (small: two new names of one person in one batch cannot see each other's answers). */
@@ -155,6 +160,12 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   };
   let contexts = compose();
 
+  // Story time, scene by scene in reading order; then the facts rank by it.
+  const timeLog = meter("story time"), timeDecide = decideFor(timeLog);
+  const listedTimes = em.flatMap((batch) => batch.results).filter((entry) => entry.outcome === "time").map((entry) => entry.text);
+  const time = await timed(timeLog, () => readStoryTime(timeDecide, { scenes: scenes.map((scene) => ({ id: scene.id, chapter: scene.chapter, sentences: scene.sentences })), words: blocks.flatMap((block) => timeWords(block.sentences, listedTimes)), text, position: pos }));
+  facts.byStory(time.periodOf);
+
   // EM², scene by scene in reading order.
   const named = new Map([...found].map(([id, hits]) => [id, [...new Set(hits.map((hit) => hit.id))]]));
   const described = new Map<string, DescriptionType>();
@@ -192,5 +203,6 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
     card.people = [...people].map(([id, entry]) => ({ id, how: [...entry.how], at: [...entry.at] }));
   }
   facts.settle(chart, pos);
-  return { scenes, cards, kinds: kindOf, chart, em, contexts, steps, facts: facts.facts, ...resolved };
+  const { periodOf: _, ...storyTime } = time;
+  return { scenes, cards, kinds: kindOf, chart, em, contexts, steps, facts: facts.facts, time: storyTime, ...resolved };
 }

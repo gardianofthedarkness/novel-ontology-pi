@@ -1,7 +1,8 @@
 // The v2 reading flow on a workspace's book (docs/v2/world-engine-v2.md §2, the user's sketch of 2026-10-30): the sentences
-// go to scene tiling, sentence kinds and listing at once; then EM batch by batch, the card scan, each scene's context, and
-// EM² (who says or does each line, who each description of a person means). Writes <out>/v2/ (the data as YAML, by
-// docs/v2/schema.yaml: scenes, cards, chart, EM, contexts, roles, references, slots, facts, and log.yaml with every step's
+// go to scene tiling, sentence kinds and listing at once; then EM batch by batch, the card scan, each scene's context, story
+// time (time words, periods, the calendar) and EM² (who says or does each line, who each description of a person means).
+// Writes <out>/v2/ (the data as YAML, by docs/v2/schema.yaml: scenes, cards, chart, EM, contexts, roles, references, slots,
+// facts, time, and log.yaml with every step's
 // requests and time) and <out>/base/ (the world loop's input: experiments/world-first/run.mjs runs on it as it is).
 // Jev's and the work model's replies are cached under <out>/cache, so a rerun pays only for what changed.
 //
@@ -62,7 +63,16 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
         vehicles: result.slots.filter(slot => slot.kind === 'vehicle').length, weapons: result.slots.filter(slot => slot.kind === 'weapon').length, habits: result.habits.length,
       };
     })(),
-    facts: { facts: result.facts.length, about: result.facts.filter(fact => fact.about.length).length, byDescription: result.facts.filter(fact => fact.about.some(entry => entry.via === 'description')).length, timed: result.facts.filter(fact => fact.time).length },
+    facts: { facts: result.facts.length, about: result.facts.filter(fact => fact.about.length).length, byDescription: result.facts.filter(fact => fact.about.some(entry => entry.via === 'description')).length, byConcept: result.facts.filter(fact => fact.about.some(entry => entry.via === 'concept')).length, timed: result.facts.filter(fact => fact.time).length, inPeriod: result.facts.filter(fact => fact.period).length },
+    time: (() => {
+      const { words, periods, scenes, calendar } = result.time, count = (list, key) => list.reduce((sum, entry) => ({ ...sum, [key(entry)]: (sum[key(entry)] ?? 0) + 1 }), {});
+      return {
+        words: words.length, roles: count(words, word => word.role), decidedBy: count(words, word => word.decidedBy), downgraded: words.filter(word => word.downgraded).length,
+        periods: periods.length, flashbackPeriods: periods.filter(period => period.flashback).length, dated: periods.filter(period => period.date?.month && period.date?.day && !period.date.derived).length, derived: periods.filter(period => period.date?.derived).length,
+        calendar: count(calendar.entries, entry => entry.placed), conflicts: calendar.conflicts.length,
+        scenesWithTime: scenes.filter(scene => scene.periods.length).length, flashbackScenes: scenes.filter(scene => scene.flashback).length, continuations: scenes.filter(scene => scene.continuation).length,
+      };
+    })(),
     chart: { person: entities.filter(entity => entity.category === 'person').length, thing: entities.filter(entity => entity.category === 'thing').length,
       thingTypes: Object.fromEntries(['object', 'vehicle', 'weapon'].map(type => [type, entities.filter(entity => entity.category === 'thing' && entity.type === type).length])),
       concept: entities.filter(entity => entity.category === 'concept').length, conceptsOwned: entities.filter(entity => entity.owners?.length).length, place: entities.filter(entity => entity.category === 'place').length, time: times.length },
@@ -80,8 +90,9 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     write(v2, 'references.yaml', yamlDocument(result.references)),
     write(v2, 'slots.yaml', yamlDocument({ slots: result.slots, habits: result.habits })),
     write(v2, 'facts.yaml', yamlDocument(result.facts.map(({ text: _, ...fact }) => fact))),
+    write(v2, 'time.yaml', yamlDocument(result.time)),
     // The same data as JSON, for tools (compare.mjs, inspect.mjs, the world loop).
-    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact) })),
+    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time })),
     write(baseDir, 'scenes.json', JSON.stringify(base.scenes)),
     write(baseDir, 'roster.json', JSON.stringify(base.roster, null, 1)),
     write(baseDir, 'facts.json', JSON.stringify(base.facts)),

@@ -41,6 +41,7 @@ export const FLOW_NODES: FlowNode[] = [
   node("typing", "Typing · v2", "digger", "jev", ["type", "proper"], 3.6, 2),
   node("unified", "Unified EM · v2", "digger", "jev", ["em", "own"], 3.6, 3),
   node("roles", "Roles · EM² · v2", "digger", "jev", ["role", "ref"], 3.6, 4),
+  node("storytime", "Story time · v2", "digger", "jev", ["time"], 3.6, 5),
 ];
 
 const edge = (source: string, target: string, context: string, feedback = false): FlowEdge => ({ id: `${source}->${target}`, source, target, context, ...(feedback ? { feedback } : {}) });
@@ -80,6 +81,9 @@ export const FLOW_EDGES: FlowEdge[] = [
   edge("typing", "unified", "typed names"),
   edge("exchanges", "unified", "facts"),
   edge("unified", "roles", "names, descriptions"),
+  edge("unified", "storytime", "time words"),
+  edge("scenes", "storytime", "scenes"),
+  edge("storytime", "roles", "facts by story time"),
   edge("scenes", "roles", "scenes"),
   edge("exchanges", "roles", "sentence kinds"),
 ];

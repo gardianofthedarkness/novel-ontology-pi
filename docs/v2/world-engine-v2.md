@@ -283,9 +283,9 @@ owner too: EM and EM² get it among the owner's facts, and the ledger lists the 
 concepts of its passage with their owners as context; a concept never acts, its owner does. Canon has the concepts
 (`Concept`) and `OWNS` from the owner; the world base has them in its roster.
 
-### 2.0.5 Story time and the calendar: how it works now, and the proposal — proposed
+### 2.0.5 Story time and the calendar — built, not run
 
-**Now, in the v2 reading:** a time word is listed, typed `time`, and EM keeps it as a time node keyed by its exact text,
+**Before (2026-10-30, until this was built), in the v2 reading:** a time word is listed, typed `time`, and EM keeps it as a time node keyed by its exact text,
 with the sentences it is in. So 早上 in chapter 1 and 早上 in chapter 5 are one node, and nothing reads its value. A fact's
 time is the latest time node at or before it, in reading order. EM² can answer that an action line goes back in time (none
 did on vol 1). Nothing decides whether a time word sets the scene's time or is only mentioned, nothing makes story periods,
@@ -315,6 +315,17 @@ contradicts story order reported, never reordered).
    decision are the latest in the story, a flashback's facts sort into the past, an update comes after what it updates.
 5. Checked on vol 1: the periods with their dates and flashbacks, the conflicts, a time strip per scene on the data page,
    and the world loop's "when" answers against the calendar's order.
+
+**Built** (`src/v2/time.ts`, after the user agreed): as proposed, with one change. The roles are not asked inside EM²'s
+requests but in a request of their own per scene with time words to ask about (at most one a scene, plus a continuation
+question after a flashback scene), run after EM and before EM². This way EM² already gets its facts ranked by story time.
+The request is a structured document: the four roles defined once, the story's time so far (the current anchor, its
+date, an open flashback), the sentences around each time word, and the words keyed `t1…`. A strong cue is ADVANCE by rule;
+a word in a quote or deep in a scene only mentions a time; Jev's answer goes through v1's floors (an unsure move or an
+unsure flashback stays a mention). Each scene gets a caption ("Year 1 · 12-24", "the past: 3 years before", "time not
+stated"), each fact its period, and the ledger ranks facts by story order. Canon writes TimePoints and OCCURS_DURING, so
+`novel calendar build` works on the workspace; the world base carries each scene's time and caption. The data page
+shows the caption at each scene and marks each time word with its role.
 
 `experiments/v2/inspect.mjs` makes one private page of a reading: each scene's text tiled into its cards and coloured by
 kind, the names, descriptions and times marked where they stand, each line's people, and under any sentence every record

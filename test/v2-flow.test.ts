@@ -12,6 +12,7 @@ import { FactLedger } from "../src/v2/facts.js";
 import { worldBase } from "../src/v2/base.js";
 import { canonRecords } from "../src/v2/canon.js";
 import { yamlDocument } from "../src/v2/yaml.js";
+import { readStoryTime, timeWords } from "../src/v2/time.js";
 
 const sentences = (text: string, block = 1): Sentence[] => sectionBlock(text, block).sentences;
 const noFacts = () => new FactLedger([], () => "", () => 0);
@@ -242,6 +243,40 @@ test("EM²: who says, acts and is spoken to; a description means a cast member, 
   const second = asked[1].state as { cast: Record<string, unknown>; descriptions: Record<string, { meant?: string }> };
   assert.ok("slot_000001_1" in second.cast && "char_000003" in second.cast);
   assert.equal(second.descriptions.d1.meant, "御坂美琴 ×1 (in lines of 白井黑子 ×1)");
+});
+
+test("story time: each time word's role, the periods with their dates, flashbacks, the calendar, and facts ranked by story time", async () => {
+  const block = sentences("十二月二十四日，上条当麻走在街上。御坂美琴向他走来。三年前，那个少女第一次来到学园都市。她还很小。第二天早上，上条醒了过来。天空很晴朗。");
+  const scenes = [{ id: "scene_000001", chapter: 1, sentences: [block[0].id, block[1].id] }, { id: "scene_000002", chapter: 1, sentences: [block[2].id, block[3].id] }, { id: "scene_000003", chapter: 1, sentences: [block[4].id, block[5].id] }];
+  const text = (id: string) => block.find((sentence) => sentence.id === id)?.text ?? "", position = (id: string) => block.findIndex((sentence) => sentence.id === id);
+  const words = timeWords(block, ["三年前", "那个少女"]);
+  assert.deepEqual(words.map((word) => word.text).sort(), ["三年前", "十二月二十四日", "早上", "第二天"].sort(), "a listed string the lexicon cannot read is no time word");
+  const asked: DecisionQuestion[][] = [];
+  const decide = async (state: DecisionState, questions: DecisionQuestion[]): Promise<DecisionAnswer[]> => {
+    asked.push(questions);
+    const times = (state as { times?: Record<string, { text: string }> }).times ?? {};
+    // A word with 前 jumps back; a forward word inside a flashback comes back to the present; else the scene moves on.
+    const inside = (state as { story?: { narration: string } }).story?.narration.startsWith("inside");
+    return questions.map((q) => { const value = q.key === "time_continuation" ? "RETURNS_TO_PRESENT" : times[q.key.slice(5)]?.text.includes("前") ? "FLASHBACK" : inside ? "RETURN" : "ADVANCE"; return { key: q.key, value, confidence: 0.9, distribution: { [value]: 0.9 } }; });
+  };
+  const time = await readStoryTime(decide, { scenes, words, text, position });
+  assert.deepEqual(time.words.map((word) => [word.text, word.role, word.decidedBy]), [["十二月二十四日", "ADVANCE", "rule"], ["三年前", "FLASHBACK", "jev"], ["第二天", "RETURN", "jev"], ["早上", "RETURN", "jev"]]);
+  assert.ok(asked.flat().some((q) => q.key.startsWith("time:") && q.optionHints?.FLASHBACK), "a structured question with short labels");
+  const [christmas, past, next, morning] = time.periods;
+  assert.deepEqual(christmas.date, { month: 12, day: 24, derived: false });
+  assert.equal(past.flashback, true);
+  assert.deepEqual([next.date, morning.date, morning.partOfDay], [{ month: 12, day: 25, derived: true }, { month: 12, day: 25, derived: true }, "morning"], "the next day, derived from the stated date");
+  assert.ok(past.storyIndex < christmas.storyIndex, "the flashback is earlier in the story");
+  assert.deepEqual(time.scenes.map((scene) => scene.when), ["Year 1 · 12-24", "the past: 3 years before", "Year 1 · 12-25"], "each scene's caption");
+  assert.equal(morning.when, "Year 1 · 12-25 · morning");
+  assert.equal(time.periodOf(block[1].id)?.id, christmas.id);
+  // Facts rank by story time: the flashback's fact is the earliest, though it is read second.
+  const facts = new FactLedger([0, 3, 5].map((index) => ({ id: `fact:${index}`, first: block[index].id, last: block[index].id, sentences: [block[index].id] })), text, position);
+  facts.byStory(time.periodOf);
+  const chart = new Chart();
+  assert.deepEqual(facts.holding("", 99, 3).map((fact) => fact.first), [block[5].id, block[0].id, block[3].id], "newest in story time first");
+  assert.deepEqual(facts.facts.map((fact) => fact.period), [christmas.id, past.id, morning.id]);
+  assert.equal(chart.entities.size, 0);
 });
 
 test("the flow: tiling, kinds and listing at once, then EM, the card scan, contexts and the world loop's base", async () => {

@@ -2,8 +2,9 @@
 
 One engine composes the state of every Jev request in v2, at extraction and in the world loop. It has a mode per kind of
 decision, and before composing it measures the surroundings of what is being decided, so that what goes in, and how much,
-follows the place in the book and in the world rather than a fixed recipe. Status: **design, for the user's approval.**
-Nothing here is built yet.
+follows the place in the book and in the world rather than a fixed recipe. Status: **design; the user agreed to most of
+it on 2026-10-30 and settled the open questions** (a mixed complexity score, widening per batch, facts by graph query
+with retrieval for widening, the world run per strand: §3.1, §6, §7, §9). Nothing here is built yet.
 
 ## 1. Why one engine
 
@@ -83,6 +84,28 @@ measures. This is code over the stores, with no model calls. Each stat moves the
 The stats are kept in the manifest. Over a run they tell which surroundings make Jev unsure (by bucket: dense dialogue,
 cuts, flashbacks), so the quotas are tuned from measurements rather than guessed.
 
+### 3.1 One score: the complexity of the context (the user's call)
+
+The stats are mixed into one number, the context's complexity, and the plan follows it, rather than one stat at a time.
+Each stat is scaled to 0..1:
+
+| Stat | Scaled as |
+|---|---|
+| density | people in the window / 12, at most 1 |
+| dialogue | the share of spoken lines in the window |
+| novelty | (first appearances + unresolved descriptions) / 6, at most 1 |
+| ambiguity | the share of unsure answers so far in the scene; for EM, 1 minus the gap between the top two candidates |
+| cut | 1 when the scene changes place or time from the one before, else 0 |
+| story time | 1 in an open flashback, else sentences since the last time anchor / 200, at most 1 |
+| evidence gap | 1 minus (facts about the focus's people / 4), at least 0 |
+| load | the window's characters / the budget, at most 1 |
+
+complexity = Σ wᵢ·sᵢ / Σ wᵢ. The weights start equal and differ by mode (EM leans on ambiguity and novelty, EM² on
+density and dialogue, story time on the time stat). Once there are manifests, the weights are fitted: how well each stat
+predicts an unsure answer over vol 1, checked on vol 2. The plan scales every source's quota by 0.75 + 0.75 × complexity (a
+simple window gets three quarters of the default, the hardest one and a half times), inside the same budget, and a request
+above 0.66 widens on answers below 0.6 instead of 0.5.
+
 ## 4. Modes
 
 | Mode | Used by | Focus | Sources (default quota) | Questions |
@@ -108,30 +131,78 @@ the questions are never cut. Every cut is written in the manifest.
 
 ## 6. Widening
 
-When an answer comes back below the mode's bar (0.5 for roles, 0.6 for EM), the engine may compose once more, only for
-those questions, with the plan widened: twice the facts, the scene before in full, more candidates. A second answer is
-kept only if it is sure. This is the "re-ask with more context" that the tiling already does with its gates, made general.
-It is capped per scene, so cost stays bounded.
+When answers come back below the mode's bar (0.5 for roles, 0.6 for EM), the engine composes once more for the batch
+(the user's call: per batch), with only those questions and the plan widened: twice the facts, retrieval (§7), the scene
+before in full, more candidates. One widened request per batch at most; a second answer is kept only if it is sure. This
+is the "re-ask with more context" that the tiling already does with its gates, made general.
 
-## 7. Story time
+## 7. Facts: graph query first, retrieval for widening (the user's idea)
+
+On the first request, facts come from the graph: the ledger and the chart go into the Ladybug store, a fact linked to
+what it is about (by name, by a description, through a concept's owner), and the sources ask it in Cypher (the latest
+facts about these people before this point, the facts that name this string, the facts about a concept and its owner), as
+`src/ground/ontology/retrieval.ts` does for presence. When a batch widens, retrieval is added: the facts and cards most
+similar in meaning to the unsure question's passage, by embedding, which finds what no edge links yet (a fact that
+describes someone without naming them). This changes the standing decision of 2026-10-21 (no embeddings until graph
+queries fall short) for widening only; the manifest records which facts came by query and which by retrieval, so it shows
+whether retrieval made the second answer sure.
+
+## 8. Story time
 
 Once the calendar is wired (§2.0.5 of the v2 design), "recent" means recent in story time: the latest facts before the
 focus on the calendar. A fact told in a flashback sorts into the past, and a fact that updates an earlier one comes after
 it. Until then, reading order, as now.
 
-## 8. Order of work
+## 9. Extraction and the world together, per strand (the user's design)
 
-1. The engine with the `roles` mode, reproducing today's EM² documents exactly (test: same bytes on vol 1's cache).
-2. `identity` and `ownership` on it; the manifest written beside each answer; the data page shows "what Jev saw".
-3. The probe and its stats, measured over vol 1 with no plan changes; then plan changes one stat at a time, each checked
-   on the page (sure answers by stat bucket).
-4. `time`, with the calendar.
-5. The world loop's `presence` and `when` as documents instead of prose (compose.mjs retired), then `movement`.
+**Can a later result change an earlier one?** Measured on vol 1 (the things run, no new requests): EM already runs in
+reading order, batch by batch, so its answers only use what came before. What reads the whole book is everything after
+it, which today runs once EM has finished:
 
-## 9. Open questions
+| Result | Changed by text read later | Example |
+|---|---|---|
+| Card scan (names tagged in sentences) | 27 of 2,853 tags (1%), in 10 of 46 scenes | a person tagged in a sentence before the listing first caught their name |
+| EM² speakers and actors | 53 of 2,197 lines (2.4%) | a line given to someone the book names only later |
+| EM² descriptions | 34 of 1,225 (2.8%) | 少女 → 食蜂操祈, 那个刺猬头 → 上条当麻, 白色的怪物 → 木原, before they are named |
+| Fact links | 8 of 111 | a fact about someone named later |
+| Calendar | every undated period | its range ends at the next dated period, which may come much later |
 
-- Which stats should change the plan first: density and kind mix (cheap, likely to help EM²), or ambiguity (directly tied
-  to unsure answers)?
-- The widening cap: one more request per scene, or per batch?
-- The world loop runs scene by scene while extraction runs first: should the engine also give extraction's modes the world
-  state once the world loop has run (a second pass of EM² with presence), or keep extraction before the world?
+So run scene by scene, about 2–3% of who-is-who would differ from the whole-book reading. Nearly all of these differences
+are reveals, where the story names someone it has been describing. Streaming does not hide these; it shows them as the
+reader meets them: the girl is an unnamed person until the book says who she is, and then the world records a reveal (the
+slot is that person from then on, and back to where she first appeared) rather than silently rewriting the past.
+
+**The design:**
+- **The gate.** The world engine takes a scene only when three things are done for it: its tiling (its block's scenes),
+  its extraction (every listing, typing and EM batch up to the scene's last sentence, in order; EM² for the scene), and its
+  sentence kinds. Listing, typing, kinds and tiling run ahead in parallel; EM is the one chain, batch by batch.
+- **One strand at a time.** A strand is a line of scenes linked by the people in them (the v1 strands: a scene joins the
+  strand it shares people with; a new strand starts where it shares no one). The world engine runs each strand on its
+  own, scene by scene in narrative order; two strands are never simulated in one world at once, so neither can disturb the
+  other.
+- **What the user sees.** The strands play live in narrative order as their scenes pass the gate. A small caption shows,
+  for a few seconds at each scene, when it takes place (from the calendar: "Year 1 · 12-24 · evening", or "between 12-24
+  and 12-25", or "the past" in a flashback).
+- **Reveals.** A later result that changes an earlier one (a reveal, a fact's new owner) is a record of its own on the
+  strand at the scene where it is learned.
+- **One world, later.** Rendering every strand together in one world, ordered by the calendar, is released only when all
+  of the above works and the whole book is read, so nothing it shows can still change.
+
+## 10. Order of work
+
+1. The calendar in the v2 reading (§2.0.5 of the v2 design; built, to be run on vol 1); the scene time caption reads
+   from it.
+2. The engine with the `roles` mode, reproducing today's EM² documents exactly (test: same bytes on vol 1's cache).
+3. `identity` and `ownership` on it; the manifest written beside each answer; the data page shows "what Jev saw".
+4. Facts in the graph (Cypher sources); the probe and the complexity score, measured over vol 1 with equal weights; then
+   the weights fitted.
+5. Widening per batch, with retrieval.
+6. The gate and the per-strand world runs, with the live view and its caption; reveals.
+7. The world loop's `presence` and `when` as documents instead of prose (compose.mjs retired), then `movement`.
+8. The one-world rendering on the calendar.
+
+## 11. Open questions
+
+- Strands for the live view: from the cards and EM² as each scene passes the gate (cheap, may split a strand that a later
+  scene joins), or the v1 strand questions where a borrowed cast links scenes?
+- Embeddings for retrieval: which model, and does the index live beside the Ladybug store?
