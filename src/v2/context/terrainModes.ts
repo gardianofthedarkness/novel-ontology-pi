@@ -57,13 +57,40 @@ export async function terrainStores(reading: TerrainReading, sentences: { id: st
 
 export interface TerrainPart { id: string; label: string; scale: string }
 export interface PartFocus { part: TerrainPart; holder: { id: string; label: string }; city: { id: string; label: string }; pictures: Record<string, string>; kind?: string }
-export interface GroundFocus extends PartFocus { kinds: Record<string, string> }
+/** `shapes`: the basic shapes of ground, at every level, besides the level's kinds. */
+export interface GroundFocus extends PartFocus { shapes: Record<string, string> }
 export interface ZoomFocus extends PartFocus { kind: string; reasons: string[] }
-export interface HeightFocus extends PartFocus { kind: string; levels: { letter: string; y: number; said: string }[] }
+/** `tops`: the lettered slices, each a height the terrain may rise to. */
+export interface HeightFocus extends PartFocus { kind: string; tops: { letter: string; y: number; said: string }[] }
 export interface MemberFocus { city: { id: string; label: string }; parts: { key: string; label: string; scale: string }[] }
 
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
 const BUDGET = 9000;
+
+/**
+ * The kinds of terrain a part may be, by its level (the user's call, 2026-10-31): a district is what a whole quarter is
+ * built as; a commercial centre, a park or a stadium is a street's. Each is the engine's ground (a landscape type, built
+ * to the height Jev says it rises to) or a shape (kept, not drawn yet). The old-world kinds stay districts' for older worlds.
+ */
+export const TERRAIN_KINDS: Record<string, Record<string, { hint: string; ground?: string; shape?: string }>> = {
+  district: {
+    cbd: { hint: "a CBD: a dense core of high-rise towers (offices, hotels, malls and flats in towers)", ground: "skyscrapers" },
+    dwelling: { hint: "a dwelling area: apartment blocks and houses with their schools, shops and stations; the city, not so tall", ground: "residential" },
+    industrial: { hint: "an industrial area: factories, warehouses, plants and yards on large plots", ground: "industrial" },
+    harbour: { hint: "a harbour or a port: docks, piers, cranes and warehouses by the water", ground: "harbour" },
+    mountain: { hint: "a mountain or high hills: natural ground rising, wooded or bare", shape: "mountain" },
+    oldtown: { hint: "an old town of an older world: a castle's keep within walls and a crowded town round it", ground: "castle" },
+    village: { hint: "a village of an older world: scattered low houses with gardens", ground: "village" },
+    farmland: { hint: "farmland: wide fields with a few farmhouses", ground: "farm" },
+  },
+  street: {
+    commercial: { hint: "a modern commercial centre: a mall podium with towers over it, a plaza with screens, wide roads round it", ground: "commercial" },
+    park: { hint: "a park or an amusement park: lawns, gardens, rides, with a few pavilions", ground: "park" },
+    stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium" },
+  },
+};
+/** A part's options: its level's kinds, then the basic shapes. */
+export const terrainKinds = (scale: string, shapes: Record<string, string>): Record<string, string> => ({ ...Object.fromEntries(Object.entries(TERRAIN_KINDS[scale] ?? TERRAIN_KINDS.district).map(([kind, entry]) => [kind, entry.hint])), ...shapes });
 /** Characters a fact needs to say something of a place (a sentence, not the name and a full stop). */
 const SAYS = 16;
 /** How near a place is to the part: itself, the place that holds it, its city (the farther, the weaker). */
@@ -131,11 +158,12 @@ const box = (focus: PartFocus): DecisionQuestion => ({ key: "box", primitive: "b
 
 export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
   name: "terrain-ground",
-  task: (focus) => `Where does ${focus.part.label} lie in ${focus.city.label}, and what is its ground? Terrain only: a manifold (a landscape type; the engine fills in its buildings) or a basic shape of ground, never a building. Read its ground from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment).`,
-  sources: [...sources<GroundFocus>({ standing: true, facts: true, environment: "city" }), fixed("kinds", "kinds", (focus: GroundFocus) => focus.kinds) as Source<GroundFocus, TerrainStores>, fixed("pictures", "pictures", (focus: GroundFocus) => focus.pictures) as Source<GroundFocus, TerrainStores>],
+  task: (focus) => `Where does ${focus.part.label} lie in ${focus.city.label}, and what kind of ${focus.part.scale} is it? Terrain only: a kind of ${focus.part.scale} (the engine fills in its buildings) or a basic shape of ground, never a building. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment).`,
+  // The options are the part's level's kinds (TERRAIN_KINDS), composed with the evidence.
+  sources: [...sources<GroundFocus>({ standing: true, facts: true, environment: "city" }), fixed("kinds", "kinds", (focus: GroundFocus) => terrainKinds(focus.part.scale, focus.shapes)) as Source<GroundFocus, TerrainStores>, fixed("pictures", "pictures", (focus: GroundFocus) => focus.pictures) as Source<GroundFocus, TerrainStores>],
   cutOrder: ["environment", "facts", "standing", "text"],
   probe,
-  questions: (focus) => [box(focus), { key: "kind", primitive: "choice", instructions: `What is ${focus.part.label}'s ground (the kinds are in kinds)?`, options: Object.keys(focus.kinds), optionHints: focus.kinds }],
+  questions: (focus, kept) => [box(focus), { key: "kind", primitive: "choice", instructions: `What kind of ${focus.part.scale} is ${focus.part.label} (the kinds are in kinds)?`, options: kept.kinds.map((item) => item.id), optionHints: Object.fromEntries(kept.kinds.map((item) => [item.id, String(item.fields)])) }],
   budget: BUDGET,
 };
 
@@ -148,12 +176,15 @@ export const terrainZoomMode: Mode<ZoomFocus, TerrainStores> = {
   budget: BUDGET,
 };
 
+// How high the terrain rises (the user's call, 2026-10-31: the ground is at 0, always): the roofs of its tallest
+// buildings, the top of its hill; what the text says of the part and its city says it.
 export const terrainHeightMode: Mode<HeightFocus, TerrainStores> = {
   name: "terrain-height",
-  task: (focus) => `At what height is ${focus.part.label}'s ground (${focus.kind})? The picture shows a core of its area with a lettered ghost slice at each height the world has; red dotted lines are where a slice cuts a building.`,
-  sources: [...sources<HeightFocus>({ environment: "part" }), fixed("heights", "heights", (focus: HeightFocus) => Object.fromEntries(focus.levels.map((level) => [level.letter, `${level.y} m: ${level.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
-  cutOrder: ["environment", "text"],
-  questions: (focus) => [{ key: "height", primitive: "choice", instructions: `Which lettered slice is the height of ${focus.part.label}'s ground?`, options: focus.levels.map((level) => level.letter), optionHints: Object.fromEntries(focus.levels.map((level) => [level.letter, `${level.letter}: ${level.y} m, ${level.said}`])) }],
+  task: (focus) => `How high does ${focus.part.label}'s terrain (${focus.kind}) rise: the roofs of its tallest buildings, or the top of its ground if it is a hill or a mountain? Its ground is at the street. The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from what the text says of it and of the places around it: what stands there (standing), the facts (facts), the surroundings of its scenes (environment).`,
+  sources: [...sources<HeightFocus>({ standing: true, facts: true, environment: "city" }), fixed("tops", "tops", (focus: HeightFocus) => Object.fromEntries(focus.tops.map((top) => [top.letter, `${top.y} m: ${top.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
+  cutOrder: ["environment", "facts", "standing", "text"],
+  probe,
+  questions: (focus) => [{ key: "top", primitive: "choice", instructions: `Which lettered slice is the top of ${focus.part.label}'s terrain?`, options: focus.tops.map((top) => top.letter), optionHints: Object.fromEntries(focus.tops.map((top) => [top.letter, `${top.letter}: ${top.y} m, ${top.said}`])) }],
   budget: BUDGET,
 };
 

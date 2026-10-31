@@ -232,6 +232,27 @@ tree, central build or default spawns. That page is gone; terrain spawning now r
 - **Places stop at rooms** (the user, 2026-10-31). A large unnamed place (an EM² slot) is not a terrain part: the engine
   samples it and Jev places it live, in the world engine's redesign.
 
+### 5.7 Terrain by level, and how high it rises (the user's calls, 2026-10-31)
+
+With the city's facts and towers in front of it, Jev still called 第七学区 commercial (0.85): the district's own text is
+a station street, and the kinds made a district's use and its height one choice ("commercial" was "a few storeys"). The
+user's answer:
+
+- **The ground is at 0, always.** Terrain spawning never asks how high the ground is; it asks **how high the terrain
+  rises**: the roofs of its tallest buildings, the top of its hill. The ghost slices ask that (fixed bands, from three
+  floors to a hundred and thirty; for a mountain, up to 800 m), with what the text says of the part and its city in
+  the state (what stands there, the facts, the surroundings). The answer is the site's `top`, and the engine builds the
+  part's ground to it (its landscape patch's height; the type's cap gives way where the text says it is taller).
+- **The kinds go by level.** A district is what a whole quarter is: a **CBD** (a core of towers), a **dwelling area**
+  (the city, not so tall), **industrial**, a **harbour or port**, or a **mountain**; the engine's old-world kinds (an
+  old town, a village, farmland) stay district options for older worlds. A **commercial centre**, a **park** (an
+  amusement park too) and a **stadium** are a street's, never a district's: 第六学区's amusement park is part of a city
+  of lower heights. The basic shapes stay at both levels. The level's options are a source of the terrain modes, so the
+  context engine composes them as it composes the evidence (`TERRAIN_KINDS` in `src/v2/context/terrainModes.ts`).
+- **Commercial is modern.** What Jev means by a commercial centre is a modern one: a mall podium with towers over it, a
+  plaza with screens, wide roads round it (the user's picture). The engine's `commercial` landscape still builds low
+  shops along a boulevard; it is to be rebuilt as that, for the street level.
+
 ## 6. Order of work
 
 1. **The event stream and the live view's skeleton:** the user's own camera and render area, Jev's strip, the frustum,

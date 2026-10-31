@@ -58,9 +58,12 @@ export const LANDSCAPES: Record<LandscapeType, Kind> = {
   farm: { soft: 15, era: "ancient", cap: 10, hint: "farmland: wide fields with a few farmhouses", radius: [180, 320], height: [3, 6], lot: [7000, 16000], block: 60000, coverage: 0.12, back: 6, family: "box", profile: "low", building: () => "farmhouse" },
 };
 
-/** One patch of landscape, everything needed to draw it again: the numbers drawn for its shape are kept, not re-drawn. */
+/**
+ * One patch of landscape, everything needed to draw it again: the numbers drawn for its shape are kept, not re-drawn.
+ * `top`: how high its terrain rises where terrain spawning said so (the patch's height; its type's cap gives way to it).
+ */
 export interface Patch {
-  id: string; type: LandscapeType; x: number; z: number; R: number; H: number; lot: number;
+  id: string; type: LandscapeType; x: number; z: number; R: number; H: number; lot: number; top?: number;
   shape: { family: Family; turn: number; terms?: [number, number, number][]; n?: number; aspect?: number; m?: number };
   born?: { strand?: string; volume?: number; scene?: string; by?: "jev" | "drift" | "strand" };
 }
@@ -252,9 +255,9 @@ export function landscapeStyle(landscape: Landscape): FillStyle {
       // the chance that ground's height manifold reaches it (the older patch passed over this lot, but its heights
       // still reach it: farther for a taller core), else from its own. So heights meet across the seam, past this type's cap if the older ground is
       // taller, never past the peak. Only the newer part's lots draw this way; the older part's never change.
-      let from = owner, cap = kind.cap;
+      let from = owner, cap = Math.max(kind.cap, owner.top ?? 0);
       if (kind.era === "modern") for (const older of landscape.patches.slice(0, landscape.patches.indexOf(owner))) {
-        if (LANDSCAPES[older.type].era === "modern" && rng() < reachOfHeights(older, lot.centre)) { from = older; cap = Math.max(cap, LANDSCAPES[older.type].cap); break; }
+        if (LANDSCAPES[older.type].era === "modern" && rng() < reachOfHeights(older, lot.centre)) { from = older; cap = Math.max(cap, LANDSCAPES[older.type].cap, older.top ?? 0); break; }
       }
       // No taller than SLENDER times its footprint's width: tall buildings need wide lots.
       const width = Math.max(4, Math.sqrt(lot.area) - 2 * kind.back), h = drawHeight(from, Math.max(0.02, depthOf(from, lot.centre)), rng);
@@ -315,9 +318,9 @@ export function defaultBox(type: LandscapeType, centre: Point = [0, 0]): MapBox 
  * A patch from a box Jev drew: centred in it and as large as fits it (its shorter side, or both for the boxy
  * families, which take the box's proportions), its outline still drawn from its own seed.
  */
-export function patchFromBox(type: LandscapeType, id: string, seed: string, box: MapBox, born?: Patch["born"]): Patch {
+export function patchFromBox(type: LandscapeType, id: string, seed: string, box: MapBox, born?: Patch["born"], top?: number | null): Patch {
   const draft = samplePatch(type, id, seed, [(box.x0 + box.x1) / 2, (box.z0 + box.z1) / 2], born), w = Math.abs(box.x1 - box.x0), d = Math.abs(box.z1 - box.z0);
   const R = Math.round(Math.max(40, Math.min(1500, LANDSCAPES[type].family === "box" ? Math.max(w, d) / 2 : Math.min(w, d) / 2)));
   const shape = LANDSCAPES[type].family === "box" ? { ...draft.shape, turn: w >= d ? 0 : Math.PI / 2, aspect: round(Math.max(0.3, Math.min(w, d) / Math.max(w, d)), 2) } : draft.shape;
-  return { ...draft, R, shape };
+  return { ...draft, R, shape, ...(top ? { H: Math.round(top), top: Math.round(top) } : {}) };
 }

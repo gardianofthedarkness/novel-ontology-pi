@@ -202,3 +202,14 @@ test("the manifold under a place: its own landscape (the main agent's over Jev's
   assert.deepEqual(groundFor(picks.bare, ["city"], pickOf, "district"), { type: null, by: "none" });
   assert.deepEqual(groundFor(undefined, [], pickOf, "region"), { type: null, by: "none" });
 });
+
+test("a patch built to the height terrain spawning said its terrain rises to: its buildings pass its type's cap", async () => {
+  const { patchFromBox, LANDSCAPE_VERSION } = await import("../src/ground/stage/landscape.js");
+  const box = { x0: -300, z0: -300, x1: 300, z1: 300 }, tallest = (top?: number) => {
+    const patch = patchFromBox("residential", "p0", "loc_top", box, undefined, top);
+    return { patch, floors: Math.max(...fillLandscape({ version: LANDSCAPE_VERSION, seed: "loc_top", patches: [patch] }).fabric.buildings.map((building) => building.floors)) };
+  };
+  const low = tallest(), high = tallest(150);
+  assert.deepEqual([high.patch.H, high.patch.top], [150, 150]);
+  assert.ok(low.floors * 3 <= LANDSCAPES.residential.cap && high.floors * 3 > LANDSCAPES.residential.cap, `${low.floors} floors, then ${high.floors}`);
+});

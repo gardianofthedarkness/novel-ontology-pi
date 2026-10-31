@@ -412,7 +412,7 @@ export async function strandDemo(novelDir, options) {
     // Terrain spawning's answer for a place, where it was asked (stage/terrain.json): its ground's type wins over the
     // landscape step's, and its first patch is the size of Jev's box.
     const terrainGround = id => { const site = terrain?.sites?.[id]; return site?.ground && LANDSCAPES[site.ground] ? site : null; };
-    const groundPatch = id => { const site = terrainGround(id); if (!site?.size) return null; const [w, d] = site.size; return patchFromBox(site.ground, 'p0', id, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }); };
+    const groundPatch = id => { const site = terrainGround(id); if (!site?.size) return null; const [w, d] = site.size; return patchFromBox(site.ground, 'p0', id, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }, site.top ?? null); };
     const landscapeOf = (id, scale = scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')) => {
       if (!ground.has(id)) ground.set(id, terrainGround(id) ? { type: terrainGround(id).ground, by: 'jev', from: 'terrain' } : groundFor(inputs.landscape?.places[id], pathOf(id).filter(at => at !== id).reverse(), at => inputs.landscape?.places[at], scale));
       return ground.get(id).type;

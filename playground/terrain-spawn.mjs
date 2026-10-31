@@ -44,15 +44,17 @@ export const SHAPES = {
 /** How wide a part's ground is, by its scale (metres): a box far from it is asked about again. */
 const SCALE_WIDTH = { district: [300, 2400], street: [40, 400], city: [800, 8000] };
 const OVERVIEW = [1440, 900], MAP = [1024, 1024], ZOOMS = 2, CELL = 2, FLOOR = 3, OPEN = new Set(['district', 'street']);
-/** Half the core the height question looks through (metres): about the levels' own span, so they stand apart on the picture. */
-const CORE = 84;
+/** The heights a part's terrain may rise to, in metres (the user's call, 2026-10-31: the ground is at 0, always). */
+const BUILT_TOPS = [[10, 'three floors'], [20, 'six floors'], [40, 'a dozen floors'], [80, 'twenty-five floors'], [150, 'fifty floors'], [250, 'eighty floors'], [400, 'a hundred and thirty floors']];
+const NATURAL_TOPS = [[30, 'a low rise'], [80, 'a hill'], [200, 'a high hill'], [400, 'a mountain'], [800, 'a high mountain']];
+/** Half the core the terrain-height question looks through (metres): wide enough to read beside slices hundreds of metres up. */
+const CORE = 150;
 /** No fog: a map straight down reads every metre of its ground alike. */
 const CLEAR = { near: 1e6, far: 2e6 };
 
 async function replace(file, body) { const temporary = `${file}.${process.pid}.tmp`; await writeFile(temporary, body, { mode: 0o644 }); await rename(temporary, file); }
 
 export async function terrainSpawn(novelDir, { jev: given = null, run = false, parts: limit = Infinity, log = () => {} } = {}) {
-  const L = await load('dist/src/ground/stage/landscape.js');
   const { stageInputs } = await load('dist/src/cli/commands/extract/stageCommands.js');
   const { simStrandList } = await load('dist/src/cli/commands/extract/simCommands.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
@@ -162,7 +164,6 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       for (const city of cities) partsOf.set(city.id, order(open.filter(part => member.get(part.id)?.city === city.id)));
     }
     const holderOf = (part, city) => { const parent = parentOf(part.id); return parent && parent !== part.id && (within(parent, city.id) || parent === city.id) ? parent : city.id; };
-    const kinds = { ...Object.fromEntries(Object.keys(L.LANDSCAPES).map(type => [type, `${type}: ${L.LANDSCAPES[type].hint} (the engine fills in its buildings)`])), ...SHAPES };
     const total = [...partsOf.values()].reduce((sum, list) => sum + list.length, 0);
     let placed = 0;
     for (const city of cities) for (const part of partsOf.get(city.id) ?? []) {
@@ -187,9 +188,11 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const yaw = -0.62, up = 0.52;
       const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(centre, yaw, up, R * 1.8), target: centre }, areas: areas(), labelScale: R / 32, vague: { near: R * 4, far: R * 9 } });
       const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R }, areas: areas(), labelScale: R / 24, vague: CLEAR });
-      const { replies: [where, what] } = await ask(decide, T.terrainGroundMode, { ...about, kinds,
+      const { replies: [where, what] } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES,
         pictures: { skyline: `${city.label} from the side and above, as the world stands now.`, map: `${city.label} straight down, north up, ${Math.round(R * 2)} m across; its districts and streets outlined and named (${name(holder)}, which holds ${part.label}, in blue)${now ? `; where ${part.label} stands for now in grey` : ''}.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
-      const kind = kinds[what?.value] ? String(what.value) : 'commercial', shape = SHAPES[kind] ? kind : null;
+      // The answer as the engine's input: a kind of the part's level (a landscape type, or a shape), or a basic shape.
+      const options = T.terrainKinds(part.scale, SHAPES), kind = options[what?.value] ? String(what.value) : part.scale === 'street' ? 'commercial' : 'dwelling';
+      const entry = (T.TERRAIN_KINDS[part.scale] ?? T.TERRAIN_KINDS.district)[kind], shape = entry?.shape ?? (SHAPES[kind] ? kind : null), ground = shape ? null : entry?.ground ?? null;
       const fromMap = (box, map) => (box && map ? [round(map.x - map.halfX + box.left * 2 * map.halfX), round(map.z - map.halfZ + box.top * 2 * map.halfZ), round(map.x - map.halfX + box.right * 2 * map.halfX), round(map.z - map.halfZ + box.bottom * 2 * map.halfZ)] : null);
       const width = SCALE_WIDTH[part.scale] ?? [60, 600], fallback = (width[0] + width[1]) / 4, at = holderNode ?? anchor;
       let box = fromMap(where?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
@@ -214,31 +217,30 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const { replies: [again] } = await ask(decide, T.terrainZoomMode, { ...about, kind, reasons, pictures: { skyline: 'the area from the side and above.', map: `the area straight down, north up, ${Math.round(zh * 2)} m across.` } }, stores, { request: { images: { skyline: zside.png, map: ztop.png } } });
         box = fromMap(again?.box, ztop.map) ?? box;
       }
-      // 3. Height: ghost slices at every height the world has, through a core of the area at its middle (the whole of a big
-      // area would put the slices a few pixels apart); red dotted cuts through its buildings.
+      // 3. How high the terrain rises (the ground is at 0, always): lettered ghost slices at fixed heights, from three floors
+      // to a hundred and thirty (a hill's or a mountain's to 800 m), through a core of the area at its middle; red dotted cuts
+      // through the buildings the engine stands there for now.
       const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, CORE), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
       const sample = [round(cc[0] - core), round(cc[1] - core), round(cc[0] + core), round(cc[1] + core)];
       const lots = data.world.lots.map(lot => ({ box: [lot.i0 * CELL, lot.j0 * CELL, (lot.i0 + lot.nx) * CELL, (lot.j0 + lot.nz) * CELL], top: (lot.floors ?? 1) * FLOOR })).filter(lot => lot.box[0] < sample[2] && sample[0] < lot.box[2] && lot.box[1] < sample[3] && sample[1] < lot.box[3]);
-      const roofs = [...new Set(lots.map(lot => lot.top))].sort((a, b) => b - a), tallest = roofs[0] ?? 0, median = roofs[Math.floor(roofs.length / 2)] ?? 0;
-      const levels = [[-60, 'deep underground'], [-12, 'the subway'], [-5, 'just under the street'], [0, 'the street'], [6, 'two floors up'], [15, 'five floors up'], ...(median > 20 ? [[median, 'the roofs around']] : []), ...(tallest > 30 ? [[tallest, 'the tallest roof'], [tallest + 40, 'the sky above the roofs']] : [[60, 'the sky']])]
-        .filter(([y], k, all) => all.findIndex(([other]) => Math.abs(other - y) < 3) === k).sort((a, b) => a[0] - b[0]).map(([y, said], k) => ({ letter: 'ABCDEFGHIJ'[k], y: Math.round(y), said }));
-      const span = levels.at(-1).y - levels[0].y, distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [cc[0], (levels[0].y + levels.at(-1).y) / 2, cc[1]];
+      const tops = (shape ? NATURAL_TOPS : BUILT_TOPS).map(([y, said], k) => ({ letter: 'ABCDEFGHIJ'[k], y, said }));
+      const span = tops.at(-1).y, distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [cc[0], span / 2, cc[1]];
       const heights = await shoot(OVERVIEW, { view: { fov: 40, position: from(mid, yaw, 0.3, distance), target: mid },
-        slices: levels.map((level, k) => ({ box: sample, y: level.y, label: `${level.letter} · ${level.y} m · ${level.said}`, side: k % 2 ? -1 : 1 })), cuts: levels.flatMap(level => (level.y > 0 ? lots.filter(lot => lot.top > level.y).slice(0, 80).map(lot => ({ box: lot.box, y: level.y })) : [])),
+        slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${entry.y} m · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.flatMap(entry => lots.filter(lot => lot.top > entry.y).slice(0, 80).map(lot => ({ box: lot.box, y: entry.y }))),
         labelScale: Math.max(2.5, distance / 75), dash: Math.max(1, distance / 160), vague: { near: distance * 0.9, far: distance * 2.6 } });
-      const { replies: [level] } = await ask(decide, T.terrainHeightMode, { ...about, kind, levels, pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
-      const y = levels.find(entry => entry.letter === level?.value)?.y ?? 0;
+      const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, tops, pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height its terrain may rise to; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
+      const upTo = tops.find(entry => entry.letter === rise?.value)?.y ?? null;
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
-      const proposal = { id: part.id, label: part.label, kind, box, y };
+      const proposal = { id: part.id, label: part.label, kind, box, y: 0, top: upTo }, said = `${kind}${upTo ? `, up to ${upTo} m` : ''}`;
       focus = { x: round((box[0] + box[2]) / 2), z: round((box[1] + box[3]) / 2), r: round(Math.hypot(box[2] - box[0], box[3] - box[1]) * 0.75) };
       await show(`${part.label}: proposal`, proposal);
-      await live.outcome({ subject: part.label, text: `${part.label}: ${kind} at ${y} m, ${Math.round(box[2] - box[0])} × ${Math.round(box[3] - box[1])} m (blinking in World · Live)` });
-      await wait(`${part.label}: ${kind} at ${y} m. Look around, then step on to keep it.`);
+      await live.outcome({ subject: part.label, text: `${part.label}: ${said}, ${Math.round(box[2] - box[0])} × ${Math.round(box[3] - box[1])} m (blinking in World · Live)` });
+      await wait(`${part.label}: ${said}. Look around, then step on to keep it.`);
       const parentNode = nodeOf(holder);
       const toward = parentNode ? [round((box[0] + box[2]) / 2 - parentNode.x), round((box[1] + box[3]) / 2 - parentNode.z)] : null;
-      terrain.sites[part.id] = { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, ...(shape ? { shape } : { ground: kind }), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, y, by: 'jev',
-        confidence: { box: where?.confidence ?? null, kind: what?.confidence ?? null, height: level?.confidence ?? null } };
-      if (shape) terrain.shapes[part.id] = { kind: shape, box, y };
+      terrain.sites[part.id] = { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), size: [round(box[2] - box[0]), round(box[3] - box[1])], toward, box, y: 0, ...(upTo ? { top: upTo } : {}), by: 'jev',
+        confidence: { box: where?.confidence ?? null, kind: what?.confidence ?? null, top: rise?.confidence ?? null } };
+      if (shape) terrain.shapes[part.id] = { kind: shape, box, y: 0, ...(upTo ? { top: upTo } : {}) };
       if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
       terrain.askedAt = new Date().toISOString();
       await replace(terrainFile, JSON.stringify(terrain, null, 1));
@@ -248,7 +250,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       placed++;
       const after = nodeOf(part.id);
       await live.outcome({ subject: part.label, text: `${part.label} kept: the world built again, ${data.world.lots.length} lots${after ? `, ${part.label} at ${Math.round(after.x)}, ${Math.round(after.z)} (r ${Math.round(after.r)} m)` : ''}` });
-      log(`${city.label} › ${part.label}: ${kind} at ${y} m`);
+      log(`${city.label} › ${part.label}: ${said}`);
     }
     if (client.usage?.length) await writeFile(join(folder, 'jev-usage.json'), JSON.stringify(client.usage), { mode: 0o644 });
     // What the context engine gave each request, and what it cut.

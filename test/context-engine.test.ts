@@ -74,7 +74,7 @@ test("terrain's ground: what stands in the part, the place holding it and its ci
     settings: [{ scene: "a", place: "d7" }, { scene: "b", place: "city" }, { scene: "c", place: "d6" }],
     scenes: [{ id: "a", index: 0, environment: [] }, { id: "b", index: 1, environment: [{ id: "environment:s4", first: "s4", text: sentences[3].text }] }, { id: "c", index: 2, environment: [{ id: "environment:s5", first: "s5", text: sentences[4].text }] }],
   }, sentences, parentOf, label);
-  const focus = { part: { id: "d7", label: "District Seven", scale: "district" }, holder: { id: "city", label: "City" }, city: { id: "city", label: "City" }, kinds: { skyscrapers: "towers", park: "a park" }, pictures: { map: "the map" } };
+  const focus = { part: { id: "d7", label: "District Seven", scale: "district" }, holder: { id: "city", label: "City" }, city: { id: "city", label: "City" }, shapes: { donut: "a donut" }, pictures: { map: "the map" } };
   const composed = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, focus, stores);
   const state = composed.state as Record<string, Record<string, unknown>>;
   assert.deepEqual(state.part, { name: "District Seven", scale: "district", in: "City" });
@@ -82,7 +82,18 @@ test("terrain's ground: what stands in the part, the place holding it and its ci
   assert.deepEqual(state.standing, { dormitory: "a building", "tower of fifty floors": "a building in City, 2 times" }, "no rooms; the part's own first");
   assert.deepEqual(Object.keys(state.facts), ["f1", "f2", "f3"], "about the city alone first; a bare name last");
   assert.deepEqual(Object.keys(state.environment), ["environment:s4"], "the city's surroundings, not District Six's");
-  assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key)], [["skyscrapers", "park"], ["box", "kind"]]);
+  // The kinds go by level (the user's call): a district's, then the basic shapes; a commercial centre or a park is a street's.
+  const district = ["cbd", "dwelling", "industrial", "harbour", "mountain", "oldtown", "village", "farmland", "donut"];
+  assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key), composed.questions[1].options], [district, ["box", "kind"], district]);
+  const street = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { ...focus.part, scale: "street" } }, stores);
+  assert.deepEqual(Object.keys((street.state as Record<string, object>).kinds), ["commercial", "park", "stadium", "donut"]);
+  assert.equal(T.TERRAIN_KINDS.district.cbd.ground, "skyscrapers");
+  // How high the terrain rises: the city's evidence in the state, a slice a height.
+  const tops = [{ letter: "A", y: 10, said: "three floors" }, { letter: "B", y: 150, said: "fifty floors" }];
+  const height = await (await import("../src/v2/context/engine.js")).compose(T.terrainHeightMode, { ...focus, kind: "cbd", tops }, stores);
+  const said = height.state as Record<string, Record<string, unknown>>;
+  assert.ok(said.standing["tower of fifty floors"] && Object.keys(said.facts).length && said.tops.B === "150 m: fifty floors");
+  assert.deepEqual(height.questions.map((question) => [question.key, question.options]), [["top", ["A", "B"]]]);
   await stores.graph?.close();
 });
 
