@@ -745,10 +745,11 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // The underground's slices first (below the street), then the kind's own: the picture spans them all.
       // Spawn mode asks the kind's standard plus an addition, as averages (docs/v2/borrow-and-spawn.md §8.9).
       const kindManifold = T.terrainKind(part.scale, kind)?.manifold, factor = spawn && kindManifold ? averageOverMedian(kindManifold) : null;
-      const { measure, slices: tops, standard } = T.terrainHeights(part.scale, kind, factor ? { factor } : undefined), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
+      // As averages, the kind's minimum a hard gate (§8.9; the user, 2026-11-01): a city or a district is never under the street.
+      const { measure, slices: tops, standard } = T.terrainHeights(part.scale, kind, factor ? { factor, underground: !['city', 'district'].includes(part.scale) } : undefined), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
       const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, Math.max(CORE_MIN, span * CORE)), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
-      // The slices through a core of the area round a point, labelled as heights (`absolute`) or as additions to the standard.
-      const heightsAt = async (at, absolute = measure !== 'average') => {
+      // The slices through a core of the area round a point, labelled as heights, or as additions to the minimum (the probe).
+      const heightsAt = async (at, absolute = true) => {
         const sample = [round(at[0] - core), round(at[1] - core), round(at[0] + core), round(at[1] + core)];
         const lots = data.world.lots.map(lot => ({ box: [lot.i0 * CELL, lot.j0 * CELL, (lot.i0 + lot.nx) * CELL, (lot.j0 + lot.nz) * CELL], top: (lot.floors ?? 1) * FLOOR })).filter(lot => lot.box[0] < sample[2] && sample[0] < lot.box[2] && lot.box[1] < sample[3] && sample[1] < lot.box[3]);
         const distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [at[0], (lo + hi) / 2, at[1]];
@@ -756,32 +757,30 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${absolute ? `${entry.y} m` : `${entry.offset >= 0 ? '+' : ''}${entry.offset} m`} · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.filter(entry => entry.y > 0).flatMap(entry => lots.filter(lot => lot.top > entry.y).slice(0, 80).map(lot => ({ box: lot.box, y: entry.y }))),
           labelScale: Math.max(2.5, distance / 75), dash: Math.max(1, distance / 160), vague: { near: distance * 1.6, far: distance * 4.5 } });
       };
-      const heights = await heightsAt(cc);
-      const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, ...(standard ? { standard } : {}), pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, ${measure === 'average' ? `a slice at its standard height (+0 m) and at each addition to it, and below the street` : 'a slice at each height its terrain may rise to'}; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
-      // The height question's experiment (`heightProbe`, the user's call, 2026-11-01): the same city asked four ways, its
-      // heights as absolute averages or as additions to its standard, on the picture at its middle or on three across it
-      // (the middle, a district halfway out, one near the edge); every answer kept in stage/terrain/height-probe.json. The run
-      // goes on with the design's own answer (the middle, as additions).
-      if (heightProbe && isCity && measure === 'average') {
-        const node = nodeOf(part.id) ?? cityNode, ring = Object.values(registry.slots).filter(slot => slot.parent === part.id && slot.toward).map(slot => ({ slot, r: Math.hypot(...slot.toward) })), R = (terrain.sites[part.id]?.size?.[0] ?? 2 * core) / 2;
-        const nearest = share => { const pick = ring.sort((a, b) => Math.abs(a.r - share * R) - Math.abs(b.r - share * R))[0]; return pick && node ? [node.x + pick.slot.toward[0], node.z + pick.slot.toward[1]] : [cc[0] + share * R, cc[1]]; };
-        const points = { middle: cc, halfway: nearest(0.5), edge: nearest(0.85) }, said = { middle: 'its middle', halfway: 'a district halfway out', edge: 'a district near its edge' };
-        const describe = (where, absolute) => `${said[where]} in ${part.label}, ${Math.round(core * 2)} m across, from the side and a little above, a slice at ${absolute ? 'each height' : 'its standard height (+0 m) and at each addition to it'}, and below the street; the city faded behind.`;
-        const shots = {};
-        for (const where of Object.keys(points)) for (const absolute of [true, false]) shots[`${where}-${absolute}`] = where === 'middle' && !absolute ? heights : await heightsAt(points[where], absolute);
-        const variants = [
-          { id: 'middle, absolute', absolute: true, wheres: ['middle'] },
-          { id: 'middle, addition', absolute: false, wheres: ['middle'], answer: rise },
-          { id: 'across, absolute', absolute: true, wheres: ['middle', 'halfway', 'edge'] },
-          { id: 'across, addition', absolute: false, wheres: ['middle', 'halfway', 'edge'] },
-        ];
+      // A city's average is asked on three pictures across it, its middle, a district halfway out and one near its edge (the
+      // height probe, 2026-11-01: its middle alone, a CBD, leans high); any other area's on its middle.
+      const across = spawn && isCity && measure === 'average', node = nodeOf(part.id) ?? cityNode, cityR = (terrain.sites[part.id]?.size?.[0] ?? 2 * core) / 2;
+      const ring = across ? Object.values(registry.slots).filter(slot => slot.parent === part.id && slot.toward).map(slot => ({ slot, r: Math.hypot(...slot.toward) })) : [];
+      const nearest = share => { const pick = [...ring].sort((a, b) => Math.abs(a.r - share * cityR) - Math.abs(b.r - share * cityR))[0]; return pick && node ? [node.x + pick.slot.toward[0], node.z + pick.slot.toward[1]] : [cc[0] + share * cityR, cc[1]]; };
+      const points = { middle: cc, ...(across ? { halfway: nearest(0.5), edge: nearest(0.85) } : {}) }, said = { middle: `the middle of ${part.label}'s area`, halfway: `a district halfway out in ${part.label}`, edge: `a district near the edge of ${part.label}` };
+      const describe = (where, absolute) => measure !== 'average' ? `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height its terrain may rise to; the city faded behind.`
+        : `${said[where]}, ${Math.round(core * 2)} m across, from the side and a little above, a slice at ${absolute ? 'each height, the lowest its minimum' : 'its minimum (+0 m) and at each addition to it'}${tops.some(entry => entry.y < 0) ? ', and below the street' : ''}; the city faded behind.`;
+      const shots = {}, shot = async (where, absolute) => (shots[`${where}-${absolute}`] ??= await heightsAt(points[where], absolute));
+      const askHeight = async (wheres, absolute) => {
+        const key = where => (wheres.length === 1 ? 'heights' : where), images = {};
+        for (const where of wheres) images[key(where)] = (await shot(where, absolute)).png;
+        return (await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, ...(standard ? { standard } : {}), ...(absolute ? {} : { addition: true }), pictures: Object.fromEntries(wheres.map(where => [key(where), describe(where, absolute)])) }, stores, { request: { images } })).replies[0];
+      };
+      const rise = await askHeight(Object.keys(points), true);
+      // The height question's experiment (`heightProbe`, the user's call, 2026-11-01): a city asked four ways, its heights as
+      // absolute averages or as additions to its minimum, on the picture at its middle or on three across it; every answer
+      // kept in stage/terrain/height-probe.json. The run goes on with the design's own answer (across it, absolute).
+      if (heightProbe && across) {
         const found = [];
-        for (const variant of variants) {
-          const key = where => (variant.wheres.length === 1 ? 'heights' : where), pictures = Object.fromEntries(variant.wheres.map(where => [key(where), describe(where, variant.absolute)]));
-          const reply = variant.answer ?? (await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, ...(variant.absolute ? {} : { standard }), pictures }, stores, { request: { images: Object.fromEntries(variant.wheres.map(where => [key(where), shots[`${where}-${variant.absolute}`].png])) } })).replies[0];
-          const slice = tops.find(entry => entry.letter === reply?.value);
-          found.push({ city: part.label, kind, variant: variant.id, letter: reply?.value ?? null, average: slice?.y ?? null, addition: slice?.offset ?? null, confidence: reply?.confidence ?? null, top: (reply?.top ?? []).map(([letter, p]) => [letter, tops.find(entry => entry.letter === letter)?.y ?? null, p]) });
-          await live.outcome({ subject: part.label, text: `height probe, ${variant.id}: ${reply?.value ?? '?'} (${slice ? `${slice.y} m${variant.absolute ? '' : `, +${slice.offset} m`}` : '?'}), ${Math.round((reply?.confidence ?? 0) * 100)}% sure; next ${(reply?.top ?? []).slice(1).map(([letter, p]) => `${letter} ${Math.round(p * 100)}%`).join(', ')}` });
+        for (const variant of [{ id: 'middle, absolute', absolute: true, wheres: ['middle'] }, { id: 'middle, addition', absolute: false, wheres: ['middle'] }, { id: 'across, absolute', absolute: true, wheres: ['middle', 'halfway', 'edge'], answer: rise }, { id: 'across, addition', absolute: false, wheres: ['middle', 'halfway', 'edge'] }]) {
+          const reply = variant.answer ?? (await askHeight(variant.wheres, variant.absolute)), slice = tops.find(entry => entry.letter === reply?.value);
+          found.push({ city: part.label, kind, variant: variant.id, letter: reply?.value ?? null, average: slice?.y ?? null, addition: slice?.offset ?? null, confidence: reply?.confidence ?? null });
+          await live.outcome({ subject: part.label, text: `height probe, ${variant.id}: ${reply?.value ?? '?'} (${slice ? `${slice.y} m${variant.absolute ? '' : `, +${slice.offset} m`}` : '?'}), ${Math.round((reply?.confidence ?? 0) * 100)}% sure` });
         }
         const probeFile = join(folder, 'height-probe.json'), kept = JSON.parse(await readFile(probeFile, 'utf8').catch(() => '[]'));
         await replace(probeFile, JSON.stringify([...kept, ...found.map(entry => ({ ...entry, at: new Date().toISOString() }))], null, 1));
