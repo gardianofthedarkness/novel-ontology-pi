@@ -394,3 +394,19 @@ surroundings is about the place itself, put nothing in its stead.
   building (shops and cinema below, offices, flats above, the chairman's home on top) first, then the scene naming it in
   passing (14,281 characters, no facts or surroundings: none are about it); an unnamed street, its own scene alone.
 
+### 5.11 Pictures the places fill, turned; and common sense (the user's calls, 2026-11-01)
+
+Run 9's kind questions showed their places as a small cluster in the middle: the frame took the city's node and the reach
+of every canvas circle, and a plain map's city circle is far larger than what stands in it.
+- `Z.fillFrame`: the pins of the city's districts and streets, the corners of what is kept in it, and the part asked
+  about; at each turn (every 3° of half a circle) the box holding the central 95% of them on its own axes, fitted to the
+  picture's shape; the turn needing the smallest frame wins (north up unless a turn is 3% tighter: a long spread lies along
+  the frame's diagonal), 15% more round it, never under the level's least. The map turns by it (its caption says so); the
+  skyline has its own (its ground seen 1.6 × sin 30° as wide as deep), its camera looking across the spread, twice the
+  frame's half-depth away.
+- Kept areas are outlined where the engine built them (their node), not where their box was kept: the canvas may set a
+  district elsewhere than its box. Placement, crowding, ties and settling read the same (`boxNow`).
+- The ground, area and height questions add: where the text says little or Jev is unsure, use common sense, what anyone
+  knows of a real place (a world city's centre stands tall) and what a place of its kind usually is. Run 9's New York was
+  named only in passing (an advertisement in one scene).
+

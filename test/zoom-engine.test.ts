@@ -156,3 +156,28 @@ test("settling clears an overlap the objective cannot price first, whatever it c
   assert.deepEqual([out.overlaps[0], out.overlaps.at(-1)], [1, 0]);
   assert.ok(out.objective.at(-1)! > out.objective[0], "it moves off its pin to clear it");
 });
+
+test("a frame the places fill: the central 95% on each axis and a margin; a far outlier left out, the part always in, never under its least", async () => {
+  const { fillFrame } = await import("../src/v2/context/zoom.js");
+  const cluster = Array.from({ length: 40 }, (_, n) => [100 + (n % 8) * 10, 200 + Math.floor(n / 8) * 10] as [number, number]);
+  const frame = fillFrame([...cluster, [5000, 5000]], null);
+  assert.ok(frame.half < 100 && Math.abs(frame.x - 135) < 10 && Math.abs(frame.z - 220) < 10, `the cluster fills it: ${JSON.stringify(frame)}`);
+  const kept = fillFrame([...cluster, [5000, 5000]], [400, 220]), inFrame = (f: { x: number; z: number; half: number; turn: number }, [x, z]: [number, number], aspect = 1) => { const u = (x - f.x) * Math.cos(f.turn) + (z - f.z) * Math.sin(f.turn), v = -(x - f.x) * Math.sin(f.turn) + (z - f.z) * Math.cos(f.turn); return Math.abs(u) <= f.half * aspect + 0.5 && Math.abs(v) <= f.half + 0.5; };
+  assert.ok(inFrame(kept, [400, 220]), `the part asked about is in it: ${JSON.stringify(kept)}`);
+  assert.equal(fillFrame(cluster, null, 0.95, 0.15, 300).half, 300, "never under its least");
+});
+
+test("the frame turns so the same zoom holds the most: a long spread lies along the frame's diagonal, tighter than north up, every place in it", async () => {
+  const { fillFrame } = await import("../src/v2/context/zoom.js");
+  const inFrame = (f: { x: number; z: number; half: number; turn: number }, [x, z]: [number, number], aspect: number) => { const u = (x - f.x) * Math.cos(f.turn) + (z - f.z) * Math.sin(f.turn), v = -(x - f.x) * Math.sin(f.turn) + (z - f.z) * Math.cos(f.turn); return Math.abs(u) <= f.half * aspect + 0.5 && Math.abs(v) <= f.half + 0.5; };
+  // A bar 1,000 m long at 20°: north up it needs a frame 940 m across; along a square's diagonal, 707.
+  const bar = Array.from({ length: 41 }, (_, n) => [n * 25 * Math.cos(Math.PI / 9), n * 25 * Math.sin(Math.PI / 9)] as [number, number]);
+  const square = fillFrame(bar, null, 1, 0);
+  assert.ok(square.turn !== 0 && square.half < 0.8 * 470, `turned and tighter: ${JSON.stringify(square)}`);
+  assert.ok(bar.every((p) => inFrame(square, p, 1)), "every place in it");
+  // The same bar standing north to south in a wide picture (1.6 : 1) lies along that picture's diagonal.
+  const upright = bar.map(([x, z]) => [0, Math.hypot(x, z)] as [number, number]), wide = fillFrame(upright, null, 1, 0, 0, 1.6);
+  assert.ok(wide.turn !== 0 && wide.half < 0.6 * 500, `turned and tighter than north up (500): ${JSON.stringify(wide)}`);
+  assert.ok(upright.every((p) => inFrame(wide, p, 1.6)), "every place in it");
+  assert.equal(fillFrame(Array.from({ length: 36 }, (_, n) => [(n % 6) * 10, Math.floor(n / 6) * 10] as [number, number]), null).turn, 0, "north up when no turn is clearly tighter");
+});
