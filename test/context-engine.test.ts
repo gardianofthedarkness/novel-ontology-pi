@@ -87,7 +87,7 @@ test("terrain's ground: the sentences around the part's name in the scenes namin
   // Its kind only: where it lies and how large it is are the program's (docs/v2/world-engine-v2.md §2.0.21).
   assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key), composed.questions[0].options], [district, ["kind"], district]);
   const street = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { ...focus.part, scale: "street" } }, stores);
-  assert.deepEqual(Object.keys((street.state as Record<string, object>).kinds), ["shopping", "centre", "avenue", "square", "station", "alley", "residential", "waterfront", "park", "stadium", "donut"]);
+  assert.deepEqual(Object.keys((street.state as Record<string, object>).kinds), ["shopping", "centre", "avenue", "square", "crossing", "station", "alley", "residential", "waterfront", "park", "stadium", "donut"]);
   // A pool's member (sampled): asked its kind, not where it lies; its own sentences' scene is its text (it has no name to find).
   const sampled = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { id: "unnamed:s1", label: "a square (scene 1)", scale: "street" }, sampled: true }, { ...stores, own: (id: string) => (id === "unnamed:s1" ? [{ id: "s1", text: sentences[0].text }] : []) });
   assert.deepEqual([sampled.questions.map((question) => question.key), Object.keys((sampled.state as Record<string, object>).scenes)], [["kind"], ["a"]]);

@@ -11,7 +11,9 @@ const fill = (patches: Patch[]) => fillLandscape({ version: LANDSCAPE_VERSION, s
 const own = (patch: Patch, landmarks: Building[]) => landmarks.filter((b) => b.lot.startsWith(`${patch.id}:`));
 
 test("every street type builds its own form: rows down both sides of its road, a ring round its square, a compound, water and a bridge; the same each time", () => {
-  for (const type of STREET_TYPES) {
+  // A crossing is the ground's own (two of the city's roads meeting: config/spawning/street.json `takes`): no form of its own.
+  assert.equal(own(street("crossing", 160, 160), fill([street("crossing", 160, 160)]).landmarks).length, 0, "a crossing: no form");
+  for (const type of STREET_TYPES.filter((type) => type !== "crossing")) {
     const patch = street(type, type === "square" || type === "centre" ? 220 : 300, type === "square" || type === "centre" ? 220 : 110), result = fill([patch]), mine = own(patch, result.landmarks), lots = (part: string) => mine.filter((b) => b.lot.includes(part));
     assert.ok(mine.length > 0, `${type}: a form`);
     assert.equal(JSON.stringify(fill([patch]).landmarks), JSON.stringify(result.landmarks), `${type}: the same form each time`);
@@ -49,7 +51,7 @@ test("a street in a CBD: the city's roads give way along it, a shopping street's
 });
 
 test("a street's buildings take their uses from its kind's list (a shopping street's shops and cafés, a centre's mall and offices), the same each time", () => {
-  for (const type of STREET_TYPES) {
+  for (const type of STREET_TYPES.filter((type) => type !== "crossing")) {
     const patch = street(type, type === "square" || type === "centre" ? 220 : 300, type === "square" || type === "centre" ? 220 : 110), mine = own(patch, fill([patch]).landmarks), uses = mine.map((b) => b.use).filter(Boolean);
     assert.ok(uses.length, `${type}: its buildings have uses`);
     const allowed = new Set([...(LANDSCAPES[type].uses ?? []), "mall", "office", "station"]);

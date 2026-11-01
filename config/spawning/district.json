@@ -16,14 +16,16 @@
       "centre": 1,
       "station": 1,
       "square": 1,
-      "shopping": 1
+      "shopping": 1,
+      "crossing": 1
     },
     "dwelling": {
       "residential": 3,
       "shopping": 1,
       "alley": 1,
       "park": 1,
-      "station": 1
+      "station": 1,
+      "crossing": 1
     },
     "industrial": {
       "alley": 2

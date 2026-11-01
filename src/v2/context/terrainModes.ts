@@ -129,12 +129,14 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     farmland: { hint: "farmland: wide fields with a few farmhouses", ground: "farm", manifold: M(0, 0.15), medians: [3, 4, 6] },
   },
   // The street level's own kinds (docs/v2/world-engine-v2.md §2.0.12, §2.0.13): the street-level land use, each built as its
-  // own street form (landscape.ts STREET_TYPES) on its own manifold. A crossing is a square; an underground passage is spatial, no street.
+  // own street form (landscape.ts STREET_TYPES) on its own manifold; an avenue and a crossing take the city's own roads
+  // (config/spawning/street.json `takes`). An underground passage is spatial, no street.
   street: {
     shopping: { hint: "a shopping street: shops of a few storeys on both sides, signs, a tower at a corner", ground: "shopping", manifold: M(0, 0.35, 0.05), medians: [6, 9, 12, 18, 25] },
     centre: { hint: "a modern commercial centre: a mall podium with towers over it, a plaza with screens, wide roads round it", ground: "centre", manifold: M(0.4, 0.6, 0.1), medians: [12, 20, 30, 45, 70, 100] },
     avenue: { hint: "an avenue: a wide road lined with offices and towers", ground: "avenue", manifold: M(0.1, 0.5, 0.08), medians: [20, 35, 50, 80, 120] },
-    square: { hint: "a square or a crossing: open ground with buildings round it", ground: "square", manifold: M(0, 0.3, 0.03), medians: [6, 10, 15, 25, 40] },
+    square: { hint: "a square or a plaza: open ground with a monument, buildings round it", ground: "square", manifold: M(0, 0.3, 0.03), medians: [6, 10, 15, 25, 40] },
+    crossing: { hint: "a crossing: two wide roads of the city meeting, the buildings on its corners facing it", ground: "crossing", manifold: M(0, 0.3, 0.03), medians: [6, 10, 15, 25, 40, 60] },
     station: { hint: "a station front: the station, a plaza, bus stops, shops round it", ground: "station", manifold: M(0.3, 0.4, 0.05), medians: [10, 15, 25, 40, 60] },
     alley: { hint: "an alley or a lane: narrow, low and dense", ground: "alley", manifold: M(0, 0.2), medians: [3, 5, 7, 10] },
     residential: { hint: "a residential street: blocks of flats along it, a few houses between them", ground: "terrace", manifold: M(0, 0.35, 0.05), medians: [9, 12, 18, 25, 35, 50] },
@@ -151,7 +153,8 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
  * a stadium adjoin nothing else of their level.
  */
 export const OVERLAPS: Record<string, string[]> = {
-  avenue: ["shopping", "station", "alley", "waterfront", "platform", "ramp"],
+  avenue: ["shopping", "station", "alley", "waterfront", "platform", "ramp", "crossing"],
+  crossing: ["shopping", "station", "alley", "residential", "centre"],
   shopping: ["alley", "centre"],
   centre: ["platform"],
   station: ["platform", "ramp"],

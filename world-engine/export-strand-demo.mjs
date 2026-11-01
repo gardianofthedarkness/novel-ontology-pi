@@ -65,6 +65,7 @@ export async function strandDemo(novelDir, options) {
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf, scaleOfName } = await load('dist/src/digger/stage/scale.js');
   const { continuityTies } = await load('dist/src/v2/extraction/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js'), Z = await load('dist/src/v2/context/zoom.js');
+  const SP = await load('dist/src/v2/spawning/config.js'), spawning = SP.loadSpawning();
   // A landscape's fill, made once per landscape (a pool's is read for its streets' buildings, then drawn).
   const fills = new WeakMap(), fillOf = landscape => { const known = fills.get(landscape); if (known?.n === landscape.patches.length) return known.filled; const filled = fillLandscape(landscape); fills.set(landscape, { n: landscape.patches.length, filled }); return filled; };
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -456,6 +457,9 @@ export async function strandDemo(novelDir, options) {
     const guessed = id => ['scene', 'setting'].includes(worldScript?.places?.[id]?.held), sampled = [];
     // A named place standing on a manifold of its parent's ground (docs/v2/borrow-and-spawn.md §8: a district of a city of
     // manifolds) is embedded there at the manifold's vector, its ground a patch of the parent's (below), none of its own.
+    // A street that took the ground's own road or crossing (street.json `takes`, laid on one: its site's `on`) builds no form:
+    // the city's lots round it are its buildings (landscape.ts `takes`).
+    const takesOf = site => { if (terrain?.mode !== 'spawn' || site?.scale !== 'street' || !site.on) return null; const takes = SP.streetTakes(site.kind, spawning); return takes?.road ? 'road' : takes?.crossing ? 'crossing' : null; };
     const embeddedOf = id => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && site?.mapped && Array.isArray(site.toward) ? { embedded: true, at: site.toward, ground: null, landscape: null } : {}; };
     const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, ...(poolArea(place.id) ? { pool: poolArea(place.id) } : {}), landscape: landscapeOf(place.id, areaScale(place.id)) , ...embeddedOf(place.id) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
@@ -602,7 +606,7 @@ export async function strandDemo(novelDir, options) {
     for (const place of Object.values(canvas.places)) {
       const manifolds = mappedIn(place.id);
       if (!manifolds.length || !place.landscape) continue;
-      const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return { ...turnedAs(site, patchFromBox(site.ground, id, id, { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: site.manifold } : null)), borrowed: true }; });
+      const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return { ...turnedAs(site, patchFromBox(site.ground, id, id, { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: site.manifold } : null)), borrowed: true, ...(takesOf(site) ? { takes: takesOf(site) } : {}) }; });
       // The manifolds before the open ground, the deepest first (a street claims its ground before its district), then the
       // tallest: a lot draws its height from older ground that reaches it, so a CBD's towers fade out into what is round it,
       // and the open ground never flattens a CBD.
@@ -659,9 +663,11 @@ export async function strandDemo(novelDir, options) {
     // A building's id is its place and its lot in the fill (stable as the place grows). Its `manifold` is the patch it
     // stands on: that patch with the older patches that cut its ground, and the fill's recipe, so a newer patch never
     // changes an older one's buildings (damage kept for them in world.json stays theirs). `era`: that patch's.
-    const patchOf = b => place.landscape.patches.find(patch => patch.id === (filled.owner[b.lot] ?? String(b.lot).split(':')[0])) ?? place.landscape.patches[0];
+    // A form's building's lot is `<patch>:<lot>`, and a slot's patch id has colons of its own: the longest patch id it starts with.
+    const patchOf = b => place.landscape.patches.find(patch => patch.id === filled.owner[b.lot]) ?? [...place.landscape.patches].filter(patch => String(b.lot).startsWith(`${patch.id}:`)).sort((x, y) => y.id.length - x.id.length)[0] ?? place.landscape.patches[0];
     const manifoldOf = patch => createHash('sha256').update(JSON.stringify({ recipe: 1, patch, older: place.landscape.patches.slice(0, place.landscape.patches.indexOf(patch)) })).digest('hex').slice(0, 12);
-    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era }; });
+    if (process.env.DEBUG_CLEAR) { const lost = {}, by = {}; for (const b of [...filled.fabric.buildings, ...filled.landmarks]) { const t = patchOf(b).type, hit = keep.find(({ at, r }) => Math.hypot(b.x - at[0], b.z - at[1]) <= r + Math.max(b.w, b.d) / 2); (lost[t] ??= [0, 0])[1]++; if (hit) { lost[t][0]++; const who = Object.values(canvas.places).find(c => c.parent === place.id && c.at === hit.at); by[`${t} by ${who?.id} r${Math.round(hit.r)}`] = (by[`${t} by ${who?.id} r${Math.round(hit.r)}`] ?? 0) + 1; } } console.error('DEBUG_CLEAR', place.id, JSON.stringify(lost), JSON.stringify(Object.entries(by).sort((x, y) => y[1] - x[1]).slice(0, 8))); }
+    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
@@ -1248,7 +1254,7 @@ export async function strandDemo(novelDir, options) {
         struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
       title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
       migrations: migrations.map(migration => { const route = routes.get(`${migration.scene}|${migration.person}`); return { ...migration, route: route ? { ...route, exit: route.exit?.map(dense) ?? null, entry: route.entry?.map(dense) ?? null } : null }; }),
-      macro, terrainShapes, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id), uses: source.buildings.map(b => b.use ?? UM.useOf(b) ?? null) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
+      macro, terrainShapes, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id), uses: source.buildings.map(b => b.use ?? UM.useOf(b) ?? null), owners: source.buildings.map(b => b.patch ?? null) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
       people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
       world: { NX, NZ, K, oi, oj, ok, lots: worldLots, shells: worldShells, earlier, underground: undergroundView(),

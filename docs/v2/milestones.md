@@ -278,6 +278,12 @@ logged spawn; the world builds in about today's time.
   them too (fixed: a street's own road), and a crossing was tested against a building's longest side (fixed: its
   footprint toward the road). Avenues still lose most rows in a CBD, likely to the room the export clears round each
   street marker on them; not yet looked into. **The 10% pass is not met.**
+- **Avenues and crossings take the ground's own (the user's design, after the stand-in):** an avenue takes a road of the
+  city at least 18 m wide, and a crossing (a new street kind) a meeting of roads at least 12 m wide (`takes` in
+  street.json). Neither builds a form; the city's lots round them are their buildings. On the copy, vol 1's 8 avenues went
+  from 15 buildings in all to 111. The densities of the streets that hold city lots (an avenue, a centre, a station front,
+  a square, a park) are measured on vol 1's city now: 6.3, 7.8, 5.8, 13.3 and 0.5 a hectare. Rows elsewhere are laid
+  between the roads crossing them.
 - **Floating objects:** a stand-in run asked each its thickness after its distance from the ground and kept both;
   nominated in the universe. On a copy with spans set, a deck draws 22–25 m up on legs, and a cavern becomes a hall from
   18 m down, 12 m tall.

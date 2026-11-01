@@ -15,8 +15,14 @@ export const CHILD: Record<Level, Level | null> = { city: "district", district: 
 
 /** How many of a kind: a number, or a range [least, most] picked once for each parent by a seed. */
 export type Count = number | [number, number];
-/** A street's buildings: how many a hectare, and the share of each use. */
-export interface Density { density: number; uses: Record<string, number> }
+/** A street's buildings: how many a hectare, and the share of each use; `takes`, the ground's own it is (see streetTakes). */
+export interface Density { density: number; uses: Record<string, number>; takes?: Takes }
+/**
+ * A street that is the ground's own, not an area laid out apart (street.json `takes`; the user, 2026-11-01): an avenue takes
+ * a road of the city at least `road` m wide, a crossing the meeting of two roads each at least `crossing` m wide. It builds
+ * no form of its own; its buildings are the city's lots already round it.
+ */
+export interface Takes { road?: number; crossing?: number }
 /** How a parent's children lie (§8.2): each kind's ring (a share of the parent's radius from its centre), and kinds near or apart. */
 export interface Topology { ring: Record<string, [number, number]>; pairs: [string, string, "near" | "apart"][]; open?: string }
 /** A parent kind's entry: what it spawns, and how its children lie; an older entry is its counts alone. */
@@ -44,6 +50,9 @@ export function defaultKindOf(level: "city" | "district", folder = DEFAULTS): st
 export function streetsOnly(folder = DEFAULTS): Record<string, string[]> {
   return JSON.parse(readFileSync(`${folder.replace(/\/?$/, "/")}district.json`, "utf8")).only ?? {};
 }
+
+/** What a street kind takes of its ground (street.json `takes`), or null for one laid out as an area of its own. */
+export const streetTakes = (kind: string, files: SpawningFiles = loadSpawning()): Takes | null => files.street[kind]?.takes ?? null;
 
 /** The area a configuration is asked for: its id and label (a place's own layer finds it by them), its level and its kind. */
 export interface Parent { id: string; label: string; level: Level; kind: string }

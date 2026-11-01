@@ -238,7 +238,7 @@ export function turnedBox(at: [number, number], size: [number, number], turn = 0
  * made of its kind, each tried turned along itself; the least costly of them is taken over open ground when it costs at
  * most ONTO_REACH of its own lengths more (what is there first). Null when no middle is allowed.
  */
-export function placeArea(frame: Frame, parent: Box | null, size: [number, number], prior: [number, number], tied: Tie[], clashes: Box[], crowds: Box[], cells = 48, onto: Onto[] = []): { at: [number, number]; cost: number; onto?: Onto } | null {
+export function placeArea(frame: Frame, parent: Box | null, size: [number, number], prior: [number, number], tied: Tie[], clashes: Box[], crowds: Box[], cells = 48, onto: Onto[] = [], ontoOnly = false): { at: [number, number]; cost: number; onto?: Onto } | null {
   const step = (2 * frame.half) / cells, x0 = frame.x - frame.half, z0 = frame.z - frame.half, weight = tied.reduce((sum, tie) => sum + tie.ties, 0);
   const costAt = (at: [number, number], box: Box): number | null => {
     if (parent && !inside(parent, at)) return null;
@@ -257,7 +257,8 @@ export function placeArea(frame: Frame, parent: Box | null, size: [number, numbe
     const cost = costAt(form.at, turnedBox(form.at, size, form.turn));
     if (cost != null && (!laid || cost < laid.cost)) laid = { at: [round(form.at[0]), round(form.at[1])], cost, onto: form };
   }
-  return laid && (!best || laid.cost <= best.cost + (ONTO_REACH * Math.max(size[0], size[1])) / frame.half) ? laid : best;
+  // `ontoOnly`: a street that takes the ground's own road or crossing stands on one wherever one is free.
+  return laid && (ontoOnly || !best || laid.cost <= best.cost + (ONTO_REACH * Math.max(size[0], size[1])) / frame.half) ? laid : best;
 }
 
 /**

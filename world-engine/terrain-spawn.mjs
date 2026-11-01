@@ -72,7 +72,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const { ask } = await load('dist/src/v2/context/engine.js'), T = await load('dist/src/v2/context/terrainModes.js');
   const { continuityTies, universeOf } = await load('dist/src/v2/extraction/pools.js');
   // The zoom engine (docs/v2/visual-context-engine.md §4.1): every frame Jev is shown and every box it answers.
-  const Z = await load('dist/src/v2/context/zoom.js'), { LANDSCAPES, formsFor, averageOverMedian } = await load('dist/src/ground/stage/landscape.js');
+  const Z = await load('dist/src/v2/context/zoom.js'), { LANDSCAPES, formsFor, formsTaking, averageOverMedian } = await load('dist/src/ground/stage/landscape.js');
   const inputs = await stageInputs(novelDir), [line] = await simStrandList(novelDir);
   if (!line) throw new Error('Terrain spawning needs the world loop\'s line: a world-first book with its world script and staged scenes.');
   const folder = join(novelDir, 'stage', 'terrain');
@@ -289,7 +289,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       return Z.sizeByPins(scale, [long, long * aspect], L ? (L.lot[0] + L.lot[1]) / 2 : 400, L?.coverage ?? 0.8, pins).size;
     };
     // The forms a street may be laid on: its area's ground, or (a manifold with no ground of its own) the ground above it.
-    const formsIn = (id, ground, long) => { let entry = null; for (let at = id, n = 0; at && !entry && n < 6; at = parentOf(at), n++) entry = (data.landscapes ?? []).find(item => item.place === at); return entry && ground ? formsFor(ground, { roads: (entry.roads ?? []).map(road => ({ a: [road[0], road[1]], b: [road[2], road[3]], level: road[5] })), waters: (entry.waters ?? []).map(water => ({ a: [water[0], water[1]], b: [water[2], water[3]] })), plazas: (entry.plazas ?? []).map(([x, z, r]) => ({ x, z, r })) }, long / 2) : []; };
+    // A street kind that takes the ground's own road or crossing (street.json `takes`; the user, 2026-11-01): the kind whose
+    // ground it is, and what it takes.
+    const takesOf = ground => { const kind = Object.entries(T.TERRAIN_KINDS.street).find(([, entry]) => entry.ground === ground)?.[0]; return spawn && kind ? S.streetTakes(kind) : null; };
+    const formsIn = (id, ground, long) => { let entry = null; for (let at = id, n = 0; at && !entry && n < 6; at = parentOf(at), n++) entry = (data.landscapes ?? []).find(item => item.place === at); if (entry && takesOf(ground)) return formsTaking(takesOf(ground), (entry.roads ?? []).map(road => ({ a: [road[0], road[1]], b: [road[2], road[3]], width: road[4], level: road[5] }))); return entry && ground ? formsFor(ground, { roads: (entry.roads ?? []).map(road => ({ a: [road[0], road[1]], b: [road[2], road[3]], level: road[5] })), waters: (entry.waters ?? []).map(water => ({ a: [water[0], water[1]], b: [water[2], water[3]] })), plazas: (entry.plazas ?? []).map(([x, z, r]) => ({ x, z, r })) }, long / 2) : []; };
     // Where an area of a size would stand in a given area: the placement the program uses for every area (Z.placeArea), near
     // the places it is tied to, a little toward its spot, inside the area grown to make room, over nothing it may not share;
     // a street on a form of its kind there.
@@ -298,7 +301,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const node = nodeOf(parent), centre = spot && (!room || Z.inside(room, spot)) ? spot : node ? [node.x, node.z] : spot ?? [0, 0];
       const frames = Z.framesFor(level, centre, room, Math.max(w, d), true);
       const tiedPlaced = [...tied].map(([id, n]) => { const at = positionOf(id); return at ? { at, ties: n } : null; }).filter(Boolean);
-      const placed = Z.placeArea(frames.context ?? frames.work, room, [w, d], centre, tiedPlaced, clashBoxes, crowdBoxes, 48, level === 'street' ? formsIn(parent, ground, w) : []);
+      const placed = Z.placeArea(frames.context ?? frames.work, room, [w, d], centre, tiedPlaced, clashBoxes, crowdBoxes, 48, level === 'street' ? formsIn(parent, ground, w) : [], level === 'street' && !!takesOf(ground));
       return placed ? { at: placed.at, onto: placed.onto ?? null } : { at: centre, onto: null };
     };
     // How tall an area is (§8.6): its average, and how high its tallest buildings reach (its manifold's 98th percentile).
@@ -357,8 +360,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       syncSlots(); await replace(terrainFile, JSON.stringify(terrain, null, 1)); await mkdir(join(universe.dir, 'maps'), { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
       await replace(mapLogFile, JSON.stringify(mapLog, null, 1)); reshape();
     };
-    // The building level's slots (docs/v2/borrow-and-spawn.md §6): every street's buildings as its form builds them, a slot
-    // of its use each, at its offset from the street (the world just built). A slot a building holds stays as it is; the
+    // The building level's slots (docs/v2/borrow-and-spawn.md §6): every street's buildings as the world just built them (its
+    // form's, or the city's lots on its ground for a street that took a road or a crossing), a slot of its use each, at its
+    // offset from the street. A slot a building holds stays as it is; the
     // spares are the form's again after every street level, so they follow the street.
     const formSlots = () => {
       const streets = new Set(Object.values(registry.slots).filter(slot => slot.level === 'street' && slot.toward).map(slot => slot.owner ?? slot.id));
@@ -367,8 +371,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       for (const [id, slot] of Object.entries(registry.slots)) if (slot.level === 'building' && slot.layer === 'form' && !isHeld(slot)) delete registry.slots[id];
       let spares = 0;
       for (const entry of data?.landscapes ?? []) (entry.ids ?? []).forEach((id, n) => {
-        // A lot of a street's form is `<place>:<street>:<lot>`; the fill's own lots are not slots.
-        const key = id.slice(entry.place.length + 1), street = key.slice(0, key.lastIndexOf(':')), node = nodeOf(street), use = entry.uses?.[n];
+        // A lot of a street's form is `<place>:<street>:<lot>`; a lot of the city's fill on a street's ground (a street that took
+        // the ground's own road or crossing, a station's surroundings) is that street's too (its owner); other fill lots are not slots.
+        const key = id.slice(entry.place.length + 1), owner = entry.owners?.[n], street = streets.has(owner) ? owner : key.slice(0, key.lastIndexOf(':')), node = nodeOf(street), use = entry.uses?.[n];
         if (!streets.has(street) || held.has(key) || !node || !use) return;
         const [x, z, w, d, angle] = entry.buildings[n];
         registry.slots[key] = { id: key, parent: street, level: 'building', kind: use, owner: null, sharers: [], damaged: [], layer: 'form', book: bookId, toward: [round(x - node.x), round(z - node.z)], size: [w, d], turn: angle };
@@ -830,11 +835,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // What is there first (§2.0.21, step 3): a street may be laid on a form the ground it will stand in already made of
         // its kind (an avenue on an arterial road, a square on a plaza, a waterfront on the water), turned along it; a pool's
         // member is laid on it again each build, as its pool's ground re-forms (the export's `relaid`).
-        const made = part.scale === 'street' && ground ? (data.landscapes ?? []).filter(entry => entry.place === holder).flatMap(entry => formsFor(ground, {
+        // A street that takes the ground's own road or crossing stands on one (street.json `takes`), the city's roads looked up from its holder.
+        const made = part.scale === 'street' && ground && takesOf(ground) ? formsIn(holder, ground, w) : part.scale === 'street' && ground ? (data.landscapes ?? []).filter(entry => entry.place === holder).flatMap(entry => formsFor(ground, {
           roads: (entry.roads ?? []).map(road => ({ a: [road[0], road[1]], b: [road[2], road[3]], level: road[5] })),
           waters: (entry.waters ?? []).map(water => ({ a: [water[0], water[1]], b: [water[2], water[3]] })),
           plazas: (entry.plazas ?? []).map(([x, z, r]) => ({ x, z, r })) }, w / 2)) : [];
-        const placed = Z.placeArea(frames.context ?? frames.work, room, [w, d], centre, tiedPlaced, clashes().map(entry => entry.box), crowds().map(entry => entry.box), 48, made);
+        const placed = Z.placeArea(frames.context ?? frames.work, room, [w, d], centre, tiedPlaced, clashes().map(entry => entry.box), crowds().map(entry => entry.box), 48, made, part.scale === 'street' && !!takesOf(ground));
         if (placed) {
           const moved = Math.hypot(placed.at[0] - centre[0], placed.at[1] - centre[1]);
           if (placed.onto) await live.outcome({ subject: part.label, text: `laid on its ground's ${placed.onto.what}, ${Math.round(moved)} m from its spot (${made.length} forms of its kind there)` });

@@ -53,3 +53,17 @@ test("a floating object is asked how far it is from the ground and how thick it 
   assert.equal(shapeHall({ id: "s2", x: 0, z: 0, w: 60, d: 20, top: -6 }).depth, 6, "an old cut keeps its depth");
   assert.ok(LANDSCAPES.terrace.row, "a residential street's rows");
 });
+
+test("a street that takes the ground's own: an avenue on a wide road, a crossing where wide roads meet; no form, the fill stays", async () => {
+  const { formsTaking, fillLandscape } = await import("../src/ground/stage/landscape.js");
+  const road = (id: string, a: [number, number], b: [number, number], width: number, level: string) => ({ id, a, b, width, level });
+  const roads = [road("A1", [-200, 0], [0, 0], 18, "arterial"), road("A2", [0, 0], [200, 0], 18, "arterial"), road("C1", [0, -150], [0, 0], 12, "collector"), road("C2", [0, 0], [0, 150], 12, "collector"), road("L1", [100, 0], [100, 120], 8, "local")];
+  const avenue = formsTaking({ road: 18 }, roads);
+  assert.ok(avenue.length && avenue.every((form) => form.what === "arterial road" && form.at[1] === 0), "an avenue: along the arterial road only");
+  const crossing = formsTaking({ crossing: 12 }, roads);
+  assert.deepEqual(crossing.map((form) => form.at), [[0, 0]], "a crossing: where the arterial and the collector cross, not where the narrow local road meets");
+  const taken = { ...street("avenue", 240, 100), takes: "road" as const };
+  assert.equal(formOf(taken).buildings.length, 0, "no rows of its own");
+  const landscape = { seed: "t", patches: [taken] } as unknown as Parameters<typeof fillLandscape>[0];
+  assert.ok(fillLandscape(landscape).fabric.buildings.some((b) => b.use && LANDSCAPES.avenue.uses!.includes(b.use)), "the city's lots on it are its buildings, with its uses");
+});

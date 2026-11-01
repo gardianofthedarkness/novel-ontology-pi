@@ -243,7 +243,17 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
   - `street.json`'s densities are what the forms build on their own ground, measured. In a city, the roads crossing a
     street break its rows, so it holds fewer.
   - A road running along a street's axis (an avenue laid on its ground's arterial road) is its own and breaks nothing.
-- **A building borrows.** Its use comes from the language profile. Of the slots of that use under its holder, it takes
+- **Streets that are the ground's own (the user, 2026-11-01).** An avenue or a crossing is not an area laid out apart
+  with its own rows. It is one of the city's roads, or the meeting of two of them, wide enough, with the city's buildings
+  already round it.
+  - `street.json` gives such a kind `takes`: an avenue a road at least 18 m wide (arterial or boulevard); a crossing (a
+    street kind of its own now, besides the square) roads at least 12 m wide meeting from two directions or more.
+  - The spawn places it only onto one (`formsTaking` in `landscape.ts`; `placeArea`'s `ontoOnly`).
+  - It builds no form, and the city's fill stays on its ground. Its lots there take its heights and its uses, and they
+    are its building slots.
+  - With no road wide enough in its area, it is placed as before and builds its form.
+  - Before, an avenue laid its own rows across the city's roads, and the roads crossing it took most of them (2 of 8 left
+    in a CBD). Now it has the city's 14 or so buildings along its road. Of the slots of that use under its holder, it takes
   the one that keeps the characters' travel least (§4). The place its scene is set in counts as its pin, because most
   buildings the text mentions are seen from a street, not set in. A named building takes its slot for good; an unnamed
   one shares.

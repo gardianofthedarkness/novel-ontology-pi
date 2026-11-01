@@ -27,7 +27,7 @@ export const LANDSCAPE_TYPES = ["skyscrapers", "commercial", "residential", "ind
  * modern commercial centre, an avenue, a square, a station front, an alley, a terrace (a residential street), a waterfront.
  * Built from a street area's box; kept apart from the district level's list, which the landscape step asks from.
  */
-export const STREET_TYPES = ["shopping", "centre", "avenue", "square", "station", "alley", "terrace", "waterfront"] as const;
+export const STREET_TYPES = ["shopping", "centre", "avenue", "square", "crossing", "station", "alley", "terrace", "waterfront"] as const;
 export type LandscapeType = (typeof LANDSCAPE_TYPES)[number] | (typeof STREET_TYPES)[number];
 
 type Family = "blob" | "lobes" | "box" | "fort";
@@ -72,6 +72,7 @@ export const LANDSCAPES: Record<LandscapeType, Kind> = {
   centre: { soft: 15, era: "modern", cap: 300, hint: "a modern commercial centre: a mall podium with towers rising from it, a plaza with a screen in front", radius: [70, 150], height: [12, 100], lot: [400, 1200], block: 4000, coverage: 0.95, back: 2, family: "blob", into: true, profile: "flat", building: (f) => (f >= 12 ? "tower" : f >= 4 ? "mall" : "shop"), uses: ["mall", "cinema", "restaurant", "cafe", "hotel", "office"] },
   avenue: { soft: 15, era: "modern", cap: 400, hint: "an avenue: a boulevard down its middle, offices and towers facing it", radius: [80, 160], height: [20, 120], lot: [800, 2400], block: 5000, coverage: 0.95, back: 3, family: "box", aspect: [0.34, 0.5], axis: { width: 36, level: "boulevard" }, row: { frontage: [30, 60], depth: [35, 55], gap: 8 }, into: true, profile: "flat", building: (f) => (f >= 20 ? "skyscraper" : f >= 8 ? "tower" : "office"), uses: ["office", "office", "hotel", "department", "bank", "restaurant", "government", "hospital"] },
   square: { soft: 12, era: "modern", cap: 80, hint: "a square: open ground with a monument, buildings ringing it", radius: [50, 120], height: [6, 40], lot: [300, 900], block: 3000, coverage: 0.95, back: 1, family: "blob", row: { frontage: [14, 26], depth: [14, 22], gap: 2 }, into: true, profile: "flat", building: (f) => (f >= 6 ? "office" : "shop"), uses: ["cafe", "restaurant", "shop", "bank", "government", "hotel", "church"] },
+  crossing: { soft: 10, era: "modern", cap: 80, hint: "a crossing: two wide roads of the city meeting, the buildings on its corners facing it", radius: [40, 90], height: [6, 40], lot: [300, 900], block: 3000, coverage: 0.95, back: 1, family: "blob", into: true, profile: "flat", building: (f) => (f >= 6 ? "office" : "shop"), uses: ["shop", "convenience", "bank", "cafe", "restaurant", "office"] },
   station: { soft: 12, era: "modern", cap: 120, hint: "a station front: the station hall, a plaza and bus bays before it, shops round it", radius: [70, 140], height: [10, 60], lot: [400, 1000], block: 3500, coverage: 0.95, back: 2, family: "box", aspect: [0.5, 0.8], into: true, profile: "flat", building: (f) => (f >= 6 ? "office" : "shop"), uses: ["station", "shop", "convenience", "cafe", "restaurant", "hotel", "office"] },
   alley: { soft: 6, era: "modern", cap: 30, hint: "an alley: a lane a few metres wide, tiny lots, low and dense", radius: [40, 100], height: [3, 12], lot: [40, 120], block: 600, coverage: 0.99, back: 0, family: "box", aspect: [0.32, 0.45], axis: { width: 4, level: "local" }, narrow: 0.5, row: { frontage: [4, 9], depth: [6, 12], gap: 0 }, profile: "flat", building: (f) => (f >= 3 ? "house" : "shop"), uses: ["house", "house", "shop", "bar", "restaurant", "workshop", "cafe"] },
   terrace: { soft: 15, era: "modern", cap: 60, hint: "a residential street: flats and houses on both sides of it", radius: [60, 140], height: [6, 25], lot: [200, 500], block: 3000, coverage: 0.9, back: 3, family: "box", aspect: [0.34, 0.5], axis: { width: 8, level: "local" }, row: { frontage: [10, 20], depth: [12, 20], gap: 4 }, profile: "flat", building: (f) => (f >= 4 ? "apartment" : "house"), uses: ["apartment", "apartment", "house", "dormitory", "convenience", "clinic", "school"] },
@@ -96,6 +97,8 @@ export interface Patch {
   id: string; type: LandscapeType; x: number; z: number; R: number; H: number; lot: number; median?: number; manifold?: Manifold;
   /** A pool's member's ground, borrowed from the pool's default where it stands: it claims lots before the default does. */
   borrowed?: boolean;
+  /** A street that is the ground's own (config/spawning/street.json `takes`): it took a road or a crossing of the city, builds no form, and its buildings are the city's lots in it. */
+  takes?: "road" | "crossing";
   /** A part below the street: the kind of hall its name says it is (a parking garage, a passage), else by its shape. */
   hall?: string;
   shape: { family: Family; turn: number; terms?: [number, number, number][]; n?: number; aspect?: number; m?: number };
@@ -364,12 +367,32 @@ function rowBuilding(patch: Patch, lot: string, along: number, across: number, w
  */
 export function formOf(patch: Patch, crossing: Road[] = [], ground: Patch[] = []): { buildings: Building[]; plazas: { x: number; z: number; r: number }[]; roads: Road[]; waters: Road[] } {
   const form = { buildings: [] as Building[], plazas: [] as { x: number; z: number; r: number }[], roads: [] as Road[], waters: [] as Road[] }, kind = LANDSCAPES[patch.type];
-  if (underground(patch)) return form;
-  // A row breaks where one of the city's roads crosses the street, as at a crossing. A road running along its axis is the
-  // street's own (an avenue laid on its ground's arterial road): its rows face it, they do not break on it.
-  const [ox, oz] = at(patch, 0, 0), [ux, uz] = at(patch, 1, 0), axisAngle = Math.atan2(uz - oz, ux - ox);
-  const alongAxis = (road: Road) => (kind.axis || kind.band) && Math.abs(Math.sin(Math.atan2(road.b[1] - road.a[1], road.b[0] - road.a[0]) - axisAngle)) < 0.34;
-  const crosses = crossing.filter((road) => !alongAxis(road));
+  // A street that took the ground's own road or crossing has no form: the city's lots round it are its buildings.
+  if (underground(patch) || patch.takes) return form;
+  // A row breaks where one of the city's roads crosses the street, as at a crossing. A road down the street's own axis is
+  // its own (an avenue laid on its ground's arterial road): its rows face it, they do not break on it.
+  const ownRoad = (road: Road) => {
+    if (!kind.axis && !kind.band) return false;
+    const [p, q] = [frameOf(patch, road.a), frameOf(patch, road.b)], length = Math.hypot(q.along - p.along, q.across - p.across) || 1;
+    return Math.abs(q.across - p.across) / length < 0.34 && Math.max(Math.abs(p.across), Math.abs(q.across)) < frontOf(patch);
+  };
+  const crosses = crossing.filter((road) => !ownRoad(road));
+  // The stretches of a row's band (across its axis from `near` to `far`) the crossing roads take, along it: each road where
+  // it runs through the band, and its half-width beside it (wider where it crosses at a slant). A row is laid in the
+  // stretches between, as the blocks along a street lie between its side streets.
+  const blockedOn = (near: number, far: number): [number, number][] => {
+    const spans: [number, number][] = [];
+    for (const road of crosses) {
+      const [p, q] = [frameOf(patch, road.a), frameOf(patch, road.b)], half = road.width / 2, lo = near - half, hi = far + half;
+      const dAcross = q.across - p.across, t0 = dAcross ? Math.max(0, Math.min(1, ((dAcross > 0 ? lo : hi) - p.across) / dAcross)) : 0, t1 = dAcross ? Math.max(0, Math.min(1, ((dAcross > 0 ? hi : lo) - p.across) / dAcross)) : 1;
+      if (!dAcross && (p.across < lo || p.across > hi)) continue;
+      if (t1 <= t0 && dAcross) continue;
+      const a0 = p.along + t0 * (q.along - p.along), a1 = p.along + t1 * (q.along - p.along), slant = Math.abs(dAcross) / (Math.hypot(q.along - p.along, dAcross) || 1);
+      const pad = half * Math.min(1 / Math.max(slant, 0.3), 3) + 1;
+      spans.push([Math.min(a0, a1) - pad, Math.max(a0, a1) + pad]);
+    }
+    return spans;
+  };
   // A building is on a road when the road's width reaches its footprint: its half-width toward the road (its frontage or
   // its depth, as it is turned), not its longest side, so a row keeps the buildings a side road only passes by.
   const onRoad = (b: Building) => crosses.some((road) => {
@@ -398,9 +421,13 @@ export function formOf(patch: Patch, crossing: Road[] = [], ground: Patch[] = []
     const front = frontOf(patch);
     for (const side of [-1, 1]) {
       let along = -0.95 * long, n = 0;
+      const blocked = blockedOn(...(side > 0 ? [front, front + kind.row.depth[1]] : [-front - kind.row.depth[1], -front]) as [number, number]);
       while (true) {
         const w = between(rng, kind.row.frontage), d = between(rng, kind.row.depth);
         if (along + w > 0.95 * long) break;
+        // A road crossing here: the row goes on past it.
+        const road = blocked.find(([lo, hi]) => along < hi && along + w > lo);
+        if (road) { along = road[1] + kind.row.gap; continue; }
         // The bridge's landing stays clear on a waterfront.
         if (!(kind.band && Math.abs(along + w / 2) < 14)) push(rowBuilding(patch, `row${side > 0 ? "n" : "s"}${n}`, along + w / 2, side * (front + d / 2), w, d, rng));
         along += w + kind.row.gap; n++;
@@ -414,9 +441,12 @@ export function formOf(patch: Patch, crossing: Road[] = [], ground: Patch[] = []
       let across = front + kind.row.depth[1] + LANE;
       for (let k = 1; across < wide; k++) {
         let along = -0.95 * long, n = 0, placed = 0, deepest = 0;
+        const blocked = blockedOn(...(side > 0 ? [across, across + kind.row.depth[1]] : [-across - kind.row.depth[1], -across]) as [number, number]);
         while (true) {
           const w = between(back, kind.row.frontage), d = between(back, kind.row.depth);
           if (along + w > 0.95 * long) break;
+          const road = blocked.find(([lo, hi]) => along < hi && along + w > lo);
+          if (road) { along = road[1] + kind.row.gap; continue; }
           const b = kind.band && Math.abs(along + w / 2) < 14 ? null : rowBuilding(patch, `row${side > 0 ? "n" : "s"}${k}.${n}`, along + w / 2, side * (across + d / 2), w, d, back);
           if (b) { push(b); placed++; }
           deepest = Math.max(deepest, d); along += w + kind.row.gap; n++;
@@ -476,6 +506,7 @@ const segmentDistance = (p: Point, a: Point, b: Point) => {
 };
 /** Where a street form stands (its road, water and rows; its square and ring; its compound and plaza): no road of the city's runs inside it. */
 function formZone(patch: Patch, p: Point): boolean {
+  if (patch.takes) return false;
   const kind = LANDSCAPES[patch.type], { across } = frameOf(patch, p);
   if (kind.axis || kind.band) return insideBy(patch, p) > 0 && Math.abs(across) < frontOf(patch) + (kind.row?.depth[1] ?? 0) + 2;
   return insideBy(patch, p) > -2 && streetOpen(patch, p);
@@ -494,6 +525,7 @@ function givesWay(landscape: Landscape, road: Road): boolean {
 }
 /** Whether a point is open ground of a street form (the city's fill gives way there): a street's whole ground (its rows are its buildings); a square's ring; a compound and its plaza. */
 function streetOpen(patch: Patch, p: Point): boolean {
+  if (patch.takes) return false;
   const kind = LANDSCAPES[patch.type], { along, across } = frameOf(patch, p), deepest = kind.row?.depth[1] ?? 0;
   if (kind.axis || kind.band) return true;
   if (patch.type === "square") return Math.hypot(along, across) < SQUARE(patch) + kind.back + deepest + 2;
@@ -553,7 +585,10 @@ export function landscapeStyle(landscape: Landscape): FillStyle {
       const width = Math.max(4, Math.sqrt(lot.area) - 2 * kind.back), h = drawHeight(from, Math.max(0.02, LANDSCAPES[from.type].axis || LANDSCAPES[from.type].band ? axisDepth(from, lot.centre) : depthOf(from, lot.centre)), rng);
       // A manifold's heights are its own: no type cap, no peak, no cut for the lot (tall ground has wider plots already).
       const floors = Math.max(1, Math.round((from.manifold ? h : Math.min(h, cap, PEAK, SLENDER * width)) / 3));
-      return { floors, kind: LANDSCAPES[from.type].building(floors), back: kind.back };
+      // A lot of a street that took the ground's own road (an avenue, a crossing) is that street's building: its use drawn
+      // from the street's uses, as a form's row is.
+      const use = owner.takes && kind.uses?.length ? kind.uses[Math.floor(skeletonStream(owner.id, "use", lot.id)() * kind.uses.length)] : undefined;
+      return { floors, kind: LANDSCAPES[from.type].building(floors), back: kind.back, ...(use ? { use } : {}) };
     },
     road: (road, faced) => !givesWay(landscape, road) && (faced || landscape.patches.some((patch) => insideBy(patch, [(road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2]) > -LANDSCAPES[patch.type].soft)),
   };
@@ -629,6 +664,34 @@ export function formsFor(kind: string, ground: MadeGround, min = 0, step = 40): 
     ...(on.waters ? ground.waters.flatMap((water) => along(water.a, water.b, "water")) : []),
     ...(on.plazas ? ground.plazas.map((plaza) => ({ at: [plaza.x, plaza.z] as Point, turn: 0, what: "plaza" })) : []),
   ];
+}
+
+/**
+ * The spots a street that takes the ground's own (config/spawning/street.json `takes`; the user, 2026-11-01) may stand on:
+ * along every road at least `road` m wide (every `step` m, the road's direction its turn), or at every crossing where roads
+ * at least `crossing` m wide meet from two directions or more (a T or a cross; the wider one's direction its turn).
+ */
+export function formsTaking(takes: { road?: number; crossing?: number }, roads: { a: Point; b: Point; width: number; level: string }[], step = 40): Form[] {
+  const forms: Form[] = [];
+  if (takes.road) for (const road of roads.filter((entry) => entry.width >= takes.road!)) {
+    const length = Math.hypot(road.b[0] - road.a[0], road.b[1] - road.a[1]), turn = round(Math.atan2(road.b[1] - road.a[1], road.b[0] - road.a[0])), n = Math.max(1, Math.floor(length / step));
+    for (let k = 0; k < n; k++) forms.push({ at: [round(road.a[0] + ((road.b[0] - road.a[0]) * (k + 0.5)) / n, 1), round(road.a[1] + ((road.b[1] - road.a[1]) * (k + 0.5)) / n, 1)], turn, what: `${road.level} road` });
+  }
+  if (takes.crossing) {
+    // Where wide roads' ends meet: a crossing when they leave it in two directions or more.
+    const ends = new Map<string, { at: Point; ways: { turn: number; width: number; level: string }[] }>();
+    for (const road of roads.filter((entry) => entry.width >= takes.crossing!)) for (const [p, q] of [[road.a, road.b], [road.b, road.a]] as [Point, Point][]) {
+      const key = `${Math.round(p[0] / 4)},${Math.round(p[1] / 4)}`, entry = ends.get(key) ?? { at: p, ways: [] };
+      entry.ways.push({ turn: Math.atan2(q[1] - p[1], q[0] - p[0]), width: road.width, level: road.level }); ends.set(key, entry);
+    }
+    for (const { at: p, ways } of ends.values()) {
+      const across = ways.some((a) => ways.some((b) => Math.abs(Math.sin(a.turn - b.turn)) > 0.7));
+      if (ways.length < 3 || !across) continue;
+      const wide = [...ways].sort((a, b) => b.width - a.width)[0], levels = [...new Set(ways.map((way) => way.level))].join(" and ");
+      forms.push({ at: [round(p[0], 1), round(p[1], 1)], turn: round(wide.turn), what: `crossing of ${levels} roads` });
+    }
+  }
+  return forms;
 }
 
 /** The question Jev answers for a place: which landscape its ground is, from what the analysis knows of it. */

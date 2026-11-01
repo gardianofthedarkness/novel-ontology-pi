@@ -50,7 +50,7 @@ export interface FillStyle {
   roadWidth?(superBlock: { centre: Point; pts: Point[] }): number;
   lotArea(block: { centre: Point; pts: Point[] }): number | null;
   keep?(lot: Lot): boolean;
-  building(lot: Lot, rng: () => number): { floors: number; kind: string; back: number } | null;
+  building(lot: Lot, rng: () => number): { floors: number; kind: string; back: number; use?: string } | null;
   road?(road: Road, faced: boolean): boolean;
 }
 export interface Fabric { roads: Road[]; blocks: { id: string; pts: Point[]; area: number }[]; lots: Lot[]; buildings: Building[] }
@@ -202,14 +202,14 @@ function withinCircle(a: Point, b: Point, r: number): [Point, Point] | null {
 }
 
 /** A lot's generated building: set back from its edges, facing its road, as tall and of the kind its style says. */
-function buildingOn(lot: Lot, poly: Poly, { floors, kind, back }: { floors: number; kind: string; back: number }): Building | null {
+function buildingOn(lot: Lot, poly: Poly, { floors, kind, back, use }: { floors: number; kind: string; back: number; use?: string }): Building | null {
   const inner = inset(poly, () => 2 * back);
   if (inner.pts.length < 3) return null;
   const u = norm(sub(lot.frontage.b, lot.frontage.a)), v: Point = [-u[1], u[0]], us = inner.pts.map((q) => dot(q, u)), vs = inner.pts.map((q) => dot(q, v));
   const w = Math.max(...us) - Math.min(...us), d = Math.max(...vs) - Math.min(...vs);
   if (w < 4 || d < 4) return null;
   const cu = (Math.max(...us) + Math.min(...us)) / 2, cv = (Math.max(...vs) + Math.min(...vs)) / 2;
-  return { lot: lot.id, x: u[0] * cu + v[0] * cv, z: u[1] * cu + v[1] * cv, w, d, angle: Math.atan2(u[1], u[0]), floors, kind };
+  return { lot: lot.id, x: u[0] * cu + v[0] * cv, z: u[1] * cu + v[1] * cv, w, d, angle: Math.atan2(u[1], u[0]), floors, kind, ...(use ? { use } : {}) };
 }
 
 /**
