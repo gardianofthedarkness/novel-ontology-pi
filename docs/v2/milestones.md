@@ -296,6 +296,34 @@ logged spawn; the world builds in about today's time.
 - **Paid by mistake:** a test run through the CLI asked Jev twice (a street's kind and height) before it stalled. Test
   runs go through a stand-in client now.
 
+**Jev run (2026-11-01, on the host, `--spawn --from street --run`; 48 paid calls, 318,070 input tokens):**
+- **Streets:**
+  - Jev typed 十字路口 a crossing. It spawned one in 第六学区 on a crossing of arterial roads, and 柏油马路 shares it
+    (reshaped 16 → 26 m).
+  - The 大道 took avenue slots laid on arterial roads.
+  - One move at the level's end (9,319 → 9,170 tie·m).
+  - The street forms and the city's lots on streets gave 1,223 building slots.
+- **Floating objects:**
+  - the underground passage, its top 6 m under the street, 6 m thick;
+  - the deck, 3 m up and 6 m thick, moved into 第七学区;
+  - the helipad and the runway, each 100 m up and 1 m thick, moved into 第六学区 and 第十五学区;
+  - the sky garden, 25 m up and 25 m thick, moved into 第六学区.
+
+  All 5 are nominated in the universe.
+- **Buildings:**
+  - 45 took 31 lots: 3 named borrowed for good (the school, the bar, the office on 大道), 40 shared, 2 spawned (a cinema
+    on a station front's shop lot, a car park).
+  - 6 moves at the level's end.
+  - 4 have no use the profile knows.
+  - The level asks nothing and takes seconds.
+- **Density in the city:** an avenue 87%, a centre 97%, a square 95%, a station front 111%, a shopping street 59%, an
+  alley 55%, a residential street 39%; 60% overall. The page is 2.57 MB.
+- **Seen in the pictures, fixed after (no model call; the building level run again):**
+  - shapes were drawn at their markers' canvas spots, not where terrain kept them: the sky garden stood over an
+    industrial district;
+  - two raised platforms moved onto one district's middle (now the nearest spot inside it, at the next street run);
+  - a city lot's building slot had no street in its id.
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)
