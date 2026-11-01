@@ -362,6 +362,17 @@ it happened in, in order: a manifold spawned (its kind, parent, vector, radius, 
 height unified (from, to; the parent's average too), and a place borrowing or sharing it. A book's map is the map at the end
 of the book before it with that book's log applied; `--from <level>` drops the book's entries at that level and under.
 
+### 8.9 Heights asked as a standard plus an offset; floating objects (the user's ideas, 2026-11-01, for the building level)
+
+- **A standard and an offset.** Every type at every level of the tree has a minimum standard height (its default). Jev is
+  asked how many metres to add to it, with +0 always among the options: positive for what stands above the ground, negative
+  for what lies under it. The decided height is the standard plus the offset; unification (§8.6) works on it as before.
+- **Floating objects.** Some buildings neither stand on the ground nor fill a manifold: an underground cavern, a commercial
+  centre on a raised ring, a floating platform. Each is asked twice, how far it is from the ground and how thick it is.
+- **Inventions are nominated.** Something that fits no category, placed as a shape, is a nominated object whatever the text
+  calls it: kept with its id and location in the map for every later book.
+- **Outside the manifolds.** Floating objects and shapes take no part in a manifold's average or in unification.
+
 ### 8.7 Decisions (the user, 2026-11-01)
 
 1. Across books: yes, a later book's spawn may squeeze an earlier book's manifolds and re-unify its heights, the earlier

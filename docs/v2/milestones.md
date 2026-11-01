@@ -121,6 +121,11 @@ today; tie·m against run 11's; every street inside its district.
 - [ ] Street slots spawn building slots by `street.json` (density × area, uses by share)
 - [ ] Named buildings borrow a slot of their use in their street (use from the language profile, else Jev); unnamed ones share
 - [ ] The landscape fill builds the slots instead of a fill of its own
+- [ ] Heights asked as the type's standard plus Jev's offset (+0 always an option; negative under the ground), at every
+      level of the tree (design §8.9; the user's idea): it changes every height question, so it may come with M3 instead
+- [ ] Floating objects (an underground cavern, a raised ring, a floating platform): asked their distance from the ground and
+      their thickness; inventions placed as shapes nominated whatever the text calls them; none of them in a manifold's
+      average or in unification (§8.9)
 
 **Pass:** buildings a street within 10% of density × area; every named building on a lot of its use in its street, or a
 logged spawn; the world builds in about today's time.
