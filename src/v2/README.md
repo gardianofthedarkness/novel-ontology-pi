@@ -8,6 +8,7 @@ The guide from concept to design to code: [docs/v2/README.md](../../docs/v2/READ
 | --- | --- | --- |
 | `extraction/` | Extraction | The reading flow: the book's blocks (`base`), listing and typing, EM (`em`), EM² (`roles`), facts, story time, places in EM (`placeEm`), the place recommender, spatial words, the world script (`script`), the canon a world-first workspace reads (`canon`), sampling pools |
 | `context/` | Both | The context engine (`engine`) and its modes: reading, places, terrain; the zoom engine (`zoom`: sizing by pins, placement, settling, framing) |
+| `spawning/` | World engine | Borrowing and spawning by type: the configurations (`config`) and the slots (`slots`: which slot each mention takes, under the characters'-travel objective; docs/v2/borrow-and-spawn.md) |
 | `rules/` | Both | What code decides without a model: the rules catalogue (`index`), the language profile (`language`), the place, presence and typing rules |
 | `concepts.ts` | Both | The concept map: every concept, its stage and layer, where it lives and where it is designed (`test/concepts.test.ts` keeps it true) |
 

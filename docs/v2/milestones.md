@@ -10,7 +10,7 @@ call); a real Jev run only when the user asks.
 | | Milestone | Status |
 | --- | --- | --- |
 | M0 | Design, draft configurations, configuration test | done 2026-11-01, every decision taken (design §7) |
-| M1 | Slots, borrowing and spawning in code; the bound tested; run from a level | |
+| M1 | Slots, borrowing and spawning in code; the bound tested; run from a level | core done 2026-11-01 (`src/v2/spawning/`, 7 tests); wiring into terrain spawning next |
 | M2 | City level on vol 1 | |
 | M3 | District level on vol 1 | |
 | M4 | Street level on vol 1 | |
@@ -30,13 +30,15 @@ call); a real Jev run only when the user asks.
 
 ## M1 — Slots, borrowing and spawning in code (no model call)
 
-- [ ] Load the configurations through a resolver (defaults only for now; the seam for M8); spawn a parent's slots (a range picked once by a seed, kept)
-- [ ] The rules: a name takes a slot of its own; an unnamed mention shares, never with a mention of its own scene; spawn only as §2.4 allows; a place whose holder is higher up borrows under that holder (§2.5)
-- [ ] The level's energy (§4.2) on today's settle, with the spare term γ and the cross-parent weight
-- [ ] Greedy in narrative order, the swap pass, then settle (§4.3)
+- [x] Load the configurations through a resolver (defaults only for now; the seam for M8); spawn a parent's slots (a range picked once by a seed, kept): `src/v2/spawning/config.ts`
+- [x] The rules (`admissible` in `src/v2/spawning/slots.ts`): a name takes a slot of its own; an unnamed mention shares, never with a mention of its own scene; spawn only as §2.4 allows; a place whose holder is higher up borrows under that holder (§2.5)
+- [x] The level's choice energy: travel (cross-parent ties at 0.3) and pins, an unplaced slot costed where the engine would place it
+- [ ] Positions: today's settle with the spare term γ, over this book's slots
+- [x] Greedy in narrative order, then moves (a name to a better free slot, two names exchanging, an unnamed mention to a better share): `chooseSlots`
+- [ ] One mention at a time for the engine's step mode (borrow after each kind answer; the moves when the level ends)
 - [ ] Slots in `terrain.json` and the universe's registry: type, owner name, sharers by book and scene (so a damaged share can split, §2.8), which configuration layer, kept offset
 - [ ] `novel sim terrain <dir> --spawn [--from city|district|street|building]`, beside today's path until M7
-- [ ] Tests: the bound (§3) over 20 synthetic books, names exclusive and permanent across books, same-scene unnamed apart, unnamed shares and damage cleared at a new book, the same order gives the same world
+- [x] Tests (`test/spawning-slots.test.ts`): the bound (§3) over 20 synthetic books (240 unnamed mentions: 14 districts, flat once names stop), names exclusive and permanent across books, same-scene unnamed apart, unnamed shares and damage cleared at a new book, the same order gives the same world
 
 **Pass:** tests green; today's terrain path unchanged (its tests and a stand-in run as before).
 
