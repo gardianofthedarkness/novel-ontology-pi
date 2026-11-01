@@ -371,6 +371,24 @@ bge-small-zh-v1.5; 100 paid calls, 632,961 input tokens):**
       Stand-in on a copy of the host's state (the real local embeddings): the search decided 43 of 49 buildings, Jev was
       asked 6 (office-like names); 57 questions in all, from 100.
 
+**The building level with Jev, the search deciding when sure (2026-11-01, on the host at 5599c6c, `--spawn --from
+building --run`; 58 questions, 54 paid and 4 answered from the cache of the earlier run; 277,964 input and 6,507 output
+tokens for the 54):**
+- **Types:** the search decided 43 of 49, Jev 6, as in the stand-in. Jev's six: a real-estate office (豚草不动产写字楼),
+  three mixed-use buildings (低层办公, two 复合大楼), a hospital (医疗机构), and the underground car park as an
+  underground structure, a cavern 6 m down. Each was the search's first but one (低层办公, its third).
+- **Heights on the one scale:** 19 buildings at 1 floor, 4 at 2, 12 at 5, 1 at 8, 1 at 20, 2 at 60, 5 at 100, and 5
+  under the street. Read from the text: the two fifty-storey towers at 60 floors, the high-rise tower flats at 100. They
+  stand as skyscrapers over the city's fill.
+- **Seen, not yet changed:**
+  - Where its scenes say little, Jev's answer spreads over the slices and the likeliest is often 1 floor: 高层大厦
+    (scene 40), whose scene is on its roof, has 0.36 on 1 floor and 0.20 on 100, and is drawn at 1 floor. Every such
+    low answer has a height confidence under 0.4.
+  - Unnamed buildings share a lot of their use, never two of one scene. Six office-like ones from six scenes share one
+    station lot, at 1 to 60 floors, and the lot is drawn at their mean, 12 floors, so the fifty-storey tower is lost.
+  - 12 of the 49 are shops, restaurants and a cinema, each on a lot of its own and asked a height.
+  - A shape's site had no `offered` list; it does now.
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)

@@ -758,7 +758,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           }
           const top = bottom !== null ? (height < 0 ? height : height + thick) : height, span2 = bottom !== null ? { bottom, thickness: thick } : {};
           terrain.shapes[part.id] = { kind: shape, box: lot.box, ...(top !== null ? { top } : {}), ...span2, ...(lot.floating ? {} : { push: true }) };
-          terrain.sites[part.id] = { label: part.label, scale: 'building', kind: shape, shape, parent: lot.street, parentLabel: name(lot.street), toward: lot.toward, size: lot.size, turn: lot.turn, box: lot.box, ...(top !== null ? { top } : {}), ...span2, by: 'shape', ...(type ? { type } : {}), typeBy: sure ? 'search' : 'jev', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
+          terrain.sites[part.id] = { label: part.label, scale: 'building', kind: shape, shape, parent: lot.street, parentLabel: name(lot.street), toward: lot.toward, size: lot.size, turn: lot.turn, box: lot.box, ...(top !== null ? { top } : {}), ...span2, by: 'shape', ...(type ? { type } : {}), typeBy: sure ? 'search' : 'jev', offered: found.map(entry => entry.id), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
           if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
           registry.shapes ??= {}; registry.shapes[part.id] = { label: part.label, book: bookId, kind: shape, box: lot.box, ...(top !== null ? { top } : {}), ...span2 };
           logMap({ level: 'building', what: 'nominate', place: part.id, kind: shape, box: lot.box, ...span2 });
