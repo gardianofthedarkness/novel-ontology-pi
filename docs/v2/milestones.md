@@ -441,6 +441,22 @@ would weigh the new slices itself.
   cinemas on malls' upper floors; a patisserie in a station. The darts bar, set in a scene, stays a building. The ramen
   shop Jev had put under the street stands at its host's foot: no sentence of it says 地下.
 
+**The building level with Jev on all of it (2026-11-01, on the host at 05ca519; the minimum gate, tower types, the text's
+measures, composite buildings, tall buildings and wide streets; 47 paid calls, 243,935 input and 5,126 output tokens,
+from 58 and 100 before):**
+- **Types:** the search decided 43 of 49, Jev 6. 11 tenants joined hosts, asked nothing: the scene-3 convenience store
+  under the street in the subway station; five shops at an office's foot; both cinemas on malls' upper floors.
+- **The text's measures, taken:** both fifty-storey towers office towers at 50 floors (Jev 99% and 91% sure); the
+  residential tower at 44 floors.
+- **Towers:** 高层大厦 an office tower at 100 floors; the minimum held every office at 3 floors or more.
+- **Wrong:**
+  - A 44-floor measure in one sentence naming three buildings was offered to each, and the "low-rise offices" took it
+    (75% sure). The measure stands nearest one of them; it should be offered to that one only.
+  - Answers Jev was unsure of still land far out: 大楼 (scene 2) at 100 floors (11% sure), the real-estate office tower at
+    1 floor (17%).
+- **The world:** 89 towers grown, 120 low buildings cleared, 367 roads widened; 30 above 100 m still over 8:1; the
+  tallest 849 m (the CBD's tail).
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)
