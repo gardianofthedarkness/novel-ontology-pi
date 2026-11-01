@@ -13,7 +13,7 @@ call); a real Jev run only when the user asks.
 | M1 | Slots, borrowing and spawning in code; the bound tested; run from a level | done 2026-11-01: `--spawn`, `--from`; stand-in on vol 1 through streets |
 | M2 | City level on vol 1, as one city of manifolds with a topology | done 2026-11-01: stand-in and Jev runs (2 paid calls) |
 | M3 | District level on vol 1 | done 2026-11-01: stand-in and Jev runs (6 paid calls) |
-| M4 | Street level on vol 1 | |
+| M4 | Street level on vol 1 | done 2026-11-01: stand-in and Jev runs (47 paid calls); sharing to decide |
 | M5 | Building level on vol 1 | |
 | M6 | Growth across books | |
 | M7 | A real run; pools removed | |
@@ -175,11 +175,32 @@ under the city's size.
 
 ## M4 — Street level
 
-- [ ] Every district, spare ones too, spawns its street slots by `district.json`
-- [ ] Vol 1's 21 street mentions (18 unnamed) borrow; unnamed ones share across scenes; streets held only by a city borrow among all its districts' slots
+- [x] Every district, spare ones too, spawns its street slots by `district.json`
+- [x] Vol 1's street mentions (18, all unnamed now that pools are gone) borrow; unnamed ones share across scenes; streets
+      held only by a city borrow among all its districts' slots
+- [x] Every placed manifold an embedded place, its ground a patch of the city's at the sum of the vectors down its chain
+- [x] Ties to a place above the level count as the distance to its area (nothing inside it)
 
 **Pass:** street areas within the bound; how many avenues the four 大道 became, and why; streets on their forms as
 today; tie·m against run 11's; every street inside its district.
+
+**Stand-in (2026-11-01):** the 18 streets on 9 slots; 2 moves at the level's end (travel 10,358 → 9,100 tie·m); 68 spares;
+builds about 30 s. Two faults found and fixed on the way: a street placed inside a district took that district for an
+obstacle and fell back to its centre (five stacked on one point, one build of 738 s); and `--from` kept slots placed by
+borrowing (only a parent's topology layout should be kept).
+
+**Jev run (2026-11-01, `--spawn --from street --until street --run`; 47 paid calls, 320,161 input tokens):**
+- 13 streets borrowed 6 slots: the four 大道 (scenes 12, 26, 28, 34) with 柏油马路 and 整条街道 became **one avenue** in
+  第六学区 (a CBD); 广场 26 and 34 one square in 第六学区; 十字路口 and 人行步道 one square in 第十五学区; 站前广场 a station
+  in a spare dwelling district; 小巷 an alley in 第七学区; 大桥 a waterfront in 第六学区, spawned (no district of 学园都市
+  has one in its configuration). The other 5 (地下通道 a cut, 6 m down; 平台, 停机坪, 飞机跑道, 空中庭院 platforms) Jev
+  boxed as shapes, outside the slots, as before. 65 spares placed; 3 of 71 street slots a little past their district's
+  edge; no move at the level's end.
+- Seen: one city, its districts' and streets' names inside it.
+- To decide: sharing has no limit, so six mentions of one kind piled onto one avenue (the risk of design §4.4: sharing
+  makes travel free); Jev put the alley 12 m under the street (the gate allows the street level under the street); a shared
+  street takes its first sharer's height (35 m here, though two sharers said 20 m); a district does not unify to its streets
+  (only a city has its open ground kept).
 
 ## M5 — Building level
 
