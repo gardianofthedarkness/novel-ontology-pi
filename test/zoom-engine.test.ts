@@ -116,3 +116,43 @@ test("room for one more: a city with no box of its own grows round its parts unt
   assert.deepEqual(roomFor({ box: [0, 0, 100, 100], by: "kept" }, [first], [600, 600]).box, [0, 0, 100, 100], "a kept box is as it was kept");
   assert.ok(roomFor(span, [first], [600, 600], 1000).box[2] - roomFor(span, [first], [600, 600], 1000).box[0] <= 1000.1, "never past its level's most");
 });
+
+test("settling: one objective for an area's placed parts; each move lowers it, the sweeps end, clashes are never crossed", async () => {
+  const { settle } = await import("../src/v2/context/zoom.js");
+  const parent: Box = [0, 0, 1000, 1000];
+  // A one-pass order left two tied streets apart: the first placed before the second existed.
+  const movers = [
+    { id: "a", size: [100, 60] as [number, number], turn: 0, at: [150, 150] as [number, number], pin: [150, 150] as [number, number] },
+    { id: "b", size: [100, 60] as [number, number], turn: 0, at: [850, 850] as [number, number], pin: [850, 850] as [number, number] },
+    { id: "c", size: [100, 60] as [number, number], turn: 0, at: [500, 150] as [number, number], pin: [500, 150] as [number, number] },
+  ];
+  const ties: Record<string, number> = { "a|b": 6, "b|c": 1 }, tie = (x: string, y: string) => ties[[x, y].sort().join("|")] ?? 0;
+  const wall = { id: "w", box: [400, 400, 600, 600] as Box, at: [500, 500] as [number, number] };
+  const out = settle(movers, [wall], tie, (x, y) => (y === "w" ? "clash" : "adjoin"), parent);
+  assert.ok(out.sweeps.length >= 1 && out.sweeps.length < 12, `the sweeps end: ${out.sweeps.length}`);
+  assert.equal(out.overlaps[0], 0, "a feasible start");
+  assert.ok(out.objective.every((e, i) => i === 0 || e < out.objective[i - 1]), `from a feasible start the objective falls every sweep: ${out.objective}`);
+  assert.ok(out.energy.every((e, i) => i === 0 || e <= out.energy[i - 1]), `never rising: ${out.energy}`);
+  assert.ok(out.energy.at(-1)! < out.energy[0] * 0.5, `the tied pair drawn together: ${out.energy[0]} → ${out.energy.at(-1)}`);
+  for (const m of out.movers) { const [x, z] = m.at; assert.ok(!(x + 50 > 400 && x - 50 < 600 && z + 30 > 400 && z - 30 < 600), `never over the clash: ${m.id} at ${m.at}`); }
+  assert.deepEqual(settle(out.movers, [wall], tie, (x, y) => (y === "w" ? "clash" : "adjoin"), parent).sweeps, [], "settled stays settled");
+});
+
+test("settling takes a form of its kind when near, turned along it (what is there first, inside the one objective)", async () => {
+  const { settle } = await import("../src/v2/context/zoom.js");
+  const road = { at: [560, 520] as [number, number], turn: Math.PI / 4, what: "arterial road" };
+  const out = settle([{ id: "a", size: [200, 80], turn: 0, at: [500, 500], pin: [500, 500], onto: [road] }], [], () => 0, () => "adjoin", [0, 0, 1000, 1000]);
+  assert.deepEqual(out.movers[0].at, [560, 520]);
+  assert.equal(out.movers[0].on, true);
+  assert.ok(Math.abs(out.movers[0].turn - Math.PI / 4) < 1e-9);
+  const far = settle([{ id: "a", size: [200, 80], turn: 0, at: [500, 500], pin: [500, 500], onto: [{ ...road, at: [950, 950] }] }], [], () => 0, () => "adjoin", [0, 0, 1000, 1000]);
+  assert.equal(far.movers[0].on ?? false, false, "a form further than its own length is not worth its pin");
+});
+
+test("settling clears an overlap the objective cannot price first, whatever it costs", async () => {
+  const { settle } = await import("../src/v2/context/zoom.js");
+  const wall = { id: "w", box: [400, 400, 600, 600] as Box, at: [500, 500] as [number, number] };
+  const out = settle([{ id: "a", size: [100, 60], turn: 0, at: [500, 500], pin: [500, 500] }], [wall], () => 0, () => "clash", [0, 0, 1000, 1000]);
+  assert.deepEqual([out.overlaps[0], out.overlaps.at(-1)], [1, 0]);
+  assert.ok(out.objective.at(-1)! > out.objective[0], "it moves off its pin to clear it");
+});

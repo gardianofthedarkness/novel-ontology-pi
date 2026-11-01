@@ -588,12 +588,17 @@ export async function strandDemo(novelDir, options) {
     }
     const round = value => Math.round(value * 10) / 10, depthOf = id => { let depth = 0; for (let at = canvas.places[id]; at?.parent; at = canvas.places[at.parent]) depth++; return depth; };
     const nodes = [];
+    // On the terrain stage (a plain map, §2.0.22, the user's call), each pin says whether it is settled: an area once terrain
+    // kept it (by the program or by Jev's box for a shape), a building once it stands (its own grid) or dwells in a building
+    // the ground made of its use; the rest are open, waiting for Jev, and turn as the run settles them.
+    const keptHere = id => { const site = terrain?.sites?.[id]; return !!site && !site.empty && !!(site.kind || site.shape || site.ground); };
+    const statusOf = (id, unit) => (!options.plain ? null : unit && ['building', 'room'].includes(unit.kind) ? (unit.dwells || ownGrids.has(id) ? 'done' : 'open') : keptHere(id) ? 'done' : 'open');
     for (const place of Object.values(canvas.places)) {
       const [x, z] = C.worldOf(canvas, place.id), grid = place.units.find(unit => unit.id === `${place.id}#grid`);
       // Its kept size (terrain spawning's box), for framing it when it is clicked (the zoom engine's extent).
       const span = place.pool ? poolExtentOf(place.id) : null, kept = span ? [Z.widthOf(span), Z.depthOf(span)] : terrain?.sites?.[place.id]?.size ?? null;
-      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(kept ? { size: kept } : {}), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.pool ? { pool: place.pool } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}) });
-      for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(terrain?.sites?.[unit.id]?.size ? { size: terrain.sites[unit.id].size } : {}), ...(unit.sampled && !unit.dwells ? { sampled: unit.sampled } : {}), ...(unit.dwells ? { dwells: unit.dwells } : {}), ...(unit.forJev ? { forJev: true } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
+      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(kept ? { size: kept } : {}), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.pool ? { pool: place.pool } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}), ...(!place.pool && statusOf(place.id) ? { status: statusOf(place.id) } : {}) });
+      for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(terrain?.sites?.[unit.id]?.size ? { size: terrain.sites[unit.id].size } : {}), ...(unit.sampled && !unit.dwells ? { sampled: unit.sampled } : {}), ...(unit.dwells ? { dwells: unit.dwells } : {}), ...(unit.forJev ? { forJev: true } : {}), ...(statusOf(unit.id, unit) ? { status: statusOf(unit.id, unit) } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
     }
     return { nodes, canvas };
   };

@@ -372,3 +372,20 @@ the street level.
 - The frames: 1440×900 for overviews and 1024×1024 for maps, or smaller to save Jev's tokens?
 - Basic shapes: plateau, basin, hill, platform, cut, ramp. More, or fewer, to start?
 - "Overall really big": zoom when the box takes more than a quarter of the overview, or another share?
+
+### 5.10 The scenes a place is in (the user's calls, 2026-11-01)
+
+Run 7's height question for 第十五学区 carried the city's facts, its weather and every building in it, and two sentences of
+the district: the place tree holds nothing under it, so every source ranked by the tree fell back to the city. The user:
+put the scenes' raw text in the prompt; rank them by the question asked; and where nothing in the graph or the scenes'
+surroundings is about the place itself, put nothing in its stead.
+- `scenes`: the scenes set in the place (or in a place inside it), naming it, or an unnamed place's own scene, whole, the
+  best answer first: an unnamed place's own scene, then those set in it, then by its mentions and the question's words
+  beside them (the language profile's `questionWords`: floors and towers for its height, streets and squares for its kind,
+  near and across for where it lies), the rest of the scene a little. At most six, cut whole over 40,000 characters.
+- `facts`: the facts the graph holds about the place itself; `environment`: the cards of scenes set in it or naming it;
+  `standing`: what the tree holds in it. Each left out when it has none; never the holder's or the city's.
+- Run 7's questions recomposed with no model call: 第十五学区's height question now carries the scene telling its complex
+  building (shops and cinema below, offices, flats above, the chairman's home on top) first, then the scene naming it in
+  passing (14,281 characters, no facts or surroundings: none are about it); an unnamed street, its own scene alone.
+

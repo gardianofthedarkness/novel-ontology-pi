@@ -25,6 +25,11 @@ export interface LanguageRules {
   buildingUses: [RegExp, BuildingUse][];
   /** What an underground space is, by the words of its name (地下停车场: a car park), the most specific first. */
   undergroundKinds: [RegExp, string][];
+  /**
+   * The words that say a sentence answers a terrain question about a place (terrain modes rank a place's scenes by them):
+   * how high it stands, what kind of ground it is, where it lies. Global patterns: every match counts.
+   */
+  questionWords: { height: RegExp; ground: RegExp; where: RegExp };
 }
 /** What a building is used for: the kinds a street's buildings come in (landscape.ts STREET_USES), and a building's own. */
 export type BuildingUse = "convenience" | "shop" | "cafe" | "restaurant" | "bar" | "arcade" | "bank" | "mall" | "department" | "office" | "hotel" | "apartment" | "dormitory" | "house" | "school" | "hospital" | "clinic" | "station" | "government" | "church" | "warehouse" | "workshop" | "lab" | "parking" | "cinema";
@@ -58,6 +63,11 @@ export const ZH: LanguageRules = {
     [/隧道|地铁|轨道/, "tunnel"], [/下水道|排水|雨水|调节池|水道/, "channel"], [/研究所|实验室|研究/, "lab"], [/基地|军事|军用/, "military"],
     [/地下室|地库|地下[一二三四五六七八九十\d]+层/, "basement"],
   ],
+  questionWords: {
+    height: /[一二三四五六七八九十百千\d]+[层楼]|高楼|高层|超高|摩天|大厦|塔|屋顶|楼顶|顶层|最上层|俯瞰|仰望|高耸|矮|平房|地下|米高|[十百]米|天际|停机坪|玻璃幕墙/g,
+    ground: /街|路|广场|商店|店|车站|公园|住宅|公寓|大楼|学校|工厂|港|河|桥|闹市|繁华|商业|办公|宿舍|森林|山|田|仓库|市场|购物/g,
+    where: /旁边|附近|对面|隔壁|角落|尽头|中心|边缘|穿过|沿着|走到|来到|离开|距离|公里|东|西|南|北/g,
+  },
 };
 
 /** The language the reading is in. */

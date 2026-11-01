@@ -259,3 +259,66 @@ export function placeArea(frame: Frame, parent: Box | null, size: [number, numbe
   }
   return laid && (!best || laid.cost <= best.cost + (ONTO_REACH * Math.max(size[0], size[1])) / frame.half) ? laid : best;
 }
+
+/**
+ * Settling (docs/v2/world-engine-v2.md §2.0.22, the user's go-ahead after the placement handout): the areas the program
+ * placed in one area move together under ONE objective, in metres and ties, so each move lowers it and the sweeps stop:
+ *   E = Σ t·|x_p − x_q| (placed pairs) + Σ t·|x_p − x_f| (fixed) + λ Σ |x_p − pin_p| + μ Σ ov(B_p, B_q) (pairs that may
+ *       adjoin) − Σ ρ_p [p on a form of its kind],  ρ_p = max(w_p, d_p)·(W_p + λ)  (one own length, as ONTO_REACH).
+ * Each mover in turn goes to the least of its own part of E over the grid, its forms and where it stands, only when that
+ * is more than ε less: E is an exact potential, so no move undoes another and the sweeps end.
+ */
+export const SETTLE = { lambda: 1.5, mu: 200, cells: 64, sweeps: 12, epsilon: 0.5 };
+/** An area the sweeps may move: its size (long side first), its turn, where it stands and its pin, the forms of its kind. */
+export interface Mover { id: string; size: [number, number]; turn: number; at: [number, number]; pin: [number, number]; onto?: Onto[]; on?: boolean }
+/** An area that stays (a shape Jev boxed, a place reused, another branch of the tree): its box and its middle. */
+export interface Fixed { id: string; box: Box; at: [number, number] }
+/** How two areas may lie: not over each other, over each other by at most CROWDED of the smaller, or anyhow (underground). */
+export type Relation = "clash" | "adjoin" | "free";
+export interface SettleMove { id: string; from: [number, number]; to: [number, number]; turn: number; on: boolean }
+export interface Settled { movers: Mover[]; energy: number[]; objective: number[]; overlaps: number[]; sweeps: SettleMove[][] }
+export function settle(start: Mover[], fixed: Fixed[], tie: (a: string, b: string) => number, relation: (a: string, b: string) => Relation, parent: Box, options = SETTLE): Settled {
+  const movers = start.map((m) => ({ ...m, at: [m.at[0], m.at[1]] as [number, number] })), half = Math.max(widthOf(parent), depthOf(parent)) / 2;
+  const [cx, cz] = middleOf(parent), step = (2 * half) / options.cells, boxOf = (m: Mover) => turnedBox(m.at, m.size, m.turn);
+  const dist = (a: [number, number], b: [number, number]) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const energy = () => { let e = 0; movers.forEach((p, i) => { for (const q of movers.slice(i + 1)) e += tie(p.id, q.id) * dist(p.at, q.at); for (const f of fixed) e += tie(p.id, f.id) * dist(p.at, f.at); }); return Math.round(e); };
+  const within = ([x, z]: [number, number]) => x >= parent[0] && x <= parent[2] && z >= parent[1] && z <= parent[3];
+  // The whole objective (an infeasible start counts its overlaps too, so the sweeps that clear them show).
+  const rewardOf = (p: Mover) => Math.max(p.size[0], p.size[1]) * ([...movers, ...fixed].filter((o) => o.id !== p.id).reduce((s, o) => s + tie(p.id, o.id), 0) + options.lambda);
+  const objective = () => {
+    let e = energy();
+    movers.forEach((p, i) => {
+      e += options.lambda * dist(p.at, p.pin) - (p.on ? rewardOf(p) : 0);
+      for (const o of [...movers.slice(i + 1).map((m) => ({ id: m.id, box: boxOf(m) })), ...fixed]) if (relation(p.id, o.id) === "adjoin") e += options.mu * overlapShare(boxOf(p), o.box);
+    });
+    return Math.round(e);
+  };
+  // What the objective cannot price: a mover over a place it may not share, or mostly over one it may only adjoin. A start
+  // with any is cleared first, whatever the objective pays for it.
+  const overlapsNow = () => movers.reduce((sum, p, i) => sum + [...movers.slice(i + 1).map((m) => ({ id: m.id, box: boxOf(m) })), ...fixed].filter((o) => { const r = relation(p.id, o.id); return (r === "clash" && overlaps(boxOf(p), o.box)) || (r === "adjoin" && overlapShare(boxOf(p), o.box) > CROWDED); }).length, 0);
+  const energies = [energy()], objectives = [objective()], overlapCounts = [overlapsNow()], sweeps: SettleMove[][] = [];
+  for (let sweep = 0; sweep < options.sweeps; sweep++) {
+    const moves: SettleMove[] = [];
+    for (const p of movers) {
+      const others = [...movers.filter((m) => m !== p).map((m) => ({ id: m.id, box: boxOf(m), at: m.at })), ...fixed];
+      const clashes = others.filter((o) => relation(p.id, o.id) === "clash").map((o) => o.box), crowds = others.filter((o) => relation(p.id, o.id) === "adjoin").map((o) => o.box);
+      const tied = others.map((o) => ({ at: o.at, ties: tie(p.id, o.id) })).filter((t) => t.ties > 0), weight = tied.reduce((s, t) => s + t.ties, 0);
+      const reward = Math.max(p.size[0], p.size[1]) * (weight + options.lambda);
+      const cost = (at: [number, number], turn: number, on: boolean): number | null => {
+        if (!within(at)) return null;
+        const box = turnedBox(at, p.size, turn);
+        if (clashes.some((c) => overlaps(box, c)) || crowds.some((c) => overlapShare(box, c) > CROWDED)) return null;
+        return tied.reduce((s, t) => s + t.ties * dist(at, t.at), 0) + options.lambda * dist(at, p.pin) + options.mu * crowds.reduce((s, c) => s + overlapShare(box, c), 0) - (on ? reward : 0);
+      };
+      const here = cost(p.at, p.turn, !!p.on);
+      let best = { at: p.at, turn: p.turn, on: !!p.on, cost: here ?? Infinity };
+      const consider = (at: [number, number], turn: number, on: boolean) => { const c = cost(at, turn, on); if (c != null && c < best.cost - options.epsilon) best = { at, turn, on, cost: c }; };
+      for (let j = 0; j < options.cells; j++) for (let i = 0; i < options.cells; i++) consider([round(cx - half + (i + 0.5) * step), round(cz - half + (j + 0.5) * step)], 0, false);
+      for (const form of p.onto ?? []) consider([round(form.at[0]), round(form.at[1])], form.turn, true);
+      if (best.at !== p.at) { moves.push({ id: p.id, from: p.at, to: best.at, turn: best.turn, on: best.on }); p.at = best.at; p.turn = best.turn; p.on = best.on; }
+    }
+    if (!moves.length) break;
+    sweeps.push(moves); energies.push(energy()); objectives.push(objective()); overlapCounts.push(overlapsNow());
+  }
+  return { movers, energy: energies, objective: objectives, overlaps: overlapCounts, sweeps };
+}

@@ -884,6 +884,32 @@ conflicts, the style and the details, and the heights and every 3D question are 
   every build, on the nearest road of its kind in its pool's base ground as it is then, within its own length and clear
   of the members standing, turned along it; with none, it stays as kept. Its own road (an alley's lane, an avenue's
   boulevard) then runs where that road ran, from one road of the fabric to the next.
+### 2.0.22 Settling, and pins that say what is settled (the user's design, 2026-11-01)
+
+Vol 1's run 7 placed areas one at a time; re-placing them with all the others known moved the layout's continuity
+(ties × distance) down a third, and the per-area rule never settled (the placement handout's lab: 3 areas still moving
+after 12 sweeps). The user's go-ahead: one objective for the areas the program places in one holder, and World · Live
+shows the optimization at each spawn, sweep by sweep.
+- `Z.settle` (the zoom engine): E = Σ t·d over placed pairs + Σ t·d to fixed areas + λ Σ |x − pin| + μ Σ ov over pairs
+  that may adjoin − Σ ρ [on a form of its kind], ρ = one own length × (the area's ties + λ). Each mover in turn goes to
+  the least of its own part of E (the grid, its forms, where it stands) only when that is more than ε less: E is an exact
+  potential, every move lowers it, and the sweeps end. λ = 1.5, μ = 200 m, a 64 × 64 grid, ε = 0.5.
+- Terrain spawning settles right after the program places an area, before Jev is asked its height (so the height
+  pictures show it where it settles). Movers: the new area and the areas the program placed beside it in its holder (not
+  shapes, not places reused from an earlier book). Fixed: everything else kept. It works in the holder's own frame (each
+  kept part's offset from it, as the engine builds them), since boxes kept at different times are in different frames as
+  a pool grows. A kept area now keeps its pin (`pinToward`, in that frame); the moved areas take their new offsets, turns
+  and forms when the user steps on.
+- World · Live plays the sweeps (the proposal's `settle`: every mover after each sweep): gold the proposal, cyan the areas
+  it moved, a faint line back to where each stood, a caption with the sweep and the continuity; Jev's stills leave it out.
+- Where a kept area stands now (`boxNow`): its offset from its holder's node as the engine builds it, for placement,
+  crowding and ties alike; a box kept earlier is in that moment's frame, and a pool's node moves as the pool grows. The
+  first settling stand-in (with kept boxes) saw continuity rise in 3 of 21 settles; the second (with `boxNow`), in 2 by under
+  30 tie·m, traded for pins. A start over a place it may not share is cleared first (the outcome says how many overlaps),
+  whatever the objective pays: the objective prices only what may be.
+- Pins on the terrain stage say whether they are settled (`status`): green once an area is kept or a building stands or
+  dwells in a building of its use; yellow and blinking while open. A building of a use its ground does not have stays
+  yellow ("open, for Jev"): no step settles those yet.
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by

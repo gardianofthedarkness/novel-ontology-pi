@@ -561,9 +561,11 @@ const SKY = { region: { height: 1100, size: 0.075, colour: "#ffffff" }, city: { 
 // district's large, so it is plain which district a place is in; a street's middling; a building's and a room's small.
 const TAG_SIZE = { region: 4, city: 4, district: 3.4, street: 1.8 };
 for (const [id, spot] of macroAt) {
-  const guess = !!(spot.sampled || spot.dwelling), strand = !!data.places[id], size = spot.unbuilt ? 1.2 : TAG_SIZE[spot.scale] ?? 1.2;
-  const pin = placePin(spot.cx, spot.cz, size, guess ? 0xffd36e : strand ? 0xffffff : 0x7ce6ff, strand || guess ? 0.9 : spot.temporary ? 0.3 : 0.6); world.add(pin.group);
-  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : spot.dwells ? ` · in a building of ${spot.dwells}` : spot.sampled ? ` · sampled in ${spot.sampled}${spot.forJev ? " · for Jev" : ""}` : ""}` : spot.label, guess ? "#ffd36e" : strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, pin.top + size * 1.1, spot.cz - size * 1.3); tag.scale.multiplyScalar(size); world.add(tag);
+  // On the terrain stage a pin also says whether it is settled (the user's call, §2.0.22): green once the program or Jev has
+  // satisfied it (an area kept, a building standing or dwelling in one of its use), yellow and blinking while it waits.
+  const done = spot.status === "done", open = spot.status === "open", guess = !done && !!(spot.sampled || spot.dwelling || open), strand = !!data.places[id], size = spot.unbuilt ? 1.2 : TAG_SIZE[spot.scale] ?? 1.2;
+  const pin = placePin(spot.cx, spot.cz, size, done ? 0x5fe08a : guess ? 0xffd36e : strand ? 0xffffff : 0x7ce6ff, done || strand || guess ? 0.9 : spot.temporary ? 0.3 : 0.6); world.add(pin.group);
+  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : spot.dwells ? ` · in a building of ${spot.dwells}` : spot.sampled ? ` · sampled in ${spot.sampled}${spot.forJev ? " · for Jev" : ""}` : ""}${done ? " · settled" : open ? (spot.forJev ? " · open, for Jev" : " · open") : ""}` : spot.label, done ? "#5fe08a" : guess ? "#ffd36e" : strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, pin.top + size * 1.1, spot.cz - size * 1.3); tag.scale.multiplyScalar(size); world.add(tag);
   if (guess) sampledSpots.push({ pin, tag });
   pin.group.traverse((part) => { part.userData.place = id; }); tag.userData.place = id; clickable.push(pin.group, tag);
   // A street's, a district's, a city's (a region's) name in the sky (the user's call, 2026-10-31): the higher its level, the
@@ -703,6 +705,30 @@ if (data.terrain?.proposal) {
   const tag = label(`${name} · ${kind}${top ? (top < 0 ? ` · ${-top} m underground` : measure === "median" ? ` · median ${top} m` : ` · up to ${top} m`) : ""}`, "#ffd36e", 30); tag.scale.multiplyScalar(Math.max(4, Math.max(w, d) / 16)); tag.position.set(0, h / 2 + Math.max(w, d) * 0.1, 0); group.add(tag);
   group.position.set((x0 + x1) / 2, top !== null && top < 0 ? -h / 2 : h / 2, (z0 + z1) / 2); world.add(group);
   blinkProposal = (now) => { if (capture) return; const u = 0.5 + 0.5 * Math.sin(now / 180); slab.material.opacity = 0.06 + 0.34 * u; edges.material.opacity = 0.3 + 0.7 * u; };
+}
+// Settling (playground/terrain-spawn.mjs, §2.0.22): the proposal and the areas the program placed beside it, after each
+// sweep of the one objective, played over and over in the live view (gold: the proposal; cyan: the areas it moved), each
+// with a faint line back to where it stood before; a caption says the sweep and the continuity it has come down to.
+let playSettle = () => {};
+const settling = data.terrain?.proposal?.settle;
+if (settling?.frames?.length > 1 && !capture) {
+  const frames = settling.frames, n = frames.length - 1, Y = 3;
+  const corners = (at, [w, d], turn) => { const c = Math.cos(turn), s = Math.sin(turn); return [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2], [-w / 2, -d / 2]].map(([u, v]) => [at[0] + u * c - v * s, at[1] + u * s + v * c]); };
+  const outline = (points, colour, opacity) => { const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points.map(([x, z]) => new THREE.Vector3(x, Y, z))), new THREE.LineBasicMaterial({ color: colour, transparent: true, opacity, depthTest: false })); line.renderOrder = 13; world.add(line); return line; };
+  const put = (line, points) => { const position = line.geometry.attributes.position; points.forEach(([x, z], i) => position.setXYZ(i, x, Y, z)); position.needsUpdate = true; line.geometry.computeBoundingSphere(); };
+  const movers = frames[0].map((m, i) => ({ shape: outline(corners(m.at, m.size, m.turn), m.part ? 0xffd36e : 0x7ce6ff, 0.95), trail: outline([m.at, m.at], m.part ? 0xffd36e : 0x7ce6ff, 0.45), moves: frames.some((f) => f[i].at[0] !== m.at[0] || f[i].at[1] !== m.at[1]) }));
+  const [x0, z0, x1, z1] = data.terrain.proposal.box, across = Math.max(x1 - x0, z1 - z0, 120);
+  const captions = frames.map((_, k) => { const tag = label(k ? `settling · sweep ${k} of ${n} · continuity ${settling.energy[k].toLocaleString("en-US")} tie·m` : `before settling · continuity ${settling.energy[0].toLocaleString("en-US")} tie·m`, "#7ce6ff", 26); tag.scale.multiplyScalar(Math.max(4, across / 14)); tag.position.set((x0 + x1) / 2, across * 0.45, z0 - across * 0.35); tag.visible = false; world.add(tag); return tag; });
+  const step = 1100, hold = 2200;
+  playSettle = (now) => {
+    const t = now % (n * step + hold), k = Math.min(n, Math.floor(t / step)), f = k >= n ? 1 : Math.min(1, (t - k * step) / (step * 0.7)), ease = f * f * (3 - 2 * f);
+    movers.forEach(({ shape, trail, moves }, i) => {
+      const a = frames[k][i], b = frames[Math.min(n, k + 1)][i], at = [a.at[0] + (b.at[0] - a.at[0]) * ease, a.at[1] + (b.at[1] - a.at[1]) * ease];
+      put(shape, corners(at, a.size, ease < 0.5 ? a.turn : b.turn)); put(trail, [frames[0][i].at, at]);
+      shape.material.opacity = moves || frames[0][i].part ? 0.95 : 0.35;
+    });
+    captions.forEach((tag, j) => { tag.visible = j === (k >= n ? n : f >= 1 ? k + 1 : k); });
+  };
 }
 /** Where a traveller is, so long into the move between places: on a leg in a place's grid, or on the map's curve. */
 function travelAt(travel, elapsed) {
@@ -939,7 +965,7 @@ function frame(now) {
   const seenBelow = Math.max(0, Math.min(1, (0.8 - groundSeen) / 0.65));
   for (const key of ["subway", "arcade", "under", "water", "deep", "facility"]) mats[key].opacity = 0.05 + seenBelow * 0.35;
   for (const material of underLines) { if (material.uniforms) material.uniforms.alpha.value = 0.15 + seenBelow * 0.65; else material.opacity = 0.15 + seenBelow * 0.65; }
-  decor(time); blinkProposal(now); blinkSampled(now);
+  decor(time); blinkProposal(now); blinkSampled(now); playSettle(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (focusGlide) { const u = Math.min(1, (performance.now() - focusGlide.start) / 600), e = u * u * (3 - 2 * u); controls.target.lerpVectors(focusGlide.fromTarget, focusGlide.toTarget, e); camera.position.lerpVectors(focusGlide.fromCamera, focusGlide.toCamera, e); if (u >= 1) focusGlide = null; }
   if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
