@@ -59,13 +59,16 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt, BLAST_ENERGY } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, formsFor, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, tallAndWide, formsFor, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf, scaleOfName } = await load('dist/src/digger/stage/scale.js');
   const { continuityTies } = await load('dist/src/v2/extraction/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js'), Z = await load('dist/src/v2/context/zoom.js');
-  const SP = await load('dist/src/v2/spawning/config.js'), spawning = SP.loadSpawning();
+  const SP = await load('dist/src/v2/spawning/config.js'), spawning = SP.loadSpawning(), TM = await load('dist/src/v2/context/terrainModes.js');
+  // A kept part's manifold is its kind's as configured now (Jev gives only its median): a kind tuned (the CBD's tail, the
+  // user, 2026-11-01) shows in a world already kept, with no question asked again.
+  const manifoldOfSite = site => TM.terrainKind(site.scale, site.kind)?.manifold ?? site.manifold;
   // A landscape's fill, made once per landscape (a pool's is read for its streets' buildings, then drawn).
   const fills = new WeakMap(), fillOf = landscape => { const known = fills.get(landscape); if (known?.n === landscape.patches.length) return known.filled; const filled = fillLandscape(landscape); fills.set(landscape, { n: landscape.patches.length, filled }); return filled; };
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -424,7 +427,7 @@ export async function strandDemo(novelDir, options) {
     const poolExtentOf = id => Z.poolExtent(Object.values(terrain?.sites ?? {}).filter(site => site.parent === id && Array.isArray(site.toward) && Array.isArray(site.size)).map(site => Z.turnedBox(site.toward, site.size, site.turn ?? 0)), null);
     const groundPatch = id => {
       // A city of manifolds (docs/v2/borrow-and-spawn.md §8): its own patch is its open ground, at that ground's height.
-      const own = terrainGround(id), site = own?.open ? { ...own, ...own.open } : own, made = site?.median && site.manifold ? { median: site.median, manifold: site.manifold } : null;
+      const own = terrainGround(id), site = own?.open ? { ...own, ...own.open } : own, made = site?.median && site.manifold ? { median: site.median, manifold: manifoldOfSite(site) } : null;
       if (!site) return null;
       // A pool's ground is its members' span in its own frame (the zoom engine's pool extent), never a sampled square.
       if (site.pool) { const extent = poolExtentOf(id); return extent && made ? patchFromBox(site.ground, 'p0', id, { x0: extent[0], z0: extent[1], x1: extent[2], z1: extent[3] }, { by: 'pool' }, made) : null; }
@@ -571,7 +574,7 @@ export async function strandDemo(novelDir, options) {
         const name = baseName(unit.label), original = first.get(name), [w, depth] = Array.isArray(site.size) ? site.size : [GROUND[site.scale] ?? 120, GROUND[site.scale] ?? 120], half = Math.max(w, depth) / 2;
         // Below the street, the hall its name says it is (§2.0.17: 地下停车场 a car park), else by its shape.
         const hall = site.median < 0 ? undergroundKindOf(unit.label) : null;
-        const made = (at, turn = site.turn) => ({ ...turnedAs({ turn }, patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: site.manifold })), borrowed: true, ...(hall ? { hall } : {}) });
+        const made = (at, turn = site.turn) => ({ ...turnedAs({ turn }, patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: manifoldOfSite(site) })), borrowed: true, ...(hall ? { hall } : {}) });
         if (!original) {
           const road = relaid(unit, site, w, depth);
           if (road) { unit.at = road.at; notes.build.relaid = (notes.build.relaid ?? 0) + 1; }
@@ -610,7 +613,7 @@ export async function strandDemo(novelDir, options) {
     for (const place of Object.values(canvas.places)) {
       const manifolds = mappedIn(place.id);
       if (!manifolds.length || !place.landscape) continue;
-      const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return { ...turnedAs(site, patchFromBox(site.ground, id, id, { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: site.manifold } : null)), borrowed: true, ...(takesOf(site) ? { takes: takesOf(site) } : {}) }; });
+      const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return { ...turnedAs(site, patchFromBox(site.ground, id, id, { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: manifoldOfSite(site) } : null)), borrowed: true, ...(takesOf(site) ? { takes: takesOf(site) } : {}) }; });
       // The manifolds before the open ground, the deepest first (a street claims its ground before its district), then the
       // tallest: a lot draws its height from older ground that reaches it, so a CBD's towers fade out into what is round it,
       // and the open ground never flattens a CBD.
@@ -710,15 +713,22 @@ export async function strandDemo(novelDir, options) {
       }
       return x === b.x && z === b.z ? b : { ...b, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 };
     };
-    const buildings = [...[...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided).map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
+    // Tall buildings and the streets round them (landscape.ts tallAndWide; the user, 2026-11-01), in a city of manifolds: a
+    // street wider the more towers stand round it, a building above 100 m as thick as its height needs. After the fill, so
+    // its lots and the slots naming them stay; what the text placed (and a landmark, a keep) is never cleared or cut.
+    const placed = [...[...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
+    const localRoads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)), held = new Set([...filled.keeps, ...standing].map(b => b.lot));
+    const fixedOf = b => held.has(b.lot) || decided.has(b.lot) || /:(landmark|bowl|fountain)$/.test(String(b.lot));
+    const shaped = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf) : { buildings: placed, roads: localRoads };
+    const buildings = shaped.buildings.map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
-    const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
+    const roads = shaped.roads.map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
     // Each patch (manifold) in birth order: its type and era, its centre and radius, its outline as 48 points (world metres),
     // and its fingerprint; each building's manifold in `buildings` order.
     const patches = place.landscape.patches.map(patch => ({ id: patch.id, type: patch.type, era: LANDSCAPES[patch.type]?.era ?? 'modern', born: patch.born ?? null, centre: [round(patch.x + wx), round(patch.z + wz)], radius: round(patch.R), height: round(patch.H), manifold: manifoldOf(patch),
       outline: Array.from({ length: 48 }, (_, n) => { const angle = (n / 48) * Math.PI * 2, d = reachOf(patch, [patch.x + Math.cos(angle), patch.z + Math.sin(angle)]); return [round(patch.x + wx + Math.cos(angle) * d), round(patch.z + wz + Math.sin(angle) * d)]; }) }));
-    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width, road.level]), plazas: filled.plazas.map(plaza => [round(plaza.x + wx), round(plaza.z + wz), round(plaza.r)]),
+    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), ...(shaped.thickened !== undefined ? { tall: { widened: shaped.widened, trimmed: shaped.trimmed, thickened: shaped.thickened, cleared: shaped.cleared } } : {}), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width, road.level]), plazas: filled.plazas.map(plaza => [round(plaza.x + wx), round(plaza.z + wz), round(plaza.r)]),
       walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })), underground: under } };
   });
   /** The theme of the manifold at a point: the era of the patch reaching it most surely (modern where no landscape does). */

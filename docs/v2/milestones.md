@@ -422,6 +422,14 @@ would weigh the new slices itself.
 - A cinema read at 8 floors coming out at 2 is for the composite buildings (a cinema on a mall's upper floors), not
   the minimum.
 
+**Tall buildings and the streets round them (the user, 2026-11-01; borrow-and-spawn.md §8.11):**
+- [x] Above 100 m the taller the thicker (no side under height / 8), the fill it covers cleared; a street wider the
+      more towers stand round it (1 + share × mean height / 400). Both after the fill, so lots and slots stay.
+- [x] The CBD's manifold tuned so a few towers reach about 600 m (spread 0.6, tail 0.15, index 3); no cap.
+- Rebuilt on the host's terrain (no model call): 87 towers grown and 127 low buildings cleared; 29 above 100 m still
+  over 8:1 (most just over; one 849 m draw between close roads); 366 roads widened. 第六学区 (median 80): 849, 591 (its
+  landmark), 483 and 477 m; New York's CBDs (median 61): 450 m each.
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)

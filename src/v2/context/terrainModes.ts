@@ -101,7 +101,7 @@ const SCENES = 5;
 const SENTENCES = 15;
 
 /** A manifold (src/ground/stage/landscape.ts): gradient, core, spread, tail share, tail index. */
-const M = (gradient: number, spread: number, tail = 0) => ({ gradient, core: 0.3, spread, tail, index: 5 });
+const M = (gradient: number, spread: number, tail = 0, index = 5) => ({ gradient, core: 0.3, spread, tail, index });
 /**
  * The kinds of terrain a part may be, by its level (the user's calls, 2026-10-31): a city is what kind of city it is; a
  * district what a whole quarter is built as; a commercial centre, a park or a stadium is a street's. A built kind is the
@@ -122,7 +122,10 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     oldcity: { hint: "an old city of an older world: walls, a keep, crowded lanes", ground: "castle", manifold: M(0.2, 0.3, 0.02), medians: [5, 8, 11, 15] },
   },
   district: {
-    cbd: { hint: "a CBD: a dense core of high-rise towers (offices, hotels, malls and flats in towers)", ground: "skyscrapers", manifold: M(0.5, 0.5, 0.1), medians: [30, 50, 80, 120, 180, 250] },
+    // A CBD's spread and tail tuned so a few of its towers reach about 600 m (the user, 2026-11-01; a CBD 600 m across, ten
+    // seeds): at a median of 80 its landmark stands 591 m and its tallest two 541 and 415 m; at 61, 450 and 413 m; at 50,
+    // 369 and 338 m. No cap: a CBD of median 120 reaches 888 m.
+    cbd: { hint: "a CBD: a dense core of high-rise towers (offices, hotels, malls and flats in towers)", ground: "skyscrapers", manifold: M(0.5, 0.6, 0.15, 3), medians: [30, 50, 80, 120, 180, 250] },
     dwelling: { hint: "a dwelling area: blocks of flats and residential towers, low houses between them, with their schools, shops and stations", ground: "residential", manifold: M(0.1, 0.4, 0.06), medians: [12, 18, 25, 35, 50, 70] },
     industrial: { hint: "an industrial area: factories, warehouses, plants and yards on large plots", ground: "industrial", manifold: M(0, 0.2, 0.02), medians: [6, 9, 12, 18, 25] },
     harbour: { hint: "a harbour or a port: docks, piers, cranes and warehouses by the water", ground: "harbour", manifold: M(0, 0.3, 0.03), medians: [6, 9, 12, 18, 25] },

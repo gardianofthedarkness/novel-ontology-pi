@@ -486,6 +486,29 @@ and platforms at 100 m over dwelling areas. Two hard rules:
   the street it shares, a later height having the better right: a higher answer raises it; a lower one lowers it only
   within the deformation limit (§8.6), the buildings already standing.
 
+### 8.11 Tall buildings and the streets round them (the user, 2026-11-01, before the composite buildings)
+
+The old engine's rules were in the code but did not run in a city of manifolds: a manifold's buildings skipped the
+`SLENDER` cut, and wider plots and streets came only on ground of 250 m, which no v2 area reaches (the tallest CBD's
+core median here, 147 m). The world had 104 buildings over 8:1, up to 98 floors on a 4.3 m footprint, and roads of a
+few fixed widths. Now (`tallAndWide` in `src/ground/stage/landscape.ts`, run by the export in spawn mode):
+
+- **Above 100 m (`TALL`), the taller the thicker.** No side under its height / `SLENDER` (8): the tallest first, each
+  grown round its middle or off it, as far as no street and no building kept before it stops it; the lower fill it
+  then covers is cleared. A building the text placed, a landmark or a keep is never cleared or cut. Rebuilt on the
+  host's terrain: 87 grown, 127 cleared; 29 above 100 m stay over 8:1, most just over (one 849 m tail draw needs a
+  106 m footprint between closer roads).
+- **A street is wider the more tall buildings stand round it.** Its width times 1 + s / 400 (at most 2.5), s the
+  heights above 100 m of the buildings within 120 m of it, summed, over how many stand there: the share of towers times
+  their mean height. A building the wider street reaches gives up that much of its face. Rebuilt: 366 roads widened,
+  arterials 18 → 19–22 m round the towers, up to 41 m in the densest core.
+- **Both after the fill:** its lots, and the building slots that name them, stay as they are, so no level is asked
+  again.
+- **The CBD tuned, not capped:** its spread 0.6, one building in seven from a Pareto tail of index 3, so a few towers
+  reach about 600 m: in a CBD 600 m across at a median of 80, a landmark of 591 m and a tallest two of 541 and 415 m
+  (ten seeds); at 61, 450 and 413 m; at 50, 369 and 338 m. It scales with the median (888 m at 120). A kept part's
+  manifold is now its kind's as configured, so a tuned kind shows in a world already kept.
+
 ### 8.7 Decisions (the user, 2026-11-01)
 
 1. Across books: yes, a later book's spawn may squeeze an earlier book's manifolds and re-unify its heights, the earlier

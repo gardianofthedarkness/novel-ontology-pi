@@ -161,3 +161,25 @@ test("every level's heights: a minimum, the text's own measures offered; far hei
   // Unnamed buildings share a lot only when their heights are near: a tower and low offices never, a basement and a roof never.
   assert.ok(heightsShare(9, 15, chart.share) && !heightsShare(15, 180, chart.share) && !heightsShare(-6, 3, chart.share));
 });
+
+test("tall buildings and the streets round them: above 100 m the taller the thicker, a street wider the more towers stand round it", async () => {
+  const { tallAndWide, footprintsOverlap, SLENDER, TALL } = await import("../src/ground/stage/landscape.js");
+  const b = (lot: string, x: number, z: number, w: number, d: number, floors: number) => ({ lot, x, z, w, d, angle: 0, floors, kind: "tower" });
+  const road = { id: "A:1", a: [-200, 100] as [number, number], b: [200, 100] as [number, number], width: 8, level: "arterial" as const };
+  // A 300 m tower 10 m wide grows to 300 / SLENDER; the low building it now covers goes, the fixed one beside it stays.
+  const tower = b("t", 0, 0, 10, 10, 100), low = b("low", 15, 0, 8, 8, 3), kept = b("kept", 0, 30, 10, 10, 3);
+  const out = tallAndWide([tower, low, kept], [road], (x) => x.lot === "kept");
+  const grown = out.buildings.find((x) => x.lot === "t")!;
+  assert.equal(TALL, 100);
+  assert.ok(Math.min(grown.w, grown.d) >= 300 / SLENDER - 0.1, `the tower ${grown.w} × ${grown.d}`);
+  assert.deepEqual(out.buildings.map((x) => x.lot).sort(), ["kept", "t"]);
+  assert.ok(!footprintsOverlap(grown, kept));
+  // The street: the share of towers round it times their height, over 400 (here a third of three, 300 m: 1.25 times).
+  assert.equal(out.roads[0].width, 10);
+  // Under 100 m nothing grows and no street widens.
+  const low3 = tallAndWide([b("a", 0, 0, 10, 10, 30), b("c", 0, 90, 10, 10, 3)], [road], () => false);
+  assert.deepEqual([low3.thickened, low3.widened, low3.roads[0].width, low3.buildings[0].w], [0, 0, 8, 10]);
+  // A building the wider street now reaches gives up that much of its face, turned away from it.
+  const face = tallAndWide([b("t", 0, -20, 40, 40, 100), b("f", 0, 90, 10, 10, 3)], [road], () => false).buildings.find((x) => x.lot === "f")!;
+  assert.ok(face.d < 10 && face.z < 90, `the face given up: ${face.d} m deep at z ${face.z}`);
+});

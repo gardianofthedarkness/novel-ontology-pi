@@ -99,7 +99,7 @@ test("terrain's ground: the sentences around the part's name in the scenes namin
     ["median", { letter: "E", y: 30, said: "about 10 floors" }, "top", "a hill", "elevation", 0]);
   // Below the street too (the user's call): every part is offered the underground's slices first, the deepest as A.
   assert.deepEqual([cbd.slices[0], cbd.slices[3].y, cbd.slices.length], [{ letter: "A", y: -60, said: "underground: deep underground" }, -6, 10]);
-  assert.match(String(state.kinds.cbd), /highest at its core \(about 2\.1 times its edge\); a wide spread .*; one in 10 far above the rest/);
+  assert.match(String(state.kinds.cbd), /highest at its core \(about 2\.1 times its edge\); a wide spread .*; one in 7 far above the rest/);
   // The city level: its own kinds, asked its kind only (it is the map); a district is told its city's kept terrain (within).
   const city = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { id: "city", label: "City", scale: "city" } }, stores);
   assert.deepEqual([Object.keys((city.state as Record<string, object>).kinds).slice(0, 4), city.questions.map((question) => question.key)], [["metropolis", "city", "town", "oldcity"], ["kind"]]);
