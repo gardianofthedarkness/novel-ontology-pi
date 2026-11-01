@@ -210,6 +210,24 @@ borrowing (only a parent's topology layout should be kept).
   street takes its first sharer's height (35 m here, though two sharers said 20 m); a district does not unify to its streets
   (only a city has its open ground kept).
 
+**Jev rerun with the tunings (2026-11-01, `--spawn --from district --until street --run`; 51 paid calls, 346,454 input
+tokens; questions: 21 kind, 21 height, 9 box):**
+- Districts: 第七学区 a dwelling area (average 19 m), 第六学区 a CBD (97 m), 第十五学区 a CBD (61 m); 学园都市 unified to
+  22.8 m.
+- No avenue or centre slot outside a CBD. The four 大道 with 整条街道 now one avenue in 第十五学区, 柏油马路 and 大道 12
+  one in 第六学区; 广场 26, 广场 34 and 十字路口 one square in 第六学区; 站前广场 and 人行步道 a station in a spare dwelling
+  district; 小巷 an alley in 第七学区; 大桥 a waterfront spawned in 第十五学区.
+- Platforms moved among buildings that reach them: 平台 (6 m) and 停机坪 (25 m) into 第七学区 (its buildings reach 32 m),
+  飞机跑道 (100 m) into 第十五学区 (160 m), 空中庭院 (25 m) into 第六学区 (256 m). 地下通道 (a cut) stays in a spare
+  industrial district.
+- Shared streets reshaped by later sharers: the square 16 → 13.6 m (广场 26 said 11 m); the avenue 41 → 34.9 → 29.7 m
+  (整条街道 and 大道 28 said 23 m), each lowering at most 15%.
+- Two moves at the level's end (大道 34 to 第十五学区's avenue, 广场 34 to 第六学区's square): travel 9,658 → 8,496 tie·m.
+- Seen by the user: the buildings do not look like a modern living area. The causes: an industrial hall is drawn as the
+  fantasy kit's market stall; a house as a small office (office-c); and a city's open ground (`open` in city.json) is
+  the commercial landscape, so the ground between districts is shops. Next, before M5: a new building model kit (models
+  found online for the modern configurations, and how a building is assigned one).
+
 ## M5 — Building level
 
 - [ ] Street slots spawn building slots by `street.json` (density × area, uses by share)
