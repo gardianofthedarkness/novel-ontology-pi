@@ -107,6 +107,16 @@ Two compatibility faults found and fixed: `novel sim terrain` refused `--spawn`,
 had not been given them; the stand-ins had called the engine directly); and the first world of a `--from` run was built
 from the terrain file before the dropped levels were saved, so Jev's first city picture showed run 11's districts and pools.
 
+**Again with a born city and heights as additions (2026-11-01, the user's calls; 4 paid calls, 27,478 input tokens):** each
+city is born a basic city (5 districts at the standard height) before Jev is asked, and the height is asked as the kind's
+standard plus an addition. Jev: 学园都市 a metropolis (58%), +26 m (21% sure), an average of 34 m; 纽约 a metropolis
+(83%), +47 m (26% sure), 55 m. Before, with absolute medians on an empty map: 13.6 m and 20.4 m. Both cities deformed as
+designed (a second CBD added, all laid out again, the CBDs alike at 128 and 140 m). Not yet clear whether Jev reads the
+addition or the picture: the heights picture looks at the city's middle, which in a born city is its CBD, so it sees
+towers; and 纽约's open ground had to rise to 50 m to hold 55 m with only two CBDs. To try: the same pictures asked both
+ways (absolute and as an addition); the heights picture across the whole city for a city's average; more CBDs for a
+taller city (the configuration by height).
+
 ## M3 — District level
 
 - [ ] 第七学区, 第六学区, 第十五学区 borrow; unnamed district mentions borrow; the swap pass; settle with spares
