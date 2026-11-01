@@ -25,8 +25,11 @@ export interface Unit { id: string; label: string; kind: "building" | "street" |
  * dwelling: the area of the central build a place the ontology puts in no larger one dwells in, until it is named.
  * pool: a sampling pool's area (docs/v2/world-engine-v2.md §2.0.11): it holds what that area has that is not nominated,
  * its members kept POOL_SPACING apart, and grows as they come.
+ * embedded: a manifold of its parent's own ground (docs/v2/borrow-and-spawn.md §8: a district of a city of manifolds): it
+ * stands exactly at its kept offset inside the parent's ground, its own ground a patch of the parent's; it is never pushed
+ * and pushes nothing, the fading of the patches being how it meets its neighbours.
  */
-export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; temporary?: boolean; dwelling?: string; pool?: string }
+export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; embedded?: boolean; temporary?: boolean; dwelling?: string; pool?: string }
 export interface Canvas { places: Record<string, CanvasPlace>; born: number }
 
 /** The least radius of a place of each scale, in metres, before anything is built in it. */
@@ -56,10 +59,11 @@ export function grow(canvas: Canvas, id: string): Canvas {
   for (let round = 0; round < 60; round++) {
     let moved = false;
     for (const a of siblings) {
+      if (a.embedded) continue;
       const fromOwn = Math.hypot(...a.at), clearOwn = own ? own + a.r + GAP : 0;
       if (own && fromOwn < clearOwn) { const u: Point = fromOwn > 1e-6 ? [a.at[0] / fromOwn, a.at[1] / fromOwn] : [1, 0]; a.at = [Math.round(u[0] * clearOwn * 10) / 10, Math.round(u[1] * clearOwn * 10) / 10]; moved = true; }
       for (const b of siblings) {
-        if (a === b) continue;
+        if (a === b || b.embedded) continue;
         const d = Math.hypot(b.at[0] - a.at[0], b.at[1] - a.at[1]), need = a.r + b.r + GAP;
         if (d >= need) continue;
         const pushed = b.id === id ? a : a.id === id ? b : a.born > b.born ? a : b, other = pushed === a ? b : a;
@@ -77,14 +81,20 @@ export function grow(canvas: Canvas, id: string): Canvas {
  * A place born on the canvas: at the free spot nearest its parent's middle (or toward a direction), then grown up. `ground`:
  * its first patch as given (terrain spawning: the type and the size Jev chose), in place of one sampled from its type.
  */
-export function bear(canvas: Canvas, place: { id: string; label: string; scale: string; parent: string | null; landscape?: LandscapeType | null; toward?: Point; ground?: Patch | null }): Canvas {
+export function bear(canvas: Canvas, place: { id: string; label: string; scale: string; parent: string | null; landscape?: LandscapeType | null; toward?: Point; ground?: Patch | null; at?: Point; embedded?: boolean }): Canvas {
   if (canvas.places[place.id]) return canvas;
+  // A manifold of its parent's ground stands exactly where it was kept, in the parent's ground (no spot of its own to find).
+  if (place.embedded && place.parent && canvas.places[place.parent]) {
+    canvas.places[place.id] = { id: place.id, label: place.label, scale: place.scale, parent: place.parent, at: place.at ?? [0, 0], landscape: null, units: [], r: 0, born: ++canvas.born, embedded: true };
+    canvas.places[place.id].r = radiusOf(canvas, place.id);
+    return grow(canvas, place.parent);
+  }
   const landscape = place.ground ? { version: LANDSCAPE_VERSION, seed: place.id, patches: [place.ground] } : place.landscape ? firstLandscape(place.id, place.landscape) : null, born = ++canvas.born;
   const entry: CanvasPlace = { id: place.id, label: place.label, scale: place.scale, parent: place.parent, at: [0, 0], landscape, units: [], r: 0, born };
   canvas.places[place.id] = entry;
   entry.r = radiusOf(canvas, place.id);
   const parent = place.parent ? canvas.places[place.parent] : null, own = parent?.landscape?.patches.length ? [{ x: 0, z: 0, r: circleOf(parent.landscape, 0) }] : [];
-  const occupied = [...own, ...(parent?.units ?? []).map((unit) => ({ x: unit.at[0], z: unit.at[1], r: unit.r })), ...childrenOf(canvas, place.parent).filter((child) => child.id !== place.id).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))];
+  const occupied = [...own, ...(parent?.units ?? []).map((unit) => ({ x: unit.at[0], z: unit.at[1], r: unit.r })), ...childrenOf(canvas, place.parent).filter((child) => child.id !== place.id && !child.embedded).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))];
   const spot = placeBeside(occupied, entry.r, place.id, place.toward, GAP);
   entry.at = [spot.x, spot.z];
   return parent ? grow(canvas, parent.id) : grow(canvas, place.id);
@@ -218,7 +228,7 @@ export function adopt(canvas: Canvas, temporaryId: string, named: { id: string; 
 }
 
 /** An area of the central build (a place larger than a building), the place the ontology puts it in, if any, and else the one proposed for it (a pending review), if any. */
-export interface BuildArea { id: string; label: string; scale: string; parent: string | null; proposed?: string | null; landscape?: LandscapeType | null; ground?: Patch | null; pool?: string }
+export interface BuildArea { id: string; label: string; scale: string; parent: string | null; proposed?: string | null; landscape?: LandscapeType | null; ground?: Patch | null; pool?: string; at?: Point; embedded?: boolean }
 /** One of several choices, picked by a seed (a place's id), so the same in every run; the choices' order does not matter. */
 function pickBy(seed: string, choices: string[]): string {
   const sorted = [...choices].sort(), hash = [...seed].reduce((sum, char) => (Math.imul(sum, 31) + char.charCodeAt(0)) >>> 0, 7);

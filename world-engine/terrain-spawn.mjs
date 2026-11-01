@@ -147,7 +147,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       if (slot.book === bookId && !slot.mapped) { slot.toward = null; delete slot.size; delete slot.turn; delete slot.on; }
     }
   }
-  const reshape = () => { if (!spawn) return; S.withSlots(inputs, Object.values(registry.slots), bookId); tree.clear(); for (const place of inputs.placeTree) tree.set(place.id, place); };
+  const lifted = new Map();
+  const reshape = () => { if (!spawn) return; S.withSlots(inputs, Object.values(registry.slots), bookId); tree.clear(); for (const place of inputs.placeTree) tree.set(place.id, place); lifted.clear(); };
   reshape();
   // Saved before the first build: the world is built from the files, so it must see the levels dropped and the mode at once.
   if (spawn || fromLevel) {
@@ -248,13 +249,26 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const keptBoxOf = id => { const site = terrain.sites[id], node = nodeOf(id); return site && ['jev', 'universe', 'slot'].includes(site.by) && Array.isArray(site.size) && node ? Z.turnedBox([node.x, node.z], site.size, site.turn ?? 0) : null; };
     const extentIn = id => Z.extentOf(keptBoxOf(id), keptIn(id), nodeOf(id), scaleOf(id) === 'city' ? 0.3 : 0.1);
     // A place's position for the characters' travel: its kept box's middle (an unnamed share's, its slot's), else its node.
+    // Only kept positions count (run 10's lesson: never where the canvas has packed a place for now); a city or a region by
+    // its node, the frame its parts are kept in.
     const positionOf = id => {
+      if (['city', 'region'].includes(scaleOf(id))) { const node = nodeOf(id); return node ? [node.x, node.z] : null; }
       const site = terrain.sites[id], key = site?.slot && !Array.isArray(site.toward) ? registry.slots[site.slot]?.owner ?? site.slot : id, kept = terrain.sites[key];
-      if (kept && Array.isArray(kept.box)) return Z.middleOf(siteBox(key, kept));
-      const node = nodeOf(id); return node ? [node.x, node.z] : null;
+      return kept && Array.isArray(kept.box) ? Z.middleOf(siteBox(key, kept)) : null;
+    };
+    // Continuity ties lifted to a level (§4.1): a place deeper than the level counts as its holder at that level (a district
+    // is tied to where its buildings' scenes lead); one higher up stays itself (a city, fixed).
+    const RANK = { region: 0, city: 1, district: 2, street: 3, building: 4, room: 5 };
+    const liftTo = (id, level) => { for (let at = id, n = 0; at && n < 12; at = parentOf(at), n++) { const scale = scaleOf(at); if (scale === level || (RANK[scale] ?? 9) < RANK[level]) return at; } return id; };
+    const tiesAt = level => {
+      if (lifted.has(level)) return lifted.get(level);
+      const out = {};
+      for (const [a, row] of Object.entries(ties)) for (const [b, n] of Object.entries(row)) { const A = liftTo(a, level), B = liftTo(b, level); if (A !== B) (out[A] ??= {})[B] = (out[A][B] ?? 0) + n; }
+      lifted.set(level, out);
+      return out;
     };
     // The places the given ones are tied to, outside them, where they stand now (the choice's fixed places).
-    const fixedFor = ids => { const own = new Set(ids), found = new Map(); for (const id of ids) for (const other of Object.keys(ties[id] ?? {})) if (!own.has(other) && !found.has(other)) { const at = positionOf(other); if (at) found.set(other, { id: other, at }); } return [...found.values()]; };
+    const fixedFor = (ids, level) => { const own = new Set(ids), found = new Map(); for (const id of ids) for (const other of Object.keys(tiesAt(level)[id] ?? {})) if (!own.has(other) && !found.has(other)) { const at = positionOf(other); if (at) found.set(other, { id: other, at }); } return [...found.values()]; };
     // An area's size from its pins (§2.0.21), as the program sizes every area below: its kind's usual size, grown for its pins.
     const sizeFor = (scale, ground, pins) => {
       const L = LANDSCAPES[ground] ?? null, radius = L ? (L.radius[0] + L.radius[1]) / 2 : Z.usualSize(scale) / 2, aspect = L?.aspect ? (L.aspect[0] + L.aspect[1]) / 2 : 1;
@@ -338,12 +352,13 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const parentAverage = site.average ?? (site.median ?? 0) * factorOf(level, site.kind), disc = Math.PI * result.radius ** 2;
       const parts = [
         { id: 'open', area: Math.max(1, disc - result.manifolds.reduce((sum, m) => sum + Math.PI * m.r ** 2, 0)), average: site.open && !site.open.provisional ? site.open.average : parentAverage, range: rangeOf(level, site.kind), born: !site.open || !!site.open.provisional },
-        // A free part starts again from its kind's default, so parts of one kind come out alike.
-        ...result.manifolds.map(m => { const slot = registry.slots[m.id]; return { id: m.id, area: Math.PI * m.r ** 2, average: free(slot) ? (S.defaultTerrain(child, slot.kind)?.median ?? 0) * factorOf(child, slot.kind) : slot.average, range: rangeOf(child, slot.kind), born: free(slot) }; }),
+        // A free part starts again from its kind's default, so parts of one kind come out alike; a named one stands (§8.6).
+        ...result.manifolds.map(m => { const slot = registry.slots[m.id], owner = slot.owner ? terrain.sites[slot.owner] : null; return owner?.average != null ? { id: m.id, area: Math.PI * m.r ** 2, average: owner.average, range: rangeOf(child, owner.kind ?? slot.kind), nominated: true } : { id: m.id, area: Math.PI * m.r ** 2, average: free(slot) ? (S.defaultTerrain(child, slot.kind)?.median ?? 0) * factorOf(child, slot.kind) : slot.average, range: rangeOf(child, slot.kind), born: free(slot) }; }),
       ];
       const heights = S.unify(parentAverage, parts);
       for (const m of result.manifolds) {
         const slot = registry.slots[m.id], to = heights.averages[m.id];
+        if (slot.owner && terrain.sites[slot.owner]?.average != null) continue;
         if (slot.average !== to) logMap({ level: child, what: 'height', id: m.id, from: slot.average ?? null, to });
         Object.assign(slot, { average: to, median: Math.round(to / factorOf(child, slot.kind)) });
         if (provisional) slot.provisional = true; else delete slot.provisional;
@@ -389,6 +404,34 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         }
       return layOutChildren(id, 'city');
     };
+    // A named place decided on a manifold of its parent (§8.6): its height is the newest and stands; the parent's other
+    // manifolds and its open ground give way within the deformation limit, names decided before standing too; what they
+    // cannot take moves the parent's average.
+    const reunify = (parentId, decided) => {
+      const site = terrain.sites[parentId], level = site?.scale, child = level ? S.CHILD[level] : null;
+      const mine = Object.values(registry.slots).filter(slot => slot.parent === parentId && slot.level === child && slot.toward && slot.size);
+      if (!site?.open || !mine.length) return null;
+      const factorOf = (scale, kind) => { const manifold = T.terrainKind(scale, kind)?.manifold; return manifold ? averageOverMedian(manifold) : 1; };
+      const rangeOf = (scale, kind) => { const medians = T.terrainKind(scale, kind)?.medians ?? [0]; return [Math.min(...medians) * factorOf(scale, kind), Math.max(...medians) * factorOf(scale, kind)]; };
+      const R = Math.max(...(site.size ?? [0])) / 2, area = slot => Math.PI * (Math.max(...slot.size) / 2) ** 2, ownerOf = slot => (slot.owner ? terrain.sites[slot.owner] : null);
+      const parts = [
+        { id: 'open', area: Math.max(1, Math.PI * R * R - mine.reduce((sum, slot) => sum + area(slot), 0)), average: site.open.average, range: rangeOf(level, site.kind) },
+        ...mine.map(slot => { const owner = ownerOf(slot); return { id: slot.id, area: area(slot), average: owner?.average ?? slot.average ?? 0, range: rangeOf(child, owner?.kind ?? slot.kind), ...(owner ? (slot.owner === decided ? { fixed: true } : { nominated: true }) : {}) }; }),
+      ];
+      const before = site.average, heights = S.unify(site.average, parts);
+      for (const slot of mine) {
+        const to = heights.averages[slot.id], owner = ownerOf(slot);
+        if (owner) { Object.assign(slot, { average: owner.average, median: owner.median }); continue; }
+        if (slot.average !== to) logMap({ level: child, what: 'height', id: slot.id, from: slot.average ?? null, to });
+        Object.assign(slot, { average: to, median: Math.round(to / factorOf(child, slot.kind)) });
+      }
+      if (heights.parent !== before) logMap({ level, what: 'height', id: parentId, from: before, to: heights.parent });
+      const openFactor = site.open.manifold ? averageOverMedian(site.open.manifold) : 1;
+      site.open = { ...site.open, average: heights.averages.open, median: Math.max(1, Math.round(heights.averages.open / openFactor)) };
+      site.average = heights.parent;
+      const moved = heights.moved.filter(entry => entry.id !== 'open' && !ownerOf(registry.slots[entry.id] ?? {}));
+      return `${site.label} unified to it: its average ${before} → ${heights.parent} m, its open ground ${heights.averages.open} m${moved.length ? `; ${moved.map(entry => `${registry.slots[entry.id].kind} ${entry.from} → ${entry.to} m`).join(', ')}` : ''}`;
+    };
     // A level's end (§4.3): the moves, the spares placed, every area of the level spawning its children's slots, the world
     // built again. Run again on a pick-up, it does only what is left.
     const spawnEnd = async level => {
@@ -397,7 +440,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       let moves = 0;
       if (mine.length) {
         const mentions = mine.map(id => ({ id, label: terrain.sites[id].label, named: !id.startsWith('unnamed:'), kind: terrain.sites[id].kind, holder: terrain.sites[id].holder ?? terrain.sites[id].parent, scene: world[id]?.scene ?? null }));
-        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => ties[a]?.[b] ?? 0, fixed: fixedFor(mine), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null });
+        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null });
         moves = choice.moves;
         for (const id of mine) {
           const slotId = choice.assignment[id], site = terrain.sites[id];
@@ -628,21 +671,29 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           if (into && !placements.has(into)) placements.set(into, placeIn(into, [w, d], ground, pinAt, clashes().map(entry => entry.box), crowds().map(entry => entry.box), tiedTo, part.scale));
           return into && placements.get(into) ? { parent: into, at: placements.get(into).at } : null;
         };
-        const mention = { id: part.id, label: part.label, named: !part.id.startsWith('unnamed:'), kind, holder, scene: world[part.id]?.scene ?? null, pin: pinAt };
-        const choice = S.chooseSlots({ book: bookId, level: part.scale, slots: slotsAt(part.scale), mentions: [mention], ties: (a, b) => ties[a]?.[b] ?? 0, fixed: fixedFor([part.id]), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place, improve: false });
+        // No pin: where the canvas has an undecided place for now is no evidence; the characters' travel decides (§4).
+        const mention = { id: part.id, label: part.label, named: !part.id.startsWith('unnamed:'), kind, holder, scene: world[part.id]?.scene ?? null, pin: null };
+        const choice = S.chooseSlots({ book: bookId, level: part.scale, slots: slotsAt(part.scale), mentions: [mention], ties: (a, b) => tiesAt(part.scale)[a]?.[b] ?? 0, fixed: fixedFor([part.id], part.scale), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place, improve: false });
         const slot = choice.slots.find(entry => entry.id === choice.assignment[part.id]);
         if (!slot?.at) { await live.outcome({ subject: part.label, text: 'no slot of its kind and nowhere to spawn one: it stands at its spot' }); box = [round((pinAt ?? [at.x, at.z])[0] - w / 2), round((pinAt ?? [at.x, at.z])[1] - d / 2), round((pinAt ?? [at.x, at.z])[0] + w / 2), round((pinAt ?? [at.x, at.z])[1] + d / 2)]; }
         else {
           const fresh = !registry.slots[slot.id]?.toward, made = fresh ? placements.get(slot.parent) : null;
           keepSlots(part.scale, choice.slots, { [slot.id]: { size: [w, d], ...(made?.onto ? { turn: made.onto.turn, on: made.onto.what } : {}) } });
+          // A spawn in a parent laid out by topology (a third CBD in a metropolis) is laid out with the rest (§8.3), not apart.
+          const parentKind = terrain.sites[slot.parent]?.kind;
+          if (choice.spawned.includes(slot.id) && parentKind && resolver({ id: slot.parent, label: name(slot.parent), level: scaleOf(slot.parent), kind: parentKind })?.topology) {
+            Object.assign(registry.slots[slot.id], { toward: null }); delete registry.slots[slot.id].size; delete registry.slots[slot.id].turn; delete registry.slots[slot.id].on;
+            const said = layOutChildren(slot.parent, scaleOf(slot.parent));
+            if (said) await live.outcome({ subject: part.label, text: `spawned beyond its city's configuration: ${said}` });
+            slot.at = slotsAt(part.scale).find(entry => entry.id === slot.id)?.at ?? slot.at;
+          }
           const kept = registry.slots[slot.id], size = kept.size ?? [w, d];
           if (typeof kept.turn === 'number') laid = { turn: kept.turn, size, on: kept.on };
           box = Z.turnedBox(slot.at, size, kept.turn ?? 0);
           holder = mention.named ? slot.parent : slot.owner ?? slot.id;
           slotChosen = { slot: slot.id, heldBy, area: slot.owner ?? slot.id };
           logMap({ level: part.scale, what: choice.spawned.includes(slot.id) ? 'spawn' : mention.named ? 'borrow' : 'share', id: slot.id, place: part.id, parent: slot.parent, kind: slot.kind, ...(fresh ? { at: kept.toward, r: Math.max(...size) / 2 } : {}) });
-          const moved = pinAt ? Math.round(Math.hypot(slot.at[0] - pinAt[0], slot.at[1] - pinAt[1])) : null;
-          await live.outcome({ subject: part.label, text: `${choice.log.at(-1).replace(`${part.label}: `, '')}${moved !== null ? `, ${moved} m from its spot` : ''}${made?.onto ? ` (laid on its ground's ${made.onto.what})` : ''}` });
+          await live.outcome({ subject: part.label, text: `${choice.log.at(-1).replace(`${part.label}: `, '')}${made?.onto ? ` (laid on its ground's ${made.onto.what})` : ''}` });
         }
       } else {
         // Sized by its pins and placed by the program (the user's design, §2.0.21): its kind's usual size, grown until its
@@ -824,7 +875,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // carries (syncSlots).
       if (spawn && slotChosen) {
         const site = terrain.sites[part.id];
-        Object.assign(site, { slot: slotChosen.slot, holder: slotChosen.heldBy });
+        Object.assign(site, { slot: slotChosen.slot, holder: slotChosen.heldBy, ...(registry.slots[slotChosen.slot]?.mapped && !part.id.startsWith('unnamed:') ? { mapped: true, ...(average ? { average } : {}) } : {}) });
         if (part.id.startsWith('unnamed:')) { site.parent = slotChosen.area; site.parentLabel = name(slotChosen.area); for (const key of ['toward', 'size', 'box', 'turn', 'on', 'pinToward']) delete site[key]; }
       }
       if (shape) terrain.shapes[part.id] = { kind: shape, box, ...(upTo ? { top: upTo } : {}) };
@@ -846,6 +897,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         await mkdir(universe.dir, { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
       }
       if (spawn && isCity) { const said = deformCity(part.id); if (said) await live.outcome({ subject: part.label, text: `deformed to Jev's answer: ${said}` }); }
+      if (spawn && terrain.sites[part.id]?.mapped) { const said = reunify(terrain.sites[part.id].parent, part.id); if (said) await live.outcome({ subject: part.label, text: said }); }
       if (spawn) await saveSlots();
       await live.phase(`building the world with ${part.label}`);
       await build(part.id);
