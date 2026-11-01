@@ -127,3 +127,44 @@ test("the search decides a building's type when it is sure, Jev only when it is 
   assert.ok(!isSure(found(7, 6.8)), "close behind: Jev is asked");
   assert.ok(isSure(found(12, 6, null)) && !isSure(found(12, 11, null)) && !isSure(found(3, 0, null, 3)), "by words: a word of it in the name, and a lead");
 });
+
+test("every level's heights: a minimum, a kind's usual height where the answer spreads wide, the text's own measures offered", async () => {
+  const { buildingHeights, isWide, terrainHeightMode, TERRAIN_KINDS, withMeasures } = await import("../src/v2/context/terrainModes.js");
+  const { heightsShare, loadHeights } = await import("../src/v2/spawning/config.js");
+  const { loadBuildingTypes } = await import("../src/v2/spawning/inventory.js");
+  const { measuresIn, numberOf } = await import("../src/v2/context/measures.js");
+  const chart = loadHeights(), types = loadBuildingTypes();
+  // The chart (config/spawning/heights.json): every building type its least and usual floors, every area kind its usual.
+  for (const [id, type] of Object.entries(types)) if (type.use) { const floors = chart.buildings[id]; assert.ok(floors && floors[0] >= 1 && floors[0] <= floors[1], `${id}: its least and usual floors (${floors})`); }
+  for (const level of ["city", "district", "street"]) for (const [kind, entry] of Object.entries(TERRAIN_KINDS[level])) {
+    const usual = chart.areas[level]?.[kind], range = entry.medians ?? entry.tops!;
+    assert.ok(usual !== undefined && usual >= range[0] && usual <= range.at(-1)!, `${level} ${kind}: its usual height among its slices (${usual})`);
+  }
+  // A building type's least floors, a hard gate as every area kind's: nothing above the street under it; the underground stays.
+  const office = buildingHeights(chart.buildings["office-building"][0]);
+  assert.equal(office.standard, 9);
+  assert.deepEqual(office.slices.filter((slice) => slice.y > 0)[0], { letter: "E", y: 9, said: "3 floors" });
+  assert.ok(office.slices.some((slice) => slice.y < 0), "under the street still offered");
+  // The text's measures, by pattern: floors, metres beside a word of height or depth, never a layer or a walk.
+  assert.deepEqual([numberOf("五十"), numberOf("一百二十"), numberOf("十几"), numberOf("两百"), numberOf("３５")], [50, 120, 15, 200, 35]);
+  assert.deepEqual(measuresIn(["一座三十层的写字楼"]).map((m) => [m.y, m.said, m.named]), [[90, "30 floors", true]]);
+  assert.deepEqual(measuresIn(["塔", "那座塔高达两百米。"]).map((m) => m.y), [200]);
+  assert.deepEqual(measuresIn(["商场", "商场在地下二层。", "月台在地下30米。"]).map((m) => m.y).sort((a, b) => a - b), [-30, -6]);
+  assert.deepEqual(measuresIn(["房间", "桌上落了一层灰。", "他沿着街走了三百米。"]), []);
+  assert.deepEqual(measuresIn(["tower", "The tower is 120 m tall."]).map((m) => m.y), [120]);
+  // Offered as slices of their own, even under the minimum; the question says so, and states the minimum.
+  const tops = withMeasures(office.slices, [{ y: 90, said: "30 floors" }, { y: 6, said: "2 floors" }], office.standard);
+  assert.deepEqual(tops.filter((slice) => slice.text).map((slice) => [slice.y, slice.said]), [[6, "2 floors, as the text says"], [90, "30 floors, as the text says"]]);
+  assert.equal(tops.map((slice) => slice.letter).join(""), "ABCDEFGHIJKLMNOP".slice(0, tops.length), "lettered again from the lowest");
+  const task = (terrainHeightMode.task as (focus: never) => string)({ part: { id: "x", label: "那座写字楼", scale: "building" }, kind: "office-building", measure: "top", slices: tops, standard: 9 } as never);
+  assert.match(task, /No office-building is built lower than 9 m \(3 floors\)/);
+  assert.match(task, /as the text says/);
+  // An answer spread wide, nothing standing out, takes its kind's usual; one held near a slice, or the text's own, stands.
+  const at = (y: number) => tops.find((slice) => slice.y === y)!.letter, weights = (pairs: [number, number][]) => Object.fromEntries(pairs.map(([y, p]) => [at(y), p]));
+  assert.ok(isWide({ value: at(9), distribution: weights([[9, 0.36], [300, 0.2], [180, 0.15], [36, 0.15], [60, 0.14]]) }, tops, chart.spread));
+  assert.ok(!isWide({ value: at(15), distribution: weights([[15, 0.4], [24, 0.3], [300, 0.3]]) }, tops, chart.spread));
+  assert.ok(!isWide({ value: at(90), distribution: weights([[90, 0.3], [9, 0.25], [300, 0.25], [-12, 0.2]]) }, tops, chart.spread), "the text's measure stands");
+  assert.ok(!isWide({ value: at(9) }, tops, chart.spread), "without its weights an answer stands");
+  // Unnamed buildings share a lot only when their heights are near: a tower and low offices never, a basement and a roof never.
+  assert.ok(heightsShare(9, 15, chart.share) && !heightsShare(15, 180, chart.share) && !heightsShare(-6, 3, chart.share));
+});

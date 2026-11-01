@@ -86,6 +86,9 @@ test("the moves undo what narrative order got wrong: the more tied name gets the
   const result = chooseSlots(problem("b1", [at("near", [900, 0]), at("far", [-1000, 0])], [named("A", "dwelling"), named("B", "dwelling")], { ties, fixed: [{ id: "X", at: [1000, 0] }] }));
   assert.equal(result.assignment.B, "near"); assert.equal(result.assignment.A, "far");
   assert.ok(result.energy.final < result.energy.greedy, `${result.energy.greedy} → ${result.energy.final}`);
+  // Two names exchange only where both may stand (`allow`: a building's lot keeps heights near, heights.json `share`).
+  const kept = chooseSlots(problem("b1", [at("near", [900, 0]), at("far", [-1000, 0])], [named("A", "dwelling"), named("B", "dwelling")], { ties, fixed: [{ id: "X", at: [1000, 0] }], allow: (slot, m) => !(m.id === "B" && slot.id === "near") }));
+  assert.deepEqual([kept.assignment.A, kept.assignment.B], ["near", "far"]);
 });
 
 test("the same book and slots give the same choice", () => {

@@ -283,8 +283,12 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
     scene is set in counts as its pin, because most buildings the text mentions are seen from a street, not set in. A
     named building takes its lot for good; an unnamed one shares.
   - Jev is asked its height on slices through its street round that lot, the street's buildings cut where a slice meets
-    them. Every building is offered the same slices, from under the street to a hundred floors (`BUILDING_FLOORS`), so a
-    building is as tall as its scenes say, whatever it is.
+    them. Every building is offered the same slices up to a hundred floors (`BUILDING_FLOORS`), from under the street, and
+    above it from its type's least floors (§8.9), so a building is as tall as its scenes say, whatever it is.
+  - Unnamed buildings share a lot only when their heights are within a factor of two (`share`): one far from those
+    already on its lot (a fifty-storey tower among low offices) leaves it for another lot of its kind, or stands apart
+    where travel is least. The level's closing moves keep to it too, and two named buildings exchange lots only where
+    both may stand.
   - The lot takes its kind and its height: a named building's, else its sharers' mean. Taller than any model of its use
     stands for, it is drawn as a tower (a 30-floor convenience store, a tower model), never cut down to its use's.
   - In World · Live it blinks on its lot while its height is asked, then is kept.
@@ -444,6 +448,20 @@ of the book before it with that book's log applied; `--from <level>` drops the b
   *Tried and changed (2026-11-01):* the height probe showed Jev reads absolute averages surely and alike, additions
   unsurely and unevenly. The user's call: absolute averages, **each area kind's minimum a hard gate** (no slice below it;
   no slice under the street for a city or a district); a city's average asked on pictures across it.
+- **Every level's minimum, a kind's usual height, and the text's measures (the user, 2026-11-01, after the building
+  level's run).** One chart, `config/spawning/heights.json`, for an East Asian megacity. Jev is never shown its usual
+  heights.
+  - *The minimum at every level.* An area kind's is its least median; a building type's is its `least` floors, so an
+    office is offered nothing under three floors above the street. The run had put six office-like buildings at one floor, a
+    high-rise among them, each with a low confidence.
+  - *Where the answer spreads wide,* the part takes the measure its own name gives (五十层的…), else its kind's usual
+    height: an area kind's `usual`, a building type's usual floors. Wide is when its likeliest slice and the slices beside it hold under half its weight (`spread`), no
+    slice standing out. The run's wrong one-floor answers were all such.
+  - *The text's own measures* (`src/v2/context/measures.ts`): a number and a unit of height in the place's name and its
+    own sentences, found by pattern, no model. Floors count (层 before what a building is or has, 地下 or 第 before it,
+    階, floors); metres only beside a word of height or depth, so a distance walked is never a height. Each is offered as a
+    slice of its own, "as the text says", at every level, even under the minimum; when Jev takes it, it stands. The
+    slice's words are never the text's own, since the pictures may be published.
 - **Floating objects.** Some buildings neither stand on the ground nor fill a manifold: an underground cavern, a commercial
   centre on a raised ring, a floating platform. Each is asked twice, how far it is from the ground and how thick it is.
 - **Inventions are nominated.** Something that fits no category, placed as a shape, is a nominated object whatever the text

@@ -77,7 +77,9 @@ export interface GroundFocus extends PartFocus { shapes: Record<string, string>;
 export interface ZoomFocus extends PartFocus { kind: string; reasons: string[] }
 /** `tops`: the lettered slices, each a height the terrain may rise to. */
 /** `measure`: a built kind's median (its manifold makes the rest), or natural ground's or a shape's top; `slices` the heights offered. */
-export interface HeightFocus extends PartFocus { kind: string; measure: "median" | "top" | "average" | "elevation" | "thickness"; slices: { letter: string; y: number; said: string; offset?: number }[]; standard?: number; addition?: boolean }
+/** A height question's slice: its letter, its height (m), what it is in words; `offset` its addition to the minimum; `text` a measure the text gives. */
+export interface Slice { letter: string; y: number; said: string; offset?: number; text?: boolean }
+export interface HeightFocus extends PartFocus { kind: string; measure: "median" | "top" | "average" | "elevation" | "thickness"; slices: Slice[]; standard?: number; addition?: boolean }
 export interface MemberFocus { city: { id: string; label: string }; parts: { key: string; label: string; scale: string }[] }
 
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
@@ -204,11 +206,13 @@ const SHAPE_TOPS = [3, 6, 12, 25, 50, 100];
  * on the ground nor fills a manifold. Each is asked twice: how far it is from the ground (its underside above the street;
  * under it, how deep its top lies), and how thick it is. None of them takes part in a manifold's average or in unification.
  */
+/** The letters a height question's slices are named by: enough for the underground's, a kind's and the text's measures. */
+export const LETTERS = "ABCDEFGHIJKLMNOPQRST";
 export const FLOATING = new Set(["platform", "sphere", "donut", "cut"]);
 const ELEVATIONS = [0, 3, 6, 12, 25, 50, 100], THICKNESSES = [1, 3, 6, 12, 25, 50];
 /** A floating object's thickness slices, each said as what it would be. */
-export const terrainThickness = (): { letter: string; y: number; said: string }[] =>
-  THICKNESSES.map((y, k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said: y <= 1 ? "a deck" : y <= 3 ? "a floor" : y <= 6 ? "two floors" : `about ${Math.round(y / 3)} floors` }));
+export const terrainThickness = (): Slice[] =>
+  THICKNESSES.map((y, k) => ({ letter: LETTERS[k], y, said: y <= 1 ? "a deck" : y <= 3 ? "a floor" : y <= 6 ? "two floors" : `about ${Math.round(y / 3)} floors` }));
 /** Natural ground by its height. */
 const natural = (y: number) => (y <= 30 ? "a low rise" : y <= 100 ? "a hill" : y <= 250 ? "a high hill" : y <= 500 ? "a mountain" : "a high mountain");
 /** A part's level's kinds (a level without its own, a district's). */
@@ -231,11 +235,11 @@ export const UNDERGROUND: [number, string][] = [[-60, "deep underground"], [-30,
  * The question's slices for a part of a kind: the underground's, then a built kind's medians (the median roof: the engine
  * draws the spread from its manifold), or natural ground's or a shape's tops; each said in floors, or as natural ground.
  */
-export function terrainHeights(scale: string, kind: string, average?: { factor: number; underground?: boolean }): { measure: "median" | "top" | "average" | "elevation"; slices: { letter: string; y: number; said: string; offset?: number }[]; standard?: number } {
+export function terrainHeights(scale: string, kind: string, average?: { factor: number; underground?: boolean }): { measure: "median" | "top" | "average" | "elevation"; slices: Slice[]; standard?: number } {
   const entry = terrainKind(scale, kind), median = !!entry?.ground && !!entry.medians;
   // A floating object is asked first how far it is from the ground (then its thickness: terrainThickness).
   if (!entry && FLOATING.has(kind))
-    return { measure: "elevation", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: its top ${-y} m down, ${under}`]), ...ELEVATIONS.map((y): [number, string] => [y, y === 0 ? "on the ground" : `its underside about ${Math.max(1, Math.round(y / 3))} floors up`])].map(([y, said], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said })) };
+    return { measure: "elevation", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: its top ${-y} m down, ${under}`]), ...ELEVATIONS.map((y): [number, string] => [y, y === 0 ? "on the ground" : `its underside about ${Math.max(1, Math.round(y / 3))} floors up`])].map(([y, said], k) => ({ letter: LETTERS[k], y, said })) };
   // As averages (docs/v2/borrow-and-spawn.md §8.9; `factor`: the kind's manifold's average over its median), the kind's
   // least average its minimum, a hard gate (the user, 2026-11-01): no slice below it. Under the street only where an area of
   // the level may lie there (`underground`: a passage at the street level, not a city or a district). Each slice keeps its
@@ -243,18 +247,50 @@ export function terrainHeights(scale: string, kind: string, average?: { factor: 
   if (average && median) {
     const ys = entry!.medians!.map((m) => Math.round(m * average.factor)), standard = ys[0];
     const slices = [...(average.underground === false ? [] : UNDERGROUND).map(([y, under]) => ({ y, offset: y, said: `underground: ${under}` })), ...ys.map((y) => ({ y, offset: y - standard, said: `about ${Math.max(1, Math.round(y / 3))} floors on average` }))];
-    return { measure: "average", standard, slices: slices.map((slice, k) => ({ letter: "ABCDEFGHIJKLMN"[k], ...slice })) };
+    return { measure: "average", standard, slices: slices.map((slice, k) => ({ letter: LETTERS[k], ...slice })) };
   }
   // A building: its roof at three metres a floor, each slice said in floors.
   if (scale === "building" && entry && !entry.shape) return buildingHeights();
   const heights = median ? entry!.medians! : entry?.tops ?? SHAPE_TOPS;
   const said = (y: number) => (median ? `about ${Math.max(1, Math.round(y / 3))} floors` : natural(y));
-  return { measure: median ? "median" : "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...heights.map((y): [number, string] => [y, said(y)])].map(([y, words], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said: words })) };
+  return { measure: median ? "median" : "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...heights.map((y): [number, string] => [y, said(y)])].map(([y, words], k) => ({ letter: LETTERS[k], y, said: words })) };
 }
-/** The floors every building is offered (the user, 2026-11-01: a building's height is its scenes' to say, never its kind's): one to a hundred. */
+/** The floors a building is offered (the user, 2026-11-01: a building's height is its scenes' to say): one to a hundred. */
 export const BUILDING_FLOORS = [1, 2, 3, 5, 8, 12, 20, 35, 60, 100];
-/** A building's height slices: under the street, then the floors (its roof at three metres a floor), each said in floors. */
-export const buildingHeights = (floors: number[] = BUILDING_FLOORS): { measure: "top"; slices: { letter: string; y: number; said: string }[] } => ({ measure: "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...floors.map((f): [number, string] => [f * 3, `${f} floor${f === 1 ? "" : "s"}`])].map(([y, said], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said })) });
+/**
+ * A building's height slices: under the street, then the floors from its type's least (its minimum, a hard gate as every
+ * area kind's: the user, 2026-11-01; config/spawning/heights.json), its roof at three metres a floor, each said in floors.
+ */
+export const buildingHeights = (least = 1, floors: number[] = BUILDING_FLOORS): { measure: "top"; slices: Slice[]; standard?: number } => {
+  const above = [least, ...floors.filter((f) => f > least)];
+  return { measure: "top", ...(least > 1 ? { standard: least * 3 } : {}), slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...above.map((f): [number, string] => [f * 3, `${f} floor${f === 1 ? "" : "s"}`])].map(([y, said], k) => ({ letter: LETTERS[k], y, said })) };
+};
+/**
+ * A height question's slices with the measures its text gives (measures.ts; the user, 2026-11-01), at every level: each a
+ * slice of its own, "as the text says", even under the minimum; one at a height already offered marks that slice. Lettered
+ * again from the lowest; an addition to the minimum kept for each (`standard`).
+ */
+export function withMeasures(slices: Slice[], measures: { y: number; said: string }[], standard?: number): Slice[] {
+  const out = slices.map((slice) => ({ ...slice }));
+  for (const measure of measures) {
+    const same = out.find((slice) => Math.abs(slice.y - measure.y) < 0.5);
+    if (same) { if (!same.text) Object.assign(same, { said: `${same.said}, as the text says`, text: true }); continue; }
+    out.push({ letter: "", y: measure.y, said: `${measure.said}, as the text says`, text: true, ...(standard !== undefined ? { offset: measure.y - standard } : {}) });
+  }
+  return out.sort((a, b) => a.y - b.y).slice(0, LETTERS.length).map((slice, k) => ({ ...slice, letter: LETTERS[k] }));
+}
+/**
+ * Whether an answer spreads too wide to stand (the user, 2026-11-01): its likeliest slice and those within `within` of it
+ * (the slices are in height order) hold under `below` of its weight, no slice standing out. A measure the text gives, when
+ * it is the likeliest, always stands; an answer without its weights (`distribution`) stands.
+ */
+export function isWide(reply: { value?: unknown; distribution?: Record<string, number> } | undefined, slices: Slice[], spread = { within: 1, below: 0.5 }): boolean {
+  const weights = reply?.distribution, at = slices.findIndex((slice) => slice.letter === reply?.value);
+  if (!weights || at < 0 || slices[at].text) return false;
+  const total = slices.reduce((sum, slice) => sum + (weights[slice.letter] ?? 0), 0);
+  const near = slices.slice(Math.max(0, at - spread.within), at + spread.within + 1).reduce((sum, slice) => sum + (weights[slice.letter] ?? 0), 0);
+  return total > 0 && near / total < spread.below;
+}
 /** A part's options: its level's kinds (each with its manifold in words), then the basic shapes. */
 export const terrainKinds = (scale: string, shapes: Record<string, string>): Record<string, string> => ({ ...Object.fromEntries(Object.entries(levelOf(scale)).map(([kind, entry]) => [kind, entry.manifold ? `${entry.hint}. Its heights: ${manifoldWords(entry.manifold)}` : entry.hint])), ...shapes });
 /** The part's own sentences (as many as the old evidence gave): what is asked about. */
@@ -363,7 +399,7 @@ export const terrainHeightMode: Mode<HeightFocus, TerrainStores> = {
     ? `How far is ${focus.part.label} (${focus.kind}) from the ground? It floats or is held up on its own, so give the height of its underside above the street (on the ground: 0 m); if it lies under the ground (a cavern), how deep its top lies: the slices below the street. Its thickness is asked next.`
     : focus.measure === "thickness"
     ? `How thick is ${focus.part.label} (${focus.kind}), from its underside to its top (a cavern: from its top down)? A deck is a metre or so, a sky garden a floor or two with its planting, a cavern as tall as its hall.`
-    : `How high does ${focus.part.label} (${focus.kind}) rise: the height of its top? If it lies underground, how deep it goes: the slices below the street.`} The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from the scenes it is in, as the text tells them, the most telling first (scenes); where given, the facts about it (facts), its surroundings (environment) and what stands in it (standing); and the terrain kept for the places holding it (within). Where the text says little of it or you are unsure, use common sense: what anyone knows of a real place (a world city's centre stands tall), and what a place of its kind usually is.`,
+    : `How high does ${focus.part.label} (${focus.kind}) rise: the height of its top? If it lies underground, how deep it goes: the slices below the street.${focus.standard !== undefined ? ` No ${focus.kind} is built lower than ${focus.standard} m (${Math.round(focus.standard / 3)} floors) above the street: that is its lowest slice there.` : ""}`}${focus.slices.some((slice) => slice.text) ? ` A slice said "as the text says" is a measure its sentences give: take it when it is of ${focus.part.label} itself, not of something beside it.` : ""} The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from the scenes it is in, as the text tells them, the most telling first (scenes); where given, the facts about it (facts), its surroundings (environment) and what stands in it (standing); and the terrain kept for the places holding it (within). Where the text says little of it or you are unsure, use common sense: what anyone knows of a real place (a world city's centre stands tall), and what a place of its kind usually is.`,
   sources: [...sources<HeightFocus>("height"), fixed("heights", "heights", (focus: HeightFocus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, focus.addition ? `${(slice.offset ?? 0) >= 0 ? "+" : ""}${slice.offset} m${(slice.offset ?? 0) >= 0 ? ` (an average of ${slice.y} m)` : ""}: ${slice.said}` : `${slice.y} m: ${slice.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
   cutOrder: ["environment", "standing", "facts"],
   probe,

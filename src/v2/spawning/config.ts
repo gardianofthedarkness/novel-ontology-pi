@@ -51,6 +51,16 @@ export function streetsOnly(folder = DEFAULTS): Record<string, string[]> {
   return JSON.parse(readFileSync(`${folder.replace(/\/?$/, "/")}district.json`, "utf8")).only ?? {};
 }
 
+/**
+ * How tall each kind usually is, at every level (heights.json; the user, 2026-11-01): an area kind's `usual` in the measure
+ * its slices are in, a building type's least and usual floors, when an answer spreads too wide (`spread`), and how near
+ * the heights of unnamed buildings sharing a lot must be (`share`).
+ */
+export interface HeightChart { spread: { within: number; below: number }; share: number; areas: Record<string, Record<string, number>>; buildings: Record<string, [number, number]> }
+export const loadHeights = (folder = DEFAULTS): HeightChart => JSON.parse(readFileSync(`${folder.replace(/\/?$/, "/")}heights.json`, "utf8"));
+/** Whether two buildings' heights may share a lot: both above the street or both under it, within a factor of `share`. */
+export const heightsShare = (a: number, b: number, share: number): boolean => (a < 0) === (b < 0) && Math.max(Math.abs(a), Math.abs(b)) <= share * Math.min(Math.abs(a), Math.abs(b));
+
 /** What a street kind takes of its ground (street.json `takes`), or null for one laid out as an area of its own. */
 export const streetTakes = (kind: string, files: SpawningFiles = loadSpawning()): Takes | null => files.street[kind]?.takes ?? null;
 

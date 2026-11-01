@@ -214,7 +214,7 @@ export function chooseSlots(problem: LevelProblem): Choice {
     for (let i = 0; i < names.length; i++)
       for (let j = i + 1; j < names.length; j++) {
         const a = names[i], b = names[j], A = slotOf(a.id), B = slotOf(b.id);
-        if (a.kind !== b.kind || !A.at || !B.at || !problem.within(B.parent, a.holder) || !problem.within(A.parent, b.holder)) continue;
+        if (a.kind !== b.kind || !A.at || !B.at || !problem.within(B.parent, a.holder) || !problem.within(A.parent, b.holder) || !(problem.allow?.(B, a) ?? true) || !(problem.allow?.(A, b) ?? true)) continue;
         const pair = new Set([a.id, b.id]), before = cost(a, A.at, A.parent, pair) + cost(b, B.at, B.parent, pair), after = cost(a, B.at, B.parent, pair) + cost(b, A.at, A.parent, pair);
         if (after < before - 0.5) {
           A.owner = b.id; B.owner = a.id; assignment[a.id] = B.id; assignment[b.id] = A.id; moves++; moved = true;

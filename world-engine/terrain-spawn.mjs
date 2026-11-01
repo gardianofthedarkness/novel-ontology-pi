@@ -128,6 +128,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // is configured (the embedding connector), else by words (src/v2/spawning/inventory.ts).
   const I = spawn ? await load('dist/src/v2/spawning/inventory.js') : null, buildingTypes = I ? I.loadBuildingTypes() : {};
   const embedder = spawn ? await (async () => { try { const { loadConfig } = await load('dist/src/cli/config.js'), { loadEmbedder } = await load('dist/src/ground/connectors/embeddings.js'), cfg = loadConfig(process.env); return cfg.embeddings.status === 'deferred' ? null : loadEmbedder({ provider: cfg.embeddings.provider, model: cfg.embeddings.model, dimension: cfg.embeddings.dimension, baseUrl: cfg.embeddings.baseUrl, apiKey: process.env.EMBEDDING_API_KEY?.trim() || null }); } catch { return null; } })() : null;
+  // How tall each kind usually is (config/spawning/heights.json; the user, 2026-11-01): a building type's minimum, and every
+  // kind's usual height where Jev's answer spreads wide; the measures a place's sentences give, offered at every level.
+  const H = spawn ? S.loadHeights() : null, M = await load('dist/src/v2/context/measures.js');
   const LEVELS = ['city', 'district', 'street', 'building'], bookId = universe.book, resolver = spawn ? S.defaultResolver() : null;
   if (spawn) { terrain.mode = 'spawn'; terrain.book = bookId; registry.slots ??= {}; terrain.slots = registry.slots; }
   // The map's log, by book (docs/v2/borrow-and-spawn.md §8.8): every change to the map in order, so a book can be played again.
@@ -398,6 +401,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       for (const scene of stores.scenes) scene.lines.forEach((line, n) => { if ([-1, 0, 1].some(k => ids.has(scene.lines[n + k]?.id))) out.push(line.text); });
       return out.slice(0, 15);
     };
+    // A place's name and its own sentences (the ones naming it), where the measures it is given are read (measures.ts).
+    const textsOf = part => [baseName(part.label), ...(part.id.startsWith('unnamed:') ? stores.own(part.id) : stores.naming(baseName(part.label))).slice(0, 60).map(sentence => sentence.text)];
     const settingOf = new Map((inputs.data?.scenes ?? []).map(scene => [scene.id, scene.placeId ?? scene.placeIds?.[0] ?? null]));
     // Where a building's mention would have the characters travel least (§4): its ties to the places standing, and the
     // place its scene is set in as its pin; and of the spots under its holder (every lot of its streets), the least.
@@ -408,7 +413,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       return { scene, pin, fixed, travel };
     };
     const bestSpot = (holder, travel, slots = slotsAt('building')) => slots.filter(slot => slot.at && (slot.parent === holder || within(slot.parent, holder))).map(slot => [slot, travel(slot.at)]).sort((a, b) => a[1] - b[1] || a[0].id.localeCompare(b[0].id))[0]?.[0] ?? null;
-    const borrowBuilding = async (part, city, use) => {
+    // `avoid`: lots it may not take (where the buildings' heights are far from its own).
+    const borrowBuilding = async (part, city, use, avoid = new Set()) => {
       const holder = holderOf(part, city), named = !part.id.startsWith('unnamed:'), { scene, pin, fixed, travel } = travelFor(part);
       const mention = { id: part.id, label: part.label, named, kind: use, holder, scene, pin };
       const slots = slotsAt('building');
@@ -417,10 +423,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // the spot of whatever lot is there, and pushes the buildings round it outward (the export); the street keeps them all.
       const place = (m, parent) => {
         if (parent) return null;
-        spot = bestSpot(holder, travel, slots);
+        spot = bestSpot(holder, travel, slots.filter(slot => !avoid.has(slot.id)));
         return spot ? { parent: spot.parent, at: spot.at } : null;
       };
-      const choice = S.chooseSlots({ book: bookId, level: 'building', slots, mentions: [mention], ties: (a, b) => tiesAt('building')[a]?.[b] ?? 0, fixed, within: (id, of) => id === of || within(id, of), sceneIndex: s => sceneAt.get(s) ?? 0, place, improve: false });
+      const choice = S.chooseSlots({ book: bookId, level: 'building', slots, mentions: [mention], ties: (a, b) => tiesAt('building')[a]?.[b] ?? 0, fixed, within: (id, of) => id === of || within(id, of), sceneIndex: s => sceneAt.get(s) ?? 0, place, improve: false, allow: slot => !avoid.has(slot.id) });
       const slot = choice.slots.find(entry => entry.id === choice.assignment[part.id]);
       if (!slot?.at) { await live.outcome({ subject: part.label, text: `a ${use}: no slot of its kind and no street under ${name(holder)}` }); return null; }
       const spawned = choice.spawned.includes(slot.id), n = Object.values(registry.slots).filter(entry => entry.parent === slot.parent && entry.kind === use && entry.placed).length + 1;
@@ -561,13 +567,16 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     };
     // A level's end (§4.3): the moves, the spares placed, every area of the level spawning its children's slots, the world
     // built again. Run again on a pick-up, it does only what is left.
+    // Buildings share a lot only when their heights are near (heights.json `share`): the level's moves keep to it as the
+    // borrowing does, a slot's mentions as the moves leave them.
+    const topOf = id => terrain.sites[id]?.top, nearHeights = (slot, m) => typeof topOf(m.id) !== 'number' || [slot.owner, ...S.sharersIn(slot, bookId).map(share => share.mention)].every(id => !id || id === m.id || typeof topOf(id) !== 'number' || S.heightsShare(topOf(id), topOf(m.id), H.share));
     const spawnEnd = async level => {
       if (!spawn) return;
       const mine = terrain.order.filter(id => terrain.sites[id]?.scale === level && terrain.sites[id].slot && registry.slots[terrain.sites[id].slot]);
       let moves = 0;
       if (mine.length) {
         const mentions = mine.map(id => ({ id, label: terrain.sites[id].label, named: !id.startsWith('unnamed:'), kind: terrain.sites[id].kind, holder: terrain.sites[id].holder ?? terrain.sites[id].parent, scene: world[id]?.scene ?? null, pin: terrain.sites[id].pin ?? null }));
-        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null, allow: (slot, m) => fits(m.kind, slot.parent) });
+        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null, allow: (slot, m) => fits(m.kind, slot.parent) && (level !== 'building' || nearHeights(slot, m)) });
         moves = choice.moves;
         for (const id of mine) {
           const slotId = choice.assignment[id], site = terrain.sites[id];
@@ -735,11 +744,13 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const type = chosen && buildingTypes[chosen] ? chosen : null, shape = chosen && SHAPES[chosen] ? chosen : type && buildingTypes[type].shape ? buildingTypes[type].shape : null, kind = type && buildingTypes[type].use ? buildingTypes[type].use : chosen && T.TERRAIN_KINDS.building[chosen] ? chosen : null;
         if (!kind && !shape) { await live.outcome({ subject: part.label, text: `${chosen ? `"${chosen}"` : 'no answer'}: no building kind or shape, so it stays where the canvas puts it` }); continue; }
         // A building borrows a lot of its kind (or stands apart, a rare one); a shape stands where travel is least.
-        const lot = shape ? placeShape(part, city, shape) : await borrowBuilding(part, city, kind);
+        let lot = shape ? placeShape(part, city, shape) : await borrowBuilding(part, city, kind);
         if (!lot) { await live.outcome({ subject: part.label, text: `no street under ${name(holderOf(part, city))} to stand in` }); continue; }
-        // Its height: slices through a core of its street round its spot, the buildings standing there cut; a building's at
-        // its kind's floors, a floating shape's its distance from the ground (then its thickness), a ground shape's its top.
-        const { measure, slices: tops } = shape ? T.terrainHeights('building', shape) : T.buildingHeights(), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo, core = Math.max(CORE_MIN, Math.max(...lot.size) * 1.5);
+        // Its height: slices through a core of its street round its spot, the buildings standing there cut; a building's from
+        // its type's least floors (heights.json, a hard gate as every level's), a floating shape's its distance from the
+        // ground (then its thickness), a ground shape's its top; each with the measures its sentences give (measures.ts).
+        const floors = !shape && type ? H?.buildings[type] ?? null : null, heights = shape ? T.terrainHeights('building', shape) : T.buildingHeights(floors?.[0] ?? 1), { measure, standard } = heights;
+        const said = M.measuresIn(textsOf(part)), own = shape ? null : said.find(measure => measure.named) ?? null, tops = T.withMeasures(heights.slices, said, standard), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo, core = Math.max(CORE_MIN, Math.max(...lot.size) * 1.5);
         const at = lot.at, sample = [round(at[0] - core), round(at[1] - core), round(at[0] + core), round(at[1] + core)];
         const lots = data.world.lots.map(entry => ({ box: [entry.i0 * CELL, entry.j0 * CELL, (entry.i0 + entry.nx) * CELL, (entry.j0 + entry.nz) * CELL], top: (entry.floors ?? 1) * FLOOR })).filter(entry => entry.box[0] < sample[2] && sample[0] < entry.box[2] && entry.box[1] < sample[3] && sample[1] < entry.box[3]);
         const distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [at[0], (lo + hi) / 2, at[1]];
@@ -747,8 +758,11 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         await show(`${part.label}: its spot`, { id: part.id, label: part.label, kind: shape ?? kind, box: lot.box, top: null });
         const shot = await shoot(OVERVIEW, { view: { fov: 40, position: from(mid, -0.62, 0.3, distance), target: mid }, slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${entry.y} m · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.filter(entry => entry.y > 0).flatMap(entry => lots.filter(entry2 => entry2.top > entry.y).slice(0, 80).map(entry2 => ({ box: entry2.box, y: entry.y }))), labelScale: Math.max(2.5, distance / 75), dash: Math.max(1, distance / 160), vague: { near: distance * 1.6, far: distance * 4.5 } });
         const where = `${part.label}'s spot in ${name(lot.street)}, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height${tops.some(entry => entry.y < 0) ? ', and below the street' : ''}; the city faded behind.`;
-        const rise = (await ask(decide, T.terrainHeightMode, { ...about, kind: shape ?? kind, measure, slices: tops, pictures: { heights: where } }, stores, { request: { images: { heights: shot.png } } })).replies[0];
-        const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null;
+        const rise = (await ask(decide, T.terrainHeightMode, { ...about, kind: shape ?? type ?? kind, measure, slices: tops, ...(standard ? { standard } : {}), pictures: { heights: where } }, stores, { request: { images: { heights: shot.png } } })).replies[0];
+        // Where the answer spreads wide, no slice standing out (heights.json; the user, 2026-11-01): the measure its own name
+        // gives (五十层的…), else its type's usual floors.
+        const wide = !!H && (!!floors || !!own) && T.isWide(rise, tops, H.spread), height = wide ? own?.y ?? floors[1] * 3 : tops.find(entry => entry.letter === rise?.value)?.y ?? null;
+        if (wide) await live.outcome({ subject: part.label, text: `its height answer spreads wide (${rise?.value ?? '?'} likeliest, ${Math.round((rise?.confidence ?? 0) * 100)}% sure): ${own ? `its name's own ${own.said}` : `a ${type}'s usual ${floors[1]} floor${floors[1] === 1 ? '' : 's'}`}` });
         if (shape) {
           // A floating shape: its thickness next (§8.9); it spans from its underside up (a cavern from its top down).
           let bottom = null, thick = null;
@@ -767,7 +781,18 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           await saveSlots(); placed++;
           continue;
         }
-        Object.assign(terrain.sites[part.id], { ...(type ? { type } : {}), typeBy: sure ? 'search' : 'jev', offered: found.map(entry => entry.id), ...(height !== null ? { top: height } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } });
+        // Unnamed buildings share a lot only when their heights are near (heights.json `share`; the user, 2026-11-01): one far
+        // from those already on its lot (a tower among low offices) leaves it for another lot of its kind, or stands apart.
+        const far = id => Object.entries(terrain.sites).some(([other, site]) => other !== part.id && site.scale === 'building' && site.slot === id && typeof site.top === 'number' && !S.heightsShare(site.top, height, H.share));
+        const was = terrain.sites[part.id]?.slot;
+        if (height !== null && was && far(was)) {
+          const kept = registry.slots[was], before = kept ? structuredClone(kept) : null;
+          if (kept) { if (kept.owner === part.id) { kept.owner = null; delete kept.ownerBook; } kept.sharers = (kept.sharers ?? []).filter(share => share.mention !== part.id); }
+          const moved = await borrowBuilding(part, city, kind, new Set(Object.values(registry.slots).filter(slot => slot.level === 'building' && far(slot.id)).map(slot => slot.id)));
+          if (moved) { lot = moved; await live.outcome({ subject: part.label, text: `at ${height} m it is far from the buildings sharing its lot: moved to ${terrain.sites[part.id].slot}` }); }
+          else if (before) registry.slots[was] = before;
+        }
+        Object.assign(terrain.sites[part.id], { ...(type ? { type } : {}), typeBy: sure ? 'search' : 'jev', offered: found.map(entry => entry.id), ...(height !== null ? { top: height } : {}), heightBy: wide ? (own ? 'name' : 'type') : 'jev', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } });
         await live.outcome({ subject: part.label, text: `${part.label}: ${type ?? kind}${type ? ` (${kind})` : ''}, ${height === null ? 'its street\'s height' : height < 0 ? `${-height} m under the street` : `${Math.round(height / 3)} floors (${height} m)`}, in ${name(lot.street)}` });
         await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: lot.box, top: height });
         await saveSlots(); placed++;
@@ -996,7 +1021,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // Spawn mode asks the kind's standard plus an addition, as averages (docs/v2/borrow-and-spawn.md §8.9).
       const kindManifold = T.terrainKind(part.scale, kind)?.manifold, factor = spawn && kindManifold ? averageOverMedian(kindManifold) : null;
       // As averages, the kind's minimum a hard gate (§8.9; the user, 2026-11-01): a city or a district is never under the street.
-      const { measure, slices: tops, standard } = T.terrainHeights(part.scale, kind, factor ? { factor, underground: !['city', 'district'].includes(part.scale) } : undefined), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
+      // With the measures its sentences give (measures.ts), each a slice of its own (the user, 2026-11-01).
+      const offered = T.terrainHeights(part.scale, kind, factor ? { factor, underground: !['city', 'district'].includes(part.scale) } : undefined), { measure, standard } = offered;
+      const measures = M.measuresIn(textsOf(part)), own = shape ? null : measures.find(measure => measure.named) ?? null, tops = T.withMeasures(offered.slices, measures, standard), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
       const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, Math.max(CORE_MIN, span * CORE)), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
       // The slices through a core of the area round a point, labelled as heights, or as additions to the minimum (the probe).
       const heightsAt = async (at, absolute = true) => {
@@ -1035,8 +1062,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const probeFile = join(folder, 'height-probe.json'), kept = JSON.parse(await readFile(probeFile, 'utf8').catch(() => '[]'));
         await replace(probeFile, JSON.stringify([...kept, ...found.map(entry => ({ ...entry, at: new Date().toISOString() }))], null, 1));
       }
-      // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top.
-      const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null;
+      // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top. Where the
+      // answer spreads wide, no slice standing out: the measure its own name gives, else its kind's usual height
+      // (heights.json), made an average as its slices are.
+      const usual = shape ? undefined : H?.areas[part.scale]?.[kind], wide = !!H && (usual !== undefined || !!own) && T.isWide(rise, tops, H.spread);
+      const height = wide ? own?.y ?? (measure === 'average' && factor ? Math.round(usual * factor) : usual) : tops.find(entry => entry.letter === rise?.value)?.y ?? null;
+      if (wide) await live.outcome({ subject: part.label, text: `its height answer spreads wide (${rise?.value ?? '?'} likeliest, ${Math.round((rise?.confidence ?? 0) * 100)}% sure): ${own ? `its name's own ${own.said}` : `a ${kind}'s usual height`}, ${height} m` });
       // A floating object (§8.9; the user's idea): its distance from the ground (asked above), then its thickness; it spans
       // from its underside up (a cavern from its top down), its top what must stand among tall enough buildings.
       let bottom = null, thick = null;
@@ -1069,7 +1100,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       }
       // An average (spawn mode) is built from its median; below the street a depth stays a depth.
       const average = measure === 'average' && height !== null && height >= 0 ? height : null, median = measure === 'median' ? height : measure === 'average' && height !== null ? (height < 0 ? height : Math.round(height / factor)) : null;
-        return { where, boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average, bottom, thick };
+        return { where, boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average, bottom, thick, heightBy: wide ? (own ? 'name' : 'kind') : rise ? 'jev' : null };
       };
       // Kept in an earlier book of the universe under the same name (§2.0.15): reused as it was, Jev not asked; where it lay
       // in its parent, when its parent has the same name too.
@@ -1083,7 +1114,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const box = isCity && cityNode ? [round(cityNode.x - cityNode.r), round(cityNode.z - cityNode.r), round(cityNode.x + cityNode.r), round(cityNode.z + cityNode.r)] : laid ? Z.turnedBox(c, [w, d], laid.turn) : [round(c[0] - w / 2), round(c[1] - d / 2), round(c[0] + w / 2), round(c[1] + d / 2)];
         return { boxBy: null, what: null, rise: null, kind: reuse.kind, entry, shape, ground: shape ? null : reuse.ground ?? known?.ground ?? null, box, laid, median: reuse.median ?? null, upTo: reuse.top ?? null, measure: reuse.median != null ? 'median' : 'top', reusedFrom: reuse.book, bottom: reuse.bottom ?? null, thick: reuse.thickness ?? null };
       };
-      const { boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average, empty, from: averaged, reusedFrom, bottom = null, thick = null } = poolOf ? byDefault() : reuse ? reused() : await asked();
+      const { boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average, empty, from: averaged, reusedFrom, bottom = null, thick = null, heightBy = null } = poolOf ? byDefault() : reuse ? reused() : await asked();
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
       const proposal = { id: part.id, label: part.label, kind: kind ?? 'empty', box, top: median ?? upTo, measure, ...(settled?.frames ? { settle: { frames: settled.frames, energy: settled.energy } } : {}) };
       const said = empty ? `empty (nothing of its level decided in ${name(poolOf)} yet)` : `${kind}${median ? (median < 0 ? `, ${-median} m underground` : `, median ${median} m`) : upTo ? (upTo < 0 ? `, ${-upTo} m down` : `, up to ${upTo} m`) : ''}${averaged ? ` (the average of ${averaged} ${part.scale === 'street' ? 'streets' : 'districts'})` : ''}${reusedFrom ? ` (kept in ${reusedFrom}, reused)` : ''}`;
@@ -1094,11 +1125,11 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const parentNode = nodeOf(holder);
       const toward = parentNode ? [round((box[0] + box[2]) / 2 - parentNode.x), round((box[1] + box[3]) / 2 - parentNode.z)] : null;
       terrain.sites[part.id] = isCity
-        ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(average ? { average } : {}), ...(upTo ? { top: upTo } : {}), by: reusedFrom ? 'universe' : 'jev', ...(reusedFrom ? { from: reusedFrom } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
+        ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(average ? { average } : {}), ...(upTo ? { top: upTo } : {}), by: reusedFrom ? 'universe' : 'jev', ...(reusedFrom ? { from: reusedFrom } : {}), ...(heightBy ? { heightBy } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
         : empty ? { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, empty: true, by: 'pool', pool: poolOf }
         // A pool's member borrows its pool's ground in the box Jev gave it (the engine builds it there).
         : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), ...(sampled ? { member: holder } : {}), size: laid?.size ?? [round(box[2] - box[0]), round(box[3] - box[1])], ...(laid ? { turn: laid.turn, on: laid.on } : {}), toward, ...(settled?.pin ? { pinToward: settled.pin } : {}), box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), ...(bottom !== null ? { bottom, thickness: thick } : {}), by: poolOf ? 'pool' : reusedFrom ? 'universe' : 'jev', ...(poolOf ? { pool: poolOf } : {}), ...(reusedFrom ? { from: reusedFrom } : {}),
-          confidence: { box: boxBy?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
+          ...(heightBy ? { heightBy } : {}), confidence: { box: boxBy?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
       // Spawn mode: the part is its slot's (its own for good when it is named, a share of this book when not). A named place
       // stands in the slot's area as its own ground; an unnamed one is a marker in the slot, whose ground the slot's site
       // carries (syncSlots).
