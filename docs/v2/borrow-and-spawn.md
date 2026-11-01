@@ -295,6 +295,20 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
   - In World · Live it blinks on its lot while its height is asked, then is kept.
   - Before (the first M5 run), its use came from the language profile and its height from its street, so Jev saw no
     building level at all.
+- **A composite building's part** (the user, 2026-11-01; `config/spawning/composite.json`, `src/v2/spawning/composite.ts`).
+  A shop, a restaurant, a bar, a cinema the text passes by is part of a larger building, not a building of its own: a
+  convenience store at a tower's foot, a cinema on a mall's upper floors, a ramen shop in a station.
+  - Its type is found as every building's (the search, or Jev when the search is unsure); then it is asked nothing more:
+    no lot, no height.
+  - It waits until the level's buildings and their moves are done, then joins a host under its holder where the
+    characters' travel is least: a building kept at this level of a use it may be part of (a mall, an office, a station,
+    a block of flats, a hotel), or a spare lot of that use.
+  - At its host's foot, on its upper floors, or under the street when its host is (a subway station) or its own sentences
+    say so (地下).
+  - With no host under its holder it borrows a lot of its own, at its type's least floors, still asked nothing.
+  - A tenant a scene is set in stays a building of its own, since the stage walks in it.
+  - Drawn: a host of four floors or more with tenants at its foot has them as its base (the amber podium, shops under a
+    tower); the tenant's marker stands at its host. In the place tree it is in its host's street.
 - **A rare building** (no lot of its use under its holder) stands where the characters' travel is least, on the spot of
   whatever lot is there. It is drawn as a building of its own, and it pushes the city's buildings round it outward, the
   nearer the more (the user, 2026-11-01).

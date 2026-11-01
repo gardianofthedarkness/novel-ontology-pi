@@ -1,0 +1,27 @@
+{
+  "about": "Composite buildings (the user, 2026-11-01): a shop, a restaurant, a bar, a cinema the text passes by is a part of a larger building, not a building of its own. Each tenant type: in, the uses of the buildings it may be part of (TERRAIN_KINDS.building, as config/models.json draws them), the likeliest first; at, where in its host it is: foot (the ground floor, a shop under a tower), upper (its upper floors, a cinema in a mall). Under the street when its host is (a subway station) or its own sentences say so (地下). It joins the host under its holder where the characters' travel is least; it takes no lot and is asked nothing. A tenant a scene is set in stays a building of its own, since the stage walks in it.",
+  "tenants": {
+    "convenience-store": { "in": ["office", "apartment", "station", "mall", "hotel"], "at": "foot" },
+    "supermarket": { "in": ["mall", "apartment", "department", "station"], "at": "foot" },
+    "ramen-shop": { "in": ["station", "mall", "office", "department"], "at": "foot" },
+    "sushi-restaurant": { "in": ["station", "mall", "office", "department"], "at": "foot" },
+    "family-restaurant": { "in": ["mall", "station", "office", "apartment"], "at": "foot" },
+    "fast-food": { "in": ["station", "mall", "office"], "at": "foot" },
+    "izakaya": { "in": ["office", "station", "mall"], "at": "foot" },
+    "bar": { "in": ["office", "hotel", "station", "mall"], "at": "foot" },
+    "karaoke": { "in": ["mall", "office", "station"], "at": "upper" },
+    "cafe": { "in": ["office", "station", "mall", "department", "hotel"], "at": "foot" },
+    "patisserie": { "in": ["mall", "station", "department", "office"], "at": "foot" },
+    "bakery": { "in": ["station", "mall", "department", "apartment"], "at": "foot" },
+    "donut-shop": { "in": ["station", "mall", "office"], "at": "foot" },
+    "drugstore": { "in": ["station", "mall", "office", "apartment"], "at": "foot" },
+    "bookstore": { "in": ["mall", "department", "station"], "at": "foot" },
+    "clothing-store": { "in": ["mall", "department", "station"], "at": "foot" },
+    "game-shop": { "in": ["mall", "department", "station"], "at": "foot" },
+    "florist": { "in": ["station", "mall", "office", "hotel"], "at": "foot" },
+    "general-shop": { "in": ["mall", "station", "office", "apartment"], "at": "foot" },
+    "cinema": { "in": ["mall", "department"], "at": "upper" },
+    "game-center": { "in": ["mall", "station"], "at": "upper" },
+    "bank": { "in": ["office"], "at": "foot" }
+  }
+}

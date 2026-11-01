@@ -430,6 +430,17 @@ would weigh the new slices itself.
   over 8:1 (most just over; one 849 m draw between close roads); 366 roads widened. 第六学区 (median 80): 849, 591 (its
   landmark), 483 and 477 m; New York's CBDs (median 61): 450 m each.
 
+**Composite buildings, no model call (the user, 2026-11-01; borrow-and-spawn.md §6):**
+- [x] 22 tenant types (shops, restaurants, bars, cafés, a cinema, a convenience store, a bank branch…) join a host under
+      their holder where travel is least, at its foot, upper floors or under it; no lot, no height question. A tenant a
+      scene is set in stays a building of its own.
+- [x] Drawn: the host's base (shops under a tower) where it stands four floors or more; the tenant's marker at its host;
+      in the place tree, in its host's street.
+- Replayed on the host's state (Jev's real answers, no model call): 11 tenants, 58 questions → 47. A convenience store
+  at the 80-floor mixed-use tower's foot (drawn with its podium); five shops at an office's foot by the station; both
+  cinemas on malls' upper floors; a patisserie in a station. The darts bar, set in a scene, stays a building. The ramen
+  shop Jev had put under the street stands at its host's foot: no sentence of it says 地下.
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)

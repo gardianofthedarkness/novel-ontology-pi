@@ -47,8 +47,11 @@ export function defaultTerrain(level: Level, kind: string, least = false): { gro
   return { ground: entry.ground, ...(entry.medians?.length ? { median: entry.medians[least ? 0 : Math.floor(entry.medians.length / 2)], manifold: entry.manifold } : {}) };
 }
 
-/** The stage inputs with slots instead of pools, changed in place (see above); returns which places were moved where. */
-export function withSlots(inputs: SlotInputs, slots: KeptSlot[], book: string): { moved: Record<string, string>; added: string[] } {
+/**
+ * The stage inputs with slots instead of pools, changed in place (see above); returns which places were moved where.
+ * `tenants`: a composite building's parts (composite.ts), each in its host's street, as a building that borrows a lot is.
+ */
+export function withSlots(inputs: SlotInputs, slots: KeptSlot[], book: string, tenants: Record<string, string> = {}): { moved: Record<string, string>; added: string[] } {
   const script = inputs.world?.places ?? {}, tree = inputs.placeTree ?? [], moved: Record<string, string> = {}, added: string[] = [];
   const poolArea = new Map(Object.entries(script).filter(([id]) => id.startsWith("pool:")).map(([id, place]) => [id, (place.pool ?? place.parent ?? null) as string | null]));
   const area = (id: string | null | undefined) => (id && poolArea.has(id) ? poolArea.get(id) ?? null : id ?? null);
@@ -80,6 +83,7 @@ export function withSlots(inputs: SlotInputs, slots: KeptSlot[], book: string): 
     script[slot.id] = { label, scale: slot.level, parent: slot.parent, slot: true };
     for (const share of sharersIn(slot as unknown as Slot, book)) reparent(share.mention, slot.id);
   }
+  for (const [id, street] of Object.entries(tenants)) reparent(id, street);
   // 3. Paths again, from the parents (a place whose chain moved, and every place under it).
   const pathOf = new Map<string, string[]>();
   const path = (id: string, seen = new Set<string>()): string[] => {

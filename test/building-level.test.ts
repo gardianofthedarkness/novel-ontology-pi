@@ -183,3 +183,33 @@ test("tall buildings and the streets round them: above 100 m the taller the thic
   const face = tallAndWide([b("t", 0, -20, 40, 40, 100), b("f", 0, 90, 10, 10, 3)], [road], () => false).buildings.find((x) => x.lot === "f")!;
   assert.ok(face.d < 10 && face.z < 90, `the face given up: ${face.d} m deep at z ${face.z}`);
 });
+
+test("composite buildings: a shop, a restaurant, a cinema joins a host where travel is least, at its foot, upper floors or under it; asked nothing", async () => {
+  const { chooseHost, floorOf, loadTenancies } = await import("../src/v2/spawning/composite.js");
+  const { loadBuildingTypes } = await import("../src/v2/spawning/inventory.js");
+  const { TERRAIN_KINDS } = await import("../src/v2/context/terrainModes.js");
+  const tenancies = loadTenancies(), types = loadBuildingTypes();
+  // Every tenant is a type of the inventory; every host use one the world draws.
+  for (const [type, tenancy] of Object.entries(tenancies)) {
+    assert.ok(types[type]?.use, `${type}: a building type of the inventory`);
+    for (const use of tenancy.in) assert.ok(TERRAIN_KINDS.building[use], `${type}: ${use} is a building kind`);
+  }
+  assert.ok(!tenancies["office-tower"] && !tenancies["shopping-mall"] && !tenancies["school"], "a host, a school: buildings of their own");
+  const travel = (at: [number, number]) => Math.hypot(at[0] - 100, at[1]);
+  const hosts = [
+    { id: "mall", use: "mall", at: [400, 0] as [number, number], kept: true },
+    { id: "tower", use: "office", at: [120, 0] as [number, number], kept: true, top: 300 },
+    { id: "lot", use: "office", at: [110, 0] as [number, number], kept: false },
+    { id: "metro", use: "station", at: [90, 0] as [number, number], kept: true, top: -12 },
+  ];
+  // Where travel is least, among the uses it may be part of: a convenience store the station; a cinema only a mall.
+  assert.equal(chooseHost(tenancies["convenience-store"], hosts, travel)?.id, "metro");
+  assert.equal(chooseHost(tenancies.cinema, hosts, travel)?.id, "mall");
+  assert.equal(chooseHost(tenancies.bank, hosts, travel)?.id, "lot", "an office lot nearer than the tower");
+  assert.equal(chooseHost(tenancies.cinema, hosts.filter((host) => host.use !== "mall"), travel), null, "no mall: no host");
+  // Under the street with its host or its own words; else its type's place.
+  assert.equal(floorOf(tenancies["convenience-store"], hosts[3], []), "under");
+  assert.equal(floorOf(tenancies["ramen-shop"], hosts[1], ["那家拉面店开在地下一层。"]), "under");
+  assert.equal(floorOf(tenancies["ramen-shop"], hosts[1], []), "foot");
+  assert.equal(floorOf(tenancies.cinema, hosts[0], []), "upper");
+});

@@ -95,7 +95,7 @@ export async function strandDemo(novelDir, options) {
   const terrain = JSON.parse(await readFile(`${novelDir}/stage/terrain.json`, 'utf8').catch(() => 'null'));
   // Borrowing and spawning by type (docs/v2/borrow-and-spawn.md): no pools; a spare or shared slot is an area of its level,
   // a named place stands in its slot's area, an unnamed mention in the slot it shares this book (the tree changed in place).
-  if (terrain?.mode === 'spawn') (await load('dist/src/v2/spawning/tree.js')).withSlots(inputs, Object.values(terrain.slots ?? {}), terrain.book);
+  if (terrain?.mode === 'spawn') (await load('dist/src/v2/spawning/tree.js')).withSlots(inputs, Object.values(terrain.slots ?? {}), terrain.book, Object.fromEntries(Object.entries(terrain.sites ?? {}).filter(([, site]) => site.by === 'tenant' && site.parent).map(([id, site]) => [id, site.parent])));
   const spawnPlan = JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
   const anew = sceneId => spawnPlan?.scenes?.[sceneId]?.spawn === 'new';
   let jev = null;
@@ -473,8 +473,9 @@ export async function strandDemo(novelDir, options) {
     const keptIn = (holder, id) => { const site = terrain?.sites?.[id]; return site?.parent === holder && Array.isArray(site.toward) ? [site.toward[0], site.toward[1]] : null; };
     const memberAt = (holder, unit) => { if (!canvas.places[holder]?.pool) return {}; const at = keptIn(holder, unit.id) ?? C.tiedSpot(canvas, holder, unit, ties[unit.id]); return at ? { at } : {}; };
     // A building that borrowed a lot of its street's form (terrain spawning's building level, docs/v2/borrow-and-spawn.md §6)
-    // stands on that lot exactly, at its offset from the street, and is not sampled.
-    const lotOf = (holder, id) => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && site?.by === 'borrow' && site.parent === holder && Array.isArray(site.toward) ? { at: site.toward } : null; };
+    // stands on that lot exactly, at its offset from the street, and is not sampled; a tenant (a composite building's part)
+    // at its host's.
+    const lotOf = (holder, id) => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && (site?.by === 'borrow' || site?.by === 'tenant') && site.parent === holder && Array.isArray(site.toward) ? { at: site.toward } : null; };
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
     for (const scene of chosen) {
       const chain = pathOf(scene.placeId), open = chain.filter(id => id !== scene.placeId && isOpen(id));
@@ -686,6 +687,15 @@ export async function strandDemo(novelDir, options) {
       if (typeof site.top === 'number' && site.top > 0) { if (named) entry.named = site.top; else entry.tops.push(site.top); }
       decided.set(key, entry); if (key.startsWith(`${slot.parent}:`)) decided.set(key.slice(slot.parent.length + 1), entry);
     }
+    // A composite building (the user, 2026-11-01): a host with tenants at its foot (shops under a tower) is drawn with them
+    // as its base, a floor high, where it stands four floors or more; tenants on its upper floors or under it are inside it.
+    const podiums = new Set();
+    for (const site of Object.values(terrain?.sites ?? {}).filter(entry => entry.by === 'tenant' && entry.floor === 'foot')) {
+      const slotId = terrain.sites?.[site.in]?.slot ?? site.in, slot = terrain.slots?.[slotId];
+      if (!slot) continue;
+      const key = slot.lot ?? slot.id; podiums.add(key); if (key.startsWith(`${slot.parent}:`)) podiums.add(key.slice(slot.parent.length + 1));
+    }
+    const withTenants = b => (podiums.has(b.lot) && b.floors >= 4 ? { ...b, base: { floors: Math.max(1, b.base?.floors ?? 0), kind: 'shop' } } : b);
     // Its height is its scenes' (the user, 2026-11-01): taller than any model of its use stands for, it is drawn as a tower
     // (its use's models yield to its kind's: useModels.ts), never cut down to its use's.
     const tallest = use => Math.max(0, ...Object.values(UM.MODELS.uses[use]?.fill ?? {}).map(([, most]) => most));
@@ -716,7 +726,7 @@ export async function strandDemo(novelDir, options) {
     // Tall buildings and the streets round them (landscape.ts tallAndWide; the user, 2026-11-01), in a city of manifolds: a
     // street wider the more towers stand round it, a building above 100 m as thick as its height needs. After the fill, so
     // its lots and the slots naming them stay; what the text placed (and a landmark, a keep) is never cleared or cut.
-    const placed = [...[...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
+    const placed = [...[...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided).map(withTenants);
     const localRoads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)), held = new Set([...filled.keeps, ...standing].map(b => b.lot));
     const fixedOf = b => held.has(b.lot) || decided.has(b.lot) || /:(landmark|bowl|fountain)$/.test(String(b.lot));
     const shaped = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf) : { buildings: placed, roads: localRoads };

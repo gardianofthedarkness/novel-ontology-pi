@@ -131,6 +131,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // A building type's least floors, its minimum (config/spawning/heights.json; the user, 2026-11-01); the measures a place's
   // sentences give, offered at every level.
   const H = spawn ? S.loadHeights() : null, M = await load('dist/src/v2/context/measures.js');
+  // Composite buildings (config/spawning/composite.json; the user, 2026-11-01): the tenant types, the hosts each may join.
+  const CP = spawn ? await load('dist/src/v2/spawning/composite.js') : null, tenancies = CP ? CP.loadTenancies() : {};
   const LEVELS = ['city', 'district', 'street', 'building'], bookId = universe.book, resolver = spawn ? S.defaultResolver() : null;
   if (spawn) { terrain.mode = 'spawn'; terrain.book = bookId; registry.slots ??= {}; terrain.slots = registry.slots; }
   // The map's log, by book (docs/v2/borrow-and-spawn.md §8.8): every change to the map in order, so a book can be played again.
@@ -157,7 +159,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     }
   }
   const lifted = new Map();
-  const reshape = () => { if (!spawn) return; S.withSlots(inputs, Object.values(registry.slots), bookId); tree.clear(); for (const place of inputs.placeTree) tree.set(place.id, place); lifted.clear(); };
+  const reshape = () => { if (!spawn) return; S.withSlots(inputs, Object.values(registry.slots), bookId, Object.fromEntries(Object.entries(terrain.sites).filter(([, site]) => site.by === 'tenant' && site.parent).map(([id, site]) => [id, site.parent]))); tree.clear(); for (const place of inputs.placeTree) tree.set(place.id, place); lifted.clear(); };
   reshape();
   // Saved before the first build: the world is built from the files, so it must see the levels dropped and the mode at once.
   if (spawn || fromLevel) {
@@ -440,6 +442,39 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       await saveSlots();
       return { street: kept.parent, at: node ? [node.x + kept.toward[0], node.z + kept.toward[1]] : slot.at, size: kept.size, box: terrain.sites[part.id].box ?? Z.turnedBox(slot.at, kept.size, kept.turn ?? 0) };
     };
+    // The composite buildings (the user, 2026-11-01): a shop, a restaurant, a cinema the text passes by joins a building of
+    // a use that holds such places (a mall, a tower's foot, a station, an underground mall) under its holder, where the
+    // characters' travel is least: one kept at this level, or a spare lot of that use. It takes no lot and is asked nothing.
+    // With no host there, it borrows a lot of its own at its type's least floors, still asked nothing. Placed once the
+    // level's buildings and their moves are done, so its host stands where it will stay.
+    const tenantsLater = [];
+    const placeTenants = async () => {
+      for (const { part, city, type, kind, tenancy, sure, what, found } of tenantsLater) {
+        const holder = holderOf(part, city), { travel } = travelFor(part), under = id => id === holder || within(id, holder);
+        const kept = Object.entries(terrain.sites).filter(([id, site]) => id !== part.id && site.scale === 'building' && site.by === 'borrow' && site.slot && site.parent && under(site.parent) && Array.isArray(site.toward) && nodeOf(site.parent))
+          .map(([id, site]) => { const node = nodeOf(site.parent); return { id, use: site.kind, at: [node.x + site.toward[0], node.z + site.toward[1]], kept: true, top: site.top ?? null, parent: site.parent, toward: site.toward, label: site.label, box: site.box }; });
+        const spare = slotsAt('building').filter(slot => slot.at && slot.toward && under(slot.parent) && !slot.owner && !S.sharersIn(slot, bookId).length)
+          .map(slot => ({ id: slot.id, use: slot.kind, at: slot.at, kept: false, top: null, parent: slot.parent, toward: slot.toward, label: `a ${slot.kind} lot`, box: Z.turnedBox(slot.at, slot.size, slot.turn ?? 0) }));
+        const host = CP.chooseHost(tenancy, [...kept, ...spare], travel), base = { label: part.label, scale: 'building', kind, holder, type, typeBy: sure ? 'search' : 'jev', offered: found.map(entry => entry.id), confidence: { kind: what?.confidence ?? null } };
+        if (!host) {
+          const lot = await borrowBuilding(part, city, kind);
+          if (!lot) { await live.outcome({ subject: part.label, text: `a ${type}: no building to be part of and no lot of its own under ${name(holder)}` }); continue; }
+          const top = (H.buildings[type] || 1) * 3;
+          Object.assign(terrain.sites[part.id], { ...base, top, tenant: 'alone' });
+          await live.outcome({ subject: part.label, text: `${part.label}: a ${type}, no building of ${tenancy.in.join(', ')} under ${name(holder)} to be part of: a lot of its own, ${top / 3} floor${top === 3 ? '' : 's'}, asked nothing` });
+          await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: lot.box, top });
+        } else {
+          const floor = CP.floorOf(tenancy, host, textsOf(part));
+          terrain.sites[part.id] = { ...base, parent: host.parent, parentLabel: name(host.parent), toward: host.toward, box: host.box, in: host.id, inLabel: host.label, floor, by: 'tenant' };
+          if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
+          logMap({ level: 'building', what: 'tenant', place: part.id, in: host.id, floor });
+          await live.outcome({ subject: part.label, text: `${part.label}: a ${type}, part of ${host.label} in ${name(host.parent)}, ${floor === 'foot' ? 'at its foot' : floor === 'upper' ? 'on its upper floors' : 'under the street'}; asked nothing` });
+          await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: host.box, top: null });
+        }
+        await saveSlots(); placed++;
+      }
+      tenantsLater.length = 0;
+    };
     // A building Jev answered with a shape (§8.9; the user, 2026-11-01): it stands where travel is least under its holder,
     // a building's size; a floating one (a platform, a sphere, a ring, a cavern) merges into the buildings there, a ground
     // shape (a hill, a plateau, a basin, a ramp) pushes them outward. Nominated, as every shape.
@@ -667,6 +702,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           if (end === 'street') { const made = formSlots(); await saveSlots(); await live.outcome({ subject: 'streets', text: `${made.spares} building slots from the streets' forms (${made.held} held by buildings already)` }); }
           else await saveSlots();
         } else await levelEnd(end);
+        if (end === 'building' && tenantsLater.length) await placeTenants();
         if (end === until) break; continue;
       }
       if (keptBefore(part.id)) continue;
@@ -743,6 +779,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const what = replies.find(reply => reply.key === 'kind'), chosen = what?.value ? String(what.value) : null;
         const type = chosen && buildingTypes[chosen] ? chosen : null, shape = chosen && SHAPES[chosen] ? chosen : type && buildingTypes[type].shape ? buildingTypes[type].shape : null, kind = type && buildingTypes[type].use ? buildingTypes[type].use : chosen && T.TERRAIN_KINDS.building[chosen] ? chosen : null;
         if (!kind && !shape) { await live.outcome({ subject: part.label, text: `${chosen ? `"${chosen}"` : 'no answer'}: no building kind or shape, so it stays where the canvas puts it` }); continue; }
+        // A tenant (composite.json) joins a host once the level's buildings stand, asked nothing more; one a scene is set in
+        // stays a building of its own (the stage walks in it).
+        const tenancy = !shape && type ? tenancies[type] : null, setting = (inputs.data?.scenes ?? []).some(scene => scene.placeId === part.id || scene.placeIds?.includes(part.id));
+        if (tenancy && !setting) { tenantsLater.push({ part, city, type, kind, tenancy, sure, what, found }); await live.outcome({ subject: part.label, text: `a ${type}: part of a larger building, placed once the level's buildings stand` }); continue; }
         // A building borrows a lot of its kind (or stands apart, a rare one); a shape stands where travel is least.
         let lot = shape ? placeShape(part, city, shape) : await borrowBuilding(part, city, kind);
         if (!lot) { await live.outcome({ subject: part.label, text: `no street under ${name(holderOf(part, city))} to stand in` }); continue; }
