@@ -63,7 +63,7 @@ const CLEAR = { near: 1e6, far: 2e6 };
 
 async function replace(file, body) { const temporary = `${file}.${process.pid}.tmp`; await writeFile(temporary, body, { mode: 0o644 }); await rename(temporary, file); }
 
-export async function terrainSpawn(novelDir, { jev: given = null, run = false, parts: limit = Infinity, spawn = false, from: fromLevel = null, until = null, log = () => {} } = {}) {
+export async function terrainSpawn(novelDir, { jev: given = null, run = false, parts: limit = Infinity, spawn = false, from: fromLevel = null, until = null, heightProbe = false, log = () => {} } = {}) {
   const { stageInputs } = await load('dist/src/cli/commands/extract/stageCommands.js');
   const { simStrandList } = await load('dist/src/cli/commands/extract/simCommands.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
@@ -747,13 +747,45 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const kindManifold = T.terrainKind(part.scale, kind)?.manifold, factor = spawn && kindManifold ? averageOverMedian(kindManifold) : null;
       const { measure, slices: tops, standard } = T.terrainHeights(part.scale, kind, factor ? { factor } : undefined), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
       const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, Math.max(CORE_MIN, span * CORE)), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
-      const sample = [round(cc[0] - core), round(cc[1] - core), round(cc[0] + core), round(cc[1] + core)];
-      const lots = data.world.lots.map(lot => ({ box: [lot.i0 * CELL, lot.j0 * CELL, (lot.i0 + lot.nx) * CELL, (lot.j0 + lot.nz) * CELL], top: (lot.floors ?? 1) * FLOOR })).filter(lot => lot.box[0] < sample[2] && sample[0] < lot.box[2] && lot.box[1] < sample[3] && sample[1] < lot.box[3]);
-      const distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [cc[0], (lo + hi) / 2, cc[1]];
-      const heights = await shoot(OVERVIEW, { view: { fov: 40, position: from(mid, yaw, 0.3, distance), target: mid },
-        slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${measure === 'average' ? `${entry.offset >= 0 ? '+' : ''}${entry.offset} m` : `${entry.y} m`} · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.filter(entry => entry.y > 0).flatMap(entry => lots.filter(lot => lot.top > entry.y).slice(0, 80).map(lot => ({ box: lot.box, y: entry.y }))),
-        labelScale: Math.max(2.5, distance / 75), dash: Math.max(1, distance / 160), vague: { near: distance * 1.6, far: distance * 4.5 } });
+      // The slices through a core of the area round a point, labelled as heights (`absolute`) or as additions to the standard.
+      const heightsAt = async (at, absolute = measure !== 'average') => {
+        const sample = [round(at[0] - core), round(at[1] - core), round(at[0] + core), round(at[1] + core)];
+        const lots = data.world.lots.map(lot => ({ box: [lot.i0 * CELL, lot.j0 * CELL, (lot.i0 + lot.nx) * CELL, (lot.j0 + lot.nz) * CELL], top: (lot.floors ?? 1) * FLOOR })).filter(lot => lot.box[0] < sample[2] && sample[0] < lot.box[2] && lot.box[1] < sample[3] && sample[1] < lot.box[3]);
+        const distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [at[0], (lo + hi) / 2, at[1]];
+        return shoot(OVERVIEW, { view: { fov: 40, position: from(mid, yaw, 0.3, distance), target: mid },
+          slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${absolute ? `${entry.y} m` : `${entry.offset >= 0 ? '+' : ''}${entry.offset} m`} · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.filter(entry => entry.y > 0).flatMap(entry => lots.filter(lot => lot.top > entry.y).slice(0, 80).map(lot => ({ box: lot.box, y: entry.y }))),
+          labelScale: Math.max(2.5, distance / 75), dash: Math.max(1, distance / 160), vague: { near: distance * 1.6, far: distance * 4.5 } });
+      };
+      const heights = await heightsAt(cc);
       const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, ...(standard ? { standard } : {}), pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, ${measure === 'average' ? `a slice at its standard height (+0 m) and at each addition to it, and below the street` : 'a slice at each height its terrain may rise to'}; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
+      // The height question's experiment (`heightProbe`, the user's call, 2026-11-01): the same city asked four ways, its
+      // heights as absolute averages or as additions to its standard, on the picture at its middle or on three across it
+      // (the middle, a district halfway out, one near the edge); every answer kept in stage/terrain/height-probe.json. The run
+      // goes on with the design's own answer (the middle, as additions).
+      if (heightProbe && isCity && measure === 'average') {
+        const node = nodeOf(part.id) ?? cityNode, ring = Object.values(registry.slots).filter(slot => slot.parent === part.id && slot.toward).map(slot => ({ slot, r: Math.hypot(...slot.toward) })), R = (terrain.sites[part.id]?.size?.[0] ?? 2 * core) / 2;
+        const nearest = share => { const pick = ring.sort((a, b) => Math.abs(a.r - share * R) - Math.abs(b.r - share * R))[0]; return pick && node ? [node.x + pick.slot.toward[0], node.z + pick.slot.toward[1]] : [cc[0] + share * R, cc[1]]; };
+        const points = { middle: cc, halfway: nearest(0.5), edge: nearest(0.85) }, said = { middle: 'its middle', halfway: 'a district halfway out', edge: 'a district near its edge' };
+        const describe = (where, absolute) => `${said[where]} in ${part.label}, ${Math.round(core * 2)} m across, from the side and a little above, a slice at ${absolute ? 'each height' : 'its standard height (+0 m) and at each addition to it'}, and below the street; the city faded behind.`;
+        const shots = {};
+        for (const where of Object.keys(points)) for (const absolute of [true, false]) shots[`${where}-${absolute}`] = where === 'middle' && !absolute ? heights : await heightsAt(points[where], absolute);
+        const variants = [
+          { id: 'middle, absolute', absolute: true, wheres: ['middle'] },
+          { id: 'middle, addition', absolute: false, wheres: ['middle'], answer: rise },
+          { id: 'across, absolute', absolute: true, wheres: ['middle', 'halfway', 'edge'] },
+          { id: 'across, addition', absolute: false, wheres: ['middle', 'halfway', 'edge'] },
+        ];
+        const found = [];
+        for (const variant of variants) {
+          const key = where => (variant.wheres.length === 1 ? 'heights' : where), pictures = Object.fromEntries(variant.wheres.map(where => [key(where), describe(where, variant.absolute)]));
+          const reply = variant.answer ?? (await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, ...(variant.absolute ? {} : { standard }), pictures }, stores, { request: { images: Object.fromEntries(variant.wheres.map(where => [key(where), shots[`${where}-${variant.absolute}`].png])) } })).replies[0];
+          const slice = tops.find(entry => entry.letter === reply?.value);
+          found.push({ city: part.label, kind, variant: variant.id, letter: reply?.value ?? null, average: slice?.y ?? null, addition: slice?.offset ?? null, confidence: reply?.confidence ?? null, top: (reply?.top ?? []).map(([letter, p]) => [letter, tops.find(entry => entry.letter === letter)?.y ?? null, p]) });
+          await live.outcome({ subject: part.label, text: `height probe, ${variant.id}: ${reply?.value ?? '?'} (${slice ? `${slice.y} m${variant.absolute ? '' : `, +${slice.offset} m`}` : '?'}), ${Math.round((reply?.confidence ?? 0) * 100)}% sure; next ${(reply?.top ?? []).slice(1).map(([letter, p]) => `${letter} ${Math.round(p * 100)}%`).join(', ')}` });
+        }
+        const probeFile = join(folder, 'height-probe.json'), kept = JSON.parse(await readFile(probeFile, 'utf8').catch(() => '[]'));
+        await replace(probeFile, JSON.stringify([...kept, ...found.map(entry => ({ ...entry, at: new Date().toISOString() }))], null, 1));
+      }
       // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top.
       const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, upTo = measure === 'top' ? height : null;
       // An average (spawn mode) is built from its median; below the street a depth stays a depth.
@@ -836,8 +868,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, parts: { type: 'string' }, spawn: { type: 'boolean' }, from: { type: 'string' }, until: { type: 'string' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, parts: { type: 'string' }, spawn: { type: 'boolean' }, from: { type: 'string' }, until: { type: 'string' }, 'probe-heights': { type: 'boolean' } } });
   const [novelDir] = positionals, levels = ['city', 'district', 'street'];
   if (!novelDir || (values.from && !levels.includes(values.from)) || (values.until && !levels.includes(values.until))) { console.error('usage: node world-engine/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn] [--from city|district|street] [--until city|district|street]'); process.exit(2); }
-  console.log(JSON.stringify(await terrainSpawn(resolve(novelDir), { run: values.run, parts: values.parts ? Number(values.parts) : Infinity, spawn: values.spawn, from: values.from ?? null, until: values.until ?? null, log: line => console.error(line) })));
+  console.log(JSON.stringify(await terrainSpawn(resolve(novelDir), { run: values.run, parts: values.parts ? Number(values.parts) : Infinity, spawn: values.spawn, from: values.from ?? null, until: values.until ?? null, heightProbe: !!values['probe-heights'], log: line => console.error(line) })));
 }
