@@ -117,6 +117,30 @@ towers; and 纽约's open ground had to rise to 50 m to hold 55 m with only two 
 ways (absolute and as an addition); the heights picture across the whole city for a city's average; more CBDs for a
 taller city (the configuration by height).
 
+**The height probe (2026-11-01, the user's two experiments; `--probe-heights`, 6 paid calls, 59,682 input tokens):** the
+born cities asked four ways each, absolute averages or additions to the standard, on the picture at the middle (the CBD)
+or on three across the city (the middle, a dwelling district halfway out, one near the edge). Jev's answer and its three
+likeliest slices:
+
+| City | Wording | Picture | Answer | Likeliest |
+| --- | --- | --- | --- | --- |
+| 学园都市 | absolute | middle | H, 34 m | H 60%, G 23%, I 10% |
+| 学园都市 | absolute | across | H, 34 m | H 36%, G 35%, F 16% |
+| 学园都市 | addition | middle | H, +26 m | H 29%, I 21%, G 19% |
+| 学园都市 | addition | across | E, +0 m | E 28%, F 26%, H 20% |
+| 纽约 | absolute | middle | H, 34 m | H 51%, G 25%, I 11% |
+| 纽约 | absolute | across | H, 34 m | H 37%, G 30%, F 17% |
+| 纽约 | addition | middle | I, +47 m | I 33%, H 23%, J 18% |
+| 纽约 | addition | across | I, +47 m | I 33%, J 26%, H 24% |
+
+- **The wording:** Jev reads absolute averages surely and alike for both pictures (H, 51–60% at the middle); as
+  additions it is unsure (28–33% at best) and inconsistent: 纽约 moves up to +47 m, 学园都市 swings from +26 m to +0 m
+  between the pictures. It does not read the addition reliably; the absolute height is the better question.
+- **The picture:** with absolute heights, the three pictures across the city shift the answer down toward G (20 m) and
+  make Jev less sure, as they should: a city's average includes its low districts. The middle alone (a CBD) leans high.
+- **Proposed:** ask absolute averages, the standard kept only as the lowest slice; for a city (or any area whose middle is
+  not like the rest), the heights pictures across it.
+
 ## M3 — District level
 
 - [ ] 第七学区, 第六学区, 第十五学区 borrow; unnamed district mentions borrow; the swap pass; settle with spares
