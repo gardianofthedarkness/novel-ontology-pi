@@ -11,7 +11,7 @@ call); a real Jev run only when the user asks.
 | --- | --- | --- |
 | M0 | Design, draft configurations, configuration test | done 2026-11-01, every decision taken (design §7) |
 | M1 | Slots, borrowing and spawning in code; the bound tested; run from a level | done 2026-11-01: `--spawn`, `--from`; stand-in on vol 1 through streets |
-| M2 | City level on vol 1, as one city of manifolds with a topology | built 2026-11-01; stand-in run passes; a Jev run when the user asks |
+| M2 | City level on vol 1, as one city of manifolds with a topology | done 2026-11-01: stand-in and Jev runs (2 paid calls) |
 | M3 | District level on vol 1 | |
 | M4 | Street level on vol 1 | |
 | M5 | Building level on vol 1 | |
@@ -98,6 +98,14 @@ Moved to later levels: below and above the street apart, and a share asked its k
   open ground is flat, of its own landscape (`open` in the configuration: a metropolis's is commercial).
 - Not yet: the named districts (第七学区 and the others) still stand as pins beside the city until the district level
   borrows manifolds for them (M3).
+
+**Jev run (2026-11-01, the host, `novel sim terrain --spawn --from city --until city --run`; run 11 backed up first):**
+Jev: 学园都市 a metropolis (57%), median 10 m; 纽约 a metropolis (98%), median 15 m (2 paid calls, 14,324 input tokens;
+纽约's answers from the cache). 学园都市's average 13.6 m holds with its CBDs at 38.7 m (inside a CBD's range, which starts
+at 36.3 m) and builds them at 43–47 m; 纽约's CBDs at 75.8 m build at 83–89 m; dwelling areas 8.7–10 m, industry 6.4–6.9 m.
+Two compatibility faults found and fixed: `novel sim terrain` refused `--spawn`, `--from` and `--until` (its list of flags
+had not been given them; the stand-ins had called the engine directly); and the first world of a `--from` run was built
+from the terrain file before the dropped levels were saved, so Jev's first city picture showed run 11's districts and pools.
 
 ## M3 — District level
 
