@@ -228,6 +228,18 @@ tokens; questions: 21 kind, 21 height, 9 box):**
   the commercial landscape, so the ground between districts is shops. Next, before M5: a new building model kit (models
   found online for the modern configurations, and how a building is assigned one).
 
+## Model kit (before M5)
+
+- [x] Free modern models found on the web, CC0 only (the repository and its pages are public): Kenney's City Kit
+      (Suburban) and City Kit (Industrial), Quaternius's Downtown City MegaKit; baked with KayKit's blocks not used before
+- [x] One table, `config/models.json`, for the fill, the engine's lots and shells, and named buildings: each use's models
+      with the floors each can stand for; old-world models only on ancient ground
+- [x] A city's open ground is housing (`open` in city.json)
+
+**Seen (vol 1, 2026-11-01, rebuilt with no model call):** the open ground 1,897 buildings (1,312 houses, 368 blocks of
+flats, 89 towers); the industrial ground 119 of 121 from the industrial kit; no stall or cart left. The page 1.97 → 2.52
+MB. Design: [model-kit.md](model-kit.md).
+
 ## M5 — Building level
 
 - [ ] Street slots spawn building slots by `street.json` (density × area, uses by share)

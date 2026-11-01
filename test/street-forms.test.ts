@@ -59,14 +59,25 @@ test("a street's buildings take their uses from its kind's list (a shopping stre
   assert.ok(centre.some((b) => b.lot.includes(":podium") && b.use === "mall") && centre.some((b) => b.lot.includes(":tower") && b.use === "office"), "a centre: a mall podium, office towers");
 });
 
-test("the terrain view draws a building as a model of its use whose proportions are nearest its own; a use with no model, a block", async () => {
-  const { modelFor, useOf } = await import("../src/ground/stage/useModels.js");
-  const sizes = { "tower-a": [0.5, 2, 0.5], "block-wide-a": [1, 1.1, 0.5], "office-c": [0.88, 0.89, 1.09], "kk-apartment": [2.01, 2.25, 1.45] };
-  assert.equal(modelFor({ kind: "tower", w: 30, d: 30, floors: 40 }, "a", sizes), "tower-a", "a tall office: a tower");
-  assert.equal(modelFor({ kind: "office", w: 40, d: 40, floors: 10 }, "b", sizes), "office-c", "a low office: the office block");
-  assert.equal(modelFor({ kind: "shop", use: "cafe", w: 10, d: 12, floors: 3 }, "c", sizes), "block-wide-a", "a café: its stand-in");
-  assert.equal(modelFor({ kind: "apartment", w: 20, d: 14, floors: 8 }, "d", sizes), "kk-apartment");
-  assert.equal(modelFor({ kind: "warehouse", w: 30, d: 20, floors: 2 }, "e", sizes), null, "no warehouse model: a block");
+test("the terrain view draws a building as a model of its use whose floors hold its own, the nearest by proportions; old models only on ancient ground", async () => {
+  const { modelFor, roleModel, useOf } = await import("../src/ground/stage/useModels.js");
+  const table = {
+    uses: { office: { fill: { "office-c": [3, 8], "tower-a": [10, 45] } }, house: { fill: { "suburban-01": [1, 3] } }, apartment: { fill: { "kk-apartment": [3, 7] }, named: { "brick-small": [3, 6] } }, warehouse: { fill: {} } },
+    kinds: { tower: "office", office: "office", house: "house", cottage: "house", apartment: "apartment", warehouse: "warehouse" },
+    roles: { home: "apartment" },
+    ancient: { "*": ["market"] },
+  } as unknown as Parameters<typeof modelFor>[3];
+  const sizes = { "tower-a": [0.5, 2, 0.5], "office-c": [0.88, 0.89, 1.09], "kk-apartment": [2.01, 2.25, 1.45], "suburban-01": [1.3, 0.74, 0.92], "brick-small": [12.5, 17, 14.5], market: [3.2, 1.2, 2.2] };
+  assert.equal(modelFor({ kind: "tower", w: 30, d: 30, floors: 40 }, "a", sizes, table), "tower-a", "a tall office: a tower");
+  assert.equal(modelFor({ kind: "office", w: 40, d: 40, floors: 6 }, "b", sizes, table), "office-c", "a low office: the office block");
+  assert.equal(modelFor({ kind: "house", w: 12, d: 10, floors: 2 }, "c", sizes, table), "suburban-01");
+  assert.equal(modelFor({ kind: "apartment", w: 20, d: 14, floors: 9 }, "d", sizes, table), "kk-apartment", "past every model's floors: the nearest");
+  assert.equal(modelFor({ kind: "apartment", w: 14, d: 14, floors: 5, named: true }, "e", sizes, table), "brick-small", "a named building: its own models first");
+  assert.equal(modelFor({ kind: "apartment", w: 14, d: 14, floors: 9, named: true }, "e", sizes, table), "kk-apartment", "unless none holds its floors");
+  assert.equal(modelFor({ kind: "warehouse", w: 30, d: 20, floors: 2 }, "f", sizes, table), null, "a use with no model: a block");
+  assert.equal(modelFor({ kind: "cottage", w: 8, d: 8, floors: 1, era: "ancient" }, "g", sizes, table), "market", "ancient ground: an older world's model");
+  assert.equal(modelFor({ kind: "cottage", w: 8, d: 8, floors: 1 }, "g", sizes, table), "suburban-01", "modern ground: never one");
+  assert.equal(roleModel({ role: "home", w: 20, d: 14, floors: 5 }, "h", sizes, table), "kk-apartment", "an engine lot: its role's use");
   assert.equal(useOf({ kind: "skyscraper" }), "office");
 });
 
