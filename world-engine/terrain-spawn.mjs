@@ -376,7 +376,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const key = id.slice(entry.place.length + 1), owner = entry.owners?.[n], street = streets.has(owner) ? owner : key.slice(0, key.lastIndexOf(':')), node = nodeOf(street), use = entry.uses?.[n];
         if (!streets.has(street) || held.has(key) || !node || !use) return;
         const [x, z, w, d, angle] = entry.buildings[n];
-        registry.slots[key] = { id: key, parent: street, level: 'building', kind: use, owner: null, sharers: [], damaged: [], layer: 'form', book: bookId, toward: [round(x - node.x), round(z - node.z)], size: [w, d], turn: angle };
+        // A city lot's id names no street (and two cities' fills may share one): its street's id goes first.
+        const slotId = key.startsWith(`${street}:`) ? key : `${street}:${key}`;
+        if (held.has(slotId)) return;
+        registry.slots[slotId] = { id: slotId, parent: street, level: 'building', kind: use, owner: null, sharers: [], damaged: [], layer: 'form', book: bookId, toward: [round(x - node.x), round(z - node.z)], size: [w, d], turn: angle };
         spares++;
       });
       return { spares, held: held.size };
@@ -980,7 +983,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         if (!under || (under.top ?? 0) < upTo) {
           const tallEnough = districts.filter(entry => (entry.top ?? 0) >= upTo).sort((a, b) => Math.hypot(...centreOf(a.box).map((v, k) => v - at[k])) - Math.hypot(...centreOf(b.box).map((v, k) => v - at[k])));
           if (tallEnough.length) {
-            const target = centreOf(tallEnough[0].box), shift = [target[0] - at[0], target[1] - at[1]];
+            // The nearest spot inside that district (its box, less the shape's half-size), not its middle: two raised shapes
+            // moved into one district stood on one point.
+            const into = tallEnough[0].box, half = [(box[2] - box[0]) / 2, (box[3] - box[1]) / 2], clampTo = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+            const target = [clampTo(at[0], into[0] + half[0], into[2] - half[0]), clampTo(at[1], into[1] + half[1], into[3] - half[1])], shift = [target[0] - at[0], target[1] - at[1]];
             box = [round(box[0] + shift[0]), round(box[1] + shift[1]), round(box[2] + shift[0]), round(box[3] + shift[1])];
             await live.outcome({ subject: part.label, text: `moved ${Math.round(Math.hypot(...shift))} m into ${tallEnough[0].label}: a ${shape} at ${upTo} m needs buildings that reach it (${under ? `${under.label}'s reach ${Math.round(under.top ?? 0)} m` : 'it stood on open ground'}; ${tallEnough[0].label}'s ${Math.round(tallEnough[0].top)} m)` });
           } else await live.outcome({ subject: part.label, text: `no district of ${city.label} has buildings that reach ${upTo} m: it stays where it was boxed` });
