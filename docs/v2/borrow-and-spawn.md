@@ -33,6 +33,9 @@ parent by a seed and kept.
 
 ### 2.2 Slots
 
+> Amended by §8 (the user, 2026-11-01): a slot is a manifold of its parent's ground, placed by the parent's topology, and
+> blends into its neighbours; it is not an area of its own.
+
 When an area's type is decided, it spawns its children as **slots**: typed areas of the level below, unnamed, each with
 its type's default terrain (the type's usual size, its manifold, the middle of its medians). A slot is a real area of the
 world: it is placed, built and shown whether or not the text ever uses it (the user, 2026-11-01). A slot a place has
@@ -240,3 +243,72 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
 | 3 | Spare slots are built and shown | Yes; a slot occupied by a pin is shown and visible to Jev (§2.2) |
 | 4 | Ties under another parent at weight 0.3 | Yes, for now |
 | 5 | JSON configurations; a count may be a range | Yes; and users may override them per universe, per place, or by a function or a review by Jev or an agent: an option, not now (§5) |
+
+## 8. One city of manifolds, and its topology (the user, 2026-11-01, before M2)
+
+What the user saw in M1's world, spare districts and streets standing apart from the city, is not the design. A city is one
+ground made of manifolds that fade into each other, as real cities have no abrupt change between their parts; a district is
+the centre of a function on that ground, not an area of its own.
+
+### 8.1 What a city is, and what is saved
+
+A city is a combination of manifolds over time. What is saved is its map: each manifold's kind, centre, size and seed (its
+shape and its buildings are drawn from the seed), the book and scene it was born in, and the nominated places and buildings
+on it, each with its id and location. Everything else (the buildings, the roads, the fades between kinds) is drawn again
+from the map. A slot (§2.2) is a manifold; a spare slot is a manifold no name holds; borrowing (§2.3) assigns a place to a
+manifold's centre of function.
+
+This is the landscape engine's own model already (`src/ground/stage/landscape.ts`): a place's ground is its patches (a
+centre, a radius, a seeded shape, a kind), each claiming ground by its membership σ(signed distance / softness), a newer one
+only where the older ones passed over, modern heights merging across the seams. What changes is that a city's districts
+become patches of the city's ground instead of areas cut out of it (M1 built each slot as a place of the canvas, its ground
+apart): no holes, no gaps, no edges.
+
+### 8.2 Topology in the configuration
+
+A configuration says not only how many of each kind but how the kinds lie, the way a city works:
+
+- **ring**: how far from the city's centre a kind sits, as a share of the city's radius: a CBD from 0 to 0.3, dwelling
+  areas from 0.3 to 0.8, industry from 0.7 to 1, a harbour at the edge by the water;
+- **pairs**: kinds that sit near each other or apart: industry apart from a CBD, dwelling areas near one.
+
+A draft for a metropolis:
+
+```json
+"metropolis": {
+  "spawns": { "cbd": 2, "dwelling": 3, "industrial": 1 },
+  "ring": { "cbd": [0, 0.3], "dwelling": [0.3, 0.8], "industrial": [0.7, 1] },
+  "pairs": [["industrial", "cbd", "apart"], ["dwelling", "cbd", "near"]]
+}
+```
+
+A district's streets the same way, at their own scale: a centre in its middle, a station on its edge toward the next
+district, alleys among the dwellings.
+
+### 8.3 Spawning on the topology, and squeezing
+
+A manifold is spawned where the city's energy is least:
+
+    E =   Σ topology    −log of its kind's ring at its distance from the city's centre
+        + Σ pairs       near: their distance; apart: their closeness
+        + Σ pressure    how much two manifolds' fading functions overlap beyond what their kinds may share
+        + the characters' travel for the book (§4.2), and the text's pins
+
+With no room at its distance, a new manifold does not go elsewhere by itself: it presses on the manifolds already there,
+and they give a little (each centre moves a little, each edge draws in a little) until the whole is least. A city grows
+wider only when the pressure costs more than the topology charges for going out.
+
+### 8.4 What it changes in the design so far
+
+- A slot is placed when its parent is decided, by its parent's topology: a city's districts at the city level, a district's
+  streets at the district level. The layout is the topology; borrowing chooses among the centres, by the travel (§4).
+- The export builds a district, spare or named, as a patch of its city's ground, and a scene set in it stands at its centre
+  of function; streets the same in their district (as pool members' borrowed patches already were, §2.0.12 of the journal).
+- §3's bound holds as it is: the counts do not change, only where the manifolds lie and how they blend.
+- What a book saves is the map: manifolds with their seeds, nominated places and buildings with their ids and locations.
+
+### 8.5 Decisions for the user
+
+1. Across books: may a later book's spawn squeeze an earlier book's manifolds (their centres move and edges draw in a
+   little, so the earlier book's world changes a little), or only its own book's?
+2. Rings as shares of the city's radius (proposed), so a city's layout keeps its shape as it grows.

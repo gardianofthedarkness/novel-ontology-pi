@@ -11,7 +11,7 @@ call); a real Jev run only when the user asks.
 | --- | --- | --- |
 | M0 | Design, draft configurations, configuration test | done 2026-11-01, every decision taken (design §7) |
 | M1 | Slots, borrowing and spawning in code; the bound tested; run from a level | done 2026-11-01: `--spawn`, `--from`; stand-in on vol 1 through streets |
-| M2 | City level on vol 1 | a tune proposed (below), for the user |
+| M2 | City level on vol 1, as one city of manifolds with a topology | redesigned with the user (design §8); two questions open |
 | M3 | District level on vol 1 | |
 | M4 | Street level on vol 1 | |
 | M5 | Building level on vol 1 | |
@@ -56,34 +56,28 @@ call); a real Jev run only when the user asks.
 - Seen in the world: spare streets stand apart from their district's built ground (the canvas takes a kept offset only as a
   direction), and 76 street areas make a world build 30–100 s instead of about 20 s.
 
-## M2 — City level
+## M2 — City level, as one city of manifolds
 
-### Proposed tune (for the user)
+The user's direction before M2 (2026-11-01; design §8): M1's spare districts and streets stood apart from their city. A
+city is one ground of manifolds that fade into each other, laid out by a topology (where each kind sits from the centre,
+which kinds sit near or apart); a district is a centre of function on it. M1's tune is folded in: the layout by topology
+replaces "placed by the first borrower"; districts as patches of the city's ground replace "areas at exact offsets".
 
-1. **The canvas stands areas at their kept offsets** (`bear` in `src/ground/stage/placeCanvas.ts` takes `toward` as an exact
-   place, not a direction). In spawn mode every district and street is an area, so the drift shows: spare streets apart
-   from their district. What is drawn must be where the objective put it.
-2. **A city's slots shown at the city level** as a line in World · Live's step list ("学园都市, metropolis: 2 CBD · 3
-   dwelling · 1 industrial, placed as the district level borrows them"). They are placed where their first borrower wants
-   them, and the spares at the district level's end. The other way: place all six at the city level, a layout to look at
-   at once, but then the districts borrow fixed spots and only settling can move them.
-3. **Spares at the lower third of their kind's medians**, not the middle: a spare CBD 80 m instead of 120 m, a spare
-   dwelling area 18 m instead of 25 m.
-4. **Spare streets not built**: a street slot is placed and built only when a mention borrows it. The district's own fill
-   already draws streets; vol 1 would build about 10 street areas instead of 76, and a build takes about 20 s again. Spare
-   districts stay built. (The other way: halve `district.json`'s counts.)
-5. **Below and above the street apart**: a mention under the street (a median below 0) shares only with one under the
-   street; the stand-in put an underground passage on the 大道 square.
-6. **A share asked its kind only**: a mention borrowing a slot already decided keeps the slot's terrain; Jev is not asked
-   its height again (a call saved a share).
+- [ ] Topology in `config/spawning/city.json`: each city kind's rings and pairs (§8.2), checked by the configuration test
+- [ ] At the city level's end, each city's district manifolds spawned where the city's energy is least (topology, pairs,
+      pressure of the fading functions), each kept with its kind, centre, size and seed: the city's map, in the registry
+- [ ] The export builds a spawn-mode city's districts as patches of the city's own ground, not areas cut out of it; a spare
+      one named grey at its centre, no pin
+- [ ] World · Live's step list: each manifold's kind, its ring and its energy terms
+- [ ] From the earlier tune: spares at the lower third of their kind's medians
 
-Then the M2 run: the city level alone (`--spawn --from city --parts 2`), stand-in first, then Jev (four calls) when the
-user asks; looked at in World · Live.
+**Pass:** 学园都市 and 纽约, both metropolises: each one blended city of 6 district manifolds, no gap or hole between them;
+the CBDs within 0.3 of the city's radius, industry beyond 0.7; the energy terms logged. A stand-in run of the city level
+(`--spawn --from city`), then Jev (four calls) when the user asks, looked at in World · Live.
 
-- [ ] Cities typed as today; each city spawns its district slots by `city.json` when the city level ends
-- [ ] World · Live: spare slots as grey pins ("dwelling · spare"); the step list says borrowed, shared, spawned
+Waiting on the user: may a later book squeeze an earlier book's manifolds (design §8.5)? Rings as shares of the radius?
 
-**Pass:** 学园都市 and 纽约, both metropolises, 6 district slots each, all inside their city; no pool district.
+Moved to later levels: below and above the street apart, and a share asked its kind only (M4, streets).
 
 ## M3 — District level
 
