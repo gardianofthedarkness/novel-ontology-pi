@@ -105,19 +105,22 @@ const M = (gradient: number, spread: number, tail = 0) => ({ gradient, core: 0.3
  * engine's ground (a landscape type) with its own manifold (docs/v2/visual-context-engine.md §5.8): Jev gives its median
  * (`medians`, the slices it is offered), the engine draws the spread, with no cap. Natural ground and shapes are asked
  * their top (`tops`). The old-world kinds stay for older worlds. The gradients follow the research: about 0.3 city-wide,
- * steeper for a commercial core; the spreads are wide where heights vary most (a CBD, a city's whole skyline).
+ * steeper for a commercial core; the spreads are wide where heights vary most (a CBD, a city's whole skyline). Living
+ * areas are an East Asian megacity's (the user's call, 2026-11-01; docs/v2/living-areas.md): a city's, a dwelling area's and a
+ * residential street's heights start at three or four floors, with a tail of residential towers; another region's living
+ * areas are an option for later.
  */
 export interface TerrainKind { hint: string; ground?: string; shape?: string; manifold?: { gradient: number; core: number; spread: number; tail: number; index: number }; medians?: number[]; tops?: number[] }
 export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
   city: {
-    metropolis: { hint: "a metropolis: a big modern city round one centre, towers at its heart", ground: "skyscrapers", manifold: M(0.3, 0.7, 0.05), medians: [6, 10, 15, 25, 40, 60] },
-    city: { hint: "a city: flats, offices and shops round a modest centre", ground: "residential", manifold: M(0.25, 0.45, 0.03), medians: [6, 9, 12, 18, 25] },
+    metropolis: { hint: "a metropolis: a big modern city round one centre, towers at its heart", ground: "skyscrapers", manifold: M(0.3, 0.7, 0.05), medians: [12, 18, 25, 35, 50, 70] },
+    city: { hint: "a city: flats, offices and shops round a modest centre", ground: "residential", manifold: M(0.25, 0.45, 0.03), medians: [9, 12, 18, 25, 35] },
     town: { hint: "a town: low houses along a main street", ground: "residential", manifold: M(0.15, 0.3), medians: [4, 6, 8, 11] },
     oldcity: { hint: "an old city of an older world: walls, a keep, crowded lanes", ground: "castle", manifold: M(0.2, 0.3, 0.02), medians: [5, 8, 11, 15] },
   },
   district: {
     cbd: { hint: "a CBD: a dense core of high-rise towers (offices, hotels, malls and flats in towers)", ground: "skyscrapers", manifold: M(0.5, 0.5, 0.1), medians: [30, 50, 80, 120, 180, 250] },
-    dwelling: { hint: "a dwelling area: apartment blocks and houses with their schools, shops and stations; the city, not so tall", ground: "residential", manifold: M(0.1, 0.25, 0.02), medians: [8, 12, 18, 25, 35, 50] },
+    dwelling: { hint: "a dwelling area: blocks of flats and residential towers, low houses between them, with their schools, shops and stations", ground: "residential", manifold: M(0.1, 0.4, 0.06), medians: [12, 18, 25, 35, 50, 70] },
     industrial: { hint: "an industrial area: factories, warehouses, plants and yards on large plots", ground: "industrial", manifold: M(0, 0.2, 0.02), medians: [6, 9, 12, 18, 25] },
     harbour: { hint: "a harbour or a port: docks, piers, cranes and warehouses by the water", ground: "harbour", manifold: M(0, 0.3, 0.03), medians: [6, 9, 12, 18, 25] },
     mountain: { hint: "a mountain or high hills: natural ground rising, wooded or bare", shape: "mountain", tops: [80, 200, 400, 600, 800] },
@@ -134,7 +137,7 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     square: { hint: "a square or a crossing: open ground with buildings round it", ground: "square", manifold: M(0, 0.3, 0.03), medians: [6, 10, 15, 25, 40] },
     station: { hint: "a station front: the station, a plaza, bus stops, shops round it", ground: "station", manifold: M(0.3, 0.4, 0.05), medians: [10, 15, 25, 40, 60] },
     alley: { hint: "an alley or a lane: narrow, low and dense", ground: "alley", manifold: M(0, 0.2), medians: [3, 5, 7, 10] },
-    residential: { hint: "a residential street: flats and houses along it", ground: "terrace", manifold: M(0, 0.25, 0.02), medians: [6, 9, 12, 18, 25] },
+    residential: { hint: "a residential street: blocks of flats along it, a few houses between them", ground: "terrace", manifold: M(0, 0.35, 0.05), medians: [9, 12, 18, 25, 35, 50] },
     waterfront: { hint: "a waterfront or a bridge: water, a deck, warehouses and walks by it", ground: "waterfront", manifold: M(0, 0.3), medians: [4, 6, 10, 15] },
     park: { hint: "a park or an amusement park: lawns, gardens, rides, with a few pavilions", ground: "park", manifold: M(0, 0.4, 0.02), medians: [3, 5, 8, 12, 20] },
     stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium", manifold: M(0, 0.2), medians: [15, 25, 35, 50] },

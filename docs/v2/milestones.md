@@ -240,6 +240,11 @@ tokens; questions: 21 kind, 21 height, 9 box):**
 flats, 89 towers); the industrial ground 119 of 121 from the industrial kit; no stall or cart left. The page 1.97 → 2.52
 MB. Design: [model-kit.md](model-kit.md).
 
+- [x] Living areas an East Asian megacity's (the user's call; other regions an option for M8): higher least heights for a
+      city, a dwelling area and a residential street, a tail of residential towers, lots for blocks of flats, flats from
+      four floors. Research and values: [living-areas.md](living-areas.md). Seen on a copy of vol 1: the living area's
+      median 3 → 4 floors, one in ten above 12 (was 7), houses 69% → 32%, 312 buildings of 10 floors or more (was 115).
+
 ## M5 — Building level
 
 - [ ] Street slots spawn building slots by `street.json` (density × area, uses by share)
@@ -271,6 +276,8 @@ its type's quota; every name stands on its first book's slot; unnamed shares sta
 ## M8 — Configurations of one's own (an option, not now)
 
 - [ ] A universe's own files (`<library>/universe/spawning/`), a place's own under `places`, a function or a review by Jev or an agent (design §5)
+- [ ] A region's living areas as a choice (the user, 2026-11-01): East Asian megacity now ([living-areas.md](living-areas.md));
+      a European city, an American suburb as other profiles of the same heights, lots and model mixes
 
 ## M9 — Damage splits shares (with the simulation stage)
 

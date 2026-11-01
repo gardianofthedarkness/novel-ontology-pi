@@ -57,28 +57,34 @@ function nearest(models: string[], building: { w: number; d: number; floors: num
   const best = Math.min(...models.map(fit)), near = models.filter((model) => fit(model) <= best + 0.4).sort();
   return near[hash(seed) % near.length];
 }
-/** Of a table's models (in the library), those whose floors hold the building's (else the nearest), the nearest by proportions; null for none. */
-function byFloors(table: Floors | undefined, building: { w: number; d: number; floors: number }, seed: string, sizes: Record<string, number[]>, holding = false): string | null {
+/** Of a table's models (in the library), those whose floors hold the building's (else the nearest), the nearest by proportions, and how many floors it is off; null for none. */
+function byFloors(table: Floors | undefined, building: { w: number; d: number; floors: number }, seed: string, sizes: Record<string, number[]>, holding = false): { model: string; off: number } | null {
   const models = Object.entries(table ?? {}).filter(([model]) => sizes[model]);
   if (!models.length) return null;
   const off = ([, [least, most]]: [string, [number, number]]) => Math.max(0, least - building.floors, building.floors - most), closest = Math.min(...models.map(off));
   if (holding && closest > 0) return null;
-  return nearest(models.filter((model) => off(model) === closest).map(([model]) => model), building, seed, sizes);
+  return { model: nearest(models.filter((model) => off(model) === closest).map(([model]) => model), building, seed, sizes), off: closest };
 }
 /**
  * The model a building is drawn as (docs/v2/model-kit.md): on ancient ground, its kind's model of an older world; else,
  * of its use's models, those whose floors hold its own (a named building's own models first, when one holds it), the
- * nearest by proportions, one of them by a seed; null when its use has none (a plain block). `sizes`: each library
- * model's size (architectureModels.json).
+ * nearest by proportions, one of them by a seed; null when its use has none (a plain block). A use none of whose models
+ * comes within a floor of the building's yields to its kind's when that fits better (a "house" a street gave a ten-floor
+ * building is flats). `sizes`: each library model's size (architectureModels.json).
  */
 export function modelFor(building: { kind: string; use?: string; w: number; d: number; floors: number; era?: string; named?: boolean }, seed: string, sizes: Record<string, number[]>, table: ModelTable = MODELS): string | null {
   if (building.era === "ancient") {
     const old = (table.ancient[building.kind] ?? table.ancient["*"] ?? []).filter((model) => sizes[model]);
     return old.length ? old[hash(seed) % old.length] : null;
   }
-  const use = building.use ?? table.kinds[building.kind] ?? null, entry = use ? table.uses[use] : null;
-  if (!entry) return null;
-  return (building.named ? byFloors(entry.named, building, seed, sizes, true) : null) ?? byFloors(entry.fill, building, seed, sizes);
+  const choose = (use: string | null | undefined) => {
+    const entry = use ? table.uses[use] : null;
+    if (!entry) return null;
+    return (building.named ? byFloors(entry.named, building, seed, sizes, true) : null) ?? byFloors(entry.fill, building, seed, sizes);
+  };
+  const mine = choose(building.use ?? table.kinds[building.kind]);
+  if (building.use && mine && mine.off > 1) { const kinds = choose(table.kinds[building.kind]); if (kinds && kinds.off < mine.off) return kinds.model; }
+  return mine?.model ?? null;
 }
 /**
  * The model of an engine lot or shell with no building model of its own (docs/v2/model-kit.md): its role's use, or, for a

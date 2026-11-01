@@ -78,6 +78,7 @@ test("the terrain view draws a building as a model of its use whose floors hold 
   assert.equal(modelFor({ kind: "cottage", w: 8, d: 8, floors: 1, era: "ancient" }, "g", sizes, table), "market", "ancient ground: an older world's model");
   assert.equal(modelFor({ kind: "cottage", w: 8, d: 8, floors: 1 }, "g", sizes, table), "suburban-01", "modern ground: never one");
   assert.equal(roleModel({ role: "home", w: 20, d: 14, floors: 5 }, "h", sizes, table), "kk-apartment", "an engine lot: its role's use");
+  assert.equal(modelFor({ kind: "apartment", use: "house", w: 20, d: 14, floors: 8 }, "i", sizes, table), "kk-apartment", "a house eight floors high: flats, its kind");
   assert.equal(useOf({ kind: "skyscraper" }), "office");
 });
 
