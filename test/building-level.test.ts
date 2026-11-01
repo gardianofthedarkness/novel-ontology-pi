@@ -67,3 +67,20 @@ test("a street that takes the ground's own: an avenue on a wide road, a crossing
   const landscape = { seed: "t", patches: [taken] } as unknown as Parameters<typeof fillLandscape>[0];
   assert.ok(fillLandscape(landscape).fabric.buildings.some((b) => b.use && LANDSCAPES.avenue.uses!.includes(b.use)), "the city's lots on it are its buildings, with its uses");
 });
+
+test("the building level is asked as every level is: its kinds the uses the streets spawn and the models draw, its heights in floors", async () => {
+  const { TERRAIN_KINDS, terrainKinds } = await import("../src/v2/context/terrainModes.js");
+  const { MODELS } = await import("../src/ground/stage/useModels.js");
+  const { readFileSync } = await import("node:fs");
+  const street = JSON.parse(readFileSync("config/spawning/street.json", "utf8")).types as Record<string, { uses: Record<string, number> }>;
+  const kinds = TERRAIN_KINDS.building;
+  for (const use of new Set(Object.values(street).flatMap((type) => Object.keys(type.uses)))) assert.ok(kinds[use], `${use}: a street spawns it, so Jev may choose it`);
+  for (const [kind, entry] of Object.entries(kinds)) {
+    assert.ok(MODELS.uses[kind], `${kind}: the model table draws it`);
+    assert.ok(entry.floors!.length && entry.floors!.every((f, n) => f >= 1 && (n === 0 || f > entry.floors![n - 1])), `${kind}: its floors`);
+  }
+  assert.ok(Object.keys(terrainKinds("building", { platform: "a platform" })).includes("platform"), "the shapes offered too, as at every level");
+  const heights = terrainHeights("building", "apartment");
+  assert.equal(heights.measure, "top");
+  assert.deepEqual(heights.slices.filter((slice) => slice.y > 0).map((slice) => [slice.y, slice.said]).slice(0, 2), [[9, "3 floors"], [15, "5 floors"]]);
+});

@@ -124,7 +124,6 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // Borrowing and spawning by type (`spawn`): slots instead of pools, kept in the universe's registry (they outlive the book),
   // mirrored in the book's terrain for the export; the stage inputs read as the slot tree (src/v2/spawning/tree.ts).
   const S = spawn ? { ...(await load('dist/src/v2/spawning/config.js')), ...(await load('dist/src/v2/spawning/slots.js')), ...(await load('dist/src/v2/spawning/tree.js')), ...(await load('dist/src/v2/spawning/topology.js')), ...(await load('dist/src/v2/spawning/heights.js')) } : null;
-  const { buildingUseOf } = await load('dist/src/v2/rules/language.js');
   const LEVELS = ['city', 'district', 'street', 'building'], bookId = universe.book, resolver = spawn ? S.defaultResolver() : null;
   if (spawn) { terrain.mode = 'spawn'; terrain.book = bookId; registry.slots ??= {}; terrain.slots = registry.slots; }
   // The map's log, by book (docs/v2/borrow-and-spawn.md §8.8): every change to the map in order, so a book can be played again.
@@ -384,15 +383,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       });
       return { spares, held: held.size };
     };
-    // A building borrows (§6): its use from the language profile; of the building slots of that use under its holder, the
-    // one that keeps the characters' travel least, the place its scene is set in counting as its pin (most buildings the
-    // text mentions are seen from a street, not set in); a named one takes its slot for good, an unnamed one shares. With
-    // none to borrow, a spawn gives its use to a spare lot of the streets under its holder where travel is least. A building
-    // whose use the profile does not know stays where the canvas puts it, for now (asking Jev is a later step).
+    // A building borrows (§6): of the building slots of its kind (Jev's answer) under its holder, the one that keeps the
+    // characters' travel least, the place its scene is set in counting as its pin (most buildings the text mentions are
+    // seen from a street, not set in); a named one takes its slot for good, an unnamed one shares. With none to borrow, a
+    // spawn gives its kind to a spare lot of the streets under its holder where travel is least. Gives back its lot.
     const settingOf = new Map((inputs.data?.scenes ?? []).map(scene => [scene.id, scene.placeId ?? scene.placeIds?.[0] ?? null]));
-    const borrowBuilding = async (part, city) => {
-      const use = buildingUseOf(part.label);
-      if (!use) { await live.outcome({ subject: part.label, text: 'no use the language profile knows: it stays where the canvas puts it' }); return false; }
+    const borrowBuilding = async (part, city, use) => {
       const holder = holderOf(part, city), named = !part.id.startsWith('unnamed:'), scene = world[part.id]?.scene ?? null, setIn = scene ? settingOf.get(scene) : null;
       const pin = setIn && setIn !== part.id ? positionOf(liftTo(setIn, 'street')) : null;
       const mention = { id: part.id, label: part.label, named, kind: use, holder, scene, pin };
@@ -408,7 +404,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       };
       const choice = S.chooseSlots({ book: bookId, level: 'building', slots, mentions: [mention], ties: (a, b) => tiesAt('building')[a]?.[b] ?? 0, fixed, within: (id, of) => id === of || within(id, of), sceneIndex: s => sceneAt.get(s) ?? 0, place, improve: false });
       const slot = choice.slots.find(entry => entry.id === choice.assignment[part.id]);
-      if (!slot?.at) { await live.outcome({ subject: part.label, text: `a ${use}: no slot of its use and no spare lot under ${name(holder)}` }); return false; }
+      if (!slot?.at) { await live.outcome({ subject: part.label, text: `a ${use}: no slot of its use and no spare lot under ${name(holder)}` }); return null; }
       const spawned = choice.spawned.includes(slot.id);
       // A spawn takes the spare lot's place: the lot is given its use (the street keeps its number of buildings).
       const list = spawned ? choice.slots.filter(entry => entry.id !== spare.id) : choice.slots;
@@ -420,7 +416,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       logMap({ level: 'building', what: spawned ? 'spawn' : named ? 'borrow' : 'share', id: slot.id, place: part.id, parent: kept.parent, kind: use, ...(spawned ? { from: spare.id } : {}) });
       await live.outcome({ subject: part.label, text: `a ${use}: ${choice.log.at(-1).replace(`${part.label}: `, '')}${spawned ? ` (the lot of ${spare.kind} ${spare.id} in ${name(spare.parent)})` : ` in ${name(kept.parent)}`}` });
       await saveSlots();
-      return true;
+      return { street: kept.parent, at: node ? [node.x + kept.toward[0], node.z + kept.toward[1]] : slot.at, size: kept.size, box: terrain.sites[part.id].box ?? Z.turnedBox(slot.at, kept.size, kept.turn ?? 0) };
     };
     // A parent's children laid out by its topology as manifolds of its own ground (§8.2, §8.3): the new ones where its
     // energy is least, those standing giving a little; the heights unified to its average (§8.6). For a born city, a city
@@ -640,8 +636,6 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         if (end === until) break; continue;
       }
       if (keptBefore(part.id)) continue;
-      // The building level (§6): a building borrows a lot of its use; no pictures and no question (its use is the language profile's).
-      if (part.scale === 'building') { if (await borrowBuilding(part, city)) placed++; continue; }
       // A pool's member: Jev is asked its kind, then where it lies (anywhere in its district, its pin a suggestion), then its height.
       const isCity = part.scale === 'city', sampled = isMember(part.id), cityNode = nodeOf(city.id);
       // In spawn mode a part moves to the area of the slot it borrows (docs/v2/borrow-and-spawn.md §2.3) once it is decided.
@@ -698,6 +692,33 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const about = { part: { id: part.id, label: part.label, scale: part.scale }, holder: { id: holder, label: name(holder) }, city: { id: city.id, label: city.label }, within: framing, ...(sampled ? { sampled: true } : {}) };
       await live.line(0, { status: 'running', part: `${part.label} (${before + placed + 1} of ${total}, in ${city.label})` });
       focus = { x: round(centre[0]), z: round(centre[2]), r: round(R * 0.6) };
+      // The building level (§6; the user, 2026-11-01: every level asked alike): its kind and its height, on the pictures
+      // every part is asked on; between them it borrows a lot of that kind under its holder (borrowBuilding): where it
+      // stands is its lot's, so it is never boxed. Shown in World · Live on its lot, blinking, as every part is.
+      if (part.scale === 'building') {
+        const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(skyCentre, -sky.turn, SKY_UP, sky.half * 2), target: skyCentre }, areas: areas(), labelScale: sky.half / 32, vague: { near: sky.half * 4, far: sky.half * 9 } });
+        const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R, turn: fill.turn }, areas: areas(), labelScale: R / 24, vague: CLEAR });
+        const { replies } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES, pictures: { skyline: `${city.label} from the side and above, as the world stands now. ${SEEN}`, map: `${city.label} straight down, ${fill.turn ? `turned ${Math.round((fill.turn * 180) / Math.PI)}° so its places fill the picture (north is not up)` : 'north up'}, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
+        const what = replies.find(reply => reply.key === 'kind'), kind = what?.value && T.TERRAIN_KINDS.building[what.value] ? String(what.value) : null;
+        if (!kind) { await live.outcome({ subject: part.label, text: `${what?.value ? `a ${what.value}` : 'no kind'}: no building kind, so no lot (a shape at the building level is a later step)` }); continue; }
+        const lot = await borrowBuilding(part, city, kind);
+        if (!lot) continue;
+        // Its height: slices at its kind's floors through a core of its street round its lot, the buildings standing there cut.
+        const { measure, slices: tops } = T.terrainHeights('building', kind), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo, core = Math.max(CORE_MIN, Math.max(...lot.size) * 1.5);
+        const at = lot.at, sample = [round(at[0] - core), round(at[1] - core), round(at[0] + core), round(at[1] + core)];
+        const lots = data.world.lots.map(entry => ({ box: [entry.i0 * CELL, entry.j0 * CELL, (entry.i0 + entry.nx) * CELL, (entry.j0 + entry.nz) * CELL], top: (entry.floors ?? 1) * FLOOR })).filter(entry => entry.box[0] < sample[2] && sample[0] < entry.box[2] && entry.box[1] < sample[3] && sample[1] < entry.box[3]);
+        const distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [at[0], (lo + hi) / 2, at[1]];
+        focus = { x: round(at[0]), z: round(at[1]), r: round(core) };
+        await show(`${part.label}: its lot`, { id: part.id, label: part.label, kind, box: lot.box, top: null });
+        const shot = await shoot(OVERVIEW, { view: { fov: 40, position: from(mid, -0.62, 0.3, distance), target: mid }, slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${entry.y} m · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.filter(entry => entry.y > 0).flatMap(entry => lots.filter(entry2 => entry2.top > entry.y).slice(0, 80).map(entry2 => ({ box: entry2.box, y: entry.y }))), labelScale: Math.max(2.5, distance / 75), dash: Math.max(1, distance / 160), vague: { near: distance * 1.6, far: distance * 4.5 } });
+        const rise = (await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, pictures: { heights: `${part.label}'s lot in ${name(lot.street)}, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height a ${kind} may rise to${tops.some(entry => entry.y < 0) ? ', and below the street' : ''}; the city faded behind.` } }, stores, { request: { images: { heights: shot.png } } })).replies[0];
+        const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null;
+        Object.assign(terrain.sites[part.id], { ...(height !== null ? { top: height } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } });
+        await live.outcome({ subject: part.label, text: `${part.label}: ${kind}, ${height === null ? 'its street\'s height' : height < 0 ? `${-height} m under the street` : `${Math.round(height / 3)} floors (${height} m)`}, on a lot of ${name(lot.street)}` });
+        await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: lot.box, top: height });
+        await saveSlots(); placed++;
+        continue;
+      }
       // A sampling pool is not asked: its default is the average of the places of its own level decided inside its area (a
       // pool street copies the district's streets, a pool district the city's districts: every level has its own kinds),
       // the most common kind and the mean of their medians; with none decided yet it stays empty. At the spot the engine

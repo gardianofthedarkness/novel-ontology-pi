@@ -671,7 +671,20 @@ export async function strandDemo(novelDir, options) {
     const patchOf = b => place.landscape.patches.find(patch => patch.id === filled.owner[b.lot]) ?? [...place.landscape.patches].filter(patch => String(b.lot).startsWith(`${patch.id}:`)).sort((x, y) => y.id.length - x.id.length)[0] ?? place.landscape.patches[0];
     const manifoldOf = patch => createHash('sha256').update(JSON.stringify({ recipe: 1, patch, older: place.landscape.patches.slice(0, place.landscape.patches.indexOf(patch)) })).digest('hex').slice(0, 12);
     if (process.env.DEBUG_CLEAR) { const lost = {}, by = {}; for (const b of [...filled.fabric.buildings, ...filled.landmarks]) { const t = patchOf(b).type, hit = keep.find(({ at, r }) => Math.hypot(b.x - at[0], b.z - at[1]) <= r + Math.max(b.w, b.d) / 2); (lost[t] ??= [0, 0])[1]++; if (hit) { lost[t][0]++; const who = Object.values(canvas.places).find(c => c.parent === place.id && c.at === hit.at); by[`${t} by ${who?.id} r${Math.round(hit.r)}`] = (by[`${t} by ${who?.id} r${Math.round(hit.r)}`] ?? 0) + 1; } } console.error('DEBUG_CLEAR', place.id, JSON.stringify(lost), JSON.stringify(Object.entries(by).sort((x, y) => y[1] - x[1]).slice(0, 8))); }
-    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
+    // A building Jev decided on a lot (terrain spawning's building level): the lot takes its kind and its height, a named
+    // one's if one holds it, else its sharers' mean. Keyed by the lot as the fill names it: a form's lot by its slot's id,
+    // a city lot by that id less its street.
+    const decided = new Map();
+    for (const site of Object.values(terrain?.sites ?? {}).filter(entry => entry.scale === 'building' && entry.by === 'borrow' && entry.slot)) {
+      const slot = terrain.slots?.[site.slot];
+      if (!slot) continue;
+      const key = slot.lot ?? slot.id, entry = decided.get(key) ?? { kind: site.kind, tops: [], named: null }, named = !String(site.label).includes(' (scene ');
+      if (named) entry.kind = site.kind;
+      if (typeof site.top === 'number' && site.top > 0) { if (named) entry.named = site.top; else entry.tops.push(site.top); }
+      decided.set(key, entry); if (key.startsWith(`${slot.parent}:`)) decided.set(key.slice(slot.parent.length + 1), entry);
+    }
+    const asDecided = b => { const entry = decided.get(b.lot); if (!entry) return b; const top = entry.named ?? (entry.tops.length ? entry.tops.reduce((sum, t) => sum + t, 0) / entry.tops.length : null); return { ...b, use: entry.kind, ...(top ? { floors: Math.max(1, Math.round(top / 3)) } : {}) }; };
+    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided).map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));

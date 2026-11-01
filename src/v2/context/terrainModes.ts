@@ -110,7 +110,7 @@ const M = (gradient: number, spread: number, tail = 0) => ({ gradient, core: 0.3
  * residential street's heights start at three or four floors, with a tail of residential towers; another region's living
  * areas are an option for later.
  */
-export interface TerrainKind { hint: string; ground?: string; shape?: string; manifold?: { gradient: number; core: number; spread: number; tail: number; index: number }; medians?: number[]; tops?: number[] }
+export interface TerrainKind { hint: string; ground?: string; shape?: string; manifold?: { gradient: number; core: number; spread: number; tail: number; index: number }; medians?: number[]; tops?: number[]; floors?: number[] }
 export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
   city: {
     metropolis: { hint: "a metropolis: a big modern city round one centre, towers at its heart", ground: "skyscrapers", manifold: M(0.3, 0.7, 0.05), medians: [12, 18, 25, 35, 50, 70] },
@@ -143,6 +143,38 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     waterfront: { hint: "a waterfront or a bridge: water, a deck, warehouses and walks by it", ground: "waterfront", manifold: M(0, 0.3), medians: [4, 6, 10, 15] },
     park: { hint: "a park or an amusement park: lawns, gardens, rides, with a few pavilions", ground: "park", manifold: M(0, 0.4, 0.02), medians: [3, 5, 8, 12, 20] },
     stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium", manifold: M(0, 0.2), medians: [15, 25, 35, 50] },
+  },
+  // The building level's own kinds (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01: every level asked alike, its
+  // type and its height): a building's use, as the streets' buildings take them (config/spawning/street.json) and the model
+  // table draws them (config/models.json). A building's height is its own (no manifold): the floors offered, its roof at
+  // three metres a floor; the least its kind is built (a hard gate, as at every level).
+  building: {
+    house: { hint: "a house: one family's home", floors: [1, 2, 3] },
+    apartment: { hint: "a block of flats or a residential tower", floors: [3, 5, 8, 12, 20, 30, 45] },
+    dormitory: { hint: "a dormitory: students' or workers' rooms, a hall of residence", floors: [3, 5, 8, 12, 20] },
+    school: { hint: "a school, a college or a campus building", floors: [2, 3, 4, 6, 10] },
+    shop: { hint: "a shop: a small store, a bakery, a cake or a sweet shop, flats or offices above it", floors: [1, 2, 3, 5] },
+    convenience: { hint: "a convenience store or a supermarket", floors: [1, 2, 3, 5] },
+    cafe: { hint: "a café or a tea house", floors: [1, 2, 3, 5] },
+    restaurant: { hint: "a restaurant, a ramen or a sushi shop, an eatery", floors: [1, 2, 3, 5, 8] },
+    bar: { hint: "a bar, a pub, a karaoke or a club", floors: [1, 2, 3, 5] },
+    arcade: { hint: "an amusement arcade or a game centre", floors: [2, 3, 5, 8] },
+    mall: { hint: "a shopping centre: many shops under one roof", floors: [3, 5, 8, 12] },
+    department: { hint: "a department store", floors: [4, 6, 8, 12] },
+    cinema: { hint: "a cinema or a theatre", floors: [2, 4, 6, 10] },
+    bank: { hint: "a bank", floors: [2, 4, 8, 15] },
+    office: { hint: "an office building or an office tower: a company's, a mixed-use block", floors: [3, 6, 10, 20, 40, 60] },
+    hotel: { hint: "a hotel", floors: [5, 10, 20, 40] },
+    government: { hint: "a public office: a city hall, a court, a prosecutors' office, a police post, a detention house", floors: [3, 6, 10, 20] },
+    hospital: { hint: "a hospital", floors: [3, 6, 10, 15] },
+    clinic: { hint: "a clinic or an infirmary", floors: [1, 2, 3, 5] },
+    station: { hint: "a station: its hall over the tracks, a subway entrance", floors: [1, 2, 3, 5] },
+    lab: { hint: "a laboratory or a research institute", floors: [2, 4, 8, 15] },
+    factory: { hint: "a factory or a plant", floors: [1, 2, 3, 5] },
+    warehouse: { hint: "a warehouse or a depot", floors: [1, 2, 3] },
+    workshop: { hint: "a workshop, a garage or a dealer's yard", floors: [1, 2] },
+    church: { hint: "a church, a temple or a shrine", floors: [1, 2, 4] },
+    parking: { hint: "a car park building", floors: [2, 4, 6, 8] },
   },
 };
 /**
@@ -212,6 +244,8 @@ export function terrainHeights(scale: string, kind: string, average?: { factor: 
     const slices = [...(average.underground === false ? [] : UNDERGROUND).map(([y, under]) => ({ y, offset: y, said: `underground: ${under}` })), ...ys.map((y) => ({ y, offset: y - standard, said: `about ${Math.max(1, Math.round(y / 3))} floors on average` }))];
     return { measure: "average", standard, slices: slices.map((slice, k) => ({ letter: "ABCDEFGHIJKLMN"[k], ...slice })) };
   }
+  // A building: its roof at three metres a floor, each slice said in floors.
+  if (entry?.floors) return { measure: "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...entry.floors.map((f): [number, string] => [f * 3, `${f} floor${f === 1 ? "" : "s"}`])].map(([y, said], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said })) };
   const heights = median ? entry!.medians! : entry?.tops ?? SHAPE_TOPS;
   const said = (y: number) => (median ? `about ${Math.max(1, Math.round(y / 3))} floors` : natural(y));
   return { measure: median ? "median" : "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...heights.map((y): [number, string] => [y, said(y)])].map(([y, words], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said: words })) };

@@ -324,6 +324,13 @@ logged spawn; the world builds in about today's time.
   - two raised platforms moved onto one district's middle (now the nearest spot inside it, at the next street run);
   - a city lot's building slot had no street in its id.
 
+**The building level asked as every level (the user, after the run: every level the same process):** Jev is shown the
+skyline and the map and asked each building's kind, from the building level's own kinds (26 uses: a house, a block of
+flats, a dormitory, a school, a shop, an office, a government office…, with floors for each), then, once it has borrowed
+a lot of that kind, its height on slices through its street. The lot takes the kind and the height; the building blinks
+on its lot in World · Live while it is asked. Stand-in on a copy of the host's state (no model call): 98 questions for 49
+buildings, all on lots of their kind with their heights. Not yet run with Jev: about 98 calls.
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)

@@ -257,14 +257,22 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
   - With no road wide enough in its area, it is placed as before and builds its form.
   - Before, an avenue laid its own rows across the city's roads, and the roads crossing it took most of them (2 of 8 left
     in a CBD). Now it has the city's 14 or so buildings along its road.
-- **A building borrows.** Its use comes from the language profile. Of the slots of that use under its holder, it takes
-  the one that keeps the characters' travel least (§4). The place its scene is set in counts as its pin, because most
-  buildings the text mentions are seen from a street, not set in. A named building takes its slot for good; an unnamed
-  one shares.
-- **A building spawns** when nothing of its use can be borrowed. It gives its use to the spare lot of a street under its
+- **A building is asked as every part is (the user, 2026-11-01: every level the same process).**
+  - Jev is shown the skyline and the map, and asked its kind. The building level's kinds are the uses the streets spawn
+    and the model table draws (`TERRAIN_KINDS.building` in `src/v2/context/terrainModes.ts`: a house, a block of flats, a
+    school, a shop, an office, a government office…), with the shapes as at every level.
+  - It borrows a lot of that kind under its holder: the one that keeps the characters' travel least (§4). The place its
+    scene is set in counts as its pin, because most buildings the text mentions are seen from a street, not set in. A
+    named building takes its lot for good; an unnamed one shares.
+  - Jev is asked its height on slices through its street round that lot, at its kind's floors (a house 1–3, a block of
+    flats 3–45, an office 3–60), the street's buildings cut where a slice meets them.
+  - The lot takes its kind and its height: a named building's, else its sharers' mean.
+  - In World · Live it blinks on its lot while its height is asked, then is kept.
+  - Before (the first M5 run), its use came from the language profile and its height from its street, so Jev saw no
+    building level at all.
+- **A building spawns** when nothing of its kind can be borrowed. It gives its kind to the spare lot of a street under its
   holder where travel is least, so the street keeps its number of buildings.
-- **A building whose use the profile does not know** stays where the canvas puts it for now; asking Jev its use is a later
-  step.
+- **A building Jev answers with a shape** (a cavern, a platform) is not placed at the building level yet.
 - **No place of its own.** A building slot is not a place in the tree (`src/v2/spawning/tree.ts`): the building that
   borrows it stands in its street, on that lot exactly. A staged building's grid clears the fill there; a marker stands on
   the lot.
