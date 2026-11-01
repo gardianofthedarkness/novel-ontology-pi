@@ -141,6 +141,12 @@ likeliest slices:
 - **Proposed:** ask absolute averages, the standard kept only as the lowest slice; for a city (or any area whose middle is
   not like the rest), the heights pictures across it.
 
+**Built (the user's call, "per area type minimum hard gate"; 2026-11-01, 3 paid calls, 32,421 input tokens):** absolute
+averages from each kind's minimum up, nothing below it, no slice under the street for a city or a district; a city shown
+its middle, a district halfway out and one near its edge. Jev: 学园都市 C, an average of 20 m (C 42%, D 31%, B 22%); 纽约 C,
+20 m (C 43%, D 35%, B 15%): the two cities alike, between the probe's G and H. Each deformed to it: the CBDs at 73.4 m,
+dwelling areas 8.4 m, industry 6.1 m, the open ground 8.2 m.
+
 ## M3 — District level
 
 - [ ] 第七学区, 第六学区, 第十五学区 borrow; unnamed district mentions borrow; the swap pass; settle with spares

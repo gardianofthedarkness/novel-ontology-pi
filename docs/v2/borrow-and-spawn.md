@@ -367,6 +367,9 @@ of the book before it with that book's log applied; `--from <level>` drops the b
 - **A standard and an offset.** Every type at every level of the tree has a minimum standard height (its default). Jev is
   asked how many metres to add to it, with +0 always among the options: positive for what stands above the ground, negative
   for what lies under it. The decided height is the standard plus the offset; unification (§8.6) works on it as before.
+  *Tried and changed (2026-11-01):* the height probe showed Jev reads absolute averages surely and alike, additions
+  unsurely and unevenly. The user's call: absolute averages, **each area kind's minimum a hard gate** (no slice below it;
+  no slice under the street for a city or a district); a city's average asked on pictures across it.
 - **Floating objects.** Some buildings neither stand on the ground nor fill a manifold: an underground cavern, a commercial
   centre on a raised ring, a floating platform. Each is asked twice, how far it is from the ground and how thick it is.
 - **Inventions are nominated.** Something that fits no category, placed as a shape, is a nominated object whatever the text
