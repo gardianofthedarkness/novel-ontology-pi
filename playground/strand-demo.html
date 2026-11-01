@@ -1345,10 +1345,9 @@ if (capture) {
       // A top-down 2D map: straight down, north up, orthographic, so a box on it reads as metres on the ground.
       if (topdown) {
         const entry = built.get(place), aspect = host.clientWidth / host.clientHeight, half = topdown.half, map = new THREE.OrthographicCamera(-half * aspect, half * aspect, half, -half, 0.1, 1000);
-        // North up, or turned so the places fill it (`turn`: the frame's x axis from the world's, the zoom engine's fillFrame).
-        const turn = topdown.turn ?? 0; map.up.set(Math.sin(turn), 0, -Math.cos(turn)); map.position.set(topdown.x - entry.cx, 400, topdown.z - entry.cz); map.lookAt(topdown.x - entry.cx, 0, topdown.z - entry.cz); map.updateMatrixWorld();
+        map.up.set(0, 0, -1); map.position.set(topdown.x - entry.cx, 400, topdown.z - entry.cz); map.lookAt(topdown.x - entry.cx, 0, topdown.z - entry.cz); map.updateMatrixWorld();
         sheetView = { scene: world, camera: map }; await frames();
-        return { id, width: host.clientWidth, height: host.clientHeight, map: { x: topdown.x, z: topdown.z, halfX: half * aspect, halfZ: half, turn: topdown.turn ?? 0 } };
+        return { id, width: host.clientWidth, height: host.clientHeight, map: { x: topdown.x, z: topdown.z, halfX: half * aspect, halfZ: half } };
       }
       return { id, width: host.clientWidth, height: host.clientHeight };
     },
