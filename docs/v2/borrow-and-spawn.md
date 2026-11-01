@@ -258,11 +258,14 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
   - Before, an avenue laid its own rows across the city's roads, and the roads crossing it took most of them (2 of 8 left
     in a CBD). Now it has the city's 14 or so buildings along its road.
 - **A building is asked as every part is (the user, 2026-11-01: every level the same process).**
-  - Jev is shown the skyline and the map, and asked its kind among ten. A universe has too many kinds of building to
+  - **The search decides when it is sure, Jev when it is not (the user, 2026-11-01).** By meaning, the search is sure when
+    its first type leads its second by 0.5 or more (`SURE` in `src/v2/spawning/inventory.ts`). On 70 names judged by
+    hand, 56 were sure, all of them right; the 14 unsure held all three of its wrong firsts. When it is unsure, Jev is
+    shown the skyline and the map and asked its kind among ten. A universe has too many kinds of building to
     offer them all (the user, 2026-11-01), so the building's name and the sentences round it in its scenes (its own or
     those naming it, one either side) are searched against the inventory (`config/spawning/building-types.json`: about
-    90 types, each with a description, its Chinese, Japanese and English words, its floors and its coarse use). The ten
-    nearest are offered, the shapes beside them (`src/v2/spawning/inventory.ts`).
+    80 types, each with a description, its Chinese, Japanese and English words, and its coarse use, or its shape: a tunnel,
+    a cavern, a raised deck). The ten nearest are offered, the shapes beside them (`src/v2/spawning/inventory.ts`).
     - The search is by meaning when an embedding model is configured, else by words. By words: a type's words in the
       building's name count most (its longest, so 便利商店 is a convenience store, not any 店), then the character pairs
       they share with it (回转寿司店 is a 寿司 shop), then its words in the sentences round it.

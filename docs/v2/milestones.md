@@ -366,6 +366,11 @@ bge-small-zh-v1.5; 100 paid calls, 632,961 input tokens):**
 - **Not yet:** Jev put 6 buildings under the street (the sushi restaurant, a ramen shop, the subway station, the car
   park…); an underground building is not built as a hall yet.
 
+- [x] The search decides a building's type when it is sure (its first leads its second by 0.5), Jev when it is not;
+      the inventory knows shapes too (a tunnel, a cavern, a raised deck). On 70 names: 56 sure, all right.
+      Stand-in on a copy of the host's state (the real local embeddings): the search decided 43 of 49 buildings, Jev was
+      asked 6 (office-like names); 57 questions in all, from 100.
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)

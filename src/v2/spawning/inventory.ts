@@ -12,14 +12,15 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 /** A type: what it is (saying nothing of its height: that is its scenes'), what the text may call it, its coarse use. */
-export interface BuildingType { use: string; describe: string; words: string[] }
+export interface BuildingType { use?: string; shape?: string; describe: string; words: string[] }
 const DEFAULT = fileURLToPath(new URL("../../../../config/spawning/building-types.json", import.meta.url));
 /** The inventory: every building type, by id. */
 export const loadBuildingTypes = (file = DEFAULT): Record<string, BuildingType> => JSON.parse(readFileSync(file, "utf8")).types;
 
 /** What the search reads of a building: its name, and the sentences round it in its scenes. */
 export interface BuildingQuery { label: string; around: string[]; /** The uses of the lots round it (its holder's streets'), by how many: what the rest of its ten leans to. */ nearby?: Record<string, number> }
-export interface Found { id: string; score: number }
+/** A type found: its score, and what it is made of (`words`: the word score; `meaning`: the cosine, with an embedder). */
+export interface Found { id: string; score: number; words: number; meaning: number | null }
 
 const pairs = (text: string) => { const out = new Set<string>(); const chars = [...text.replace(/[\s\p{P}]/gu, "")]; chars.forEach((c, n) => { if (n) out.add(chars[n - 1] + c); }); return out; };
 const cjk = (word: string) => /[぀-ヿ一-鿿]/.test(word);
@@ -47,17 +48,32 @@ const cache = new WeakMap<Embeds, Map<string, number[]>>();
  */
 export async function searchBuildingTypes(query: BuildingQuery, types: Record<string, BuildingType> = loadBuildingTypes(), k = 10, embedder: Embeds | null = null): Promise<Found[]> {
   const ids = Object.keys(types);
-  let scores = ids.map((id) => ({ id, score: wordScore(types[id], query) }));
+  let scores: Found[] = ids.map((id) => { const words = wordScore(types[id], query); return { id, score: words, words, meaning: null }; });
   if (embedder) {
     const known = cache.get(embedder) ?? new Map<string, number[]>(), missing = ids.filter((id) => !known.has(id));
     if (missing.length) (await embedder.embed(missing.map((id) => typeText(types[id])))).forEach((vector, n) => known.set(missing[n], vector));
     cache.set(embedder, known);
     const [asked] = await embedder.embed([`${query.label.replace(/ \(scene \d+\)$/, "")}\n${query.around.slice(0, 6).join("\n")}`]);
-    scores = scores.map(({ id, score }) => ({ id, score: round(10 * cosine(asked, known.get(id)!) + score / 6) }));
+    scores = scores.map((entry) => { const meaning = round(cosine(asked, known.get(entry.id)!)); return { ...entry, meaning, score: round(10 * meaning + entry.words / 6) }; });
   }
-  // The rest of the ten, after what the name and its sentences found: the types sharing a use with those, then the uses of
-  // the lots round it (what its streets hold), so Jev is never offered a list padded at random.
-  const found = new Set(scores.filter((entry) => entry.score > 0).map((entry) => types[entry.id].use)), total = Object.values(query.nearby ?? {}).reduce((sum, n) => sum + n, 0);
-  const lean = (id: string) => (found.has(types[id].use) ? 0.5 : 0) + (total ? (0.4 * (query.nearby![types[id].use] ?? 0)) / total : 0);
-  return scores.map((entry, n) => ({ ...entry, lean: lean(entry.id), n })).sort((a, b) => b.score - a.score || b.lean - a.lean || a.n - b.n).slice(0, k).map(({ id, score }) => ({ id, score }));
+  // The rest of the ten, after what the name and its sentences found by their words: the types sharing a use with those,
+  // then the uses of the lots round it (what its streets hold), so Jev is never offered a list padded at random.
+  const kindOf = (id: string) => types[id].use ?? types[id].shape ?? "", total = Object.values(query.nearby ?? {}).reduce((sum, n) => sum + n, 0);
+  const found = new Set(scores.filter((entry) => entry.words > 0).map((entry) => kindOf(entry.id)));
+  const lean = (id: string) => (found.has(kindOf(id)) ? 0.5 : 0) + (total ? (0.4 * (query.nearby![kindOf(id)] ?? 0)) / total : 0);
+  return scores.map((entry, n) => ({ entry, lean: lean(entry.id), n })).sort((a, b) => b.entry.score - a.entry.score || b.lean - a.lean || a.n - b.n).slice(0, k).map(({ entry }) => entry);
+}
+
+/**
+ * Whether the search is sure enough to decide a building's type itself, Jev asked only when it is not (the user,
+ * 2026-11-01). By meaning: its first leads its second by `lead` (on 70 names judged by hand, every first leading by 0.6 or
+ * more was right, the three wrong ones led by under 0.5). By words alone: a word of the type in the name, and a lead of
+ * `wordsLead`.
+ */
+export const SURE = { lead: 0.5, wordsLead: 2 };
+export function isSure(found: Found[]): boolean {
+  const [first, second] = found;
+  if (!first) return false;
+  const lead = first.score - (second?.score ?? 0);
+  return first.meaning !== null ? lead >= SURE.lead : first.words >= 6 && lead >= SURE.wordsLead;
 }

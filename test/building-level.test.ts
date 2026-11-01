@@ -93,7 +93,8 @@ test("the building inventory: every type a use the world draws, its words and fl
   const types = loadBuildingTypes();
   assert.ok(Object.keys(types).length >= 60, "many types: too many to offer them all");
   for (const [id, type] of Object.entries(types)) {
-    assert.ok(TERRAIN_KINDS.building[type.use], `${id}: its use ${type.use} is a building kind (its lots, its model)`);
+    // A building's use is a building kind (its lots, its model); a shape's, a shape every level offers.
+    assert.ok(type.use ? TERRAIN_KINDS.building[type.use] : ["cut", "platform", "sphere", "donut", "hill", "plateau", "basin", "ramp"].includes(type.shape!), `${id}: a building kind or a shape (${type.use ?? type.shape})`);
     assert.ok(type.describe && type.words.length, `${id}: described, its words`);
     assert.ok(!/floor|storey|tall|high-rise|tens of|many floors|few floors/i.test(type.describe), `${id}: its description says nothing of its height (${type.describe})`);
   }
@@ -104,7 +105,8 @@ test("the building inventory: every type a use the world draws, its words and fl
   assert.equal((await top("学生宿舍 (scene 7)"))[0], "student-dormitory");
   assert.equal((await top("便利商店 (scene 10)"))[0], "convenience-store", "the longest word it is called by, not the most short ones");
   assert.equal((await top("大楼 (scene 2)", { office: 10 })).length, 10, "always ten to choose among");
-  assert.ok((await top("隧道 (scene 21)", { office: 10, shop: 2 })).slice(0, 3).every((id) => types[id].use === "office"), "with nothing found, what stands round it");
+  assert.ok((await top("那一带 (scene 21)", { office: 10, shop: 2 })).slice(0, 3).every((id) => types[id].use === "office"), "with nothing found, what stands round it");
+  assert.equal((await top("隧道 (scene 21)"))[0], "tunnel", "a shape the inventory knows: a tunnel");
   const around = await searchBuildingTypes({ label: "那栋建筑", around: ["她走进那栋建筑，柜台上摆满了拉面碗。"] }, types, 10);
   assert.equal(around[0].id, "ramen-shop", "the sentences round it when the name says nothing");
   assert.ok(wordScore(types["sushi-restaurant"], { label: "寿司", around: [] }) > wordScore(types["sushi-restaurant"], { label: "x", around: ["寿司"] }), "its name counts more than its sentences");
@@ -116,4 +118,12 @@ test("the building level's search by meaning: with an embedder the nearest by ve
   const embedder = { embed: async (texts: string[]) => texts.map((text) => (text.includes("beta") || text.includes("办公") ? [0, 1] : [1, 0])) };
   assert.equal((await searchBuildingTypes({ label: "办公的地方", around: [] }, types, 2, embedder))[0].id, "b", "by meaning");
   assert.equal((await searchBuildingTypes({ label: "甲", around: [] }, types, 2, embedder))[0].id, "a", "its own word in its name");
+});
+
+test("the search decides a building's type when it is sure, Jev only when it is not", async () => {
+  const { isSure, SURE } = await import("../src/v2/spawning/inventory.js");
+  const found = (a: number, b: number, meaning: number | null = 0.6, words = 11) => [{ id: "x", score: a, words, meaning }, { id: "y", score: b, words: 0, meaning }];
+  assert.ok(isSure(found(7, 7 - SURE.lead)), "by meaning: its first well ahead");
+  assert.ok(!isSure(found(7, 6.8)), "close behind: Jev is asked");
+  assert.ok(isSure(found(12, 6, null)) && !isSure(found(12, 11, null)) && !isSure(found(3, 0, null, 3)), "by words: a word of it in the name, and a lead");
 });

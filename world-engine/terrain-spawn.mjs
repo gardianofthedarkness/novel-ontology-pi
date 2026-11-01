@@ -721,16 +721,18 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // every part is asked on; between them it borrows a lot of that kind under its holder (borrowBuilding): where it
       // stands is its lot's, so it is never boxed. Shown in World · Live on its lot, blinking, as every part is.
       if (part.scale === 'building') {
-        const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(skyCentre, -sky.turn, SKY_UP, sky.half * 2), target: skyCentre }, areas: areas(), labelScale: sky.half / 32, vague: { near: sky.half * 4, far: sky.half * 9 } });
-        const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R, turn: fill.turn }, areas: areas(), labelScale: R / 24, vague: CLEAR });
+        const pictures = async () => ({ side: await shoot(OVERVIEW, { view: { fov: 38, position: from(skyCentre, -sky.turn, SKY_UP, sky.half * 2), target: skyCentre }, areas: areas(), labelScale: sky.half / 32, vague: { near: sky.half * 4, far: sky.half * 9 } }),
+        top: await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R, turn: fill.turn }, areas: areas(), labelScale: R / 24, vague: CLEAR }) });
         // The inventory's ten nearest types (the user, 2026-11-01): its name and the sentences round it searched, the lots round
         // it leaning the rest; Jev chooses among them and the shapes, given the scenes.
         const nearby = {}; for (const slot of slotsAt('building').filter(entry => entry.parent === holder || within(entry.parent, holder))) nearby[slot.kind] = (nearby[slot.kind] ?? 0) + 1;
-        const found = await I.searchBuildingTypes({ label: part.label, around: aroundOf(part), nearby }, buildingTypes, 10, embedder);
+        const found = await I.searchBuildingTypes({ label: part.label, around: aroundOf(part), nearby }, buildingTypes, 10, embedder), sure = I.isSure(found);
         const offered = { ...Object.fromEntries(found.map(entry => [entry.id, buildingTypes[entry.id].describe])), ...SHAPES };
-        const { replies } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES, offered, pictures: { skyline: `${city.label} from the side and above, as the world stands now. ${SEEN}`, map: `${city.label} straight down, ${fill.turn ? `turned ${Math.round((fill.turn * 180) / Math.PI)}° so its places fill the picture (north is not up)` : 'north up'}, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
+        // Sure (its first well ahead of its second: I.SURE), the search decides; else Jev, on the pictures every part is asked on.
+        if (sure) await live.outcome({ subject: part.label, text: `the search is sure: ${found[0].id}, ahead of ${found[1]?.id ?? 'nothing'} by ${(found[0].score - (found[1]?.score ?? 0)).toFixed(2)}` });
+        const { replies } = sure ? { replies: [{ key: 'kind', value: found[0].id, confidence: null, by: 'search' }] } : await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES, offered, pictures: { skyline: `${city.label} from the side and above, as the world stands now. ${SEEN}`, map: `${city.label} straight down, ${fill.turn ? `turned ${Math.round((fill.turn * 180) / Math.PI)}° so its places fill the picture (north is not up)` : 'north up'}, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white. A pin is a point, not a size.` } }, stores, { request: { images: await pictures().then(({ side, top }) => ({ skyline: side.png, map: top.png })) } });
         const what = replies.find(reply => reply.key === 'kind'), chosen = what?.value ? String(what.value) : null;
-        const shape = chosen && SHAPES[chosen] ? chosen : null, type = chosen && buildingTypes[chosen] ? chosen : null, kind = type ? buildingTypes[type].use : chosen && T.TERRAIN_KINDS.building[chosen] ? chosen : null;
+        const type = chosen && buildingTypes[chosen] ? chosen : null, shape = chosen && SHAPES[chosen] ? chosen : type && buildingTypes[type].shape ? buildingTypes[type].shape : null, kind = type && buildingTypes[type].use ? buildingTypes[type].use : chosen && T.TERRAIN_KINDS.building[chosen] ? chosen : null;
         if (!kind && !shape) { await live.outcome({ subject: part.label, text: `${chosen ? `"${chosen}"` : 'no answer'}: no building kind or shape, so it stays where the canvas puts it` }); continue; }
         // A building borrows a lot of its kind (or stands apart, a rare one); a shape stands where travel is least.
         const lot = shape ? placeShape(part, city, shape) : await borrowBuilding(part, city, kind);
@@ -756,7 +758,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           }
           const top = bottom !== null ? (height < 0 ? height : height + thick) : height, span2 = bottom !== null ? { bottom, thickness: thick } : {};
           terrain.shapes[part.id] = { kind: shape, box: lot.box, ...(top !== null ? { top } : {}), ...span2, ...(lot.floating ? {} : { push: true }) };
-          terrain.sites[part.id] = { label: part.label, scale: 'building', kind: shape, shape, parent: lot.street, parentLabel: name(lot.street), toward: lot.toward, size: lot.size, turn: lot.turn, box: lot.box, ...(top !== null ? { top } : {}), ...span2, by: 'shape', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
+          terrain.sites[part.id] = { label: part.label, scale: 'building', kind: shape, shape, parent: lot.street, parentLabel: name(lot.street), toward: lot.toward, size: lot.size, turn: lot.turn, box: lot.box, ...(top !== null ? { top } : {}), ...span2, by: 'shape', ...(type ? { type } : {}), typeBy: sure ? 'search' : 'jev', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
           if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
           registry.shapes ??= {}; registry.shapes[part.id] = { label: part.label, book: bookId, kind: shape, box: lot.box, ...(top !== null ? { top } : {}), ...span2 };
           logMap({ level: 'building', what: 'nominate', place: part.id, kind: shape, box: lot.box, ...span2 });
@@ -765,7 +767,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           await saveSlots(); placed++;
           continue;
         }
-        Object.assign(terrain.sites[part.id], { ...(type ? { type } : {}), offered: found.map(entry => entry.id), ...(height !== null ? { top: height } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } });
+        Object.assign(terrain.sites[part.id], { ...(type ? { type } : {}), typeBy: sure ? 'search' : 'jev', offered: found.map(entry => entry.id), ...(height !== null ? { top: height } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } });
         await live.outcome({ subject: part.label, text: `${part.label}: ${type ?? kind}${type ? ` (${kind})` : ''}, ${height === null ? 'its street\'s height' : height < 0 ? `${-height} m under the street` : `${Math.round(height / 3)} floors (${height} m)`}, in ${name(lot.street)}` });
         await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: lot.box, top: height });
         await saveSlots(); placed++;
