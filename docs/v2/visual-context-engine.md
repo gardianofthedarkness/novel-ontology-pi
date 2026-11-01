@@ -379,8 +379,9 @@ Run 7's height question for 第十五学区 carried the city's facts, its weathe
 the district: the place tree holds nothing under it, so every source ranked by the tree fell back to the city. The user:
 put the scenes' raw text in the prompt; rank them by the question asked; and where nothing in the graph or the scenes'
 surroundings is about the place itself, put nothing in its stead.
-- `scenes`: the scenes set in the place (or in a place inside it), naming it, or an unnamed place's own scene, whole, the
-  best answer first: an unnamed place's own scene, then those set in it, then by its mentions and the question's words
+- `scenes`: of the scenes set in the place (or in a place inside it), naming it, or an unnamed place's own scene, the one
+  that best answers the question, whole (the user, after the first try carried up to six: "pick the most similar scene
+  and that's it"). The best: an unnamed place's own scene, then those set in it, then by its mentions and the question's words
   beside them (the language profile's `questionWords`: floors and towers for its height, streets and squares for its kind,
   near and across for where it lies), the rest of the scene a little. At most six, cut whole over 16,000 characters (Jev 1.14 takes 32k tokens of state; 40,000 characters was refused at the first question, `max_tokens_exceeded`; vol 1's longest scene is 11,754).
 - `facts`: the facts the graph holds about the place itself; `environment`: the cards of scenes set in it or naming it;

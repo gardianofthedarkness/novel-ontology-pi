@@ -83,16 +83,15 @@ const clip = (text: string, size: number) => (text.length > size ? `${text.slice
 /*
  * A terrain question carries the raw text of the scenes its place is in (the user's calls, 2026-11-01, after run 7: the
  * standing things, the facts and the surroundings ranked by the tree gave 第十五学区's height question the city's filler and
- * two sentences of the district): the scenes set in it, naming it, or an unnamed place's own scene, whole, the ones that
- * best answer the question asked first (its words told beside the place's mentions: floors and towers for its height),
- * cut whole when over the budget (characters of the prompt). Facts, surroundings and what stands there come only when
+ * two sentences of the district): of the scenes set in it, naming it, or an unnamed place's own scene, the one that best
+ * answers the question asked (its words told beside the place's mentions: floors and towers for its height), whole. Facts, surroundings and what stands there come only when
  * they are about the place itself; with none, nothing is put in their stead.
  */
 // Jev 1.14 takes 32k tokens of state with one question, and Chinese runs near a token a character (more at times): 16,000
 // characters hold the longest scene of vol 1 (11,754) whole, with room left; 40,000 was refused (max_tokens_exceeded).
 const BUDGET = 16000;
-/** The scenes a terrain question carries at most (scaled like every quota). */
-const SCENES = 6;
+/** The scenes a terrain question carries: its best one (the source gives no more). */
+const SCENES = 1;
 
 /** A manifold (src/ground/stage/landscape.ts): gradient, core, spread, tail share, tail index. */
 const M = (gradient: number, spread: number, tail = 0) => ({ gradient, core: 0.3, spread, tail, index: 5 });
@@ -207,14 +206,16 @@ function sources<F extends PartFocus>(asked: Asked): Source<F, TerrainStores>[] 
     fixed("within", "within", (focus: F) => focus.within ?? {}) as Source<F, TerrainStores>,
     {
       name: "scenes", key: "scenes", quota: SCENES,
-      // Set in it (or in a place inside it), its own sentences' scene (an unnamed place), or naming it; the best answers first.
+      // Of the scenes set in it (or in a place inside it), naming it, or its own (an unnamed place), the one that best
+      // answers the question: that scene alone (the user's call, 2026-11-01: "pick the most similar scene and that's it").
       collect: (focus, stores) => {
         const own = new Set(stores.own(focus.part.id).map((sentence) => sentence.id));
-        return stores.scenes.flatMap((scene) => {
+        const scored = stores.scenes.flatMap((scene) => {
           const setIn = !!scene.setting && stores.inside(scene.setting, focus.part.id);
           if (!setIn && !scene.text.includes(focus.part.label) && !scene.lines.some((line) => own.has(line.id))) return [];
           return [{ id: scene.id, score: Math.round(sceneScore(scene, focus, own, asked, setIn) * 100) / 100, fields: scene.text }];
         });
+        return scored.sort((a, b) => b.score - a.score).slice(0, 1);
       },
     },
     // The facts the graph holds about the place itself (none: none given).

@@ -55,7 +55,7 @@ test("the engine for every Jev request: a task from the focus, a ranked source i
   assert.deepEqual([replies[0].value, manifests.length, (sent[0] as unknown[])[0], (sent[0] as unknown[])[2]], ["a", 1, "3 asked: c, a", { images: {} }]);
 });
 
-test("terrain's ground: the raw text of the scenes the part is in (set in it, naming it, an unnamed place's own), set-in first; not another district's", async () => {
+test("terrain's ground: the raw text of the one scene that best tells the part (set in it, naming it, an unnamed place's own); not another district's", async () => {
   const T = await import("../src/v2/context/terrainModes.js");
   const label = (id: string) => ({ city: "City", d7: "District Seven", d6: "District Six", tokyo: "Tokyo" })[id] ?? id;
   const parentOf = (id: string) => ({ d7: "city", d6: "city", city: "tokyo" })[id] ?? null;
@@ -80,7 +80,7 @@ test("terrain's ground: the raw text of the scenes the part is in (set in it, na
   const composed = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, focus, stores);
   const state = composed.state as Record<string, Record<string, unknown>>;
   assert.deepEqual(state.part, { name: "District Seven", scale: "district", in: "City" });
-  assert.deepEqual(state.scenes, { a: "The station square of District Seven is busy.", d: "They walked back to District Seven at night." }, "set in it first, then naming it; not the city's other scenes nor District Six's");
+  assert.deepEqual(state.scenes, { a: "The station square of District Seven is busy." }, "its best scene alone: the one set in it, over one naming it; never the city's other scenes nor District Six's");
   assert.deepEqual([state.standing, state.facts, state.environment, state.text], [{ dormitory: "a building" }, undefined, undefined, undefined], "what stands in it, and no facts or surroundings that are the city's");
   // The kinds go by level (the user's call): a district's, then the basic shapes; a commercial centre or a park is a street's.
   const district = ["cbd", "dwelling", "industrial", "harbour", "mountain", "oldtown", "village", "farmland", "donut"];
@@ -104,7 +104,7 @@ test("terrain's ground: the raw text of the scenes the part is in (set in it, na
   assert.deepEqual([Object.keys((city.state as Record<string, object>).kinds).slice(0, 4), city.questions.map((question) => question.key)], [["metropolis", "city", "town", "oldcity"], ["kind"]]);
   const height = await (await import("../src/v2/context/engine.js")).compose(T.terrainHeightMode, { ...focus, kind: "cbd", ...cbd, within: { City: "metropolis, median 15 m" } }, stores);
   const said = height.state as Record<string, Record<string, unknown>>;
-  assert.ok(Object.keys(said.scenes).join() === "a,d" && said.heights.E === "30 m: about 10 floors" && said.heights.A === "-60 m: underground: deep underground" && said.within.City === "metropolis, median 15 m");
+  assert.ok(Object.keys(said.scenes).join() === "a" && said.heights.E === "30 m: about 10 floors" && said.heights.A === "-60 m: underground: deep underground" && said.within.City === "metropolis, median 15 m");
   assert.match(String(height.state.task), /median height .* not the tallest/);
   assert.deepEqual(height.questions.map((question) => [question.key, question.options?.length]), [["height", 10]]);
   await stores.graph?.close();
@@ -133,7 +133,7 @@ test("compatibility at the street level: an avenue may carry a station front or 
   assert.ok(!mayOverlap(null, "avenue"), "an unknown kind: no");
 });
 
-test("a place's scenes go by the question asked: for its height, the scene telling its floors beside it; for its kind, the one telling its streets", async () => {
+test("a place's one scene goes by the question asked: for its height, the scene telling its floors beside it; for its kind, the one telling its streets", async () => {
   const T = await import("../src/v2/context/terrainModes.js"), { compose } = await import("../src/v2/context/engine.js");
   const sentences = [
     { id: "x1", text: "第十五学区是最大的闹市。" }, { id: "x2", text: "那里有五十层的高楼。" },
@@ -144,6 +144,6 @@ test("a place's scenes go by the question asked: for its height, the scene telli
   const focus = { part: { id: "d15", label: "第十五学区", scale: "district" }, holder: { id: "city", label: "City" }, city: { id: "city", label: "City" }, kind: "cbd", shapes: {}, pictures: {}, measure: "median" as const, slices: [{ letter: "A", y: 30, said: "about 10 floors" }] };
   const height = (await compose(T.terrainHeightMode, focus, stores)).state as Record<string, Record<string, string>>;
   const ground = (await compose(T.terrainGroundMode, focus, stores)).state as Record<string, Record<string, string>>;
-  assert.deepEqual([Object.keys(height.scenes), Object.keys(ground.scenes)], [["x", "y"], ["y", "x"]]);
+  assert.deepEqual([Object.keys(height.scenes), Object.keys(ground.scenes)], [["x"], ["y"]]);
   assert.equal(height.scenes.x, "第十五学区是最大的闹市。那里有五十层的高楼。", "the scene's raw text");
 });
