@@ -355,6 +355,10 @@ bge-small-zh-v1.5; 100 paid calls, 632,961 input tokens):**
 - **The search:** on 63 names judged by hand, the right type was first for 78% by words and 90% by meaning, and in the ten
   for 84% by words and 100% by meaning. After the types that differed only by height were merged: 95% first, 98% in the
   ten.
+- **A bigger model, tried (the user's ask):** BAAI/bge-m3 (multilingual, 1024 dimensions, 2.3 GB) downloaded and served
+  beside the small one. On the same 63 names it put the right type first for 92% (meaning and words) and 78% (meaning
+  alone), against bge-small-zh-v1.5's 95% and 92%. It got three wrong that the small one got right (a place to eat called a
+  bakery, a hall for swimming and ball games a bowling alley). The small Chinese model stays.
 - **Seen by the user, changed after:** a building's height was offered by its kind (a convenience store 1–5 floors), and
   several descriptions said how tall a type is. Now every building is offered the same slices, from under the street to a
   hundred floors; no description speaks of height; a building taller than its use's models is drawn as a tower. This run's

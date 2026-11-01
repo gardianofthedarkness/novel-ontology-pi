@@ -269,7 +269,8 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
     - The model is v1's causality model, BAAI/bge-small-zh-v1.5, served on this machine by `tools/embeddings/serve.py`
       (offline, CPU, 127.0.0.1 only). A run reaches it with `EMBEDDING_BASE_URL=http://127.0.0.1:8194/v1` and
       `EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5`. By meaning, a name the words miss still finds its neighbours: a tunnel
-      (隧道) a subway station and a construction site, a detention centre a police station beside it.
+      (隧道) a subway station and a construction site, a detention centre a police station beside it. On 63 names judged by hand
+      it puts the right type first for 95% and in the ten for 98%; BAAI/bge-m3, a bigger multilingual model, did worse (92%).
     - The rest of the ten lean to the types sharing a use with what was found, then to the uses of the lots round it.
   - The type's coarse use (`TERRAIN_KINDS.building`: a house, a block of flats, a school, a shop, an office…) is what its
     lot and its model go by. No description says how tall a type is (the user, 2026-11-01: a building's height is its
