@@ -31,6 +31,23 @@
   .asks header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--jev); }
   .asks header a { color: var(--dim); font-size: 11px; }
   .asks iframe { position: static; width: 100%; height: 100%; }
+  /* The building level, folded out at the side: each building's type, who typed it, its height against its minimum, and the
+     parts of composite buildings under their hosts; a row tapped shows that building in the world. */
+  .blist { position: fixed; z-index: 6; right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 44px); width: min(440px, calc(100vw - 24px)); display: grid; grid-template-rows: auto 1fr; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .blist[hidden] { display: none; }
+  .blist header { display: grid; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .blist header b { color: var(--accent); font-size: 12px; letter-spacing: .04em; }
+  .blist header span { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .blist ol { list-style: none; margin: 0; padding: 4px 0; overflow-y: auto; overscroll-behavior: contain; }
+  .blist li { padding: 6px 10px; border-bottom: 1px solid #12232e; cursor: pointer; display: grid; gap: 1px; }
+  .blist li:hover, .blist li:focus-visible { background: #10212c; outline: none; }
+  .blist li.part { padding-left: 26px; background: #08131b; }
+  .blist .name { color: var(--ink); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+  .blist .what { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .blist .by { color: var(--accent); } .blist .by.jev { color: var(--jev); }
+  .blist .low { color: #ff9d7a; }
+  /* A phone's bar wraps to two rows: the panels stand above both. */
+  @media (max-width: 560px) { .blist, .asks { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 92px); } }
 </style>
 </head>
 <body>
@@ -43,18 +60,53 @@
   <div class="counts" id="counts"></div>
 </section>
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
+<section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
-<nav class="bar"><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><a id="play" href="./">Player</a></nav>
+<nav class="bar"><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><a id="play" href="./">Player</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
   $("play").href = `./${query}`; $("asksFull").href = `live${query}`;
   // Jev's questions fold out over the world (the live page, loaded the first time they are opened) and fold away again.
+  const fold = (button, panel, on) => { $(button).setAttribute("aria-pressed", String(on)); $(panel).hidden = !on; };
   $("live").addEventListener("click", () => {
     const on = $("live").getAttribute("aria-pressed") !== "true";
-    $("live").setAttribute("aria-pressed", String(on)); $("asks").hidden = !on;
+    fold("live", "asks", on); if (on) fold("bopen", "blist", false);
     if (on && !$("asksFrame").getAttribute("src")) $("asksFrame").src = `live${query}`;
   });
+  // The building level (terrain spawning's, live.json's world notes): a building's type and who typed it (the search, or
+  // Jev and how sure), its height against its type's minimum and how sure Jev was of it; a composite building's parts
+  // under their host, at its foot, on its upper floors or under it. A row tapped shows that building in the world.
+  let buildings = "";
+  $("bopen").addEventListener("click", () => { const on = $("bopen").getAttribute("aria-pressed") !== "true"; fold("bopen", "blist", on); if (on) fold("live", "asks", false); });
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const pct = (v) => (typeof v === "number" ? `${Math.round(v * 100)}%` : "");
+  const height = (b) => (typeof b.top !== "number" ? "no height" : b.top < 0 ? `${-b.top} m under the street` : `${Math.round(b.top / 3)} fl`);
+  const FLOOR = { foot: "at its foot", upper: "on its upper floors", under: "under it, below the street" };
+  const row = (b, part) => {
+    const li = document.createElement("li"); li.tabIndex = 0; if (part) li.className = "part";
+    const typed = b.typeBy === "jev" ? `<span class="by jev">Jev ${pct(b.sure.kind)}</span>` : b.typeBy === "search" ? `<span class="by">search</span>` : "";
+    const sure = typeof b.sure.height === "number" ? ` · Jev <span class="${b.sure.height < 0.3 ? "low" : ""}">${pct(b.sure.height)} sure</span>` : "";
+    const least = typeof b.least === "number" && typeof b.top === "number" && b.top >= 0 ? ` · min ${Math.round(b.least / 3)} fl${b.top === b.least ? " (at it)" : ""}` : "";
+    li.innerHTML = `<span class="name">${part ? "↳ " : ""}${esc(b.label)}</span><span class="what">${esc(b.type ?? "—")} ${typed}</span><span class="what">${part ? `part of ${esc(b.inLabel)}, ${FLOOR[b.floor] ?? b.floor}, asked nothing` : `${b.by === "shape" ? "a shape · " : ""}${height(b)}${least}${sure}${b.alone ? " · no host near: a lot of its own" : ""}${b.street ? ` · ${esc(b.street)}` : ""}`}</span>`;
+    const focus = () => { for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "focus", id: b.id }, origin); if (camera) camera.follow = false; showFollow(false); };
+    li.addEventListener("click", focus); li.addEventListener("keydown", (event) => { if (event.key === "Enter") focus(); });
+    return li;
+  };
+  const listBuildings = (list) => {
+    const key = JSON.stringify(list ?? null);
+    if (key === buildings) return; buildings = key;
+    if (!list?.length) { $("bsum").textContent = "No building level yet."; $("brows").replaceChildren(); return; }
+    const parts = list.filter((b) => b.by === "tenant"), own = list.filter((b) => b.by !== "tenant"), byJev = list.filter((b) => b.typeBy === "jev").length;
+    const atLeast = own.filter((b) => typeof b.least === "number" && b.top === b.least).length, unsure = own.filter((b) => typeof b.sure.height === "number" && b.sure.height < 0.3).length;
+    $("bsum").textContent = `${list.length} buildings · typed by the search ${list.length - byJev}, by Jev ${byJev} · ${parts.length} parts of composite buildings · ${atLeast} at their minimum · ${unsure} heights Jev was under 30% sure of`;
+    const rows = [], hosts = new Map();
+    for (const b of parts) { if (!hosts.has(b.in)) hosts.set(b.in, []); hosts.get(b.in).push(b); }
+    for (const b of own) { rows.push(row(b, false)); for (const p of hosts.get(b.id) ?? []) rows.push(row(p, true)); hosts.delete(b.id); }
+    // Parts whose host is a spare lot of the fill (no building of the text): under that lot.
+    for (const [, group] of hosts) { const lot = document.createElement("li"); lot.innerHTML = `<span class="name">${esc(group[0].inLabel)}</span><span class="what">a lot of the fill, no building of the text</span>`; rows.push(lot); for (const p of group) rows.push(row(p, true)); }
+    $("brows").replaceChildren(...rows);
+  };
   // Two frames at most: the one shown, and the next one loading over it, unseen and untouchable, until it says it is
   // ready; then it fades in on top and the old one goes, so a finger never lands on a frame about to go. Building a frame
   // is heavy (the whole world so far), so one loads at most every few seconds, only for a newer moment, and it plays
@@ -138,6 +190,7 @@
         $("next").hidden = !terrain; $("runOn").hidden = !terrain; $("next").disabled = !waiting;
         if (terrain && state.lines?.[0]?.mode) $("runOn").setAttribute("aria-pressed", String(state.lines[0].mode === "run"));
         const world = state.world;
+        listBuildings(world?.notes?.buildings);
         if (world) {
           $("where").textContent = `${world.moment ?? ""}${world.final ? " · end" : ""}`;
           // The manifold the moment stands on: each place's ground, and who set it (Jev, the main agent, or the terrain rules).

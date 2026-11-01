@@ -177,7 +177,15 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   live.encoder(png => chrome.evaluate(`(async () => { const image = new Image(); image.src = 'data:image/png;base64,${png}'; await image.decode(); const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight; canvas.getContext('2d').drawImage(image, 0, 0); return canvas.toDataURL('image/jpeg', 0.78).split(',')[1]; })()`));
   // World · Live is told where to look (the focus): the proposal, or the place just kept; `terrain` keeps the whole world drawn.
   let data = null, snapshot = null, reference = null, builds = 0, focus = null;
-  const show = (moment, proposal = null) => (snapshot ? live.world({ ...snapshot, moment, ...(focus ? { focus } : {}) }, { ...data, terrain: { proposal } }) : null);
+  // The building level as World · Live lists it (its Buildings panel; the user, 2026-11-01): each building's type and who
+  // typed it, its height against its type's minimum, how sure Jev was; a tenant's host and floor. Names only.
+  const buildingList = () => Object.entries(terrain.sites).filter(([, site]) => site.scale === 'building').map(([id, site]) => ({
+    id, label: site.label, type: site.type ?? site.shape ?? site.kind ?? null, use: site.kind ?? null, by: site.by, typeBy: site.typeBy ?? null,
+    ...(typeof site.top === 'number' ? { top: site.top } : {}), ...(site.type && H?.buildings[site.type] ? { least: H.buildings[site.type] * 3 } : {}),
+    sure: { kind: site.confidence?.kind ?? null, height: site.confidence?.height ?? null }, street: site.parentLabel ?? null,
+    ...(site.by === 'tenant' ? { in: site.in, inLabel: site.inLabel, floor: site.floor } : {}), ...(site.tenant ? { alone: true } : {}),
+  }));
+  const show = (moment, proposal = null) => (snapshot ? live.world({ ...snapshot, moment, ...(focus ? { focus } : {}), ...(spawn ? { notes: { ...snapshot.notes, buildings: buildingList() } } : {}) }, { ...data, terrain: { proposal } }) : null);
   const build = async (kept = null) => {
     const started = Date.now();
     // A plain map (the user's call, §2.0.19): the tree from the reading, its places as pins, and only the ground terrain kept.
