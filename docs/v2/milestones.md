@@ -10,8 +10,8 @@ call); a real Jev run only when the user asks.
 | | Milestone | Status |
 | --- | --- | --- |
 | M0 | Design, draft configurations, configuration test | done 2026-11-01, every decision taken (design §7) |
-| M1 | Slots, borrowing and spawning in code; the bound tested; run from a level | core done 2026-11-01 (`src/v2/spawning/`, 7 tests); wiring into terrain spawning next |
-| M2 | City level on vol 1 | |
+| M1 | Slots, borrowing and spawning in code; the bound tested; run from a level | done 2026-11-01: `--spawn`, `--from`; stand-in on vol 1 through streets |
+| M2 | City level on vol 1 | a tune proposed (below), for the user |
 | M3 | District level on vol 1 | |
 | M4 | Street level on vol 1 | |
 | M5 | Building level on vol 1 | |
@@ -33,16 +33,52 @@ call); a real Jev run only when the user asks.
 - [x] Load the configurations through a resolver (defaults only for now; the seam for M8); spawn a parent's slots (a range picked once by a seed, kept): `src/v2/spawning/config.ts`
 - [x] The rules (`admissible` in `src/v2/spawning/slots.ts`): a name takes a slot of its own; an unnamed mention shares, never with a mention of its own scene; spawn only as §2.4 allows; a place whose holder is higher up borrows under that holder (§2.5)
 - [x] The level's choice energy: travel (cross-parent ties at 0.3) and pins, an unplaced slot costed where the engine would place it
-- [ ] Positions: today's settle with the spare term γ, over this book's slots
+- [ ] Positions: today's settle with the spare term γ at a level's end: moved to M3
 - [x] Greedy in narrative order, then moves (a name to a better free slot, two names exchanging, an unnamed mention to a better share): `chooseSlots`
-- [ ] One mention at a time for the engine's step mode (borrow after each kind answer; the moves when the level ends)
-- [ ] Slots in `terrain.json` and the universe's registry: type, owner name, sharers by book and scene (so a damaged share can split, §2.8), which configuration layer, kept offset
-- [ ] `novel sim terrain <dir> --spawn [--from city|district|street|building]`, beside today's path until M7
+- [x] One mention at a time for the engine's step mode (`improve: false`, the level's earlier parts as fixed places), the moves when the level ends (`assigned`)
+- [x] Slots in the universe's registry (`universe/terrain.json` `slots`), mirrored in the book's `terrain.json`: type, owner name, sharers by book and scene, damage, the configuration layer, kept offset, size; a slot no name owns kept as a site of its own (`by: "slot"`, `spare`)
+- [x] The slot tree (`src/v2/spawning/tree.ts`): no pools; spare and shared slots as places; names and shares under their slots; read alike by terrain spawning and the export
+- [x] World · Live: a spare slot has no pin, its name grey and only on the ground
+- [x] `novel sim terrain <dir> --spawn [--from city|district|street]`, beside today's path until M7 (`world-engine/terrain-spawn.mjs`: each level ends with the moves, its spares placed, its areas' children spawned)
 - [x] Tests (`test/spawning-slots.test.ts`): the bound (§3) over 20 synthetic books (240 unnamed mentions: 14 districts, flat once names stop), names exclusive and permanent across books, same-scene unnamed apart, unnamed shares and damage cleared at a new book, the same order gives the same world
 
 **Pass:** tests green; today's terrain path unchanged (its tests and a stand-in run as before).
 
+**Result (2026-11-01, stand-in answers, vol 1):**
+- Today's path: a full stand-in run keeps the same 28 places, field for field, as before the change.
+- Spawn mode, through streets: 2 cities spawned 12 district slots. The stand-in types every district a CBD, so 学园都市's
+  three named districts took its two CBD slots and spawned a third; 10 spares placed. Those 13 districts spawned 76 street
+  slots. The 18 unnamed streets used 10 of them: one shared by five mentions (the four 大道 and an underground passage), one
+  by three, two by two. The street level's end made 2 moves (travel 421,236 → 413,848 tie·m) and placed 65 spare streets.
+- `--from street` ran the streets again and nothing above them.
+- A fix on the way: an area's extent is its size round its own node (a box kept in an earlier frame put spare streets 2.4 km
+  out of 600 m districts); after it, the largest street offset is 413 m, 2 of 77 just past their district's edge.
+- Seen in the world: spare streets stand apart from their district's built ground (the canvas takes a kept offset only as a
+  direction), and 76 street areas make a world build 30–100 s instead of about 20 s.
+
 ## M2 — City level
+
+### Proposed tune (for the user)
+
+1. **The canvas stands areas at their kept offsets** (`bear` in `src/ground/stage/placeCanvas.ts` takes `toward` as an exact
+   place, not a direction). In spawn mode every district and street is an area, so the drift shows: spare streets apart
+   from their district. What is drawn must be where the objective put it.
+2. **A city's slots shown at the city level** as a line in World · Live's step list ("学园都市, metropolis: 2 CBD · 3
+   dwelling · 1 industrial, placed as the district level borrows them"). They are placed where their first borrower wants
+   them, and the spares at the district level's end. The other way: place all six at the city level, a layout to look at
+   at once, but then the districts borrow fixed spots and only settling can move them.
+3. **Spares at the lower third of their kind's medians**, not the middle: a spare CBD 80 m instead of 120 m, a spare
+   dwelling area 18 m instead of 25 m.
+4. **Spare streets not built**: a street slot is placed and built only when a mention borrows it. The district's own fill
+   already draws streets; vol 1 would build about 10 street areas instead of 76, and a build takes about 20 s again. Spare
+   districts stay built. (The other way: halve `district.json`'s counts.)
+5. **Below and above the street apart**: a mention under the street (a median below 0) shares only with one under the
+   street; the stand-in put an underground passage on the 大道 square.
+6. **A share asked its kind only**: a mention borrowing a slot already decided keeps the slot's terrain; Jev is not asked
+   its height again (a call saved a share).
+
+Then the M2 run: the city level alone (`--spawn --from city --parts 2`), stand-in first, then Jev (four calls) when the
+user asks; looked at in World · Live.
 
 - [ ] Cities typed as today; each city spawns its district slots by `city.json` when the city level ends
 - [ ] World · Live: spare slots as grey pins ("dwelling · spare"); the step list says borrowed, shared, spawned

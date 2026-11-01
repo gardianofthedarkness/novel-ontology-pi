@@ -6,7 +6,7 @@ checkout (`npm run build`) and on a world-first workspace (`experiments/v2/works
 
 | File | Step | What it does |
 | --- | --- | --- |
-| `terrain-spawn.mjs` | Terrain (done) | Part by part, asks Jev each place's kind and height with two pictures, then sizes, places, settles and lays it; `novel sim terrain` runs it |
+| `terrain-spawn.mjs` | Terrain (done) | Part by part, asks Jev each place's kind and height with two pictures, then sizes, places, settles and lays it; `novel sim terrain` runs it. With `--spawn` (next: docs/v2/borrow-and-spawn.md) a part borrows or spawns a slot of its kind instead of pools, level by level; `--from <level>` runs a level again |
 | `export-strand-demo.mjs`, `strand-demo.html` | The view | One strand's world as a page: the places from the place tree, pins with their status, the settle playback; also the page World · Live and Jev's pictures are drawn from |
 | `sim-jev.mjs` | Movement (later) | The stage simulation decided live, as `novel sim pick` runs it; the vendored three.js files |
 | `world-map.mjs` | The view | A top-down map around a point, for Jev's box questions |

@@ -94,3 +94,35 @@ test("the same book and slots give the same choice", () => {
   const run = () => chooseSlots(problem("b1", spawnChildren(city, resolver, "b1"), mentions, { ties })).assignment;
   assert.deepEqual(run(), run());
 });
+
+test("the slot tree: pools gone, their members in the pool's area; spare and shared slots are places; names and shares under their slots", async () => {
+  const { withSlots, defaultTerrain } = await import("../src/v2/spawning/tree.js");
+  const inputs = {
+    placeTree: [
+      { id: "c1", label: "City", parentId: null, path: ["c1"] },
+      { id: "d1", label: "Seventh", parentId: "c1", path: ["c1", "d1"] },
+      { id: "pool:c1", label: "City · pool", parentId: "c1", path: ["c1", "pool:c1"] },
+      { id: "unnamed:a", label: "大道 (scene 3)", parentId: "pool:c1", path: ["c1", "pool:c1", "unnamed:a"] },
+      { id: "unnamed:b", label: "大道 (scene 9)", parentId: "pool:c1", path: ["c1", "pool:c1", "unnamed:b"] },
+    ],
+    world: { places: { "pool:c1": { label: "City · pool", parent: "c1", pool: "c1" }, "unnamed:a": { label: "大道 (scene 3)", parent: "pool:c1" }, "unnamed:b": { label: "大道 (scene 9)", parent: "pool:c1" } } },
+    names: { c1: "City", d1: "Seventh", "unnamed:a": "大道 (scene 3)", "unnamed:b": "大道 (scene 9)" } as Record<string, string>,
+    scale: { places: { c1: { scale: "city" }, d1: { scale: "district" } } as Record<string, { scale: string }> },
+  };
+  const slot = (id: string, extra: object) => ({ id, parent: "c1", level: "district" as const, kind: "cbd", toward: [100, 0] as [number, number], owner: null, sharers: [], damaged: [], layer: "defaults", book: "b1", ...extra });
+  withSlots(inputs, [
+    slot("slot:c1:dwelling:1", { kind: "dwelling", owner: "d1", ownerBook: "b1" }),
+    slot("slot:c1:cbd:1", { sharers: [{ book: "b1", mention: "unnamed:a", scene: "s3" }, { book: "b1", mention: "unnamed:b", scene: "s9" }] }),
+    slot("slot:c1:cbd:2", {}),
+    slot("slot:c1:industrial:1", { kind: "industrial", toward: null }),
+  ], "b1");
+  const byId = new Map(inputs.placeTree.map((place) => [place.id, place]));
+  assert.ok(!byId.has("pool:c1") && !inputs.world.places["pool:c1"], "no pool");
+  assert.equal(byId.get("slot:c1:cbd:1")?.label, "大道 · 2 scenes");
+  assert.equal(byId.get("slot:c1:cbd:2")?.label, "cbd · spare");
+  assert.ok(!byId.has("slot:c1:industrial:1"), "an unplaced slot is no place yet");
+  assert.equal(byId.get("unnamed:a")?.parentId, "slot:c1:cbd:1"); assert.deepEqual(byId.get("unnamed:b")?.path, ["c1", "slot:c1:cbd:1", "unnamed:b"]);
+  assert.equal(inputs.scale.places["slot:c1:cbd:2"].scale, "district");
+  assert.equal(byId.get("d1")?.parentId, "c1");
+  assert.deepEqual(defaultTerrain("district", "cbd"), { ground: "skyscrapers", median: 120, manifold: defaultTerrain("district", "cbd")?.manifold });
+});

@@ -93,6 +93,9 @@ export async function strandDemo(novelDir, options) {
   // Terrain and spawns (world-engine/terrain.mjs), when they were asked: where Jev put each main site in the place that holds
   // it, and which scenes start anew (everyone present placed afresh, with the scene's environment in the question).
   const terrain = JSON.parse(await readFile(`${novelDir}/stage/terrain.json`, 'utf8').catch(() => 'null'));
+  // Borrowing and spawning by type (docs/v2/borrow-and-spawn.md): no pools; a spare or shared slot is an area of its level,
+  // a named place stands in its slot's area, an unnamed mention in the slot it shares this book (the tree changed in place).
+  if (terrain?.mode === 'spawn') (await load('dist/src/v2/spawning/tree.js')).withSlots(inputs, Object.values(terrain.slots ?? {}), terrain.book);
   const spawnPlan = JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
   const anew = sceneId => spawnPlan?.scenes?.[sceneId]?.spawn === 'new';
   let jev = null;
@@ -597,7 +600,7 @@ export async function strandDemo(novelDir, options) {
       const [x, z] = C.worldOf(canvas, place.id), grid = place.units.find(unit => unit.id === `${place.id}#grid`);
       // Its kept size (terrain spawning's box), for framing it when it is clicked (the zoom engine's extent).
       const span = place.pool ? poolExtentOf(place.id) : null, kept = span ? [Z.widthOf(span), Z.depthOf(span)] : terrain?.sites?.[place.id]?.size ?? null;
-      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(kept ? { size: kept } : {}), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.pool ? { pool: place.pool } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}), ...(!place.pool && statusOf(place.id) ? { status: statusOf(place.id) } : {}) });
+      nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(kept ? { size: kept } : {}), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.pool ? { pool: place.pool } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}), ...(!place.pool && statusOf(place.id) ? { status: statusOf(place.id) } : {}), ...(terrain?.sites?.[place.id]?.spare ? { spare: true } : {}) });
       for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(terrain?.sites?.[unit.id]?.size ? { size: terrain.sites[unit.id].size } : {}), ...(unit.sampled && !unit.dwells ? { sampled: unit.sampled } : {}), ...(unit.dwells ? { dwells: unit.dwells } : {}), ...(unit.forJev ? { forJev: true } : {}), ...(statusOf(unit.id, unit) ? { status: statusOf(unit.id, unit) } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
     }
     return { nodes, canvas };

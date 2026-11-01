@@ -572,7 +572,9 @@ async function main(): Promise<void> {
     if (turns !== undefined && (!/^\d+$/.test(turns) || Number(turns) < 1 || Number(turns) > 3)) throw new Error("--turns must be 1, 2 or 3.");
     const parts = flag(positional, "--parts");
     if (parts !== undefined && (!/^\d+$/.test(parts) || Number(parts) < 1)) throw new Error("--parts must be a whole number, 1 or more.");
-    if (sub === "terrain") { out(await simTerrain(novelDir, { turns: turns === undefined ? undefined : Number(turns), sites: positional.includes("--sites"), run: positional.includes("--run"), parts: parts === undefined ? undefined : Number(parts) }), pretty); return; }
+    const level = flag(positional, "--from");
+    if (sub === "terrain" && level !== undefined && !["city", "district", "street"].includes(level)) throw new Error("--from must be city, district or street.");
+    if (sub === "terrain") { out(await simTerrain(novelDir, { turns: turns === undefined ? undefined : Number(turns), sites: positional.includes("--sites"), run: positional.includes("--run"), parts: parts === undefined ? undefined : Number(parts), spawn: positional.includes("--spawn"), from: level }), pretty); return; }
     out(await (sub === "strands" ? simStrands(novelDir) : sub === "show" ? simShow(novelDir) : sub === "pick" ? simPick(novelDir, { ...lines, maxCalls: maxCalls === undefined ? undefined : Number(maxCalls) }) : simRun(novelDir, { ...lines, from: flag(positional, "--from"), accept: positional.includes("--accept"), force: positional.includes("--force"), pace: pace === undefined ? undefined : Number(pace) })), pretty);
     return;
   }

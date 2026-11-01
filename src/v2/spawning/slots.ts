@@ -72,6 +72,10 @@ export interface LevelProblem {
   crossWeight?: number;
   /** The pins' weight, as the settling's (zoom.ts SETTLE.lambda). */
   lambda?: number;
+  /** Mentions already on a slot (mention id → slot id; the slots record them): the engine's step mode borrows one mention at a time, and the moves come when the level ends. */
+  assigned?: Record<string, string>;
+  /** Whether to make the moves after the greedy pass (default yes); the step mode borrows one mention at a time without them. */
+  improve?: boolean;
 }
 export interface Choice {
   /** Mention id → slot id. */
@@ -159,8 +163,10 @@ export function chooseSlots(problem: LevelProblem): Choice {
     delete assignment[m.id];
   };
 
-  // 1. Greedy, in narrative order.
+  // 1. Greedy, in narrative order; a mention already on a slot stays there.
+  for (const [id, slotId] of Object.entries(problem.assigned ?? {})) if (mentionOf.has(id) && byId.has(slotId)) assignment[id] = slotId;
   for (const m of problem.mentions) {
+    if (assignment[m.id]) continue;
     const own = m.named ? slots.find((slot) => slot.owner === m.id) : null;
     if (own) { take(m, own, own.at ?? problem.place(m, own.parent, slots.filter((s) => s.at))?.at ?? null); log.push(`${m.label}: back on its own slot ${own.id}`); continue; }
     // Unplaced slots of one kind in one area are alike: each area's is costed once, where the engine would place it.
@@ -186,7 +192,7 @@ export function chooseSlots(problem: LevelProblem): Choice {
   // 2. Moves, until none lowers the level's energy: this book's names to a better free slot or exchanging theirs, unnamed
   // mentions to a better slot they may share. A slot spawned for a name it no longer holds goes (§3: no growth).
   let moves = 0;
-  for (let round = 0; round < 20; round++) {
+  for (let round = 0; round < (problem.improve === false ? 0 : 20); round++) {
     let moved = false;
     const mine = problem.mentions.filter((m) => assignment[m.id] && (!m.named || slotOf(m.id).ownerBook === book));
     for (const m of mine) {

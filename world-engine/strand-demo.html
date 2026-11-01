@@ -221,7 +221,7 @@ const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low <
 // its own disc (a staged building's on a lot of the place holding it); its circle holds its children. A temporary area (an
 // unnamed district or street of a place, holding what is known only to lie in it) is drawn fainter; a dwelling place (one
 // the ontology puts in no larger place, at a random spot of the central build until it is named) says where it dwells.
-const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale, temporary: !!node.temporary, dwelling: node.dwelling ? data.macro.find((other) => other.id === node.dwelling)?.label ?? node.dwelling : null, sampled: node.sampled ? (node.sampled === "build" ? "the build" : data.macro.find((other) => other.id === node.sampled)?.label ?? node.sampled) : null, dwells: node.dwells ? data.macro.find((other) => other.id === node.dwells)?.label ?? node.dwells : null, forJev: !!node.forJev, unbuilt: !!node.unbuilt, size: node.size ?? null }]));
+const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale, temporary: !!node.temporary, dwelling: node.dwelling ? data.macro.find((other) => other.id === node.dwelling)?.label ?? node.dwelling : null, sampled: node.sampled ? (node.sampled === "build" ? "the build" : data.macro.find((other) => other.id === node.sampled)?.label ?? node.sampled) : null, dwells: node.dwells ? data.macro.find((other) => other.id === node.dwells)?.label ?? node.dwells : null, forJev: !!node.forJev, unbuilt: !!node.unbuilt, size: node.size ?? null, spare: !!node.spare }]));
 
 // The 3D stage.
 const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -563,16 +563,19 @@ const TAG_SIZE = { region: 4, city: 4, district: 3.4, street: 1.8 };
 for (const [id, spot] of macroAt) {
   // On the terrain stage a pin also says whether it is settled (the user's call, §2.0.22): green once the program or Jev has
   // satisfied it (an area kept, a building standing or dwelling in one of its use), yellow and blinking while it waits.
-  const done = spot.status === "done", open = spot.status === "open", guess = !done && !!(spot.sampled || spot.dwelling || open), strand = !!data.places[id], size = spot.unbuilt ? 1.2 : TAG_SIZE[spot.scale] ?? 1.2;
-  const pin = placePin(spot.cx, spot.cz, size, done ? 0x5fe08a : guess ? 0xffd36e : strand ? 0xffffff : 0x7ce6ff, done || strand || guess ? 0.9 : spot.temporary ? 0.3 : 0.6); world.add(pin.group);
-  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : spot.dwells ? ` · in a building of ${spot.dwells}` : spot.sampled ? ` · sampled in ${spot.sampled}${spot.forJev ? " · for Jev" : ""}` : ""}${done ? " · settled" : open ? (spot.forJev ? " · open, for Jev" : " · open") : ""}` : spot.label, done ? "#5fe08a" : guess ? "#ffd36e" : strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, pin.top + size * 1.1, spot.cz - size * 1.3); tag.scale.multiplyScalar(size); world.add(tag);
+  // A spare slot (docs/v2/borrow-and-spawn.md §2.2: no place of the text has borrowed it) stands as ground and buildings
+  // with no pin, its name grey.
+  const done = spot.status === "done" && !spot.spare, open = spot.status === "open", guess = !done && !!(spot.sampled || spot.dwelling || open), strand = !!data.places[id], size = spot.unbuilt ? 1.2 : TAG_SIZE[spot.scale] ?? 1.2;
+  const pin = placePin(spot.cx, spot.cz, size, done ? 0x5fe08a : guess ? 0xffd36e : strand ? 0xffffff : 0x7ce6ff, done || strand || guess ? 0.9 : spot.temporary ? 0.3 : 0.6); if (!spot.spare) world.add(pin.group);
+  const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : spot.dwells ? ` · in a building of ${spot.dwells}` : spot.sampled ? ` · sampled in ${spot.sampled}${spot.forJev ? " · for Jev" : ""}` : ""}${done ? " · settled" : open ? (spot.forJev ? " · open, for Jev" : " · open") : ""}` : spot.label, spot.spare ? "#8a96a0" : done ? "#5fe08a" : guess ? "#ffd36e" : strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, pin.top + size * 1.1, spot.cz - size * 1.3); tag.scale.multiplyScalar(size); world.add(tag);
   if (guess) sampledSpots.push({ pin, tag });
-  pin.group.traverse((part) => { part.userData.place = id; }); tag.userData.place = id; clickable.push(pin.group, tag);
+  pin.group.traverse((part) => { part.userData.place = id; }); tag.userData.place = id; clickable.push(...(spot.spare ? [] : [pin.group]), tag);
   // A street's, a district's, a city's (a region's) name in the sky (the user's call, 2026-10-31): the higher its level, the
   // higher and larger, a faint line down to its middle, so each range is found and picked at any zoom. The live view's
   // only (Jev's stills carry their own names, sized by the zoom engine), unless a still asks for them (?sky).
   const sky = SKY[spot.scale];
-  if (sky && (!capture || new URLSearchParams(location.search).has("sky"))) {
+  // A spare slot keeps its grey name on the ground only: the sky is for the places the text has.
+  if (sky && !spot.spare && (!capture || new URLSearchParams(location.search).has("sky"))) {
     const name = label(spot.label, sky.colour, 40), aspect = name.scale.x / name.scale.y;
     name.material.sizeAttenuation = false; name.scale.set(aspect * sky.size, sky.size, 1); name.position.set(spot.cx, sky.height, spot.cz); name.material.opacity = 0.85; name.userData.place = id;
     const tether = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(spot.cx, 0, spot.cz), new THREE.Vector3(spot.cx, sky.height, spot.cz)]), new THREE.LineBasicMaterial({ color: sky.colour, transparent: true, opacity: 0.25, depthTest: false }));
