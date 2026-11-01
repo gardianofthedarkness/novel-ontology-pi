@@ -426,7 +426,8 @@ export async function strandDemo(novelDir, options) {
     // size), a fifth more all round (Z.poolExtent); null with none boxed.
     const poolExtentOf = id => Z.poolExtent(Object.values(terrain?.sites ?? {}).filter(site => site.parent === id && Array.isArray(site.toward) && Array.isArray(site.size)).map(site => Z.turnedBox(site.toward, site.size, site.turn ?? 0)), null);
     const groundPatch = id => {
-      const site = terrainGround(id), made = site?.median && site.manifold ? { median: site.median, manifold: site.manifold } : null;
+      // A city of manifolds (docs/v2/borrow-and-spawn.md §8): its own patch is its open ground, at that ground's height.
+      const own = terrainGround(id), site = own?.open ? { ...own, ...own.open } : own, made = site?.median && site.manifold ? { median: site.median, manifold: site.manifold } : null;
       if (!site) return null;
       // A pool's ground is its members' span in its own frame (the zoom engine's pool extent), never a sampled square.
       if (site.pool) { const extent = poolExtentOf(id); return extent && made ? patchFromBox(site.ground, 'p0', id, { x0: extent[0], z0: extent[1], x1: extent[2], z1: extent[3] }, { by: 'pool' }, made) : null; }
@@ -582,6 +583,21 @@ export async function strandDemo(novelDir, options) {
       const { dwells, forJev } = C.dwellInStreets(pool, streets, ties, unit => buildingUseOf(unit.label), dwelt.get(pool.id) ?? dwelt.set(pool.id, new Set()).get(pool.id));
       notes.build.dwells = (notes.build.dwells ?? 0) + Object.keys(dwells).length; notes.build.forJev = (notes.build.forJev ?? 0) + forJev.length;
     }
+    // One city of manifolds (docs/v2/borrow-and-spawn.md §8): the manifolds a place's topology laid out are patches of its
+    // own ground, each at its vector from the place's centre, at its unified height, claiming before the place's open
+    // ground; their edges fade into each other and into it, so the city is one ground with no holes.
+    const mappedIn = id => Object.entries(terrain?.sites ?? {}).filter(([, site]) => site.mapped && site.parent === id && Array.isArray(site.toward) && Array.isArray(site.size) && site.ground && LANDSCAPES[site.ground]);
+    for (const place of Object.values(canvas.places)) {
+      const manifolds = mappedIn(place.id);
+      if (!manifolds.length || !place.landscape) continue;
+      const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return { ...turnedAs(site, patchFromBox(site.ground, id, id, { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: site.manifold } : null)), borrowed: true }; });
+      // The manifolds before the open ground, the tallest first: a lot draws its height from older ground that reaches it,
+      // so a CBD's towers fade out into what is round it, and the open ground never flattens a CBD.
+      const height = patch => patch.median ?? patch.H;
+      place.landscape = { ...place.landscape, patches: [...patches.sort((a, b) => height(b) - height(a)), ...place.landscape.patches.filter(patch => !manifolds.some(([id]) => id === patch.id))] };
+      C.grow(canvas, place.id);
+      notes.build.manifolds = (notes.build.manifolds ?? 0) + patches.length;
+    }
     // What is there first (§2.0.21): every place's buildings not dwelling yet dwell in the buildings its ground made of
     // their use (a form's by its street, the fill's by its kind), the scarcest uses first; the rest are left for Jev.
     for (const place of Object.values(canvas.places).filter(place => place.landscape?.patches.length && place.units.some(unit => unit.kind === 'building' && !unit.dwells))) {
@@ -601,6 +617,8 @@ export async function strandDemo(novelDir, options) {
       // Its kept size (terrain spawning's box), for framing it when it is clicked (the zoom engine's extent).
       const span = place.pool ? poolExtentOf(place.id) : null, kept = span ? [Z.widthOf(span), Z.depthOf(span)] : terrain?.sites?.[place.id]?.size ?? null;
       nodes.push({ id: place.id, label: place.label, scale: place.scale, parent: place.parent, x: round(x), z: round(z), r: place.r, depth: depthOf(place.id), spotX: round(x), spotZ: round(z), ...(kept ? { size: kept } : {}), ...(grid ? { own: grid.r } : {}), ...(place.temporary ? { temporary: true } : {}), ...(place.pool ? { pool: place.pool } : {}), ...(place.dwelling ? { dwelling: place.dwelling } : {}), ...(!place.pool && statusOf(place.id) ? { status: statusOf(place.id) } : {}), ...(terrain?.sites?.[place.id]?.spare ? { spare: true } : {}) });
+      // Its manifolds (§8): a centre of function each, named at its centre; a spare one grey, with no pin.
+      for (const [id, site] of mappedIn(place.id)) nodes.push({ id, label: site.label, scale: site.scale, parent: place.id, x: round(x + site.toward[0]), z: round(z + site.toward[1]), r: Math.max(...site.size) / 2, depth: depthOf(place.id) + 1, spotX: round(x + site.toward[0]), spotZ: round(z + site.toward[1]), size: site.size, ...(site.spare ? { spare: true } : {}), status: 'done' });
       for (const unit of place.units) if (['building', 'room', 'street'].includes(unit.kind)) nodes.push({ id: unit.id, label: unit.label, scale: scaleOf(unit.id), parent: place.id, ...(terrain?.sites?.[unit.id]?.size ? { size: terrain.sites[unit.id].size } : {}), ...(unit.sampled && !unit.dwells ? { sampled: unit.sampled } : {}), ...(unit.dwells ? { dwells: unit.dwells } : {}), ...(unit.forJev ? { forJev: true } : {}), ...(statusOf(unit.id, unit) ? { status: statusOf(unit.id, unit) } : {}), ...(ownGrids.has(unit.id) ? {} : { unbuilt: true }), x: round(x + unit.at[0]), z: round(z + unit.at[1]), r: unit.r, depth: depthOf(place.id) + 1, spotX: round(x + unit.at[0]), spotZ: round(z + unit.at[1]), ...(dwellingUnits[unit.id] ? { dwelling: dwellingUnits[unit.id] } : {}) });
     }
     return { nodes, canvas };
@@ -622,7 +640,8 @@ export async function strandDemo(novelDir, options) {
   const landscapes = Object.values(canvas.places).filter(place => place.landscape && (!options.plain || terrain?.sites?.[place.id]?.ground || place.landscape.patches.some(patch => patch.borrowed))).map(place => {
     const [wx, wz] = C.worldOf(canvas, place.id), round = value => Math.round(value * 10) / 10, filled = fillOf(place.landscape);
     // Not where a child place stands: it has its own ground there.
-    const keep = Object.values(canvas.places).filter(child => child.parent === place.id).map(child => ({ at: child.at, r: child.r }));
+    // In a city of manifolds (§8) a child with no ground of its own yet (a district not decided) cuts no hole in it.
+    const keep = Object.values(canvas.places).filter(child => child.parent === place.id && !(terrain?.mode === 'spawn' && !child.landscape?.patches?.length)).map(child => ({ at: child.at, r: child.r }));
     const clear = (x, z, margin = 3) => keep.every(({ at, r }) => Math.hypot(x - at[0], z - at[1]) > r + margin);
     // A building's id is its place and its lot in the fill (stable as the place grows). Its `manifold` is the patch it
     // stands on: that patch with the older patches that cut its ground, and the fill's recipe, so a newer patch never

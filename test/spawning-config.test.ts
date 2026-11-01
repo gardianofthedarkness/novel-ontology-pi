@@ -16,11 +16,17 @@ for (const [name, parent, level] of [["city", "city", "district"], ["district", 
     const file = read(name);
     assert.equal(file.parent, parent); assert.equal(file.level, level);
     assert.deepEqual(Object.keys(file.types).sort(), Object.keys(TERRAIN_KINDS[parent]).sort(), `every ${parent} kind has its configuration`);
-    for (const [type, spawns] of Object.entries(file.types as Record<string, Record<string, unknown>>))
+    for (const [type, entry] of Object.entries(file.types as Record<string, Record<string, unknown>>)) {
+      const spawns = (entry.spawns ?? entry) as Record<string, unknown>;
       for (const [kind, count] of Object.entries(spawns)) {
         assert.ok(TERRAIN_KINDS[level][kind], `${type} spawns ${kind}, not a ${level} kind`);
         assert.ok(isCount(count), `${type}: ${kind} has a count or a range`);
       }
+      // Its topology (docs/v2/borrow-and-spawn.md §8.2): a ring for each kind it spawns, within the radius; pairs of kinds it spawns.
+      if (entry.ring) for (const kind of Object.keys(spawns)) { const ring = (entry.ring as Record<string, number[]>)[kind]; assert.ok(ring && ring[0] >= 0 && ring[0] < ring[1] && ring[1] <= 1, `${type}: ${kind} has a ring within the radius`); }
+      if (entry.open) assert.ok(LANDSCAPES[entry.open as keyof typeof LANDSCAPES], `${type}: its open ground is a landscape`);
+      for (const [a, b, how] of (entry.pairs ?? []) as [string, string, string][]) assert.ok(spawns[a] !== undefined && spawns[b] !== undefined && ["near", "apart"].includes(how), `${type}: the pair ${a}, ${b}, ${how}`);
+    }
   });
 }
 

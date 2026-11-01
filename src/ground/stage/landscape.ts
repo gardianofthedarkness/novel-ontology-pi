@@ -229,6 +229,17 @@ export const localMedian = (patch: Patch, s: number) => (patch.median ?? patch.H
 const gaussian = (rng: () => number) => Math.sqrt(-2 * Math.log(Math.max(1e-9, rng()))) * Math.cos(2 * Math.PI * rng());
 /** The z of a probability (a logistic approximation, close enough for a profile). */
 const probit = (u: number) => Math.log(Math.max(1e-6, u) / Math.max(1e-6, 1 - u)) / 1.702;
+/**
+ * How far a manifold's average height over its ground stands above the median it is built from (docs/v2/borrow-and-spawn.md
+ * §8.6: heights are kept as averages, the engine builds from medians): its buildings, spread evenly over its area, stand
+ * at their local median (falling from the core) times their own draw (heightAt).
+ */
+export function averageOverMedian(manifold: Manifold): number {
+  let shape = 0, draw = 0;
+  for (let k = 0; k < 64; k++) shape += shapeOf(manifold, Math.sqrt((k + 0.5) / 64)) / shapeOf(manifold, Math.SQRT1_2);
+  for (let k = 0; k < 200; k++) draw += Math.exp(manifold.spread * probit((k + 0.5) / 200));
+  return (shape / 64) * (draw / 200);
+}
 /** A building's height on a manifold patch at depth s: log-normal round the local median, or from its Pareto tail; never capped. */
 export function manifoldHeight(patch: Patch, s: number, rng: () => number): number {
   const manifold = patch.manifold!, local = localMedian(patch, s);

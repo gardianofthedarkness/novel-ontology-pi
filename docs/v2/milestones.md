@@ -11,7 +11,7 @@ call); a real Jev run only when the user asks.
 | --- | --- | --- |
 | M0 | Design, draft configurations, configuration test | done 2026-11-01, every decision taken (design §7) |
 | M1 | Slots, borrowing and spawning in code; the bound tested; run from a level | done 2026-11-01: `--spawn`, `--from`; stand-in on vol 1 through streets |
-| M2 | City level on vol 1, as one city of manifolds with a topology | redesigned with the user (design §8); two questions open |
+| M2 | City level on vol 1, as one city of manifolds with a topology | built 2026-11-01; stand-in run passes; a Jev run when the user asks |
 | M3 | District level on vol 1 | |
 | M4 | Street level on vol 1 | |
 | M5 | Building level on vol 1 | |
@@ -63,25 +63,41 @@ city is one ground of manifolds that fade into each other, laid out by a topolog
 which kinds sit near or apart); a district is a centre of function on it. M1's tune is folded in: the layout by topology
 replaces "placed by the first borrower"; districts as patches of the city's ground replace "areas at exact offsets".
 
-- [ ] Topology in `config/spawning/city.json`: each city kind's rings and pairs (§8.2), checked by the configuration test
-- [ ] At the city level's end, each city's district manifolds spawned where the city's energy is least (topology, pairs,
+- [x] Topology in `config/spawning/city.json`: each city kind's rings and pairs (§8.2), checked by the configuration test
+- [x] At the city level's end, each city's district manifolds spawned where the city's energy is least (topology, pairs,
       pressure of the fading functions), each kept with its kind, centre, size and seed: the city's map, in the registry
-- [ ] The export builds a spawn-mode city's districts as patches of the city's own ground, not areas cut out of it; a spare
+- [x] The export builds a spawn-mode city's districts as patches of the city's own ground, not areas cut out of it; a spare
       one named grey at its centre, no pin
-- [ ] World · Live's step list: each manifold's kind, its ring and its energy terms
-- [ ] The map's parenting (design §8.5): each manifold a vector from its parent's centre, in the parent's frame; only the
+- [x] World · Live's step list: each manifold's kind, its ring and its energy terms
+- [x] The map's log by book (§8.8, the user): every spawn, move, height change and borrowing in order, for replaying a book
+- [x] The map's parenting (design §8.5): each manifold a vector from its parent's centre, in the parent's frame; only the
       city placed by the canvas, everything under it summed down the chain
-- [ ] Heights as averages, unified at spawn (§8.6): a spare district's height is what keeps the city's average, within its
+- [x] Heights as averages, unified at spawn (§8.6): a spare district's height is what keeps the city's average, within its
       kind's range; where the range cannot hold it, the city's average moves (replaces the earlier tune's "lower third")
 
 **Pass:** 学园都市 and 纽约, both metropolises: each one blended city of 6 district manifolds, no gap or hole between them;
 the CBDs within 0.3 of the city's radius, industry beyond 0.7; the energy terms logged. A stand-in run of the city level
 (`--spawn --from city`), then Jev (four calls) when the user asks, looked at in World · Live.
 
-Waiting on the user (design §8.7): across books, may a later book squeeze or re-unify an earlier book's manifolds? Rings as
-shares of the radius? The proposals with parenting and heights?
+Decided (design §8.7): later books may squeeze and re-unify earlier ones; rings as shares of the radius; heights unified
+within the deformation limit (a higher part lowers only the highest non-nominated and damaged parts, only so far).
 
 Moved to later levels: below and above the street apart, and a share asked its kind only (M4, streets).
+
+**Result (2026-11-01, stand-in answers, `--spawn --until city`):** `src/v2/spawning/topology.ts` (the layout),
+`heights.ts` (unification within the deformation limit), `averageOverMedian` in the landscape engine, the map log at
+`universe/maps/<book>.json`.
+- Each metropolis: 6 district manifolds, radius 991 m; CBDs at 0.24 and 0.30 of the radius, dwelling areas 0.46–0.64,
+  industry 0.84; the pressure of overlapping edges 9.3 → 0.06 after the moves.
+- Heights held the city's average (20.4 m): CBDs 75.8 m, dwelling 8.4 m, industry 6.1 m, the open ground 8.2 m. Built:
+  CBDs 83–91 m, dwelling about 9.5 m, industry 7.6 m, open ground 11.1 m (raised where the CBDs fade into it); the whole
+  city 19.7 m.
+- Seen: one city each, the CBD towers in the middle fading out into low ground, no gap or hole.
+- Fixed on the way: the open ground (one patch over the whole city, older than the districts) flattened the CBDs to 10 m,
+  since a lot draws its height from older ground that reaches it; the manifolds now come first, the tallest first, and the
+  open ground is flat, of its own landscape (`open` in the configuration: a metropolis's is commercial).
+- Not yet: the named districts (第七学区 and the others) still stand as pins beside the city until the district level
+  borrows manifolds for them (M3).
 
 ## M3 — District level
 

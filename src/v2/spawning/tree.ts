@@ -4,7 +4,9 @@
  *  - no pools: a pool's members stand in the pool's own area (a place the text puts only in 学园都市 is held by 学园都市, and
  *    borrows among the slots under it: §2.5);
  *  - every placed slot no named place owns (spare, or shared by unnamed mentions) is a place of its level in its area;
- *  - a named place stands in its slot's area, an unnamed mention in the slot it shares this book.
+ *  - a named place stands in its slot's area, an unnamed mention in the slot it shares this book;
+ *  - a manifold its parent laid out by topology (§8) is no place of its own but a patch of its parent's ground (the export
+ *    builds it there), so what shares it stands in that parent.
  * The stage inputs are changed in place, so every later reader of them (paths, scales, names, the canvas) sees one tree.
  */
 import { TERRAIN_KINDS } from "../context/terrainModes.js";
@@ -12,7 +14,7 @@ import type { Level } from "./config.js";
 import { sharersIn, type Slot } from "./slots.js";
 
 /** A slot as terrain keeps it: the core's slot, with its offset from its area (`toward`, as a kept site's) instead of a world point. */
-export type KeptSlot = Omit<Slot, "at"> & { toward: [number, number] | null };
+export type KeptSlot = Omit<Slot, "at"> & { toward: [number, number] | null; mapped?: boolean };
 
 interface TreePlace { id: string; label: string; parentId: string | null; proposedParentId?: string | null; path?: string[]; sceneIds?: string[] }
 interface ScriptPlace { label: string; parent?: string | null; pool?: string; scale?: string; [key: string]: unknown }
@@ -67,6 +69,7 @@ export function withSlots(inputs: SlotInputs, slots: KeptSlot[], book: string): 
   for (const slot of slots.filter((entry) => entry.toward)) {
     if (slot.owner) { reparent(slot.owner, slot.parent); continue; }
     const label = slotLabel(slot, book, inputs.names);
+    if (slot.mapped) { inputs.names[slot.id] = label; for (const share of sharersIn(slot as unknown as Slot, book)) reparent(share.mention, slot.parent); continue; }
     if (!byId.has(slot.id)) { const place = { id: slot.id, label, parentId: slot.parent, proposedParentId: null, path: [], sceneIds: [] }; tree.push(place); byId.set(slot.id, place); added.push(slot.id); }
     inputs.names[slot.id] = label;
     if (inputs.scale) inputs.scale.places[slot.id] = { label, scale: slot.level, inputs: "" };

@@ -17,9 +17,13 @@ export const CHILD: Record<Level, Level | null> = { city: "district", district: 
 export type Count = number | [number, number];
 /** A street's buildings: how many a hectare, and the share of each use. */
 export interface Density { density: number; uses: Record<string, number> }
+/** How a parent's children lie (§8.2): each kind's ring (a share of the parent's radius from its centre), and kinds near or apart. */
+export interface Topology { ring: Record<string, [number, number]>; pairs: [string, string, "near" | "apart"][]; open?: string }
+/** A parent kind's entry: what it spawns, and how its children lie; an older entry is its counts alone. */
+export type Spawning = Record<string, Count> | ({ spawns: Record<string, Count> } & Partial<Topology>);
 export interface SpawningFiles {
-  city: Record<string, Record<string, Count>>;
-  district: Record<string, Record<string, Count>>;
+  city: Record<string, Spawning>;
+  district: Record<string, Spawning>;
   street: Record<string, Density>;
 }
 
@@ -34,13 +38,17 @@ export function loadSpawning(folder = DEFAULTS): SpawningFiles {
 /** The area a configuration is asked for: its id and label (a place's own layer finds it by them), its level and its kind. */
 export interface Parent { id: string; label: string; level: Level; kind: string }
 /** A configuration resolved for one parent, and the layer it came from (kept with its slots, so a world is made again the same way). */
-export interface Resolved { spawns: Record<string, Count>; layer: string }
+export interface Resolved { spawns: Record<string, Count>; layer: string; topology?: Topology }
 export type Resolver = (parent: Parent) => Resolved | null;
 
 /** The defaults' layer: a city's or a district's kind gives its children's counts; a kind with no entry spawns nothing. */
 export function defaultResolver(files: SpawningFiles = loadSpawning()): Resolver {
   return (parent) => {
-    if (parent.level === "city" || parent.level === "district") return { spawns: files[parent.level][parent.kind] ?? {}, layer: "defaults" };
+    if (parent.level !== "city" && parent.level !== "district") return null;
+    const entry = files[parent.level][parent.kind] ?? {};
+    if (!("spawns" in entry)) return { spawns: entry as Record<string, Count>, layer: "defaults" };
+    const { spawns, ring, pairs, open } = entry as { spawns: Record<string, Count> } & Partial<Topology>;
+    return { spawns, layer: "defaults", ...(ring ? { topology: { ring, pairs: pairs ?? [], ...(open ? { open } : {}) } } : {}) };
     return null;
   };
 }

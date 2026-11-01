@@ -66,16 +66,16 @@ async function repository(): Promise<string> {
  * kept as the engine's input (stage/terrain.json) and the world built again, watched in World · Live with the user's own
  * camera; in step mode (the default) the run waits for the user after each proposal, `--run` runs on, `--parts N` stops
  * after N parts. `--spawn` borrows and spawns by type instead of pools (docs/v2/borrow-and-spawn.md), level by level;
- * `--from city|district|street` drops that level and the levels under it, to run them again. `--sites` is the earlier step instead (which site holds which, and the
+ * `--from city|district|street` drops that level and the levels under it, to run them again; `--until <level>` stops after it. `--sites` is the earlier step instead (which site holds which, and the
  * spawn plan: world-engine/terrain.mjs). Needs the world loop's script (a world-first book).
  */
-export async function simTerrain(novelDir: string, options: { turns?: number; sites?: boolean; run?: boolean; parts?: number; spawn?: boolean; from?: string } = {}) {
+export async function simTerrain(novelDir: string, options: { turns?: number; sites?: boolean; run?: boolean; parts?: number; spawn?: boolean; from?: string; until?: string } = {}) {
   if (options.sites) {
     const { terrainAndSpawns } = await import(pathToFileURL(join(await repository(), "world-engine", "terrain.mjs")).href) as { terrainAndSpawns(novelDir: string, options: { turns?: number }): Promise<unknown> };
     return terrainAndSpawns(novelDir, { turns: options.turns ?? 1 });
   }
-  const { terrainSpawn } = await import(pathToFileURL(join(await repository(), "world-engine", "terrain-spawn.mjs")).href) as { terrainSpawn(novelDir: string, options: { run?: boolean; parts?: number; spawn?: boolean; from?: string | null }): Promise<unknown> };
-  return terrainSpawn(novelDir, { run: options.run, ...(options.parts ? { parts: options.parts } : {}), spawn: !!options.spawn, from: options.from ?? null });
+  const { terrainSpawn } = await import(pathToFileURL(join(await repository(), "world-engine", "terrain-spawn.mjs")).href) as { terrainSpawn(novelDir: string, options: { run?: boolean; parts?: number; spawn?: boolean; from?: string | null; until?: string | null }): Promise<unknown> };
+  return terrainSpawn(novelDir, { run: options.run, ...(options.parts ? { parts: options.parts } : {}), spawn: !!options.spawn, from: options.from ?? null, until: options.until ?? null });
 }
 const engine = async (): Promise<Engine> => import(pathToFileURL(join(await repository(), "world-engine", "export-strand-demo.mjs")).href) as Promise<Engine>;
 const pickers = async (): Promise<Pickers> => import(pathToFileURL(join(await repository(), "world-engine", "sim-jev.mjs")).href) as Promise<Pickers>;
@@ -242,4 +242,4 @@ export async function simCurrent(novelDir: string): Promise<{ current: boolean; 
   return { current: status.lines.length > 0 && status.lines.every((line) => line.playable && (line.current || line.newerCurrent)), lines: status.lines.length };
 }
 
-export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim terrain <novel-dir> [--run] [--parts N] [--spawn [--from city|district|street]] [--sites [--turns N]] | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id> [--from <scene-id>]] [--accept] [--pace seconds] [--force] | novel sim show <novel-dir>";
+export const SIM_USAGE = "novel sim strands <novel-dir> | novel sim terrain <novel-dir> [--run] [--parts N] [--spawn [--from city|district|street] [--until city|district|street]] [--sites [--turns N]] | novel sim pick <novel-dir> --max-calls N [--auto N] [--strand <id>] | novel sim run <novel-dir> [--auto N] [--strand <id> [--from <scene-id>]] [--accept] [--pace seconds] [--force] | novel sim show <novel-dir>";

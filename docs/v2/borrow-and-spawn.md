@@ -347,11 +347,24 @@ Proposed with it:
 - **Above and below the street apart**: what lies under the street (an average below 0) is its own budget; an underground
   mall does not lower the towers above it.
 
-### 8.7 Decisions for the user
+**The deformation limit (the user, 2026-11-01).** A city area's skyline bends only within a continuous limit. A lower
+placement raises the rest of its parent, as cities grow. A higher one cannot make standing buildings vanish, nor make low
+ground lower still (a commercial centre that was already low): it lowers only the highest parts that are not nominated, and
+damaged ones, each only so far. What the limit cannot take, the parent's average takes: it rises. Proposed numbers, to be
+tuned on the runs: at one spawn a part is lowered by at most 15% of its average (a damaged one 30%), never below its kind's
+least, and only a part above its parent's average is lowered at all. A part spawned at that moment has no limit yet: its
+height is set, within its kind's range, where it keeps the parent's average best.
 
-1. Across books: may a later book's spawn squeeze an earlier book's manifolds (their centres move and edges draw in a
-   little, the children following), and may a later book's height re-unify an earlier book's, so the earlier book's world
-   changes a little? Or does only the new book's own ground give way?
-2. Rings as shares of the city's radius (proposed), so a city's layout keeps its shape as it grows.
-3. The proposals in §8.5 and §8.6: the parent's turn, squeezes scaling children, only cities placed by the canvas; the least
-   change within bounds, nominated buildings adding, above and below the street apart.
+### 8.8 The map's log, by book (the user, 2026-11-01)
+
+So a book can be played again as it grew (an animation of earlier books), every change to the map is logged with the book
+it happened in, in order: a manifold spawned (its kind, parent, vector, radius, seed), moved (a squeeze: from, to), its
+height unified (from, to; the parent's average too), and a place borrowing or sharing it. A book's map is the map at the end
+of the book before it with that book's log applied; `--from <level>` drops the book's entries at that level and under.
+
+### 8.7 Decisions (the user, 2026-11-01)
+
+1. Across books: yes, a later book's spawn may squeeze an earlier book's manifolds and re-unify its heights, the earlier
+   book's world changing a little, as real cities grow.
+2. Rings as shares of the city's radius: proposed, not objected to; built so.
+3. The proposals of §8.5 and §8.6, with the deformation limit for any lowering (above).
