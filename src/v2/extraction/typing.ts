@@ -1,9 +1,9 @@
-import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../ground/connectors/jev.js";
-import type { Sentence } from "../digger/intake/sectioning.js";
-import { ask } from "./context/engine.js";
-import { typingMode } from "./context/readingModes.js";
+import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../../ground/connectors/jev.js";
+import type { Sentence } from "../../digger/intake/sectioning.js";
+import { ask } from "../context/engine.js";
+import { typingMode } from "../context/readingModes.js";
 import { sentencesWith } from "./listing.js";
-import { isLocative, isPartOrFloor } from "./rules/typing.js";
+import { isLocative, isPartOrFloor } from "../rules/typing.js";
 
 /**
  * What each listed string is (the user's v2 flow, 2026-10-30; System 1): one structured request a batch. The state holds the
@@ -40,7 +40,7 @@ export type EntityType = keyof typeof ENTITY_TYPES | "place";
 export type Category = "person" | "crowd" | "thing" | "place" | "concept" | "time";
 export const CATEGORY_OF: Record<EntityType, Category | null> = { person: "person", crowd: "crowd", object: "thing", routine: null, weapon: "thing", vehicle: "thing", region: "place", city: "place", district: "place", street: "place", place: "place", building: "place", room: "place", spatial: null, concept: "concept", time: "time", none: null };
 /** The scale of places, smallest first (a place's scale is its type); a parent is larger than what it holds. */
-export { PLACE_SCALES } from "./rules/places.js";
+export { PLACE_SCALES } from "../rules/places.js";
 const TYPE_LABELS: Record<keyof typeof ENTITY_TYPES, string> = {
   person: "a person", crowd: "a crowd or a group of people", object: "an important named thing", routine: "an everyday thing", weapon: "a weapon", vehicle: "a vehicle or a mech",
   region: "a region, bigger than a city", city: "a city or a town", district: "a part of a city", street: "a street or an open place in a district", building: "a building", room: "a room inside a building",

@@ -70,7 +70,7 @@ async function writeReport(path: string, value: unknown) {
 }
 
 /**
- * The world script of a world-first workspace (stage/world/script.json), or null: from a v2 reading (src/v2/script.ts,
+ * The world script of a world-first workspace (stage/world/script.json), or null: from a v2 reading (src/v2/extraction/script.ts,
  * `from: "v2-reading"`, written with the workspace), or from the v1 world-first loop.
  */
 interface WorldScript { from?: string; places: Record<string, { label: string; scale?: string | null; parent?: string | null; spot?: boolean; near?: string }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }

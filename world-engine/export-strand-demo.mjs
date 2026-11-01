@@ -5,7 +5,7 @@
 // sampled from the path integral (an exact h-transform draw, plus a small ensemble to show the spread).
 // Where each move ends comes from Jev's spot answers in the book's movement report. The page carries scene
 // and event summaries, names and places; no quotes or source text.
-//   npm run build && node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text]
+//   npm run build && node world-engine/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text]
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
@@ -68,7 +68,7 @@ export async function strandDemo(novelDir, options) {
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf, scaleOfName } = await load('dist/src/digger/stage/scale.js');
-  const { continuityTies } = await load('dist/src/v2/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js'), Z = await load('dist/src/v2/context/zoom.js');
+  const { continuityTies } = await load('dist/src/v2/extraction/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js'), Z = await load('dist/src/v2/context/zoom.js');
   // A landscape's fill, made once per landscape (a pool's is read for its streets' buildings, then drawn).
   const fills = new WeakMap(), fillOf = landscape => { const known = fills.get(landscape); if (known?.n === landscape.patches.length) return known.filled; const filled = fillLandscape(landscape); fills.set(landscape, { n: landscape.patches.length, filled }); return filled; };
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
@@ -90,7 +90,7 @@ export async function strandDemo(novelDir, options) {
   // scene's composed context, where someone first seen starts (the level, then a box on a map of the place), who came to
   // whom when two people talking face to face are apart, and the box a group gathers in. Cached under stage/world/cache.
   const worldScript = inputs.worldFirst ? inputs.world : null, worldScene = new Map((worldScript?.scenes ?? []).map(scene => [scene.id, scene]));
-  // Terrain and spawns (playground/terrain.mjs), when they were asked: where Jev put each main site in the place that holds
+  // Terrain and spawns (world-engine/terrain.mjs), when they were asked: where Jev put each main site in the place that holds
   // it, and which scenes start anew (everyone present placed afresh, with the scene's environment in the question).
   const terrain = JSON.parse(await readFile(`${novelDir}/stage/terrain.json`, 'utf8').catch(() => 'null'));
   const spawnPlan = JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
@@ -185,7 +185,7 @@ export async function strandDemo(novelDir, options) {
   // inside, a small skeleton that hits can break; every thing joins the walk once placed (its top walkable, the street
   // under a grounded one blocked) and moves when a later event mentions it elsewhere.
   const found = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
-  // Jev's three calls per thing (playground/two-view-things.mjs): which model it is, then a box on two views of each placement.
+  // Jev's three calls per thing (world-engine/two-view-things.mjs): which model it is, then a box on two views of each placement.
   const twoView = JSON.parse(await readFile(`${novelDir}/stage/thing-boxes.json`, 'utf8').catch(() => 'null')), boxes = twoView?.placements ?? {};
   const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8'));
   // Building EM (experiments/world-first/buildings.mjs): with it, a building the text mentions is never a box; it is its
@@ -259,7 +259,7 @@ export async function strandDemo(novelDir, options) {
     }
   };
   notes.things = { mentions: mentions.length, things: entities.length, withStructure: entities.filter(entity => entity.struct).length };
-  // Where each fight hits and how big, as Jev chose (playground/impact-choices.mjs): a sphere on a building, or no damage.
+  // Where each fight hits and how big, as Jev chose (world-engine/impact-choices.mjs): a sphere on a building, or no damage.
   const impacts = JSON.parse(await readFile(`${novelDir}/stage/impacts.json`, 'utf8').catch(() => 'null'))?.fights ?? {};
   notes.impacts = { sphere: 0, none: 0 };
   const damage = (scene, event, at, seed) => {
@@ -1397,8 +1397,8 @@ export function inlineStrand(template, data, { name = 'One Strand', fragment = f
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { from: { type: 'string' }, to: { type: 'string' }, fork: { type: 'string' }, title: { type: 'string' }, name: { type: 'string' }, fragment: { type: 'boolean' }, vendor: { type: 'boolean' }, set: { type: 'string' }, records: { type: 'boolean' }, accept: { type: 'boolean' } } });
-  const usage = 'Usage: node playground/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text] [--name text] [--fragment] [--vendor]\n       node playground/export-strand-demo.mjs --set <strands.json> <out.html> [--name text] [--fragment] [--vendor] [--records [--accept]]   (strands.json: [{ id, label, name, novel, from, to, fork, title }], one page with a strand picker)';
-  const template = await readFile(`${repository}/playground/strand-demo.html`, 'utf8'), started = Date.now();
+  const usage = 'Usage: node world-engine/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text] [--name text] [--fragment] [--vendor]\n       node world-engine/export-strand-demo.mjs --set <strands.json> <out.html> [--name text] [--fragment] [--vendor] [--records [--accept]]   (strands.json: [{ id, label, name, novel, from, to, fork, title }], one page with a strand picker)';
+  const template = await readFile(`${repository}/world-engine/strand-demo.html`, 'utf8'), started = Date.now();
   // One page per strand, or one page carrying a set of strands to pick from.
   const entries = values.set ? JSON.parse(await readFile(values.set, 'utf8')) : [{ ...values, novel: positionals[0] }], out = values.set ? positionals[0] : positionals[1];
   if (!out || entries.some(entry => !entry.novel || !entry.from || !entry.to) || (values.set && entries.some(entry => !/^[A-Za-z0-9_-]+$/.test(entry.id ?? '') || !entry.label))) throw new Error(usage);

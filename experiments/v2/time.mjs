@@ -1,5 +1,5 @@
 // Story time alone, again, on a finished v2 reading (the user asked, 2026-10-31: fix the calendar and rerun it on its own):
-// the reading's scenes, sentence kinds and listed time words go through src/v2/time.ts as it is now; the facts get their
+// the reading's scenes, sentence kinds and listed time words go through src/v2/extraction/time.ts as it is now; the facts get their
 // periods again. Nothing else is asked again (EM² keeps the facts' ranking it had). The reading's time.yaml is kept as
 // time.previous.yaml; data.json gets the new story time, and the base layer (<out>/base: the world loop's input, each
 // scene's time with it) is written again from it; prints what changed.
@@ -14,10 +14,10 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 
 export async function rerunTime(novelDir, outDir, { decisions = null } = {}) {
-  const { loadBlocks, worldBase } = await load('dist/src/v2/base.js');
-  const { readStoryTime, timeWords } = await load('dist/src/v2/time.js');
-  const { FactLedger } = await load('dist/src/v2/facts.js');
-  const { yamlDocument } = await load('dist/src/v2/yaml.js');
+  const { loadBlocks, worldBase } = await load('dist/src/v2/extraction/base.js');
+  const { readStoryTime, timeWords } = await load('dist/src/v2/extraction/time.js');
+  const { FactLedger } = await load('dist/src/v2/extraction/facts.js');
+  const { yamlDocument } = await load('dist/src/v2/extraction/yaml.js');
   const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
   const v2 = join(outDir, 'v2'), data = JSON.parse(await readFile(join(v2, 'data.json'), 'utf8'));
   const blocks = (await loadBlocks(novelDir)).filter(block => data.scenes.some(scene => scene.block === block.id));

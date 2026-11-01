@@ -1,5 +1,5 @@
 import type { DecisionQuestion } from "../../ground/connectors/jev.js";
-import { ReadingGraph } from "../readingGraph.js";
+import { ReadingGraph } from "../extraction/readingGraph.js";
 import { LANGUAGE } from "../rules/language.js";
 import type { Item, Mode, Source } from "./engine.js";
 

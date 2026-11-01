@@ -2,11 +2,11 @@ import type { DecisionQuestion } from "../../ground/connectors/jev.js";
 import { SENTENCE_CHANGE, SENTENCE_KINDS, tilingDocument, type TilingRequest } from "../../digger/autostep/segmentation.js";
 import type { Sentence } from "../../digger/intake/sectioning.js";
 import { continuationDocument } from "../../digger/timeplace/roles.js";
-import type { Chart } from "../em.js";
-import { sentencesWith } from "../listing.js";
-import type { Role, Slot } from "../roles.js";
-import { ROLES } from "../time.js";
-import { ENTITY_TYPES, type Detected } from "../typing.js";
+import type { Chart } from "../extraction/em.js";
+import { sentencesWith } from "../extraction/listing.js";
+import type { Role, Slot } from "../extraction/roles.js";
+import { ROLES } from "../extraction/time.js";
+import { ENTITY_TYPES, type Detected } from "../extraction/typing.js";
 import type { Item, Mode, Source } from "./engine.js";
 
 /**

@@ -1,8 +1,8 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { cutBlocks } from "../digger/intake/blocks.js";
-import { sectionBlock } from "../digger/intake/sectioning.js";
-import { storedSource } from "../ground/workspace/source.js";
+import { cutBlocks } from "../../digger/intake/blocks.js";
+import { sectionBlock } from "../../digger/intake/sectioning.js";
+import { storedSource } from "../../ground/workspace/source.js";
 import { actionEvents, cardPeople } from "./canon.js";
 import type { FlowBlock, FlowResult } from "./flow.js";
 

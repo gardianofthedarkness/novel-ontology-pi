@@ -1,4 +1,4 @@
-import type { DecisionQuestion, DecisionState } from "../ground/connectors/jev.js";
+import type { DecisionQuestion, DecisionState } from "../../ground/connectors/jev.js";
 
 /**
  * What answer options mean, once a request (the user's call, 2026-10-31; docs/v2/world-engine-v2.md §2.0.5, measured):

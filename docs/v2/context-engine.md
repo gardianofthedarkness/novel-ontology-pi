@@ -1,5 +1,7 @@
 # The context composing engine (design, 2026-10-30)
 
+> A journal: each section dated, in the order the user decided it. For the guide by stage (extraction, then the world engine) start at [README.md](README.md); for where each step stands, [status.md](status.md).
+
 One engine composes the state of every Jev request in v2, at extraction and in the world loop. It has a mode per kind of
 decision, and before composing it measures the surroundings of what is being decided, so that what goes in, and how much,
 follows the place in the book and in the world rather than a fixed recipe. Status: **design; the user agreed to most of
@@ -14,10 +16,10 @@ Today every step builds its own request:
 
 | Step | Where | What it composes |
 |---|---|---|
-| Typing | `src/v2/typing.ts` | the batch's sentences, the strings, the types |
-| EM | `src/v2/em.ts` | the batch, the strings, three candidates each, the latest facts about them |
-| Concept owners | `src/v2/em.ts` (`askOwners`) | the batch, the concepts, the people it names, facts holding them |
-| EM² | `src/v2/roles.ts` | a window of the scene, a scored cast, slots, things, concepts, facts, the lines before, descriptions and habits |
+| Typing | `src/v2/extraction/typing.ts` | the batch's sentences, the strings, the types |
+| EM | `src/v2/extraction/em.ts` | the batch, the strings, three candidates each, the latest facts about them |
+| Concept owners | `src/v2/extraction/em.ts` (`askOwners`) | the batch, the concepts, the people it names, facts holding them |
+| EM² | `src/v2/extraction/roles.ts` | a window of the scene, a scored cast, slots, things, concepts, facts, the lines before, descriptions and habits |
 | Sentence kinds | `src/digger/autostep/segmentation.ts` | a window of sentences, the kinds |
 | World loop | `experiments/world-first/compose.mjs` | prose: who is where, facts, the story so far, the scene before, the scene, the question |
 | Movement, buildings, scale | `src/digger/stage/*.ts` | spots, units, pictures |

@@ -1,5 +1,7 @@
 # The visual context engine, debugging by display, and terrain spawning (design, 2026-10-31)
 
+> A journal: each section dated, in the order the user decided it. For the guide by stage (extraction, then the world engine) start at [README.md](README.md); for where each step stands, [status.md](status.md).
+
 The user's redesign of how Jev sees the world and how we see what Jev does, starting with the spawning department and
 its first faculty, terrain. Status: **approved by the user (2026-10-31: step mode, these frames, the basic shapes plus rectangles, spheres and donuts); the live view, the engine page as Jev's player, and terrain spawning are built and were run once on vol 1 (§5.5).** It sits beside the text
 context engine ([context-engine.md](context-engine.md)): that one composes what Jev reads, this one what Jev looks at,
@@ -22,7 +24,7 @@ and every question gets both.
 
 | Today | The problem |
 |---|---|
-| Each step draws its own pictures: births a PNG writer (`playground/world-map.mjs`), things the capture loop's ghosts (`two-view-things.mjs`), terrain the landscape mock page (`terrain.mjs`), movement its spots | Four renderers, four ideas of a camera, a scale and a label. What Jev saw is not what the user sees. |
+| Each step draws its own pictures: births a PNG writer (`world-engine/world-map.mjs`), things the capture loop's ghosts (`two-view-things.mjs`), terrain the landscape mock page (`terrain.mjs`), movement its spots | Four renderers, four ideas of a camera, a scale and a label. What Jev saw is not what the user sees. |
 | The live page shows the last question and a picture | The answer's effect on the world is not shown where it happens; a wrong placement is found later, by reading. |
 | One camera in the player, moved by "Follow Jev" | The user cannot look elsewhere while Jev works, or look at Jev's view from outside. |
 | The engine replays the whole line at every event | Every birth question is recorded again and again (the vol 1 run asked 134 birth questions on the first load and kept repeating them per event). |

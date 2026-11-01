@@ -1,6 +1,6 @@
-import type { WorkModel } from "../ground/connectors/llm.js";
-import type { Sentence } from "../digger/intake/sectioning.js";
-import { detectTimeMentions } from "../digger/timeplace/lexicon.js";
+import type { WorkModel } from "../../ground/connectors/llm.js";
+import type { Sentence } from "../../digger/intake/sectioning.js";
+import { detectTimeMentions } from "../../digger/timeplace/lexicon.js";
 
 /**
  * Entity listing (the user's v2 flow, 2026-10-30; System 2): a batch of sentences goes to the work model, not an agent: fixed

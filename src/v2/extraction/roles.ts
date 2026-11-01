@@ -1,7 +1,7 @@
-import type { DecisionQuestion } from "../ground/connectors/jev.js";
+import type { DecisionQuestion } from "../../ground/connectors/jev.js";
 import { mentions, type Chart } from "./em.js";
-import { ask } from "./context/engine.js";
-import { rolesMode } from "./context/readingModes.js";
+import { ask } from "../context/engine.js";
+import { rolesMode } from "../context/readingModes.js";
 import { factEvidence, type FactLedger } from "./facts.js";
 import type { Decide } from "./typing.js";
 

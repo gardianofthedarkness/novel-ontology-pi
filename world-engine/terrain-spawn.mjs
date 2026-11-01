@@ -23,7 +23,7 @@
  * A part's height and a basic shape are kept but not drawn yet (the engine's ground is flat). Every question with its
  * pictures is on the live record (stage/simulation/live: Jev's questions). Jev's answers are cached (stage/terrain/cache).
  *
- *   npm run build && node playground/terrain-spawn.mjs <novel-dir> [--run] [--parts N]   (N: stop after that many parts)
+ *   npm run build && node world-engine/terrain-spawn.mjs <novel-dir> [--run] [--parts N]   (N: stop after that many parts)
  */
 import { copyFile, mkdir, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -61,7 +61,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
   // Every Jev request is composed by the context engine (the user's call): the terrain modes, from the reading's stores.
   const { ask } = await load('dist/src/v2/context/engine.js'), T = await load('dist/src/v2/context/terrainModes.js');
-  const { continuityTies, universeOf } = await load('dist/src/v2/pools.js');
+  const { continuityTies, universeOf } = await load('dist/src/v2/extraction/pools.js');
   // The zoom engine (docs/v2/visual-context-engine.md §4.1): every frame Jev is shown and every box it answers.
   const Z = await load('dist/src/v2/context/zoom.js'), { LANDSCAPES, formsFor } = await load('dist/src/ground/stage/landscape.js');
   const inputs = await stageInputs(novelDir), [line] = await simStrandList(novelDir);
@@ -114,7 +114,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const registry = JSON.parse(await readFile(registryFile, 'utf8').catch(() => 'null')) ?? { version: 1, places: {} };
   // How tightly continuity ties the places (§2.0.14): the pin's suggestion, and the places Jev is told it is tied to.
   const ties = inputs.world?.scenes ? continuityTies(inputs.world) : {};
-  const template = await readFile(join(repository, 'playground', 'strand-demo.html'), 'utf8');
+  const template = await readFile(join(repository, 'world-engine', 'strand-demo.html'), 'utf8');
   const work = await mkdtemp(join(tmpdir(), 'terrain-engine-'));
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   await writeFile(join(work, 'index.html'), '');
@@ -526,6 +526,6 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, parts: { type: 'string' } } });
   const [novelDir] = positionals;
-  if (!novelDir) { console.error('usage: node playground/terrain-spawn.mjs <novel-dir> [--run] [--parts N]'); process.exit(2); }
+  if (!novelDir) { console.error('usage: node world-engine/terrain-spawn.mjs <novel-dir> [--run] [--parts N]'); process.exit(2); }
   console.log(JSON.stringify(await terrainSpawn(resolve(novelDir), { run: values.run, parts: values.parts ? Number(values.parts) : Infinity, log: line => console.error(line) })));
 }

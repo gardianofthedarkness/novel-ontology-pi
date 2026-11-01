@@ -21,7 +21,7 @@
  * Both are recorded on the live page (stage/simulation/live: every question with its picture, each outcome), so the host's
  * play/live page shows them as they happen and keeps them after. Jev's answers are cached under stage/terrain-cache.
  *
- *   npm run build && node playground/terrain.mjs <novel-dir> [--turns 1] [--max-sites 30]
+ *   npm run build && node world-engine/terrain.mjs <novel-dir> [--turns 1] [--max-sites 30]
  */
 import { mkdir, mkdtemp, readFile, rename, writeFile, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -99,7 +99,7 @@ export async function terrainAndSpawns(novelDir, { jev: given = null, turns = 1,
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   // The page starts from a first map (its models are the ones every later map draws with): the first site's parent.
   const firstParent = order.find(id => OPEN.has(scaleOf(id) ?? '')) ?? order[0];
-  const page = (await readFile(join(repository, 'playground', 'landscape-mock.html'), 'utf8')).replace('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js', './vendor/three.module.js').replace('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/', './vendor/addons/')
+  const page = (await readFile(join(repository, 'world-engine', 'landscape-mock.html'), 'utf8')).replace('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js', './vendor/three.module.js').replace('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/', './vendor/addons/')
     .replace('<script type="application/json" id="fill-data">null</script>', () => `<script type="application/json" id="fill-data">${JSON.stringify(mapData(firstParent, HALF[scaleOf(firstParent) ?? 'city'] ?? 300, [], [])).replace(/</g, '\\u003c')}</script>`);
   await writeFile(join(work, 'index.html'), page);
   const { server, url } = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser();
@@ -243,6 +243,6 @@ export async function terrainAndSpawns(novelDir, { jev: given = null, turns = 1,
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { turns: { type: 'string', default: '1' }, 'max-sites': { type: 'string', default: '30' } } });
   const [novelDir] = positionals;
-  if (!novelDir) { console.error('usage: node playground/terrain.mjs <novel-dir> [--turns 1] [--max-sites 30]'); process.exit(2); }
+  if (!novelDir) { console.error('usage: node world-engine/terrain.mjs <novel-dir> [--turns 1] [--max-sites 30]'); process.exit(2); }
   console.log(JSON.stringify(await terrainAndSpawns(resolve(novelDir), { turns: Number(values.turns), maxSites: Number(values['max-sites']), log: line => console.error(line) })));
 }

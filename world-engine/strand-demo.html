@@ -692,7 +692,7 @@ let decor = () => {};
     world.add(form);
   }
 }
-// Terrain spawning's proposal (playground/terrain-spawn.mjs): the ground Jev means to put down, blinking where it would go,
+// Terrain spawning's proposal (world-engine/terrain-spawn.mjs): the ground Jev means to put down, blinking where it would go,
 // until the user steps on and it is kept (the world is then built again with it).
 let blinkProposal = () => {};
 if (data.terrain?.proposal) {
@@ -706,7 +706,7 @@ if (data.terrain?.proposal) {
   group.position.set((x0 + x1) / 2, top !== null && top < 0 ? -h / 2 : h / 2, (z0 + z1) / 2); world.add(group);
   blinkProposal = (now) => { if (capture) return; const u = 0.5 + 0.5 * Math.sin(now / 180); slab.material.opacity = 0.06 + 0.34 * u; edges.material.opacity = 0.3 + 0.7 * u; };
 }
-// Settling (playground/terrain-spawn.mjs, §2.0.22): the proposal and the areas the program placed beside it, after each
+// Settling (world-engine/terrain-spawn.mjs, §2.0.22): the proposal and the areas the program placed beside it, after each
 // sweep of the one objective, played over and over in the live view (gold: the proposal; cyan: the areas it moved), each
 // with a faint line back to where it stood before; a caption says the sweep and the continuity it has come down to.
 let playSettle = () => {};
@@ -1041,6 +1041,8 @@ if (liveMode) {
     if (event.source !== parent || event.origin !== origin) return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
     if (event.data?.type === "underground") { xray = !!event.data.on; return; }
+    // A page around the world (the terrain io's step list) picks a place: the same as clicking it here.
+    if (event.data?.type === "focus") { focusOn(event.data.id); return; }
     // The world view is done with this frame: its WebGL context is let go now (a phone allows only a few at once), not
     // whenever the removed frame is collected.
     if (event.data?.type === "dispose") { renderer.dispose(); renderer.forceContextLoss(); return; }

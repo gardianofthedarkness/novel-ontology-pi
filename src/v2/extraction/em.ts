@@ -1,6 +1,6 @@
-import type { Sentence } from "../digger/intake/sectioning.js";
-import { ask } from "./context/engine.js";
-import { emMode, ownersMode } from "./context/readingModes.js";
+import type { Sentence } from "../../digger/intake/sectioning.js";
+import { ask } from "../context/engine.js";
+import { emMode, ownersMode } from "../context/readingModes.js";
 import { factEvidence, FACT_RECENT, type FactLedger } from "./facts.js";
 import type { Category, Decide, Detected, EntityType } from "./typing.js";
 

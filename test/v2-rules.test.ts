@@ -31,7 +31,7 @@ test("the code rules: one folder, a language profile, and a catalogue of every r
 });
 
 test("an entity whose typings settle on another category moves there, under an id of it, with its names", async () => {
-  const { Chart } = await import("../src/v2/em.js");
+  const { Chart } = await import("../src/v2/extraction/em.js");
   const chart = new Chart(), place = chart.mint("place", "region", "魔法侧", ["s1"]);
   const moved = chart.recategorize(place.id, "concept", "concept");
   assert.ok(!chart.entities.has(place.id) && chart.entities.get(moved)?.category === "concept" && !moved.startsWith("loc_"));

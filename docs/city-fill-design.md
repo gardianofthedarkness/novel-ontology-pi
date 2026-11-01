@@ -179,7 +179,7 @@ A city that spans books needs its landscape from all of them, not from the first
 - beside it, a walled castle quarter, docks, a village and fields;
 - a named building pinned to the lot it borrowed.
 
-**Drawn as the frontend's cyan holograms** (`playground/landscape-mock.html`): a faint cyan fill with cyan edges (white for named buildings), fields and lawns as faint ground. The building forms:
+**Drawn as the frontend's cyan holograms** (`world-engine/landscape-mock.html`): a faint cyan fill with cyan edges (white for named buildings), fields and lawns as faint ground. The building forms:
 - **Baked Kenney models:** 13 towers, 3 skyscrapers, offices and the keep.
 - **Procedural forms per landscape:**
   - stepped and twin skyscrapers, and spires;

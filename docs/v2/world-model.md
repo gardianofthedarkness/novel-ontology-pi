@@ -1,5 +1,7 @@
 # The world model, its laws, and the engineering layers (design, 2026-10-31)
 
+> A journal: each section dated, in the order the user decided it. For the guide by stage (extraction, then the world engine) start at [README.md](README.md); for where each step stands, [status.md](status.md).
+
 The user's frame (2026-10-31), written down so every part of v2 is built against it: a novel's world is **spacetime**
 (places and times) and **matter** (people, crowds, things, vehicles, weapons) in it, tied together by **spatial
 relations**. Places and matter obey different laws, so they are different kinds of entity in every system: places are
@@ -210,13 +212,13 @@ with no keys: every request a cache hit).
 
 | Where | Change |
 |---|---|
-| `src/v2/placeRecommend.ts` (new) | the place recommender: evidence index, parents, setting tiers, description candidates |
+| `src/v2/extraction/placeRecommend.ts` (new) | the place recommender: evidence index, parents, setting tiers, description candidates |
 | `src/v2/context/` (new) | the engine: `compose`, sources, budget, render, manifest, probe; `modes/place.ts` |
-| `src/v2/placeEm.ts` (new; `places.ts` folds into it) | place EM: tree, settings, unnamed places, occupancy |
-| `src/v2/roles.ts` | EM² no longer asks about places (no `ref:`/`within:` for place descriptions; no `placeLinks`) |
-| `src/v2/flow.ts` | place EM after EM²; the result carries `places` (tree, unnamed, settings, occupancy) |
+| `src/v2/extraction/placeEm.ts` (new; `places.ts` folds into it) | place EM: tree, settings, unnamed places, occupancy |
+| `src/v2/extraction/roles.ts` | EM² no longer asks about places (no `ref:`/`within:` for place descriptions; no `placeLinks`) |
+| `src/v2/extraction/flow.ts` | place EM after EM²; the result carries `places` (tree, unnamed, settings, occupancy) |
 | `src/v2/context/readingModes.ts`, `terrainModes.ts` (2026-10-31) | every other Jev request's document: the reading's steps and terrain spawning |
-| `src/v2/script.ts` | the world script takes settings and occupancy from place EM; its own tiers stay only for older readings |
+| `src/v2/extraction/script.ts` | the world script takes settings and occupancy from place EM; its own tiers stay only for older readings |
 
 ## 8. How it is measured (vol 1)
 

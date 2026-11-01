@@ -16,7 +16,7 @@
  * The exporter fits the picked model into it, as large as fits. The report keeps every turn's confidence, so how sure Jev
  * is by turn can be compared over the same scenes (printed at the end).
  *
- *   node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh] [--resweep] [--resolve] [--low 0.5] [--model jev-1.14.0]
+ *   node world-engine/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh] [--resweep] [--resolve] [--low 0.5] [--model jev-1.14.0]
  *
  * --reask keeps the models and asks every view again; --resweep keeps the models and the reader's-view boxes and asks the
  * side and top views again; --resolve re-renders the views of answers already given and solves them again, with no Jev
@@ -319,7 +319,7 @@ export async function placeThings({ chrome, jev, stage, models, placements, save
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, max: { type: 'string' }, fresh: { type: 'boolean' }, reask: { type: 'boolean' }, resweep: { type: 'boolean' }, resolve: { type: 'boolean' }, low: { type: 'string', default: '0.5' }, method: { type: 'string', default: 'candidates' }, use: { type: 'string', default: 'ghost' }, model: { type: 'string', default: 'jev-1.14.0' } } });
   const [page, novelDir] = positionals.map(path => resolve(path));
-  if (!page || !novelDir || !values.vendor) throw new Error('Usage: node playground/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh]');
+  if (!page || !novelDir || !values.vendor) throw new Error('Usage: node world-engine/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh]');
   const load = path => import(pathToFileURL(`${repository}/${path}`));
   const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js');
   // Box questions need Jev 1.14; the analysis keeps its own pinned model.

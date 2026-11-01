@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { CONCEPTS, LAYERS } from "../src/v2/concepts.js";
+import { CONCEPTS, LAYERS, STAGES } from "../src/v2/concepts.js";
 
 // Run from the repository's root (npm test): every pointer of the concept map must still hold, or the map has gone stale.
 const holds = (pointer: string) => { const [file, text] = pointer.split("#"), path = resolve(process.cwd(), file); return existsSync(path) && readFileSync(path, "utf8").includes(text); };
@@ -16,4 +16,9 @@ test("the concept map holds: each concept in a layer, its code and its design wh
     for (const pointer of [...concept.lives, ...concept.docs]) assert.ok(holds(pointer), `${concept.id}: ${pointer} no longer holds`);
     for (const used of concept.uses ?? []) assert.ok(ids.has(used), `${concept.id}: builds on ${used}, which is not a concept`);
   }
+});
+
+test("the stages hold every layer once", () => {
+  const layers = STAGES.flatMap((stage) => stage.layers);
+  assert.deepEqual([...layers].sort(), Object.keys(LAYERS).sort(), "each layer in one stage");
 });

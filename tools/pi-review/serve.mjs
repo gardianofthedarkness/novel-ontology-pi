@@ -200,7 +200,7 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         return;
       }
       if (scopedPath === '/play/terrain/step') {
-        // Terrain spawning's step (playground/terrain-spawn.mjs), from World · Live's Next step and Run on: for a run waiting
+        // Terrain spawning's step (world-engine/terrain-spawn.mjs), from World · Live's Next step and Run on: for a run waiting
         // after a proposal, watched in the engine's own live view.
         const volume = url.searchParams.get('volume') ?? 'active';
         if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); request.resume(); return; }

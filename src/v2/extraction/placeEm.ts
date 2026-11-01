@@ -1,11 +1,11 @@
-import type { DecisionAnswer } from "../ground/connectors/jev.js";
-import { ask as askJev, type Manifest, type Mode } from "./context/engine.js";
-import { placeParentMode, placeRefMode, settingMode, type PlaceStores } from "./context/placeModes.js";
+import type { DecisionAnswer } from "../../ground/connectors/jev.js";
+import { ask as askJev, type Manifest, type Mode } from "../context/engine.js";
+import { placeParentMode, placeRefMode, settingMode, type PlaceStores } from "../context/placeModes.js";
 import { mentions, type Chart } from "./em.js";
 import type { FactEntry } from "./facts.js";
 import type { FlowCard, FlowScene } from "./flow.js";
 import { describedCandidates, fallbackParents, placeIndex, recommendParents, settingTiers, type Candidate } from "./placeRecommend.js";
-import { ACCEPT, chooseSetting, deeperByUnnamed, HABIT, holderIn, isPresent, mayHold, rankOf, sameWords, SCALES, sureParent } from "./rules/index.js";
+import { ACCEPT, chooseSetting, deeperByUnnamed, HABIT, holderIn, isPresent, mayHold, rankOf, sameWords, SCALES, sureParent } from "../rules/index.js";
 import { ReadingGraph } from "./readingGraph.js";
 import type { SpatialMention } from "./spatial.js";
 import type { Decide } from "./typing.js";

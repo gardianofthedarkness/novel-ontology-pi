@@ -1,5 +1,5 @@
 import type { FlowResult } from "./flow.js";
-import { LANGUAGE, type Level } from "./rules/language.js";
+import { LANGUAGE, type Level } from "../rules/language.js";
 
 /**
  * Spatial words (the user's call, 2026-10-31): 地面, 地下, 街上, 屋顶, 走廊 are no places of their own but where someone or

@@ -13,7 +13,7 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const esc = text => String(text).replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]);
 
 export async function conceptsPage() {
-  const { CONCEPTS, LAYERS } = await import(pathToFileURL(join(repository, 'dist/src/v2/concepts.js')).href);
+  const { CONCEPTS, LAYERS, STAGES } = await import(pathToFileURL(join(repository, 'dist/src/v2/concepts.js')).href);
   const holds = pointer => { const [file, text] = pointer.split('#'), path = join(repository, file); return existsSync(path) && readFileSync(path, 'utf8').includes(text); };
   const broken = CONCEPTS.flatMap(concept => [...concept.lives, ...concept.docs].filter(pointer => !holds(pointer)).map(pointer => `${concept.id}: ${pointer}`));
   if (broken.length) throw new Error(`The concept map no longer holds:\n${broken.join('\n')}`);
@@ -21,7 +21,6 @@ export async function conceptsPage() {
   const byId = new Map(CONCEPTS.map(concept => [concept.id, concept]));
   const builtOnBy = id => CONCEPTS.filter(concept => concept.uses?.includes(id));
   const pointers = CONCEPTS.reduce((sum, concept) => sum + concept.lives.length + concept.docs.length, 0);
-  const layers = Object.keys(LAYERS);
   // A code pointer: the file and what it holds; a design pointer: the doc (relative to docs/v2) and its heading.
   const code = pointer => { const [file, text] = pointer.split('#'); return `<li><code class="path">${esc(file)}</code> <code class="sym">${esc(text)}</code></li>`; };
   const design = pointer => { const [file, text] = pointer.split('#'), href = file.startsWith('docs/v2/') ? file.slice('docs/v2/'.length) : `../../${file}`; return `<li><a href="${esc(href)}">${esc(file.split('/').pop())}</a> <span class="head">§ ${esc(text)}</span></li>`; };
@@ -29,16 +28,23 @@ export async function conceptsPage() {
   const card = concept => {
     const on = concept.uses ?? [], by = builtOnBy(concept.id).map(other => other.id);
     return `<article class="card" id="${esc(concept.id)}" data-layer="${esc(concept.layer)}" data-text="${esc(`${concept.name} ${concept.what} ${concept.id}`.toLowerCase())}">
-  <header><h3>${esc(concept.name)}</h3>${concept.user ? '<span class="badge">the user\'s design</span>' : ''}</header>
+  <header><h4>${esc(concept.name)}</h4>${concept.user ? '<span class="badge">the user\'s design</span>' : ''}</header>
   <p>${esc(concept.what)}</p>
   <div class="where"><div><span class="label">code</span><ul>${concept.lives.map(code).join('')}</ul></div><div><span class="label">design</span><ul>${concept.docs.map(design).join('')}</ul></div></div>
   ${on.length || by.length ? `<div class="links">${on.length ? `<div><span class="label">builds on</span>${on.map(chip).join('')}</div>` : ''}${by.length ? `<div><span class="label">built on by</span>${by.map(chip).join('')}</div>` : ''}</div>` : ''}
 </article>`;
   };
-  const strip = layers.map((layer, n) => `<a class="step ${esc(layer)}" href="#layer-${esc(layer)}"><b>${esc(layer)}</b><span>${CONCEPTS.filter(concept => concept.layer === layer).length}</span></a>${n < layers.length - 2 ? '<span class="arrow" aria-hidden="true">→</span>' : n === layers.length - 2 ? '<span class="arrow" aria-hidden="true">·</span>' : ''}`).join('');
-  const sections = layers.map(layer => `<section class="layer" id="layer-${esc(layer)}" data-layer="${esc(layer)}">
-  <div class="layer-head"><h2><span class="dot ${esc(layer)}"></span>${esc(layer)}</h2><p>${esc(LAYERS[layer])}</p></div>
+  // The strip and the sections follow the two stages (extraction, then the world engine), the rules last as serving both.
+  const count = layer => CONCEPTS.filter(concept => concept.layer === layer).length;
+  const strip = STAGES.map(stage => `<a class="stage-link" href="#stage-${esc(stage.id)}"><b>${esc(stage.name)}</b>${stage.layers.map(layer => `<span class="step ${esc(layer)}">${esc(layer)} <span>${count(layer)}</span></span>`).join('')}</a>`).join('<span class="arrow" aria-hidden="true">→</span>');
+  const progress = stage => stage.steps.length ? `<ol class="progress">${stage.steps.map(step => `<li class="${esc(step.progress)}"><span class="mark">${esc(step.progress)}</span><b>${esc(step.name)}</b><span>${esc(step.what)}</span></li>`).join('')}</ol>` : '';
+  const layerSection = layer => `<section class="layer" id="layer-${esc(layer)}" data-layer="${esc(layer)}">
+  <div class="layer-head"><h3><span class="dot ${esc(layer)}"></span>${esc(layer)}</h3><p>${esc(LAYERS[layer])}</p></div>
   <div class="cards">${CONCEPTS.filter(concept => concept.layer === layer).map(card).join('\n')}</div>
+</section>`;
+  const sections = STAGES.map(stage => `<section class="stage" id="stage-${esc(stage.id)}">
+  <div class="stage-head"><h2>${esc(stage.name)}</h2><p>${esc(stage.what)}</p>${progress(stage)}</div>
+${stage.layers.map(layerSection).join('\n')}
 </section>`).join('\n');
 
   return `<!doctype html>
@@ -60,15 +66,26 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 syste
 main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; max-width: 1180px; margin: 0 auto; padding-block: 32px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .eyebrow { font: 600 11px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
 h1 { margin: 6px 0 0; font-size: 30px; line-height: 1.15; text-wrap: balance; }
-h2 { margin: 0; font-size: 18px; text-transform: capitalize; display: flex; align-items: center; gap: 8px; }
-h3 { margin: 0; font-size: 15px; text-wrap: balance; }
+h2 { margin: 0; font-size: 22px; text-wrap: balance; }
+h3 { margin: 0; font-size: 17px; text-transform: capitalize; display: flex; align-items: center; gap: 8px; }
+h4 { margin: 0; font-size: 15px; text-wrap: balance; }
 p { margin: 0; color: var(--muted); max-width: 70ch; }
 code { font: 12px ui-monospace, "SF Mono", Menlo, monospace; overflow-wrap: anywhere; }
 header.top { display: grid; gap: 8px; }
 .status { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--accent); }
 .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.step { display: inline-flex; gap: 8px; align-items: baseline; padding: 8px 12px; border-radius: 8px; background: var(--panel); border: 1px solid var(--rule); color: var(--fg); text-decoration: none; border-top: 3px solid; }
+.stage { display: grid; gap: 22px; min-width: 0; padding-top: 18px; border-top: 2px solid var(--fg); }
+.stage-head { display: grid; gap: 8px; }
+.progress { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 8px; }
+.progress li { display: grid; gap: 3px; align-content: start; padding: 10px 12px; border-radius: 8px; background: var(--panel); border: 1px solid var(--rule); font-size: 13px; min-width: 0; }
+.progress li > span:last-child { color: var(--muted); }
+.mark { font: 600 10px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.progress .done .mark { color: var(--accent); } .progress .next .mark { color: var(--terrain); } .progress .later .mark { color: var(--muted); }
+.progress .next { border-color: var(--terrain); }
+.stage-link { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--rule); background: var(--panel); color: var(--fg); text-decoration: none; }
+.stage-link > b { margin-right: 4px; }
+.step { display: inline-flex; gap: 6px; align-items: baseline; padding: 4px 8px; border-radius: 6px; background: var(--soft); color: var(--fg); font-size: 13px; border-top: 3px solid; }
 .step span { color: var(--muted); font-size: 12px; }
 .arrow { color: var(--muted); }
 .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -106,10 +123,10 @@ footer { font-size: 12px; color: var(--muted); }
 <header class="top">
   <span class="eyebrow">Novel ontology · v2 · the concepts we invented</span>
   <h1>Concept map</h1>
-  <p>Every abstract concept of the v2 build, in the layer it belongs to, from what the text says to what is seen: what it is, where it lives in code, where it is designed, what it builds on and what builds on it. Made from <code>src/v2/concepts.ts</code> at <code>${esc(commit)}</code> on ${new Date().toISOString().slice(0, 10)}.</p>
+  <p>Every abstract concept of the v2 build, in the stage and layer it belongs to — extraction (what the text says, where things are), then the world engine (the ground, what stands, what is seen): what it is, where it lives in code, where it is designed, what it builds on and what builds on it. Made from <code>src/v2/concepts.ts</code> at <code>${esc(commit)}</code> on ${new Date().toISOString().slice(0, 10)}.</p>
   <span class="status">${CONCEPTS.length} concepts · all ${pointers} pointers hold · ${CONCEPTS.filter(concept => concept.user).length} of the user's design</span>
 </header>
-<nav class="strip" aria-label="Layers">${strip}</nav>
+<nav class="strip" aria-label="Stages and layers">${strip}</nav>
 <div class="tools" role="search">
   <input id="find" type="search" placeholder="Find a concept (pools, zoom, shells…)" aria-label="Find a concept">
   <button type="button" id="mine" aria-pressed="false">Only the user's designs</button>
@@ -123,6 +140,7 @@ const apply = () => {
   const words = find.value.trim().toLowerCase(), only = mine.getAttribute('aria-pressed') === 'true';
   for (const card of document.querySelectorAll('.card')) card.hidden = (words && !card.dataset.text.includes(words)) || (only && !card.querySelector('.badge'));
   for (const layer of document.querySelectorAll('.layer')) layer.hidden = ![...layer.querySelectorAll('.card')].some(card => !card.hidden);
+  for (const stage of document.querySelectorAll('.stage')) stage.hidden = ![...stage.querySelectorAll('.layer')].some(layer => !layer.hidden);
 };
 find.addEventListener('input', apply);
 mine.addEventListener('click', () => { mine.setAttribute('aria-pressed', String(mine.getAttribute('aria-pressed') !== 'true')); apply(); });

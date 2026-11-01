@@ -1,10 +1,10 @@
-// A world-first workspace whose canon is the v2 reading (src/v2/canon.ts), so the stage steps and the engine run on it as
+// A world-first workspace whose canon is the v2 reading (src/v2/extraction/canon.ts), so the stage steps and the engine run on it as
 // they are: the source workspace's manifest and stored source are copied (the sentence ids are the same), its canon is not.
 // Its world script (stage/world/script.json: each scene's place, who is present, the past, its events) is read off the
-// reading too (src/v2/script.ts), so no v1 world loop runs before terrain and the world engine.
+// reading too (src/v2/extraction/script.ts), so no v1 world loop runs before terrain and the world engine.
 // The new workspace must not exist yet; nothing in the source workspace is changed. `--script` writes the world script
 // alone again, into a workspace made from that reading (after the script's rules change; the canon stays as it is).
-// The script's sampling pools (src/v2/pools.ts) are the universe's: its registry (<library>/universe/pools.json) is read,
+// The script's sampling pools (src/v2/extraction/pools.ts) are the universe's: its registry (<library>/universe/pools.json) is read,
 // this book's pools and members written into it, and kept for the other books.
 //
 //   node experiments/v2/workspace.mjs <source-novel-dir> <v2-out-dir> <new-novel-dir>
@@ -18,7 +18,7 @@ const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 
 /** The reading's result as canonRecords and readingScript read it (the chart as maps), and its sentences' text. */
 async function reading(outDir, textDir) {
-  const { loadBlocks } = await load('dist/src/v2/base.js');
+  const { loadBlocks } = await load('dist/src/v2/extraction/base.js');
   const data = JSON.parse(await readFile(join(outDir, 'v2', 'data.json'), 'utf8'));
   const text = new Map((await loadBlocks(textDir)).flatMap(block => block.sentences.map(sentence => [sentence.id, sentence.text])));
   const result = { ...data, chart: { entities: new Map(data.chart.entities.map(entity => [entity.id, entity])), times: new Map(data.chart.times.map(node => [node.text, node])) } };
@@ -27,7 +27,7 @@ async function reading(outDir, textDir) {
 
 /** The world script read off the reading, written into the workspace (stage/world/script.json), with what it came to. */
 export async function writeScript(outDir, novelDir, given = null) {
-  const { readingScript } = await load('dist/src/v2/script.js'), { emptyRegistry, universeOf, withPools } = await load('dist/src/v2/pools.js');
+  const { readingScript } = await load('dist/src/v2/extraction/script.js'), { emptyRegistry, universeOf, withPools } = await load('dist/src/v2/extraction/pools.js');
   const { result, text } = given ?? await reading(outDir, novelDir);
   const universe = universeOf(resolve(novelDir)), registryFile = join(universe.dir, 'pools.json');
   const registry = JSON.parse(await readFile(registryFile, 'utf8').catch(() => 'null')) ?? emptyRegistry();
@@ -41,7 +41,7 @@ export async function writeScript(outDir, novelDir, given = null) {
 
 export async function v2Workspace(sourceDir, outDir, novelDir) {
   if (await stat(novelDir).then(() => true, () => false)) throw new Error(`${novelDir} exists: a v2 workspace is made new, never over another`);
-  const { canonRecords } = await load('dist/src/v2/canon.js');
+  const { canonRecords } = await load('dist/src/v2/extraction/canon.js');
   const read = await reading(outDir, sourceDir), canon = canonRecords(read.result, read.text);
   await mkdir(join(novelDir, 'ontology'), { recursive: true, mode: 0o700 });
   await cp(join(sourceDir, 'source'), join(novelDir, 'source'), { recursive: true });

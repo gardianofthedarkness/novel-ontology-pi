@@ -1,11 +1,11 @@
-import type { DecisionQuestion } from "../ground/connectors/jev.js";
-import type { Sentence } from "../digger/intake/sectioning.js";
-import { describeTime, detectTimeMentions, leadingDateCue, needsRoleCheck, parseTimeText, quoteMasks, strongAdvanceCue, type TimeMention } from "../digger/timeplace/lexicon.js";
-import { assemblePeriods, dateFor, isMicroJump, shiftDate, type AnchoredMention, type SceneTime, type StoryPeriod } from "../digger/timeplace/periods.js";
-import { continuationOf, continuationQuestion, ROLE_OPTIONS, verdict, type RoleVerdict, type TimeRole } from "../digger/timeplace/roles.js";
-import { describeEntry, placeOnCalendar, type CalendarFile } from "../solidifier/calendar/calendar.js";
-import { ask } from "./context/engine.js";
-import { continuationMode, storyTimeMode } from "./context/readingModes.js";
+import type { DecisionQuestion } from "../../ground/connectors/jev.js";
+import type { Sentence } from "../../digger/intake/sectioning.js";
+import { describeTime, detectTimeMentions, leadingDateCue, needsRoleCheck, parseTimeText, quoteMasks, strongAdvanceCue, type TimeMention } from "../../digger/timeplace/lexicon.js";
+import { assemblePeriods, dateFor, isMicroJump, shiftDate, type AnchoredMention, type SceneTime, type StoryPeriod } from "../../digger/timeplace/periods.js";
+import { continuationOf, continuationQuestion, ROLE_OPTIONS, verdict, type RoleVerdict, type TimeRole } from "../../digger/timeplace/roles.js";
+import { describeEntry, placeOnCalendar, type CalendarFile } from "../../solidifier/calendar/calendar.js";
+import { ask } from "../context/engine.js";
+import { continuationMode, storyTimeMode } from "../context/readingModes.js";
 import type { Decide } from "./typing.js";
 
 /**

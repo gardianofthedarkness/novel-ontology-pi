@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../src/ground/connectors/jev.js";
 import { sectionBlock } from "../src/digger/intake/sectioning.js";
-import { Chart } from "../src/v2/em.js";
-import type { FlowResult } from "../src/v2/flow.js";
-import { placeEm } from "../src/v2/placeEm.js";
-import { readingScript } from "../src/v2/script.js";
-import { levelOf, spatialMentions } from "../src/v2/spatial.js";
+import { Chart } from "../src/v2/extraction/em.js";
+import type { FlowResult } from "../src/v2/extraction/flow.js";
+import { placeEm } from "../src/v2/extraction/placeEm.js";
+import { readingScript } from "../src/v2/extraction/script.js";
+import { levelOf, spatialMentions } from "../src/v2/extraction/spatial.js";
 
 type Card = FlowResult["cards"][number];
 const card = (kind: string, sentences: string[], entities: string[], people: [string, string[]][] = []): Card =>

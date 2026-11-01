@@ -106,7 +106,7 @@ Buildings are added as the story detects them, not fixed up front.
    2. **A side view** of the same moment: turned 90° (left or right, drawn from the placement), lowered to a near-level look, and aimed at the first box, which is drawn in as a beam (everything that box could mean in 3D).
    - **The 3D box:** the points of the place both pictures show inside their boxes give the centre. The size is each box measured in metres at that depth: view 1's width across; view 2's width along view 1's line of sight, and its height. A thing that starts at the ground stands on it, and one higher up stays where the boxes put it.
    - **When view 2's box covers most of the beam,** depth along it is marked uncertain and taken as about the width.
-   - **Built as a demo:** the player's capture mode (`?capture`, `window.__stage`) and `playground/two-view-things.mjs` (headless Chrome, `<book>/stage/thing-boxes.json`).
+   - **Built as a demo:** the player's capture mode (`?capture`, `window.__stage`) and `world-engine/two-view-things.mjs` (headless Chrome, `<book>/stage/thing-boxes.json`).
    - **First try** (book 3's Kuroko strand, 10 placements, 20 calls, 30 s): position and height are right for about half.
      - The scaffolding, the helicopter in the air, the long pipe, the lab, and the small room up in a building are plausible.
      - Things with nothing to fix them along the beam (in the air, or generic "building" mentions) get a whole-beam second box.
@@ -242,7 +242,7 @@ A building is its circulation only: corridors and stairs on 2 m cells and 3 m fl
 - **Damage persists on the place** and is applied in story order. A scene sees a hit only if the hit happened before it (happens-before across strands, not reading order).
 
 
-**Impacts chosen like placements** (user design, 2026-10-29; `playground/impact-choices.mjs`): the fights the stand-in found breaking something are asked again, on pictures, the way things are placed.
+**Impacts chosen like placements** (user design, 2026-10-29; `world-engine/impact-choices.mjs`): the fights the stand-in found breaking something are asked again, on pictures, the way things are placed.
 1. **Where it hits (one choice):** the place just before the hit, from the reader's camera, with lettered red spheres at the likely impact points.
    - The points: the faces of the buildings by the fighters (those moving first), level with them; the nearest roofs; and the building nearest the middle between the first two fighters.
    - The options include "no damage".
@@ -321,7 +321,7 @@ As of 2026-10-28, uncommitted on `claude/place-read-mode`.
 | Places of skeleton buildings, movement graph, hits | `apps/playground/src/data/skeletonPlace.ts` | built, tested |
 | Floor plans with rooms and doors (stage 1) | `apps/playground/src/data/buildingPlan.ts` | built; superseded by skeletons for the stage |
 | Ground-floor districts | `apps/playground/src/data/placeGroup.ts` | built; superseded by `skeletonPlace` |
-| Strand demo: two strands to pick from (book 2's Christmas Eve, book 3's Kuroko; `#kuroko` opens the second) | github.io `stage-strand/`, `playground/strand-demo.html`, exported with `--set` | public |
+| Strand demo: two strands to pick from (book 2's Christmas Eve, book 3's Kuroko; `#kuroko` opens the second) | github.io `stage-strand/`, `world-engine/strand-demo.html`, exported with `--set` | public |
 | Skeleton lab | `playground/skeleton-lab.html` | local |
 
 **Built for the animation:**

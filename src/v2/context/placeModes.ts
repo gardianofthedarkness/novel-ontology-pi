@@ -1,7 +1,7 @@
 import type { DecisionQuestion } from "../../ground/connectors/jev.js";
-import type { FlowScene } from "../flow.js";
-import type { Candidate, PlaceIndex } from "../placeRecommend.js";
-import type { ReadingGraph } from "../readingGraph.js";
+import type { FlowScene } from "../extraction/flow.js";
+import type { Candidate, PlaceIndex } from "../extraction/placeRecommend.js";
+import type { ReadingGraph } from "../extraction/readingGraph.js";
 import type { Item, Mode } from "./engine.js";
 
 /**

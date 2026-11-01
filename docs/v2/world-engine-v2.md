@@ -1,5 +1,7 @@
 # World engine v2
 
+> A journal: each section dated, in the order the user decided it. For the guide by stage (extraction, then the world engine) start at [README.md](README.md); for where each step stands, [status.md](status.md).
+
 The world engine is the second version of this CLI: a book is read into a world first (who is where, when, in which
 building, above or under the ground), and everything else (dialogue, movement, things, fights, identity) is decided inside
 that world. This document is its design going forward. The reader's version, with every feature block built so far, is
@@ -117,7 +119,7 @@ with a composed context, **System 2** is the main model (the work model for list
    layer (`<out>/base/`), and with `experiments/v2/workspace.mjs` a world-first workspace whose canon is this reading (scenes,
    entities, events from action cards, who takes part), so the stage steps and the engine run on it as they are. Its world
    script (`stage/world/script.json`: each scene's place, who is present, the past, its events) is read off the reading
-   too (`src/v2/script.ts`, §2.0.9), so the v1 world loop no longer runs before terrain and the world engine.
+   too (`src/v2/extraction/script.ts`, §2.0.9), so the v1 world loop no longer runs before terrain and the world engine.
 
 **Measured on vol 1, 2026-10-30, before EM²** (5,202 sentences, Jev 1.14, deepseek-chat; a fraction of a dollar in all):
 
@@ -159,7 +161,7 @@ is 茵蒂克丝 in one scene and someone else in the next; 姐姐大人 is 美�
   point at.
 - **B: roles and slots.** Only names enter the chart. Lines and descriptions are resolved against the scene's cast.
 
-**How** (`src/v2/roles.ts`, after the card scan and the contexts; scenes in reading order, a scene's batches in order):
+**How** (`src/v2/extraction/roles.ts`, after the card scan and the contexts; scenes in reading order, a scene's batches in order):
 - **Asked:** every spoken and action sentence, and every sentence that holds a description of a person (the descriptions
   typing found, scanned everywhere, a longer name masking the ones inside it: 御坂妹妹 is a name, not 妹妹). 12 asked
   sentences a request; the passage runs from 3 sentences before the first to the last.
@@ -195,7 +197,7 @@ is 茵蒂克丝 in one scene and someone else in the next; 姐姐大人 is 美�
 
 ### 2.0.2 Facts, the action rule and crowds (the user's notes, 2026-10-30) — built
 
-**Facts are the source of truth for every EM** (`src/v2/facts.ts`). Every fact card is a fact in an ordered ledger
+**Facts are the source of truth for every EM** (`src/v2/extraction/facts.ts`). Every fact card is a fact in an ordered ledger
 (`fact_000001` …, reading order), so the facts grow as the book does. Who a fact is about: the chart's proper names in it
 (rescanned as EM gives people more names, so a fact read before a name was known is found once it is), and the descriptions
 EM² resolved in it (`via: description`). Each fact keeps its time (the latest time node at or before it); facts are
@@ -317,7 +319,7 @@ contradicts story order reported, never reordered).
 5. Checked on vol 1: the periods with their dates and flashbacks, the conflicts, a time strip per scene on the data page,
    and the world loop's "when" answers against the calendar's order.
 
-**Built** (`src/v2/time.ts`, after the user agreed): as proposed, with one change. The roles are not asked inside EM²'s
+**Built** (`src/v2/extraction/time.ts`, after the user agreed): as proposed, with one change. The roles are not asked inside EM²'s
 requests but in a request of their own per scene with time words to ask about (at most one a scene, plus a continuation
 question after a flashback scene), run after EM and before EM². This way EM² already gets its facts ranked by story time.
 The request is a structured document: the four roles defined once, the story's time so far (the current anchor, its
@@ -349,7 +351,7 @@ Saturday; the listing, typing and kinds changed, the tiling came from the cache)
 
 ### 2.0.6 The time tree, and option meanings once a request (the user's calls, 2026-10-31) — built, run on vol 1
 
-**The time tree** (`timeTree` in `src/v2/time.ts`), as places have theirs: the story, a year, its days (a date, or "day N"
+**The time tree** (`timeTree` in `src/v2/extraction/time.ts`), as places have theirs: the story, a year, its days (a date, or "day N"
 while nothing is dated), a day's parts (a part of the day or a clock time), and the past (flashbacks, by how far back).
 The tree walks the present line with a cursor and settles the days of parts of the day itself: one earlier than the last
 the story reached that day is the next day, and a late night after an evening is that night past midnight. So a coarse
@@ -362,7 +364,7 @@ are the tree's paths; the data page shows the tree. `experiments/v2/time.mjs` re
   conflicts and no false flashback (it was a thought); scene 1 at 12-24 › 00:00 (not the heading's 平安夜), 2–14 late
   night, 15–34 the 24th, 35–46 the 24th's evening (not the 25th's).
 
-**Option meanings once a request** (`src/v2/hints.ts`): a meaning two questions give an option the same way goes into the
+**Option meanings once a request** (`src/v2/extraction/hints.ts`): a meaning two questions give an option the same way goes into the
 state once (`answerOptions`), a shared yes-and-no once (`yesNo`). Run on vol 1 for every step but the tiling (57 s),
 against the last reading (`experiments/v2/compare.mjs`; the listing came from the same cache, so the same strings):
 - **Price:** Jev 7,242,024 → 5,951,354 input tokens, $0.304 → $0.250 (−18%). By step (Jev reports each request's tokens,
@@ -385,7 +387,7 @@ against the last reading (`experiments/v2/compare.mjs`; the listing came from th
 
 After the whole extraction and the world script (which says where each scene happens: the v1 world loop's then, the
 reading's own since §2.0.9), `novel sim terrain`
-(`playground/terrain.mjs`), recorded on the host's live page:
+(`world-engine/terrain.mjs`), recorded on the host's live page:
 1. **Terrain.** The book's main sites (the places its scenes happen in), in story order of their first scene, each placed
    by Jev in the place that holds it on the place tree, on a picture of that place from above: its ground (the
    landscape the engine fills, the manifold), the sites placed so far by name, and boxes O (over the middle) and A–H
@@ -432,7 +434,7 @@ it is part of (the book's text is in it: never public).
 
 Terrain is the first step after extraction, before any world loop. But the engine built its world from the v1 world-first
 loop's script (the main agent deciding presence, place, time and dialogue batch by batch), so a v2 workspace could not
-reach terrain without running that loop first. The reading decides all of it already, so `src/v2/script.ts` reads the
+reach terrain without running that loop first. The reading decides all of it already, so `src/v2/extraction/script.ts` reads the
 script off it, with no model call, and `experiments/v2/workspace.mjs` writes it with the canon (`--script` writes it
 again into a workspace made from that reading):
 - **place:** where the scene is set: the deepest named place its environment cards name, else the place its action cards
@@ -519,7 +521,7 @@ smallest boundary that fits: true random sampling. A pool replaces it:
   proposed at the spot the engine sampled for it and kept on the user's step (`by: "pool"`), last in its level
   (§2.0.12). Jev builds on top of the sampling: every map shows the pools and what stands in them.
 
-Built (`src/v2/pools.ts`, the canvas's `poolOf`/`POOL_SPACING`, `experiments/v2/workspace.mjs --script`). Vol 1's tree
+Built (`src/v2/extraction/pools.ts`, the canvas's `poolOf`/`POOL_SPACING`, `experiments/v2/workspace.mjs --script`). Vol 1's tree
 rebuilt (2026-10-31): 9 pools, 91 places in them, the registry at `~/claude-world-first/v2-host-state-7/universe/pools.json`.
 学园都市's pool district holds 81 (42 buildings, 16 streets, 23 rooms the text puts only in the city); 第六学区's pool
 street 6, 第七学区's 3 (an alley among them); 合众国's pool city an unnamed city; the pools of 纽约, 第十五学区, 东京都 and
@@ -658,7 +660,7 @@ an underground square at 12 m down), a station front at 15 m, a centre at 20 m, 
    it is tied to, each counted by its ties (a member Jev kept: its box's middle), so the more ties, the nearer; with none,
    the pool's middle as before. Every member of a pool counts (its buildings and rooms too); members of different pools
    are not pulled across.
-   Built: `continuityTies` (`src/v2/pools.ts`) over the script's scenes, `tiedSpot` (`placeCanvas.ts`: the free spot
+   Built: `continuityTies` (`src/v2/extraction/pools.ts`) over the script's scenes, `tiedSpot` (`placeCanvas.ts`: the free spot
    nearest the tied mean, as far from the others as any member); the export lays out the members Jev kept first, each at
    its box's middle, then samples the rest by their ties. On vol 1 with the run above's terrain, the 65 members of
    学园都市's pool Jev has not boxed: the 334 tied pairs 83 m apart on average (161 m before), the 1,746 untied 189 m
@@ -1000,6 +1002,10 @@ v2 makes each a structured request:
 - Pi runs the commands the guard allows (`sim pick --max-calls ≤ 60`, `sim run --pace 0.5–5`), from v2 builds.
 
 ## 7. Order of work
+**Where it stands (2026-11-01):** extraction is done; the world engine's first step, terrain, is done (run 11, tag
+`terrain-run11`); the next step is spawning positions. The current order is kept in [status.md](status.md); the items
+below are the order as it was decided.
+
 0. **Done 2026-10-30:** the reading flow of the sketch (§2.0), on vol 1 end to end into the engine; the model catalog in one
    request per theme (21 things: 0.42 s, 17 of 21 the same as one request each); the stretch before the first event
    explained (the line's loads, above). Then EM² (§2.0.1): roles and slots, on vol 1 (35 people; 1,561 of 2,272 lines

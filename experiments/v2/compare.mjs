@@ -14,7 +14,7 @@ const pct = (part, whole) => whole ? Number((100 * part / whole).toFixed(1)) : n
 const mean = list => list.length ? Number((list.reduce((sum, value) => sum + value, 0) / list.length).toFixed(3)) : null;
 
 export async function compare(novelDir, dirA, dirB, { sample = null, n = 15 } = {}) {
-  const { loadBlocks } = await load('dist/src/v2/base.js');
+  const { loadBlocks } = await load('dist/src/v2/extraction/base.js');
   const [a, b] = await Promise.all([dirA, dirB].map(async dir => JSON.parse(await readFile(join(dir, 'v2', 'data.json'), 'utf8'))));
   const text = new Map((await loadBlocks(novelDir)).flatMap(block => block.sentences.map(sentence => [sentence.id, sentence.text])));
   const namer = data => {

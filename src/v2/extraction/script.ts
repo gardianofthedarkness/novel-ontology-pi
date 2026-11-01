@@ -1,6 +1,6 @@
 import { actionEvents, cardPeople } from "./canon.js";
 import type { FlowResult } from "./flow.js";
-import { isPresent, LANGUAGE, SCALES } from "./rules/index.js";
+import { isPresent, LANGUAGE, SCALES } from "../rules/index.js";
 import { levelOf } from "./spatial.js";
 
 /**

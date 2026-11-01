@@ -1,513 +1,83 @@
 # novel-ontology-pi
 
-A **Pi-agent-compatible Skill + CLI bundle** that turns a novel — in any
-language — into a queryable **ontology** of characters, events, causality
-and timelines, powering **character simulation** and **parallel-universe
-story forking** at a time point the user chooses.
+Turns a novel into a world you can watch. **Extraction** reads the book into a world model: what the text says, who says
+and does each line, when it happens, and where every place and thing is. The **world engine** builds that world on the
+ground, step by step: first the terrain, then where everyone stands, then how they move.
 
-No Docker or hosted database required. Download it, drop in your novel, provide
-two API keys (one work LLM + one decision model), and start.
+**See it:** the terrain step of vol 1, as Jev built it part by part:
+[gardianofthedarkness.github.io/novel-ontology-pi/terrain/](https://gardianofthedarkness.github.io/novel-ontology-pi/terrain/).
+The stages and their concepts: [/v2/](https://gardianofthedarkness.github.io/novel-ontology-pi/v2/).
 
-## Post-extraction character portraits
+## Where it stands
 
-The separate [`novel-portraits` skill](skills/novel-portraits/SKILL.md) lets an
-agent run `novel album assign <workspace> --check`, then `novel album assign
-<workspace>` after the full volume is extracted, reviewed and applied. The CLI
-uses the imported EPUB album and canonical cast; local OCR/head detection creates
-crops and uniquely binds character names. Existing assignments are preserved;
-uncertain matches stay hidden. No model API calls or ontology approvals.
+| Stage | Step | Status |
+| --- | --- | --- |
+| Extraction | The reading flow: scene tiling, sentence kinds, EM and EM² (who is this, here), facts, things, story time and the calendar, places in EM | **done** |
+| Extraction | The place tree: places at their scales, the world script, sampling pools | **done** |
+| World engine | Terrain: each place's kind and height, from Jev, placed as one optimization and settled | **done** (run 11, tag `terrain-run11`) |
+| World engine | Spawning positions: where each character and thing stands when a scene begins | **next** |
+| World engine | Movement and simulation: actions over time, paths, what breaks | later |
 
-This optional feature needs [local Python dependencies](tools/album-portraits/README.md).
-The scoped Pi host loads the skill and permits the command without general shell
-access. No artwork is generated; it only uses pictures in the book's imported album.
+The detail, with what each step decided and why: [docs/v2/status.md](docs/v2/status.md). For a teammate catching up:
+[docs/v2/whats-new.md](docs/v2/whats-new.md).
 
-## Optional team playground
+## How it is designed
 
-The root-level [playground/](playground/README.md) contains the separate team
-development harness: original CC0 synthetic data, an illustrative snapshot, a
-fresh idle Pi workspace, and backend-connected frontend HMR. Docker Compose is
-an optional team setup, not an end-user dependency; native setup is supported.
-Viewing needs no keys, and processing starts only when you send Pi a task.
-No private commercial-novel data is distributed.
+- **The program does geometry; Jev does meaning.** Jev (the decision model) is asked what a place is and how high it rises;
+  sizes, positions, overlaps and streets are computed. Nothing geometric is asked of a model.
+- **Jev sees what the user sees.** Every terrain question carries two pictures of the world as it stands (a plan and a
+  skyline), framed by the zoom engine to the part being asked about; the user watches the same world live.
+- **Every Jev request is composed by one context engine.** No hand-built prompts: a request names its mode, and the engine
+  gathers its sources, ranks them by the question, and cuts them to a budget.
+- **Raw text, ranked by the question, and no filler.** A place's prompt carries the sentences around its exact name from
+  its five best scenes (15 in all); facts and surroundings only when they are about that place; a section is left out
+  rather than padded with the city's.
+- **Pins are suggestions; placement is one optimization.** Where the text says a place is, it is pinned; the engine sizes
+  each area by its pins, places it, and settles the whole part at once (distance, pins, overlaps and street forms in one
+  potential). Pins turn green when settled.
+- **Debugging by display.** Every step can be watched (World · Live, the replay); what the user sees decides what is fixed.
+- **One concept map.** Every concept we invented is in [src/v2/concepts.ts](src/v2/concepts.ts), with where it lives in
+  code and where it is designed; a stale pointer fails `npm test`.
 
-## How it works
+## Where things live
 
-### Multiple files and series
-
-Use the separate [novel-library skill](skills/novel-library/SKILL.md) before
-multi-file ingestion. The main agent determines series/universe/continuity
-membership and reading order from evidence; the CLI validates, stages and records
-its review. It does not guess grouping from filenames or call a model itself.
-
-```sh
-novel library init ./library
-novel library add ./library ./volume-1.epub
-novel library add ./library ./volume-2.epub
-novel library show ./library
-novel library evidence ./library <source-id> --offset 0 --limit 1500
-novel library propose ./library ./organization.json --revision <catalog-revision>
-novel library plan ./library <plan-id>
-novel library decide ./library <plan-id> --revision <plan-revision> --decision approve --reason 'Reviewed the source evidence and volume order'
-novel library show ./library --series <series-id>
-novel library prepare ./library <source-id>
+```
+src/v2/extraction/   the reading flow: EM, EM², facts, time, places, the place tree, the world script, pools
+src/v2/context/      the context engine and its modes (reading, places, terrain), the zoom engine
+src/v2/rules/        what code decides alone: the rules catalogue, the language profile
+src/v2/concepts.ts   the concept map
+world-engine/        the world engine's scripts: terrain spawning, the strand page, Jev's line, the world map
+src/ground/stage/    the world's ground: the canvas of places, landscapes, lots, the underground
+tools/pi-review/     the host and its pages (World · Live, the replay)
+experiments/v2/      runs and pages: the reading, the workspace, comparisons, the concept and compatibility pages
+docs/v2/             the design: start at docs/v2/README.md
+docs/v1/             the v1 bundle's README and design (still runs)
 ```
 
-See the [proposal schema](skills/novel-library/references/organization.md); agents
-can submit the same JSON via `--organization '<JSON>'` without writing a plan
-file. Load/install both skill folders when using the multi-file workflow.
-Unknown memberships remain unresolved, and a changed catalog invalidates old
-plans. `library history` lists immutable checkpoints; organization can be changed
-only by another reviewed plan. History/evidence and source copies are private
-local data, not a public catalog to serve wholesale.
+## Running
 
-`prepare` performs offline EPUB/text intake and returns exact `workspace` and
-`input` paths; only an explicit later `novel ingest` starts processing and its
-normal gates. Every source has its own stable-ID workspace. The returned input
-is outside that workspace (compatible with Pi job validation), while a matching
-bound source copy remains inside it. Qualify local IDs as `<source-id>:<local-id>`
-when reporting across files. Reordering volumes never renumbers stored facts.
-Directly ingesting another source into a bound workspace is refused. Existing
-single-source workspaces can bind unchanged; ambiguous/replaced sources require
-an explicit migration, not silent concatenation.
-
-This is **federated organization**, not a combined ontology or cross-book EM.
-`show --universe` lists sources but does not fuse their graphs or continuities.
-Actual story-time extraction/alignment remains phase 2. The existing bounded
-`tools/pi-review` extraction runner is not a library-management shell: organize
-and prepare before configuring its ordered job inputs. No active Pi session or
-existing database is migrated or restarted by these commands.
-
-For the [live orbital series view](docs/library-live.md), configure a protected
-viewer with `NOVEL_LIBRARY_DIR` and prepared-source/volume bindings. The existing
-activity stream then shows proposed/held organization ghosts and reviewed series
-→ ordered files → chapters. Volume arrows are reading order, not actual story
-time. Existing library-less viewers remain unchanged.
-
-### Extraction pipeline
-
-- **The Skill** (`skills/novel-ontology/SKILL.md`) teaches a
-  [Pi agent](https://github.com/earendil-works/pi) the workflows:
-  ingest → review → query → simulate → fork.
-- **The CLI** (`novel`) implements everything: deterministic sentence
-  sectioning, ontology extraction, storage, queries, forking.
-- **System 1 — the autostep miniloop** (inside the CLI): a recursive
-  decision system built on **Jev** (TypeSafe AI's decision model). It
-  works as independent **decision patches** — a dialogue detector, a name
-  detector, a presence detector, a dialogue-membership faculty — each asking the
-  decision model small typed questions (`noul` / `choice` / `score`)
-  over auto-sectioned source. The default work-model path emits multi-person
-  dialogue cards, not sentence-speaker assignments. Sentence IDs locate the
-  original exchange. Membership is reviewed independently for each person.
-  The detector
-  prompt allows one or two brief narration beats between spoken sentences, but
-  asks for a new dialogue unit after three or more non-verbal sentences, even
-  with the same speakers in the same scene.
-- **The merge gate:** the miniloop never writes to the ontology main
-  graph. Per chapter/block it accumulates a **ChangeSet** of proposed
-  changes, and the main agent — holding the full context — **approves,
-  holds, or sends parts back for revision**. Block by block, until the
-  novel is done.
-- **Storage:** a portable JSONL **bundle** is the source of truth;
-  **Ladybug** (embedded property graph + Cypher, with native full-text
-  and vector indexes) is the hot query engine rebuilt from it. One local
-  folder per novel. Schema keys and enum values are English; summaries
-  and entity names stay in the novel's language and original script.
-  The legacy `summaryEn` field holds source-language text.
-
-📐 **Design:** [DESIGN.md](DESIGN.md) ·
-⚙️ **Streaming faculties:** [dependency graph and bounded System 2](docs/faculty-graph.md) · [live comparison](docs/faculty-benchmark.md) ·
-🧠 **System 1 in detail (by sector):** [docs/system1/index.html](docs/system1/index.html) ·
-📱 **Single-file viewer** (all sector pages in one self-contained HTML, clickable anywhere): [docs/system1-viewer.html](docs/system1-viewer.html) — regenerate with `node tools/build-viewer.mjs`
-
-## Quick start
-
-```bash
+```sh
 npm install
 npm run build
-npm test                                   # mocked Jev — costs nothing
-
-# Create a fresh workspace (no models or API keys needed):
-node dist/src/cli/cli.js init novels/my-novel --pretty
-
-# Deterministic sectioning (works today):
-node dist/src/cli/cli.js section path/to/chapter.txt --pretty
+npm test                    # the v1 and v2 tests, the concept map included
+npm run world-engine:test   # the world engine's own tests
 ```
 
-`init` requires a new target path and creates missing parent directories. It
-refuses existing files, directories (even empty ones), and symlinks. The workspace
-contains `source/`, `ontology/`, `branches/`, and `changesets/`; `ontology/` holds
-the schema-v1 manifest and six empty JSONL bundle files. The manifest uses an
-opaque novel ID, the directory name as its title, unknown source languages
-(`[]`), no embeddings (`null`), and zero processed blocks. The decision-model
-version is recorded from `JEV_MODEL`, defaulting to `jev-1.13.0` as in
-`.env.example`; no model is called. A filesystem failure may leave a partial
-directory; inspect it before removing it or choosing a new path.
-
-Once a bundle's graph has been built
-(`node dist/src/cli/cli.js graph build novels/my-novel/ontology`), the workspace
-can be browsed without any model calls:
-
-```bash
-node dist/src/cli/cli.js query novels/my-novel "MATCH (c:Character) RETURN c.id AS id" --pretty
-node dist/src/cli/cli.js search novels/my-novel "café" --pretty
-node dist/src/cli/cli.js timeline list novels/my-novel --pretty
-node dist/src/cli/cli.js timeline show novels/my-novel tl_canon --pretty
-```
-
-`query` runs Cypher against the novel's built graph (`ontology/graph.lbug`).
-`search` is the graph-first text search over canonical names and event
-summaries (`--limit N`, default 20). `timeline list` shows the timelines
-with their event counts; `timeline show` lists one timeline's fork-point
-events — importance at least `--min-importance N` (default 0.5), in story
-order. All output is JSON, `--pretty` for humans. A novel whose graph has
-not been built, an unknown timeline ID, and missing or invalid arguments
-are clear errors (JSON on stderr, exit code 1); the read commands never
-create a database as a side effect.
-
-Configuration (see `.env.example`): `WORK_LLM_*` for the one work LLM
-API, `TYPESAFE_API_KEY` + pinned `JEV_MODEL` for the decision model.
-Keys are user inputs — provide them via environment/secure entry, never
-commit them.
-
-## Work LLM smoke tests: `llm ping` / `llm probe`
-
-The work-LLM plumbing — an OpenAI-compatible chat-completions client
-(`src/ground/connectors/workModel.ts`, configured from `WORK_LLM_*`) — can be
-exercised before any live wiring exists:
-
-```bash
-node dist/src/cli/cli.js llm ping  --pretty   # one tiny completion: reachability + latency + token usage
-node dist/src/cli/cli.js llm probe --pretty   # JSON-mode completion, reply validated as JSON
-```
-
-`WORK_LLM_BASE_URL` overrides the provider's default API root
-(deepseek: `https://api.deepseek.com/v1`, openai:
-`https://api.openai.com/v1`), so both commands can be pointed at a
-local mock server and run for free with a dummy `WORK_LLM_API_KEY`.
-The key is reported as status only (`configured`) and never printed.
-A missing key, model, or base URL is a specific error, not a silent
-skip. Transient failures (5xx, network) are retried with backoff;
-4xx is not retried; each attempt times out after 30s. The client is
-wired into `ingest`: when `WORK_LLM_*` is configured, the per-scene
-extraction step (sector 08) runs between the miniloop and the merge
-gate — `--no-extract` forces it off, and the ingest result reports
-`extraction: "live" | "off"` so its absence is never silent.
-
-## Jev key management: `jev login` / `status` / `logout` / `ping`
-
-The CLI keeps its own durable secret store for the decision-model
-key, so the key does not have to live in the environment:
-
-```bash
-node dist/src/cli/cli.js jev login            # hidden prompt; stores the key (file mode 0600, outside the repo)
-node dist/src/cli/cli.js jev login --from-env # copy TYPESAFE_API_KEY into the store instead
-node dist/src/cli/cli.js jev status           # source only: env / store / env-indirect / missing
-node dist/src/cli/cli.js jev logout           # remove the stored copy
-node dist/src/cli/cli.js jev ping  --pretty   # one tiny live decision through the resolved key
-```
-
-Resolution order (the same one open-source Jev integrations use):
-`TYPESAFE_API_KEY` env → the secure store → the env var named by
-`JEV_API_KEY_ENV`. The store lives under `~/.config/novel-ontology/`
-(`NOVEL_SECRETS_DIR` overrides it), never inside a novel bundle, and
-no command ever prints the key. The live client speaks the real
-System One wire format with the model pinned (`JEV_MODEL`, default
-`jev-1.13.0`); transient failures (429/529/5xx, network) retry with
-backoff, other 4xx fail at once.
-
-## Measuring: `inspect` and `eval run`
-
-Phase 2 measurement tooling — numbers only. Nothing in this section
-sets or checks a threshold: what the numbers mean, and what (if
-anything) they should gate, is the maintainer's decision.
-
-### `novel inspect <novel-dir>` — corpus diagnostics
-
-```bash
-node dist/src/cli/cli.js inspect path/to/novel --pretty
-```
-
-Reads the bundle JSONL + manifest (the source of truth; the Ladybug
-graph is never opened — the report only notes whether `graph.lbug`
-exists) and reports: the manifest summary; source-corpus size
-(files, bytes, characters, chapters and blocks per the deterministic
-text tools); ontology counts by kind/type/timeline/chapter; coverage
-tallies (events with evidence, events placed on known timelines,
-entities with canonical names, unresolved dialogue turns); integrity
-tallies (relation endpoints and other references pointing at ids that
-do not exist in the bundle — counted, never repaired); branch and
-ChangeSet tallies. Counts and ratios of stored data only — no quality
-judgments, no semantic validation. A corrupt JSONL line is an error
-naming the file and line; missing optional files read as clean zeroes.
-
-### Golden-chapter eval datasets
-
-A dataset is a directory:
-
-```
-my-dataset/
-  dataset.json          { "name": "...", "chapters": [
-                            { "id": "ch01", "source": "chapters/ch01.txt",
-                              "golden": "golden/ch01" } ] }
-  chapters/ch01.txt     the chapter's source text
-  golden/ch01/          expected records, in bundle record shapes:
-    entities.jsonl  relations.jsonl  events.jsonl
-```
-
-Golden files use exactly the bundle's JSONL shapes
-(`src/ground/ontology/types.ts`). Every scored kind needs its file — write an
-empty file for a kind with no records. A worked example ships in
-`eval/examples/golden-chapter/` (one hand-written chapter, expected
-records, and sample predictions).
-
-### `novel eval run <dataset-dir> <predictions-dir>` — precision/recall
-
-Predictions are *data*: a directory with one subfolder per chapter id,
-each holding `entities.jsonl` / `relations.jsonl` / `events.jsonl` in
-the same shapes. Anything can produce them — a recorded pipeline run,
-a mock, a future live run. The runner never calls a model. A missing
-chapter folder or kind file in the predictions counts as "predicted
-nothing"; unknown chapter folders or unknown `.jsonl` files are
-errors (they would silently corrupt the scores).
-
-Matching is per chapter and kind, in two passes:
-
-1. **Exact id** — a predicted record whose `id` equals a golden
-   record's `id` matches it (recorded runs keep their ids).
-2. **Semantic key** over the leftovers:
-   - entity: `entity:<kind>:<canonical name>` (the `names[]` entry
-     with kind `canonical`, else the first name)
-   - relation: `relation:<type>:<from>-><to>`, where each endpoint is
-     the semantic key of the record it references *in the same chapter
-     and side* (golden relations resolve against golden records), or
-     `id:<raw id>` when the endpoint doesn't resolve
-   - event: `event:<timelineId>:<summary>`, the summary normalized
-     (trimmed, whitespace-collapsed, lowercased)
-
-Matching is a multiset match — duplicate keys pair off one-for-one.
-The report gives TP/FP/FN and precision/recall/F1 per kind and overall
-(and per chapter), plus the missed and spurious record keys so a
-human can inspect every disagreement. Precision is `null` when
-nothing was predicted for a slice; recall is `null` when the slice
-has no golden records. A completed scoring run exits 0 whatever the
-numbers are — non-zero exits mean usage, IO, or format errors only.
-
-### `novel eval story-order <gold.json> <predicted.json> [--timeplace] [--ties]` — story order as a partial order
-
-Scores story order pair by pair (before / after / parallel) against a
-strand gold: strands of scenes in story order plus cross-strand evidence.
-`--timeplace` reads a time-place run report as the prediction. See
-[story strands](docs/story-strands.md) for the format and the measured
-results. No model calls.
-
-### `novel eval extract <novel-dir> <predictions-dir>` — predictions from a bundle
-
-`eval run` scores predictions as data; `eval extract` is the producer
-that makes them from a real ingest. It projects the bundle's stored
-ontology (`ontology/entities.jsonl`, `relations.jsonl`,
-`events.jsonl`) into a predictions directory in exactly the format
-above — records copied as stored, ids included — split per chapter.
-No model calls.
-
-Chapter folders are named `ch<NN>`, where NN is the stored
-`chapterIndex` zero-padded to two digits (`ch01`, `ch02`, …); name a
-dataset's chapters the same way so the runner lines them up.
-
-Only events and scenes carry a `chapterIndex`, so the split uses
-stored fields only:
-
-- **events** go to their own `chapterIndex`;
-- **entities** carry no chapter field, so an entity is projected into
-  every chapter where a stored scene or event places it (scene
-  presence/mentions/location/dialogue-card members or legacy turns; event primary actors /
-  affected characters);
-- **relations** carry no chapter field either, so a relation is
-  projected into the chapters *both* endpoints are placed in — a
-  relation spanning two chapters (say, a `PRECEDES` between their
-  events) lands in neither.
-
-Records no stored field ties to a chapter are counted as
-`unattributed` in the command's report — never guessed at, never
-silently dropped. The target directory must not already hold files:
-like bundle import, the adapter never overwrites, so a stale
-projection cannot corrupt a score.
-
-## Sharing a novel: bundle export / import
-
-The JSONL bundle is the source of truth, so sharing a novel = moving the
-bundle folder. The graph database is *not* part of it — it is rebuilt
-locally from the bundle.
-
-```bash
-node dist/src/cli/cli.js bundle export <novel-dir> <out-dir>     # writes a NEW dir
-node dist/src/cli/cli.js bundle import <bundle-dir> <target-dir> # writes a NEW dir
-node dist/src/cli/cli.js graph build <target-dir>/ontology       # rebuild the graph
-```
-
-- **Export includes** the whole bundle, byte-for-byte: `source/`,
-  `ontology/manifest.json` + all JSONL (entities, relations, events,
-  scenes, timelines, branches), `branches/<id>/` deltas and snapshots,
-  and the `changesets/` audit trail. IDs, source evidence, timelines and
-  fields written by newer versions are preserved exactly.
-- **Export excludes** the derived Ladybug graph (`graph.lbug*` —
-  rebuild it with `graph build`) and secret-shaped files (`.env*`,
-  private keys, credentials), which are listed in the command output.
-- **Import validates before writing anything**: manifest shape and
-  schema version, every JSON file parses, every JSONL line parses
-  (errors name the file and line). The copy is staged next to the
-  target and moved into place only when complete, so a failed import
-  leaves no partial folder behind.
-- **Nothing is ever overwritten**: if the target directory already
-  exists, both commands stop with an error and leave it untouched.
-
-## Story time and places: `timeplace` (phase 1)
-
-Granularity is the scene. Time and place words become entities that scenes
-belong to: a `TimePoint` per time anchor (`Scene -OCCURS_DURING-> TimePoint`)
-and named `Location`s (`Scene -LOCATED_AT-> Location`).
-
-```
-novel timeplace run <novel-dir> [--mode hybrid|llm|programmatic] [--no-jev] [--chapter N] [--propose] [--cache dir]
-novel timeplace show <novel-dir>
-novel changeset approve <novel-dir> <id> --time-place   # at birth, after a block is approved
-novel ingest <novel-dir> <file> --time-place            # inline, for blocks approved during ingest
-```
-
-1. **Vocabulary** — a rule lexicon (dates, clock times, relative days,
-   spans, parts of day, holidays, past markers; Chinese first, basic
-   Japanese/English) and/or a work-model pass that lists time and place
-   words verbatim per sentence; code rejects anything not in the source.
-2. **Roles** — unambiguous "it is now …" cues are rule-decided; Jev decides
-   the rest as ADVANCE / FLASHBACK / RETURN / REFERENCE with the story
-   state (current time, date, open flashback) and the full distribution.
-   Quoted speech and （inner thoughts） default to REFERENCE. A flashback
-   needs confidence (0.6, or 0.5 FLASHBACK probability on a past marker).
-3. **Periods** — code: one anchor until the next; a flashback closes on
-   RETURN or when Jev says the next scene is back in the present; dates are
-   derived only from stated words; dated flashbacks are ordered by date.
-4. **Places** — scenes are `LOCATED_AT` the proper-named places they happen
-   in; generic settings ("屋顶", "医院") stay in the report for the later
-   hierarchy phase.
-
-Runs are incremental and continue the book's stored periods, so
-block-by-block equals the whole book. Output is a reviewable ChangeSet; the
-viewer's **Story time** and **Places** views (in both Orbital and
-Traditional mode; `?view=story` or `?view=places`) read the applied facts. See
-[docs/time-place.md](docs/time-place.md) for the design and measured results.
-
-## Gate review tooling: `match` / `fix` / `recall`
-
-The merge gate's review is staged. `novel match <novel-dir>
-[--changeset <id>]` produces the entity-matching packet: code
-nominates duplicate pairs (shared forms, script-variant folds,
-containment, near-identical forms), System 1 (Jev) reviews the whole
-batch with a three-question checklist, and only the pairs it cannot
-settle are raised to the agent — confident pairs arrive with a ready
-merge command. `novel fix …` applies pointwise repairs over the
-bundle (`merge`, `rename`, `add-form`, `relate`, `unrelate`,
-`remove-entity`, `remove-event`), each audited in `maintenance.jsonl`
-with the graph rebuilt after it. When a whole subtree is wrong, the
-agent pins the early decision that caused the cascade
-(`novel fix correct --block <id> --key <decision-key> --value <v>`)
-and `novel recall <novel-dir> <blockId>` re-runs just that block from
-the workspace's stored source with the pin honored.
-
-For an extraction-origin identity cascade, pin `extraction:constraints`
-with a JSON object containing `distinctNames` (groups of different
-identities, never aliases of one person), `rejectCharacterNames` (explicit
-invalid placeholders), and/or `instructions` (source-grounded guidance).
-Recall feeds this correction into extraction and the name resolver,
-preserves the superseded ChangeSet, and leaves a fresh held set for full
-review. Corrections and recalls are audited; an already approved block
-cannot be recalled without a canonical rollback plan.
-
-Large review packets support `novel changeset show <dir> <id> --summary`
-and `--offset 0 --limit 20`; follow `page.nextOffset` until null. Add
-`--notes` to page through review notes without truncating the Bash output.
-
-New work-model ingestion uses [precision-first semantic review](docs/semantic-review.md):
-`changeset facts` returns byte-bounded assertions with source excerpts;
-`changeset decide --revision <hash> --decisions '<JSON>'` accepts, holds or
-rejects individual facts. Code checks spans/coverage; Pi reviews identity,
-dialogue-card memberships, relations, participants and state, not segmentation perfection.
-Approval can leave uncertain facts held outside canon while processing
-continues. Missing means unknown, not false. Work-model ingestion refuses
-`--auto-approve`; existing legacy miniloop-only smoke runs are unchanged.
-
-For a trusted **live extraction smoke test**, initialize a fresh private workspace
-and omit `--auto-approve`:
+The two models (a work model and Jev) are configured as in v1: see
+[docs/v1/README-v1.md](docs/v1/README-v1.md#jev-key-management-jev-login--status--logout--ping). Then, on a book's
+workspace:
 
 ```sh
-smoke_root="$(mktemp -d)"
-novel init "$smoke_root/novel"
-novel ingest "$smoke_root/novel" /path/to/source.txt --max-blocks 1
-novel changeset facts "$smoke_root/novel" cs_b0001 --summary
-novel inspect "$smoke_root/novel"
+node experiments/v2/read.mjs <novel-dir> <out-dir>                        # extraction: the v2 reading
+node experiments/v2/workspace.mjs <novel-dir> <out-dir> <new-novel-dir>   # a world-first workspace from it
+node dist/src/cli/cli.js sim terrain <new-novel-dir>                      # terrain, one part per step (--run: all)
+node experiments/v2/terrain-replay.mjs <new-novel-dir> <out.html>         # the replay
 ```
 
-This stops with pending proposals for inspection, not a populated canonical
-ontology or a passed end-to-end review. For canonical verification, run the
-skill-loaded Pi reviewer (see `tools/pi-review/README.md`) or record independent
-source-supported fact decisions before approval. Scripts that formerly combined
-a work model with `--auto-approve` must adopt one of these paths; there is no
-live override or implicit accept-all mode. A miniloop-only smoke test is not a
-substitute for testing the full extraction/review pipeline.
+Book text never leaves the workspace: the pages that hold it (the reading's inspect page, the replay) are private.
 
-Live processing also writes owner-only, atomically replaced
-`working/<block-id>.json` snapshots after real Jev patches and each extracted
-scene. These are disposable, uncommitted working drafts: scene/dialogue
-decisions and candidate stubs can be rendered as ghosts immediately. Entity
-faculties also record `entityCandidates` as each scene's identities resolve:
-a name that is a recorded form of a known entity points at that entity
-(`existingId`), anything else is a new candidate keyed by kind and name, with
-the sentence where it was first seen. Extraction links each candidate to the
-entity it became (`resolvedId`) in the same write that adds that entity. Any
-future faculty that identifies entities should add to this list rather than
-waiting for extraction. Drafts never update ontology files or bypass the merge
-gate. Final proposals still
-arrive in the normal persisted ChangeSet; the metadata-only processing log
-continues to exclude raw payloads and source quotes.
+## v1
 
-## Status
-
-### Optional Pi reviewer and real test report
-
-The [scoped Pi runner](tools/pi-review/README.md) loads the skill and uses
-only CLI commands to review, repair and apply blocks. Semantic packets require
-current fact values and source evidence before accepting an assertion;
-legacy packets retain full source/proposal/note coverage. The runner keeps
-private checkpoints, supports explicit per-block repair budgets, and
-exports source-redacted native Pi session replay. It never auto-approves
-or starts a public tunnel. Its SDK dependencies are optional and separate
-from the CLI installation.
-
-The [2026-10-22 live integration report](docs/reports/pi-review-live-2026-10-22.md)
-records four chapter sections / six blocks, 2,558 supported proposals
-applied and 594 deferred, with limitations and separate offline tests.
-
-Read-only processing event streaming: `novel watch <novel-dir> [--port 4317]`
-serves loopback SSE from the workspace's processing `events.jsonl` (separate
-from `ontology/events.jsonl`). See the [contract draft and SSH setup](docs/playground-events-watch.md)
-for replay, integration limits, and frontend questions. `watch` never reviews
-or applies ChangeSets. The CLI ingest path **is** wired: `novel ingest
-<novel-dir> <file>` runs blocks -> miniloop -> ChangeSets -> merge gate
-(stops at the first gate by default; `--auto-approve` is miniloop-only),
-and the playground follows a run live via `?live=http://127.0.0.1:4317/events`.
-Re-running ingest with the same input and block size skips approved blocks
-with recorded application, preserving their ChangeSets and the remaining
-blocks' sentence provenance. An approval without an application record stops
-the run for inspection rather than silently replaying or skipping it.
-
-v0.1 skeleton (2026-10-21): founding design, Skill, CLI skeleton with
-working sectioning, decision-patch interfaces + v1 patches, ChangeSet /
-merge-gate machinery, ontology schema v1, and connector interfaces for
-Ladybug, the bundle, Jev, and the work LLM. Live wiring (Ladybug driver,
-Jev key, Pi provider layer) lands incrementally — see the open questions
-in DESIGN.md §9.
-
-## Lineage
-
-A clean-slate rebuild of
-[agentic_chinese_novel_discord_bot](https://github.com/gardianofthedarkness/agentic_chinese_novel_discord_bot)
-(Python/LangGraph + Neo4j/Postgres/Qdrant/Redis under Docker), keeping
-its ontology and timeline/fork design ideas and replacing the stack.
+The v1 bundle (a Pi skill and CLI that turns a novel into a queryable ontology, with review, library, portraits and the
+team playground) still runs. Its README is kept whole at [docs/v1/README-v1.md](docs/v1/README-v1.md); the docs index is
+[docs/README.md](docs/README.md).

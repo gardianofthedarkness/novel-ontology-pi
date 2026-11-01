@@ -13,8 +13,8 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 
 export async function inspect(novelDir, outDir) {
-  const { loadBlocks } = await load('dist/src/v2/base.js');
-  const { mentions } = await load('dist/src/v2/em.js');
+  const { loadBlocks } = await load('dist/src/v2/extraction/base.js');
+  const { mentions } = await load('dist/src/v2/extraction/em.js');
   const data = JSON.parse(await readFile(join(outDir, 'v2', 'data.json'), 'utf8'));
   const blocks = await loadBlocks(novelDir);
   const text = new Map(blocks.flatMap(block => block.sentences.map(sentence => [sentence.id, sentence.text])));

@@ -220,19 +220,19 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>Listing (System 2)</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Run on vol 1</span></div></header>
 <p>30 sentences a batch to the work model, not an agent: fixed instructions and a structured output, <code>{"names": [...]}</code>. Every important person, object, weapon, vehicle, place, building, room and time, as the passage writes it. A string the passage doesn't hold word for word is dropped, and so are pronouns.</p>
-<dl class="facts"><dt>Decides with</dt><dd>deepseek-chat, JSON output, 8 batches at once</dd><dt>Vol 1</dt><dd>177 calls, 3.0 s, 2,231 strings</dd><dt>Files</dt><dd><code>src/v2/listing.ts</code></dd></dl></article>
+<dl class="facts"><dt>Decides with</dt><dd>deepseek-chat, JSON output, 8 batches at once</dd><dt>Vol 1</dt><dd>177 calls, 3.0 s, 2,231 strings</dd><dt>Files</dt><dd><code>src/v2/extraction/listing.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>Typing</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Run on vol 1</span></div></header>
 <p>One structured document a batch: the types once, the sentences by id, the strings by key with the sentences that hold them. Each string chooses a type, and a yes/no says whether it is a <b>proper name</b>. That answer was added after the first run, when a pronoun and generic words had become global aliases.</p>
-<dl class="facts"><dt>Vol 1</dt><dd>177 requests</dd><dt>Files</dt><dd><code>src/v2/typing.ts</code></dd></dl></article>
+<dl class="facts"><dt>Vol 1</dt><dd>177 requests</dd><dt>Files</dt><dd><code>src/v2/extraction/typing.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>Unified EM</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Run on vol 1</span></div></header>
 <p>Batch by batch in reading order. Times go to the times (EM for times is the calendar's, later). A proper name already in the chart is that entity, with no model call. Anything else meets the recommender: the chart's entities of its category, scored by how near before it and how often they appear and by shared names; the best three, with the latest facts that name them, go to Jev. Two new names of one person in one batch can point at each other. A description is a name only where EM said it.</p>
-<dl class="facts"><dt>Vol 1</dt><dd>158 requests, 14 s. 657 exact, 569 joined through Jev, 632 new, 120 times. 上条当麻 gathers 上条, 当麻, 阿上; 御坂美琴 gathers 美琴, 御坂, 超电磁炮, 第三位.</dd><dt>Gaps</dt><dd>Still apart: 禁书目录 and 茵蒂克丝, 最后之作 and 御坂御坂, 一方通行 and 统括理事长. 174 people against the old 31: one-scene descriptions are people of their own. These wait for the world engine's second EM.</dd><dt>Files</dt><dd><code>src/v2/em.ts</code></dd></dl></article>
+<dl class="facts"><dt>Vol 1</dt><dd>158 requests, 14 s. 657 exact, 569 joined through Jev, 632 new, 120 times. 上条当麻 gathers 上条, 当麻, 阿上; 御坂美琴 gathers 美琴, 御坂, 超电磁炮, 第三位.</dd><dt>Gaps</dt><dd>Still apart: 禁书目录 and 茵蒂克丝, 最后之作 and 御坂御坂, 一方通行 and 统括理事长. 174 people against the old 31: one-scene descriptions are people of their own. These wait for the world engine's second EM.</dd><dt>Files</dt><dd><code>src/v2/extraction/em.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>Card scan, context, canon</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Run on vol 1</span></div></header>
 <p>Every card is scanned for the chart's proper names (a longer name masks a shorter one inside it), plus the appearances EM recorded. Each scene's context holds its world cards, the scene before's cards of the same kinds, and the people the recommender expects. The reading is written as the world loop's base layer and as a world-first workspace's canon, so the world loop, the stage steps and the engine run on it unchanged.</p>
-<dl class="facts"><dt>Files</dt><dd><code>src/v2/flow.ts</code>, <code>base.ts</code>, <code>canon.ts</code>; <code>experiments/v2/read.mjs</code>, <code>workspace.mjs</code>; schema <code>docs/v2/schema.yaml</code></dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>src/v2/extraction/flow.ts</code>, <code>base.ts</code>, <code>canon.ts</code>; <code>experiments/v2/read.mjs</code>, <code>workspace.mjs</code>; schema <code>docs/v2/schema.yaml</code></dd></dl></article>
 </div>
 <h2>Vol 1, end to end (2026-10-30)</h2>
 <div class="table-wrap"><table>
@@ -390,7 +390,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>The wake hook</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>Each hall belongs to the smallest area its middle lies in. That area's underground (its halls, its ways up, its collapse) is laid only once a character goes down there; until then it is drawn but never walked.</p>
-<dl class="facts"><dt>Files</dt><dd><code>playground/export-strand-demo.mjs</code> (awake, bornUnder, hallUnder)</dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>world-engine/export-strand-demo.mjs</code> (awake, bornUnder, hallUnder)</dd></dl></article>
 
 <article class="block"><header><h3>Collapse after a blast</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip gap">Gap</span></div></header>
 <p>A confined blast widens the roof's span (twice the distance to the nearest support); past what the band holds, the roof caves in to a dome, a choke, or (soil halls only) a dent in the street of up to 3 m. Deep halls fill partly with dirt and never break the ground. People buried by a cave-in climb out to the nearest open cell of their hall.</p>
@@ -436,7 +436,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>Births: where someone starts</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>The first time someone is seen, Jev boxes where they are on a picture of their level: the map around the place, a slice of a floor (to pick a room), or one of the three underground choices. A person in a room whose floor the text does not give gets a random floor of their building (the same every run) and a close-up slice of it.</p>
-<dl class="facts"><dt>Decides with</dt><dd>Jev box on a map picture drawn in plain Node (no browser)</dd><dt>Files</dt><dd><code>export-strand-demo.mjs</code>, <code>playground/world-map.mjs</code> (93 lines)</dd></dl></article>
+<dl class="facts"><dt>Decides with</dt><dd>Jev box on a map picture drawn in plain Node (no browser)</dd><dt>Files</dt><dd><code>export-strand-demo.mjs</code>, <code>world-engine/world-map.mjs</code> (93 lines)</dd></dl></article>
 
 <article class="block"><header><h3>Meetings and gatherings</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>A live dialogue brings its two parties within talking distance (the same floor, 4 m); a group dialogue is one box Jev draws, everyone held inside it, on their floor or interval.</p>
@@ -452,15 +452,15 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>Things in their places</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>Large things the scenes mention (3 m or more) are matched to a model: Jev picks it on a labelled sheet of every model and basic shape. Each placement is boxed on the reader's view, then on a low side view at six turns in one request, keeping the surest; a third view only when still unsure.</p>
-<dl class="facts"><dt>Decides with</dt><dd>Jev choice (model) and boxes on rendered pictures</dd><dt>Files</dt><dd><code>playground/two-view-things.mjs</code> (382 lines), <code>src/digger/stage/objects.ts</code> (296 lines)</dd></dl></article>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice (model) and boxes on rendered pictures</dd><dt>Files</dt><dd><code>world-engine/two-view-things.mjs</code> (382 lines), <code>src/digger/stage/objects.ts</code> (296 lines)</dd></dl></article>
 
 <article class="block"><header><h3>Fights and destruction</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>Where a fight hits: lettered red spheres at likely impact points, Jev picks one or "no damage"; how big: concentric spheres 4, 8, 16 and 32 m across. Every building the sphere reaches loses structural units; its standing cells step down their percolation curve. A fight underground is centred on its fighter and caves in halls (page 5). Damage other story lines left on the world is applied in story order.</p>
-<dl class="facts"><dt>Files</dt><dd><code>playground/impact-choices.mjs</code> (119 lines), <code>export-strand-demo.mjs</code>, <code>structure.ts</code></dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>world-engine/impact-choices.mjs</code> (119 lines), <code>export-strand-demo.mjs</code>, <code>structure.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>Runs and records</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
 <p>Each run is kept with its book as a versioned record (what it was made from, the engine version, the accepted run); the host plays the accepted runs. Derived view data, never canon.</p>
-<dl class="facts"><dt>Files</dt><dd><code>export-strand-demo.mjs</code> (keepRun, ENGINE_VERSION 3), <code>src/cli/commands/extract/simCommands.ts</code></dd><dt>Tests</dt><dd><code>playground/strand-records.test.mjs</code></dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>export-strand-demo.mjs</code> (keepRun, ENGINE_VERSION 3), <code>src/cli/commands/extract/simCommands.ts</code></dd><dt>Tests</dt><dd><code>world-engine/strand-records.test.mjs</code></dd></dl></article>
 </div>
 <div class="pager"></div>
 </section>
@@ -473,7 +473,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 <div class="blocks">
 <article class="block"><header><h3>novel sim pick</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span><span class="chip gap">Slow</span></div></header>
 <p>Walks a story line forward event by event in headless Chrome: on a picture of each event as it begins, Jev decides where the people go, where the things stand and where the fight hits; the engine plays it and the next event begins from what it made. Pi may spend at most 60 calls a command.</p>
-<dl class="facts"><dt>Measured</dt><dd>A recorded pick: 449 s, of which Jev 28 s. Before each event question, 2–6 s replaying the engine from the line's start and reopening the page in Chrome; a 222 s stretch before the first event question is not yet accounted for.</dd><dt>Files</dt><dd><code>playground/sim-jev.mjs</code> (333 lines)</dd></dl></article>
+<dl class="facts"><dt>Measured</dt><dd>A recorded pick: 449 s, of which Jev 28 s. Before each event question, 2–6 s replaying the engine from the line's start and reopening the page in Chrome; a 222 s stretch before the first event question is not yet accounted for.</dd><dt>Files</dt><dd><code>world-engine/sim-jev.mjs</code> (333 lines)</dd></dl></article>
 
 <article class="block"><header><h3>novel sim run</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
 <p>Plays a line with the answers it has, no model calls; <code>--pace 0.5–5</code> seconds a moment so the live view shows every moment as the engine plays it.</p></article>
@@ -504,7 +504,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>The player</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>One page: the world, its people and their traces over time, blasts as red spheres, the underground seen through a see-through ground (halls, pillars, piles, dents; kiosks and steps at stations). three.js ships beside the page, never from a CDN, because the CDN fails on the phone.</p>
-<dl class="facts"><dt>Files</dt><dd><code>playground/strand-demo.html</code> (1,278 lines)</dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>world-engine/strand-demo.html</code> (1,278 lines)</dd></dl></article>
 </div>
 <div class="pager"></div>
 </section>

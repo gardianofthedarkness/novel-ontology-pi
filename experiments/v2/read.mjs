@@ -19,10 +19,10 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 
 export async function read(novelDir, outDir, { blocks: range = null, lister: listerKind = 'model', lexicon = null, decisions = null, work = null } = {}) {
-  const { loadBlocks, worldBase } = await load('dist/src/v2/base.js');
-  const { readFlow } = await load('dist/src/v2/flow.js');
-  const { modelLister, lexiconLister } = await load('dist/src/v2/listing.js');
-  const { yamlDocument } = await load('dist/src/v2/yaml.js');
+  const { loadBlocks, worldBase } = await load('dist/src/v2/extraction/base.js');
+  const { readFlow } = await load('dist/src/v2/extraction/flow.js');
+  const { modelLister, lexiconLister } = await load('dist/src/v2/extraction/listing.js');
+  const { yamlDocument } = await load('dist/src/v2/extraction/yaml.js');
   const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions, cachedWork } = await load('dist/src/digger/timeplace/cache.js');
   const all = await loadBlocks(novelDir);
   const blocks = range ? all.filter(block => { const n = Number(block.id.slice(1)); return n >= range[0] && n <= range[1]; }) : all;
@@ -53,7 +53,7 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     lister = modelLister(cached);
   }
   const started = Date.now();
-  // Which steps send each option's meaning once a request (src/v2/hints.ts): by default the flow's (HINTS_ONCE_STEPS);
+  // Which steps send each option's meaning once a request (src/v2/extraction/hints.ts): by default the flow's (HINTS_ONCE_STEPS);
   // V2_HINTS=inline none, V2_HINTS=once every step but the tiling, V2_HINTS=once:<step>,<step> those (by their log name).
   const hints = process.env.V2_HINTS;
   const hintsOnce = hints === 'inline' ? false : hints === 'once' ? true : hints?.startsWith('once:') ? hints.slice(5).split(',') : undefined;

@@ -6,7 +6,7 @@ import { repo } from './config.mjs';
 
 /**
  * The stage simulation player, served by the host: the engine's own page
- * (playground/strand-demo.html) with a book's accepted runs inlined, the way
+ * (world-engine/strand-demo.html) with a book's accepted runs inlined, the way
  * the exporter builds a page (inlineStrand), and three.js served beside it
  * from the app's own copy, so nothing loads from a CDN. Read-only: runs are
  * made by `novel sim run`; this only plays what stage/simulation/ keeps.
@@ -47,8 +47,8 @@ function pagePolicy(html, { framed = false } = {}) {
 export async function simulationPage(workspace, { title = 'Simulation', newest = false, live = null } = {}) {
   const runs = await playableRuns(workspace, { newest });
   if (!runs.length) return null;
-  const { inlineStrand } = await import(pathToFileURL(`${repo}/playground/export-strand-demo.mjs`).href);
-  const template = await readFile(`${repo}/playground/strand-demo.html`, 'utf8');
+  const { inlineStrand } = await import(pathToFileURL(`${repo}/world-engine/export-strand-demo.mjs`).href);
+  const template = await readFile(`${repo}/world-engine/strand-demo.html`, 'utf8');
   let html = inlineStrand(template, { strands: runs.map(({ id, label, name, data }) => ({ id, label, name, data })) }, { name: title, vendor: true });
   if (live) {
     const running = (await liveState(workspace)).status === 'running';
@@ -57,16 +57,16 @@ export async function simulationPage(workspace, { title = 'Simulation', newest =
   return { html, policy: pagePolicy(html), runs: runs.map(({ id, run }) => ({ id, run })) };
 }
 
-/** three.js for the player, from the app's own dependency: only the files the page imports (playground/sim-jev.mjs names them). */
+/** three.js for the player, from the app's own dependency: only the files the page imports (world-engine/sim-jev.mjs names them). */
 export async function simulationVendor(file) {
-  const { VENDOR_FILES } = await import(pathToFileURL(`${repo}/playground/sim-jev.mjs`).href);
+  const { VENDOR_FILES } = await import(pathToFileURL(`${repo}/world-engine/sim-jev.mjs`).href);
   const path = Object.hasOwn(VENDOR_FILES, file) ? VENDOR_FILES[file] : null;
   return path ? readFile(`${repo}/${path}`) : null;
 }
 
 /**
  * The live page: what a book's running `novel sim pick|run` is doing, and a replay of every question Jev was asked with its
- * pictures and answers (playground/sim-jev.mjs records them). Static: it reads live.json and the recording beside it.
+ * pictures and answers (world-engine/sim-jev.mjs records them). Static: it reads live.json and the recording beside it.
  */
 export async function simulationLivePage() {
   const html = await readFile(new URL('./sim-live.html', import.meta.url), 'utf8');
@@ -91,8 +91,8 @@ export async function simulationWorldPage() {
 export async function simulationNowPage(workspace) {
   const page = await readFile(resolve(workspace, 'stage', 'simulation', 'live', 'page.json'), 'utf8').then(JSON.parse, () => null);
   if (!page) return null;
-  const { inlineStrand } = await import(pathToFileURL(`${repo}/playground/export-strand-demo.mjs`).href);
-  const template = await readFile(`${repo}/playground/strand-demo.html`, 'utf8');
+  const { inlineStrand } = await import(pathToFileURL(`${repo}/world-engine/export-strand-demo.mjs`).href);
+  const template = await readFile(`${repo}/world-engine/strand-demo.html`, 'utf8');
   const html = inlineStrand(template, page, { name: 'World · now', vendor: true });
   return { html, policy: pagePolicy(html, { framed: true }), run: page.live?.run ?? null };
 }
@@ -129,7 +129,7 @@ export async function livePicture(workspace, file) {
 }
 
 /**
- * Terrain spawning's step (playground/terrain-spawn.mjs; docs/v2/visual-context-engine.md), from World · Live: `step` lets
+ * Terrain spawning's step (world-engine/terrain-spawn.mjs; docs/v2/visual-context-engine.md), from World · Live: `step` lets
  * a run waiting after a proposal go on by one, `run` lets it run on, `pause` makes it wait again after each proposal.
  */
 export async function terrainStep(workspace, mode) {

@@ -1,8 +1,8 @@
-import type { DecisionQuestion, DecisionState } from "../ground/connectors/jev.js";
-import type { Sentence } from "../digger/intake/sectioning.js";
-import { ask, type Asker, type Manifest } from "./context/engine.js";
-import { kindsMode, tilingSeamMode, tilingWindowMode } from "./context/readingModes.js";
-import { classifySentences, kindCards, tileScenes, type KindCard, type SentenceKind } from "../digger/autostep/segmentation.js";
+import type { DecisionQuestion, DecisionState } from "../../ground/connectors/jev.js";
+import type { Sentence } from "../../digger/intake/sectioning.js";
+import { ask, type Asker, type Manifest } from "../context/engine.js";
+import { kindsMode, tilingSeamMode, tilingWindowMode } from "../context/readingModes.js";
+import { classifySentences, kindCards, tileScenes, type KindCard, type SentenceKind } from "../../digger/autostep/segmentation.js";
 import { Chart, mentions, resolveBatch, type EmResult } from "./em.js";
 import { FactLedger, type FactEntry } from "./facts.js";
 import type { Lister } from "./listing.js";
@@ -12,7 +12,7 @@ import { hintsOnce } from "./hints.js";
 import { placeEm, type PlaceResult } from "./placeEm.js";
 import { spatialMentions, type SpatialMention } from "./spatial.js";
 import { CATEGORY_OF, typeNames, type Decide, type Detected, type EntityType } from "./typing.js";
-import { settledCategory, usualType } from "./rules/typing.js";
+import { settledCategory, usualType } from "../rules/typing.js";
 
 /**
  * The v2 reading flow (the user's sketch, 2026-10-30; docs/v2/world-engine-v2.md §2):

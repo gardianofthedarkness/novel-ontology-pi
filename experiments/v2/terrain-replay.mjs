@@ -18,7 +18,7 @@ const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 const BIRTHS = 'the line loads · births, meetings';
 
 export async function terrainReplay(novelDir, out) {
-  const { loadBlocks } = await load('dist/src/v2/base.js');
+  const { loadBlocks } = await load('dist/src/v2/extraction/base.js');
   const live = join(novelDir, 'stage', 'simulation', 'live');
   const frames = (await readFile(join(live, 'frames.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
   const terrain = JSON.parse(await readFile(join(novelDir, 'stage', 'terrain.json'), 'utf8'));

@@ -1,7 +1,7 @@
 import { mentions, type Chart, type ChartEntity } from "./em.js";
 import type { FlowCard, FlowScene } from "./flow.js";
 import type { ReadingGraph } from "./readingGraph.js";
-import { EVIDENCE_WEIGHTS as WEIGHTS, FAR_LEVELS, LANGUAGE, mayHold, nameHolds, NEXT_SCALE, rankOf, SCALES } from "./rules/index.js";
+import { EVIDENCE_WEIGHTS as WEIGHTS, FAR_LEVELS, LANGUAGE, mayHold, nameHolds, NEXT_SCALE, rankOf, SCALES } from "../rules/index.js";
 
 /**
  * The place recommender (docs/v2/world-model.md §4; layer 2): code over the stores, no model call. Places are a tree graded
