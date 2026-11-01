@@ -5,8 +5,9 @@
  *    borrows among the slots under it: §2.5);
  *  - every placed slot no named place owns (spare, or shared by unnamed mentions) is a place of its level in its area;
  *  - a named place stands in its slot's area, an unnamed mention in the slot it shares this book;
- *  - a manifold its parent laid out by topology (§8) is no place of its own but a patch of its parent's ground (the export
- *    builds it there), so what shares it stands in that parent.
+ *  - a manifold (§8: placed in its parent, spare or borrowed) is a place embedded in its parent at its kept vector, its
+ *    ground a patch of the ground above it (the export builds both), so what it holds stands in it, a street in its
+ *    district, a district in its city.
  * The stage inputs are changed in place, so every later reader of them (paths, scales, names, the canvas) sees one tree.
  */
 import { TERRAIN_KINDS } from "../context/terrainModes.js";
@@ -37,11 +38,12 @@ export function slotLabel(slot: KeptSlot, book: string, names: Record<string, st
 }
 
 /** A slot's default terrain (§2.2): its kind's ground, the middle of its medians and its manifold; a natural kind's shape and top. */
-export function defaultTerrain(level: Level, kind: string): { ground?: string; median?: number; manifold?: unknown; shape?: string; top?: number } | null {
+export function defaultTerrain(level: Level, kind: string, least = false): { ground?: string; median?: number; manifold?: unknown; shape?: string; top?: number } | null {
   const entry = (TERRAIN_KINDS as Record<string, Record<string, { ground?: string; manifold?: unknown; medians?: number[]; shape?: string; tops?: number[] }>>)[level]?.[kind];
   if (!entry) return null;
   if (entry.shape) return { shape: entry.shape, ...(entry.tops?.length ? { top: entry.tops[Math.floor(entry.tops.length / 2)] } : {}) };
-  return { ground: entry.ground, ...(entry.medians?.length ? { median: entry.medians[Math.floor(entry.medians.length / 2)], manifold: entry.manifold } : {}) };
+  // `least`: its kind's minimum (a spare where no topology unifies its height), else the middle of its medians.
+  return { ground: entry.ground, ...(entry.medians?.length ? { median: entry.medians[least ? 0 : Math.floor(entry.medians.length / 2)], manifold: entry.manifold } : {}) };
 }
 
 /** The stage inputs with slots instead of pools, changed in place (see above); returns which places were moved where. */
@@ -69,7 +71,6 @@ export function withSlots(inputs: SlotInputs, slots: KeptSlot[], book: string): 
   for (const slot of slots.filter((entry) => entry.toward)) {
     if (slot.owner) { reparent(slot.owner, slot.parent); continue; }
     const label = slotLabel(slot, book, inputs.names);
-    if (slot.mapped) { inputs.names[slot.id] = label; for (const share of sharersIn(slot as unknown as Slot, book)) reparent(share.mention, slot.parent); continue; }
     if (!byId.has(slot.id)) { const place = { id: slot.id, label, parentId: slot.parent, proposedParentId: null, path: [], sceneIds: [] }; tree.push(place); byId.set(slot.id, place); added.push(slot.id); }
     inputs.names[slot.id] = label;
     if (inputs.scale) inputs.scale.places[slot.id] = { label, scale: slot.level, inputs: "" };

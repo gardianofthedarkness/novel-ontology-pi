@@ -143,8 +143,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       if (slot.book === bookId && (drop.has(LEVELS[LEVELS.indexOf(slot.level) - 1]) || ['named', 'unnamed'].includes(slot.layer))) { delete registry.slots[id]; continue; }
       if (slot.ownerBook === bookId) { slot.owner = null; delete slot.ownerBook; }
       slot.sharers = slot.sharers.filter(share => share.book !== bookId); slot.damaged = slot.damaged.filter(hit => hit.book !== bookId);
-      // A manifold its parent laid out by topology keeps its place: the layout is the parent level's (§8.4).
-      if (slot.book === bookId && !slot.mapped) { slot.toward = null; delete slot.size; delete slot.turn; delete slot.on; }
+      // A manifold its parent laid out by topology keeps its place: the layout is the parent level's (§8.4); one placed by
+      // borrowing at this level is placed again.
+      if (slot.book === bookId && !slot.topology) { slot.toward = null; delete slot.size; delete slot.turn; delete slot.on; delete slot.mapped; }
     }
   }
   const lifted = new Map();
@@ -268,14 +269,25 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       return out;
     };
     // The places the given ones are tied to, outside them, where they stand now (the choice's fixed places).
-    const fixedFor = (ids, level) => { const own = new Set(ids), found = new Map(); for (const id of ids) for (const other of Object.keys(tiesAt(level)[id] ?? {})) if (!own.has(other) && !found.has(other)) { const at = positionOf(other); if (at) found.set(other, { id: other, at }); } return [...found.values()]; };
+    // A place above the level (a city, for a district; a district, for a street) is fixed as its area: travel to it is the
+    // distance to its box, nothing inside it (§4.1), so a part is not drawn to its holder's centre.
+    const fixedFor = (ids, level) => {
+      const own = new Set(ids), found = new Map();
+      for (const id of ids) for (const other of Object.keys(tiesAt(level)[id] ?? {})) {
+        if (own.has(other) || found.has(other)) continue;
+        const at = positionOf(other), box = (RANK[scaleOf(other)] ?? 9) < RANK[level] ? keptBoxOf(other) : null;
+        if (at) found.set(other, { id: other, at, ...(box ? { box } : {}) });
+      }
+      return [...found.values()];
+    };
     // An area's size from its pins (§2.0.21), as the program sizes every area below: its kind's usual size, grown for its pins.
     const sizeFor = (scale, ground, pins) => {
       const L = LANDSCAPES[ground] ?? null, radius = L ? (L.radius[0] + L.radius[1]) / 2 : Z.usualSize(scale) / 2, aspect = L?.aspect ? (L.aspect[0] + L.aspect[1]) / 2 : 1;
       const long = Math.max(2 * radius, scale === 'street' ? 0 : 2 * (Z.LADDER[scale]?.sizes[0] ?? 0));
       return Z.sizeByPins(scale, [long, long * aspect], L ? (L.lot[0] + L.lot[1]) / 2 : 400, L?.coverage ?? 0.8, pins).size;
     };
-    const formsIn = (id, ground, long) => { const entry = (data.landscapes ?? []).find(item => item.place === id); return entry && ground ? formsFor(ground, { roads: (entry.roads ?? []).map(road => ({ a: [road[0], road[1]], b: [road[2], road[3]], level: road[5] })), waters: (entry.waters ?? []).map(water => ({ a: [water[0], water[1]], b: [water[2], water[3]] })), plazas: (entry.plazas ?? []).map(([x, z, r]) => ({ x, z, r })) }, long / 2) : []; };
+    // The forms a street may be laid on: its area's ground, or (a manifold with no ground of its own) the ground above it.
+    const formsIn = (id, ground, long) => { let entry = null; for (let at = id, n = 0; at && !entry && n < 6; at = parentOf(at), n++) entry = (data.landscapes ?? []).find(item => item.place === at); return entry && ground ? formsFor(ground, { roads: (entry.roads ?? []).map(road => ({ a: [road[0], road[1]], b: [road[2], road[3]], level: road[5] })), waters: (entry.waters ?? []).map(water => ({ a: [water[0], water[1]], b: [water[2], water[3]] })), plazas: (entry.plazas ?? []).map(([x, z, r]) => ({ x, z, r })) }, long / 2) : []; };
     // Where an area of a size would stand in a given area: the placement the program uses for every area (Z.placeArea), near
     // the places it is tied to, a little toward its spot, inside the area grown to make room, over nothing it may not share;
     // a street on a form of its kind there.
@@ -306,7 +318,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       for (const [id, slot] of Object.entries(registry.slots)) if (slot.level === level && !ids.has(id)) delete registry.slots[id];
       for (const { at, ...slot } of slots) {
         const node = nodeOf(slot.parent), was = registry.slots[slot.id], toward = was?.toward ?? (at && node ? [round(at[0] - node.x), round(at[1] - node.z)] : null);
-        registry.slots[slot.id] = { ...slot, toward, ...(!was?.toward && toward ? placedNow[slot.id] ?? {} : {}) };
+        // A slot placed now is a manifold of its parent (§8): embedded there, its ground a patch of the ground above.
+        registry.slots[slot.id] = { ...slot, toward, ...(!was?.toward && toward ? { ...(placedNow[slot.id] ?? {}), mapped: true } : {}) };
       }
     };
     // The sites of the slots no name owns (spare, or shared this book): the export builds each as an area of its level
@@ -316,8 +329,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         if (!slot.toward || slot.owner) { if (terrain.sites[slot.id]?.by === 'slot') delete terrain.sites[slot.id]; continue; }
         const shares = S.sharersIn(slot, bookId), first = shares.map(share => terrain.sites[share.mention]).find(site => site?.kind);
         // A manifold of its parent's ground (§8) keeps its own unified height; any other slot its first sharer's terrain.
-        const made = slot.mapped ? { ...(S.defaultTerrain(slot.level, slot.kind) ?? {}), ...(slot.median != null ? { median: slot.median } : {}) }
-          : first ? { ...(first.shape ? { shape: first.shape } : { ground: first.ground }), ...(first.median ? { median: first.median, manifold: first.manifold } : {}), ...(first.top ? { top: first.top } : {}) } : S.defaultTerrain(slot.level, slot.kind) ?? {};
+        // Unified by its parent's topology (a city's districts): its kind's ground at its unified height; else its first
+        // sharer's terrain (Jev's answer); else, spare, its kind's minimum.
+        const made = slot.mapped && slot.median != null ? { ...(S.defaultTerrain(slot.level, slot.kind) ?? {}), median: slot.median }
+          : first ? { ...(first.shape ? { shape: first.shape } : { ground: first.ground }), ...(first.median ? { median: first.median, manifold: first.manifold } : {}), ...(first.top ? { top: first.top } : {}) } : S.defaultTerrain(slot.level, slot.kind, true) ?? {};
         const node = nodeOf(slot.parent), size = slot.size ?? sizeFor(slot.level, made.ground, 0);
         terrain.sites[slot.id] = { label: S.slotLabel(slot, bookId, inputs.names), parent: slot.parent, parentLabel: name(slot.parent), scale: slot.level, kind: slot.kind, ...made, size, toward: slot.toward, ...(typeof slot.turn === 'number' ? { turn: slot.turn, on: slot.on } : {}),
           ...(node ? { box: Z.turnedBox([node.x + slot.toward[0], node.z + slot.toward[1]], size, slot.turn ?? 0) } : {}), by: 'slot', ...(slot.mapped ? { mapped: true, average: slot.average } : {}), ...(shares.length ? { shares: shares.map(share => share.mention) } : { spare: true }) };
@@ -342,7 +357,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const result = S.layOut(mine.filter(slot => slot.toward).map(slot => ({ id: slot.id, kind: slot.kind, at: slot.toward, r: radiusFor(slot), give: mine.some(free) ? 10 : give })), fresh.map(slot => ({ id: slot.id, kind: slot.kind, r: radiusFor(slot) })), topology, id);
       for (const m of result.manifolds) {
         const slot = registry.slots[m.id], was = slot.toward;
-        Object.assign(slot, { toward: m.at, size: [2 * m.r, 2 * m.r], mapped: true });
+        Object.assign(slot, { toward: m.at, size: [2 * m.r, 2 * m.r], mapped: true, topology: true });
         if (!was) logMap({ level: child, what: 'spawn', id: slot.id, parent: id, kind: slot.kind, at: m.at, r: m.r, seed: slot.id });
         else if (was[0] !== m.at[0] || was[1] !== m.at[1]) { logMap({ level: child, what: 'move', id: slot.id, from: was, to: m.at }); if (slot.owner && terrain.sites[slot.owner]) terrain.sites[slot.owner].toward = m.at; }
       }
@@ -465,7 +480,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const made = S.defaultTerrain(level, slot.kind) ?? {}, size = sizeFor(level, made.ground, 0);
         const taken = Object.entries(terrain.sites).filter(([, site]) => site.scale === level && Array.isArray(site.box)).map(([id, site]) => siteBox(id, site));
         const placed = placeIn(slot.parent, size, made.ground, null, taken, [], new Map(), level);
-        Object.assign(slot, { toward: [round(placed.at[0] - node.x), round(placed.at[1] - node.z)], size }, placed.onto ? { turn: placed.onto.turn, on: placed.onto.what } : {});
+        Object.assign(slot, { toward: [round(placed.at[0] - node.x), round(placed.at[1] - node.z)], size, mapped: true }, placed.onto ? { turn: placed.onto.turn, on: placed.onto.what } : {});
         logMap({ level, what: 'spawn', id: slot.id, parent: slot.parent, kind: slot.kind, at: slot.toward, r: Math.max(...size) / 2, seed: slot.id });
         syncSlots(); spares++;
       }
@@ -668,7 +683,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const [w, d] = sizeFor(part.scale, ground, pinsOf(part)), placements = new Map();
         const place = (m, parent) => {
           const into = parent ?? spawnArea(holder, part.scale, [w, d], ground, pinAt, tiedTo);
-          if (into && !placements.has(into)) placements.set(into, placeIn(into, [w, d], ground, pinAt, clashes().map(entry => entry.box), crowds().map(entry => entry.box), tiedTo, part.scale));
+          // Placed inside an area, that area and those above it are no obstacles (the part will stand in them); no canvas spot.
+          const obstacles = Object.entries(terrain.sites).filter(([id, site]) => clash(id, site) && id !== into && !within(into, id)).map(([id, site]) => boxNow(id, site));
+          if (into && !placements.has(into)) placements.set(into, placeIn(into, [w, d], ground, null, obstacles, crowds().map(entry => entry.box), tiedTo, part.scale));
           return into && placements.get(into) ? { parent: into, at: placements.get(into).at } : null;
         };
         // No pin: where the canvas has an undecided place for now is no evidence; the characters' travel decides (§4).

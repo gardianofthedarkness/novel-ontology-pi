@@ -460,7 +460,7 @@ export async function strandDemo(novelDir, options) {
     const guessed = id => ['scene', 'setting'].includes(worldScript?.places?.[id]?.held), sampled = [];
     // A named place standing on a manifold of its parent's ground (docs/v2/borrow-and-spawn.md §8: a district of a city of
     // manifolds) is embedded there at the manifold's vector, its ground a patch of the parent's (below), none of its own.
-    const embeddedOf = id => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && site?.mapped && site.slot && Array.isArray(site.toward) ? { embedded: true, at: site.toward, ground: null, landscape: null } : {}; };
+    const embeddedOf = id => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && site?.mapped && Array.isArray(site.toward) ? { embedded: true, at: site.toward, ground: null, landscape: null } : {}; };
     const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, ...(poolArea(place.id) ? { pool: poolArea(place.id) } : {}), landscape: landscapeOf(place.id, areaScale(place.id)) , ...embeddedOf(place.id) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
     // A pool's member (docs/v2/world-engine-v2.md §2.0.14): one Jev kept stands where its box put it; any other is sampled
@@ -589,15 +589,26 @@ export async function strandDemo(novelDir, options) {
     // One city of manifolds (docs/v2/borrow-and-spawn.md §8): the manifolds a place's topology laid out are patches of its
     // own ground, each at its vector from the place's centre, at its unified height, claiming before the place's open
     // ground; their edges fade into each other and into it, so the city is one ground with no holes.
-    const mappedIn = id => Object.entries(terrain?.sites ?? {}).filter(([, site]) => site.mapped && site.parent === id && Array.isArray(site.toward) && Array.isArray(site.size) && site.ground && LANDSCAPES[site.ground]);
+    // Every manifold under a place with ground of its own (a city), at the sum of the vectors down its chain (§8.5: a street
+    // in its district in its city), with its depth there.
+    const mappedIn = root => Object.entries(terrain?.sites ?? {}).flatMap(([id, site]) => {
+      if (!site.mapped || !Array.isArray(site.size) || !site.ground || !LANDSCAPES[site.ground]) return [];
+      let at = [0, 0], depth = 0;
+      for (let cur = site; cur?.mapped && Array.isArray(cur.toward) && depth < 6; cur = terrain.sites[cur.parent]) {
+        at = [at[0] + cur.toward[0], at[1] + cur.toward[1]]; depth++;
+        if (cur.parent === root) return [[id, { ...site, toward: at }, depth]];
+      }
+      return [];
+    });
     for (const place of Object.values(canvas.places)) {
       const manifolds = mappedIn(place.id);
       if (!manifolds.length || !place.landscape) continue;
       const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return { ...turnedAs(site, patchFromBox(site.ground, id, id, { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: site.manifold } : null)), borrowed: true }; });
-      // The manifolds before the open ground, the tallest first: a lot draws its height from older ground that reaches it,
-      // so a CBD's towers fade out into what is round it, and the open ground never flattens a CBD.
-      const height = patch => patch.median ?? patch.H;
-      place.landscape = { ...place.landscape, patches: [...patches.sort((a, b) => height(b) - height(a)), ...place.landscape.patches.filter(patch => !manifolds.some(([id]) => id === patch.id))] };
+      // The manifolds before the open ground, the deepest first (a street claims its ground before its district), then the
+      // tallest: a lot draws its height from older ground that reaches it, so a CBD's towers fade out into what is round it,
+      // and the open ground never flattens a CBD.
+      const height = patch => patch.median ?? patch.H, depth = new Map(manifolds.map(([id, , n]) => [id, n]));
+      place.landscape = { ...place.landscape, patches: [...patches.sort((a, b) => (depth.get(b.id) ?? 0) - (depth.get(a.id) ?? 0) || height(b) - height(a)), ...place.landscape.patches.filter(patch => !manifolds.some(([id]) => id === patch.id))] };
       C.grow(canvas, place.id);
       notes.build.manifolds = (notes.build.manifolds ?? 0) + patches.length;
     }
