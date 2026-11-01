@@ -69,13 +69,17 @@ replaces "placed by the first borrower"; districts as patches of the city's grou
 - [ ] The export builds a spawn-mode city's districts as patches of the city's own ground, not areas cut out of it; a spare
       one named grey at its centre, no pin
 - [ ] World · Live's step list: each manifold's kind, its ring and its energy terms
-- [ ] From the earlier tune: spares at the lower third of their kind's medians
+- [ ] The map's parenting (design §8.5): each manifold a vector from its parent's centre, in the parent's frame; only the
+      city placed by the canvas, everything under it summed down the chain
+- [ ] Heights as averages, unified at spawn (§8.6): a spare district's height is what keeps the city's average, within its
+      kind's range; where the range cannot hold it, the city's average moves (replaces the earlier tune's "lower third")
 
 **Pass:** 学园都市 and 纽约, both metropolises: each one blended city of 6 district manifolds, no gap or hole between them;
 the CBDs within 0.3 of the city's radius, industry beyond 0.7; the energy terms logged. A stand-in run of the city level
 (`--spawn --from city`), then Jev (four calls) when the user asks, looked at in World · Live.
 
-Waiting on the user: may a later book squeeze an earlier book's manifolds (design §8.5)? Rings as shares of the radius?
+Waiting on the user (design §8.7): across books, may a later book squeeze or re-unify an earlier book's manifolds? Rings as
+shares of the radius? The proposals with parenting and heights?
 
 Moved to later levels: below and above the street apart, and a share asked its kind only (M4, streets).
 

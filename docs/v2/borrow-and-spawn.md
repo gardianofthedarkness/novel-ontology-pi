@@ -307,8 +307,51 @@ wider only when the pressure costs more than the topology charges for going out.
 - §3's bound holds as it is: the counts do not change, only where the manifolds lie and how they blend.
 - What a book saves is the map: manifolds with their seeds, nominated places and buildings with their ids and locations.
 
-### 8.5 Decisions for the user
+### 8.5 Parenting: where a manifold is (the user, 2026-11-01)
+
+Every manifold of a lower level, and every nominated building (a point), keeps a vector from the centre of its parent
+manifold. When the parent moves, the child follows by adding the vectors: a city's districts move with it, a district's
+streets and buildings with the district. Only the top of the tree (a city in its region) is placed in the world; everything
+under it is the sum of the vectors down its chain. This is run 10's lesson made the rule: a position is its holder's
+plus a kept offset, never read back from the built world.
+
+Proposed with it:
+- **The parent's turn too**: a vector is kept in the parent's own frame and turned with it (a street laid along a road has
+  a turn; its buildings turn with it). For a manifold that never turns this is the plain sum.
+- **A squeeze scales its children's vectors**: when a parent's edge draws in by a share, its children's vectors draw in by
+  the same share (their sizes do not), so they stay inside it. A nominated building is the text's: a parent cannot be
+  squeezed past its nominated points.
+- **Only cities are placed by the canvas**: what is drawn under a city is exactly the map, so M1's drift (areas placed by
+  direction only) has nowhere to come from.
+
+### 8.6 Heights: manifold unification at spawn (the user, 2026-11-01)
+
+A manifold's height is its **average**, not its median (Jev is asked the average; the landscape engine turns it into its own
+manifold's numbers). When a child manifold spawns higher or lower than its parent, the parent's other parts go the other
+way, so the parent's average stays the same: **manifold unification at spawn**. So a later height has the better right over
+an earlier one, the way a city changes over time. A **nominated building** is the source of truth: where one is placed, its
+height stands, and the manifolds of every area holding it grow to hold it.
+
+Why the average: an area's average is the area-weighted average of its parts' averages, so keeping it is one sum. A median
+has no such sum.
+
+Proposed with it:
+- **Unification as the least change, within bounds.** At a spawn the newest height is fixed, and the others change as
+  little as they can while the parent's average stays: the parent's own open ground and its spare manifolds first, then
+  earlier decided ones (the oldest the most), each within its kind's range of heights. Where that cannot hold the average
+  (vol 1's numbers: a city of average 15 m with two CBDs of 80 m on a third of it would need the rest at −17.5 m), the
+  parent's own average moves, up or down: the later choice still wins.
+- **Nominated buildings add, they do not take away**: a nominated building's height is not paid for by lowering the rest;
+  it adds its footprint's share to the averages of the areas above it, and its own manifold rises round it as a local peak
+  (its tail), so one tower does not make a whole district tall.
+- **Above and below the street apart**: what lies under the street (an average below 0) is its own budget; an underground
+  mall does not lower the towers above it.
+
+### 8.7 Decisions for the user
 
 1. Across books: may a later book's spawn squeeze an earlier book's manifolds (their centres move and edges draw in a
-   little, so the earlier book's world changes a little), or only its own book's?
+   little, the children following), and may a later book's height re-unify an earlier book's, so the earlier book's world
+   changes a little? Or does only the new book's own ground give way?
 2. Rings as shares of the city's radius (proposed), so a city's layout keeps its shape as it grows.
+3. The proposals in §8.5 and §8.6: the parent's turn, squeezes scaling children, only cities placed by the canvas; the least
+   change within bounds, nominated buildings adding, above and below the street apart.
