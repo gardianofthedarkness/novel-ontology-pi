@@ -390,6 +390,9 @@ and platforms at 100 m over dwelling areas. Two hard rules:
   percentile) reach their height: one Jev boxed elsewhere moves into the nearest district of its city that is tall enough.
   This one stays dynamic: it reads the height Jev gave the object (a deck at 3 m may stand anywhere, a helipad at 100 m
   only among towers).
+- **A shared street's height** (the user, 2026-11-01): every sharer is still asked its height, and a later one reshapes
+  the street it shares, a later height having the better right: a higher answer raises it; a lower one lowers it only
+  within the deformation limit (§8.6), the buildings already standing.
 
 ### 8.7 Decisions (the user, 2026-11-01)
 

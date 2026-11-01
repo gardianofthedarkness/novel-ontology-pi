@@ -196,6 +196,10 @@ borrowing (only a parent's topology layout should be kept).
   has one in its configuration). The other 5 (地下通道 a cut, 6 m down; 平台, 停机坪, 飞机跑道, 空中庭院 platforms) Jev
   boxed as shapes, outside the slots, as before. 65 spares placed; 3 of 71 street slots a little past their district's
   edge; no move at the level's end.
+- The calls (47): a kind question for every street (18, 158,155 input tokens, about 8,800 a call: two pictures and up to
+  15 sentences), a height question for every street (18, 84,995), and a box for each of the 5 shapes (11, 77,011: three of
+  them boxed again twice when their first box lay over places they may not cover). Since: a later sharer's height
+  reshapes its shared street instead of being dropped (the user's call; design §8.10).
 - Seen: one city, its districts' and streets' names inside it.
 - Seen by the user after the run: spare avenues in industrial districts, and platforms at 100 m over dwelling areas.
   Tuned (design §8.10): `only` in district.json (an avenue and a commercial centre only in a CBD; an industrial district

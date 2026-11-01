@@ -145,7 +145,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       slot.sharers = slot.sharers.filter(share => share.book !== bookId); slot.damaged = slot.damaged.filter(hit => hit.book !== bookId);
       // A manifold its parent laid out by topology keeps its place: the layout is the parent level's (§8.4); one placed by
       // borrowing at this level is placed again.
-      if (slot.book === bookId && !slot.topology) { slot.toward = null; delete slot.size; delete slot.turn; delete slot.on; delete slot.mapped; }
+      if (slot.book === bookId && !slot.topology) { slot.toward = null; for (const key of ['size', 'turn', 'on', 'mapped', 'average', 'median']) delete slot[key]; }
     }
   }
   const lifted = new Map();
@@ -920,6 +920,22 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const site = terrain.sites[part.id];
         Object.assign(site, { slot: slotChosen.slot, holder: slotChosen.heldBy, ...(registry.slots[slotChosen.slot]?.mapped && !part.id.startsWith('unnamed:') ? { mapped: true, ...(average ? { average } : {}) } : {}) });
         if (part.id.startsWith('unnamed:')) { site.parent = slotChosen.area; site.parentLabel = name(slotChosen.area); for (const key of ['toward', 'size', 'box', 'turn', 'on', 'pinToward']) delete site[key]; }
+        if (average != null) site.average = average;
+        // A later sharer's height reshapes the street it shares (the user, 2026-11-01: a later height has the better right):
+        // a higher one raises it; a lower one lowers it only within the deformation limit (§8.6), its buildings standing.
+        const slot = registry.slots[slotChosen.slot], earlier = slot && part.id.startsWith('unnamed:') && average != null ? S.sharersIn(slot, bookId).filter(share => share.mention !== part.id).map(share => terrain.sites[share.mention]).filter(Boolean) : [];
+        if (earlier.length) {
+          const manifold = T.terrainKind(slot.level, slot.kind)?.manifold, f = manifold ? averageOverMedian(manifold) : 1;
+          const current = slot.average ?? earlier[0].average ?? (earlier[0].median != null ? earlier[0].median * f : null);
+          if (current != null && current > 0) {
+            const next = Math.round((average >= current ? average : Math.max(average, current * (1 - S.LIMIT.lower))) * 10) / 10;
+            if (Math.abs(next - current) > 0.05) {
+              Object.assign(slot, { average: next, median: Math.max(1, Math.round(next / f)) });
+              logMap({ level: slot.level, what: 'height', id: slot.id, from: Math.round(current * 10) / 10, to: next, by: part.id });
+              await live.outcome({ subject: part.label, text: `reshapes the ${slot.kind} it shares: ${Math.round(current * 10) / 10} → ${next} m on average${average < current && next > average ? ` (it said ${average} m; a street lowers only ${Math.round(S.LIMIT.lower * 100)}% at a time)` : ''}` });
+            }
+          }
+        }
       }
       if (shape) terrain.shapes[part.id] = { kind: shape, box, ...(upTo ? { top: upTo } : {}) };
       // The areas it settled with keep where the sweeps left them (their offsets, turns and the forms they lie on).
