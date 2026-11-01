@@ -30,7 +30,8 @@ export const STAGES: Stage[] = [
   ] },
   { id: "world-engine", name: "World engine", what: "From the world model to a world that stands and moves: ground, then things, then motion.", layers: ["terrain", "world", "view"], steps: [
     { name: "Terrain", progress: "done", what: "Each place's kind and height asked of Jev part by part with two pictures; sized by pins, placed as one optimization, settled." },
-    { name: "Spawning positions", progress: "next", what: "Where each character and thing stands when a scene begins, on the terrain the first step built." },
+    { name: "Borrowing and spawning by type", progress: "next", what: "Each type spawns its children by a configuration; a place borrows a slot of its type or spawns one, so a city stops growing with every scene." },
+    { name: "Spawning positions", progress: "later", what: "Where each character and thing stands when a scene begins, on the terrain the first step built." },
     { name: "Movement and simulation", progress: "later", what: "Per-character actions over time, paths on the ground, what breaks." },
   ] },
   { id: "across", name: "Across both", what: "What code decides alone, for either stage.", layers: ["rules"], steps: [] },

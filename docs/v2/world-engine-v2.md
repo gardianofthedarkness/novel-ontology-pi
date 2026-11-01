@@ -497,6 +497,9 @@ stand-in area, 学园都市 931 m across, 100 markers, 93 places sampled (gold, 
 
 ### 2.0.11 Sampling pools (the user's design, 2026-10-31)
 
+> To be replaced by borrowing and spawning by type ([borrow-and-spawn.md](borrow-and-spawn.md), the user's design of
+> 2026-11-01): pools grow with every scene; configured slots do not.
+
 Sampling (§2.0.10) put what the tree held only in a city into one of the city's districts picked by a seed, at the
 smallest boundary that fits: true random sampling. A pool replaces it:
 - **Every nominated area has a pool**: a region a pool city, a city a pool district, a district a pool street (named

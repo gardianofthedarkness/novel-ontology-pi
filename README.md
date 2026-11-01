@@ -15,7 +15,8 @@ The stages and their concepts: [/v2/](https://gardianofthedarkness.github.io/nov
 | Extraction | The reading flow: scene tiling, sentence kinds, EM and EM² (who is this, here), facts, things, story time and the calendar, places in EM | **done** |
 | Extraction | The place tree: places at their scales, the world script, sampling pools | **done** |
 | World engine | Terrain: each place's kind and height, from Jev, placed as one optimization and settled | **done** (run 11, tag `terrain-run11`) |
-| World engine | Spawning positions: where each character and thing stands when a scene begins | **next** |
+| World engine | Borrowing and spawning by type: configured children per type, so a city stops growing with every scene ([design](docs/v2/borrow-and-spawn.md), [milestones](docs/v2/milestones.md)) | **next** |
+| World engine | Spawning positions: where each character and thing stands when a scene begins | later |
 | World engine | Movement and simulation: actions over time, paths, what breaks | later |
 
 The detail, with what each step decided and why: [docs/v2/status.md](docs/v2/status.md). For a teammate catching up:

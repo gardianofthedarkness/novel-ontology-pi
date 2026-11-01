@@ -15,6 +15,8 @@ Read them by the sections named here rather than from the top.
 | [context-engine.md](context-engine.md) | One engine composes every Jev request: modes, sources, ranking, budget |
 | [world-model.md](world-model.md) | The world model and its laws (places a tree, matter a graph, time a tree); the engineering layers; place EM |
 | [visual-context-engine.md](visual-context-engine.md) | What Jev sees (one renderer, the zoom engine), debugging by display, terrain spawning (§5–5.11) |
+| [borrow-and-spawn.md](borrow-and-spawn.md) | Borrowing and spawning by type (next): configured children per type, slots, the characters'-travel objective, why a city stops growing |
+| [milestones.md](milestones.md) | Its milestones, level by level |
 | [schema.yaml](schema.yaml) | The reading's output files, field by field |
 | [concepts.html](concepts.html) | Every concept in its stage and layer, with its code and its design (made from `src/v2/concepts.ts`) |
 | [street-compatibility.html](street-compatibility.html) | Which street kinds share ground, which uses their buildings take, which models stand for them (made from the code's tables) |
@@ -63,7 +65,14 @@ Run: `node dist/src/cli/cli.js sim terrain <novel-dir>` (one part per step; `--r
 `experiments/v2/terrain-replay.mjs` writes the replay. The run of record is run 11 (tag `terrain-run11`), published at
 [/terrain/](https://gardianofthedarkness.github.io/novel-ontology-pi/terrain/).
 
-### Spawning positions — next
+### Borrowing and spawning by type — next
+
+The user's redesign of how places get their areas (it replaces sampling pools, §2.0.11–2.0.12): each type spawns its
+children by a configuration (`config/spawning/`), a place borrows a slot of its type in its parent or spawns one, level
+by level in narrative order, keeping the characters' travel least. Design: [borrow-and-spawn.md](borrow-and-spawn.md);
+progress: [milestones.md](milestones.md).
+
+### Spawning positions — later
 
 Where each character and thing stands when a scene begins, on the terrain the first step built: the scene's place from the
 world script, who is there from EM², and a spot inside the place's built ground. Terrain spawning was designed as "the first

@@ -1,0 +1,106 @@
+{
+  "about": "What a street of each kind spawns: buildings a hectare (density) and the share of each use (docs/v2/borrow-and-spawn.md §2.1, §5, §6). Drafted from the landscapes the world builds today (LANDSCAPES in src/ground/stage/landscape.ts: cover / mean lot, and their uses); a street with no uses (a park, a stadium) spawns its own pavilions or halls only.",
+  "level": "building",
+  "parent": "street",
+  "unit": "buildings a hectare",
+  "types": {
+    "shopping": {
+      "density": 49,
+      "uses": {
+        "shop": 0.25,
+        "convenience": 0.13,
+        "cafe": 0.13,
+        "restaurant": 0.13,
+        "bar": 0.13,
+        "arcade": 0.13,
+        "bank": 0.13
+      }
+    },
+    "centre": {
+      "density": 11.9,
+      "uses": {
+        "mall": 0.17,
+        "cinema": 0.17,
+        "restaurant": 0.17,
+        "cafe": 0.17,
+        "hotel": 0.17,
+        "office": 0.17
+      }
+    },
+    "avenue": {
+      "density": 5.9,
+      "uses": {
+        "office": 0.25,
+        "hotel": 0.13,
+        "department": 0.13,
+        "bank": 0.13,
+        "restaurant": 0.13,
+        "government": 0.13,
+        "hospital": 0.13
+      }
+    },
+    "square": {
+      "density": 15.8,
+      "uses": {
+        "cafe": 0.14,
+        "restaurant": 0.14,
+        "shop": 0.14,
+        "bank": 0.14,
+        "government": 0.14,
+        "hotel": 0.14,
+        "church": 0.14
+      }
+    },
+    "station": {
+      "density": 13.6,
+      "uses": {
+        "station": 0.14,
+        "shop": 0.14,
+        "convenience": 0.14,
+        "cafe": 0.14,
+        "restaurant": 0.14,
+        "hotel": 0.14,
+        "office": 0.14
+      }
+    },
+    "alley": {
+      "density": 123.8,
+      "uses": {
+        "house": 0.29,
+        "shop": 0.14,
+        "bar": 0.14,
+        "restaurant": 0.14,
+        "workshop": 0.14,
+        "cafe": 0.14
+      }
+    },
+    "residential": {
+      "density": 25.7,
+      "uses": {
+        "apartment": 0.29,
+        "house": 0.14,
+        "dormitory": 0.14,
+        "convenience": 0.14,
+        "clinic": 0.14,
+        "school": 0.14
+      }
+    },
+    "waterfront": {
+      "density": 6.3,
+      "uses": {
+        "warehouse": 0.4,
+        "restaurant": 0.2,
+        "cafe": 0.2,
+        "workshop": 0.2
+      }
+    },
+    "park": {
+      "density": 0.9,
+      "uses": {}
+    },
+    "stadium": {
+      "density": 0.3,
+      "uses": {}
+    }
+  }
+}

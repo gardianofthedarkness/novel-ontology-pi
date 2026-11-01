@@ -1,0 +1,11 @@
+{
+  "about": "What a city of each kind spawns: how many districts of each kind (docs/v2/borrow-and-spawn.md §2.1, §5). A count is a number or a range [least, most], picked once for each city by a seed. Kinds are TERRAIN_KINDS.district.",
+  "level": "district",
+  "parent": "city",
+  "types": {
+    "metropolis": { "cbd": 2, "dwelling": 3, "industrial": 1 },
+    "city": { "cbd": 1, "dwelling": 3, "industrial": 1 },
+    "town": { "dwelling": 2, "farmland": 1 },
+    "oldcity": { "oldtown": 1, "village": 2, "farmland": 1 }
+  }
+}
