@@ -512,6 +512,10 @@ export async function strandDemo(novelDir, options) {
     for (const place of placeTree.filter(entry => unitScale(entry.id) && !areaScale(entry.id)).sort((a, b) => SIZE[unitScale(a.id)] - SIZE[unitScale(b.id)] || kept(a.id) - kept(b.id))) {
       if (canvas.places[place.id] || unitOf(place.id)) continue;
       const scale = unitScale(place.id), kind = scale === 'street' ? 'street' : scale === 'room' ? 'room' : 'building', r = C.LEAST[scale];
+      // A shape terrain kept (a platform, a cavern) stands at its kept offset in the place it was kept in: its marker where
+      // the shape is drawn, not in a district the canvas picks.
+      const shapeSite = terrain?.shapes?.[place.id] ? terrain.sites?.[place.id] : null;
+      if (shapeSite && Array.isArray(shapeSite.toward) && canvas.places[shapeSite.parent]) { C.addUnit(canvas, shapeSite.parent, { id: place.id, label: name(place.id), kind, r, at: shapeSite.toward }); continue; }
       const parent = place.parentId ?? null, building = parent && !canvas.places[parent] ? unitOf(parent) : null;
       if (building) { C.addUnit(canvas, building.place.id, { id: place.id, label: `${name(place.id)} · in ${building.unit.label}`, kind, r, ...(guessed(place.id) || building.unit.sampled ? { sampled: building.unit.sampled ?? parent } : {}) }, building.unit.at); continue; }
       const area = parent && canvas.places[parent] ? parent : null, host = area ?? C.dwellingFor(canvas, place.id, place.proposedParentId);
