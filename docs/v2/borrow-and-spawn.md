@@ -242,7 +242,10 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
   - The spares are the form's again after every street level, so they follow their street.
   - `street.json`'s densities are what the forms build on their own ground, measured. In a city, the roads crossing a
     street break its rows, so it holds fewer.
-  - A road running along a street's axis (an avenue laid on its ground's arterial road) is its own and breaks nothing.
+  - A road running along a street's axis is its own and breaks nothing. A row is laid in the stretches between the
+    roads crossing it, as blocks lie between side streets.
+  - The city's lots on a street's ground (round a station's hall, a centre's compound, a square's rings) are its
+    building slots too.
 - **Streets that are the ground's own (the user, 2026-11-01).** An avenue or a crossing is not an area laid out apart
   with its own rows. It is one of the city's roads, or the meeting of two of them, wide enough, with the city's buildings
   already round it.
@@ -253,7 +256,8 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
     are its building slots.
   - With no road wide enough in its area, it is placed as before and builds its form.
   - Before, an avenue laid its own rows across the city's roads, and the roads crossing it took most of them (2 of 8 left
-    in a CBD). Now it has the city's 14 or so buildings along its road. Of the slots of that use under its holder, it takes
+    in a CBD). Now it has the city's 14 or so buildings along its road.
+- **A building borrows.** Its use comes from the language profile. Of the slots of that use under its holder, it takes
   the one that keeps the characters' travel least (§4). The place its scene is set in counts as its pin, because most
   buildings the text mentions are seen from a street, not set in. A named building takes its slot for good; an unnamed
   one shares.
