@@ -88,7 +88,9 @@ const clip = (text: string, size: number) => (text.length > size ? `${text.slice
  * cut whole when over the budget (characters of the prompt). Facts, surroundings and what stands there come only when
  * they are about the place itself; with none, nothing is put in their stead.
  */
-const BUDGET = 40000;
+// Jev 1.14 takes 32k tokens of state with one question, and Chinese runs near a token a character (more at times): 16,000
+// characters hold the longest scene of vol 1 (11,754) whole, with room left; 40,000 was refused (max_tokens_exceeded).
+const BUDGET = 16000;
 /** The scenes a terrain question carries at most (scaled like every quota). */
 const SCENES = 6;
 

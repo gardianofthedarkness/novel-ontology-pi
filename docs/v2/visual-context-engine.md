@@ -382,7 +382,7 @@ surroundings is about the place itself, put nothing in its stead.
 - `scenes`: the scenes set in the place (or in a place inside it), naming it, or an unnamed place's own scene, whole, the
   best answer first: an unnamed place's own scene, then those set in it, then by its mentions and the question's words
   beside them (the language profile's `questionWords`: floors and towers for its height, streets and squares for its kind,
-  near and across for where it lies), the rest of the scene a little. At most six, cut whole over 40,000 characters.
+  near and across for where it lies), the rest of the scene a little. At most six, cut whole over 16,000 characters (Jev 1.14 takes 32k tokens of state; 40,000 characters was refused at the first question, `max_tokens_exceeded`; vol 1's longest scene is 11,754).
 - `facts`: the facts the graph holds about the place itself; `environment`: the cards of scenes set in it or naming it;
   `standing`: what the tree holds in it. Each left out when it has none; never the holder's or the city's.
 - Run 7's questions recomposed with no model call: 第十五学区's height question now carries the scene telling its complex
