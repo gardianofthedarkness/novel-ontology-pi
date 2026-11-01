@@ -263,9 +263,13 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
     those naming it, one either side) are searched against the inventory (`config/spawning/building-types.json`: about
     90 types, each with a description, its Chinese, Japanese and English words, its floors and its coarse use). The ten
     nearest are offered, the shapes beside them (`src/v2/spawning/inventory.ts`).
-    - The search is by meaning when an embedding model is configured (the embedding connector), else by words: a type's
-      words in the building's name count most, then the character pairs they share with it (回转寿司店 is a 寿司
-      shop), then its words in the sentences round it.
+    - The search is by meaning when an embedding model is configured, else by words. By words: a type's words in the
+      building's name count most (its longest, so 便利商店 is a convenience store, not any 店), then the character pairs
+      they share with it (回转寿司店 is a 寿司 shop), then its words in the sentences round it.
+    - The model is v1's causality model, BAAI/bge-small-zh-v1.5, served on this machine by `tools/embeddings/serve.py`
+      (offline, CPU, 127.0.0.1 only). A run reaches it with `EMBEDDING_BASE_URL=http://127.0.0.1:8194/v1` and
+      `EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5`. By meaning, a name the words miss still finds its neighbours: a tunnel
+      (隧道) a subway station and a construction site, a detention centre a police station beside it.
     - The rest of the ten lean to the types sharing a use with what was found, then to the uses of the lots round it.
   - The type's coarse use (`TERRAIN_KINDS.building`: a house, a block of flats, a school, a shop, an office…) is what its
     lot and its model go by; its own floors are its height slices.
