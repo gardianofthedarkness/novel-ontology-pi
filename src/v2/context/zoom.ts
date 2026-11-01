@@ -322,3 +322,30 @@ export function settle(start: Mover[], fixed: Fixed[], tie: (a: string, b: strin
   }
   return { movers, energy: energies, objective: objectives, overlaps: overlapCounts, sweeps };
 }
+
+/**
+ * A frame that the places fill (the user's calls, 2026-11-01: Jev's pictures stood too far away, the places a small cluster
+ * in the middle; and the frame turns, so the same zoom holds the most): at each turn (every 3° of half a circle), the box
+ * holding the central `share` of the points on each of its axes (outliers left out), fitted to the picture's `aspect`
+ * (width over height); the turn needing the smallest frame wins, north up unless a turn is 3% tighter. `half` is the
+ * frame's half-height, a `margin` more, never under `least`; `keep` (the part asked about) is always in it. `turn`: the
+ * frame's x axis from the world's, in radians.
+ */
+export function fillFrame(points: [number, number][], keep: [number, number] | null, share = 0.95, margin = 0.15, least = 0, aspect = 1): { x: number; z: number; half: number; turn: number } {
+  const all = keep ? [...points, keep] : points;
+  if (!all.length) return { x: 0, z: 0, half: least, turn: 0 };
+  const cut = (1 - share) / 2, at = (sorted: number[], q: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(q * (sorted.length - 1))))];
+  const fit = (turn: number) => {
+    const c = Math.cos(turn), s = Math.sin(turn), along = ([x, z]: [number, number]) => [x * c + z * s, -x * s + z * c];
+    const local = all.map(along), us = local.map((p) => p[0]).sort((a, b) => a - b), vs = local.map((p) => p[1]).sort((a, b) => a - b);
+    let [u0, u1, v0, v1] = [at(us, cut), at(us, 1 - cut), at(vs, cut), at(vs, 1 - cut)];
+    if (keep) { const [ku, kv] = along(keep); u0 = Math.min(u0, ku); u1 = Math.max(u1, ku); v0 = Math.min(v0, kv); v1 = Math.max(v1, kv); }
+    const half = Math.max((u1 - u0) / aspect, v1 - v0) / 2, [mu, mv] = [(u0 + u1) / 2, (v0 + v1) / 2];
+    return { turn, half, x: mu * c - mv * s, z: mu * s + mv * c };
+  };
+  const north = fit(0);
+  let best = north;
+  for (let degree = 3; degree < 180; degree += 3) { const tried = fit((degree * Math.PI) / 180); if (tried.half < best.half) best = tried; }
+  if (best.half > north.half / 1.03) best = north;
+  return { x: round(best.x), z: round(best.z), half: round(Math.max(least, best.half * (1 + margin))), turn: Math.round(best.turn * 1000) / 1000 };
+}
