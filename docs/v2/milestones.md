@@ -197,6 +197,10 @@ borrowing (only a parent's topology layout should be kept).
   boxed as shapes, outside the slots, as before. 65 spares placed; 3 of 71 street slots a little past their district's
   edge; no move at the level's end.
 - Seen: one city, its districts' and streets' names inside it.
+- Seen by the user after the run: spare avenues in industrial districts, and platforms at 100 m over dwelling areas.
+  Tuned (design §8.10): `only` in district.json (an avenue and a commercial centre only in a CBD; an industrial district
+  spawns two alleys, no avenue); a raised platform moves among buildings that reach its height. Stand-in from the
+  district level: no avenue or centre outside a CBD. Not yet run with Jev (the platforms are Jev's shapes).
 - To decide: sharing has no limit, so six mentions of one kind piled onto one avenue (the risk of design §4.4: sharing
   makes travel free); Jev put the alley 12 m under the street (the gate allows the street level under the street); a shared
   street takes its first sharer's height (35 m here, though two sharers said 20 m); a district does not unify to its streets

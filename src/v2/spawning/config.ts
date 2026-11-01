@@ -40,6 +40,11 @@ export function defaultKindOf(level: "city" | "district", folder = DEFAULTS): st
   return JSON.parse(readFileSync(`${folder.replace(/\/?$/, "/")}${level}.json`, "utf8")).default ?? null;
 }
 
+/** The district kinds a street kind may stand in (district.json `only`), for the kinds that cannot be anywhere; others may stand in any. */
+export function streetsOnly(folder = DEFAULTS): Record<string, string[]> {
+  return JSON.parse(readFileSync(`${folder.replace(/\/?$/, "/")}district.json`, "utf8")).only ?? {};
+}
+
 /** The area a configuration is asked for: its id and label (a place's own layer finds it by them), its level and its kind. */
 export interface Parent { id: string; label: string; level: Level; kind: string }
 /** A configuration resolved for one parent, and the layer it came from (kept with its slots, so a world is made again the same way). */

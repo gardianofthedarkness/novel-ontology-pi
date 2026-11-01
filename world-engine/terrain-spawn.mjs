@@ -299,13 +299,23 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const placed = Z.placeArea(frames.context ?? frames.work, room, [w, d], centre, tiedPlaced, clashBoxes, crowdBoxes, 48, level === 'street' ? formsIn(parent, ground, w) : []);
       return placed ? { at: placed.at, onto: placed.onto ?? null } : { at: centre, onto: null };
     };
+    // How tall an area is (§8.6): its average, and how high its tallest buildings reach (its manifold's 98th percentile).
+    const areaSite = id => terrain.sites[id] ?? null;
+    const areaAverage = id => { const site = areaSite(id); if (!site) return null; if (site.average != null) return site.average; const manifold = site.manifold ?? T.terrainKind(site.scale, site.kind)?.manifold; return site.median != null ? site.median * (manifold ? averageOverMedian(manifold) : 1) : null; };
+    const areaTop = id => { const site = areaSite(id), manifold = site?.manifold ?? (site ? T.terrainKind(site.scale, site.kind)?.manifold : null); return site?.median != null ? site.median * Math.exp(2.326 * (manifold?.spread ?? 0.3)) : null; };
+    // The district kinds a street kind may stand in (district.json `only`: an avenue, a commercial centre in a CBD; the user,
+    // 2026-11-01: no boulevard where people dwell or few live): a tuning, not a rule of the code.
+    const only = spawn ? S.streetsOnly() : {};
+    const fits = (kind, areaId) => !only[kind] || only[kind].includes(areaSite(areaId)?.kind);
     // Where a spawn goes (§2.4, §2.5): into its holder when that is one level up; else into the area of the level between,
     // under its holder, where the characters' travel to the places it is tied to is least (spare areas among them).
-    const spawnArea = (holderId, level, size, ground, spot, tied) => {
+    const spawnArea = (holderId, level, size, ground, spot, tied, kind = null) => {
       const up = LEVELS[LEVELS.indexOf(level) - 1];
       if (!up || scaleOf(holderId) === up) return holderId;
-      const areas = [...tree.keys()].filter(id => scaleOf(id) === up && within(id, holderId));
-      if (!areas.length) return holderId;
+      const under = [...tree.keys()].filter(id => scaleOf(id) === up && within(id, holderId));
+      if (!under.length) return holderId;
+      // Only areas its kind may stand in (`only`); with none, the tallest there is.
+      const fitting = under.filter(id => !kind || fits(kind, id)), areas = fitting.length ? fitting : [...under].sort((a, b) => (areaAverage(b) ?? 0) - (areaAverage(a) ?? 0)).slice(0, 1);
       const travel = id => { const at = placeIn(id, size, ground, spot, [], [], tied, level).at; return [...tied].reduce((sum, [other, n]) => { const p = positionOf(other); return p ? sum + n * Math.hypot(at[0] - p[0], at[1] - p[1]) : sum; }, 0); };
       return areas.map(id => [id, travel(id)]).sort((a, b) => a[1] - b[1] || String(a[0]).localeCompare(String(b[0])))[0][0];
     };
@@ -455,7 +465,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       let moves = 0;
       if (mine.length) {
         const mentions = mine.map(id => ({ id, label: terrain.sites[id].label, named: !id.startsWith('unnamed:'), kind: terrain.sites[id].kind, holder: terrain.sites[id].holder ?? terrain.sites[id].parent, scene: world[id]?.scene ?? null }));
-        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null });
+        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null, allow: (slot, m) => fits(m.kind, slot.parent) });
         moves = choice.moves;
         for (const id of mine) {
           const slotId = choice.assignment[id], site = terrain.sites[id];
@@ -682,7 +692,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // where nothing can be borrowed. The slot's area holds it from now on; the level's moves come when the level ends.
         const [w, d] = sizeFor(part.scale, ground, pinsOf(part)), placements = new Map();
         const place = (m, parent) => {
-          const into = parent ?? spawnArea(holder, part.scale, [w, d], ground, pinAt, tiedTo);
+          const into = parent ?? spawnArea(holder, part.scale, [w, d], ground, pinAt, tiedTo, kind);
           // Placed inside an area, that area and those above it are no obstacles (the part will stand in them); no canvas spot.
           const obstacles = Object.entries(terrain.sites).filter(([id, site]) => clash(id, site) && id !== into && !within(into, id)).map(([id, site]) => boxNow(id, site));
           if (into && !placements.has(into)) placements.set(into, placeIn(into, [w, d], ground, null, obstacles, crowds().map(entry => entry.box), tiedTo, part.scale));
@@ -690,7 +700,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         };
         // No pin: where the canvas has an undecided place for now is no evidence; the characters' travel decides (§4).
         const mention = { id: part.id, label: part.label, named: !part.id.startsWith('unnamed:'), kind, holder, scene: world[part.id]?.scene ?? null, pin: null };
-        const choice = S.chooseSlots({ book: bookId, level: part.scale, slots: slotsAt(part.scale), mentions: [mention], ties: (a, b) => tiesAt(part.scale)[a]?.[b] ?? 0, fixed: fixedFor([part.id], part.scale), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place, improve: false });
+        const choice = S.chooseSlots({ book: bookId, level: part.scale, slots: slotsAt(part.scale), mentions: [mention], ties: (a, b) => tiesAt(part.scale)[a]?.[b] ?? 0, fixed: fixedFor([part.id], part.scale), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place, improve: false, allow: (slot, m) => fits(m.kind, slot.parent) });
         const slot = choice.slots.find(entry => entry.id === choice.assignment[part.id]);
         if (!slot?.at) { await live.outcome({ subject: part.label, text: 'no slot of its kind and nowhere to spawn one: it stands at its spot' }); box = [round((pinAt ?? [at.x, at.z])[0] - w / 2), round((pinAt ?? [at.x, at.z])[1] - d / 2), round((pinAt ?? [at.x, at.z])[0] + w / 2), round((pinAt ?? [at.x, at.z])[1] + d / 2)]; }
         else {
@@ -855,6 +865,22 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       }
       // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top.
       const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, upTo = measure === 'top' ? height : null;
+      // A raised shape (a platform at some height: a helipad, a sky garden) stands only where the buildings reach it (the user,
+      // 2026-11-01): when the district under its box is not tall enough (or it lies on open ground), it moves into the nearest
+      // district of its city whose tallest buildings reach its top.
+      if (spawn && shape && upTo > 0 && !isCity) {
+        const centreOf = b => [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2], at = centreOf(box), cityId = city.id;
+        const districts = Object.entries(terrain.sites).filter(([id, site]) => site.scale === 'district' && site.mapped && Array.isArray(site.toward) && Array.isArray(site.size) && (site.parent === cityId || within(id, cityId))).map(([id, site]) => ({ id, label: site.label, box: siteBox(id, site), top: areaTop(id) })).filter(entry => entry.box);
+        const under = districts.find(entry => Z.inside(entry.box, at));
+        if (!under || (under.top ?? 0) < upTo) {
+          const tallEnough = districts.filter(entry => (entry.top ?? 0) >= upTo).sort((a, b) => Math.hypot(...centreOf(a.box).map((v, k) => v - at[k])) - Math.hypot(...centreOf(b.box).map((v, k) => v - at[k])));
+          if (tallEnough.length) {
+            const target = centreOf(tallEnough[0].box), shift = [target[0] - at[0], target[1] - at[1]];
+            box = [round(box[0] + shift[0]), round(box[1] + shift[1]), round(box[2] + shift[0]), round(box[3] + shift[1])];
+            await live.outcome({ subject: part.label, text: `moved ${Math.round(Math.hypot(...shift))} m into ${tallEnough[0].label}: a ${shape} at ${upTo} m needs buildings that reach it (${under ? `${under.label}'s reach ${Math.round(under.top ?? 0)} m` : 'it stood on open ground'}; ${tallEnough[0].label}'s ${Math.round(tallEnough[0].top)} m)` });
+          } else await live.outcome({ subject: part.label, text: `no district of ${city.label} has buildings that reach ${upTo} m: it stays where it was boxed` });
+        }
+      }
       // An average (spawn mode) is built from its median; below the street a depth stays a depth.
       const average = measure === 'average' && height !== null && height >= 0 ? height : null, median = measure === 'median' ? height : measure === 'average' && height !== null ? (height < 0 ? height : Math.round(height / factor)) : null;
         return { where, boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average };

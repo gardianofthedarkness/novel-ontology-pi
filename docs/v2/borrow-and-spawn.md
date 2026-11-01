@@ -376,6 +376,21 @@ of the book before it with that book's log applied; `--from <level>` drops the b
   calls it: kept with its id and location in the map for every later book.
 - **Outside the manifolds.** Floating objects and shapes take no part in a manifold's average or in unification.
 
+### 8.10 What must stand among tall buildings (the user, 2026-11-01, after M4)
+
+Some places only make sense where the buildings round them are tall: a boulevard lined with offices and towers, a
+commercial centre's towers, a helipad or a sky garden in the air. M4's world had spare avenues in industrial districts
+and platforms at 100 m over dwelling areas. Two hard rules:
+
+- **Where a street kind may stand** is a tuning of the configuration (the user's call): `only` in
+  `config/spawning/district.json` lists, for the kinds that cannot be anywhere, the district kinds they may stand in (an
+  avenue and a commercial centre only in a CBD); they are neither borrowed nor spawned elsewhere (a spawn with nowhere
+  allowed goes to the tallest district there is). An industrial district spawns no avenue.
+- **Raised objects** (a platform at some height) stand only where the area's tallest buildings (its manifold's 98th
+  percentile) reach their height: one Jev boxed elsewhere moves into the nearest district of its city that is tall enough.
+  This one stays dynamic: it reads the height Jev gave the object (a deck at 3 m may stand anywhere, a helipad at 100 m
+  only among towers).
+
 ### 8.7 Decisions (the user, 2026-11-01)
 
 1. Across books: yes, a later book's spawn may squeeze an earlier book's manifolds and re-unify its heights, the earlier

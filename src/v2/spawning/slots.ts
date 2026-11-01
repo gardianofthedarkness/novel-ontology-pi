@@ -76,6 +76,8 @@ export interface LevelProblem {
   assigned?: Record<string, string>;
   /** Whether to make the moves after the greedy pass (default yes); the step mode borrows one mention at a time without them. */
   improve?: boolean;
+  /** The engine's own rules on top of admissible (a tall-lined street only where the buildings are tall enough). */
+  allow?: (slot: Slot, mention: Mention) => boolean;
 }
 export interface Choice {
   /** Mention id → slot id. */
@@ -129,6 +131,7 @@ export function chooseSlots(problem: LevelProblem): Choice {
   const assignment: Record<string, string> = {}, spawned: string[] = [], log: string[] = [];
   const mentionOf = new Map(problem.mentions.map((m) => [m.id, m]));
   const slotOf = (id: string) => byId.get(assignment[id])!;
+  const fits = (slot: Slot, m: Mention) => admissible(slot, m, problem) && (problem.allow?.(slot, m) ?? true);
   const weight = (a: Slot, parentB: string) => (a.parent === parentB ? 1 : w);
   // A mention's own cost at a point in an area, against the mentions placed so far (all but `skip`), the fixed places and its pin.
   const cost = (m: Mention, at: Point, parent: string, skip = new Set<string>()) => {
@@ -171,7 +174,7 @@ export function chooseSlots(problem: LevelProblem): Choice {
     if (own) { take(m, own, own.at ?? problem.place(m, own.parent, slots.filter((s) => s.at))?.at ?? null); log.push(`${m.label}: back on its own slot ${own.id}`); continue; }
     // Unplaced slots of one kind in one area are alike: each area's is costed once, where the engine would place it.
     const where = new Map<string, Point | null>(), candidates: { slot: Slot; at: Point; c: number }[] = [];
-    for (const slot of slots.filter((s) => admissible(s, m, problem))) {
+    for (const slot of slots.filter((s) => fits(s, m))) {
       let at = slot.at;
       if (!at) { if (!where.has(slot.parent)) where.set(slot.parent, problem.place(m, slot.parent, slots.filter((s) => s.at))?.at ?? null); at = where.get(slot.parent) ?? null; }
       if (at) candidates.push({ slot, at, c: cost(m, at, slot.parent) });
@@ -199,7 +202,7 @@ export function chooseSlots(problem: LevelProblem): Choice {
       const from = slotOf(m.id);
       if (!from.at) continue;
       const here = cost(m, from.at, from.parent);
-      const options = slots.filter((slot) => slot !== from && slot.at && admissible(slot, m, problem) && !(m.named && slot.owner));
+      const options = slots.filter((slot) => slot !== from && slot.at && fits(slot, m) && !(m.named && slot.owner));
       const best = options.map((slot) => ({ slot, c: cost(m, slot.at!, slot.parent) })).sort((a, b) => a.c - b.c || a.slot.id.localeCompare(b.slot.id))[0];
       if (best && best.c < here - 0.5) {
         leave(m, from); take(m, best.slot, null); moves++; moved = true;
