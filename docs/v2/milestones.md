@@ -411,6 +411,16 @@ would weigh the new slices itself.
   and 60 floors.
 - A cinema read at 8 floors comes out at 2: its weights under the minimum all land on its lowest slice, which then leads.
   高层大厦 is likewise held at the minimum, 3 floors.
+- [x] Towers are types again (the user: 高层大厦 is a tower, and a tower is 30 floors at least): an office tower and a
+      residential tower, split out of the office building and the block of flats they had been merged into, each with a
+      minimum of 30 floors. The search: 96% first by meaning (95% before), 80% by words (78%); the sure rule still decides
+      55 of the 70 names, none wrongly.
+      Replayed: 高层大厦 an office tower at its minimum, 30 floors (it had been 1); 五十层以上的高楼 an office tower at 60;
+      高层塔楼公寓 a residential tower at 100; plain 大楼, 大厦 and the flats stay office buildings and blocks. 五十层的高层大楼
+      is not sure with its sentences, so Jev chooses, office tower first among the ten (the replay kept the run's office
+      building).
+- A cinema read at 8 floors coming out at 2 is for the composite buildings (a cinema on a mall's upper floors), not
+  the minimum.
 
 ## M6 — Growth across books
 

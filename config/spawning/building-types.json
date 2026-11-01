@@ -42,20 +42,29 @@
     },
     "apartment-block": {
       "use": "apartment",
-      "describe": "a block of flats or a residential tower: homes over a lobby",
+      "describe": "a block of flats: homes over a lobby",
       "words": [
         "公寓",
         "住宅楼",
         "アパート",
         "マンション",
         "apartment",
-        "flats",
+        "flats"
+      ]
+    },
+    "residential-tower": {
+      "use": "apartment",
+      "describe": "a residential tower: a skyscraper of flats over a lobby",
+      "words": [
         "塔楼公寓",
         "高层公寓",
         "高层住宅",
+        "塔楼",
+        "住宅塔楼",
         "タワーマンション",
         "tower apartment",
-        "high-rise"
+        "residential tower",
+        "high-rise flats"
       ]
     },
     "public-housing": {
@@ -481,7 +490,7 @@
     },
     "office-building": {
       "use": "office",
-      "describe": "an office building or an office tower: offices over a lobby",
+      "describe": "an office building: offices over a lobby",
       "words": [
         "办公楼",
         "写字楼",
@@ -489,15 +498,26 @@
         "办公室",
         "オフィス",
         "office",
+        "大厦"
+      ]
+    },
+    "office-tower": {
+      "use": "office",
+      "describe": "an office tower: a skyscraper of offices over a lobby",
+      "words": [
         "高层大楼",
         "高层大厦",
+        "高层建筑",
         "高楼",
-        "大厦",
+        "摩天楼",
+        "摩天大楼",
         "摩天",
         "超高层",
         "高層ビル",
+        "超高層ビル",
         "skyscraper",
-        "tower"
+        "tower",
+        "high-rise"
       ]
     },
     "mixed-use-building": {

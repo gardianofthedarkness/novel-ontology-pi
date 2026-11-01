@@ -107,6 +107,7 @@ test("the building inventory: every type a use the world draws, its words and fl
   assert.equal((await top("大楼 (scene 2)", { office: 10 })).length, 10, "always ten to choose among");
   assert.ok((await top("那一带 (scene 21)", { office: 10, shop: 2 })).slice(0, 3).every((id) => types[id].use === "office"), "with nothing found, what stands round it");
   assert.equal((await top("隧道 (scene 21)"))[0], "tunnel", "a shape the inventory knows: a tunnel");
+  assert.deepEqual([(await top("高层大厦 (scene 40)"))[0], (await top("高层塔楼公寓 (scene 26)"))[0], (await top("大楼 (scene 2)"))[0]], ["office-tower", "residential-tower", "office-building"], "a tower is a tower, a building a building");
   const around = await searchBuildingTypes({ label: "那栋建筑", around: ["她走进那栋建筑，柜台上摆满了拉面碗。"] }, types, 10);
   assert.equal(around[0].id, "ramen-shop", "the sentences round it when the name says nothing");
   assert.ok(wordScore(types["sushi-restaurant"], { label: "寿司", around: [] }) > wordScore(types["sushi-restaurant"], { label: "x", around: ["寿司"] }), "its name counts more than its sentences");
@@ -141,6 +142,8 @@ test("every level's heights: a minimum, the text's own measures offered; far hei
   assert.equal(office.standard, 9);
   assert.deepEqual(office.slices.filter((slice) => slice.y > 0)[0], { letter: "E", y: 9, said: "3 floors" });
   assert.ok(office.slices.some((slice) => slice.y < 0), "under the street still offered");
+  assert.deepEqual([chart.buildings["office-tower"], chart.buildings["residential-tower"]], [30, 30], "a tower: thirty floors at least (the user, 2026-11-01)");
+  assert.equal(buildingHeights(30).slices.filter((slice) => slice.y > 0)[0].said, "30 floors");
   // The text's measures, by pattern: floors, metres beside a word of height or depth, never a layer or a walk.
   assert.deepEqual([numberOf("五十"), numberOf("一百二十"), numberOf("十几"), numberOf("两百"), numberOf("３５")], [50, 120, 15, 200, 35]);
   assert.deepEqual(measuresIn(["一座三十层的写字楼"]).map((m) => [m.y, m.said, m.named]), [[90, "30 floors", true]]);

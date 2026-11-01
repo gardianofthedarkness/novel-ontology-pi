@@ -276,9 +276,10 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
       it puts the right type first for 95% and in the ten for 98%; BAAI/bge-m3, a bigger multilingual model, did worse (92%).
     - The rest of the ten lean to the types sharing a use with what was found, then to the uses of the lots round it.
   - The type's coarse use (`TERRAIN_KINDS.building`: a house, a block of flats, a school, a shop, an office…) is what its
-    lot and its model go by. No description says how tall a type is (the user, 2026-11-01: a building's height is its
-    scenes' to say), and two types that differed only by height became one (an office building or tower, a block of flats
-    or a residential tower).
+    lot and its model go by. No description gives a type's floors (the user, 2026-11-01: a building's height is its
+    scenes' to say). The towers were merged into the office building and the block of flats, then split out again (the
+    user, after 高层大厦 came out an office building at the minimum): an office tower and a residential tower, each a
+    skyscraper, with a minimum of 30 floors (§8.9).
   - It borrows a lot of that kind under its holder: the one that keeps the characters' travel least (§4). The place its
     scene is set in counts as its pin, because most buildings the text mentions are seen from a street, not set in. A
     named building takes its lot for good; an unnamed one shares.
@@ -451,7 +452,7 @@ of the book before it with that book's log applied; `--from <level>` drops the b
 - **Every level's minimum, and the text's measures (the user, 2026-11-01, after the building level's run).**
   - *The minimum at every level.* An area kind's is its least median; a building type's is its least floors
     (`config/spawning/heights.json`, for an East Asian megacity), so an office is offered nothing under three floors
-    above the street. The run had put six office-like buildings at one floor, a high-rise among them, each with a low
+    above the street, a tower nothing under thirty. The run had put six office-like buildings at one floor, a high-rise among them, each with a low
     confidence.
   - *The text's own measures* (`src/v2/context/measures.ts`): a number and a unit of height in the place's name and its
     own sentences, found by pattern, no model. Floors count (层 before what a building is or has, 地下 or 第 before it,
