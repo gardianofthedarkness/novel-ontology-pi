@@ -149,6 +149,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   }
   const reshape = () => { if (!spawn) return; S.withSlots(inputs, Object.values(registry.slots), bookId); tree.clear(); for (const place of inputs.placeTree) tree.set(place.id, place); };
   reshape();
+  // Saved before the first build: the world is built from the files, so it must see the levels dropped and the mode at once.
+  if (spawn || fromLevel) {
+    await replace(terrainFile, JSON.stringify(terrain, null, 1));
+    await mkdir(join(universe.dir, 'maps'), { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
+    if (mapLog) await replace(mapLogFile, JSON.stringify(mapLog, null, 1));
+  }
   // How tightly continuity ties the places (§2.0.14): the pin's suggestion, and the places Jev is told it is tied to.
   const ties = inputs.world?.scenes ? continuityTies(inputs.world) : {};
   const template = await readFile(join(repository, 'world-engine', 'strand-demo.html'), 'utf8');
