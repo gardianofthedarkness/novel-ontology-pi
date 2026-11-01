@@ -5,7 +5,7 @@
 | Extraction | The reading flow | **done**, run on vol 1 end to end |
 | Extraction | The place tree, the world script, pools | **done** |
 | World engine | Terrain | **done**: run 11 (commit `44cf6a1`, tag `terrain-run11`) |
-| World engine | Borrowing and spawning by type | **next**: [design](borrow-and-spawn.md), [milestones](milestones.md) |
+| World engine | Borrowing and spawning by type | **in progress**: city to building level built (M0–M5), growth across books next; [design](borrow-and-spawn.md), [milestones](milestones.md) |
 | World engine | Spawning positions | later |
 | World engine | Movement and simulation | later |
 
@@ -48,13 +48,19 @@ Open on terrain, not blocking the next step: the canvas places a kept district b
 offset, so an outline can sit beside its towers; the fix is for the canvas to honour the kept offset (`bear` in
 `src/ground/stage/placeCanvas.ts`).
 
-## World engine: borrowing and spawning by type — next
+## World engine: borrowing and spawning by type — in progress
 
 Today every unnamed mention becomes an area of its own in a pool, so a city grows with the number of scenes; over 20
 books it would not stop. The user's redesign (2026-11-01): each type spawns its children by a configuration file, a place
 borrows a slot of its type in its parent or spawns one, level by level in narrative order, under the characters'-travel
 objective. Unnamed mentions share slots, so only new names can grow a city. Design: [borrow-and-spawn.md](borrow-and-spawn.md);
 progress: [milestones.md](milestones.md).
+
+Built so far (M0–M5, 2026-11-01): a city born basic and deformed to Jev's kind, its districts and streets as manifolds
+laid out by its topology, heights unified; a street's buildings as its form's lots, which named and unnamed buildings
+borrow by their use; floating objects asked their distance from the ground and their thickness. The buildings are drawn
+by one model table of CC0 kits ([model-kit.md](model-kit.md)); living areas are an East Asian megacity's
+([living-areas.md](living-areas.md)). Next: growth across books (M6).
 
 ## World engine: spawning positions — later
 

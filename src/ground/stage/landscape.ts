@@ -342,6 +342,8 @@ const frontOf = (patch: Patch) => { const kind = LANDSCAPES[patch.type]; return 
 const SQUARE = (patch: Patch) => clamp(0.5 * patch.R, 20, 80);
 /** How far the city's lots keep from a compound (a centre's podium and plaza, a station's hall): about half a lot. */
 const CLEAR = 20;
+/** The lane between a street's rows behind its frontage (and a square's rings): a back lane's width. */
+const LANE = 4;
 /** A building of a street's row: its floors drawn from the street's manifold where it stands (from its road, or its square's middle). */
 function rowBuilding(patch: Patch, lot: string, along: number, across: number, w: number, d: number, rng: () => number, ring?: number): Building | null {
   const kind = LANDSCAPES[patch.type], [x, z] = ring === undefined ? at(patch, along, across) : [patch.x + Math.cos(along) * across, patch.z + Math.sin(along) * across];
@@ -363,8 +365,18 @@ function rowBuilding(patch: Patch, lot: string, along: number, across: number, w
 export function formOf(patch: Patch, crossing: Road[] = [], ground: Patch[] = []): { buildings: Building[]; plazas: { x: number; z: number; r: number }[]; roads: Road[]; waters: Road[] } {
   const form = { buildings: [] as Building[], plazas: [] as { x: number; z: number; r: number }[], roads: [] as Road[], waters: [] as Road[] }, kind = LANDSCAPES[patch.type];
   if (underground(patch)) return form;
-  // A row breaks where one of the city's roads crosses the street, as at a crossing.
-  const onRoad = (b: Building) => crossing.some((road) => segmentDistance([b.x, b.z], road.a, road.b) < road.width / 2 + Math.max(b.w, b.d) / 2 + 1);
+  // A row breaks where one of the city's roads crosses the street, as at a crossing. A road running along its axis is the
+  // street's own (an avenue laid on its ground's arterial road): its rows face it, they do not break on it.
+  const [ox, oz] = at(patch, 0, 0), [ux, uz] = at(patch, 1, 0), axisAngle = Math.atan2(uz - oz, ux - ox);
+  const alongAxis = (road: Road) => (kind.axis || kind.band) && Math.abs(Math.sin(Math.atan2(road.b[1] - road.a[1], road.b[0] - road.a[0]) - axisAngle)) < 0.34;
+  const crosses = crossing.filter((road) => !alongAxis(road));
+  // A building is on a road when the road's width reaches its footprint: its half-width toward the road (its frontage or
+  // its depth, as it is turned), not its longest side, so a row keeps the buildings a side road only passes by.
+  const onRoad = (b: Building) => crosses.some((road) => {
+    const dx = road.b[0] - road.a[0], dz = road.b[1] - road.a[1], len = Math.hypot(dx, dz) || 1, nx = -dz / len, nz = dx / len, ux = Math.cos(b.angle), uz = Math.sin(b.angle);
+    const reach = (Math.abs(nx * ux + nz * uz) * b.w + Math.abs(nz * ux - nx * uz) * b.d) / 2;
+    return segmentDistance([b.x, b.z], road.a, road.b) < road.width / 2 + reach + 1;
+  });
   // Building into the ground it lands on (docs/v2/world-engine-v2.md §2.0.13): where a building of an `into` street stands
   // on taller ground of its place (its pool's default: a CBD), that ground's tower goes on above it, the street's building
   // its base (shops under a tower); a low street (an alley, a terrace) keeps its own low fabric.
@@ -394,6 +406,25 @@ export function formOf(patch: Patch, crossing: Road[] = [], ground: Patch[] = []
         along += w + kind.row.gap; n++;
       }
     }
+    // Behind the frontage, rows of the street's own buildings back to its edge, a lane between: its ground is built to its
+    // density (config/spawning/street.json; docs/v2/borrow-and-spawn.md §6), not left open. A stream of their own, so the
+    // frontage is as it was.
+    const back = skeletonStream(patch.id, "back", patch.type);
+    for (const side of [-1, 1]) {
+      let across = front + kind.row.depth[1] + LANE;
+      for (let k = 1; across < wide; k++) {
+        let along = -0.95 * long, n = 0, placed = 0, deepest = 0;
+        while (true) {
+          const w = between(back, kind.row.frontage), d = between(back, kind.row.depth);
+          if (along + w > 0.95 * long) break;
+          const b = kind.band && Math.abs(along + w / 2) < 14 ? null : rowBuilding(patch, `row${side > 0 ? "n" : "s"}${k}.${n}`, along + w / 2, side * (across + d / 2), w, d, back);
+          if (b) { push(b); placed++; }
+          deepest = Math.max(deepest, d); along += w + kind.row.gap; n++;
+        }
+        if (!placed) break;
+        across += deepest + LANE;
+      }
+    }
   }
   if (patch.type === "square" && kind.row) {
     const r = SQUARE(patch);
@@ -405,6 +436,20 @@ export function formOf(patch: Patch, crossing: Road[] = [], ground: Patch[] = []
       if (angle + step > Math.PI * 2) break;
       push(rowBuilding(patch, `ring${n}`, angle + step / 2, radius, w, d, rng, radius));
       angle += step; n++;
+    }
+    // Rings behind the first, a lane between, out to the square's edge (its density, as a street's rows behind its frontage).
+    const back = skeletonStream(patch.id, "back", patch.type);
+    for (let k = 1, inner = r + kind.back + kind.row.depth[1] + LANE; inner < patch.R; k++) {
+      let around = 0, m = 0, placed = 0, deepest = 0;
+      while (around < Math.PI * 2 - 0.05) {
+        const w = between(back, kind.row.frontage), d = between(back, kind.row.depth), radius = inner + d / 2, step = (w + kind.row.gap) / radius;
+        if (around + step > Math.PI * 2) break;
+        const b = rowBuilding(patch, `ring${k}.${m}`, around + step / 2, radius, w, d, back, radius);
+        if (b) { push(b); placed++; }
+        deepest = Math.max(deepest, d); around += step; m++;
+      }
+      if (!placed) break;
+      inner += deepest + LANE;
     }
   }
   if (patch.type === "centre") {

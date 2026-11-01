@@ -465,6 +465,9 @@ export async function strandDemo(novelDir, options) {
     const ties = worldScript ? continuityTies(worldScript) : {};
     const keptIn = (holder, id) => { const site = terrain?.sites?.[id]; return site?.parent === holder && Array.isArray(site.toward) ? [site.toward[0], site.toward[1]] : null; };
     const memberAt = (holder, unit) => { if (!canvas.places[holder]?.pool) return {}; const at = keptIn(holder, unit.id) ?? C.tiedSpot(canvas, holder, unit, ties[unit.id]); return at ? { at } : {}; };
+    // A building that borrowed a lot of its street's form (terrain spawning's building level, docs/v2/borrow-and-spawn.md §6)
+    // stands on that lot exactly, at its offset from the street, and is not sampled.
+    const lotOf = (holder, id) => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && site?.by === 'borrow' && site.parent === holder && Array.isArray(site.toward) ? { at: site.toward } : null; };
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
     for (const scene of chosen) {
       const chain = pathOf(scene.placeId), open = chain.filter(id => id !== scene.placeId && isOpen(id));
@@ -491,8 +494,8 @@ export async function strandDemo(novelDir, options) {
       const holder = C.holderFor(canvas, open.at(-1), scaleOf(scene.placeId) ?? 'building', scene.placeId), picked = C.sampledIn(canvas, open.at(-1), holder) || guessed(scene.placeId);
       // Near where the terrain step put the building (the site on the chain it stands for) in this holder.
       const site = [...chain].reverse().find(at => terrain?.sites?.[at]), near = site && terrain.sites[site].parent === holder ? terrain.sites[site].toward : undefined;
-      const unit = { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId), ...(picked ? { sampled: open.at(-1) } : {}) };
-      C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit) }, near);
+      const lot = lotOf(holder, scene.placeId), unit = { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId), ...(picked && !lot ? { sampled: open.at(-1) } : {}) };
+      C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...(lot ?? {}) }, near);
     }
     // Every other building, room and unnamed place of the tree (a v2 reading's EM² places among them), laid out as the
     // scenes' are, buildings before the rooms they hold: in the area the tree puts it in (sampled into one of a city's
@@ -511,8 +514,8 @@ export async function strandDemo(novelDir, options) {
       if (!host) continue;
       // A pool's member is sampled there (blinking) as a place the tree puts only in a city is.
       const holder = C.holderFor(canvas, host, scale, place.id), picked = !area || C.sampledIn(canvas, host, holder) || guessed(place.id) || !!canvas.places[holder]?.pool;
-      const unit = { id: place.id, label: name(place.id), kind, r, ...(picked ? { sampled: area ?? 'build' } : {}) };
-      C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit) });
+      const lot = lotOf(holder, place.id), unit = { id: place.id, label: name(place.id), kind, r, ...(picked && !lot ? { sampled: area ?? 'build' } : {}) };
+      C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...(lot ?? {}) });
       if (!area) { dwellingUnits[place.id] = host; notes.build.dwelling.push(`${name(place.id)} in ${name(host)}`); }
     }
     // Borrowing (docs/v2/world-engine-v2.md §2.0.12, §2.0.13): a pool's member Jev decided borrows its pool's ground in the
@@ -716,7 +719,7 @@ export async function strandDemo(novelDir, options) {
   // One storm-water system for the city: its own landscape's (a district's landscape keeps its malls and deep facilities).
   // The terrain's shapes (docs/v2/world-engine-v2.md §2.0.17): each shape Jev kept (a platform, a ramp, a cut) stands where
   // its part is now, as large as its box; one below the street is a hall that deep too (U.shapeHall).
-  const terrainShapes = Object.entries(terrain?.shapes ?? {}).map(([id, shape]) => { const node = macroOf.get(id), [x0, z0, x1, z1] = shape.box; return node ? { id, label: name(id), kind: shape.kind, x: node.x, z: node.z, w: Math.round((x1 - x0) * 10) / 10, d: Math.round((z1 - z0) * 10) / 10, top: shape.top ?? null, hall: (shape.top ?? 0) < 0 ? undergroundKindOf(name(id)) : null } : null; }).filter(Boolean);
+  const terrainShapes = Object.entries(terrain?.shapes ?? {}).map(([id, shape]) => { const node = macroOf.get(id), [x0, z0, x1, z1] = shape.box; return node ? { id, label: name(id), kind: shape.kind, x: node.x, z: node.z, w: Math.round((x1 - x0) * 10) / 10, d: Math.round((z1 - z0) * 10) / 10, top: shape.top ?? null, ...(shape.bottom != null ? { bottom: shape.bottom } : {}), hall: (shape.top ?? 0) < 0 ? undergroundKindOf(name(id)) : null } : null; }).filter(Boolean);
   const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city && !options.plain ? U.subwayOf(stops, city.id, city.r) : []), ...terrainShapes.filter(shape => (shape.top ?? 0) < 0).map(shape => U.shapeHall(shape))].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
   const underground = { halls };
   notes.underground = { halls: Object.fromEntries(Object.entries(halls.reduce((count, hall) => ({ ...count, [hall.kind]: (count[hall.kind] ?? 0) + 1 }), {}))), stops: stops.length, active: {}, hits: 0 };
@@ -1245,7 +1248,7 @@ export async function strandDemo(novelDir, options) {
         struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
       title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
       migrations: migrations.map(migration => { const route = routes.get(`${migration.scene}|${migration.person}`); return { ...migration, route: route ? { ...route, exit: route.exit?.map(dense) ?? null, entry: route.entry?.map(dense) ?? null } : null }; }),
-      macro, terrainShapes, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
+      macro, terrainShapes, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id), uses: source.buildings.map(b => b.use ?? UM.useOf(b) ?? null) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
       people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
       world: { NX, NZ, K, oi, oj, ok, lots: worldLots, shells: worldShells, earlier, underground: undergroundView(),

@@ -682,10 +682,15 @@ let decor = () => {};
   const part = (geometry, x, y, z, turn = 0) => { const piece = new THREE.Group(); piece.add(new THREE.Mesh(geometry, fillLook), new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 20), edgeLook)); piece.position.set(x, y, z); piece.rotation.y = turn; return piece; };
   for (const shape of data.terrainShapes ?? []) {
     const { x, z, w, d } = shape, top = shape.top ?? 3, h = Math.max(0.5, Math.abs(top)), length = Math.max(w, d), width = Math.min(w, d), turn = w >= d ? 0 : -Math.PI / 2, form = new THREE.Group();
+    // A floating object (terrain spawning's: its underside `bottom` and its top) spans between them; a platform stands on
+    // legs down to the ground, a cavern lies under the street, a sphere or a ring floats there.
+    const floats = typeof shape.bottom === "number", thick = floats ? Math.max(0.5, top - shape.bottom) : 1, base = floats ? shape.bottom : top - 1;
     if (shape.kind === "platform") {
-      form.add(part(new THREE.BoxGeometry(w, 1, d), x, top - 0.5, z));
-      if (top > 1) for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) form.add(part(new THREE.BoxGeometry(1.2, top - 1, 1.2), x + sx * (w / 2 - 2), (top - 1) / 2, z + sz * (d / 2 - 2)));
-    } else if (shape.kind === "hill") form.add(part(new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(w, 2 * h, d), x, 0, z));
+      form.add(part(new THREE.BoxGeometry(w, thick, d), x, base + thick / 2, z));
+      if (base > 0) for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) form.add(part(new THREE.BoxGeometry(1.2, base, 1.2), x + sx * (w / 2 - 2), base / 2, z + sz * (d / 2 - 2)));
+    } else if (floats && shape.kind === "cut") form.add(part(new THREE.BoxGeometry(w, thick, d), x, base + thick / 2, z));
+    else if (floats && shape.kind === "sphere") { const r = Math.min(w, d, thick) / 2; form.add(part(new THREE.SphereGeometry(r, 20, 14), x, base + thick / 2, z)); }
+    else if (floats && shape.kind === "donut") { const r = Math.min(w, d) / 2, tube = Math.min(r * 0.4, thick / 2); form.add(part(new THREE.TorusGeometry(r - tube, tube, 10, 32).rotateX(Math.PI / 2), x, base + thick / 2, z)); } else if (shape.kind === "hill") form.add(part(new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(w, 2 * h, d), x, 0, z));
     else if (shape.kind === "basin") form.add(part(new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2).scale(w, 2 * h, d), x, 0, z));
     else if (shape.kind === "cut") form.add(part(new THREE.BoxGeometry(w, h, d), x, -h / 2, z));
     else if (shape.kind === "ramp") form.add(part(new THREE.BoxGeometry(Math.hypot(length, top), 0.6, width).rotateZ(Math.atan2(top, length)), x, top / 2, z, turn));

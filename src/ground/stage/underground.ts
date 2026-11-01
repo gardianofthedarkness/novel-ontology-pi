@@ -275,9 +275,10 @@ export function collapse(hall: Pick<Hall, "depth" | "height" | "lined" | "pillar
  * §2.0.17): a hall that deep over its box, a passage along a long one (three times as long as wide) and a hall under any
  * other, stairs up at its ends, so the underground shows what Jev placed there.
  */
-export function shapeHall(shape: { id: string; x: number; z: number; w: number; d: number; top: number; hall?: string | null }): Hall {
-  const depth = Math.max(4, -shape.top), length = Math.max(shape.w, shape.d), width = Math.max(6, Math.min(shape.w, shape.d)), long = length >= 3 * width, angle = shape.w >= shape.d ? 0 : Math.PI / 2;
+export function shapeHall(shape: { id: string; x: number; z: number; w: number; d: number; top: number; bottom?: number; hall?: string | null }): Hall {
+  // A floating cavern (its top under the street and its thickness: terrainModes.ts FLOATING) lies from its bottom up.
+  const depth = Math.max(4, -(shape.bottom ?? shape.top)), length = Math.max(shape.w, shape.d), width = Math.max(6, Math.min(shape.w, shape.d)), long = length >= 3 * width, angle = shape.w >= shape.d ? 0 : Math.PI / 2;
   // Its name's kind when the language profile knows it (a car park, a shelter), else a passage or a hall by its proportions.
   const kind = (shape.hall && shape.hall in LIES_UNDER ? shape.hall : long ? "corridor" : "mall") as HallKind, narrow = ["corridor", "utility", "tunnel"].includes(kind);
-  return { id: `${shape.id}:shape`, kind, depth, height: HALL_HEIGHT[kind] ?? 4, boxes: [{ x: round(shape.x), z: round(shape.z), w: round(length), d: round(narrow ? Math.min(width, 12) : width), angle }], bores: [], pillars: narrow ? 0 : 8, lined: true, up: ends(shape.x, shape.z, length, angle) };
+  return { id: `${shape.id}:shape`, kind, depth, height: shape.bottom != null ? Math.max(3, shape.top - shape.bottom) : HALL_HEIGHT[kind] ?? 4, boxes: [{ x: round(shape.x), z: round(shape.z), w: round(length), d: round(narrow ? Math.min(width, 12) : width), angle }], bores: [], pillars: narrow ? 0 : 8, lined: true, up: ends(shape.x, shape.z, length, angle) };
 }

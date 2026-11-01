@@ -94,8 +94,9 @@ test("terrain's ground: the sentences around the part's name in the scenes namin
   assert.equal(T.TERRAIN_KINDS.district.cbd.ground, "skyscrapers");
   // Each kind its own manifold, and Jev gives its median (the user's calls): a CBD's medians, a mountain's tops.
   const cbd = T.terrainHeights("district", "cbd");
-  assert.deepEqual([cbd.measure, cbd.slices[4], T.terrainHeights("district", "mountain").measure, T.terrainHeights("district", "mountain").slices[4].said, T.terrainHeights("district", "donut").slices[4].y],
-    ["median", { letter: "E", y: 30, said: "about 10 floors" }, "top", "a hill", 3]);
+  // A ring floats (docs/v2/borrow-and-spawn.md §8.9): asked first how far it is from the ground, the ground itself a slice.
+  assert.deepEqual([cbd.measure, cbd.slices[4], T.terrainHeights("district", "mountain").measure, T.terrainHeights("district", "mountain").slices[4].said, T.terrainHeights("district", "donut").measure, T.terrainHeights("district", "donut").slices[4].y],
+    ["median", { letter: "E", y: 30, said: "about 10 floors" }, "top", "a hill", "elevation", 0]);
   // Below the street too (the user's call): every part is offered the underground's slices first, the deepest as A.
   assert.deepEqual([cbd.slices[0], cbd.slices[3].y, cbd.slices.length], [{ letter: "A", y: -60, said: "underground: deep underground" }, -6, 10]);
   assert.match(String(state.kinds.cbd), /highest at its core \(about 2\.1 times its edge\); a wide spread .*; one in 10 far above the rest/);

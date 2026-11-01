@@ -7,7 +7,8 @@
  *  - a named place stands in its slot's area, an unnamed mention in the slot it shares this book;
  *  - a manifold (§8: placed in its parent, spare or borrowed) is a place embedded in its parent at its kept vector, its
  *    ground a patch of the ground above it (the export builds both), so what it holds stands in it, a street in its
- *    district, a district in its city.
+ *    district, a district in its city;
+ *  - a building slot is a lot of its street's form (§6), no place: the building that borrows it stands in that street.
  * The stage inputs are changed in place, so every later reader of them (paths, scales, names, the canvas) sees one tree.
  */
 import { TERRAIN_KINDS } from "../context/terrainModes.js";
@@ -69,6 +70,8 @@ export function withSlots(inputs: SlotInputs, slots: KeptSlot[], book: string): 
     if (script[id] && script[id].parent !== parent) { script[id].parent = parent; moved[id] = parent; }
   };
   for (const slot of slots.filter((entry) => entry.toward)) {
+    // A building slot is a lot of its street's form (§6), no place of its own: what borrows it stands in its street.
+    if (slot.level === "building") { for (const id of [slot.owner, ...sharersIn(slot as unknown as Slot, book).map((share) => share.mention)]) if (id) reparent(id, slot.parent); continue; }
     if (slot.owner) { reparent(slot.owner, slot.parent); continue; }
     const label = slotLabel(slot, book, inputs.names);
     if (!byId.has(slot.id)) { const place = { id: slot.id, label, parentId: slot.parent, proposedParentId: null, path: [], sceneIds: [] }; tree.push(place); byId.set(slot.id, place); added.push(slot.id); }

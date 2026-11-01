@@ -76,7 +76,7 @@ export interface GroundFocus extends PartFocus { shapes: Record<string, string> 
 export interface ZoomFocus extends PartFocus { kind: string; reasons: string[] }
 /** `tops`: the lettered slices, each a height the terrain may rise to. */
 /** `measure`: a built kind's median (its manifold makes the rest), or natural ground's or a shape's top; `slices` the heights offered. */
-export interface HeightFocus extends PartFocus { kind: string; measure: "median" | "top" | "average"; slices: { letter: string; y: number; said: string; offset?: number }[]; standard?: number; addition?: boolean }
+export interface HeightFocus extends PartFocus { kind: string; measure: "median" | "top" | "average" | "elevation" | "thickness"; slices: { letter: string; y: number; said: string; offset?: number }[]; standard?: number; addition?: boolean }
 export interface MemberFocus { city: { id: string; label: string }; parts: { key: string; label: string; scale: string }[] }
 
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
@@ -163,6 +163,16 @@ export const mayOverlap = (a: string | null | undefined, b: string | null | unde
   below || BELOW.has(a ?? "") || BELOW.has(b ?? "") || !!(a && b && (OVERLAPS[a]?.includes(b) || OVERLAPS[b]?.includes(a)));
 /** The heights a basic shape may rise to (metres). */
 const SHAPE_TOPS = [3, 6, 12, 25, 50, 100];
+/**
+ * Floating objects (docs/v2/borrow-and-spawn.md §8.9; the user's idea): a platform, a sphere, a ring, a cavern neither stands
+ * on the ground nor fills a manifold. Each is asked twice: how far it is from the ground (its underside above the street;
+ * under it, how deep its top lies), and how thick it is. None of them takes part in a manifold's average or in unification.
+ */
+export const FLOATING = new Set(["platform", "sphere", "donut", "cut"]);
+const ELEVATIONS = [0, 3, 6, 12, 25, 50, 100], THICKNESSES = [1, 3, 6, 12, 25, 50];
+/** A floating object's thickness slices, each said as what it would be. */
+export const terrainThickness = (): { letter: string; y: number; said: string }[] =>
+  THICKNESSES.map((y, k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said: y <= 1 ? "a deck" : y <= 3 ? "a floor" : y <= 6 ? "two floors" : `about ${Math.round(y / 3)} floors` }));
 /** Natural ground by its height. */
 const natural = (y: number) => (y <= 30 ? "a low rise" : y <= 100 ? "a hill" : y <= 250 ? "a high hill" : y <= 500 ? "a mountain" : "a high mountain");
 /** A part's level's kinds (a level without its own, a district's). */
@@ -185,8 +195,11 @@ export const UNDERGROUND: [number, string][] = [[-60, "deep underground"], [-30,
  * The question's slices for a part of a kind: the underground's, then a built kind's medians (the median roof: the engine
  * draws the spread from its manifold), or natural ground's or a shape's tops; each said in floors, or as natural ground.
  */
-export function terrainHeights(scale: string, kind: string, average?: { factor: number; underground?: boolean }): { measure: "median" | "top" | "average"; slices: { letter: string; y: number; said: string; offset?: number }[]; standard?: number } {
+export function terrainHeights(scale: string, kind: string, average?: { factor: number; underground?: boolean }): { measure: "median" | "top" | "average" | "elevation"; slices: { letter: string; y: number; said: string; offset?: number }[]; standard?: number } {
   const entry = terrainKind(scale, kind), median = !!entry?.ground && !!entry.medians;
+  // A floating object is asked first how far it is from the ground (then its thickness: terrainThickness).
+  if (!entry && FLOATING.has(kind))
+    return { measure: "elevation", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: its top ${-y} m down, ${under}`]), ...ELEVATIONS.map((y): [number, string] => [y, y === 0 ? "on the ground" : `its underside about ${Math.max(1, Math.round(y / 3))} floors up`])].map(([y, said], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said })) };
   // As averages (docs/v2/borrow-and-spawn.md §8.9; `factor`: the kind's manifold's average over its median), the kind's
   // least average its minimum, a hard gate (the user, 2026-11-01): no slice below it. Under the street only where an area of
   // the level may lie there (`underground`: a passage at the street level, not a city or a district). Each slice keeps its
@@ -304,11 +317,15 @@ export const terrainHeightMode: Mode<HeightFocus, TerrainStores> = {
     ? `Every ${focus.kind} is built at least at its standard height: an average of ${focus.standard} m for its buildings. How many metres must be added to that standard for ${focus.part.label}: +0 m if it is just the standard, more if its buildings are taller on average (its manifold makes the rest: ${manifoldWords(terrainKind(focus.part.scale, focus.kind)!.manifold!)}). If it lies underground (an underground passage, a mall under the street), pick the slice below the street instead (a negative addition).`
     : focus.measure === "median"
     ? `What is the median height of ${focus.part.label}'s roofs (${focus.kind}): the height half its buildings stand below? Its manifold makes the rest (${manifoldWords(terrainKind(focus.part.scale, focus.kind)!.manifold!)}), so give the median, not the tallest. If it lies underground (an underground passage, a mall under the street), give how deep its floors lie: the slices below the street.`
+    : focus.measure === "elevation"
+    ? `How far is ${focus.part.label} (${focus.kind}) from the ground? It floats or is held up on its own, so give the height of its underside above the street (on the ground: 0 m); if it lies under the ground (a cavern), how deep its top lies: the slices below the street. Its thickness is asked next.`
+    : focus.measure === "thickness"
+    ? `How thick is ${focus.part.label} (${focus.kind}), from its underside to its top (a cavern: from its top down)? A deck is a metre or so, a sky garden a floor or two with its planting, a cavern as tall as its hall.`
     : `How high does ${focus.part.label} (${focus.kind}) rise: the height of its top? If it lies underground, how deep it goes: the slices below the street.`} The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from the scenes it is in, as the text tells them, the most telling first (scenes); where given, the facts about it (facts), its surroundings (environment) and what stands in it (standing); and the terrain kept for the places holding it (within). Where the text says little of it or you are unsure, use common sense: what anyone knows of a real place (a world city's centre stands tall), and what a place of its kind usually is.`,
   sources: [...sources<HeightFocus>("height"), fixed("heights", "heights", (focus: HeightFocus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, focus.addition ? `${(slice.offset ?? 0) >= 0 ? "+" : ""}${slice.offset} m${(slice.offset ?? 0) >= 0 ? ` (an average of ${slice.y} m)` : ""}: ${slice.said}` : `${slice.y} m: ${slice.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
   cutOrder: ["environment", "standing", "facts"],
   probe,
-  questions: (focus) => [{ key: "height", primitive: "choice", instructions: `Which lettered slice is ${focus.measure === "average" && !focus.addition ? `the average of ${focus.part.label}'s buildings` : focus.measure === "average" ? `the standard plus what must be added for ${focus.part.label}'s buildings on average` : focus.measure === "median" ? `the median of ${focus.part.label}'s roofs` : `the top of ${focus.part.label}'s ground`}?`, options: focus.slices.map((slice) => slice.letter), optionHints: Object.fromEntries(focus.slices.map((slice) => [slice.letter, focus.addition ? `${slice.letter}: ${(slice.offset ?? 0) >= 0 ? `the standard +${slice.offset} m` : `${slice.offset} m, below the street`}, ${slice.said}` : `${slice.letter}: ${slice.y} m, ${slice.said}`])) }],
+  questions: (focus) => [{ key: "height", primitive: "choice", instructions: `Which lettered slice is ${focus.measure === "average" && !focus.addition ? `the average of ${focus.part.label}'s buildings` : focus.measure === "average" ? `the standard plus what must be added for ${focus.part.label}'s buildings on average` : focus.measure === "median" ? `the median of ${focus.part.label}'s roofs` : focus.measure === "elevation" ? `${focus.part.label}'s distance from the ground` : focus.measure === "thickness" ? `${focus.part.label}'s thickness` : `the top of ${focus.part.label}'s ground`}?`, options: focus.slices.map((slice) => slice.letter), optionHints: Object.fromEntries(focus.slices.map((slice) => [slice.letter, focus.addition ? `${slice.letter}: ${(slice.offset ?? 0) >= 0 ? `the standard +${slice.offset} m` : `${slice.offset} m, below the street`}, ${slice.said}` : `${slice.letter}: ${slice.y} m, ${slice.said}`])) }],
   budget: BUDGET,
 };
 

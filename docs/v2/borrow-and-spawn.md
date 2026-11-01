@@ -234,6 +234,33 @@ by its type's density over its area, each with a use drawn by the shares. A name
 profile, or Jev's answer) borrows a building slot of its use in its street, the one least by E, or spawns one when none is
 left; an unnamed one ("a convenience store") shares. The landscape fill then builds the slots, not a fill of its own.
 
+**As built (M5, 2026-11-01).**
+- **A street's building slots are the lots its form builds.** That is its frontage, the rows behind it out to its edge with
+  a 4 m lane between, and a square's rings out to its edge. Each lot is a slot of its use, read from the world just built at
+  every street level's end (`formSlots` in `world-engine/terrain-spawn.mjs`) and kept at its offset from its street.
+  - A slot a building holds stays where it is.
+  - The spares are the form's again after every street level, so they follow their street.
+  - `street.json`'s densities are what the forms build on their own ground, measured. In a city, the roads crossing a
+    street break its rows, so it holds fewer.
+  - A road running along a street's axis (an avenue laid on its ground's arterial road) is its own and breaks nothing.
+- **A building borrows.** Its use comes from the language profile. Of the slots of that use under its holder, it takes
+  the one that keeps the characters' travel least (§4). The place its scene is set in counts as its pin, because most
+  buildings the text mentions are seen from a street, not set in. A named building takes its slot for good; an unnamed
+  one shares.
+- **A building spawns** when nothing of its use can be borrowed. It gives its use to the spare lot of a street under its
+  holder where travel is least, so the street keeps its number of buildings.
+- **A building whose use the profile does not know** stays where the canvas puts it for now; asking Jev its use is a later
+  step.
+- **No place of its own.** A building slot is not a place in the tree (`src/v2/spawning/tree.ts`): the building that
+  borrows it stands in its street, on that lot exactly. A staged building's grid clears the fill there; a marker stands on
+  the lot.
+- **Floating objects.** A platform, a sphere, a ring or a cavern (`FLOATING` in `src/v2/context/terrainModes.ts`) is asked
+  first how far it is from the ground (its underside, or how deep its top lies), then how thick it is.
+  - It spans from its underside up, and a cavern becomes a hall from its bottom up.
+  - Every shape is kept in the universe's registry as a nominated object (`shapes`, with a `nominate` entry in the map's
+    log).
+  - No shape or building lot takes part in unification.
+
 ## 7. Decisions
 
 | | Proposed | The user (2026-11-01) |

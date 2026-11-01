@@ -1,11 +1,11 @@
 {
-  "about": "What a street of each kind spawns: buildings a hectare (density) and the share of each use (docs/v2/borrow-and-spawn.md §2.1, §5, §6). Drafted from the landscapes the world builds today (LANDSCAPES in src/ground/stage/landscape.ts: cover / mean lot, and their uses); a street with no uses (a park, a stadium) spawns its own pavilions or halls only.",
+  "about": "What a street of each kind spawns: buildings a hectare (density) and the share of each use (docs/v2/borrow-and-spawn.md §2.1, §5, §6). A street's building slots are the lots its form builds (landscape.ts formOf: its frontage, the rows behind it to its edge, a square's rings); the densities are what the forms build on their own ground, measured 2026-11-01 (40 streets of each kind at the spawn's sizes), the shares the uses its rows draw (LANDSCAPES' uses). In a city the roads crossing a street break its rows, so it holds fewer. A street with no uses (a park, a stadium) builds its own pavilions or halls, which are no slots.",
   "level": "building",
   "parent": "street",
   "unit": "buildings a hectare",
   "types": {
     "shopping": {
-      "density": 49,
+      "density": 19.3,
       "uses": {
         "shop": 0.25,
         "convenience": 0.13,
@@ -17,7 +17,7 @@
       }
     },
     "centre": {
-      "density": 11.9,
+      "density": 3.6,
       "uses": {
         "mall": 0.17,
         "cinema": 0.17,
@@ -28,7 +28,7 @@
       }
     },
     "avenue": {
-      "density": 5.9,
+      "density": 3.0,
       "uses": {
         "office": 0.25,
         "hotel": 0.13,
@@ -40,7 +40,7 @@
       }
     },
     "square": {
-      "density": 15.8,
+      "density": 12.2,
       "uses": {
         "cafe": 0.14,
         "restaurant": 0.14,
@@ -52,7 +52,7 @@
       }
     },
     "station": {
-      "density": 13.6,
+      "density": 0.4,
       "uses": {
         "station": 0.14,
         "shop": 0.14,
@@ -64,7 +64,7 @@
       }
     },
     "alley": {
-      "density": 123.8,
+      "density": 111.1,
       "uses": {
         "house": 0.29,
         "shop": 0.14,
@@ -75,7 +75,7 @@
       }
     },
     "residential": {
-      "density": 25.7,
+      "density": 20.7,
       "uses": {
         "apartment": 0.29,
         "house": 0.14,
@@ -86,7 +86,7 @@
       }
     },
     "waterfront": {
-      "density": 6.3,
+      "density": 2.1,
       "uses": {
         "warehouse": 0.4,
         "restaurant": 0.2,

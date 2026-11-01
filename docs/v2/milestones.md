@@ -247,17 +247,48 @@ MB. Design: [model-kit.md](model-kit.md).
 
 ## M5 — Building level
 
-- [ ] Street slots spawn building slots by `street.json` (density × area, uses by share)
-- [ ] Named buildings borrow a slot of their use in their street (use from the language profile, else Jev); unnamed ones share
-- [ ] The landscape fill builds the slots instead of a fill of its own
-- [ ] Heights asked as the type's standard plus Jev's offset (+0 always an option; negative under the ground), at every
-      level of the tree (design §8.9; the user's idea): it changes every height question, so it may come with M3 instead
-- [ ] Floating objects (an underground cavern, a raised ring, a floating platform): asked their distance from the ground and
-      their thickness; inventions placed as shapes nominated whatever the text calls them; none of them in a manifold's
-      average or in unification (§8.9)
+- [x] Street slots spawn building slots: the lots their forms build (frontage, rows behind it to the street's edge, a
+      square's rings), a slot of its use each; `street.json`'s densities measured from the forms (design §6, as built)
+- [x] Named buildings borrow a slot of their use under their holder (use from the language profile; Jev's answer for the
+      rest is a later step); unnamed ones share; a spawn gives its use to a spare lot
+- [x] The fill builds the slots: a borrowed building stands on its lot exactly (a staged one's grid there, a marker on it)
+- [x] ~~Heights asked as the type's standard plus Jev's offset~~ Replaced at M3 by absolute averages with a hard minimum
+      (design §8.9: the height probe)
+- [x] Floating objects (a platform, a sphere, a ring, a cavern): asked their distance from the ground and their thickness;
+      every shape nominated in the universe's registry; none of them in a manifold's average or in unification (§8.9)
 
 **Pass:** buildings a street within 10% of density × area; every named building on a lot of its use in its street, or a
 logged spawn; the world builds in about today's time.
+
+**Stand-in (2026-11-01, on copies of vol 1 after the M4 rerun; no model call):**
+- **Slots:** the streets' forms gave 675 building slots before the rows behind the frontage, and about 1,000 after. 45 of
+  the 50 buildings the text names or mentions took a lot of their use:
+  - 3 named ones borrowed for good: 常盘台中学 a school lot of 第七学区's residential street, 飞镖酒吧 a bar lot of an
+    alley there, 豚草不动产写字楼 an office lot of 第十五学区's avenue;
+  - 38 unnamed ones shared (29 lots in all, at most 4 on one);
+  - 4 spawned on a spare lot given their use (a cinema, a hospital, a car park, a shop);
+  - 7 moves at the level's end (飞镖酒吧 nearer its scenes: 16,659 → 13,355 tie·m on the first copy).
+  The 5 the language profile cannot type (a tunnel, an underground structure, ruins, a used-car dealer, a grimoire
+  library in another city) stay where the canvas puts them. The building level asks Jev nothing; its builds take 33–37 s.
+- **Density:** the drafts assumed area-filling lots, while a street's form built only its frontage, leaving most of its
+  ground empty (15–25% of density × area). Now the forms fill their ground with rows behind the frontage and rings round a
+  square, and `street.json`'s densities are what the forms build on their own ground, measured. In the city the streets
+  hold 62% of that: a commercial centre 98%, a station front 93%, a square 74%, an alley 69%, a shopping street 65%, a
+  residential street 52%, an avenue 29%. The roads crossing a street break its rows. A road along an avenue's axis broke
+  them too (fixed: a street's own road), and a crossing was tested against a building's longest side (fixed: its
+  footprint toward the road). Avenues still lose most rows in a CBD, likely to the room the export clears round each
+  street marker on them; not yet looked into. **The 10% pass is not met.**
+- **Floating objects:** a stand-in run asked each its thickness after its distance from the ground and kept both;
+  nominated in the universe. On a copy with spans set, a deck draws 22–25 m up on legs, and a cavern becomes a hall from
+  18 m down, 12 m tall.
+- **Two faults from M4 found on the way:**
+  - a named place on a slot left the slot's own children loose round the map: 第七学区 on a dwelling slot, with that
+    slot's seven streets. The shared station front of 站前广场 and 人行步道 was one of them. Now held children go to the
+    place, the rest are removed.
+  - a run `--from` a level ran the ends of the levels above it again, and their moves reshuffled what the earlier Jev run
+    had settled. Now they stand.
+- **Paid by mistake:** a test run through the CLI asked Jev twice (a street's kind and height) before it stalled. Test
+  runs go through a stand-in client now.
 
 ## M6 — Growth across books
 

@@ -124,6 +124,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // Borrowing and spawning by type (`spawn`): slots instead of pools, kept in the universe's registry (they outlive the book),
   // mirrored in the book's terrain for the export; the stage inputs read as the slot tree (src/v2/spawning/tree.ts).
   const S = spawn ? { ...(await load('dist/src/v2/spawning/config.js')), ...(await load('dist/src/v2/spawning/slots.js')), ...(await load('dist/src/v2/spawning/tree.js')), ...(await load('dist/src/v2/spawning/topology.js')), ...(await load('dist/src/v2/spawning/heights.js')) } : null;
+  const { buildingUseOf } = await load('dist/src/v2/rules/language.js');
   const LEVELS = ['city', 'district', 'street', 'building'], bookId = universe.book, resolver = spawn ? S.defaultResolver() : null;
   if (spawn) { terrain.mode = 'spawn'; terrain.book = bookId; registry.slots ??= {}; terrain.slots = registry.slots; }
   // The map's log, by book (docs/v2/borrow-and-spawn.md §8.8): every change to the map in order, so a book can be played again.
@@ -145,7 +146,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       slot.sharers = slot.sharers.filter(share => share.book !== bookId); slot.damaged = slot.damaged.filter(hit => hit.book !== bookId);
       // A manifold its parent laid out by topology keeps its place: the layout is the parent level's (§8.4); one placed by
       // borrowing at this level is placed again.
-      if (slot.book === bookId && !slot.topology) { slot.toward = null; for (const key of ['size', 'turn', 'on', 'mapped', 'average', 'median']) delete slot[key]; }
+      // A street's form slots (§6) stand where its form builds them.
+      if (slot.book === bookId && !slot.topology && slot.layer !== 'form') { slot.toward = null; for (const key of ['size', 'turn', 'on', 'mapped', 'average', 'median']) delete slot[key]; }
     }
   }
   const lifted = new Map();
@@ -336,6 +338,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     // (src/v2/spawning/tree.ts), on its first sharer's terrain, else its kind's default (§2.2); a spare one has no pin.
     const syncSlots = () => {
       for (const slot of Object.values(registry.slots)) {
+        // A building slot is a lot of its street's form (§6): no area of its own; what borrows it has its site.
+        if (slot.level === 'building') continue;
         if (!slot.toward || slot.owner) { if (terrain.sites[slot.id]?.by === 'slot') delete terrain.sites[slot.id]; continue; }
         const shares = S.sharersIn(slot, bookId), first = shares.map(share => terrain.sites[share.mention]).find(site => site?.kind);
         // A manifold of its parent's ground (§8) keeps its own unified height; any other slot its first sharer's terrain.
@@ -352,6 +356,63 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const saveSlots = async () => {
       syncSlots(); await replace(terrainFile, JSON.stringify(terrain, null, 1)); await mkdir(join(universe.dir, 'maps'), { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
       await replace(mapLogFile, JSON.stringify(mapLog, null, 1)); reshape();
+    };
+    // The building level's slots (docs/v2/borrow-and-spawn.md §6): every street's buildings as its form builds them, a slot
+    // of its use each, at its offset from the street (the world just built). A slot a building holds stays as it is; the
+    // spares are the form's again after every street level, so they follow the street.
+    const formSlots = () => {
+      const streets = new Set(Object.values(registry.slots).filter(slot => slot.level === 'street' && slot.toward).map(slot => slot.owner ?? slot.id));
+      const isHeld = slot => slot.owner || S.sharersIn(slot, bookId).length;
+      const held = new Set(Object.values(registry.slots).filter(slot => slot.level === 'building' && isHeld(slot)).map(slot => slot.lot ?? slot.id));
+      for (const [id, slot] of Object.entries(registry.slots)) if (slot.level === 'building' && slot.layer === 'form' && !isHeld(slot)) delete registry.slots[id];
+      let spares = 0;
+      for (const entry of data?.landscapes ?? []) (entry.ids ?? []).forEach((id, n) => {
+        // A lot of a street's form is `<place>:<street>:<lot>`; the fill's own lots are not slots.
+        const key = id.slice(entry.place.length + 1), street = key.slice(0, key.lastIndexOf(':')), node = nodeOf(street), use = entry.uses?.[n];
+        if (!streets.has(street) || held.has(key) || !node || !use) return;
+        const [x, z, w, d, angle] = entry.buildings[n];
+        registry.slots[key] = { id: key, parent: street, level: 'building', kind: use, owner: null, sharers: [], damaged: [], layer: 'form', book: bookId, toward: [round(x - node.x), round(z - node.z)], size: [w, d], turn: angle };
+        spares++;
+      });
+      return { spares, held: held.size };
+    };
+    // A building borrows (§6): its use from the language profile; of the building slots of that use under its holder, the
+    // one that keeps the characters' travel least, the place its scene is set in counting as its pin (most buildings the
+    // text mentions are seen from a street, not set in); a named one takes its slot for good, an unnamed one shares. With
+    // none to borrow, a spawn gives its use to a spare lot of the streets under its holder where travel is least. A building
+    // whose use the profile does not know stays where the canvas puts it, for now (asking Jev is a later step).
+    const settingOf = new Map((inputs.data?.scenes ?? []).map(scene => [scene.id, scene.placeId ?? scene.placeIds?.[0] ?? null]));
+    const borrowBuilding = async (part, city) => {
+      const use = buildingUseOf(part.label);
+      if (!use) { await live.outcome({ subject: part.label, text: 'no use the language profile knows: it stays where the canvas puts it' }); return false; }
+      const holder = holderOf(part, city), named = !part.id.startsWith('unnamed:'), scene = world[part.id]?.scene ?? null, setIn = scene ? settingOf.get(scene) : null;
+      const pin = setIn && setIn !== part.id ? positionOf(liftTo(setIn, 'street')) : null;
+      const mention = { id: part.id, label: part.label, named, kind: use, holder, scene, pin };
+      const fixed = fixedFor([part.id], 'building'), tie = id => tiesAt('building')[part.id]?.[id] ?? 0;
+      const travel = at => fixed.reduce((sum, f) => sum + tie(f.id) * (f.box ? Math.hypot(Math.max(f.box[0] - at[0], 0, at[0] - f.box[2]), Math.max(f.box[1] - at[1], 0, at[1] - f.box[3])) : Math.hypot(at[0] - f.at[0], at[1] - f.at[1])), 0) + (pin ? S.LAMBDA * Math.hypot(at[0] - pin[0], at[1] - pin[1]) : 0);
+      const slots = slotsAt('building');
+      let spare = null;
+      const place = (m, parent) => {
+        if (parent) return null;
+        const free = slots.filter(slot => slot.layer === 'form' && slot.at && !slot.owner && !S.sharersIn(slot, bookId).length && (slot.parent === holder || within(slot.parent, holder)));
+        spare = free.map(slot => [slot, travel(slot.at)]).sort((a, b) => a[1] - b[1] || a[0].id.localeCompare(b[0].id))[0]?.[0] ?? null;
+        return spare ? { parent: spare.parent, at: spare.at } : null;
+      };
+      const choice = S.chooseSlots({ book: bookId, level: 'building', slots, mentions: [mention], ties: (a, b) => tiesAt('building')[a]?.[b] ?? 0, fixed, within: (id, of) => id === of || within(id, of), sceneIndex: s => sceneAt.get(s) ?? 0, place, improve: false });
+      const slot = choice.slots.find(entry => entry.id === choice.assignment[part.id]);
+      if (!slot?.at) { await live.outcome({ subject: part.label, text: `a ${use}: no slot of its use and no spare lot under ${name(holder)}` }); return false; }
+      const spawned = choice.spawned.includes(slot.id);
+      // A spawn takes the spare lot's place: the lot is given its use (the street keeps its number of buildings).
+      const list = spawned ? choice.slots.filter(entry => entry.id !== spare.id) : choice.slots;
+      keepSlots('building', list, spawned ? { [slot.id]: { size: spare.size, turn: spare.turn, lot: spare.lot ?? spare.id } } : {});
+      const kept = registry.slots[slot.id], node = nodeOf(kept.parent);
+      if (spawned) delete kept.mapped;
+      terrain.sites[part.id] = { label: part.label, scale: 'building', kind: use, parent: kept.parent, parentLabel: name(kept.parent), holder, slot: slot.id, toward: kept.toward, size: kept.size, turn: kept.turn ?? 0, ...(node ? { box: Z.turnedBox([node.x + kept.toward[0], node.z + kept.toward[1]], kept.size, kept.turn ?? 0) } : {}), ...(pin ? { pin } : {}), by: 'borrow' };
+      if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
+      logMap({ level: 'building', what: spawned ? 'spawn' : named ? 'borrow' : 'share', id: slot.id, place: part.id, parent: kept.parent, kind: use, ...(spawned ? { from: spare.id } : {}) });
+      await live.outcome({ subject: part.label, text: `a ${use}: ${choice.log.at(-1).replace(`${part.label}: `, '')}${spawned ? ` (the lot of ${spare.kind} ${spare.id} in ${name(spare.parent)})` : ` in ${name(kept.parent)}`}` });
+      await saveSlots();
+      return true;
     };
     // A parent's children laid out by its topology as manifolds of its own ground (§8.2, §8.3): the new ones where its
     // energy is least, those standing giving a little; the heights unified to its average (§8.6). For a born city, a city
@@ -457,6 +518,18 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const moved = heights.moved.filter(entry => entry.id !== 'open' && !ownerOf(registry.slots[entry.id] ?? {}));
       return `${site.label} unified to it: its average ${before} → ${heights.parent} m, its open ground ${heights.averages.open} m${moved.length ? `; ${moved.map(entry => `${registry.slots[entry.id].kind} ${entry.from} → ${entry.to} m`).join(', ')}` : ''}`;
     };
+    // A slot a named place took is that place from now on (§2.4), and the place spawns its own children: what the slot
+    // spawned while it was spare goes to the place if something holds it, else it goes (vol 1's 第七学区 on a dwelling
+    // slot kept the slot's seven streets loose round the map, their area no place).
+    const adoptChildren = level => {
+      for (const slot of Object.values(registry.slots).filter(entry => entry.level === level && entry.owner)) {
+        for (const [id, child] of Object.entries(registry.slots).filter(([, entry]) => entry.parent === slot.id)) {
+          if (child.owner || S.sharersIn(child, bookId).length) { child.parent = slot.owner; logMap({ level: child.level, what: 'reparent', id, from: slot.id, to: slot.owner }); continue; }
+          delete registry.slots[id]; if (terrain.sites[id]?.by === 'slot') delete terrain.sites[id];
+          logMap({ level: child.level, what: 'remove', id, parent: slot.id });
+        }
+      }
+    };
     // A level's end (§4.3): the moves, the spares placed, every area of the level spawning its children's slots, the world
     // built again. Run again on a pick-up, it does only what is left.
     const spawnEnd = async level => {
@@ -464,7 +537,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const mine = terrain.order.filter(id => terrain.sites[id]?.scale === level && terrain.sites[id].slot && registry.slots[terrain.sites[id].slot]);
       let moves = 0;
       if (mine.length) {
-        const mentions = mine.map(id => ({ id, label: terrain.sites[id].label, named: !id.startsWith('unnamed:'), kind: terrain.sites[id].kind, holder: terrain.sites[id].holder ?? terrain.sites[id].parent, scene: world[id]?.scene ?? null }));
+        const mentions = mine.map(id => ({ id, label: terrain.sites[id].label, named: !id.startsWith('unnamed:'), kind: terrain.sites[id].kind, holder: terrain.sites[id].holder ?? terrain.sites[id].parent, scene: world[id]?.scene ?? null, pin: terrain.sites[id].pin ?? null }));
         const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null, allow: (slot, m) => fits(m.kind, slot.parent) });
         moves = choice.moves;
         for (const id of mine) {
@@ -473,7 +546,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           const slot = choice.slots.find(entry => entry.id === slotId), node = nodeOf(slot.parent);
           logMap({ level, what: 'reassign', place: id, from: site.slot, to: slotId });
           site.slot = slotId;
-          if (id.startsWith('unnamed:')) { site.parent = slot.owner ?? slot.id; site.parentLabel = name(site.parent); continue; }
+          // An unnamed share stands in its slot (an area); a building on its slot's lot, as a named one does.
+          if (id.startsWith('unnamed:') && level !== 'building') { site.parent = slot.owner ?? slot.id; site.parentLabel = name(site.parent); continue; }
           if (!node || !slot.at) continue;
           Object.assign(site, { parent: slot.parent, parentLabel: name(slot.parent), toward: [round(slot.at[0] - node.x), round(slot.at[1] - node.z)], box: Z.turnedBox(slot.at, site.size, slot.turn ?? 0) });
           if (typeof slot.turn === 'number') Object.assign(site, { turn: slot.turn, on: slot.on }); else { delete site.turn; delete site.on; }
@@ -494,8 +568,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         logMap({ level, what: 'spawn', id: slot.id, parent: slot.parent, kind: slot.kind, at: slot.toward, r: Math.max(...size) / 2, seed: slot.id });
         syncSlots(); spares++;
       }
+      adoptChildren(level);
       // Every area of the level spawns its children's slots by its kind (config/spawning): a city its districts', a district
-      // its streets'; the building level is not run yet.
+      // its streets'; a street's building slots are its form's lots (formSlots, after the street level's build).
       let born = 0;
       if (S.CHILD[level] !== 'building') for (const [id, site] of Object.entries(terrain.sites).filter(([sid, site]) => site.scale === level && site.kind && (level === 'city' || site.by === 'slot' || (site.slot && !sid.startsWith('unnamed:'))))) {
         // An area with a topology whose children stand already (a born or re-decided city) keeps them: deformCity manages them.
@@ -514,6 +589,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       await live.outcome({ subject: `${level}s`, text: `the ${level} level ends: ${moves} move${moves === 1 ? '' : 's'}, ${spares} spare${spares === 1 ? '' : 's'} placed, ${born} slot${born === 1 ? '' : 's'} spawned for the level below` });
       log(`${level} level ends: ${moves} moves, ${spares} spares placed, ${born} slots below`);
       await live.phase(`building the world after the ${level} level`); await build(); await live.phase('terrain');
+      // The streets' buildings, as their forms build them, are the building level's slots (§6).
+      if (level === 'street') { const made = formSlots(); await saveSlots(); await live.outcome({ subject: 'streets', text: `${made.spares} building slots from the streets' forms (${made.held} held by buildings already)` }); }
     };
     // Spawn mode (docs/v2/borrow-and-spawn.md §2.6): level by level, the named and the unnamed alike in the order the text
     // first comes to them; each level ends (`end`) with its moves, its spares placed and its areas' children spawned.
@@ -522,7 +599,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       .map(part => ({ part, city: cities.find(city => city.id === cityOf(part.id)) })).filter(item => item.city).sort((a, b) => a.part.at - b.part.at);
     const queue = spawn ? [
       ...cities.map(city => ({ part: { id: city.id, label: city.label, scale: 'city', at: firstAt(city.label) }, city })).sort((a, b) => a.part.at - b.part.at), { end: 'city' },
-      ...levelParts('district'), { end: 'district' }, ...levelParts('street'), { end: 'street' },
+      ...levelParts('district'), { end: 'district' }, ...levelParts('street'), { end: 'street' }, ...levelParts('building'), { end: 'building' },
     ] : [
       ...cities.map(city => ({ part: { id: city.id, label: city.label, scale: 'city', at: firstAt(city.label) }, city })).sort((a, b) => a.part.at - b.part.at),
       // Within a level the real places first, in the text's order; its pools last, as each copies the places of its level.
@@ -544,8 +621,19 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     }
     for (const { part, city, end } of queue) {
       if (placed >= limit) break;
-      if (end) { await levelEnd(end); if (end === until) break; continue; }
+      if (end) {
+        // A level above `from` stands as the earlier run kept it: its end is not run again (its moves would reshuffle what
+        // that run settled); only its named slots' children are put right, and the streets' lots read for the building level.
+        if (fromLevel && LEVELS.indexOf(end) < LEVELS.indexOf(fromLevel)) {
+          adoptChildren(end);
+          if (end === 'street') { const made = formSlots(); await saveSlots(); await live.outcome({ subject: 'streets', text: `${made.spares} building slots from the streets' forms (${made.held} held by buildings already)` }); }
+          else await saveSlots();
+        } else await levelEnd(end);
+        if (end === until) break; continue;
+      }
       if (keptBefore(part.id)) continue;
+      // The building level (§6): a building borrows a lot of its use; no pictures and no question (its use is the language profile's).
+      if (part.scale === 'building') { if (await borrowBuilding(part, city)) placed++; continue; }
       // A pool's member: Jev is asked its kind, then where it lies (anywhere in its district, its pin a suggestion), then its height.
       const isCity = part.scale === 'city', sampled = isMember(part.id), cityNode = nodeOf(city.id);
       // In spawn mode a part moves to the area of the slot it borrows (docs/v2/borrow-and-spawn.md §2.3) once it is decided.
@@ -864,7 +952,18 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         await replace(probeFile, JSON.stringify([...kept, ...found.map(entry => ({ ...entry, at: new Date().toISOString() }))], null, 1));
       }
       // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top.
-      const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, upTo = measure === 'top' ? height : null;
+      const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null;
+      // A floating object (§8.9; the user's idea): its distance from the ground (asked above), then its thickness; it spans
+      // from its underside up (a cavern from its top down), its top what must stand among tall enough buildings.
+      let bottom = null, thick = null;
+      if (measure === 'elevation' && height !== null) {
+        const slices = T.terrainThickness(), images = { heights: (await shot('middle', true)).png };
+        const reply = (await ask(decide, T.terrainHeightMode, { ...about, kind, measure: 'thickness', slices, pictures: { heights: `the middle of ${part.label}'s area from the side and a little above; ${part.label}'s ${height < 0 ? `top lies ${-height} m under` : `underside is ${height} m above`} the street` } }, stores, { request: { images } })).replies[0];
+        thick = slices.find(entry => entry.letter === reply?.value)?.y ?? slices[1].y;
+        bottom = height < 0 ? height - thick : height;
+        await live.outcome({ subject: part.label, text: `a floating ${shape}: ${height < 0 ? `its top ${-height} m under the street` : `its underside ${height} m up`}, ${thick} m thick` });
+      }
+      const upTo = measure === 'top' ? height : bottom !== null ? (height < 0 ? height : height + thick) : null;
       // A raised shape (a platform at some height: a helipad, a sky garden) stands only where the buildings reach it (the user,
       // 2026-11-01): when the district under its box is not tall enough (or it lies on open ground), it moves into the nearest
       // district of its city whose tallest buildings reach its top.
@@ -883,7 +982,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       }
       // An average (spawn mode) is built from its median; below the street a depth stays a depth.
       const average = measure === 'average' && height !== null && height >= 0 ? height : null, median = measure === 'median' ? height : measure === 'average' && height !== null ? (height < 0 ? height : Math.round(height / factor)) : null;
-        return { where, boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average };
+        return { where, boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average, bottom, thick };
       };
       // Kept in an earlier book of the universe under the same name (§2.0.15): reused as it was, Jev not asked; where it lay
       // in its parent, when its parent has the same name too.
@@ -895,9 +994,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const c = reuse.toward && reuse.parentLabel === name(holder) && holderNode ? [holderNode.x + reuse.toward[0], holderNode.z + reuse.toward[1]] : pinAt ?? [(holderNode ?? anchor).x, (holderNode ?? anchor).z];
         const laid = typeof reuse.turn === 'number' ? { turn: reuse.turn, size: [w, d], on: reuse.on } : null;
         const box = isCity && cityNode ? [round(cityNode.x - cityNode.r), round(cityNode.z - cityNode.r), round(cityNode.x + cityNode.r), round(cityNode.z + cityNode.r)] : laid ? Z.turnedBox(c, [w, d], laid.turn) : [round(c[0] - w / 2), round(c[1] - d / 2), round(c[0] + w / 2), round(c[1] + d / 2)];
-        return { boxBy: null, what: null, rise: null, kind: reuse.kind, entry, shape, ground: shape ? null : reuse.ground ?? known?.ground ?? null, box, laid, median: reuse.median ?? null, upTo: reuse.top ?? null, measure: reuse.median != null ? 'median' : 'top', reusedFrom: reuse.book };
+        return { boxBy: null, what: null, rise: null, kind: reuse.kind, entry, shape, ground: shape ? null : reuse.ground ?? known?.ground ?? null, box, laid, median: reuse.median ?? null, upTo: reuse.top ?? null, measure: reuse.median != null ? 'median' : 'top', reusedFrom: reuse.book, bottom: reuse.bottom ?? null, thick: reuse.thickness ?? null };
       };
-      const { boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average, empty, from: averaged, reusedFrom } = poolOf ? byDefault() : reuse ? reused() : await asked();
+      const { boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average, empty, from: averaged, reusedFrom, bottom = null, thick = null } = poolOf ? byDefault() : reuse ? reused() : await asked();
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
       const proposal = { id: part.id, label: part.label, kind: kind ?? 'empty', box, top: median ?? upTo, measure, ...(settled?.frames ? { settle: { frames: settled.frames, energy: settled.energy } } : {}) };
       const said = empty ? `empty (nothing of its level decided in ${name(poolOf)} yet)` : `${kind}${median ? (median < 0 ? `, ${-median} m underground` : `, median ${median} m`) : upTo ? (upTo < 0 ? `, ${-upTo} m down` : `, up to ${upTo} m`) : ''}${averaged ? ` (the average of ${averaged} ${part.scale === 'street' ? 'streets' : 'districts'})` : ''}${reusedFrom ? ` (kept in ${reusedFrom}, reused)` : ''}`;
@@ -911,7 +1010,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(average ? { average } : {}), ...(upTo ? { top: upTo } : {}), by: reusedFrom ? 'universe' : 'jev', ...(reusedFrom ? { from: reusedFrom } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
         : empty ? { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, empty: true, by: 'pool', pool: poolOf }
         // A pool's member borrows its pool's ground in the box Jev gave it (the engine builds it there).
-        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), ...(sampled ? { member: holder } : {}), size: laid?.size ?? [round(box[2] - box[0]), round(box[3] - box[1])], ...(laid ? { turn: laid.turn, on: laid.on } : {}), toward, ...(settled?.pin ? { pinToward: settled.pin } : {}), box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : reusedFrom ? 'universe' : 'jev', ...(poolOf ? { pool: poolOf } : {}), ...(reusedFrom ? { from: reusedFrom } : {}),
+        : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), ...(sampled ? { member: holder } : {}), size: laid?.size ?? [round(box[2] - box[0]), round(box[3] - box[1])], ...(laid ? { turn: laid.turn, on: laid.on } : {}), toward, ...(settled?.pin ? { pinToward: settled.pin } : {}), box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), ...(bottom !== null ? { bottom, thickness: thick } : {}), by: poolOf ? 'pool' : reusedFrom ? 'universe' : 'jev', ...(poolOf ? { pool: poolOf } : {}), ...(reusedFrom ? { from: reusedFrom } : {}),
           confidence: { box: boxBy?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
       // Spawn mode: the part is its slot's (its own for good when it is named, a share of this book when not). A named place
       // stands in the slot's area as its own ground; an unnamed one is a marker in the slot, whose ground the slot's site
@@ -937,7 +1036,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           }
         }
       }
-      if (shape) terrain.shapes[part.id] = { kind: shape, box, ...(upTo ? { top: upTo } : {}) };
+      if (shape) terrain.shapes[part.id] = { kind: shape, box, ...(upTo ? { top: upTo } : {}), ...(bottom !== null ? { bottom, thickness: thick } : {}) };
+      // A shape is a nominated object whatever the text calls it (§8.9): kept in the universe with its place and size for
+      // every later book, outside every manifold.
+      if (spawn && shape) { registry.shapes ??= {}; registry.shapes[part.id] = { label: part.label, book: bookId, kind: shape, box, ...(upTo ? { top: upTo } : {}), ...(bottom !== null ? { bottom, thickness: thick } : {}) }; logMap({ level: part.scale, what: 'nominate', place: part.id, kind: shape, box, ...(bottom !== null ? { bottom, thickness: thick } : {}) }); }
       // The areas it settled with keep where the sweeps left them (their offsets, turns and the forms they lie on).
       for (const move of parentNode ? settled?.moves ?? [] : []) {
         const site = terrain.sites[move.id];
@@ -951,8 +1053,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       await replace(terrainFile, JSON.stringify(terrain, null, 1));
       // A named place Jev decided here is the universe's from now on, under its exact name (a later book reuses it).
       if (terrain.sites[part.id].by === 'jev' && !sampled && !part.id.startsWith('unnamed:')) {
-        const { kind: k, shape: sh, ground: g, median: m, manifold, top: t, size, toward: tw, parentLabel, turn: tn, on } = terrain.sites[part.id];
-        registry.places[part.label] = { book: universe.book, id: part.id, scale: part.scale, kind: k, ...(sh ? { shape: sh } : { ground: g }), ...(m ? { median: m, manifold } : {}), ...(t ? { top: t } : {}), ...(size ? { size, toward: tw, parentLabel } : {}), ...(typeof tn === 'number' ? { turn: tn, on } : {}), keptAt: new Date().toISOString() };
+        const { kind: k, shape: sh, ground: g, median: m, manifold, top: t, bottom: b, thickness: th, size, toward: tw, parentLabel, turn: tn, on } = terrain.sites[part.id];
+        registry.places[part.label] = { book: universe.book, id: part.id, scale: part.scale, kind: k, ...(sh ? { shape: sh } : { ground: g }), ...(m ? { median: m, manifold } : {}), ...(t ? { top: t } : {}), ...(b != null ? { bottom: b, thickness: th } : {}), ...(size ? { size, toward: tw, parentLabel } : {}), ...(typeof tn === 'number' ? { turn: tn, on } : {}), keptAt: new Date().toISOString() };
         await mkdir(universe.dir, { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
       }
       if (spawn && isCity) { const said = deformCity(part.id); if (said) await live.outcome({ subject: part.label, text: `deformed to Jev's answer: ${said}` }); }
@@ -979,7 +1081,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, parts: { type: 'string' }, spawn: { type: 'boolean' }, from: { type: 'string' }, until: { type: 'string' }, 'probe-heights': { type: 'boolean' } } });
-  const [novelDir] = positionals, levels = ['city', 'district', 'street'];
+  const [novelDir] = positionals, levels = ['city', 'district', 'street', 'building'];
   if (!novelDir || (values.from && !levels.includes(values.from)) || (values.until && !levels.includes(values.until))) { console.error('usage: node world-engine/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn] [--from city|district|street] [--until city|district|street]'); process.exit(2); }
   console.log(JSON.stringify(await terrainSpawn(resolve(novelDir), { run: values.run, parts: values.parts ? Number(values.parts) : Infinity, spawn: values.spawn, from: values.from ?? null, until: values.until ?? null, heightProbe: !!values['probe-heights'], log: line => console.error(line) })));
 }
