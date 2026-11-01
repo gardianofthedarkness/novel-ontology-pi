@@ -535,7 +535,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const birthCity = (id, label) => {
       const entry = T.terrainKind('city', bornKind);
       if (!entry?.medians) return null;
-      const median = entry.medians[0], average = Math.round(median * averageOverMedian(entry.manifold));
+      const median = H?.areas.city?.[bornKind] ?? entry.medians[0], average = Math.round(median * averageOverMedian(entry.manifold));
       terrain.sites[id] = { label, scale: 'city', kind: bornKind, ground: entry.ground, median, average, manifold: entry.manifold, by: 'birth' };
       logMap({ level: 'city', what: 'birth', id, kind: bornKind, average });
       return deformCity(id);
@@ -1059,7 +1059,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const kindManifold = T.terrainKind(part.scale, kind)?.manifold, factor = spawn && kindManifold ? averageOverMedian(kindManifold) : null;
       // As averages, the kind's minimum a hard gate (§8.9; the user, 2026-11-01): a city or a district is never under the street.
       // With the measures its sentences give (measures.ts), each a slice of its own (the user, 2026-11-01).
-      const offered = T.terrainHeights(part.scale, kind, factor ? { factor, underground: !['city', 'district'].includes(part.scale) } : undefined), { measure, standard } = offered;
+      const offered = T.terrainHeights(part.scale, kind, factor ? { factor, underground: !['city', 'district'].includes(part.scale) } : undefined, H?.areas[part.scale]?.[kind]), { measure, standard } = offered;
       const tops = T.withMeasures(offered.slices, M.measuresIn(textsOf(part)), standard), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
       const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, Math.max(CORE_MIN, span * CORE)), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
       // The slices through a core of the area round a point, labelled as heights, or as additions to the minimum (the probe).

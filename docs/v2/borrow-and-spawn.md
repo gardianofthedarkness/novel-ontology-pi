@@ -465,8 +465,12 @@ of the book before it with that book's log applied; `--from <level>` drops the b
   no slice under the street for a city or a district); a city's average asked on pictures across it.
 - **Every level's minimum, and the text's measures (the user, 2026-11-01, after the building level's run).**
   - *The minimum at every level.* An area kind's is its least median; a building type's is its least floors
-    (`config/spawning/heights.json`, for an East Asian megacity), so an office is offered nothing under three floors
-    above the street, a tower nothing under thirty. The run had put six office-like buildings at one floor, a high-rise among them, each with a low
+    (`config/spawning/heights.json`, for an East Asian megacity), so a tower is offered nothing under thirty floors
+    above the street. Every type's minimum is in one dictionary, whole (the user, after the live run: 豚草不动产写字楼
+    a real-estate office at 1 floor; "every area type needs a minimum gate"): each building type at its usual height (an
+    office building 12 floors, a block of flats 10, a hotel 15, a hospital 8, a school 4, a real-estate firm's office
+    building as an office building), each area kind of each level at its least median (`areas`: a CBD 30 m, a dwelling
+    district 12 m, a residential street 9 m), which the height question, a spare slot and a newborn city all read. The run had put six office-like buildings at one floor, a high-rise among them, each with a low
     confidence.
   - *The text's own measures* (`src/v2/context/measures.ts`): a number and a unit of height in the place's name and its
     own sentences, found by pattern, no model. Floors count (层 before what a building is or has, 地下 or 第 before it,

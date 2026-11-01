@@ -52,10 +52,10 @@ export function streetsOnly(folder = DEFAULTS): Record<string, string[]> {
 }
 
 /**
- * Each building type's least floors, its minimum (heights.json; the user, 2026-11-01), and how near the heights of unnamed
- * buildings sharing a lot must be (`share`).
+ * Every type's minimum, a hard gate (heights.json; the user, 2026-11-01): each building type's least floors, each area
+ * kind's least median (metres) by level; and how near the heights of unnamed buildings sharing a lot must be (`share`).
  */
-export interface HeightChart { share: number; buildings: Record<string, number> }
+export interface HeightChart { share: number; buildings: Record<string, number>; areas: Record<string, Record<string, number>> }
 export const loadHeights = (folder = DEFAULTS): HeightChart => JSON.parse(readFileSync(`${folder.replace(/\/?$/, "/")}heights.json`, "utf8"));
 /** Whether two buildings' heights may share a lot: both above the street or both under it, within a factor of `share`. */
 export const heightsShare = (a: number, b: number, share: number): boolean => (a < 0) === (b < 0) && Math.max(Math.abs(a), Math.abs(b)) <= share * Math.min(Math.abs(a), Math.abs(b));

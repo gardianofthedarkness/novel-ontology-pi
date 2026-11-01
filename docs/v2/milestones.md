@@ -456,6 +456,13 @@ from 58 and 100 before):**
     1 floor (17%).
 - **The world:** 89 towers grown, 120 low buildings cleared, 367 roads widened; 30 above 100 m still over 8:1; the
   tallest 849 m (the CBD's tail).
+- [x] After it (the user: "those offices, you know their usual type, set that usual height as the minimum gate";
+      "every area type needs a minimum gate, the type configuration dictionary needs to be fulfilled"): one dictionary,
+      `config/spawning/heights.json`, whole. Every building type at its usual height (an office building 12 floors, a
+      mixed-use street building 8, a real-estate firm's office building 12, a block of flats 10, a hotel 15, a hospital 8,
+      a school 4, a tower 30); every area kind of every level at its least median (as before, now in the dictionary and
+      read from it). On this run's answers 17 buildings would be lifted: 豚草不动产写字楼 1 → 12 floors; 大厦, 两栋大楼 and
+      大楼 (scene 29) 3 → 12; the flats 5 → 10; the hospital 4 → 8. A minimum lifts; 大楼 (scene 2) stays at 100 floors.
 
 ## M6 — Growth across books
 

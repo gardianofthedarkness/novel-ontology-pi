@@ -135,12 +135,27 @@ test("every level's heights: a minimum, the text's own measures offered; far hei
   const { loadBuildingTypes } = await import("../src/v2/spawning/inventory.js");
   const { measuresIn, numberOf } = await import("../src/v2/context/measures.js");
   const chart = loadHeights(), types = loadBuildingTypes();
-  // The chart (config/spawning/heights.json): every building type its least floors.
+  // The dictionary (config/spawning/heights.json), whole (the user, 2026-11-01): every building type its least floors,
+  // every area kind of every level its least median, each among the heights its kind is offered.
   for (const [id, type] of Object.entries(types)) if (type.use) assert.ok(Number.isInteger(chart.buildings[id]) && chart.buildings[id] >= 1, `${id}: its least floors (${chart.buildings[id]})`);
+  assert.deepEqual(Object.keys(chart.buildings).sort(), Object.keys(types).filter((id) => types[id].use).sort(), "no type left out, none extra");
+  const { TERRAIN_KINDS, terrainHeights } = await import("../src/v2/context/terrainModes.js");
+  for (const level of ["city", "district", "street"]) {
+    assert.deepEqual(Object.keys(chart.areas[level]).sort(), Object.keys(TERRAIN_KINDS[level]).sort(), `${level}: every kind`);
+    for (const [kind, entry] of Object.entries(TERRAIN_KINDS[level])) { const range = entry.medians ?? entry.tops!, least = chart.areas[level][kind]; assert.ok(least >= range[0] && least <= range.at(-1)!, `${level} ${kind}: ${least}`); }
+  }
+  // An area's gate: its slices from its minimum up (a CBD at least 50 m here), the underground still offered at a street.
+  const cbd = terrainHeights("district", "cbd", { factor: 1, underground: false }, 50);
+  assert.deepEqual([cbd.standard, cbd.slices[0].y, cbd.slices.some((slice) => slice.y < 50 && slice.y > 0)], [50, 50, false]);
+  assert.equal(terrainHeights("district", "cbd", { factor: 1, underground: false }).standard, 30, "without one, its own lowest");
+  assert.equal(terrainHeights("district", "mountain", undefined, 200).slices.filter((slice) => slice.y > 0)[0].y, 200, "a natural ground's top too");
+  assert.deepEqual([chart.buildings["office-building"], chart.buildings["apartment-block"], chart.buildings.hotel, chart.buildings.hospital, chart.buildings["office-tower"]], [12, 10, 15, 8, 30], "each at its usual height");
   // A building type's least floors, a hard gate as every area kind's: nothing above the street under it; the underground stays.
   const office = buildingHeights(chart.buildings["office-building"]);
-  assert.equal(office.standard, 9);
-  assert.deepEqual(office.slices.filter((slice) => slice.y > 0)[0], { letter: "E", y: 9, said: "3 floors" });
+  // An office at its usual height at least (the user, 2026-11-01): 12 floors; a real-estate firm's office building too.
+  assert.equal(office.standard, 36);
+  assert.deepEqual(office.slices.filter((slice) => slice.y > 0)[0], { letter: "E", y: 36, said: "12 floors" });
+  assert.equal(chart.buildings["real-estate-office"], chart.buildings["office-building"]);
   assert.ok(office.slices.some((slice) => slice.y < 0), "under the street still offered");
   assert.deepEqual([chart.buildings["office-tower"], chart.buildings["residential-tower"]], [30, 30], "a tower: thirty floors at least (the user, 2026-11-01)");
   assert.equal(buildingHeights(30).slices.filter((slice) => slice.y > 0)[0].said, "30 floors");
@@ -155,8 +170,8 @@ test("every level's heights: a minimum, the text's own measures offered; far hei
   const tops = withMeasures(office.slices, [{ y: 90, said: "30 floors" }, { y: 6, said: "2 floors" }], office.standard);
   assert.deepEqual(tops.filter((slice) => slice.text).map((slice) => [slice.y, slice.said]), [[6, "2 floors, as the text says"], [90, "30 floors, as the text says"]]);
   assert.equal(tops.map((slice) => slice.letter).join(""), "ABCDEFGHIJKLMNOP".slice(0, tops.length), "lettered again from the lowest");
-  const task = (terrainHeightMode.task as (focus: never) => string)({ part: { id: "x", label: "那座写字楼", scale: "building" }, kind: "office-building", measure: "top", slices: tops, standard: 9 } as never);
-  assert.match(task, /No office-building is built lower than 9 m \(3 floors\)/);
+  const task = (terrainHeightMode.task as (focus: never) => string)({ part: { id: "x", label: "那座写字楼", scale: "building" }, kind: "office-building", measure: "top", slices: tops, standard: office.standard } as never);
+  assert.match(task, /No office-building is built lower than 36 m \(12 floors\)/);
   assert.match(task, /as the text says/);
   // Unnamed buildings share a lot only when their heights are near: a tower and low offices never, a basement and a roof never.
   assert.ok(heightsShare(9, 15, chart.share) && !heightsShare(15, 180, chart.share) && !heightsShare(-6, 3, chart.share));

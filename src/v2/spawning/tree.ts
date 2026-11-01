@@ -12,7 +12,7 @@
  * The stage inputs are changed in place, so every later reader of them (paths, scales, names, the canvas) sees one tree.
  */
 import { TERRAIN_KINDS } from "../context/terrainModes.js";
-import type { Level } from "./config.js";
+import { loadHeights, type Level } from "./config.js";
 import { sharersIn, type Slot } from "./slots.js";
 
 /** A slot as terrain keeps it: the core's slot, with its offset from its area (`toward`, as a kept site's) instead of a world point. */
@@ -44,7 +44,7 @@ export function defaultTerrain(level: Level, kind: string, least = false): { gro
   if (!entry) return null;
   if (entry.shape) return { shape: entry.shape, ...(entry.tops?.length ? { top: entry.tops[Math.floor(entry.tops.length / 2)] } : {}) };
   // `least`: its kind's minimum (a spare where no topology unifies its height), else the middle of its medians.
-  return { ground: entry.ground, ...(entry.medians?.length ? { median: entry.medians[least ? 0 : Math.floor(entry.medians.length / 2)], manifold: entry.manifold } : {}) };
+  return { ground: entry.ground, ...(entry.medians?.length ? { median: least ? loadHeights().areas[level]?.[kind] ?? entry.medians[0] : entry.medians[Math.floor(entry.medians.length / 2)], manifold: entry.manifold } : {}) };
 }
 
 /**

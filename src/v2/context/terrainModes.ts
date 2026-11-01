@@ -238,8 +238,11 @@ export const UNDERGROUND: [number, string][] = [[-60, "deep underground"], [-30,
  * The question's slices for a part of a kind: the underground's, then a built kind's medians (the median roof: the engine
  * draws the spread from its manifold), or natural ground's or a shape's tops; each said in floors, or as natural ground.
  */
-export function terrainHeights(scale: string, kind: string, average?: { factor: number; underground?: boolean }): { measure: "median" | "top" | "average" | "elevation"; slices: Slice[]; standard?: number } {
+export function terrainHeights(scale: string, kind: string, average?: { factor: number; underground?: boolean }, least?: number): { measure: "median" | "top" | "average" | "elevation"; slices: Slice[]; standard?: number } {
   const entry = terrainKind(scale, kind), median = !!entry?.ground && !!entry.medians;
+  // Its minimum, a hard gate (config/spawning/heights.json `areas`, the user, 2026-11-01): its medians (or a natural
+  // ground's tops) from `least` up, `least` the lowest; without one, its own lowest.
+  const gated = (values: number[]) => (least === undefined ? values : [least, ...values.filter((value) => value > least)]);
   // A floating object is asked first how far it is from the ground (then its thickness: terrainThickness).
   if (!entry && FLOATING.has(kind))
     return { measure: "elevation", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: its top ${-y} m down, ${under}`]), ...ELEVATIONS.map((y): [number, string] => [y, y === 0 ? "on the ground" : `its underside about ${Math.max(1, Math.round(y / 3))} floors up`])].map(([y, said], k) => ({ letter: LETTERS[k], y, said })) };
@@ -248,13 +251,13 @@ export function terrainHeights(scale: string, kind: string, average?: { factor: 
   // the level may lie there (`underground`: a passage at the street level, not a city or a district). Each slice keeps its
   // addition to the minimum (`offset`), for the question asked as one (the height probe).
   if (average && median) {
-    const ys = entry!.medians!.map((m) => Math.round(m * average.factor)), standard = ys[0];
+    const ys = gated(entry!.medians!).map((m) => Math.round(m * average.factor)), standard = ys[0];
     const slices = [...(average.underground === false ? [] : UNDERGROUND).map(([y, under]) => ({ y, offset: y, said: `underground: ${under}` })), ...ys.map((y) => ({ y, offset: y - standard, said: `about ${Math.max(1, Math.round(y / 3))} floors on average` }))];
     return { measure: "average", standard, slices: slices.map((slice, k) => ({ letter: LETTERS[k], ...slice })) };
   }
   // A building: its roof at three metres a floor, each slice said in floors.
   if (scale === "building" && entry && !entry.shape) return buildingHeights();
-  const heights = median ? entry!.medians! : entry?.tops ?? SHAPE_TOPS;
+  const heights = median ? gated(entry!.medians!) : entry?.tops ? gated(entry.tops) : SHAPE_TOPS;
   const said = (y: number) => (median ? `about ${Math.max(1, Math.round(y / 3))} floors` : natural(y));
   return { measure: median ? "median" : "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...heights.map((y): [number, string] => [y, said(y)])].map(([y, words], k) => ({ letter: LETTERS[k], y, said: words })) };
 }
