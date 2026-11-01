@@ -12,7 +12,7 @@ call); a real Jev run only when the user asks.
 | M0 | Design, draft configurations, configuration test | done 2026-11-01, every decision taken (design §7) |
 | M1 | Slots, borrowing and spawning in code; the bound tested; run from a level | done 2026-11-01: `--spawn`, `--from`; stand-in on vol 1 through streets |
 | M2 | City level on vol 1, as one city of manifolds with a topology | done 2026-11-01: stand-in and Jev runs (2 paid calls) |
-| M3 | District level on vol 1 | |
+| M3 | District level on vol 1 | done 2026-11-01: stand-in and Jev runs (6 paid calls) |
 | M4 | Street level on vol 1 | |
 | M5 | Building level on vol 1 | |
 | M6 | Growth across books | |
@@ -149,12 +149,29 @@ dwelling areas 8.4 m, industry 6.1 m, the open ground 8.2 m.
 
 ## M3 — District level
 
-- [ ] 第七学区, 第六学区, 第十五学区 borrow; unnamed district mentions borrow; the swap pass; settle with spares
-- [ ] Spare districts with their type's default terrain
+- [x] 第七学区, 第六学区, 第十五学区 borrow (vol 1 has no unnamed district); the moves at the level's end
+- [x] Spare districts with their type's default terrain, unified with the city (M2)
+- [x] A named district is a manifold of its city: the canvas embeds it exactly at its kept vector inside the city's ground
+      (never pushed, no ground of its own); its ground a patch of the city's
+- [x] Borrowing by the characters' travel alone: ties lifted to the level, kept positions only, no pin
+- [x] A named district decided: its height stands, the city unifies to it within the deformation limit; a district spawned
+      beyond the configuration laid out with the rest
+- [ ] Settling with the spare term γ: not needed so far (the topology's layout and the moves hold the districts apart)
 
 **Pass:** no spawn on vol 1 (3 names within the quotas); every district inside its city; the characters' travel (tie·m)
 logged before and after the swaps and the settle, and no worse than run 11's at this level; the largest kept offset
 under the city's size.
+
+**Jev run (2026-11-01, `--spawn --from district --until district --run`; 6 paid calls, 40,348 input tokens):**
+- 第七学区 a dwelling area (74%), 19 m on average (C, 51%), on a dwelling manifold 512 m out (0.52 of the radius);
+  第六学区 a CBD (52%, dwelling 34%), 61 m (B, 39%), 156 m out; 第十五学区 a CBD (94%), 61 m (B, 38%), 316 m out. No spawn:
+  Jev's kinds fit the metropolis's configuration; no move at the level's end (the travel was least as borrowed).
+- 学园都市 kept its 20 m average: after 第七学区, taller than a dwelling area's default, a spare CBD was lowered by the
+  deformation limit (73.4 → 62.7 m); after the two lower CBDs the rest rose a little (dwelling 10.2 m, industry 7.9 m).
+- Built: 第六学区 and 第十五学区 66.7 m, 第七学区 19.9 m, the spares 10.5–11.4 m, the open ground 13 m; the city 17.6 m against
+  its 20 m. Each district stands exactly at its kept vector inside the city; seen as one city, the towers in its middle.
+- Not yet: the travel before and after has no comparison with run 11 (run 11 did not lift ties to the level; at this level
+  it had none). The unnamed streets still stand as markers until the street level (M4).
 
 ## M4 — Street level
 
