@@ -390,28 +390,27 @@ tokens for the 54):**
   - A shape's site had no `offered` list; it does now.
 
 **Heights at every level, after that run (the user, 2026-11-01; borrow-and-spawn.md §8.9):**
-- [x] One chart, `config/spawning/heights.json`, for an East Asian megacity: every building type's least and usual floors,
-      every area kind's usual height. Jev is never shown its usual heights.
-- [x] A minimum at every level: area kinds had theirs (their least median); a building type's least floors are now its
-      lowest slice above the street (an office three floors, a hospital four).
-- [x] Where an answer spreads wide (its likeliest slice and the slices beside it under half its weight), the part takes
-      the measure its own name gives, else its kind's usual height, at every level.
+- [x] A minimum at every level: area kinds had theirs (their least median); a building type's least floors
+      (`config/spawning/heights.json`, for an East Asian megacity) are now its lowest slice above the street (an office
+      three floors, a hospital four).
 - [x] The text's own measures (`src/v2/context/measures.ts`): a number and a unit of height in a place's name and own
       sentences (五十层, 两百米高, 地下三层, 35 floors), found by pattern, offered as slices of their own, "as the text
       says", at every level. In this book only the two fifty-storey towers' names give one; no named place's sentences do.
 - [x] Unnamed buildings share a lot only when their heights are within a factor of two, in the borrowing and in the
       level's closing moves; two named buildings exchange lots only where both may stand.
+- Tried and removed (the user's call): where an answer spread wide, the part took its kind's usual height. Replayed, it
+  lowered the real-estate office tower from 20 floors to 5 and a building in a scene of towers from 100 to 12.
 
-Replayed without a model call: Jev's real answers from the run above, each answer's weights moved onto the new slices
-at the nearest height. A real run will differ, since Jev would weigh the new slices itself.
-- One-floor buildings 19 → 11, all shops, stations and the ruins; offices 3 floors or more.
-- 7 wide answers took their type's usual height (the detention centre 5 floors, two 大楼 12), and the fifty-storey tower
-  its name's 50 floors.
-- Mixed lots 0: the four towers (50–100 floors) share one lot, the low offices another; before, the station lot mixed 1
+Replayed without a model call, the minimum alone: Jev's real answers from the run above, each answer's weights moved onto
+the new slices at the nearest height (under a type's minimum, onto its lowest slice). A real run will differ, since Jev
+would weigh the new slices itself.
+- One-floor buildings 19 → 11, all shops, stations and the ruins; offices 3 floors or more (高层大厦, 大厦, two 大楼),
+  the hospital 4.
+- The towers as Jev read them: 20, 60 and 100 floors.
+- Mixed lots 0: the four towers (60–100 floors) share one lot, the low offices another; before, the station lot mixed 1
   and 60 floors.
-- Worse in the replay: the real-estate office tower (20 floors in the run, 5 now) and a mixed-use building in a scene of
-  towers (100 → 12), both wide answers. 高层大厦 stays low (3 floors): its weights under the minimum all land on the
-  lowest slice.
+- A cinema read at 8 floors comes out at 2: its weights under the minimum all land on its lowest slice, which then leads.
+  高层大厦 is likewise held at the minimum, 3 floors.
 
 ## M6 — Growth across books
 

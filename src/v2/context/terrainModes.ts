@@ -279,18 +279,6 @@ export function withMeasures(slices: Slice[], measures: { y: number; said: strin
   }
   return out.sort((a, b) => a.y - b.y).slice(0, LETTERS.length).map((slice, k) => ({ ...slice, letter: LETTERS[k] }));
 }
-/**
- * Whether an answer spreads too wide to stand (the user, 2026-11-01): its likeliest slice and those within `within` of it
- * (the slices are in height order) hold under `below` of its weight, no slice standing out. A measure the text gives, when
- * it is the likeliest, always stands; an answer without its weights (`distribution`) stands.
- */
-export function isWide(reply: { value?: unknown; distribution?: Record<string, number> } | undefined, slices: Slice[], spread = { within: 1, below: 0.5 }): boolean {
-  const weights = reply?.distribution, at = slices.findIndex((slice) => slice.letter === reply?.value);
-  if (!weights || at < 0 || slices[at].text) return false;
-  const total = slices.reduce((sum, slice) => sum + (weights[slice.letter] ?? 0), 0);
-  const near = slices.slice(Math.max(0, at - spread.within), at + spread.within + 1).reduce((sum, slice) => sum + (weights[slice.letter] ?? 0), 0);
-  return total > 0 && near / total < spread.below;
-}
 /** A part's options: its level's kinds (each with its manifold in words), then the basic shapes. */
 export const terrainKinds = (scale: string, shapes: Record<string, string>): Record<string, string> => ({ ...Object.fromEntries(Object.entries(levelOf(scale)).map(([kind, entry]) => [kind, entry.manifold ? `${entry.hint}. Its heights: ${manifoldWords(entry.manifold)}` : entry.hint])), ...shapes });
 /** The part's own sentences (as many as the old evidence gave): what is asked about. */

@@ -448,20 +448,19 @@ of the book before it with that book's log applied; `--from <level>` drops the b
   *Tried and changed (2026-11-01):* the height probe showed Jev reads absolute averages surely and alike, additions
   unsurely and unevenly. The user's call: absolute averages, **each area kind's minimum a hard gate** (no slice below it;
   no slice under the street for a city or a district); a city's average asked on pictures across it.
-- **Every level's minimum, a kind's usual height, and the text's measures (the user, 2026-11-01, after the building
-  level's run).** One chart, `config/spawning/heights.json`, for an East Asian megacity. Jev is never shown its usual
-  heights.
-  - *The minimum at every level.* An area kind's is its least median; a building type's is its `least` floors, so an
-    office is offered nothing under three floors above the street. The run had put six office-like buildings at one floor, a
-    high-rise among them, each with a low confidence.
-  - *Where the answer spreads wide,* the part takes the measure its own name gives (五十层的…), else its kind's usual
-    height: an area kind's `usual`, a building type's usual floors. Wide is when its likeliest slice and the slices beside it hold under half its weight (`spread`), no
-    slice standing out. The run's wrong one-floor answers were all such.
+- **Every level's minimum, and the text's measures (the user, 2026-11-01, after the building level's run).**
+  - *The minimum at every level.* An area kind's is its least median; a building type's is its least floors
+    (`config/spawning/heights.json`, for an East Asian megacity), so an office is offered nothing under three floors
+    above the street. The run had put six office-like buildings at one floor, a high-rise among them, each with a low
+    confidence.
   - *The text's own measures* (`src/v2/context/measures.ts`): a number and a unit of height in the place's name and its
     own sentences, found by pattern, no model. Floors count (层 before what a building is or has, 地下 or 第 before it,
     階, floors); metres only beside a word of height or depth, so a distance walked is never a height. Each is offered as a
-    slice of its own, "as the text says", at every level, even under the minimum; when Jev takes it, it stands. The
-    slice's words are never the text's own, since the pictures may be published.
+    slice of its own, "as the text says", at every level, even under the minimum. The slice's words are never the text's
+    own, since the pictures may be published.
+  - *Tried and removed:* where an answer spread wide (its likeliest slice and those beside it under half its weight), the
+    part took its kind's usual height. Replayed on the run's real answers it lowered towers Jev had read as tall (a
+    20-floor office tower to 5, a 100-floor building to 12), so the user removed it; the minimum stays.
 - **Floating objects.** Some buildings neither stand on the ground nor fill a manifold: an underground cavern, a commercial
   centre on a raised ring, a floating platform. Each is asked twice, how far it is from the ground and how thick it is.
 - **Inventions are nominated.** Something that fits no category, placed as a shape, is a nominated object whatever the text
