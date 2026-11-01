@@ -379,11 +379,15 @@ Run 7's height question for 第十五学区 carried the city's facts, its weathe
 the district: the place tree holds nothing under it, so every source ranked by the tree fell back to the city. The user:
 put the scenes' raw text in the prompt; rank them by the question asked; and where nothing in the graph or the scenes'
 surroundings is about the place itself, put nothing in its stead.
-- `scenes`: of the scenes set in the place (or in a place inside it), naming it, or an unnamed place's own scene, the one
-  that best answers the question, whole (the user, after the first try carried up to six: "pick the most similar scene
-  and that's it"). The best: an unnamed place's own scene, then those set in it, then by its mentions and the question's words
-  beside them (the language profile's `questionWords`: floors and towers for its height, streets and squares for its kind,
-  near and across for where it lies), the rest of the scene a little. At most six, cut whole over 16,000 characters (Jev 1.14 takes 32k tokens of state; 40,000 characters was refused at the first question, `max_tokens_exceeded`; vol 1's longest scene is 11,754).
+- `scenes` (the user's calls, in turn: whole scenes, then the one best scene, then this): the five scenes that best
+  answer the question (an unnamed place: its own sentences' scene; ranked by its mentions and the question's words beside
+  them: the language profile's `questionWords`, floors and towers for its height, streets and squares for its kind, near
+  and across for where it lies), and of those only the sentences naming it exactly and their neighbours, fifteen in all:
+  each scene's first mention with a sentence either side (the best scene first), then the second mentions so, then wider
+  rings round every mention; a break (……) where a scene's sentences skip. A place named often (a city) gets its five
+  scenes' first mentions, not fifteen mentions from its first scene. The source picks its own scenes and sentences, so the
+  engine neither scales nor cuts it. The budget stays 16,000 characters (Jev 1.14 takes 32k tokens of state; whole
+  scenes at 40,000 characters were refused, `max_tokens_exceeded`).
 - `facts`: the facts the graph holds about the place itself; `environment`: the cards of scenes set in it or naming it;
   `standing`: what the tree holds in it. Each left out when it has none; never the holder's or the city's.
 - Run 7's questions recomposed with no model call: 第十五学区's height question now carries the scene telling its complex

@@ -83,15 +83,19 @@ const clip = (text: string, size: number) => (text.length > size ? `${text.slice
 /*
  * A terrain question carries the raw text of the scenes its place is in (the user's calls, 2026-11-01, after run 7: the
  * standing things, the facts and the surroundings ranked by the tree gave 第十五学区's height question the city's filler and
- * two sentences of the district): of the scenes set in it, naming it, or an unnamed place's own scene, the one that best
- * answers the question asked (its words told beside the place's mentions: floors and towers for its height), whole. Facts, surroundings and what stands there come only when
+ * two sentences of the district): of the scenes naming it (an unnamed place: its own sentences' scene), the five that best
+ * answer the question asked (its words told beside the place's mentions: floors and towers for its height), and of those
+ * only the sentences naming it exactly and their neighbours, fifteen in all: each scene's first mention with a sentence
+ * either side (the best scene first), then the second mentions so, then wider rings round every mention. Facts, surroundings and what stands there come only when
  * they are about the place itself; with none, nothing is put in their stead.
  */
 // Jev 1.14 takes 32k tokens of state with one question, and Chinese runs near a token a character (more at times): 16,000
 // characters hold the longest scene of vol 1 (11,754) whole, with room left; 40,000 was refused (max_tokens_exceeded).
 const BUDGET = 16000;
-/** The scenes a terrain question carries: its best one (the source gives no more). */
-const SCENES = 1;
+/** The scenes a terrain question draws on: the best five for the question. */
+const SCENES = 5;
+/** The sentences it carries from them in all: each mention with a sentence either side, then wider rings. */
+const SENTENCES = 15;
 
 /** A manifold (src/ground/stage/landscape.ts): gradient, core, spread, tail share, tail index. */
 const M = (gradient: number, spread: number, tail = 0) => ({ gradient, core: 0.3, spread, tail, index: 5 });
@@ -205,17 +209,26 @@ function sources<F extends PartFocus>(asked: Asked): Source<F, TerrainStores>[] 
     fixed("part", "part", (focus: F) => ({ name: focus.part.label, scale: focus.part.scale, in: focus.holder.label, ...(focus.holder.id !== focus.city.id ? { city: focus.city.label } : {}), ...(focus.kind ? { ground: focus.kind } : {}) })) as Source<F, TerrainStores>,
     fixed("within", "within", (focus: F) => focus.within ?? {}) as Source<F, TerrainStores>,
     {
-      name: "scenes", key: "scenes", quota: SCENES,
-      // Of the scenes set in it (or in a place inside it), naming it, or its own (an unnamed place), the one that best
-      // answers the question: that scene alone (the user's call, 2026-11-01: "pick the most similar scene and that's it").
+      // It picks its own five scenes and fifteen sentences: kept as given (a scaled quota would drop a scene after the
+      // fifteen were shared), and small enough never to need cutting.
+      name: "scenes", key: "scenes", quota: SCENES, keep: true,
+      // The five scenes that best answer the question, and from them only the sentences around the place's exact name
+      // (the user's call, 2026-11-01), fifteen in all, each scene's in reading order with a break where they skip.
       collect: (focus, stores) => {
-        const own = new Set(stores.own(focus.part.id).map((sentence) => sentence.id));
-        const scored = stores.scenes.flatMap((scene) => {
-          const setIn = !!scene.setting && stores.inside(scene.setting, focus.part.id);
-          if (!setIn && !scene.text.includes(focus.part.label) && !scene.lines.some((line) => own.has(line.id))) return [];
-          return [{ id: scene.id, score: Math.round(sceneScore(scene, focus, own, asked, setIn) * 100) / 100, fields: scene.text }];
-        });
-        return scored.sort((a, b) => b.score - a.score).slice(0, 1);
+        const own = new Set(stores.own(focus.part.id).map((sentence) => sentence.id)), names = (line: { id: string; text: string }) => line.text.includes(focus.part.label) || own.has(line.id);
+        const best = stores.scenes.flatMap((scene) => {
+          const mentions = scene.lines.flatMap((line, n) => (names(line) ? [n] : []));
+          return mentions.length ? [{ scene, mentions, score: Math.round(sceneScore(scene, focus, own, asked, !!scene.setting && stores.inside(scene.setting, focus.part.id)) * 100) / 100 }] : [];
+        }).sort((a, b) => b.score - a.score).slice(0, SCENES);
+        // Shared fairly: each scene's first mention with a sentence either side, best scene first, then its second
+        // mentions so, then wider rings round every mention; a place named often never fills the fifteen with its first scene.
+        const order = best.flatMap(({ scene, mentions }, k) => mentions.flatMap((n, i) => Array.from({ length: Math.max(n, scene.lines.length - 1 - n) + 1 }, (_, ring) => ring).flatMap((ring) =>
+          (ring ? [n - ring, n + ring] : [n]).filter((at) => at >= 0 && at < scene.lines.length).map((at) => ({ k, at, key: [ring <= 1 ? 0 : ring, ring <= 1 ? i : 0, ring <= 1 ? k : i, ring <= 1 ? ring : k] })))))
+          .sort((a, b) => a.key[0] - b.key[0] || a.key[1] - b.key[1] || a.key[2] - b.key[2] || a.key[3] - b.key[3]);
+        const taken = best.map(() => new Set<number>());
+        let count = 0;
+        for (const { k, at } of order) { if (count >= SENTENCES) break; if (!taken[k].has(at)) { taken[k].add(at); count++; } }
+        return best.flatMap(({ scene, score }, k) => (taken[k].size ? [{ id: scene.id, score, fields: [...taken[k]].sort((a, b) => a - b).map((at, i, all) => (i && at > all[i - 1] + 1 ? "……" : "") + scene.lines[at].text).join("") }] : []));
       },
     },
     // The facts the graph holds about the place itself (none: none given).
@@ -235,7 +248,7 @@ export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
   task: (focus) => `${focus.part.scale === "city" ? `What kind of city is ${focus.part.label}?` : focus.sampled ? `What kind of ${focus.part.scale} is ${focus.part.label}? The text gives it no name of its own; it stands where sampling put it, in ${focus.holder.label}.` : `What kind of ${focus.part.scale} is ${focus.part.label}, in ${focus.city.label}?`} Terrain only: a kind of ${focus.part.scale} (each with its manifold: how its heights spread; the engine fills in its buildings) or a basic shape, never a building. Read it from the scenes it is in, as the text tells them, the most telling first (scenes); where given, the facts about it (facts), its surroundings (environment) and what stands in it (standing); and the terrain kept for the places holding it (within).`,
   // The options are the part's level's kinds (TERRAIN_KINDS, each with its manifold), composed with the evidence.
   sources: [...sources<GroundFocus>("ground"), fixed("kinds", "kinds", (focus: GroundFocus) => terrainKinds(focus.part.scale, focus.shapes)) as Source<GroundFocus, TerrainStores>, fixed("pictures", "pictures", (focus: GroundFocus) => focus.pictures) as Source<GroundFocus, TerrainStores>],
-  cutOrder: ["environment", "standing", "facts", "scenes"],
+  cutOrder: ["environment", "standing", "facts"],
   probe,
   // Its kind only (docs/v2/world-engine-v2.md §2.0.21): where an area lies and how large it is are the program's (its pins,
   // its ties, free ground); a city is the map itself.
@@ -254,7 +267,7 @@ export const terrainAreaMode: Mode<AreaFocus, TerrainStores> = {
   // The pin is a suggestion (the user's call, §2.0.15): where continuity would put it; Jev may box it anywhere in its district.
   task: (focus) => `Where does ${focus.part.label} (${focus.kind}) lie in ${focus.district ?? focus.holder.label}, and how large is it? The text gives it no name of its own. The grey pin is only a suggestion, a point and not a size: where the characters going between it and the places it is tied to would put it${focus.tied?.length ? ` (${focus.tied.join(", ")})` : ""}. Put it anywhere in ${focus.district ?? focus.holder.label} that suits what it is (an airfield is not in the middle of towers). Box its ground on picture "map": where it lies and as large as it is, from what the text says of it (text) and of the places around it (standing, facts, environment), and the terrain kept for the places holding it (within).`,
   sources: [...sources<AreaFocus>("where"), fixed("pictures", "pictures", (focus: AreaFocus) => focus.pictures) as Source<AreaFocus, TerrainStores>],
-  cutOrder: ["environment", "standing", "facts", "scenes"],
+  cutOrder: ["environment", "standing", "facts"],
   probe,
   questions: (focus) => [box(focus)],
   budget: BUDGET,
@@ -264,7 +277,7 @@ export const terrainZoomMode: Mode<ZoomFocus, TerrainStores> = {
   name: "terrain-zoom",
   task: (focus) => `Where does ${focus.part.label} lie, closer up? The red box is the last answer: ${focus.reasons.join("; ")}.`,
   sources: [...sources<ZoomFocus>("where"), fixed("pictures", "pictures", (focus: ZoomFocus) => focus.pictures) as Source<ZoomFocus, TerrainStores>],
-  cutOrder: ["environment", "standing", "facts", "scenes"],
+  cutOrder: ["environment", "standing", "facts"],
   questions: (focus) => [box(focus)],
   budget: BUDGET,
 };
@@ -277,7 +290,7 @@ export const terrainHeightMode: Mode<HeightFocus, TerrainStores> = {
     ? `What is the median height of ${focus.part.label}'s roofs (${focus.kind}): the height half its buildings stand below? Its manifold makes the rest (${manifoldWords(terrainKind(focus.part.scale, focus.kind)!.manifold!)}), so give the median, not the tallest. If it lies underground (an underground passage, a mall under the street), give how deep its floors lie: the slices below the street.`
     : `How high does ${focus.part.label} (${focus.kind}) rise: the height of its top? If it lies underground, how deep it goes: the slices below the street.`} The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from the scenes it is in, as the text tells them, the most telling first (scenes); where given, the facts about it (facts), its surroundings (environment) and what stands in it (standing); and the terrain kept for the places holding it (within).`,
   sources: [...sources<HeightFocus>("height"), fixed("heights", "heights", (focus: HeightFocus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.y} m: ${slice.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
-  cutOrder: ["environment", "standing", "facts", "scenes"],
+  cutOrder: ["environment", "standing", "facts"],
   probe,
   questions: (focus) => [{ key: "height", primitive: "choice", instructions: `Which lettered slice is ${focus.measure === "median" ? `the median of ${focus.part.label}'s roofs` : `the top of ${focus.part.label}'s ground`}?`, options: focus.slices.map((slice) => slice.letter), optionHints: Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.letter}: ${slice.y} m, ${slice.said}`])) }],
   budget: BUDGET,
