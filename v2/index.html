@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Novel Ontology v2</title>
+<meta name="description" content="v2 in two stages, extraction and the world engine: what each does and where each step stands.">
+<style>
+:root { --bg: #0d1214; --panel: #141b1e; --raise: #1a2327; --fg: #e3ebe8; --muted: #8fa29b; --rule: #24302f; --accent: #5fe08a; --gold: #ffd36e; --cyan: #7ce6ff; --soft: #18241f; color-scheme: dark; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg: #f3f5f2; --panel: #ffffff; --raise: #f7f9f6; --fg: #17201d; --muted: #586660; --rule: #dbe1dc; --accent: #1f7a4a; --gold: #9a6a00; --cyan: #0b6f86; --soft: #e6f0ea; color-scheme: light; } }
+:root[data-theme="light"] { --bg: #f3f5f2; --panel: #ffffff; --raise: #f7f9f6; --fg: #17201d; --muted: #586660; --rule: #dbe1dc; --accent: #1f7a4a; --gold: #9a6a00; --cyan: #0b6f86; --soft: #e6f0ea; color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif; }
+a { color: var(--accent); }
+.eyebrow { font: 600 11px/1.3 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 4px 0 0; font-size: 28px; line-height: 1.15; text-wrap: balance; }
+code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; }
+[hidden] { display: none !important; }
+main { display: grid; gap: 28px; max-width: 1040px; margin: 0 auto; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { display: grid; gap: 8px; }
+header p, .head p { margin: 0; color: var(--muted); max-width: 70ch; }
+.principles { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--fg); max-width: 78ch; }
+.principles li::marker { color: var(--accent); }
+.stage { display: grid; gap: 14px; padding-top: 18px; border-top: 2px solid var(--fg); }
+.head { display: grid; gap: 4px; }
+h2 { margin: 0; font-size: 22px; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px; }
+.steps li { display: grid; gap: 4px; align-content: start; padding: 12px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--rule); font-size: 14px; }
+.steps li > span:last-of-type { color: var(--muted); }
+.steps .next { border-color: var(--gold); }
+.mark { font: 600 10px/1 ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.done .mark { color: var(--accent); } .next .mark { color: var(--gold); } .later .mark { color: var(--muted); }
+.layers { display: flex; flex-wrap: wrap; gap: 8px; }
+.layers a { display: grid; gap: 2px; flex: 1 1 240px; min-width: 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--rule); background: var(--raise); color: var(--fg); text-decoration: none; text-transform: capitalize; }
+.layers a span { color: var(--muted); font-size: 12px; text-transform: none; }
+.layers small { color: var(--muted); text-transform: none; }
+.more { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.more a { display: grid; gap: 2px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--rule); background: var(--panel); color: var(--fg); text-decoration: none; }
+.more a span { color: var(--muted); font-size: 13px; }
+footer { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <span class="eyebrow">novel-ontology-pi · v2</span>
+  <h1>From a novel to a world you can watch</h1>
+  <p>Extraction reads the book into a world model: who says and does each line, when it happens, where every place and thing is. The world engine builds that world on the ground: the terrain first, then where everyone stands, then how they move.</p>
+  <ul class="principles">
+    <li>The program does geometry; Jev does meaning. No model is asked for a coordinate or a size.</li>
+    <li>Jev sees what the user sees: every terrain question carries pictures of the world as it stands.</li>
+    <li>One context engine composes every Jev request: the raw text around the place's name, ranked by the question, nothing padded.</li>
+    <li>Pins are suggestions; placement is one optimization, settled part by part.</li>
+  </ul>
+</header>
+<section class="stage">
+  <div class="head"><h2>Extraction</h2><p>From the book to a world model: what the text says, and where every thing of it is.</p></div>
+  <ol class="steps"><li class="done"><span class="mark">done</span><b>The reading flow</b><span>Every scene read once by Jev, each request composed by the context engine: facts, story time, places, roles.</span></li><li class="done"><span class="mark">done</span><b>The place tree</b><span>Places at their scales, the world script, the pools that hold what the text does not nominate.</span></li></ol>
+  <div class="layers"><a href="concepts.html#layer-reading"><b>reading</b> <span>6 concepts</span><small>What the text says: the reading flow and its Jev requests, composed by the context engine.</small></a><a href="concepts.html#layer-tree"><b>tree</b> <span>6 concepts</span><small>Where things are: the place tree, its scales, and the pools that hold what the text does not nominate.</small></a></div>
+</section>
+<section class="stage">
+  <div class="head"><h2>World engine</h2><p>From the world model to a world that stands and moves: ground, then things, then motion.</p></div>
+  <ol class="steps"><li class="done"><span class="mark">done</span><b>Terrain</b><span>Each place's kind and height asked of Jev part by part with two pictures; sized by pins, placed as one optimization, settled.</span><a href="../terrain/">See the terrain run →</a></li><li class="next"><span class="mark">next</span><b>Spawning positions</b><span>Where each character and thing stands when a scene begins, on the terrain the first step built.</span></li><li class="later"><span class="mark">later</span><b>Movement and simulation</b><span>Per-character actions over time, paths on the ground, what breaks.</span></li></ol>
+  <div class="layers"><a href="concepts.html#layer-terrain"><b>terrain</b> <span>17 concepts</span><small>What the ground is: each place's kind and height, decided by Jev level by level, part by part.</small></a><a href="concepts.html#layer-world"><b>world</b> <span>14 concepts</span><small>What stands: the canvas of places, the filled landscapes, the world's lots and its underground.</small></a><a href="concepts.html#layer-view"><b>view</b> <span>10 concepts</span><small>What is seen: the visual context engine's frames for Jev, and the live page the user watches.</small></a></div>
+</section>
+<section class="stage">
+  <div class="head"><h2>Across both</h2><p>What code decides alone, for either stage.</p></div>
+  
+  <div class="layers"><a href="concepts.html#layer-rules"><b>rules</b> <span>2 concepts</span><small>What code decides alone: the rules catalogue and the language profile's words.</small></a></div>
+</section>
+<section class="stage">
+  <div class="head"><h2>Read further</h2></div>
+  <div class="more">
+    <a href="../terrain/"><b>The terrain run</b><span>Each part as Jev saw it, and the world it built.</span></a>
+    <a href="concepts.html"><b>Concept map</b><span>Every concept we invented, with its code and its design.</span></a>
+    <a href="street-compatibility.html"><b>Street compatibility</b><span>Which streets share ground, which buildings they take.</span></a>
+    <a href="https://github.com/gardianofthedarkness/novel-ontology-pi/blob/v2/docs/v2/README.md"><b>The guide by stage</b><span>From each concept to its design and its code.</span></a>
+    <a href="https://github.com/gardianofthedarkness/novel-ontology-pi/blob/v2/docs/v2/status.md"><b>Status</b><span>What each step decided, and what is open.</span></a>
+    <a href="https://github.com/gardianofthedarkness/novel-ontology-pi/blob/v2/docs/v2/whats-new.md"><b>What is new in v2</b><span>For a teammate catching up.</span></a>
+  </div>
+</section>
+<footer>Made from <code>src/v2/concepts.ts</code> by <code>experiments/v2/terrain-io.mjs</code> at <a href="https://github.com/gardianofthedarkness/novel-ontology-pi/tree/terrain-run11">terrain-run11</a>.</footer>
+</main>
+</body>
+</html>
