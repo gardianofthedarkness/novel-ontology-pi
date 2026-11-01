@@ -35,6 +35,11 @@ export function loadSpawning(folder = DEFAULTS): SpawningFiles {
   return { city: read("city"), district: read("district"), street: read("street") };
 }
 
+/** The kind a parent of a level is born as before Jev is asked (its configuration's `default`; the user's call, 2026-11-01). */
+export function defaultKindOf(level: "city" | "district", folder = DEFAULTS): string | null {
+  return JSON.parse(readFileSync(`${folder.replace(/\/?$/, "/")}${level}.json`, "utf8")).default ?? null;
+}
+
 /** The area a configuration is asked for: its id and label (a place's own layer finds it by them), its level and its kind. */
 export interface Parent { id: string; label: string; level: Level; kind: string }
 /** A configuration resolved for one parent, and the layer it came from (kept with its slots, so a world is made again the same way). */

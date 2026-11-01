@@ -314,6 +314,81 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       syncSlots(); await replace(terrainFile, JSON.stringify(terrain, null, 1)); await mkdir(join(universe.dir, 'maps'), { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
       await replace(mapLogFile, JSON.stringify(mapLog, null, 1)); reshape();
     };
+    // A parent's children laid out by its topology as manifolds of its own ground (§8.2, §8.3): the new ones where its
+    // energy is least, those standing giving a little; the heights unified to its average (§8.6). For a born city, a city
+    // re-decided, and a level's end alike; says what it did.
+    const layOutChildren = (id, level, give = 1) => {
+      const site = terrain.sites[id], child = S.CHILD[level];
+      const topology = resolver({ id, label: site.label, level, kind: site.kind })?.topology;
+      const mine = Object.values(registry.slots).filter(slot => slot.parent === id && slot.level === child), fresh = mine.filter(slot => !slot.toward);
+      if (!topology || !mine.length) return null;
+      // A born city's districts were a default, not yet seen: they move and change height freely at its first decision.
+      const provisional = site.by === 'birth', free = slot => slot.average == null || slot.provisional;
+      const radiusFor = slot => (slot.size ? Math.max(...slot.size) : Math.max(...sizeFor(child, S.defaultTerrain(child, slot.kind)?.ground, 0))) / 2;
+      const result = S.layOut(mine.filter(slot => slot.toward).map(slot => ({ id: slot.id, kind: slot.kind, at: slot.toward, r: radiusFor(slot), give: mine.some(free) ? 10 : give })), fresh.map(slot => ({ id: slot.id, kind: slot.kind, r: radiusFor(slot) })), topology, id);
+      for (const m of result.manifolds) {
+        const slot = registry.slots[m.id], was = slot.toward;
+        Object.assign(slot, { toward: m.at, size: [2 * m.r, 2 * m.r], mapped: true });
+        if (!was) logMap({ level: child, what: 'spawn', id: slot.id, parent: id, kind: slot.kind, at: m.at, r: m.r, seed: slot.id });
+        else if (was[0] !== m.at[0] || was[1] !== m.at[1]) { logMap({ level: child, what: 'move', id: slot.id, from: was, to: m.at }); if (slot.owner && terrain.sites[slot.owner]) terrain.sites[slot.owner].toward = m.at; }
+      }
+      // The heights (§8.6): the parent's average held over its own open ground and its manifolds, within the deformation limit.
+      const factorOf = (scale, kind) => { const manifold = T.terrainKind(scale, kind)?.manifold; return manifold ? averageOverMedian(manifold) : 1; };
+      const rangeOf = (scale, kind) => { const medians = T.terrainKind(scale, kind)?.medians ?? [0]; return [Math.min(...medians) * factorOf(scale, kind), Math.max(...medians) * factorOf(scale, kind)]; };
+      const parentAverage = site.average ?? (site.median ?? 0) * factorOf(level, site.kind), disc = Math.PI * result.radius ** 2;
+      const parts = [
+        { id: 'open', area: Math.max(1, disc - result.manifolds.reduce((sum, m) => sum + Math.PI * m.r ** 2, 0)), average: site.open && !site.open.provisional ? site.open.average : parentAverage, range: rangeOf(level, site.kind), born: !site.open || !!site.open.provisional },
+        // A free part starts again from its kind's default, so parts of one kind come out alike.
+        ...result.manifolds.map(m => { const slot = registry.slots[m.id]; return { id: m.id, area: Math.PI * m.r ** 2, average: free(slot) ? (S.defaultTerrain(child, slot.kind)?.median ?? 0) * factorOf(child, slot.kind) : slot.average, range: rangeOf(child, slot.kind), born: free(slot) }; }),
+      ];
+      const heights = S.unify(parentAverage, parts);
+      for (const m of result.manifolds) {
+        const slot = registry.slots[m.id], to = heights.averages[m.id];
+        if (slot.average !== to) logMap({ level: child, what: 'height', id: m.id, from: slot.average ?? null, to });
+        Object.assign(slot, { average: to, median: Math.round(to / factorOf(child, slot.kind)) });
+        if (provisional) slot.provisional = true; else delete slot.provisional;
+      }
+      if (heights.parent !== round(parentAverage)) logMap({ level, what: 'height', id, from: round(parentAverage), to: heights.parent });
+      // Its open ground: the city's own ground between its manifolds, of its topology's landscape, flat (no core of its own:
+      // its manifolds are its centres), at the height that holds the city's average.
+      const openManifold = site.manifold ? { ...site.manifold, gradient: 0 } : null, openFactor = openManifold ? averageOverMedian(openManifold) : 1;
+      site.open = { ground: topology.open ?? site.ground, average: heights.averages.open, median: Math.max(1, Math.round(heights.averages.open / openFactor)), ...(openManifold ? { manifold: openManifold } : {}), ...(provisional ? { provisional: true } : {}) };
+      Object.assign(site, { average: heights.parent, size: [2 * result.radius, 2 * result.radius] });
+      const R = result.radius, said = result.manifolds.map(m => `${m.kind} ${(Math.hypot(...m.at) / R).toFixed(2)}R ${heights.averages[m.id]} m`).join(', ');
+      return `${site.label}: ${result.manifolds.length} ${child}s laid out by its topology, radius ${R} m (${said}); energy ring ${result.first.ring} → ${result.terms.ring}, pairs ${result.first.pairs} → ${result.terms.pairs}, pressure ${result.first.pressure} → ${result.terms.pressure}; average ${round(parentAverage)} → ${heights.parent} m, its open ground ${heights.averages.open} m`;
+    };
+    // A city born before Jev is asked (the user's call, 2026-11-01): Jev looks at building blocks from its first picture, and
+    // its answers deform a basic city into the one the reading discloses. Born as its configuration's default kind at that
+    // kind's standard height (the least average), its districts laid out by that kind's topology.
+    const bornKind = spawn ? S.defaultKindOf('city') : null;
+    const birthCity = (id, label) => {
+      const entry = T.terrainKind('city', bornKind);
+      if (!entry?.medians) return null;
+      const median = entry.medians[0], average = Math.round(median * averageOverMedian(entry.manifold));
+      terrain.sites[id] = { label, scale: 'city', kind: bornKind, ground: entry.ground, median, average, manifold: entry.manifold, by: 'birth' };
+      logMap({ level: 'city', what: 'birth', id, kind: bornKind, average });
+      return deformCity(id);
+    };
+    // A city's districts brought to its kind (§8.3): the slots its kind's configuration no longer has and no name holds go,
+    // the ones it lacks are added; then laid out and their heights unified again (layOutChildren).
+    const deformCity = id => {
+      const site = terrain.sites[id], area = { id, label: site.label, level: 'city', kind: site.kind }, resolved = resolver(area);
+      if (!resolved?.topology) return null;
+      const { counts, layer } = S.spawnsOf(area, resolver), kept = new Map();
+      const mine = Object.values(registry.slots).filter(slot => slot.parent === id && slot.level === 'district');
+      for (const slot of mine.sort((a, b) => Number(!!b.owner) - Number(!!a.owner) || Number(!!b.toward) - Number(!!a.toward) || a.id.localeCompare(b.id))) {
+        const n = kept.get(slot.kind) ?? 0;
+        if (slot.owner || n < (counts[slot.kind] ?? 0)) { kept.set(slot.kind, n + 1); continue; }
+        delete registry.slots[slot.id]; logMap({ level: 'district', what: 'remove', id: slot.id, kind: slot.kind });
+      }
+      for (const [kind, n] of Object.entries(counts))
+        for (let k = kept.get(kind) ?? 0; k < n; k++) {
+          let index = 1; while (registry.slots[`slot:${id}:${kind}:${index}`]) index++;
+          const slotId = `slot:${id}:${kind}:${index}`;
+          registry.slots[slotId] = { id: slotId, parent: id, level: 'district', kind, toward: null, owner: null, sharers: [], damaged: [], layer, book: bookId };
+        }
+      return layOutChildren(id, 'city');
+    };
     // A level's end (§4.3): the moves, the spares placed, every area of the level spawning its children's slots, the world
     // built again. Run again on a pick-up, it does only what is left.
     const spawnEnd = async level => {
@@ -354,45 +429,17 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // Every area of the level spawns its children's slots by its kind (config/spawning): a city its districts', a district
       // its streets'; the building level is not run yet.
       let born = 0;
-      if (S.CHILD[level] !== 'building') for (const [id, site] of Object.entries(terrain.sites).filter(([sid, site]) => site.scale === level && site.kind && (level === 'city' || site.by === 'slot' || (site.slot && !sid.startsWith('unnamed:')))))
+      if (S.CHILD[level] !== 'building') for (const [id, site] of Object.entries(terrain.sites).filter(([sid, site]) => site.scale === level && site.kind && (level === 'city' || site.by === 'slot' || (site.slot && !sid.startsWith('unnamed:'))))) {
+        // An area with a topology whose children stand already (a born or re-decided city) keeps them: deformCity manages them.
+        if (resolver({ id, label: site.label, level, kind: site.kind })?.topology && Object.values(registry.slots).some(slot => slot.parent === id && slot.level === S.CHILD[level])) continue;
         for (const { at, ...child } of S.spawnChildren({ id, label: site.label, level, kind: site.kind }, resolver, bookId, Object.values(registry.slots))) { registry.slots[child.id] = { ...child, toward: null }; born++; }
-      // A parent whose configuration has a topology (§8.2: a city) lays its children out now, as manifolds of its own ground:
-      // the new ones where its energy is least, those standing giving a little (§8.3), the heights unified (§8.6).
+      }
+      // A parent whose configuration has a topology (§8.2: a city) lays out the children it has not placed yet.
       const laid = [];
       if (S.CHILD[level] !== 'building') for (const [id, site] of Object.entries(terrain.sites).filter(([, site]) => site.scale === level && site.kind)) {
-        const topology = resolver({ id, label: site.label, level, kind: site.kind })?.topology, child = S.CHILD[level];
-        const mine = Object.values(registry.slots).filter(slot => slot.parent === id && slot.level === child), fresh = mine.filter(slot => !slot.toward);
-        if (!topology || !fresh.length) continue;
-        const radiusFor = slot => (slot.size ? Math.max(...slot.size) : Math.max(...sizeFor(child, S.defaultTerrain(child, slot.kind)?.ground, 0))) / 2;
-        const result = S.layOut(mine.filter(slot => slot.toward).map(slot => ({ id: slot.id, kind: slot.kind, at: slot.toward, r: radiusFor(slot), give: 1 })), fresh.map(slot => ({ id: slot.id, kind: slot.kind, r: radiusFor(slot) })), topology, id);
-        for (const m of result.manifolds) {
-          const slot = registry.slots[m.id], was = slot.toward;
-          Object.assign(slot, { toward: m.at, size: [2 * m.r, 2 * m.r], mapped: true });
-          if (!was) logMap({ level: child, what: 'spawn', id: slot.id, parent: id, kind: slot.kind, at: m.at, r: m.r, seed: slot.id });
-          else if (was[0] !== m.at[0] || was[1] !== m.at[1]) { logMap({ level: child, what: 'move', id: slot.id, from: was, to: m.at }); if (slot.owner && terrain.sites[slot.owner]) terrain.sites[slot.owner].toward = m.at; }
-        }
-        // The heights (§8.6): the parent's average held over its own open ground and its manifolds, within the deformation limit.
-        const factorOf = (scale, kind) => { const manifold = T.terrainKind(scale, kind)?.manifold; return manifold ? averageOverMedian(manifold) : 1; };
-        const rangeOf = (scale, kind) => { const medians = T.terrainKind(scale, kind)?.medians ?? [0]; return [Math.min(...medians) * factorOf(scale, kind), Math.max(...medians) * factorOf(scale, kind)]; };
-        const parentAverage = site.average ?? (site.median ?? 0) * factorOf(level, site.kind), disc = Math.PI * result.radius ** 2;
-        const parts = [
-          { id: 'open', area: Math.max(1, disc - result.manifolds.reduce((sum, m) => sum + Math.PI * m.r ** 2, 0)), average: site.open?.average ?? parentAverage, range: rangeOf(level, site.kind), born: !site.open },
-          ...result.manifolds.map(m => { const slot = registry.slots[m.id]; return { id: m.id, area: Math.PI * m.r ** 2, average: slot.average ?? (S.defaultTerrain(child, slot.kind)?.median ?? 0) * factorOf(child, slot.kind), range: rangeOf(child, slot.kind), born: slot.average == null }; }),
-        ];
-        const heights = S.unify(parentAverage, parts);
-        for (const m of result.manifolds) {
-          const slot = registry.slots[m.id], to = heights.averages[m.id];
-          if (slot.average !== to) logMap({ level: child, what: 'height', id: m.id, from: slot.average ?? null, to });
-          Object.assign(slot, { average: to, median: Math.round(to / factorOf(child, slot.kind)) });
-        }
-        if (heights.parent !== round(parentAverage)) logMap({ level, what: 'height', id, from: round(parentAverage), to: heights.parent });
-        // Its open ground: the city's own ground between its manifolds, of its topology's landscape, flat (no core of its own:
-        // its manifolds are its centres), at the height that holds the city's average.
-        const openManifold = site.manifold ? { ...site.manifold, gradient: 0 } : null, openFactor = openManifold ? averageOverMedian(openManifold) : 1;
-        site.open = { ground: topology.open ?? site.ground, average: heights.averages.open, median: Math.max(1, Math.round(heights.averages.open / openFactor)), ...(openManifold ? { manifold: openManifold } : {}) };
-        Object.assign(site, { average: heights.parent, size: [2 * result.radius, 2 * result.radius] });
-        const R = result.radius, said = result.manifolds.map(m => `${m.kind} ${(Math.hypot(...m.at) / R).toFixed(2)}R ${heights.averages[m.id]} m`).join(', ');
-        laid.push(`${site.label}: ${result.manifolds.length} ${child}s laid out by its topology, radius ${R} m (${said}); energy ring ${result.first.ring} → ${result.terms.ring}, pairs ${result.first.pairs} → ${result.terms.pairs}, pressure ${result.first.pressure} → ${result.terms.pressure}; average ${round(parentAverage)} → ${heights.parent} m, its open ground ${heights.averages.open} m`);
+        if (!Object.values(registry.slots).some(slot => slot.parent === id && slot.level === S.CHILD[level] && !slot.toward)) continue;
+        const said = layOutChildren(id, level);
+        if (said) laid.push(said);
       }
       await saveSlots();
       for (const text of laid) await live.outcome({ subject: `${level}s`, text });
@@ -418,12 +465,19 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     let placed = 0;
     // A part already kept (a stopped run's stage/terrain.json) stays as it is: the run picks up where it stopped (the user's
     // call, 2026-10-31). A fresh run moves terrain.json aside first.
-    const before = queue.filter(item => item.part && terrain.sites[item.part.id]).length;
+    const keptBefore = id => !!terrain.sites[id] && terrain.sites[id].by !== 'birth';
+    const before = queue.filter(item => item.part && keptBefore(item.part.id)).length;
     if (before) await live.outcome({ subject: 'terrain', text: `picking up: ${before} of ${total} parts kept before, ${total - before} to go` });
+    // Spawn mode: every city not decided yet is born a basic city first, so Jev's first pictures show building blocks.
+    if (spawn) {
+      const unborn = queue.filter(item => item.part?.scale === 'city' && !terrain.sites[item.part.id]);
+      for (const { part } of unborn) { const said = birthCity(part.id, part.label); if (said) await live.outcome({ subject: part.label, text: `born a basic ${bornKind} at its standard height: ${said}` }); }
+      if (unborn.length) { await saveSlots(); await build(); }
+    }
     for (const { part, city, end } of queue) {
       if (placed >= limit) break;
       if (end) { await levelEnd(end); if (end === until) break; continue; }
-      if (terrain.sites[part.id]) continue;
+      if (keptBefore(part.id)) continue;
       // A pool's member: Jev is asked its kind, then where it lies (anywhere in its district, its pin a suggestion), then its height.
       const isCity = part.scale === 'city', sampled = isMember(part.id), cityNode = nodeOf(city.id);
       // In spawn mode a part moves to the area of the slot it borrows (docs/v2/borrow-and-spawn.md §2.3) once it is decided.
@@ -504,7 +558,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const cityFree = isCity ? { rects: [] } : Z.freeSpace({ x: centre[0], z: centre[2], half: R, level: 'city', purpose: 'context', tag: R / 24 }, null, Object.entries(terrain.sites).filter(([id, site]) => Array.isArray(site.box) && site.by !== 'pool' && id !== part.id && !within(part.id, id) && !within(id, part.id)).map(([, site]) => site.box));
       const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R, turn: fill.turn }, areas: areas(), free: cityFree.rects, labelScale: R / 24, vague: CLEAR });
       const { replies: grounds } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES,
-        pictures: { skyline: `${city.label} from the side and above, as the world stands now. ${SEEN}`, map: `${city.label} straight down, ${fill.turn ? `turned ${Math.round((fill.turn * 180) / Math.PI)}° so its places fill the picture (north is not up)` : 'north up'}, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white${now ? `; where ${part.label} stands for now, a grey pin` : ''}${cityFree.rects.length ? '; free ground in faint cyan squares' : ''}. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
+        pictures: { skyline: `${city.label} from the side and above, as the world stands now.${isCity && terrain.sites[part.id]?.by === 'birth' ? ` It stands as a basic ${bornKind} for now, the engine's default before the text says more; your answers reshape it.` : ''} ${SEEN}`, map: `${city.label} straight down, ${fill.turn ? `turned ${Math.round((fill.turn * 180) / Math.PI)}° so its places fill the picture (north is not up)` : 'north up'}, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white${now ? `; where ${part.label} stands for now, a grey pin` : ''}${cityFree.rects.length ? '; free ground in faint cyan squares' : ''}. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
       const where = grounds.find(reply => reply.key === 'box'), what = grounds.find(reply => reply.key === 'kind');
       // The answer as the engine's input: a kind of the part's level (a landscape type, or a shape), or a basic shape.
       const options = T.terrainKinds(part.scale, SHAPES), kind = options[what?.value] ? String(what.value) : Object.keys(options)[isCity ? 1 : part.scale === 'street' ? 0 : 1];
@@ -689,18 +743,22 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // from 200 m, a dwelling area's to 60 m: terrainTops), through a core of the area at its middle; red dotted cuts
       // through the buildings the engine stands there for now.
       // The underground's slices first (below the street), then the kind's own: the picture spans them all.
-      const { measure, slices: tops } = T.terrainHeights(part.scale, kind), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
+      // Spawn mode asks the kind's standard plus an addition, as averages (docs/v2/borrow-and-spawn.md §8.9).
+      const kindManifold = T.terrainKind(part.scale, kind)?.manifold, factor = spawn && kindManifold ? averageOverMedian(kindManifold) : null;
+      const { measure, slices: tops, standard } = T.terrainHeights(part.scale, kind, factor ? { factor } : undefined), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
       const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, Math.max(CORE_MIN, span * CORE)), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
       const sample = [round(cc[0] - core), round(cc[1] - core), round(cc[0] + core), round(cc[1] + core)];
       const lots = data.world.lots.map(lot => ({ box: [lot.i0 * CELL, lot.j0 * CELL, (lot.i0 + lot.nx) * CELL, (lot.j0 + lot.nz) * CELL], top: (lot.floors ?? 1) * FLOOR })).filter(lot => lot.box[0] < sample[2] && sample[0] < lot.box[2] && lot.box[1] < sample[3] && sample[1] < lot.box[3]);
       const distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [cc[0], (lo + hi) / 2, cc[1]];
       const heights = await shoot(OVERVIEW, { view: { fov: 40, position: from(mid, yaw, 0.3, distance), target: mid },
-        slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${entry.y} m · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.filter(entry => entry.y > 0).flatMap(entry => lots.filter(lot => lot.top > entry.y).slice(0, 80).map(lot => ({ box: lot.box, y: entry.y }))),
+        slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${measure === 'average' ? `${entry.offset >= 0 ? '+' : ''}${entry.offset} m` : `${entry.y} m`} · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.filter(entry => entry.y > 0).flatMap(entry => lots.filter(lot => lot.top > entry.y).slice(0, 80).map(lot => ({ box: lot.box, y: entry.y }))),
         labelScale: Math.max(2.5, distance / 75), dash: Math.max(1, distance / 160), vague: { near: distance * 1.6, far: distance * 4.5 } });
-      const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height its terrain may rise to; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
+      const { replies: [rise] } = await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, ...(standard ? { standard } : {}), pictures: { heights: `the middle of ${part.label}'s area, ${Math.round(core * 2)} m across, from the side and a little above, ${measure === 'average' ? `a slice at its standard height (+0 m) and at each addition to it, and below the street` : 'a slice at each height its terrain may rise to'}; the city faded behind.` } }, stores, { request: { images: { heights: heights.png } } });
       // A built kind's median, on its manifold (the engine draws the spread); natural ground's or a shape's top.
-      const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, median = measure === 'median' ? height : null, upTo = measure === 'top' ? height : null;
-        return { where, boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure };
+      const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null, upTo = measure === 'top' ? height : null;
+      // An average (spawn mode) is built from its median; below the street a depth stays a depth.
+      const average = measure === 'average' && height !== null && height >= 0 ? height : null, median = measure === 'median' ? height : measure === 'average' && height !== null ? (height < 0 ? height : Math.round(height / factor)) : null;
+        return { where, boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average };
       };
       // Kept in an earlier book of the universe under the same name (§2.0.15): reused as it was, Jev not asked; where it lay
       // in its parent, when its parent has the same name too.
@@ -714,7 +772,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         const box = isCity && cityNode ? [round(cityNode.x - cityNode.r), round(cityNode.z - cityNode.r), round(cityNode.x + cityNode.r), round(cityNode.z + cityNode.r)] : laid ? Z.turnedBox(c, [w, d], laid.turn) : [round(c[0] - w / 2), round(c[1] - d / 2), round(c[0] + w / 2), round(c[1] + d / 2)];
         return { boxBy: null, what: null, rise: null, kind: reuse.kind, entry, shape, ground: shape ? null : reuse.ground ?? known?.ground ?? null, box, laid, median: reuse.median ?? null, upTo: reuse.top ?? null, measure: reuse.median != null ? 'median' : 'top', reusedFrom: reuse.book };
       };
-      const { boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, empty, from: averaged, reusedFrom } = poolOf ? byDefault() : reuse ? reused() : await asked();
+      const { boxBy, what, rise, kind, entry, shape, ground, box, laid, settled, median, upTo, measure, average, empty, from: averaged, reusedFrom } = poolOf ? byDefault() : reuse ? reused() : await asked();
       // 4. The proposal in World · Live, the user's step, then the engine's own input, and the world built again.
       const proposal = { id: part.id, label: part.label, kind: kind ?? 'empty', box, top: median ?? upTo, measure, ...(settled?.frames ? { settle: { frames: settled.frames, energy: settled.energy } } : {}) };
       const said = empty ? `empty (nothing of its level decided in ${name(poolOf)} yet)` : `${kind}${median ? (median < 0 ? `, ${-median} m underground` : `, median ${median} m`) : upTo ? (upTo < 0 ? `, ${-upTo} m down` : `, up to ${upTo} m`) : ''}${averaged ? ` (the average of ${averaged} ${part.scale === 'street' ? 'streets' : 'districts'})` : ''}${reusedFrom ? ` (kept in ${reusedFrom}, reused)` : ''}`;
@@ -725,7 +783,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const parentNode = nodeOf(holder);
       const toward = parentNode ? [round((box[0] + box[2]) / 2 - parentNode.x), round((box[1] + box[3]) / 2 - parentNode.z)] : null;
       terrain.sites[part.id] = isCity
-        ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: reusedFrom ? 'universe' : 'jev', ...(reusedFrom ? { from: reusedFrom } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
+        ? { label: part.label, scale: 'city', kind, ...(shape ? { shape } : { ground }), ...(median ? { median, manifold: entry.manifold } : {}), ...(average ? { average } : {}), ...(upTo ? { top: upTo } : {}), by: reusedFrom ? 'universe' : 'jev', ...(reusedFrom ? { from: reusedFrom } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } }
         : empty ? { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, empty: true, by: 'pool', pool: poolOf }
         // A pool's member borrows its pool's ground in the box Jev gave it (the engine builds it there).
         : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), ...(sampled ? { member: holder } : {}), size: laid?.size ?? [round(box[2] - box[0]), round(box[3] - box[1])], ...(laid ? { turn: laid.turn, on: laid.on } : {}), toward, ...(settled?.pin ? { pinToward: settled.pin } : {}), box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), by: poolOf ? 'pool' : reusedFrom ? 'universe' : 'jev', ...(poolOf ? { pool: poolOf } : {}), ...(reusedFrom ? { from: reusedFrom } : {}),
@@ -756,6 +814,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         registry.places[part.label] = { book: universe.book, id: part.id, scale: part.scale, kind: k, ...(sh ? { shape: sh } : { ground: g }), ...(m ? { median: m, manifold } : {}), ...(t ? { top: t } : {}), ...(size ? { size, toward: tw, parentLabel } : {}), ...(typeof tn === 'number' ? { turn: tn, on } : {}), keptAt: new Date().toISOString() };
         await mkdir(universe.dir, { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
       }
+      if (spawn && isCity) { const said = deformCity(part.id); if (said) await live.outcome({ subject: part.label, text: `deformed to Jev's answer: ${said}` }); }
       if (spawn) await saveSlots();
       await live.phase(`building the world with ${part.label}`);
       await build(part.id);

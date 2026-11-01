@@ -76,7 +76,7 @@ export interface GroundFocus extends PartFocus { shapes: Record<string, string> 
 export interface ZoomFocus extends PartFocus { kind: string; reasons: string[] }
 /** `tops`: the lettered slices, each a height the terrain may rise to. */
 /** `measure`: a built kind's median (its manifold makes the rest), or natural ground's or a shape's top; `slices` the heights offered. */
-export interface HeightFocus extends PartFocus { kind: string; measure: "median" | "top"; slices: { letter: string; y: number; said: string }[] }
+export interface HeightFocus extends PartFocus { kind: string; measure: "median" | "top" | "average"; slices: { letter: string; y: number; said: string; offset?: number }[]; standard?: number }
 export interface MemberFocus { city: { id: string; label: string }; parts: { key: string; label: string; scale: string }[] }
 
 const clip = (text: string, size: number) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
@@ -182,8 +182,16 @@ export const UNDERGROUND: [number, string][] = [[-60, "deep underground"], [-30,
  * The question's slices for a part of a kind: the underground's, then a built kind's medians (the median roof: the engine
  * draws the spread from its manifold), or natural ground's or a shape's tops; each said in floors, or as natural ground.
  */
-export function terrainHeights(scale: string, kind: string): { measure: "median" | "top"; slices: { letter: string; y: number; said: string }[] } {
+export function terrainHeights(scale: string, kind: string, average?: { factor: number }): { measure: "median" | "top" | "average"; slices: { letter: string; y: number; said: string; offset?: number }[]; standard?: number } {
   const entry = terrainKind(scale, kind), median = !!entry?.ground && !!entry.medians;
+  // As a standard and an addition (docs/v2/borrow-and-spawn.md §8.9, the user's idea): the kind's least average is its
+  // standard; each slice is the standard plus so many metres (+0 the first), the same heights as the medians, as averages
+  // (`factor`: the kind's manifold's average over its median); under the street, below the ground.
+  if (average && median) {
+    const ys = entry!.medians!.map((m) => Math.round(m * average.factor)), standard = ys[0];
+    const slices = [...UNDERGROUND.map(([y, under]) => ({ y, offset: y, said: `underground: ${under}` })), ...ys.map((y) => ({ y, offset: y - standard, said: `about ${Math.max(1, Math.round(y / 3))} floors on average` }))];
+    return { measure: "average", standard, slices: slices.map((slice, k) => ({ letter: "ABCDEFGHIJKLMN"[k], ...slice })) };
+  }
   const heights = median ? entry!.medians! : entry?.tops ?? SHAPE_TOPS;
   const said = (y: number) => (median ? `about ${Math.max(1, Math.round(y / 3))} floors` : natural(y));
   return { measure: median ? "median" : "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...heights.map((y): [number, string] => [y, said(y)])].map(([y, words], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said: words })) };
@@ -286,13 +294,15 @@ export const terrainZoomMode: Mode<ZoomFocus, TerrainStores> = {
 // its manifold makes the spread): the median roof, or natural ground's top; what the text says of the part and its city says it.
 export const terrainHeightMode: Mode<HeightFocus, TerrainStores> = {
   name: "terrain-height",
-  task: (focus) => `${focus.measure === "median"
+  task: (focus) => `${focus.measure === "average"
+    ? `Every ${focus.kind} is built at least at its standard height: an average of ${focus.standard} m for its buildings. How many metres must be added to that standard for ${focus.part.label}: +0 m if it is just the standard, more if its buildings are taller on average (its manifold makes the rest: ${manifoldWords(terrainKind(focus.part.scale, focus.kind)!.manifold!)}). If it lies underground (an underground passage, a mall under the street), pick the slice below the street instead (a negative addition).`
+    : focus.measure === "median"
     ? `What is the median height of ${focus.part.label}'s roofs (${focus.kind}): the height half its buildings stand below? Its manifold makes the rest (${manifoldWords(terrainKind(focus.part.scale, focus.kind)!.manifold!)}), so give the median, not the tallest. If it lies underground (an underground passage, a mall under the street), give how deep its floors lie: the slices below the street.`
     : `How high does ${focus.part.label} (${focus.kind}) rise: the height of its top? If it lies underground, how deep it goes: the slices below the street.`} The picture shows a core of its area with a lettered ghost slice at each height; red dotted lines are where a slice cuts a building the engine stands there for now. Read it from the scenes it is in, as the text tells them, the most telling first (scenes); where given, the facts about it (facts), its surroundings (environment) and what stands in it (standing); and the terrain kept for the places holding it (within). Where the text says little of it or you are unsure, use common sense: what anyone knows of a real place (a world city's centre stands tall), and what a place of its kind usually is.`,
-  sources: [...sources<HeightFocus>("height"), fixed("heights", "heights", (focus: HeightFocus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.y} m: ${slice.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
+  sources: [...sources<HeightFocus>("height"), fixed("heights", "heights", (focus: HeightFocus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, focus.measure === "average" ? `${(slice.offset ?? 0) >= 0 ? "+" : ""}${slice.offset} m${(slice.offset ?? 0) >= 0 ? ` (an average of ${slice.y} m)` : ""}: ${slice.said}` : `${slice.y} m: ${slice.said}`]))) as Source<HeightFocus, TerrainStores>, fixed("pictures", "pictures", (focus: HeightFocus) => focus.pictures) as Source<HeightFocus, TerrainStores>],
   cutOrder: ["environment", "standing", "facts"],
   probe,
-  questions: (focus) => [{ key: "height", primitive: "choice", instructions: `Which lettered slice is ${focus.measure === "median" ? `the median of ${focus.part.label}'s roofs` : `the top of ${focus.part.label}'s ground`}?`, options: focus.slices.map((slice) => slice.letter), optionHints: Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.letter}: ${slice.y} m, ${slice.said}`])) }],
+  questions: (focus) => [{ key: "height", primitive: "choice", instructions: `Which lettered slice is ${focus.measure === "average" ? `the standard plus what must be added for ${focus.part.label}'s buildings on average` : focus.measure === "median" ? `the median of ${focus.part.label}'s roofs` : `the top of ${focus.part.label}'s ground`}?`, options: focus.slices.map((slice) => slice.letter), optionHints: Object.fromEntries(focus.slices.map((slice) => [slice.letter, focus.measure === "average" ? `${slice.letter}: ${(slice.offset ?? 0) >= 0 ? `the standard +${slice.offset} m` : `${slice.offset} m, below the street`}, ${slice.said}` : `${slice.letter}: ${slice.y} m, ${slice.said}`])) }],
   budget: BUDGET,
 };
 

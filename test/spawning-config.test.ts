@@ -16,6 +16,7 @@ for (const [name, parent, level] of [["city", "city", "district"], ["district", 
     const file = read(name);
     assert.equal(file.parent, parent); assert.equal(file.level, level);
     assert.deepEqual(Object.keys(file.types).sort(), Object.keys(TERRAIN_KINDS[parent]).sort(), `every ${parent} kind has its configuration`);
+    if (file.default !== undefined) assert.ok(file.types[file.default], `the kind a ${parent} is born as is one of its kinds`);
     for (const [type, entry] of Object.entries(file.types as Record<string, Record<string, unknown>>)) {
       const spawns = (entry.spawns ?? entry) as Record<string, unknown>;
       for (const [kind, count] of Object.entries(spawns)) {

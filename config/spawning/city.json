@@ -1,7 +1,8 @@
 {
-  "about": "What a city of each kind spawns, and how its districts lie (docs/v2/borrow-and-spawn.md §2.1, §8.2): spawns, how many districts of each kind (a number, or a range [least, most] picked once for each city by a seed); ring, how far from the city's centre each kind sits, as a share of the city's radius; pairs, kinds that sit near each other or apart; open, the landscape of the city's own ground between its districts (no core of its own: its districts are its centres). Kinds are TERRAIN_KINDS.district.",
+  "about": "What a city of each kind spawns, and how its districts lie (docs/v2/borrow-and-spawn.md §2.1, §8.2): spawns, how many districts of each kind (a number, or a range [least, most] picked once for each city by a seed); ring, how far from the city's centre each kind sits, as a share of the city's radius; pairs, kinds that sit near each other or apart; open, the landscape of the city's own ground between its districts (no core of its own: its districts are its centres). default, the kind a city is born as before Jev is asked (a basic city its answers deform). Kinds are TERRAIN_KINDS.district.",
   "level": "district",
   "parent": "city",
+  "default": "city",
   "types": {
     "metropolis": {
       "spawns": {

@@ -610,7 +610,7 @@ export async function strandDemo(novelDir, options) {
     // On the terrain stage (a plain map, §2.0.22, the user's call), each pin says whether it is settled: an area once terrain
     // kept it (by the program or by Jev's box for a shape), a building once it stands (its own grid) or dwells in a building
     // the ground made of its use; the rest are open, waiting for Jev, and turn as the run settles them.
-    const keptHere = id => { const site = terrain?.sites?.[id]; return !!site && !site.empty && !!(site.kind || site.shape || site.ground); };
+    const keptHere = id => { const site = terrain?.sites?.[id]; return !!site && !site.empty && site.by !== 'birth' && !!(site.kind || site.shape || site.ground); };
     const statusOf = (id, unit) => (!options.plain ? null : unit && ['building', 'room'].includes(unit.kind) ? (unit.dwells || ownGrids.has(id) ? 'done' : 'open') : keptHere(id) ? 'done' : 'open');
     for (const place of Object.values(canvas.places)) {
       const [x, z] = C.worldOf(canvas, place.id), grid = place.units.find(unit => unit.id === `${place.id}#grid`);
