@@ -77,12 +77,14 @@ test("the building level is asked as every level is: its kinds the uses the stre
   for (const use of new Set(Object.values(street).flatMap((type) => Object.keys(type.uses)))) assert.ok(kinds[use], `${use}: a street spawns it, so Jev may choose it`);
   for (const [kind, entry] of Object.entries(kinds)) {
     assert.ok(MODELS.uses[kind], `${kind}: the model table draws it`);
-    assert.ok(entry.floors!.length && entry.floors!.every((f, n) => f >= 1 && (n === 0 || f > entry.floors![n - 1])), `${kind}: its floors`);
+    assert.ok(!entry.floors, `${kind}: no heights of its own: a building's height is its scenes'`);
   }
   assert.ok(Object.keys(terrainKinds("building", { platform: "a platform" })).includes("platform"), "the shapes offered too, as at every level");
-  const heights = terrainHeights("building", "apartment");
-  assert.equal(heights.measure, "top");
-  assert.deepEqual(heights.slices.filter((slice) => slice.y > 0).map((slice) => [slice.y, slice.said]).slice(0, 2), [[9, "3 floors"], [15, "5 floors"]]);
+  // Every building the same slices, a house as a hotel: from under the street to a hundred floors (the user, 2026-11-01).
+  const house = terrainHeights("building", "house"), hotel = terrainHeights("building", "hotel");
+  assert.equal(house.measure, "top");
+  assert.deepEqual(house.slices, hotel.slices);
+  assert.deepEqual([house.slices.find((slice) => slice.y > 0), house.slices.at(-1)!.y], [{ letter: "E", y: 3, said: "1 floor" }, 300]);
 });
 
 test("the building inventory: every type a use the world draws, its words and floors; the search finds a building by its name and leans on what stands round it", async () => {
@@ -92,7 +94,8 @@ test("the building inventory: every type a use the world draws, its words and fl
   assert.ok(Object.keys(types).length >= 60, "many types: too many to offer them all");
   for (const [id, type] of Object.entries(types)) {
     assert.ok(TERRAIN_KINDS.building[type.use], `${id}: its use ${type.use} is a building kind (its lots, its model)`);
-    assert.ok(type.describe && type.words.length && type.floors.every((f, n) => f >= 1 && (n === 0 || f > type.floors[n - 1])), `${id}: described, its words, its floors`);
+    assert.ok(type.describe && type.words.length, `${id}: described, its words`);
+    assert.ok(!/floor|storey|tall|high-rise|tens of|many floors|few floors/i.test(type.describe), `${id}: its description says nothing of its height (${type.describe})`);
   }
   const top = async (label: string, nearby?: Record<string, number>) => (await searchBuildingTypes({ label, around: [], nearby }, types, 10)).map((found) => found.id);
   assert.equal((await top("回转寿司店 (scene 10)"))[0], "sushi-restaurant", "a compound name: its part");
@@ -109,7 +112,7 @@ test("the building inventory: every type a use the world draws, its words and fl
 
 test("the building level's search by meaning: with an embedder the nearest by vectors, the name's own words still counting", async () => {
   const { searchBuildingTypes } = await import("../src/v2/spawning/inventory.js");
-  const types = { a: { use: "shop", describe: "alpha", words: ["甲"], floors: [1] }, b: { use: "office", describe: "beta", words: ["乙"], floors: [3] } };
+  const types = { a: { use: "shop", describe: "alpha", words: ["甲"] }, b: { use: "office", describe: "beta", words: ["乙"] } };
   const embedder = { embed: async (texts: string[]) => texts.map((text) => (text.includes("beta") || text.includes("办公") ? [0, 1] : [1, 0])) };
   assert.equal((await searchBuildingTypes({ label: "办公的地方", around: [] }, types, 2, embedder))[0].id, "b", "by meaning");
   assert.equal((await searchBuildingTypes({ label: "甲", around: [] }, types, 2, embedder))[0].id, "a", "its own word in its name");

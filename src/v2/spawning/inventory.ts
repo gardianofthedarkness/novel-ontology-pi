@@ -11,7 +11,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export interface BuildingType { use: string; describe: string; words: string[]; floors: number[] }
+/** A type: what it is (saying nothing of its height: that is its scenes'), what the text may call it, its coarse use. */
+export interface BuildingType { use: string; describe: string; words: string[] }
 const DEFAULT = fileURLToPath(new URL("../../../../config/spawning/building-types.json", import.meta.url));
 /** The inventory: every building type, by id. */
 export const loadBuildingTypes = (file = DEFAULT): Record<string, BuildingType> => JSON.parse(readFileSync(file, "utf8")).types;

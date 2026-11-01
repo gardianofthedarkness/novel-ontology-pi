@@ -1,9 +1,9 @@
 {
-  "about": "The building level's inventory (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01): there are too many kinds of building in a universe to offer them all, so a building's name and the sentences round it in its scenes are searched against these types, and Jev chooses among the ten nearest, given the scenes. Each type: describe, what it is (what the search and Jev read); words, what the text may call it (Chinese, Japanese, English); floors, the heights offered (three metres a floor); use, the coarse use its lot and its model go by (TERRAIN_KINDS.building, config/models.json). A type whose use has no lot where it stands is placed where the characters' travel is least and pushes the buildings round it outward.",
+  "about": "The building level's inventory (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01): there are too many kinds of building in a universe to offer them all, so a building's name and the sentences round it in its scenes are searched against these types, and Jev chooses among the ten nearest, given the scenes. Each type: describe, what it is (what the search and Jev read), saying nothing of its height; words, what the text may call it (Chinese, Japanese, English); use, the coarse use its lot and its model go by (TERRAIN_KINDS.building, config/models.json). Its height is the scenes' alone (the user, 2026-11-01): every building is offered the same slices, from under the street to a hundred floors. A type whose use has no lot where it stands is placed where the characters' travel is least and pushes the buildings round it outward.",
   "types": {
     "detached-house": {
       "use": "house",
-      "describe": "a detached house: one family's home with a small yard",
+      "describe": "a detached house: one family's home with a yard",
       "words": [
         "独栋",
         "一户建",
@@ -13,27 +13,17 @@
         "家",
         "house",
         "home"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "townhouse": {
       "use": "house",
-      "describe": "a narrow townhouse or row house wedged between its neighbours",
+      "describe": "a townhouse or a row house wedged between its neighbours",
       "words": [
         "联排",
         "长屋",
         "町屋",
         "townhouse",
         "row house"
-      ],
-      "floors": [
-        2,
-        3,
-        4
       ]
     },
     "villa": {
@@ -48,46 +38,24 @@
         "邸",
         "villa",
         "mansion"
-      ],
-      "floors": [
-        2,
-        3
       ]
     },
     "apartment-block": {
       "use": "apartment",
-      "describe": "a block of flats, a few floors of homes over a lobby",
+      "describe": "a block of flats or a residential tower: homes over a lobby",
       "words": [
         "公寓",
         "住宅楼",
         "アパート",
         "マンション",
         "apartment",
-        "flats"
-      ],
-      "floors": [
-        3,
-        5,
-        8,
-        12
-      ]
-    },
-    "residential-tower": {
-      "use": "apartment",
-      "describe": "a residential tower of many floors, a high-rise of homes",
-      "words": [
+        "flats",
         "塔楼公寓",
         "高层公寓",
         "高层住宅",
         "タワーマンション",
         "tower apartment",
         "high-rise"
-      ],
-      "floors": [
-        15,
-        20,
-        30,
-        45
       ]
     },
     "public-housing": {
@@ -100,12 +68,6 @@
         "団地",
         "estate",
         "public housing"
-      ],
-      "floors": [
-        4,
-        5,
-        11,
-        14
       ]
     },
     "student-dormitory": {
@@ -118,12 +80,6 @@
         "寮",
         "dormitory",
         "dorm"
-      ],
-      "floors": [
-        3,
-        5,
-        8,
-        12
       ]
     },
     "company-dormitory": {
@@ -134,11 +90,6 @@
         "社员寮",
         "宿舍楼",
         "workers' dormitory"
-      ],
-      "floors": [
-        3,
-        5,
-        8
       ]
     },
     "share-house": {
@@ -150,10 +101,6 @@
         "下宿",
         "シェアハウス",
         "boarding house"
-      ],
-      "floors": [
-        2,
-        3
       ]
     },
     "ramen-shop": {
@@ -166,11 +113,6 @@
         "ラーメン",
         "ramen",
         "noodle"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "sushi-restaurant": {
@@ -181,11 +123,6 @@
         "回转寿司",
         "回転寿司",
         "sushi"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "family-restaurant": {
@@ -198,10 +135,6 @@
         "ファミレス",
         "restaurant",
         "diner"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "fast-food": {
@@ -214,10 +147,6 @@
         "ファストフード",
         "burger",
         "fast food"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "izakaya": {
@@ -228,11 +157,6 @@
         "酒馆",
         "izakaya",
         "pub"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "bar": {
@@ -244,27 +168,16 @@
         "バー",
         "bar",
         "lounge"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "karaoke": {
       "use": "bar",
-      "describe": "a karaoke box: private singing rooms floor upon floor",
+      "describe": "a karaoke box: private singing rooms",
       "words": [
         "卡拉OK",
         "KTV",
         "カラオケ",
         "karaoke"
-      ],
-      "floors": [
-        2,
-        4,
-        6,
-        8
       ]
     },
     "cafe": {
@@ -278,11 +191,6 @@
         "カフェ",
         "cafe",
         "coffee"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "patisserie": {
@@ -296,11 +204,6 @@
         "ケーキ",
         "patisserie",
         "cake"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "bakery": {
@@ -311,10 +214,6 @@
         "面包",
         "パン屋",
         "bakery"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "donut-shop": {
@@ -327,10 +226,6 @@
         "クレープ",
         "donut",
         "crepe"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "convenience-store": {
@@ -342,10 +237,6 @@
         "超商",
         "コンビニ",
         "convenience"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "supermarket": {
@@ -358,11 +249,6 @@
         "スーパー",
         "supermarket",
         "grocery"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "drugstore": {
@@ -376,11 +262,6 @@
         "ドラッグストア",
         "pharmacy",
         "drugstore"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "bookstore": {
@@ -392,12 +273,6 @@
         "本屋",
         "書店",
         "bookstore"
-      ],
-      "floors": [
-        1,
-        2,
-        3,
-        5
       ]
     },
     "clothing-store": {
@@ -410,28 +285,17 @@
         "ブティック",
         "boutique",
         "clothing"
-      ],
-      "floors": [
-        1,
-        2,
-        3,
-        5
       ]
     },
     "electronics-store": {
       "use": "department",
-      "describe": "an electronics store: floors of appliances, phones and games",
+      "describe": "an electronics store: appliances, phones and games",
       "words": [
         "电器",
         "家电",
         "电子",
         "家電量販店",
         "electronics"
-      ],
-      "floors": [
-        3,
-        5,
-        8
       ]
     },
     "game-shop": {
@@ -445,11 +309,6 @@
         "ホビー",
         "toy",
         "game shop"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "florist": {
@@ -459,15 +318,11 @@
         "花店",
         "花屋",
         "florist"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "general-shop": {
       "use": "shop",
-      "describe": "a small shop of some trade on the street front",
+      "describe": "a shop of some trade on the street front",
       "words": [
         "商店",
         "店铺",
@@ -475,11 +330,6 @@
         "店",
         "shop",
         "store"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "car-dealer": {
@@ -492,10 +342,6 @@
         "经销商",
         "中古車",
         "car dealer"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "garage": {
@@ -509,10 +355,6 @@
         "整備工場",
         "garage",
         "workshop"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "gas-station": {
@@ -523,9 +365,6 @@
         "ガソリンスタンド",
         "gas station",
         "petrol"
-      ],
-      "floors": [
-        1
       ]
     },
     "shopping-mall": {
@@ -538,12 +377,6 @@
         "ショッピングモール",
         "mall",
         "shopping centre"
-      ],
-      "floors": [
-        3,
-        5,
-        8,
-        12
       ]
     },
     "department-store": {
@@ -556,27 +389,16 @@
         "デパート",
         "百貨店",
         "department store"
-      ],
-      "floors": [
-        5,
-        8,
-        10,
-        12
       ]
     },
     "shopping-arcade": {
       "use": "arcade",
-      "describe": "a covered shopping arcade of small shops",
+      "describe": "a covered shopping arcade of shops",
       "words": [
         "商店街",
         "拱廊",
         "アーケード",
         "arcade street"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "game-center": {
@@ -590,12 +412,6 @@
         "ゲーセン",
         "game center",
         "arcade"
-      ],
-      "floors": [
-        2,
-        3,
-        5,
-        8
       ]
     },
     "pachinko": {
@@ -606,11 +422,6 @@
         "弹珠",
         "パチンコ",
         "pachinko"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "cinema": {
@@ -622,12 +433,6 @@
         "映画館",
         "cinema",
         "movie"
-      ],
-      "floors": [
-        2,
-        4,
-        6,
-        10
       ]
     },
     "theatre": {
@@ -640,11 +445,6 @@
         "劇場",
         "theatre",
         "concert hall"
-      ],
-      "floors": [
-        2,
-        4,
-        6
       ]
     },
     "bowling": {
@@ -654,11 +454,6 @@
         "保龄球",
         "ボウリング",
         "bowling"
-      ],
-      "floors": [
-        2,
-        3,
-        5
       ]
     },
     "museum": {
@@ -672,11 +467,6 @@
         "美術館",
         "museum",
         "gallery"
-      ],
-      "floors": [
-        2,
-        3,
-        5
       ]
     },
     "library": {
@@ -687,35 +477,18 @@
         "書館",
         "图书",
         "library"
-      ],
-      "floors": [
-        2,
-        3,
-        5
       ]
     },
     "office-building": {
       "use": "office",
-      "describe": "an office building of a few floors",
+      "describe": "an office building or an office tower: offices over a lobby",
       "words": [
         "办公楼",
         "写字楼",
         "大楼",
         "办公室",
         "オフィス",
-        "office"
-      ],
-      "floors": [
-        3,
-        5,
-        8,
-        12
-      ]
-    },
-    "office-tower": {
-      "use": "office",
-      "describe": "an office tower or a skyscraper of glass, tens of floors",
-      "words": [
+        "office",
         "高层大楼",
         "高层大厦",
         "高楼",
@@ -725,12 +498,6 @@
         "高層ビル",
         "skyscraper",
         "tower"
-      ],
-      "floors": [
-        20,
-        30,
-        50,
-        70
       ]
     },
     "mixed-use-building": {
@@ -743,12 +510,6 @@
         "综合大楼",
         "雑居ビル",
         "mixed-use"
-      ],
-      "floors": [
-        4,
-        6,
-        10,
-        15
       ]
     },
     "company-headquarters": {
@@ -759,29 +520,17 @@
         "总公司",
         "本社",
         "headquarters"
-      ],
-      "floors": [
-        8,
-        15,
-        25,
-        40
       ]
     },
     "real-estate-office": {
       "use": "office",
-      "describe": "an estate agent's or a small firm's office building",
+      "describe": "an estate agent's or a firm's office building",
       "words": [
         "不动产",
         "地产",
         "房产",
         "不動産",
         "real estate"
-      ],
-      "floors": [
-        2,
-        4,
-        8,
-        12
       ]
     },
     "bank": {
@@ -791,12 +540,6 @@
         "银行",
         "銀行",
         "bank"
-      ],
-      "floors": [
-        2,
-        4,
-        8,
-        15
       ]
     },
     "hotel": {
@@ -809,27 +552,16 @@
         "旅馆",
         "ホテル",
         "hotel"
-      ],
-      "floors": [
-        5,
-        10,
-        20,
-        40
       ]
     },
     "capsule-hotel": {
       "use": "hotel",
-      "describe": "a capsule or a business hotel, narrow and tall",
+      "describe": "a capsule or a business hotel",
       "words": [
         "胶囊旅馆",
         "商务酒店",
         "カプセルホテル",
         "capsule hotel"
-      ],
-      "floors": [
-        4,
-        6,
-        10
       ]
     },
     "ryokan": {
@@ -840,11 +572,6 @@
         "旅館",
         "ryokan",
         "inn"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "city-hall": {
@@ -858,12 +585,6 @@
         "市役所",
         "city hall",
         "administration"
-      ],
-      "floors": [
-        4,
-        8,
-        12,
-        20
       ]
     },
     "police-station": {
@@ -878,12 +599,6 @@
         "警备员",
         "警備員",
         "police"
-      ],
-      "floors": [
-        1,
-        2,
-        4,
-        6
       ]
     },
     "prosecutors-office": {
@@ -897,16 +612,11 @@
         "裁判所",
         "court",
         "prosecutor"
-      ],
-      "floors": [
-        3,
-        6,
-        10
       ]
     },
     "detention-centre": {
       "use": "government",
-      "describe": "a detention centre or a prison, high walls round it",
+      "describe": "a detention centre or a prison, walls round it",
       "words": [
         "看守所",
         "拘留所",
@@ -916,26 +626,16 @@
         "审讯",
         "prison",
         "detention"
-      ],
-      "floors": [
-        2,
-        3,
-        5
       ]
     },
     "fire-station": {
       "use": "government",
-      "describe": "a fire station with its engine bays and a tower",
+      "describe": "a fire station with its engine bays",
       "words": [
         "消防局",
         "消防署",
         "消防",
         "fire station"
-      ],
-      "floors": [
-        2,
-        3,
-        4
       ]
     },
     "post-office": {
@@ -945,11 +645,6 @@
         "邮局",
         "郵便局",
         "post office"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "embassy": {
@@ -960,11 +655,6 @@
         "领事馆",
         "大使館",
         "embassy"
-      ],
-      "floors": [
-        3,
-        5,
-        8
       ]
     },
     "research-institute": {
@@ -978,12 +668,6 @@
         "研究",
         "institute",
         "research"
-      ],
-      "floors": [
-        2,
-        4,
-        8,
-        15
       ]
     },
     "laboratory": {
@@ -995,12 +679,6 @@
         "ラボ",
         "laboratory",
         "lab"
-      ],
-      "floors": [
-        2,
-        3,
-        5,
-        8
       ]
     },
     "windowless-building": {
@@ -1011,11 +689,6 @@
         "无窗",
         "窓のないビル",
         "windowless"
-      ],
-      "floors": [
-        10,
-        20,
-        30
       ]
     },
     "data-centre": {
@@ -1028,11 +701,6 @@
         "データセンター",
         "data center",
         "supercomputer"
-      ],
-      "floors": [
-        2,
-        4,
-        6
       ]
     },
     "hospital": {
@@ -1043,12 +711,6 @@
         "医疗机构",
         "病院",
         "hospital"
-      ],
-      "floors": [
-        3,
-        6,
-        10,
-        15
       ]
     },
     "clinic": {
@@ -1062,12 +724,6 @@
         "保健室",
         "clinic",
         "infirmary"
-      ],
-      "floors": [
-        1,
-        2,
-        3,
-        5
       ]
     },
     "school": {
@@ -1082,12 +738,6 @@
         "学院",
         "高校",
         "school"
-      ],
-      "floors": [
-        2,
-        3,
-        4,
-        6
       ]
     },
     "girls-academy": {
@@ -1099,11 +749,6 @@
         "女校",
         "お嬢様",
         "academy"
-      ],
-      "floors": [
-        3,
-        4,
-        6
       ]
     },
     "university": {
@@ -1115,12 +760,6 @@
         "キャンパス",
         "university",
         "campus"
-      ],
-      "floors": [
-        3,
-        5,
-        8,
-        12
       ]
     },
     "cram-school": {
@@ -1132,11 +771,6 @@
         "塾",
         "予備校",
         "cram school"
-      ],
-      "floors": [
-        2,
-        3,
-        5
       ]
     },
     "kindergarten": {
@@ -1148,15 +782,11 @@
         "保育园",
         "幼稚園",
         "kindergarten"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "gym": {
       "use": "mall",
-      "describe": "a gymnasium or a sports centre, a large hall",
+      "describe": "a gymnasium or a sports centre, one great hall",
       "words": [
         "体育馆",
         "体育中心",
@@ -1164,11 +794,6 @@
         "体育館",
         "gymnasium",
         "sports centre"
-      ],
-      "floors": [
-        2,
-        3,
-        4
       ]
     },
     "church": {
@@ -1181,11 +806,6 @@
         "教会堂",
         "church",
         "chapel"
-      ],
-      "floors": [
-        1,
-        2,
-        4
       ]
     },
     "shrine": {
@@ -1196,10 +816,6 @@
         "鸟居",
         "鳥居",
         "shrine"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "temple": {
@@ -1211,11 +827,6 @@
         "寺院",
         "お寺",
         "temple"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "train-station": {
@@ -1227,12 +838,6 @@
         "电车",
         "駅",
         "station"
-      ],
-      "floors": [
-        1,
-        2,
-        3,
-        5
       ]
     },
     "subway-station": {
@@ -1244,10 +849,6 @@
         "地下鉄",
         "subway",
         "metro"
-      ],
-      "floors": [
-        1,
-        2
       ]
     },
     "bus-terminal": {
@@ -1261,28 +862,17 @@
         "モノレール",
         "bus terminal",
         "monorail"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "parking-garage": {
       "use": "parking",
-      "describe": "a multi-storey car park",
+      "describe": "a car park building",
       "words": [
         "停车场",
         "停车楼",
         "立体停车",
         "駐車場",
         "parking"
-      ],
-      "floors": [
-        2,
-        4,
-        6,
-        8
       ]
     },
     "factory": {
@@ -1294,12 +884,6 @@
         "制造",
         "plant",
         "factory"
-      ],
-      "floors": [
-        1,
-        2,
-        3,
-        5
       ]
     },
     "power-plant": {
@@ -1311,11 +895,6 @@
         "变电所",
         "発電所",
         "power plant"
-      ],
-      "floors": [
-        2,
-        3,
-        5
       ]
     },
     "warehouse": {
@@ -1327,11 +906,6 @@
         "物流",
         "warehouse",
         "depot"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "construction-site": {
@@ -1343,11 +917,6 @@
         "建设中",
         "工事現場",
         "construction"
-      ],
-      "floors": [
-        1,
-        3,
-        6
       ]
     },
     "ruins": {
@@ -1360,11 +929,6 @@
         "廃墟",
         "ruins",
         "abandoned"
-      ],
-      "floors": [
-        1,
-        2,
-        3
       ]
     },
     "bridge-building": {
@@ -1376,10 +940,6 @@
         "空中走廊",
         "skywalk",
         "bridge building"
-      ],
-      "floors": [
-        3,
-        5
       ]
     }
   }

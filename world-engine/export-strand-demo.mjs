@@ -683,7 +683,15 @@ export async function strandDemo(novelDir, options) {
       if (typeof site.top === 'number' && site.top > 0) { if (named) entry.named = site.top; else entry.tops.push(site.top); }
       decided.set(key, entry); if (key.startsWith(`${slot.parent}:`)) decided.set(key.slice(slot.parent.length + 1), entry);
     }
-    const asDecided = b => { const entry = decided.get(b.lot); if (!entry) return b; const top = entry.named ?? (entry.tops.length ? entry.tops.reduce((sum, t) => sum + t, 0) / entry.tops.length : null); return { ...b, use: entry.kind, ...(top ? { floors: Math.max(1, Math.round(top / 3)) } : {}) }; };
+    // Its height is its scenes' (the user, 2026-11-01): taller than any model of its use stands for, it is drawn as a tower
+    // (its use's models yield to its kind's: useModels.ts), never cut down to its use's.
+    const tallest = use => Math.max(0, ...Object.values(UM.MODELS.uses[use]?.fill ?? {}).map(([, most]) => most));
+    const asDecided = b => {
+      const entry = decided.get(b.lot);
+      if (!entry) return b;
+      const top = entry.named ?? (entry.tops.length ? entry.tops.reduce((sum, t) => sum + t, 0) / entry.tops.length : null), floors = top ? Math.max(1, Math.round(top / 3)) : null;
+      return { ...b, use: entry.kind, ...(floors ? { floors, ...(floors > tallest(entry.kind) + 1 ? { kind: floors >= 20 ? 'skyscraper' : 'tower' } : {}) } : {}) };
+    };
     // What stands apart (terrain spawning's building level, docs/v2/borrow-and-spawn.md §6): a rare kind with no lot of its
     // own under its holder, and a ground shape, each where the characters' travel put it (its street's node plus its kept
     // offset). The rare building is drawn as a building of its own; both push the city's buildings round them outward, the

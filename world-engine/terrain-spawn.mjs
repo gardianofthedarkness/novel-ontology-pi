@@ -737,7 +737,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         if (!lot) { await live.outcome({ subject: part.label, text: `no street under ${name(holderOf(part, city))} to stand in` }); continue; }
         // Its height: slices through a core of its street round its spot, the buildings standing there cut; a building's at
         // its kind's floors, a floating shape's its distance from the ground (then its thickness), a ground shape's its top.
-        const { measure, slices: tops } = shape ? T.terrainHeights('building', shape) : type ? T.buildingHeights(buildingTypes[type].floors) : T.terrainHeights('building', kind), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo, core = Math.max(CORE_MIN, Math.max(...lot.size) * 1.5);
+        const { measure, slices: tops } = shape ? T.terrainHeights('building', shape) : T.buildingHeights(), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo, core = Math.max(CORE_MIN, Math.max(...lot.size) * 1.5);
         const at = lot.at, sample = [round(at[0] - core), round(at[1] - core), round(at[0] + core), round(at[1] + core)];
         const lots = data.world.lots.map(entry => ({ box: [entry.i0 * CELL, entry.j0 * CELL, (entry.i0 + entry.nx) * CELL, (entry.j0 + entry.nz) * CELL], top: (entry.floors ?? 1) * FLOOR })).filter(entry => entry.box[0] < sample[2] && sample[0] < entry.box[2] && entry.box[1] < sample[3] && sample[1] < entry.box[3]);
         const distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [at[0], (lo + hi) / 2, at[1]];

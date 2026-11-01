@@ -345,6 +345,23 @@ questions for 49 buildings. 46 took a type (a student dormitory, a mixed-use bui
 convenience store, a subway station…), 3 were shapes, and 2 rare kinds (a cinema, a car park) were placed apart. Not yet
 run with Jev.
 
+**The building level with Jev (2026-11-01, on the host, `--spawn --from building --run`, the search by meaning on v1's
+bge-small-zh-v1.5; 100 paid calls, 632,961 input tokens):**
+- **Choices:** of 49 buildings, Jev took the search's first type for 34, its 2nd–6th for 13, and made 2 shapes (the
+  tunnel and the underground structure, caverns 6–24 m down).
+  - Well read: 常盘台中学 a girls' academy; 看守所 a detention centre; 检察厅 a prosecutors' office; 二手车经销商 a car
+    dealer; 回转寿司店 a sushi restaurant.
+  - Three rare kinds stood apart (a cinema, the ruins, a car park).
+- **The search:** on 63 names judged by hand, the right type was first for 78% by words and 90% by meaning, and in the ten
+  for 84% by words and 100% by meaning. After the types that differed only by height were merged: 95% first, 98% in the
+  ten.
+- **Seen by the user, changed after:** a building's height was offered by its kind (a convenience store 1–5 floors), and
+  several descriptions said how tall a type is. Now every building is offered the same slices, from under the street to a
+  hundred floors; no description speaks of height; a building taller than its use's models is drawn as a tower. This run's
+  heights were asked the old way.
+- **Not yet:** Jev put 6 buildings under the street (the sushi restaurant, a ramen shop, the subway station, the car
+  park…); an underground building is not built as a hall yet.
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)

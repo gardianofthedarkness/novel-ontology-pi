@@ -272,13 +272,17 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
       (隧道) a subway station and a construction site, a detention centre a police station beside it.
     - The rest of the ten lean to the types sharing a use with what was found, then to the uses of the lots round it.
   - The type's coarse use (`TERRAIN_KINDS.building`: a house, a block of flats, a school, a shop, an office…) is what its
-    lot and its model go by; its own floors are its height slices.
+    lot and its model go by. No description says how tall a type is (the user, 2026-11-01: a building's height is its
+    scenes' to say), and two types that differed only by height became one (an office building or tower, a block of flats
+    or a residential tower).
   - It borrows a lot of that kind under its holder: the one that keeps the characters' travel least (§4). The place its
     scene is set in counts as its pin, because most buildings the text mentions are seen from a street, not set in. A
     named building takes its lot for good; an unnamed one shares.
-  - Jev is asked its height on slices through its street round that lot, at its kind's floors (a house 1–3, a block of
-    flats 3–45, an office 3–60), the street's buildings cut where a slice meets them.
-  - The lot takes its kind and its height: a named building's, else its sharers' mean.
+  - Jev is asked its height on slices through its street round that lot, the street's buildings cut where a slice meets
+    them. Every building is offered the same slices, from under the street to a hundred floors (`BUILDING_FLOORS`), so a
+    building is as tall as its scenes say, whatever it is.
+  - The lot takes its kind and its height: a named building's, else its sharers' mean. Taller than any model of its use
+    stands for, it is drawn as a tower (a 30-floor convenience store, a tower model), never cut down to its use's.
   - In World · Live it blinks on its lot while its height is asked, then is kept.
   - Before (the first M5 run), its use came from the language profile and its height from its street, so Jev saw no
     building level at all.
