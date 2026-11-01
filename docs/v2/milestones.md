@@ -464,6 +464,17 @@ from 58 and 100 before):**
       read from it). On this run's answers 17 buildings would be lifted: 豚草不动产写字楼 1 → 12 floors; 大厦, 两栋大楼 and
       大楼 (scene 29) 3 → 12; the flats 5 → 10; the hospital 4 → 8. A minimum lifts; 大楼 (scene 2) stays at 100 floors.
 
+**The building level with Jev on the whole dictionary (2026-11-01, on the host at 0f632a6; 47 questions, 36 paid and 11
+from the cache; 190,936 input and 3,816 output tokens):**
+- **The minimum held everywhere:** 豚草不动产写字楼 at 12 floors (42% sure), every office 12 or more, the flats 10, the
+  hospital 8, the dormitories 5, the stations 2.
+- **The text's measures** as before: both fifty-storey towers at 50 floors, the residential tower at 44.
+- **Tenants:** the five shops by the station now at the foot of the fifty-storey office tower (drawn with its podium).
+- **Wrong, and more of it:** offices Jev was unsure of now leap to the top slice: 大楼 (scene 2), 两栋大楼 and 大楼
+  (scene 29) at 100 floors, 18–22% sure (3 floors in the run before, under the old minimum); the flats of scene 34 at
+  100 (34%). With the minimum at 12 an office is offered 12, 20, 35, 60 and 100 floors, and the CBD tuned round them
+  stands taller in the picture. The "low-rise offices" still take the 44-floor measure of another building (92% sure).
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)
