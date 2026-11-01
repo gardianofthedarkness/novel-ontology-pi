@@ -684,7 +684,25 @@ export async function strandDemo(novelDir, options) {
       decided.set(key, entry); if (key.startsWith(`${slot.parent}:`)) decided.set(key.slice(slot.parent.length + 1), entry);
     }
     const asDecided = b => { const entry = decided.get(b.lot); if (!entry) return b; const top = entry.named ?? (entry.tops.length ? entry.tops.reduce((sum, t) => sum + t, 0) / entry.tops.length : null); return { ...b, use: entry.kind, ...(top ? { floors: Math.max(1, Math.round(top / 3)) } : {}) }; };
-    const buildings = [...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided).map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
+    // What stands apart (terrain spawning's building level, docs/v2/borrow-and-spawn.md §6): a rare kind with no lot of its
+    // own under its holder, and a ground shape, each where the characters' travel put it (its street's node plus its kept
+    // offset). The rare building is drawn as a building of its own; both push the city's buildings round them outward, the
+    // nearer the more. A floating shape merges into the buildings under it and pushes nothing.
+    const here = id => place.landscape.patches.some(patch => patch.id === id), local = (id, toward) => { const node = macroOf.get(id); return node && Array.isArray(toward) ? [node.x + toward[0] - wx, node.z + toward[1] - wz] : null; };
+    const apart = Object.values(terrain?.slots ?? {}).filter(slot => slot.level === 'building' && slot.placed && here(slot.parent)).map(slot => ({ slot, at: local(slot.parent, slot.toward) })).filter(entry => entry.at);
+    const standing = apart.map(({ slot, at }) => ({ lot: slot.lot, x: Math.round(at[0] * 10) / 10, z: Math.round(at[1] * 10) / 10, w: slot.size[0], d: slot.size[1], angle: slot.turn ?? 0, floors: 3, kind: slot.kind, use: slot.kind }));
+    const pushers = [...apart.map(({ slot, at }) => ({ at, r: Math.max(...slot.size) / 2 })), ...Object.entries(terrain?.shapes ?? {}).filter(([, shape]) => shape.push).map(([id, shape]) => { const site = terrain.sites?.[id]; return site && here(site.parent) ? { at: local(site.parent, site.toward), r: Math.max(shape.box[2] - shape.box[0], shape.box[3] - shape.box[1]) / 2 } : null; }).filter(entry => entry?.at)];
+    const pushed = b => {
+      let x = b.x, z = b.z;
+      for (const { at, r } of pushers) {
+        const dx = x - at[0], dz = z - at[1], d = Math.hypot(dx, dz) || 0.01, need = r + Math.max(b.w, b.d) / 2 + 2, reach = need + 2 * r;
+        if (d >= reach) continue;
+        const shift = (d < need ? need - d : 0) + 0.25 * (reach - Math.max(d, need));
+        x += (dx / d) * shift; z += (dz / d) * shift;
+      }
+      return x === b.x && z === b.z ? b : { ...b, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 };
+    };
+    const buildings = [...[...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided).map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)).map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));

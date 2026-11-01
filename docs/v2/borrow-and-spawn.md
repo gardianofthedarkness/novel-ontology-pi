@@ -258,9 +258,17 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
   - Before, an avenue laid its own rows across the city's roads, and the roads crossing it took most of them (2 of 8 left
     in a CBD). Now it has the city's 14 or so buildings along its road.
 - **A building is asked as every part is (the user, 2026-11-01: every level the same process).**
-  - Jev is shown the skyline and the map, and asked its kind. The building level's kinds are the uses the streets spawn
-    and the model table draws (`TERRAIN_KINDS.building` in `src/v2/context/terrainModes.ts`: a house, a block of flats, a
-    school, a shop, an office, a government office…), with the shapes as at every level.
+  - Jev is shown the skyline and the map, and asked its kind among ten. A universe has too many kinds of building to
+    offer them all (the user, 2026-11-01), so the building's name and the sentences round it in its scenes (its own or
+    those naming it, one either side) are searched against the inventory (`config/spawning/building-types.json`: about
+    90 types, each with a description, its Chinese, Japanese and English words, its floors and its coarse use). The ten
+    nearest are offered, the shapes beside them (`src/v2/spawning/inventory.ts`).
+    - The search is by meaning when an embedding model is configured (the embedding connector), else by words: a type's
+      words in the building's name count most, then the character pairs they share with it (回转寿司店 is a 寿司
+      shop), then its words in the sentences round it.
+    - The rest of the ten lean to the types sharing a use with what was found, then to the uses of the lots round it.
+  - The type's coarse use (`TERRAIN_KINDS.building`: a house, a block of flats, a school, a shop, an office…) is what its
+    lot and its model go by; its own floors are its height slices.
   - It borrows a lot of that kind under its holder: the one that keeps the characters' travel least (§4). The place its
     scene is set in counts as its pin, because most buildings the text mentions are seen from a street, not set in. A
     named building takes its lot for good; an unnamed one shares.
@@ -270,9 +278,14 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
   - In World · Live it blinks on its lot while its height is asked, then is kept.
   - Before (the first M5 run), its use came from the language profile and its height from its street, so Jev saw no
     building level at all.
-- **A building spawns** when nothing of its kind can be borrowed. It gives its kind to the spare lot of a street under its
-  holder where travel is least, so the street keeps its number of buildings.
-- **A building Jev answers with a shape** (a cavern, a platform) is not placed at the building level yet.
+- **A rare building** (no lot of its use under its holder) stands where the characters' travel is least, on the spot of
+  whatever lot is there. It is drawn as a building of its own, and it pushes the city's buildings round it outward, the
+  nearer the more (the user, 2026-11-01).
+- **A building Jev answers with a shape** stands where travel is least, a building's size.
+  - A floating one (a platform, a sphere, a ring, a cavern) is asked its distance from the ground and its thickness, and
+    merges into the buildings there.
+  - A ground shape (a hill, a plateau, a basin, a ramp) is asked its top and pushes the buildings round it outward.
+  - Both are nominated, as every shape.
 - **No place of its own.** A building slot is not a place in the tree (`src/v2/spawning/tree.ts`): the building that
   borrows it stands in its street, on that lot exactly. A staged building's grid clears the fill there; a marker stands on
   the lot.

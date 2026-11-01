@@ -84,3 +84,33 @@ test("the building level is asked as every level is: its kinds the uses the stre
   assert.equal(heights.measure, "top");
   assert.deepEqual(heights.slices.filter((slice) => slice.y > 0).map((slice) => [slice.y, slice.said]).slice(0, 2), [[9, "3 floors"], [15, "5 floors"]]);
 });
+
+test("the building inventory: every type a use the world draws, its words and floors; the search finds a building by its name and leans on what stands round it", async () => {
+  const { loadBuildingTypes, searchBuildingTypes, wordScore } = await import("../src/v2/spawning/inventory.js");
+  const { TERRAIN_KINDS } = await import("../src/v2/context/terrainModes.js");
+  const types = loadBuildingTypes();
+  assert.ok(Object.keys(types).length >= 60, "many types: too many to offer them all");
+  for (const [id, type] of Object.entries(types)) {
+    assert.ok(TERRAIN_KINDS.building[type.use], `${id}: its use ${type.use} is a building kind (its lots, its model)`);
+    assert.ok(type.describe && type.words.length && type.floors.every((f, n) => f >= 1 && (n === 0 || f > type.floors[n - 1])), `${id}: described, its words, its floors`);
+  }
+  const top = async (label: string, nearby?: Record<string, number>) => (await searchBuildingTypes({ label, around: [], nearby }, types, 10)).map((found) => found.id);
+  assert.equal((await top("回转寿司店 (scene 10)"))[0], "sushi-restaurant", "a compound name: its part");
+  assert.equal((await top("二手车经销商 (scene 45)"))[0], "car-dealer");
+  assert.equal((await top("看守所 (scene 2)"))[0], "detention-centre");
+  assert.equal((await top("学生宿舍 (scene 7)"))[0], "student-dormitory");
+  assert.equal((await top("便利商店 (scene 10)"))[0], "convenience-store", "the longest word it is called by, not the most short ones");
+  assert.equal((await top("大楼 (scene 2)", { office: 10 })).length, 10, "always ten to choose among");
+  assert.ok((await top("隧道 (scene 21)", { office: 10, shop: 2 })).slice(0, 3).every((id) => types[id].use === "office"), "with nothing found, what stands round it");
+  const around = await searchBuildingTypes({ label: "那栋建筑", around: ["她走进那栋建筑，柜台上摆满了拉面碗。"] }, types, 10);
+  assert.equal(around[0].id, "ramen-shop", "the sentences round it when the name says nothing");
+  assert.ok(wordScore(types["sushi-restaurant"], { label: "寿司", around: [] }) > wordScore(types["sushi-restaurant"], { label: "x", around: ["寿司"] }), "its name counts more than its sentences");
+});
+
+test("the building level's search by meaning: with an embedder the nearest by vectors, the name's own words still counting", async () => {
+  const { searchBuildingTypes } = await import("../src/v2/spawning/inventory.js");
+  const types = { a: { use: "shop", describe: "alpha", words: ["甲"], floors: [1] }, b: { use: "office", describe: "beta", words: ["乙"], floors: [3] } };
+  const embedder = { embed: async (texts: string[]) => texts.map((text) => (text.includes("beta") || text.includes("办公") ? [0, 1] : [1, 0])) };
+  assert.equal((await searchBuildingTypes({ label: "办公的地方", around: [] }, types, 2, embedder))[0].id, "b", "by meaning");
+  assert.equal((await searchBuildingTypes({ label: "甲", around: [] }, types, 2, embedder))[0].id, "a", "its own word in its name");
+});

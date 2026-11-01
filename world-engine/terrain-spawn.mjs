@@ -124,6 +124,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // Borrowing and spawning by type (`spawn`): slots instead of pools, kept in the universe's registry (they outlive the book),
   // mirrored in the book's terrain for the export; the stage inputs read as the slot tree (src/v2/spawning/tree.ts).
   const S = spawn ? { ...(await load('dist/src/v2/spawning/config.js')), ...(await load('dist/src/v2/spawning/slots.js')), ...(await load('dist/src/v2/spawning/tree.js')), ...(await load('dist/src/v2/spawning/topology.js')), ...(await load('dist/src/v2/spawning/heights.js')) } : null;
+  // The building level's inventory (config/spawning/building-types.json) and its search: by meaning when an embedding model
+  // is configured (the embedding connector), else by words (src/v2/spawning/inventory.ts).
+  const I = spawn ? await load('dist/src/v2/spawning/inventory.js') : null, buildingTypes = I ? I.loadBuildingTypes() : {};
+  const embedder = spawn ? await (async () => { try { const { loadConfig } = await load('dist/src/cli/config.js'), { loadEmbedder } = await load('dist/src/ground/connectors/embeddings.js'), cfg = loadConfig(process.env); return cfg.embeddings.status === 'deferred' ? null : loadEmbedder({ provider: cfg.embeddings.provider, model: cfg.embeddings.model, dimension: cfg.embeddings.dimension, baseUrl: cfg.embeddings.baseUrl, apiKey: process.env.EMBEDDING_API_KEY?.trim() || null }); } catch { return null; } })() : null;
   const LEVELS = ['city', 'district', 'street', 'building'], bookId = universe.book, resolver = spawn ? S.defaultResolver() : null;
   if (spawn) { terrain.mode = 'spawn'; terrain.book = bookId; registry.slots ??= {}; terrain.slots = registry.slots; }
   // The map's log, by book (docs/v2/borrow-and-spawn.md §8.8): every change to the map in order, so a book can be played again.
@@ -387,36 +391,57 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     // characters' travel least, the place its scene is set in counting as its pin (most buildings the text mentions are
     // seen from a street, not set in); a named one takes its slot for good, an unnamed one shares. With none to borrow, a
     // spawn gives its kind to a spare lot of the streets under its holder where travel is least. Gives back its lot.
+    // The sentences round a building in its scenes (the context engine's way: its own sentences, or those naming it, and
+    // one either side), for the inventory's search.
+    const aroundOf = part => {
+      const ids = new Set((part.id.startsWith('unnamed:') ? stores.own(part.id) : stores.naming(baseName(part.label))).map(sentence => sentence.id)), out = [];
+      for (const scene of stores.scenes) scene.lines.forEach((line, n) => { if ([-1, 0, 1].some(k => ids.has(scene.lines[n + k]?.id))) out.push(line.text); });
+      return out.slice(0, 15);
+    };
     const settingOf = new Map((inputs.data?.scenes ?? []).map(scene => [scene.id, scene.placeId ?? scene.placeIds?.[0] ?? null]));
-    const borrowBuilding = async (part, city, use) => {
-      const holder = holderOf(part, city), named = !part.id.startsWith('unnamed:'), scene = world[part.id]?.scene ?? null, setIn = scene ? settingOf.get(scene) : null;
-      const pin = setIn && setIn !== part.id ? positionOf(liftTo(setIn, 'street')) : null;
-      const mention = { id: part.id, label: part.label, named, kind: use, holder, scene, pin };
+    // Where a building's mention would have the characters travel least (§4): its ties to the places standing, and the
+    // place its scene is set in as its pin; and of the spots under its holder (every lot of its streets), the least.
+    const travelFor = part => {
+      const scene = world[part.id]?.scene ?? null, setIn = scene ? settingOf.get(scene) : null, pin = setIn && setIn !== part.id ? positionOf(liftTo(setIn, 'street')) : null;
       const fixed = fixedFor([part.id], 'building'), tie = id => tiesAt('building')[part.id]?.[id] ?? 0;
       const travel = at => fixed.reduce((sum, f) => sum + tie(f.id) * (f.box ? Math.hypot(Math.max(f.box[0] - at[0], 0, at[0] - f.box[2]), Math.max(f.box[1] - at[1], 0, at[1] - f.box[3])) : Math.hypot(at[0] - f.at[0], at[1] - f.at[1])), 0) + (pin ? S.LAMBDA * Math.hypot(at[0] - pin[0], at[1] - pin[1]) : 0);
+      return { scene, pin, fixed, travel };
+    };
+    const bestSpot = (holder, travel, slots = slotsAt('building')) => slots.filter(slot => slot.at && (slot.parent === holder || within(slot.parent, holder))).map(slot => [slot, travel(slot.at)]).sort((a, b) => a[1] - b[1] || a[0].id.localeCompare(b[0].id))[0]?.[0] ?? null;
+    const borrowBuilding = async (part, city, use) => {
+      const holder = holderOf(part, city), named = !part.id.startsWith('unnamed:'), { scene, pin, fixed, travel } = travelFor(part);
+      const mention = { id: part.id, label: part.label, named, kind: use, holder, scene, pin };
       const slots = slotsAt('building');
-      let spare = null;
+      let spot = null;
+      // A kind with no lot under its holder (a rare building: the user, 2026-11-01): it stands where travel is least, on
+      // the spot of whatever lot is there, and pushes the buildings round it outward (the export); the street keeps them all.
       const place = (m, parent) => {
         if (parent) return null;
-        const free = slots.filter(slot => slot.layer === 'form' && slot.at && !slot.owner && !S.sharersIn(slot, bookId).length && (slot.parent === holder || within(slot.parent, holder)));
-        spare = free.map(slot => [slot, travel(slot.at)]).sort((a, b) => a[1] - b[1] || a[0].id.localeCompare(b[0].id))[0]?.[0] ?? null;
-        return spare ? { parent: spare.parent, at: spare.at } : null;
+        spot = bestSpot(holder, travel, slots);
+        return spot ? { parent: spot.parent, at: spot.at } : null;
       };
       const choice = S.chooseSlots({ book: bookId, level: 'building', slots, mentions: [mention], ties: (a, b) => tiesAt('building')[a]?.[b] ?? 0, fixed, within: (id, of) => id === of || within(id, of), sceneIndex: s => sceneAt.get(s) ?? 0, place, improve: false });
       const slot = choice.slots.find(entry => entry.id === choice.assignment[part.id]);
-      if (!slot?.at) { await live.outcome({ subject: part.label, text: `a ${use}: no slot of its use and no spare lot under ${name(holder)}` }); return null; }
-      const spawned = choice.spawned.includes(slot.id);
-      // A spawn takes the spare lot's place: the lot is given its use (the street keeps its number of buildings).
-      const list = spawned ? choice.slots.filter(entry => entry.id !== spare.id) : choice.slots;
-      keepSlots('building', list, spawned ? { [slot.id]: { size: spare.size, turn: spare.turn, lot: spare.lot ?? spare.id } } : {});
+      if (!slot?.at) { await live.outcome({ subject: part.label, text: `a ${use}: no slot of its kind and no street under ${name(holder)}` }); return null; }
+      const spawned = choice.spawned.includes(slot.id), n = Object.values(registry.slots).filter(entry => entry.parent === slot.parent && entry.kind === use && entry.placed).length + 1;
+      keepSlots('building', choice.slots, spawned ? { [slot.id]: { size: spot.size.map(v => round(v * 1.2)), turn: spot.turn ?? 0, lot: `${slot.parent}:${use}.${n}`, placed: true } } : {});
       const kept = registry.slots[slot.id], node = nodeOf(kept.parent);
       if (spawned) delete kept.mapped;
       terrain.sites[part.id] = { label: part.label, scale: 'building', kind: use, parent: kept.parent, parentLabel: name(kept.parent), holder, slot: slot.id, toward: kept.toward, size: kept.size, turn: kept.turn ?? 0, ...(node ? { box: Z.turnedBox([node.x + kept.toward[0], node.z + kept.toward[1]], kept.size, kept.turn ?? 0) } : {}), ...(pin ? { pin } : {}), by: 'borrow' };
       if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
-      logMap({ level: 'building', what: spawned ? 'spawn' : named ? 'borrow' : 'share', id: slot.id, place: part.id, parent: kept.parent, kind: use, ...(spawned ? { from: spare.id } : {}) });
-      await live.outcome({ subject: part.label, text: `a ${use}: ${choice.log.at(-1).replace(`${part.label}: `, '')}${spawned ? ` (the lot of ${spare.kind} ${spare.id} in ${name(spare.parent)})` : ` in ${name(kept.parent)}`}` });
+      logMap({ level: 'building', what: spawned ? 'spawn' : named ? 'borrow' : 'share', id: slot.id, place: part.id, parent: kept.parent, kind: use, ...(spawned ? { at: kept.toward, pushes: true } : {}) });
+      await live.outcome({ subject: part.label, text: `a ${use}: ${choice.log.at(-1).replace(`${part.label}: `, '')}${spawned ? ` (placed where travel is least in ${name(kept.parent)}, the buildings round it pushed outward)` : ` in ${name(kept.parent)}`}` });
       await saveSlots();
       return { street: kept.parent, at: node ? [node.x + kept.toward[0], node.z + kept.toward[1]] : slot.at, size: kept.size, box: terrain.sites[part.id].box ?? Z.turnedBox(slot.at, kept.size, kept.turn ?? 0) };
+    };
+    // A building Jev answered with a shape (§8.9; the user, 2026-11-01): it stands where travel is least under its holder,
+    // a building's size; a floating one (a platform, a sphere, a ring, a cavern) merges into the buildings there, a ground
+    // shape (a hill, a plateau, a basin, a ramp) pushes them outward. Nominated, as every shape.
+    const placeShape = (part, city, shape) => {
+      const holder = holderOf(part, city), { travel } = travelFor(part), spot = bestSpot(holder, travel);
+      if (!spot) return null;
+      const node = nodeOf(spot.parent), size = [round(Math.max(Z.usualSize('building'), ...spot.size)), round(Math.max(Z.usualSize('building'), ...spot.size))], toward = spot.toward;
+      return { street: spot.parent, toward, size, at: spot.at, box: Z.turnedBox(spot.at, size, spot.turn ?? 0), turn: spot.turn ?? 0, floating: T.FLOATING.has(shape), node };
     };
     // A parent's children laid out by its topology as manifolds of its own ground (§8.2, §8.3): the new ones where its
     // energy is least, those standing giving a little; the heights unified to its average (§8.6). For a born city, a city
@@ -698,23 +723,50 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       if (part.scale === 'building') {
         const side = await shoot(OVERVIEW, { view: { fov: 38, position: from(skyCentre, -sky.turn, SKY_UP, sky.half * 2), target: skyCentre }, areas: areas(), labelScale: sky.half / 32, vague: { near: sky.half * 4, far: sky.half * 9 } });
         const top = await shoot(MAP, { topdown: { x: centre[0], z: centre[2], half: R, turn: fill.turn }, areas: areas(), labelScale: R / 24, vague: CLEAR });
-        const { replies } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES, pictures: { skyline: `${city.label} from the side and above, as the world stands now. ${SEEN}`, map: `${city.label} straight down, ${fill.turn ? `turned ${Math.round((fill.turn * 180) / Math.PI)}° so its places fill the picture (north is not up)` : 'north up'}, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
-        const what = replies.find(reply => reply.key === 'kind'), kind = what?.value && T.TERRAIN_KINDS.building[what.value] ? String(what.value) : null;
-        if (!kind) { await live.outcome({ subject: part.label, text: `${what?.value ? `a ${what.value}` : 'no kind'}: no building kind, so no lot (a shape at the building level is a later step)` }); continue; }
-        const lot = await borrowBuilding(part, city, kind);
-        if (!lot) continue;
-        // Its height: slices at its kind's floors through a core of its street round its lot, the buildings standing there cut.
-        const { measure, slices: tops } = T.terrainHeights('building', kind), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo, core = Math.max(CORE_MIN, Math.max(...lot.size) * 1.5);
+        // The inventory's ten nearest types (the user, 2026-11-01): its name and the sentences round it searched, the lots round
+        // it leaning the rest; Jev chooses among them and the shapes, given the scenes.
+        const nearby = {}; for (const slot of slotsAt('building').filter(entry => entry.parent === holder || within(entry.parent, holder))) nearby[slot.kind] = (nearby[slot.kind] ?? 0) + 1;
+        const found = await I.searchBuildingTypes({ label: part.label, around: aroundOf(part), nearby }, buildingTypes, 10, embedder);
+        const offered = { ...Object.fromEntries(found.map(entry => [entry.id, buildingTypes[entry.id].describe])), ...SHAPES };
+        const { replies } = await ask(decide, T.terrainGroundMode, { ...about, shapes: SHAPES, offered, pictures: { skyline: `${city.label} from the side and above, as the world stands now. ${SEEN}`, map: `${city.label} straight down, ${fill.turn ? `turned ${Math.round((fill.turn * 180) / Math.PI)}° so its places fill the picture (north is not up)` : 'north up'}, ${Math.round(R * 2)} m across; its districts and streets pinned and named (${name(holder)}, which holds ${part.label}, in blue), those already kept outlined in white. A pin is a point, not a size.` } }, stores, { request: { images: { skyline: side.png, map: top.png } } });
+        const what = replies.find(reply => reply.key === 'kind'), chosen = what?.value ? String(what.value) : null;
+        const shape = chosen && SHAPES[chosen] ? chosen : null, type = chosen && buildingTypes[chosen] ? chosen : null, kind = type ? buildingTypes[type].use : chosen && T.TERRAIN_KINDS.building[chosen] ? chosen : null;
+        if (!kind && !shape) { await live.outcome({ subject: part.label, text: `${chosen ? `"${chosen}"` : 'no answer'}: no building kind or shape, so it stays where the canvas puts it` }); continue; }
+        // A building borrows a lot of its kind (or stands apart, a rare one); a shape stands where travel is least.
+        const lot = shape ? placeShape(part, city, shape) : await borrowBuilding(part, city, kind);
+        if (!lot) { await live.outcome({ subject: part.label, text: `no street under ${name(holderOf(part, city))} to stand in` }); continue; }
+        // Its height: slices through a core of its street round its spot, the buildings standing there cut; a building's at
+        // its kind's floors, a floating shape's its distance from the ground (then its thickness), a ground shape's its top.
+        const { measure, slices: tops } = shape ? T.terrainHeights('building', shape) : type ? T.buildingHeights(buildingTypes[type].floors) : T.terrainHeights('building', kind), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo, core = Math.max(CORE_MIN, Math.max(...lot.size) * 1.5);
         const at = lot.at, sample = [round(at[0] - core), round(at[1] - core), round(at[0] + core), round(at[1] + core)];
         const lots = data.world.lots.map(entry => ({ box: [entry.i0 * CELL, entry.j0 * CELL, (entry.i0 + entry.nx) * CELL, (entry.j0 + entry.nz) * CELL], top: (entry.floors ?? 1) * FLOOR })).filter(entry => entry.box[0] < sample[2] && sample[0] < entry.box[2] && entry.box[1] < sample[3] && sample[1] < entry.box[3]);
         const distance = Math.max(core * 2 * 1.9, span * 2.1, 200), mid = [at[0], (lo + hi) / 2, at[1]];
         focus = { x: round(at[0]), z: round(at[1]), r: round(core) };
-        await show(`${part.label}: its lot`, { id: part.id, label: part.label, kind, box: lot.box, top: null });
+        await show(`${part.label}: its spot`, { id: part.id, label: part.label, kind: shape ?? kind, box: lot.box, top: null });
         const shot = await shoot(OVERVIEW, { view: { fov: 40, position: from(mid, -0.62, 0.3, distance), target: mid }, slices: tops.map((entry, k) => ({ box: sample, y: entry.y, label: `${entry.letter} · ${entry.y} m · ${entry.said}`, side: k % 2 ? -1 : 1 })), cuts: tops.filter(entry => entry.y > 0).flatMap(entry => lots.filter(entry2 => entry2.top > entry.y).slice(0, 80).map(entry2 => ({ box: entry2.box, y: entry.y }))), labelScale: Math.max(2.5, distance / 75), dash: Math.max(1, distance / 160), vague: { near: distance * 1.6, far: distance * 4.5 } });
-        const rise = (await ask(decide, T.terrainHeightMode, { ...about, kind, measure, slices: tops, pictures: { heights: `${part.label}'s lot in ${name(lot.street)}, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height a ${kind} may rise to${tops.some(entry => entry.y < 0) ? ', and below the street' : ''}; the city faded behind.` } }, stores, { request: { images: { heights: shot.png } } })).replies[0];
+        const where = `${part.label}'s spot in ${name(lot.street)}, ${Math.round(core * 2)} m across, from the side and a little above, a slice at each height${tops.some(entry => entry.y < 0) ? ', and below the street' : ''}; the city faded behind.`;
+        const rise = (await ask(decide, T.terrainHeightMode, { ...about, kind: shape ?? kind, measure, slices: tops, pictures: { heights: where } }, stores, { request: { images: { heights: shot.png } } })).replies[0];
         const height = tops.find(entry => entry.letter === rise?.value)?.y ?? null;
-        Object.assign(terrain.sites[part.id], { ...(height !== null ? { top: height } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } });
-        await live.outcome({ subject: part.label, text: `${part.label}: ${kind}, ${height === null ? 'its street\'s height' : height < 0 ? `${-height} m under the street` : `${Math.round(height / 3)} floors (${height} m)`}, on a lot of ${name(lot.street)}` });
+        if (shape) {
+          // A floating shape: its thickness next (§8.9); it spans from its underside up (a cavern from its top down).
+          let bottom = null, thick = null;
+          if (measure === 'elevation' && height !== null) {
+            const slices = T.terrainThickness(), reply = (await ask(decide, T.terrainHeightMode, { ...about, kind: shape, measure: 'thickness', slices, pictures: { heights: `${where} ${part.label}'s ${height < 0 ? `top lies ${-height} m under` : `underside is ${height} m above`} the street.` } }, stores, { request: { images: { heights: shot.png } } })).replies[0];
+            thick = slices.find(entry => entry.letter === reply?.value)?.y ?? slices[1].y; bottom = height < 0 ? height - thick : height;
+          }
+          const top = bottom !== null ? (height < 0 ? height : height + thick) : height, span2 = bottom !== null ? { bottom, thickness: thick } : {};
+          terrain.shapes[part.id] = { kind: shape, box: lot.box, ...(top !== null ? { top } : {}), ...span2, ...(lot.floating ? {} : { push: true }) };
+          terrain.sites[part.id] = { label: part.label, scale: 'building', kind: shape, shape, parent: lot.street, parentLabel: name(lot.street), toward: lot.toward, size: lot.size, turn: lot.turn, box: lot.box, ...(top !== null ? { top } : {}), ...span2, by: 'shape', confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
+          if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
+          registry.shapes ??= {}; registry.shapes[part.id] = { label: part.label, book: bookId, kind: shape, box: lot.box, ...(top !== null ? { top } : {}), ...span2 };
+          logMap({ level: 'building', what: 'nominate', place: part.id, kind: shape, box: lot.box, ...span2 });
+          await live.outcome({ subject: part.label, text: `${part.label}: a ${shape} in ${name(lot.street)}, ${bottom !== null ? `${height < 0 ? `its top ${-height} m under the street` : `its underside ${height} m up`}, ${thick} m thick, merged into the buildings there` : `${top ?? '?'} m high, the buildings round it pushed outward`}` });
+          await show(`${part.label}: kept`, { id: part.id, label: part.label, kind: shape, box: lot.box, top });
+          await saveSlots(); placed++;
+          continue;
+        }
+        Object.assign(terrain.sites[part.id], { ...(type ? { type } : {}), offered: found.map(entry => entry.id), ...(height !== null ? { top: height } : {}), confidence: { kind: what?.confidence ?? null, height: rise?.confidence ?? null } });
+        await live.outcome({ subject: part.label, text: `${part.label}: ${type ?? kind}${type ? ` (${kind})` : ''}, ${height === null ? 'its street\'s height' : height < 0 ? `${-height} m under the street` : `${Math.round(height / 3)} floors (${height} m)`}, in ${name(lot.street)}` });
         await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: lot.box, top: height });
         await saveSlots(); placed++;
         continue;

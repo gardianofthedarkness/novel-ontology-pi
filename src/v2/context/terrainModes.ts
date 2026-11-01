@@ -72,7 +72,8 @@ export interface TerrainPart { id: string; label: string; scale: string }
  */
 export interface PartFocus { part: TerrainPart; holder: { id: string; label: string }; city: { id: string; label: string }; pictures: Record<string, string>; kind?: string; within?: Record<string, string>; sampled?: boolean }
 /** `shapes`: the basic shapes, at every level, besides the level's kinds. */
-export interface GroundFocus extends PartFocus { shapes: Record<string, string> }
+/** `offered`: the kinds to choose among when not the level's own (a building's: the inventory's ten nearest, and the shapes). */
+export interface GroundFocus extends PartFocus { shapes: Record<string, string>; offered?: Record<string, string> }
 export interface ZoomFocus extends PartFocus { kind: string; reasons: string[] }
 /** `tops`: the lettered slices, each a height the terrain may rise to. */
 /** `measure`: a built kind's median (its manifold makes the rest), or natural ground's or a shape's top; `slices` the heights offered. */
@@ -245,11 +246,13 @@ export function terrainHeights(scale: string, kind: string, average?: { factor: 
     return { measure: "average", standard, slices: slices.map((slice, k) => ({ letter: "ABCDEFGHIJKLMN"[k], ...slice })) };
   }
   // A building: its roof at three metres a floor, each slice said in floors.
-  if (entry?.floors) return { measure: "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...entry.floors.map((f): [number, string] => [f * 3, `${f} floor${f === 1 ? "" : "s"}`])].map(([y, said], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said })) };
+  if (entry?.floors) return buildingHeights(entry.floors);
   const heights = median ? entry!.medians! : entry?.tops ?? SHAPE_TOPS;
   const said = (y: number) => (median ? `about ${Math.max(1, Math.round(y / 3))} floors` : natural(y));
   return { measure: median ? "median" : "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...heights.map((y): [number, string] => [y, said(y)])].map(([y, words], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said: words })) };
 }
+/** A building's height slices: under the street, then its floors (its roof at three metres a floor), each said in floors. */
+export const buildingHeights = (floors: number[]): { measure: "top"; slices: { letter: string; y: number; said: string }[] } => ({ measure: "top", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: ${under}`]), ...floors.map((f): [number, string] => [f * 3, `${f} floor${f === 1 ? "" : "s"}`])].map(([y, said], k) => ({ letter: "ABCDEFGHIJKLMN"[k], y, said })) });
 /** A part's options: its level's kinds (each with its manifold in words), then the basic shapes. */
 export const terrainKinds = (scale: string, shapes: Record<string, string>): Record<string, string> => ({ ...Object.fromEntries(Object.entries(levelOf(scale)).map(([kind, entry]) => [kind, entry.manifold ? `${entry.hint}. Its heights: ${manifoldWords(entry.manifold)}` : entry.hint])), ...shapes });
 /** The part's own sentences (as many as the old evidence gave): what is asked about. */
@@ -309,7 +312,7 @@ export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
   name: "terrain-ground",
   task: (focus) => `${focus.part.scale === "city" ? `What kind of city is ${focus.part.label}?` : focus.sampled ? `What kind of ${focus.part.scale} is ${focus.part.label}? The text gives it no name of its own; it stands where sampling put it, in ${focus.holder.label}.` : `What kind of ${focus.part.scale} is ${focus.part.label}, in ${focus.city.label}?`} Terrain only: a kind of ${focus.part.scale} (each with its manifold: how its heights spread; the engine fills in its buildings) or a basic shape, never a building. Read it from the scenes it is in, as the text tells them, the most telling first (scenes); where given, the facts about it (facts), its surroundings (environment) and what stands in it (standing); and the terrain kept for the places holding it (within). Where the text says little of it or you are unsure, use common sense: what anyone knows of a real place (a world city's centre stands tall), and what a place of its kind usually is.`,
   // The options are the part's level's kinds (TERRAIN_KINDS, each with its manifold), composed with the evidence.
-  sources: [...sources<GroundFocus>("ground"), fixed("kinds", "kinds", (focus: GroundFocus) => terrainKinds(focus.part.scale, focus.shapes)) as Source<GroundFocus, TerrainStores>, fixed("pictures", "pictures", (focus: GroundFocus) => focus.pictures) as Source<GroundFocus, TerrainStores>],
+  sources: [...sources<GroundFocus>("ground"), fixed("kinds", "kinds", (focus: GroundFocus) => focus.offered ?? terrainKinds(focus.part.scale, focus.shapes)) as Source<GroundFocus, TerrainStores>, fixed("pictures", "pictures", (focus: GroundFocus) => focus.pictures) as Source<GroundFocus, TerrainStores>],
   cutOrder: ["environment", "standing", "facts"],
   probe,
   // Its kind only (docs/v2/world-engine-v2.md §2.0.21): where an area lies and how large it is are the program's (its pins,

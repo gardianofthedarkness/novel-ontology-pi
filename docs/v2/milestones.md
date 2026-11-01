@@ -331,6 +331,20 @@ a lot of that kind, its height on slices through its street. The lot takes the k
 on its lot in World · Live while it is asked. Stand-in on a copy of the host's state (no model call): 98 questions for 49
 buildings, all on lots of their kind with their heights. Not yet run with Jev: about 98 calls.
 
+**The user's building level (after the first asked run):**
+- [x] Shapes at the building level: a floating one asked its distance from the ground and its thickness, merging into
+      the buildings there; a ground shape asked its top, pushing them outward; both placed where travel is least.
+- [x] An inventory of about 90 building types (`config/spawning/building-types.json`), searched by a building's name and
+      the sentences round it; Jev chooses among the ten nearest and the shapes. The search is by words until an
+      embedding model is configured.
+- [x] A rare type with no lot of its use under its holder stands where travel is least and pushes the buildings round it
+      outward, drawn as a building of its own.
+
+Stand-in on a copy of the host's state (no model call; its kind the search's first, its height a middle slice): 100
+questions for 49 buildings. 46 took a type (a student dormitory, a mixed-use building, a school, a detention centre, a
+convenience store, a subway station…), 3 were shapes, and 2 rare kinds (a cinema, a car park) were placed apart. Not yet
+run with Jev.
+
 ## M6 — Growth across books
 
 - [ ] Vols 1–4 in order (stand-in), then a 20-book replay (the four books again with fresh scene ids)
