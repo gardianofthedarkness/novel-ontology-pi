@@ -95,6 +95,10 @@ export async function strandDemo(novelDir, options) {
   // Terrain and spawns (world-engine/terrain/terrain.mjs), when they were asked: where Jev put each main site in the place that holds
   // it, and which scenes start anew (everyone present placed afresh, with the scene's environment in the question).
   const terrain = JSON.parse(await readFile(`${novelDir}/stage/terrain.json`, 'utf8').catch(() => 'null'));
+  // Spawning positions (world-engine/spawning/spawn.mjs, docs/v2/spawning.md): where each person begins each scene; the
+  // player starts them there (its own start spots and grouping where spawning has nothing).
+  const spawned = JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
+  const spawnAt = new Map((spawned?.scenes ?? []).flatMap(scene => scene.starts.filter(start => start.kind === 'person').map(start => [`${scene.id}|${start.who}`, start])));
   // Borrowing and spawning by type (docs/v2/borrow-and-spawn.md): no pools; a spare or shared slot is an area of its level,
   // a named place stands in its slot's area, an unnamed mention in the slot it shares this book (the tree changed in place).
   if (terrain?.mode === 'spawn') (await load('dist/src/v2/terrain/tree.js')).withSlots(inputs, Object.values(terrain.slots ?? {}), terrain.book, Object.fromEntries(Object.entries(terrain.sites ?? {}).filter(([, site]) => site.by === 'tenant' && site.parent).map(([id, site]) => [id, site.parent])));
@@ -899,6 +903,8 @@ export async function strandDemo(novelDir, options) {
     // Carried from this place when they were last here; else where Jev said the scene finds them, else coming in off the avenue
     // (walking there from the place they were last in).
     start: ({ scene, handoff, carried, seed }) => {
+      // Where spawning put them (it groups and carries on already).
+      if (spawnAt.has(`${scene.id}|${handoff.person}`)) { const begin = beginOf({ scene, handoff, carried, seed }); begun.set(`${scene.id}|${handoff.person}`, begin); return begin; }
       // Together at the opening: beside the leader, wherever the leader begins.
       const order = (timeline.handoffs.get(scene.id) ?? []).map(entry => entry.person), leader = leaderOf(report[scene.id]?.startPairs ?? [], order, handoff.person), ahead = leader && begun.get(`${scene.id}|${leader}`);
       if (ahead) {
@@ -934,6 +940,14 @@ export async function strandDemo(novelDir, options) {
   };
   /** Where someone begins on their own. */
   function beginOf({ scene, handoff, carried, seed }) {
+      // Spawning's start: carried on (the player's own end of their last scene), else the walkable node nearest its point,
+      // on its floor (any floor where that one has none).
+      const start = spawnAt.get(`${scene.id}|${handoff.person}`);
+      if (start && !(start.by === 'carried' && carried)) {
+        reach(start.at[0], start.at[1], 40);
+        const built = graphOf({ x: start.at[0], z: start.at[1] }), node = W.nodeNear(world, built, start.at[0], start.at[1], Math.round(start.y / 3)) ?? W.nodeNear(world, built, start.at[0], start.at[1], null);
+        if (node !== null) { (traceOf(scene.id, 'start').spawned ??= []).push({ person: handoff.person, by: start.by, floor: start.floor }); return [node, directionOf(0, -1)]; }
+      }
       if (carried) return carried;
       const { anchor } = groups.get(scene.placeId);
       reach(anchor.x, anchor.z, 56);

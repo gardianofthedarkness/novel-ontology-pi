@@ -47,3 +47,15 @@ test("people carry on at the same place close in time, else start fresh; things 
   assert.deepEqual([of("s4", "car").by, of("s4", "car").at], ["stays", of("s1", "car").at], "the car stays where it was left");
   assert.equal(of("s5", "a").by, "part", "in a shop: inside it");
 });
+
+test("Jev's spot question reads the scene's own text: the lines naming those asked about or saying where, their neighbours, its opening", async () => {
+  const { spawnLines, spawnSpotMode } = await import("../src/v2/context/spawnModes.js");
+  const { compose } = await import("../src/v2/context/engine.js");
+  const lines = Array.from({ length: 20 }, (_, n) => ({ id: `s${n}`, text: n === 10 ? "A走上了楼顶。" : `line ${n}` }));
+  const kept = spawnLines(lines, ["A"], ["s15"]);
+  assert.deepEqual(kept.map((line) => line.id), ["s0", "s1", "s2", "s3", "s9", "s10", "s11", "s14", "s15", "s16"]);
+  assert.ok(kept[4].text.startsWith("……"), "a break where lines are skipped");
+  const composed = await compose(spawnSpotMode, { scene: { id: "x", label: "4", when: null }, place: { name: "a school", kind: "building", floors: 5 }, subjects: [{ id: "a", name: "A", kind: "person" }], spots: [{ letter: "A", said: "floor 1" }, { letter: "B", said: "on its roof" }], lines: kept }, null);
+  assert.deepEqual(Object.keys(composed.document as object), ["task", "scene", "who", "spots"]);
+  assert.deepEqual(composed.questions.map((question) => [question.key, question.options]), [["a", ["A", "B"]]]);
+});

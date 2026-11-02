@@ -46,6 +46,9 @@
   .blist .what { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
   .blist .by { color: var(--accent); } .blist .by.jev { color: var(--jev); }
   .blist .low { color: #ff9d7a; }
+  .blist .ask summary { color: var(--jev); font-size: 11px; cursor: pointer; padding-top: 4px; }
+  .blist .ask div { color: var(--ink); font-size: 12px; line-height: 1.6; padding: 4px 0 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .blist .ask b { color: var(--dim); font-weight: 600; font-size: 11px; display: block; padding-top: 6px; }
   /* A phone's bar wraps to two rows: the panels stand above both. */
   @media (max-width: 560px) { .blist, .asks { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 92px); } }
 </style>
@@ -61,8 +64,9 @@
 </section>
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
 <section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
+<section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
-<nav class="bar"><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><a id="play" href="./">Player</a></nav>
+<nav class="bar"><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
@@ -71,14 +75,35 @@
   const fold = (button, panel, on) => { $(button).setAttribute("aria-pressed", String(on)); $(panel).hidden = !on; };
   $("live").addEventListener("click", () => {
     const on = $("live").getAttribute("aria-pressed") !== "true";
-    fold("live", "asks", on); if (on) fold("bopen", "blist", false);
+    fold("live", "asks", on); if (on) { fold("bopen", "blist", false); fold("sopen", "slist", false); }
     if (on && !$("asksFrame").getAttribute("src")) $("asksFrame").src = `live${query}`;
   });
   // The building level (terrain spawning's, live.json's world notes): a building's type and who typed it (the search, or
   // Jev and how sure), its height against its type's minimum and how sure Jev was of it; a composite building's parts
   // under their host, at its foot, on its upper floors or under it. A row tapped shows that building in the world.
   let buildings = "";
-  $("bopen").addEventListener("click", () => { const on = $("bopen").getAttribute("aria-pressed") !== "true"; fold("bopen", "blist", on); if (on) fold("live", "asks", false); });
+  $("bopen").addEventListener("click", () => { const on = $("bopen").getAttribute("aria-pressed") !== "true"; fold("bopen", "blist", on); if (on) { fold("live", "asks", false); fold("sopen", "slist", false); } });
+  $("sopen").addEventListener("click", () => { const on = $("sopen").getAttribute("aria-pressed") !== "true"; fold("sopen", "slist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); } });
+  // Spawning (world-engine/spawning/spawn.mjs, live.json's world notes): each scene's start positions, how each was decided,
+  // and, where the rules left someone open, what Jev is given to say where: the scene's own text, who, the place's spots.
+  let spawnKey = "";
+  const BY = { carried: "carried on", stays: "stays where left", holder: "with its holder", spatial: "by the scene's words", group: "with those arriving together", speaking: "within speaking distance", default: "a random floor (open: Jev's question)", ground: "on the ground", part: "inside its part" };
+  const listSpawn = (list) => {
+    const key = JSON.stringify(list ?? null);
+    if (key === spawnKey) return; spawnKey = key;
+    if (!list?.length) { $("ssum").textContent = "No spawning yet."; $("srows").replaceChildren(); return; }
+    const all = list.flatMap((scene) => scene.starts), open = list.filter((scene) => scene.ask).length;
+    $("ssum").textContent = `${list.length} scenes · ${all.filter((s) => s.kind === "person").length} people and ${all.filter((s) => s.kind === "thing").length} things placed · ${all.filter((s) => s.by === "carried").length} carried on · ${open} scenes with a question for Jev (composed, not asked)`;
+    $("srows").replaceChildren(...list.map((scene) => {
+      const li = document.createElement("li"); li.tabIndex = 0;
+      const starts = scene.starts.map((s) => `${esc(s.name)}${s.kind === "thing" ? " (thing)" : ""}: ${BY[s.by] ?? s.by}${typeof s.floor === "number" && s.floor !== 0 ? `, ${s.floor < 0 ? `${-s.floor} under` : `floor ${s.floor}`}` : ""}`).join("<br>");
+      const doc = scene.ask?.document, lines = doc?.scene ? Object.values(doc.scene).map(esc).join("\n") : "";
+      const ask = doc ? `<details class="ask"><summary>What Jev is given (not asked yet)</summary><div><b>Task</b>${esc(doc.task)}<b>The scene's text</b>${lines}<b>Who</b>${Object.values(doc.who ?? {}).map(esc).join(", ")}<b>Spots</b>${Object.entries(doc.spots ?? {}).map(([k, v]) => `${k}: ${esc(v)}`).join("\n")}</div></details>` : "";
+      li.innerHTML = `<span class="name">Scene ${Number(scene.id.slice(-3))} · ${esc(scene.place ?? "no place")}</span><span class="what">${esc(scene.when ?? "")}</span><span class="what">${starts || "nobody present"}</span>${ask}`;
+      li.addEventListener("click", (event) => { if (event.target.closest("details")) return; if (scene.placeId) for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "focus", id: scene.placeId }, origin); if (camera) camera.follow = false; showFollow(false); });
+      return li;
+    }));
+  };
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const pct = (v) => (typeof v === "number" ? `${Math.round(v * 100)}%` : "");
   const height = (b) => (typeof b.top !== "number" ? "no height" : b.top < 0 ? `${-b.top} m under the street` : `${Math.round(b.top / 3)} fl`);
@@ -192,7 +217,7 @@
         $("next").hidden = !terrain; $("runOn").hidden = !terrain; $("next").disabled = !waiting;
         if (terrain && state.lines?.[0]?.mode) $("runOn").setAttribute("aria-pressed", String(state.lines[0].mode === "run"));
         const world = state.world;
-        listBuildings(world?.notes?.buildings);
+        listBuildings(world?.notes?.buildings); listSpawn(world?.notes?.spawn);
         if (world) {
           $("where").textContent = `${world.moment ?? ""}${world.final ? " · end" : ""}`;
           // The manifold the moment stands on: each place's ground, and who set it (Jev, the main agent, or the terrain rules).
