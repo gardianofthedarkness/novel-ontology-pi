@@ -260,7 +260,7 @@ Jev gives each dialogue card its kind.
 | State change | a blast, a fall, a capture | a building damaged; someone hurt |
 
 Each goes through the ledger and its gates (§7b): applied when the laws pass it and it is the world's own or agrees
-with the reading; otherwise decided by the main agent (G1) or the senior agent (G2), never by default.
+with the reading; otherwise decided by a main agent (G1), never by default.
 
 ## 7. The review: a main agent with a high-privilege CLI
 
@@ -283,8 +283,8 @@ the full text included, and writes only answers into the ledger.
 - **The user's notes** (World · Live's Why) become held items too: a note on a card is shown to the agent with the
   card's records, and an answer pins the card.
 - **Replay:** pins are replayed from the cache (only what changed is asked again).
-- **The senior agent (G2, §7b)** settles what the main agent shouldn't settle alone: identity, a fact against a sure
-  reading, abilities, cross-book records, and conflicts the main agent's answers can't make lawful.
+- **A main agent decides everything the laws don't** (§7b): identity, a fact against a sure reading, abilities,
+  cross-book records; what its answers can't make lawful stays held, playing its lawful default, and is reported.
 
 ## 7a. v1's review boundary (for decision 1)
 
@@ -318,18 +318,17 @@ How v1 formats the ontology and what its review gate covers (`src/ground/connect
 
 The user's concern with v1's boundary: the world log now records many kinds of things, and reviewing them as v1
 reviewed facts would bury the user. On volume 1 alone one run wrote 339 world records and 359 ledger entries, and the
-reading has 2,196 roles (643 under 0.5). Decided: **nothing is reviewed as a record; only exceptions are, in three
-gates of shrinking volume, each gate seeing bundles, not lines.** No gate is the user (the user: an agent understands
-better than a person, because of how long its context is); the user reads what the gates decided and can reverse any of
-it.
+reading has 2,196 roles (643 under 0.5). Decided: **nothing is reviewed as a record; only exceptions are, in two
+gates, the second seeing bundles, not lines.** No gate is the user (the user: an agent understands better than a
+person, because of how long its context is), and there is no tier above the main agent: **every main agent (Pi, Codex
+or another) has all the rights.** The user reads what was decided and can reverse any of it.
 
-### The three gates
+### The two gates
 
 | Gate | Who | Sees | Volume on volume 1 (estimate) |
 |---|---|---|---|
 | **G0 · The laws** | code | every proposal, every run | all of it, in milliseconds |
-| **G1 · The main agent** | Pi (or Codex) with the review CLI | what G0 holds, bundled by scene; a sample of what G0 passed | today 112 held items in 23 scenes, so ~23 bundles; fewer once system 2 and Jev's dialogue kinds run |
-| **G2 · The senior agent** | an agent with the whole book and its universe in context (the full EPUB, the ontology, the world log, earlier books), separate from G1's run so its judgement is fresh | identity, abilities, big revisions, cross-book, what G1 can't settle | a handful per book |
+| **G1 · A main agent** | any: Pi, Codex or another, with the review CLI and the whole book, its ontology, world log and universe to read; each with all the rights | what G0 holds, bundled by scene; identity, abilities, big revisions, cross-book records; a sample of what G0 passed | today 112 held items in 23 scenes, so ~23 bundles, plus a handful of identity and ability items per book; fewer once system 2 and Jev's dialogue kinds run |
 
 ### Classes: what goes where
 
@@ -337,20 +336,21 @@ it.
 |---|---|---|
 | **W · World mechanics** | positions, walks, tracks, meetings by rule, bindings, blast geometry | never reviewed; the world log only; canon gets their summary (where each person is at a scene's end) applied automatically when lawful |
 | **S · Story state the world derives** | presence, a scene's place, time relations, a line's speaker, hurt, a building damaged | applied automatically when G0 passes and it agrees with the reading or the reading was unsure (below 0.5); otherwise G1 |
-| **R · Revisions** (back-propagation) | a pin's re-derived span | applied when its size J is below the threshold; above it G1; far above it G2 |
-| **I · Identity** | a merge or a split, a new person, a description that means someone | a clean merge (no law against it, strong evidence) applied with a flag, undoable, as v1; anything else G1; G1 unsure goes to G2 |
-| **A · Abilities** | the per-character config (it lets someone past the physics) | written by G1 with evidence; every change confirmed by G2, since one wrong entry changes everything a person does |
-| **X · Cross-book** | a strand continued into the next book, the atlas, the calendar | G1, then G2 as one bundle per book |
+| **R · Revisions** (back-propagation) | a pin's re-derived span | applied when its size J is below the threshold; above it G1 |
+| **I · Identity** | a merge or a split, a new person, a description that means someone | a clean merge (no law against it, strong evidence) applied with a flag, undoable, as v1; anything else G1 |
+| **A · Abilities** | the per-character config (it lets someone past the physics) | written by G1 with evidence; every change in the run's report, since one wrong entry changes everything a person does |
+| **X · Cross-book** | a strand continued into the next book, the atlas, the calendar | G1, one bundle per book |
 
 ### What keeps the volume down
 
 1. **Bundles, not records.** G1 gets one item per scene: the scene's held breaks together, with its text, the world log's
    records for it and the alternatives the laws allow. One answer can settle several breaks (one misplaced person
-   explains three L6 breaks). G2 gets one item per identity question, one list of ability changes, one bundle per book.
-   The user gets a report per run: what G1 and G2 decided, by class, with what each changed, readable in World · Live.
+   explains three L6 breaks). Identity questions are one item each, ability changes one list, cross-book one bundle per
+   book. The user gets a report per run: what G0 applied and G1 decided, by class, with what each changed, readable in
+   World · Live.
 2. **Reach decides priority.** Each item is scored by how much it would change (its J, §5a) times how far it reaches
    (the later scenes and people that depend on it, from the log's ties). Items are answered highest first, within a
-   budget per run (G1 a fixed number of bundles; G2 a few); what's left over stays held and plays its lawful
+   budget per run (G1 a fixed number of bundles); what's left over stays held and plays its lawful
    default. Nothing waits on review.
 3. **Audits instead of approvals.** Of what G0 passes and is applied automatically, a small random share (say 2%) goes
    to G1 as an audit. Each class keeps its audit error rate; a class whose rate rises above a limit is routed to G1
@@ -365,9 +365,9 @@ it.
 ### Who decides
 
 The laws decide what applies on its own (classes W and S when lawful, small revisions, clean merges flagged), and each
-class's audit rate is on record. Everything else is decided by an agent with the evidence in front of it, never by
-default: G1 for the scene-level exceptions, G2 for identity, abilities, big revisions and cross-book records. The user
-is not a gate (the user, 2026-11-02); every decision is reported and can be reversed or pinned from World · Live.
+class's audit rate is on record. Everything else is decided by a main agent with the evidence in front of it, never
+by default; any main agent has all the rights (the user, 2026-11-02), there is no senior tier, and the user is not a
+gate: every decision is reported and can be reversed or pinned from World · Live.
 
 ## 8. What the user sees
 
@@ -405,10 +405,10 @@ then W8. Track A runs in parallel throughout.
 
 ## 10. Decisions for the user
 
-1. ~~Review gates~~ **Decided (§7b):** review by exception; G0 the laws, G1 the main agent, G2 a senior agent with the
-   whole book in context; the user reads reports and reverses through notes. Its numbers still to set: the audit
-   share, the error-rate limit per class, G1's and G2's budgets per run.
-2. ~~EM merges~~ **Decided (§7b):** a clean merge applied with a flag, undoable, as v1; anything else to G1, then G2.
+1. ~~Review gates~~ **Decided (§7b):** review by exception; G0 the laws, G1 any main agent with all the rights; the user
+   reads reports and reverses through notes. Its numbers still to set: the audit share, the error-rate limit per
+   class, G1's budget per run.
+2. ~~EM merges~~ **Decided (§7b):** a clean merge applied with a flag, undoable, as v1; anything else to G1.
 3. When the laws reject a reading's sure answer (a speaker at 0.9 out of earshot): the reading wins and the world is
    rechecked, or the world wins?
 4. Abilities (law 12): read from the concepts' owners only, or also asked of the work model per person?
