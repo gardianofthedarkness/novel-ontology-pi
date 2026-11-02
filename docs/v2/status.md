@@ -64,6 +64,8 @@ by one model table of CC0 kits ([model-kit.md](model-kit.md)); living areas are 
 
 ## World engine: spawning positions — next
 
+Designed (2026-11-01): [spawning.md](spawning.md). People and things in one pass; carry on by strands, start fresh by rule, Jev's choice over the place's spots only where the rules cannot say.
+
 Where each character and thing stands when a scene begins: the scene's place (the world script), who is there (EM²), and a
 spot in that place's built ground. Designed in outline (visual-context-engine.md §5, world-engine-v2.md §4); its own
 design comes first.

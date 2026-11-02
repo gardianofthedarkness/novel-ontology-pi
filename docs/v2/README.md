@@ -74,6 +74,8 @@ progress: [milestones.md](milestones.md).
 
 ### Spawning positions — next
 
+Designed with the user (2026-11-01): [spawning.md](spawning.md).
+
 Where each character and thing stands when a scene begins, on the terrain the first step built: the scene's place from the
 world script, who is there from EM², and a spot inside the place's built ground. Terrain spawning was designed as "the first
 faculty of the spawning department" (visual-context-engine.md §5); the units and destinations it leads to are in
