@@ -560,8 +560,24 @@ the same CLI).
   description's words as their aliases in canon. *Places:* a scene at an unnamed place takes its nearest named one up
   the script's tree. On the last real run: canon's 39 played scenes all have presence and a place (none had either),
   98 scene-end locations (27 held), 125 presence edges in the graph (0 before), 3 strand timelines; the review has 143
-  `who-speaks`, 8 audits and 12 identities besides the laws' 57; undo returns canon exactly as it was. Not yet: time
-  relations, a place's container, a room's floor, building identity, splits.
+  `who-speaks`, 8 audits and 12 identities besides the laws' 57; undo returns canon exactly as it was.
+
+  **And the rest of §6 (2026-11-02):** `worldPlaces` reads from the run's page which lot each scene played in (the
+  building spawning bound it to, else the one most of its people stood in) and on which floor. *Building identity:* a
+  named building is its lot (`properties.world.lot`, floors, role), the same lot every time, else a `building` question.
+  *A room's floor:* a named room or floor gets its floor and building, the same every time, else a `floor` question.
+  *A place's container:* a named place smaller than a building playing in a named building's lot is `PART_OF` it, where
+  canon has no parent for it; against canon's parent, a `container` question (canon keeps one parent per place, so the
+  answer is pinned for the main agent rather than rewritten). *Time:* someone who walks from one scene to the next,
+  both at one unstated time, puts the second at least that walk later: `PRECEDES` from the first scene's last event to
+  the second's first, the minutes, metres and walker kept with it (stated clocks stay the laws', L5). *Damage:* a blast
+  on a named building's lot goes on its record (`properties.world.damage`: scene, card, cells taken), unless the laws
+  held the blast (L13). *Splits:* someone twice in two places at one stated moment (L2) is a `split` question.
+  Undo covers all of it. On the last real run: the named building of scenes 13–20 is its lot (a 40-floor office) with
+  scene 21's blast on it; 4 time relations (scene 6 at least 15 min after 5, scene 10 15 min after both 8 and 9, scene 13 10 min after 12), 4
+  `PRECEDES` edges in the graph; no rooms are named in volume 1 and no one breaks L2, so no floors, containers or splits
+  there. Still not in canon: someone hurt (no state for it), a split carried out (the answer is pinned for the main
+  agent's identity tools).
 - *W7 · UI* (World · Live's reader): Why shows, per card, the laws as it played (with the talk's kind, Jev's or the
   review's), system 2's answer beside Jev's, the card's proposals, and the review's question with the agent's answer and
   reason; **Run report** shows the run's laws by verdict, system 2, proposals by state, the review, canon's writes, the

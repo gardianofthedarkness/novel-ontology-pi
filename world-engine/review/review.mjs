@@ -63,6 +63,15 @@ export function heldItems({ ledger, notes = [], name = id => id, at = new Date()
     const v = entry.value, options = [...new Set(v.candidates ?? [])].filter(id => id !== v.to);
     item(`who-speaks|${v.line}`, { scene: v.scene, card: v.card, line: v.line, law: null, ledger: entry.id, kind: 'who-speaks', subjects: options, names: options.map(name), question: `In ${v.scene}, who says line ${v.line}${v.to ? ` (to ${name(v.to)})` : ''}? The reading was unsure; the world could not settle it: ${v.why}. Those there: ${options.map(id => `${id} = ${name(id)}`).join(', ')}.`, options: [...options, 'none of them'], evidence: [`line ${v.line}`, `card ${v.card}`, `ledger ${entry.id}`] });
   }
+  // What canon could not take from the world on its own (W6, canon.mjs): a named building in several lots, a named room on
+  // several floors, a place inside a building canon puts elsewhere, someone twice in two places at once.
+  for (const entry of ledger.filter(row => row.state === 'held' && ['building', 'floor', 'container', 'split'].includes(row.kind))) {
+    const v = entry.value, base = { scene: v.scenes?.[0] ?? null, card: null, law: null, ledger: entry.id, kind: entry.kind, evidence: [`ledger ${entry.id}`, ...(v.scenes ?? []).map(scene => `scene ${scene}`)] };
+    if (entry.kind === 'building') item(`building|${v.place}`, { ...base, subjects: [v.place], names: [name(v.place)], question: `${name(v.place)} (${v.place}) plays in ${v.lots.length} different buildings across ${v.scenes.join(', ')}. Is it one building throughout (the one most of them used), or are these different places the text gives one name?`, options: ['one building', 'different places'] });
+    if (entry.kind === 'floor') item(`floor|${v.place}`, { ...base, subjects: [v.place], names: [name(v.place)], question: `${name(v.place)} (${v.place}) is played on floors ${v.floors.join(', ')} in ${v.scenes.join(', ')}. Which floor is it on (counting the ground as 1)?`, options: v.floors.map(String) });
+    if (entry.kind === 'container') item(`container|${v.place}`, { ...base, subjects: [v.place, v.host], names: [name(v.place), name(v.host)], question: `${name(v.place)} (${v.place}) plays inside ${name(v.host)} (${v.host}), but the ontology has it inside ${name(v.parent)} (${v.parent}). Which contains it?`, options: [v.host, v.parent] });
+    if (entry.kind === 'split') item(`split|${v.who}`, { ...base, subjects: [v.who], names: [name(v.who)], question: `${name(v.who)} (${v.who}) is in two places at the same stated moment ${v.where.length} times (${v.where.join('; ')}). Is this one person, or two the reading took for one?`, options: ['one person', 'two people'] });
+  }
   // An audit (§7b): a share of what the world settled on its own, checked; too many wrong and the class goes to the review.
   for (const entry of ledger.filter(row => row.state === 'held' && row.kind === 'audit')) {
     const v = entry.value;
@@ -134,7 +143,7 @@ export async function holdForReview(novelDir, { run = null, budget = 12, size = 
 
 /** The pins the director plays by (v1's, with v2's: remote actors, arrivals, stays, meetings, speakers, notes). */
 export async function loadPins(novelDir) {
-  return { present: {}, same: [], different: [], kind: {}, landscape: {}, remote: {}, arrive: {}, stays: {}, meet: [], revise: {}, speaker: {}, audits: {}, notSpeaker: {}, notes: {}, abilities: [], strands: [], time: [], ...await readJson(join(novelDir, 'stage', 'world', 'pins.json'), {}) };
+  return { present: {}, same: [], different: [], kind: {}, landscape: {}, remote: {}, arrive: {}, stays: {}, meet: [], revise: {}, speaker: {}, audits: {}, places: {}, floor: {}, container: {}, split: {}, notSpeaker: {}, notes: {}, abilities: [], strands: [], time: [], ...await readJson(join(novelDir, 'stage', 'world', 'pins.json'), {}) };
 }
 export async function savePins(novelDir, pins) {
   await mkdir(join(novelDir, 'stage', 'world'), { recursive: true });
@@ -190,6 +199,10 @@ export function pinsFrom(pins, settled, { script }) {
       audit[answer.verdict === 'right' ? 'right' : 'wrong']++;
       if (answer.verdict === 'wrong' && item.audits === 'speaker') for (const line of item.lines ?? []) pins.notSpeaker[line] = who;
     }
+    if (item.kind === 'building') pins.places[item.subjects[0]] = answer.verdict;
+    if (item.kind === 'floor') pins.floor[item.subjects[0]] = answer.verdict;
+    if (item.kind === 'container') pins.container[item.subjects[0]] = answer.verdict;
+    if (item.kind === 'split') pins.split[item.subjects[0]] = answer.verdict;
     if (item.kind === 'revision') pins.revise[`${item.scene}|${who}`] = answer.verdict === 'apply' ? 'apply' : 'keep';
     if (item.kind === 'note' || item.kind === 'blast') pins.notes[item.card ?? item.id] = { verdict: answer.verdict, reason: answer.reason };
   }

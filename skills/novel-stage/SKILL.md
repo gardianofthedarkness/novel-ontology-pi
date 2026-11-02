@@ -136,6 +136,11 @@ the text, never by default.
    - `identity`: two who are never together, with the same people round
      them: `same` or `different`. A description answered `same` as a named
      person becomes one of their names in the ontology.
+   - `building`, `floor`, `container`, `split`: what the world found about
+     places and people that the ontology cannot take on its own (a named
+     building played in several buildings, a named room on several floors,
+     a place inside a building the ontology puts elsewhere, someone twice in
+     two places at once). Answer from where the text puts them.
    - `continuity`, `two-places`, `travel`, `blast`, `revision`, `note`: as
      their question says. A `note` is the user's own, on a card: say what is
      wrong in the option and how it should be in the reason.

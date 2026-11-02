@@ -58,3 +58,34 @@ test('a description the review answered is a named person: its words an alias of
   const again = new Map([['char_1', out[0].record]]);
   assert.equal(canonOf({ ...input, reading: withSlots, entities: again, pins: { notSpeaker: {}, same: [['char_1', 'slot_9']] } }).filter(entry => entry.file === 'entities.jsonl').length, 0, 'nothing new the second time');
 });
+
+test('places from the world: a named building is its lot, with the blasts on it; a room inside it is PART_OF it, on its floor; a walk between scenes of one unstated time puts the second later', async () => {
+  const { worldPlaces } = await import('./canon.mjs');
+  const world = { NX: 100, NZ: 100, K: 5, oi: 0, oj: 0, ok: 0, lots: [{ i0: 10, j0: 10, nx: 10, nz: 10, floors: 6, role: 'office', source: 'b1' }, { i0: 50, j0: 50, nx: 4, nz: 4, floors: 2, source: 'b2' }] };
+  const node = (x, z, k = 0) => (k * world.NZ + Math.floor(z / 2)) * world.NX + Math.floor(x / 2);
+  const page = { world, scenes: [
+    { id: 's1', starts: { char_1: node(25, 25) }, events: [{ id: 'action:x', hit: { lot: 0, destroyed: [1, 2, 3] }, moves: [] }] },
+    { id: 's2', starts: { char_1: node(26, 24, 3), char_2: node(30, 30, 3) }, events: [] },
+  ] };
+  const script = { places: { loc_b: { scale: 'building' }, loc_r: { scale: 'room' } }, scenes: [{ id: 's1', place: 'loc_b', at: { node: 't:night', stated: false } }, { id: 's2', place: 'loc_r', at: { node: 't:night', stated: false } }] };
+  const record = { scenes: [{ scene: 's1', cards: [] }, { scene: 's2', cards: [] }] };
+  const placed = worldPlaces({ page, script, record, arrivals: [{ fromScene: 's1', scene: 's2', who: 'char_1', metres: 600 }] });
+  assert.deepEqual(placed.places.loc_r, [{ scene: 's2', lot: { source: 'b1', floors: 6, role: 'office' }, floor: 3 }]);
+  const entities = new Map(['loc_b', 'loc_r'].map(id => [id, { id, kind: 'Location', names: [{ text: id }], properties: {}, confidence: 1 }]));
+  const scenes = new Map([['s1', { id: 's1', sentenceIds: ['x1'] }], ['s2', { id: 's2', sentenceIds: ['x2'] }]]);
+  const events = new Map([['e1', { id: 'e1', chronologicalOrder: 1, evidence: { sentenceIds: ['x1'] } }], ['e2', { id: 'e2', chronologicalOrder: 2, evidence: { sentenceIds: ['x2'] } }]]);
+  const out = canonOf({ run: 'r', record: { scenes: [] }, ledger: [], pins: {}, scenes, events, script, strands: null, reading: { roles: {} }, entities, world: placed, relations: [] });
+  const of = id => out.find(entry => entry.file === 'entities.jsonl' && entry.record.id === id)?.record.properties.world;
+  assert.deepEqual(of('loc_b'), { lot: 'b1', floors: 6, role: 'office', damage: [{ scene: 's1', card: 'action:x', cells: 3 }] });
+  assert.deepEqual(of('loc_r'), { lot: 'b1', floor: 4 });
+  const relations = out.filter(entry => entry.file === 'relations.jsonl').map(entry => [entry.record.type, entry.record.fromId, entry.record.toId, entry.record.properties.minMinutes ?? null]);
+  assert.deepEqual(relations, [['PART_OF', 'loc_r', 'loc_b', null], ['PRECEDES', 'e1', 'e2', 8]]);
+  const again = canonOf({ run: 'r', record: { scenes: [] }, ledger: [], pins: {}, scenes, events, script, strands: null, reading: { roles: {} }, entities, world: placed, relations: out.filter(entry => entry.file === 'relations.jsonl').map(entry => entry.record) });
+  assert.equal(again.filter(entry => entry.file === 'relations.jsonl').length, 0, 'what canon has is not written again');
+});
+
+test('a split is asked when someone is twice in two places at once', () => {
+  const ledger = [1, 2].map(n => ({ state: 'held', law: 'L2', subject: 'char_1', value: { what: `s${n} & s${n + 5} · char_1` } }));
+  const held = canonOf({ ...input, ledger }).filter(entry => entry.file === 'held');
+  assert.deepEqual(held.map(entry => [entry.record.kind, entry.record.who, entry.record.where.length]), [['split', 'char_1', 2]]);
+});
