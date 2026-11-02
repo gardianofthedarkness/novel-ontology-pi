@@ -121,6 +121,15 @@ with the 6 of 20 dialogue gatherings. What is not played: travel the text tells 
 front, to 小萌's door), which is in no action card; and inside a building the shots look at it from outside (the cut at
 the mover's floor is not built yet).
 
+**Every move an action (the user, 2026-11-02).** Told in the sentence kinds' definitions that any change of place is an
+action, Jev moved 3 of the 35 narration and description sentences holding a word of moving, and 217 other sentences
+changed kind back and forth (its run-to-run noise is larger than the wording's effect; that reading was set aside). So it
+is a code rule (`LANGUAGE.moves`, the move rule in src/v2/extraction/flow.ts): such a sentence is an action, EM² says who
+moves, a move with no one said to move (the subject left out) is that of whoever last spoke or acted before it, and the
+action rule drops the rest. Vol 1: 44 marked, 33 kept (443 action cards, from 417). Scenes 1–13 played again: 18 moves,
+the narrated walks among them (to 小萌's door); most of these scenes' travel is between scenes (carried by spawning) or only
+said or thought ("we'll go to 小萌's place first"), which is not a move.
+
 ## 8. Order of building
 
 1. The camera planner (`src/v2/context/camera.ts`): the fourteen directions and their letters, the action's frame along an
