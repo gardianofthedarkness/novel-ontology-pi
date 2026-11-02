@@ -59,10 +59,31 @@
   .reader .ctl #rgo { border-color: var(--jev); color: var(--bg); background: var(--jev); }
   .reader .book { overflow-y: auto; overscroll-behavior: contain; padding: 6px 12px 40px; font-size: 15px; line-height: 1.85; color: #c9d6de; }
   .reader .book p { margin: 0 0 .6em; }
+  /* The EPUB as published: its headings and pictures, in this panel's type. */
+  .reader .book .doc { border-bottom: 1px solid var(--line); padding-bottom: 1em; margin-bottom: 1em; }
+  .reader .book .doc h1, .reader .book .doc h2, .reader .book .doc h3 { color: var(--ink); font-size: 17px; line-height: 1.5; margin: 1em 0 .6em; text-wrap: balance; }
+  .reader .book .doc img { display: block; max-width: 100%; height: auto; margin: .8em auto; border-radius: 4px; }
+  .reader .book .doc div { margin: 0 0 .6em; }
   .reader .book .s { border-radius: 3px; }
   .reader .book .s.played { color: var(--ink); text-decoration: underline; text-decoration-color: #5a7a8e; text-underline-offset: 4px; cursor: pointer; }
   .reader .book .s.moved { text-decoration-color: #7dffa4; text-decoration-thickness: 2px; }
   .reader .book .s.current { background: #17384d; color: #fff; }
+  /* Why (the user, 2026-11-02: a frontend the reader and the developer share): the card's questions to Jev as asked, its
+     answers and pictures, and notes either of us leaves on the card. */
+  .reader .why { border-top: 1px solid var(--line); padding-top: 6px; max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }
+  .reader .why summary { cursor: pointer; color: var(--jev); font-size: 12px; }
+  .reader .qa .f { border-left: 2px solid var(--line); padding: 4px 0 4px 8px; margin: 6px 0; font-size: 12px; line-height: 1.55; }
+  .reader .qa .f > b { color: var(--dim); font-weight: 600; }
+  .reader .qa .q { margin-top: 3px; }
+  .reader .qa .q i { color: var(--dim); font-style: normal; }
+  .reader .qa .a { color: var(--ink); }
+  .reader .qa .low { color: #ff9a8a; }
+  .reader .qa .pics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .reader .qa .pics img { width: 120px; height: auto; border-radius: 4px; border: 1px solid var(--line); }
+  .reader .notes ol { margin: 6px 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+  .reader .notes li { margin: 3px 0; overflow-wrap: anywhere; }
+  .reader .notes li small { color: var(--dim); }
+  .reader .notes textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--ink); background: #0b1a24; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 4px 0; }
   .reader .book .more { color: var(--dim); font-size: 12px; text-align: center; padding: 10px; }
   /* A phone's bar wraps to two rows: the panels stand above both. */
   @media (max-width: 560px) { .blist, .asks { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 92px); } }
@@ -79,7 +100,7 @@
 </section>
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
 <section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
-<section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (green: someone moved). Tap one to play it here.</span></header><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
+<section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (green: someone moved). Tap one to play it here.</span></header><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div><details class="why" id="cwhy"><summary>Why · Jev's questions and our notes <span id="cnotecount"></span></summary><div id="cqa" class="qa"></div><div class="notes"><ol id="cnotes"></ol><textarea id="cnote" rows="2" placeholder="What looks wrong in this card? (where, who, what the text says)"></textarea><div class="ctl"><button id="csend">Add note</button><button id="call">All notes</button></div><ol id="callnotes" hidden></ol></div></details></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
 <section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
 <nav class="bar"><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
@@ -129,8 +150,44 @@
   let cards = [], cardKey = "", cardAt = -1, cardOfSentence = new Map(), rspeed = 2, nextBlock = 0, loading = false, bookDone = false;
   const says = (m) => `${esc(m.name)}: ${m.moved ? `went${m.direction && m.direction !== "stays" ? ` (arrow ${esc(m.direction)}${m.how ? `, ${esc(m.how)}` : ""})` : ""} to ${esc(m.to ?? "?")}${m.spot && m.spot !== "none" ? ` · spot: ${esc(m.spot)}` : m.boxed ? ` · boxed${m.height ? `, ${esc(m.height)}` : ""}` : ""}` : m.direction === "stays" ? "stays" : `did not move${m.why ? ` (${esc(m.why)})` : ""}`}`;
   const mark = () => { for (const span of $("book").querySelectorAll(".s")) { const n = cardOfSentence.get(span.dataset.id); span.classList.toggle("played", n !== undefined); span.classList.toggle("moved", n !== undefined && cards[n].moves.some((m) => m.moved)); span.classList.toggle("current", n !== undefined && n === cardAt); } };
+  // Why: the questions Jev was asked for a card, from the question log (live/frames.jsonl, the latest run's: from its last
+  // first call), matched by the card's place in its scene ("scene 1 · card 15/20 · …"); and the notes on it.
+  let frames = null, framesKey = "", notes = [];
+  const loadFrames = async () => {
+    if (frames && framesKey === cardKey) return frames;
+    const text = await fetch(`live/frames.jsonl${query}`, { cache: "no-store" }).then((r) => (r.ok ? r.text() : "")).catch(() => "");
+    const all = text.split("\n").flatMap((line) => { try { return line ? [JSON.parse(line)] : []; } catch { return []; } });
+    frames = all.slice(Math.max(0, all.findLastIndex((frame) => frame.call === 1))); framesKey = cardKey;
+    return frames;
+  };
+  const phaseOf = (card) => { const own = cards.filter((other) => other.scene === card.scene); return `scene ${Number(card.scene.slice(-3))} · card ${own.indexOf(card) + 1}/${own.length}`; };
+  // People by name where an answer names them (with:char_000003).
+  const valueOf = (value) => { const names = new Map(cards.flatMap((card) => card.moves.map((m) => [m.who, m.name]))); return (value && typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")).replace(/char_\d+/g, (id) => names.get(id) ?? id); };
+  const loadNotes = async () => { notes = await fetch(`notes.json${query}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])).catch(() => []); $("cnotecount").textContent = notes.length ? `· ${notes.length} note${notes.length === 1 ? "" : "s"}` : ""; };
+  const noteRow = (note, play) => { const li = document.createElement("li"); li.innerHTML = `<small>${esc(note.at.slice(5, 16).replace("T", " "))} · ${esc(note.scene ?? "")} ${esc(note.card)}</small><br>${esc(note.text)}`; if (play) { li.style.cursor = "pointer"; li.addEventListener("click", () => { const n = cards.findIndex((card) => card.card === note.card && card.scene === note.scene); if (n >= 0) { playCard(n); showCard(n); } }); } return li; };
+  const showWhy = async () => {
+    const card = cards[cardAt];
+    if (!$("cwhy").open) return;
+    $("cnotes").replaceChildren(...notes.filter((note) => card && note.card === card.card && note.scene === card.scene).map((note) => noteRow(note, false)));
+    $("callnotes").replaceChildren(...notes.slice().reverse().map((note) => noteRow(note, true)));
+    if (!card) { $("cqa").textContent = "Tap a played sentence to see its card."; return; }
+    $("cqa").textContent = "Reading Jev's questions…";
+    const phase = phaseOf(card), own = (await loadFrames()).filter((frame) => frame.phase === phase || frame.phase?.startsWith(`${phase} `));
+    if (cards[cardAt] !== card) return;
+    $("cqa").innerHTML = own.length ? own.map((frame) => `<div class="f"><b>${esc(frame.phase.slice(phase.length + 3) || phase)} · call ${frame.call}</b>${frame.questions.map((q, k) => { const a = frame.answers.find((answer) => answer.key === q.key) ?? frame.answers[k]; return `<div class="q"><i>${esc(q.instructions)}</i><br><span class="a">${esc(valueOf(a?.value ?? a?.box))}</span>${typeof a?.confidence === "number" ? ` <span class="${a.confidence < 0.6 ? "low" : ""}">${Math.round(a.confidence * 100)}%</span>` : ""}${a?.top?.length > 1 ? ` <i>· else ${a.top.slice(1, 3).map(([v, c]) => `${esc(valueOf(v))} ${Math.round(c * 100)}%`).join(", ")}</i>` : ""}</div>`; }).join("")}${frame.pictures?.length ? `<div class="pics">${frame.pictures.map((picture) => `<a href="live/${esc(picture.file)}${esc(query)}" target="_blank" rel="noopener"><img loading="lazy" alt="${esc(picture.name)}" src="live/${esc(picture.file)}${esc(query)}"></a>`).join("")}</div>` : ""}</div>`).join("") : "No question was asked for this card (dialogue is played by rule).";
+  };
+  $("cwhy").addEventListener("toggle", () => { if ($("cwhy").open) loadNotes().then(showWhy); });
+  $("call").addEventListener("click", () => { $("callnotes").hidden = !$("callnotes").hidden; });
+  $("csend").addEventListener("click", async () => {
+    const card = cards[cardAt], text = $("cnote").value.trim();
+    if (!card || !text) return;
+    const reply = await fetch(`notes${query}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ card: card.card, scene: card.scene, event: card.event, sentence: card.lines[0]?.id ?? null, text }) }).catch(() => null);
+    if (!reply?.ok) { $("csend").textContent = "Not saved, try again"; return; }
+    $("cnote").value = ""; $("csend").textContent = "Add note"; await loadNotes(); showWhy();
+  });
   const showCard = (n, scroll = true) => {
     cardAt = n; const card = cards[n]; if (!card) return;
+    showWhy();
     $("cmeta").innerHTML = `Scene ${Number(card.scene.slice(-3))} · card ${n + 1} of ${cards.length} · ${card.kind}<br>${card.moves.length ? card.moves.map(says).join("<br>") : "nobody asked"}`;
     mark();
     if (scroll) $("book").querySelector(`.s[data-id="${card.lines[0]?.id}"]`)?.scrollIntoView({ block: "center" });
@@ -147,16 +204,72 @@
     $("csum").textContent = cards.length ? `The whole text; ${cards.length} cards played, ${cards.reduce((sum, card) => sum + card.moves.filter((m) => m.moved).length, 0)} moves (green). Tap an underlined sentence to play it here.` : "The whole text. No director's run yet.";
     mark();
   };
-  // The book, a block at a time (b0003_s0012 is in block 3), as the reader nears its end.
+  // The book as published (the user, 2026-11-02): the volume's EPUB a document at a time (api/book-epub), its headings,
+  // paragraphs and pictures kept, each sentence the records cite (b0003_s0012, from api/book-text) found in it in order and
+  // wrapped, so a played one is underlined and tappable there. Without an EPUB, the text a block at a time, in its paragraphs.
+  let epub = null, item = 0, pending = [], textDone = false;
+  // Letters and digits only: the extracted text and the EPUB differ in spaces and marks (">>" before a time line).
+  const kept = /[\p{L}\p{N}]/u, norm = (text) => [...String(text ?? "")].filter((c) => kept.test(c)).join("");
+  const nextSentences = async () => {
+    const reply = await fetch(`../api/book-text?volume=${encodeURIComponent(volume)}&block=${nextBlock}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!reply?.sentences?.length) { textDone = true; return null; }
+    nextBlock++;
+    return reply.sentences;
+  };
+  // Each sentence found in the document's text (its letters and digits) from where the last ended; one not found is passed
+  // over when one of the next five is found close by; when none is, the rest belong to the next document.
+  const align = async (doc) => {
+    const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT), nodes = [], map = [];
+    let flat = "";
+    for (let node; (node = walker.nextNode()); ) { for (let o = 0; o < node.data.length; o++) if (kept.test(node.data[o])) { flat += node.data[o]; map.push([nodes.length, o]); } nodes.push(node); }
+    const ranges = [];
+    let cursor = 0;
+    for (;;) {
+      if (pending.length < 8 && !textDone) pending.push(...((await nextSentences()) ?? []));
+      while (pending.length && !norm(pending[0].text)) pending.shift();
+      if (!pending.length) break;
+      let found = -1, at = -1;
+      for (let k = 0; k < Math.min(6, pending.length); k++) { const key = norm(pending[k].text), p = key ? flat.indexOf(key, cursor) : -1; if (p >= 0 && (k === 0 || p - cursor < 400)) { found = k; at = p; break; } }
+      if (found < 0) break;
+      pending.splice(0, found);
+      const sentence = pending.shift(), length = norm(sentence.text).length;
+      ranges.push([sentence.id, at, at + length]); cursor = at + length;
+    }
+    // Wrapped from the last back, so a text node split for a later sentence keeps the offsets of the earlier ones.
+    for (const [id, a, b] of ranges.reverse()) {
+      const parts = [];
+      for (let k = a; k < b; k++) { const [n, o] = map[k], last = parts.at(-1); if (last && last.n === n) last.end = o + 1; else parts.push({ n, start: o, end: o + 1 }); }
+      for (const { n, start, end } of parts.reverse()) {
+        const node = nodes[n], tail = node.splitText(start); tail.splitText(end - start);
+        const span = document.createElement("span"); span.className = "s"; span.dataset.id = id; tail.replaceWith(span); span.append(tail);
+      }
+    }
+  };
+  const loadText = async () => {
+    const sentences = await nextSentences();
+    if (!sentences) { bookDone = true; $("bmore").textContent = nextBlock ? "The end of the book." : "The book's text is not served here."; return; }
+    // Paragraphs as the book has them (each sentence marked when one starts).
+    let para = null;
+    for (const sentence of sentences) {
+      if (!para || sentence.paragraph) { para = document.createElement("p"); $("bmore").before(para); }
+      const span = document.createElement("span"); span.className = "s"; span.dataset.id = sentence.id; span.textContent = sentence.text; para.append(span);
+    }
+  };
+  const loadEpub = async () => {
+    const reply = await fetch(`../api/book-epub?volume=${encodeURIComponent(volume)}&item=${item}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!reply) { if (!item) { epub = false; return loadText(); } bookDone = true; $("bmore").textContent = "The end of the book."; return; }
+    epub = true; item++;
+    const doc = document.createElement("section"); doc.className = "doc";
+    doc.append(...new DOMParser().parseFromString(reply.html, "text/html").body.childNodes);
+    for (const img of doc.querySelectorAll("img[data-epub]")) { img.loading = "lazy"; img.src = `../api/book-epub-file?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(img.dataset.epub)}`; }
+    $("bmore").before(doc);
+    await align(doc);
+  };
   const loadBlock = async () => {
     if (loading || bookDone) return; loading = true;
-    const reply = await fetch(`../api/book-text?volume=${encodeURIComponent(volume)}&block=${nextBlock}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    loading = false;
-    if (!reply?.sentences?.length) { bookDone = true; $("bmore").textContent = nextBlock ? "The end of the book." : "The book's text is not served here."; return; }
-    const para = document.createElement("p");
-    for (const sentence of reply.sentences) { const span = document.createElement("span"); span.className = "s"; span.dataset.id = sentence.id; span.textContent = sentence.text; para.append(span); }
-    $("bmore").before(para); nextBlock++; mark();
-    if ($("book").scrollHeight <= $("book").clientHeight * 2) loadBlock();
+    try { await (epub === false ? loadText() : loadEpub()); } finally { loading = false; }
+    mark();
+    if (!bookDone && $("book").scrollHeight <= $("book").clientHeight * 2) loadBlock();
   };
   $("book").addEventListener("scroll", () => { const book = $("book"); if (book.scrollTop + book.clientHeight > book.scrollHeight - 600) loadBlock(); });
   $("book").addEventListener("click", (event) => { const span = event.target.closest(".s"); const n = span ? cardOfSentence.get(span.dataset.id) : undefined; if (n !== undefined) playCard(n); });

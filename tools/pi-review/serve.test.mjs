@@ -394,3 +394,42 @@ test('read mode text: a block is found by its file name, a missing one is a 404 
   assert.deepEqual([third.block, third.blocks, third.sentences[0].id.startsWith('b0002_')], [2, 3, true]);
   assert.equal(await bookText(directory, 3), null);
 });
+
+test('read mode book: the EPUB a spine document at a time, made safe, its pictures served by their path in the book', async (context) => {
+  const { createZip } = await import('../../dist/src/digger/intake/album/zip.js');
+  const { directory, start } = await fixture(context);
+  const epub = join(directory, 'book.epub');
+  await writeFile(epub, createZip([
+    { name: 'mimetype', data: 'application/epub+zip' },
+    { name: 'META-INF/container.xml', data: '<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>' },
+    { name: 'OEBPS/content.opf', data: '<package><metadata><dc:title>书</dc:title></metadata><manifest><item id="a" href="Text/a.xhtml" media-type="application/xhtml+xml"/><item id="p" href="Images/p.jpg" media-type="image/jpeg"/></manifest><spine><itemref idref="a"/></spine></package>' },
+    { name: 'OEBPS/Text/a.xhtml', data: '<html><head><style>p{}</style></head><body onload="x()"><h1>第一章</h1><p style="color:red">第一句。<a href="https://example.com">链接</a></p><script>alert(1)</script><img src="../Images/p.jpg"/></body></html>' },
+    { name: 'OEBPS/Images/p.jpg', data: Buffer.from([255, 216, 255]) },
+  ]));
+  const viewer = await start({ resolveWorkspace: async () => directory, resolveSource: async () => ({ workspace: directory, metadataDirectory: directory, epub }) });
+  const first = await send(viewer, 'api/book-epub?item=0');
+  assert.equal(first.status, 200);
+  const { html, items, title } = JSON.parse(first.body);
+  assert.deepEqual([items, title], [1, '书']);
+  assert.match(html, /<h1>第一章<\/h1>/);
+  assert.match(html, /<img data-epub="OEBPS\/Images\/p\.jpg" alt="">/);
+  assert.doesNotMatch(html, /script|onload|style=|href=|alert/);
+  assert.equal((await send(viewer, 'api/book-epub?item=1')).status, 404);
+  const picture = await send(viewer, 'api/book-epub-file?path=OEBPS/Images/p.jpg');
+  assert.deepEqual([picture.status, picture.headers['content-type']], [200, 'image/jpeg']);
+  assert.equal((await send(viewer, 'api/book-epub-file?path=OEBPS/Text/a.xhtml')).status, 404, 'only pictures');
+  assert.equal((await send(viewer, 'api/book-epub-file?path=../x.jpg')).status, 400);
+});
+
+test('notes on the director\'s cards: added from the reader, listed for both, nothing else written', async (context) => {
+  const { directory, start } = await fixture(context);
+  const viewer = await start({ resolveWorkspace: async () => directory });
+  assert.deepEqual(JSON.parse((await send(viewer, 'play/notes.json')).body), []);
+  const added = await send(viewer, 'play/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ card: 'action:b0000_s0110', scene: 'scene_000001', event: 14, sentence: 'b0000_s0110', text: 'jumps to a roof, ends on the street' }) });
+  assert.equal(added.status, 200);
+  assert.equal((await send(viewer, 'play/notes', { method: 'POST', body: '{"card":"x"}' })).status, 400, 'a note needs its text');
+  assert.equal((await send(viewer, 'play/notes', { method: 'POST', body: 'x'.repeat(5000) })).status, 413);
+  const [note] = JSON.parse((await send(viewer, 'play/notes.json')).body);
+  assert.deepEqual([note.card, note.event, note.text], ['action:b0000_s0110', 14, 'jumps to a roof, ends on the street']);
+  assert.match(await readFile(join(directory, 'stage', 'director', 'notes.jsonl'), 'utf8'), /ends on the street/);
+});

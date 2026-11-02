@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { repo } from './config.mjs';
@@ -141,4 +141,24 @@ export async function terrainStep(workspace, mode) {
   await writeFile(temporary, JSON.stringify(step), { mode: 0o644 });
   await rename(temporary, file);
   return step;
+}
+
+/**
+ * Notes on the director's cards, shared by the reader and the developer (the user, 2026-11-02: a frontend we both use, so
+ * whatever goes wrong is easily spotted): World · Live's reader adds one to the card it is on (what looks wrong and where),
+ * and lists them; the developer reads stage/director/notes.jsonl. Only notes are written here, never a run's data.
+ */
+const notesFile = workspace => resolve(workspace, 'stage', 'director', 'notes.jsonl');
+const clip = (value, length) => (typeof value === 'string' ? value.slice(0, length) : null);
+export async function directorNotes(workspace) {
+  const text = await readFile(notesFile(workspace), 'utf8').catch(() => '');
+  return text.split('\n').filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } }).slice(-500);
+}
+export async function addDirectorNote(workspace, body) {
+  const text = clip(body?.text, 2000)?.trim(), card = clip(body?.card, 120);
+  if (!text || !card) return null;
+  const note = { at: new Date().toISOString(), card, scene: clip(body.scene, 40), event: Number.isInteger(body.event) ? body.event : null, sentence: clip(body.sentence, 40), time: typeof body.time === 'number' && Number.isFinite(body.time) ? Math.round(body.time * 100) / 100 : null, text };
+  await mkdir(resolve(workspace, 'stage', 'director'), { recursive: true });
+  await appendFile(notesFile(workspace), `${JSON.stringify(note)}\n`, { mode: 0o644 });
+  return note;
 }

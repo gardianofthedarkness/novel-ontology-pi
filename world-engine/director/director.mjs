@@ -85,16 +85,28 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
   await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', engine: async E => {
     const { world, W } = E, server = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser({ gpu: true });
     let page = null, lotsShown = -1;
+    // Every scene's line as played so far (its starts and events with their walks), kept in world nodes and made the page's
+    // own whenever the page is written: a page loaded later (World · Live's frame, the Player) holds the whole line, every
+    // card in it to replay (the user, 2026-11-02: tapping a played sentence replayed nothing once the run was over).
+    const played = new Map();
     try {
       // The page as far as the loop has played, loaded again only when the world has grown (or a scene is done).
       const show = async (force = false) => {
         if (!force && page && world.lots.length === lotsShown) return page;
         page = E.assemble(E.runs); lotsShown = world.lots.length;
-        await writeFile(join(work, 'index.html'), inlineStrand(template, page, { vendor: true }));
+        await writeFile(join(work, 'index.html'), inlineStrand(template, withLine(page), { vendor: true }));
         await chrome.evaluate('delete window.__stage').catch(() => {});
         await chrome.open(server.url);
         return page;
       };
+      // A scene's piece of the line on the page's grid as it stands now.
+      function pieceOf({ scene, run }) {
+        const starts = Object.fromEntries(Object.entries(run.starts).map(([who, value]) => [who, dense(value[0])]));
+        const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, camera: event.camera ?? null, spots: [], hit: E.hits?.get(event.id) ?? null, hitThings: null, trace: null,
+          moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)) })) }));
+        return { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey() };
+      }
+      const withLine = data => ({ ...data, scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast } : entry; }) });
       const dense = id => { const { i, j, k } = W.cellOf(world, id), g = page.world; return ((k + g.ok) * g.NZ + (j + g.oj)) * g.NX + (i + g.oi); };
       const at = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
       const lotOf = (x, z) => world.lotAt.get(W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
@@ -141,10 +153,10 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
       // has changed (the frame then loads it, and takes the pieces after).
       const gridKey = () => `${page.world.NX}x${page.world.NZ}+${page.world.oi},${page.world.oj},${page.world.ok}`;
       let lastPiece = null, sentGrid = null, seq = 0;
-      const stream = async (moment, focus = null) => {
+      const stream = async (moment, focus = null, whole = false) => {
         if (!live) return;
         const full = gridKey() !== sentGrid;
-        await live.world(noted(moment, focus, lastPiece ? { ...lastPiece, seq: ++seq, ...(focus ? { focus } : {}) } : null), full ? { ...page, director: payload() } : null);
+        await live.world(noted(moment, focus, lastPiece ? { ...lastPiece, seq: ++seq, ...(focus ? { focus } : {}) } : null), full || whole ? { ...withLine(page), director: payload() } : null);
         if (full) sentGrid = gridKey();
       };
       const spawn = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'spawn.json'), 'utf8').catch(() => 'null'));
@@ -155,10 +167,8 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
       // each with its moves as walked; the page is loaded again only when the world has grown.
       const grow = async (scene, run) => {
         await show();
-        const starts = Object.fromEntries(Object.entries(run.starts).map(([who, value]) => [who, dense(value[0])]));
-        const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, camera: event.camera ?? null, spots: [], hit: E.hits?.get(event.id) ?? null, hitThings: null, trace: null,
-          moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)) })) }));
-        lastPiece = { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey() };
+        played.set(scene.id, { scene, run });
+        lastPiece = pieceOf({ scene, run });
         return chrome.evaluate(`window.__stage.extend(${JSON.stringify(lastPiece)})`);
       };
       for (const scene of E.chosen) {
@@ -399,12 +409,14 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
           await stream(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${went.length ? ` · ${went.map(move => names.get(move.person) ?? move.person).join(', ')} moved` : ''}`, cardRecord.camera ? { x: cardRecord.camera.focus.x, z: cardRecord.camera.focus.z, r: 24 } : null);
           if (pace && went.length) await new Promise(done => setTimeout(done, pace * 1000));
         }
+        // The scene done: the live page written whole (every card so far), so a view loaded now can replay any of them.
+        await stream(`scene ${Number(scene.id.slice(-3))} played`, null, true);
         before = { scene, reads, positions: { ...positions } };
         for (const [who, value] of Object.entries(positions)) where.set(who, value);
         log(`${scene.id}: ${cards.length} cards, ${sceneRecord.cards.reduce((n, card) => n + card.moves.filter(move => move.moved).length, 0)} moves, ${calls} calls so far`);
         await save();
       }
-      result = { data: { ...page, title: `The director · ${from} – ${to}`, director: payload() }, calls };
+      result = { data: { ...withLine(page), title: `The director · ${from} – ${to}`, director: payload() }, calls };
       // The run as a playable run of the book (stage/simulation/index.json, the Player's list): replayed card by card. A
       // stand-in's run (rule-made answers) is not one: it is only for trying the loop.
       if (jev.modelId !== 'stand-in-director') {

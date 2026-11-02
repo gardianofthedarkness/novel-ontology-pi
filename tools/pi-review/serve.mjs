@@ -11,7 +11,7 @@ import { bookCatalog } from './book-catalog.mjs';
 import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
-import { liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
+import { addDirectorNote, directorNotes, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -177,7 +177,7 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
       const route = url.pathname.match(/^\/view\/([a-zA-Z0-9_-]+)(\/.*)$/);
       if (!route || Buffer.byteLength(route[1]) !== Buffer.byteLength(access) || !timingSafeEqual(Buffer.from(route[1]), Buffer.from(access))) { send(401); return; }
       const scopedPath = route[2];
-      const allowed = scopedPath === '/api/pi/messages' || scopedPath === '/play/terrain/step' ? 'POST' : scopedPath === '/api/live/stream' ? 'GET' : 'GET, HEAD';
+      const allowed = scopedPath === '/api/pi/messages' || scopedPath === '/play/terrain/step' || scopedPath === '/play/notes' ? 'POST' : scopedPath === '/api/live/stream' ? 'GET' : 'GET, HEAD';
       if (!allowed.split(', ').includes(request.method)) { send(405, undefined, { Allow: allowed }); request.resume(); return; }
       if (scopedPath === '/api/pi/messages') {
         if (!piConsole) { send(404); request.resume(); return; }
@@ -212,6 +212,19 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         send(200, JSON.stringify(step), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         return;
       }
+      if (scopedPath === '/play/notes' || scopedPath === '/play/notes.json') {
+        // Notes on the director's cards (sim-play.mjs directorNotes): added from World · Live's reader, read by both.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); request.resume(); return; }
+        if (scopedPath === '/play/notes.json') { send(200, JSON.stringify(await bounded(async () => directorNotes(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8' }); return; }
+        let body = '';
+        for await (const chunk of request) { body += chunk; if (body.length > 4096) { send(413); return; } }
+        let parsed = null; try { parsed = JSON.parse(body); } catch { /* a bad body */ }
+        const note = await bounded(async () => addDirectorNote(await resolveWorkspace(volume), parsed));
+        if (!note) { send(400); return; }
+        send(200, JSON.stringify(note), { 'Content-Type': 'application/json; charset=utf-8' });
+        return;
+      }
       if (scopedPath === '/play/' || scopedPath === '/play/live' || scopedPath === '/play/world' || scopedPath === '/play/now' || scopedPath === '/play/live.json' || scopedPath.startsWith('/play/live/')) {
         // The stage simulation: the player (the selected book's accepted runs, or with newest=1 its latest; novel sim run) in the
         // engine's own page, and the live page with what a running novel sim pick|run is doing and the replay of Jev's questions.
@@ -243,6 +256,18 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         const body = await simulationVendor(scopedPath.slice('/play/vendor/'.length));
         if (!body) { send(404); return; }
         send(200, body, { 'Content-Type': types['.js'] });
+        return;
+      }
+      if (scopedPath === '/api/book-epub' || scopedPath === '/api/book-epub-file') {
+        // Read mode's original book: a spine document of the volume's EPUB, made safe, or one of its pictures (book-epub.mjs).
+        const volume = url.searchParams.get('volume') ?? 'active', item = url.searchParams.get('item') ?? '0', inside = url.searchParams.get('path') ?? '';
+        if (!resolveSource || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        if (scopedPath === '/api/book-epub' ? !/^\d{1,4}$/.test(item) : !inside || inside.length > 300 || inside.includes('..')) { send(400); return; }
+        const { bookEpub, bookEpubFile } = await import('./book-epub.mjs');
+        const data = await bounded(async () => { const source = await resolveSource(volume); return scopedPath === '/api/book-epub' ? bookEpub(source, Number(item)) : bookEpubFile(source, inside); }).catch(() => null);
+        if (!data) { send(404); return; }
+        if (scopedPath === '/api/book-epub-file') send(200, data.bytes, { 'Content-Type': data.type });
+        else send(200, JSON.stringify(data), { 'Content-Type': 'application/json; charset=utf-8' });
         return;
       }
       if (scopedPath === '/api/book-text' || scopedPath === '/api/stage') {
