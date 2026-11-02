@@ -1202,20 +1202,25 @@ function frame(now) {
  * story view the ground and buildings beyond 112 m (160 m once shown) go entirely; the terrain stage keeps the whole
  * city's shells for the user.
  */
-const LOAD = 112, UNLOAD = 160, INSIDE = 60, INSIDE_UNLOAD = 90;
+const LOAD = 112, UNLOAD = 160, INSIDE = 60, INSIDE_UNLOAD = 90, FOCUS_INSIDE = 20;
 let lastCull = 0;
 function cullByInterest(entry, shot = null) {
   if (!entry?.chunks) return;
   const focus = shot ?? data.live?.focus ?? null, points = [...(focus ? [{ x: focus.x, z: focus.z, r: focus.r ?? 0 }] : []), ...[...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => ({ x: pawn.position.x + entry.cx, z: pawn.position.z + entry.cz, r: 0 }))];
   if (!points.length) return;
   const gap = (x, z, r) => Math.min(...points.map((p) => Math.hypot(p.x - x, p.z - z) - p.r)) - r;
+  // In the viewer's view, insides are near the focus's centre, not its whole extent (the user, 2026-11-02: the terrain loop
+  // looks at a whole city, and every building it had reached kept its inside once the focus had moved on). Jev's own
+  // pictures (`shot`) keep theirs as framed.
+  const close = shot ? gap : (x, z, r) => Math.min(...points.map((p) => Math.hypot(p.x - x, p.z - z) - Math.min(p.r, FOCUS_INSIDE))) - r;
   const whole = liveMode && !data.terrain && !shot;
   if (whole) for (const chunk of entry.chunks) { const d = gap(chunk.x, chunk.z, 23); chunk.near = chunk.near === false ? d < LOAD : d < UNLOAD; }
   const far = new Set(), deep = new Set();
   data.world.lots.forEach((lot, n) => {
     const d = gap((lot.i0 + lot.nx / 2) * CELL, (lot.j0 + lot.nz / 2) * CELL, Math.hypot(lot.nx, lot.nz) * CELL / 2);
     if (whole && (entry.far?.has(n) ? d > LOAD : d > UNLOAD)) far.add(n);
-    if (entry.deep?.has(n) ? d < INSIDE_UNLOAD : d < INSIDE) deep.add(n);
+    const c = close((lot.i0 + lot.nx / 2) * CELL, (lot.j0 + lot.nz / 2) * CELL, Math.hypot(lot.nx, lot.nz) * CELL / 2);
+    if (entry.deep?.has(n) ? c < INSIDE_UNLOAD : c < INSIDE) deep.add(n);
   });
   const key = `${[...far].join(",")}|${[...deep].join(",")}`;
   if (key !== entry.farKey) { entry.far = far; entry.deep = deep; entry.farKey = key; entry.shownHits = -1; }
