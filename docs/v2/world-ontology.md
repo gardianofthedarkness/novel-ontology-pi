@@ -382,6 +382,7 @@ gate: every decision is reported and can be reversed or pinned from World · Liv
 
 | | Builds | Model calls | Done when |
 |---|---|---|---|
+| W0 · A valid world | each building's inside walked on its own plan, joined to the street only at its doors; holdings independent of the order chunks are reached in; the world's own check (no building shut, no room shut) at generation and at every scene; every failed walk with a code and what replays it | none | the check finds nothing on a generated city or round 第十五学区; two load orders give the same world; held walks coded |
 | W1 · World log and ledger | the director writes world-log records (presence, tracks, meetings, holdings, damage, bindings), each position with its rank (§5a) and what it was derived from, and evidence proposals; canon's empty files filled from accepted ones | none | volume 1's run replayed from cache writes them; `state-changes`, `timelines` non-empty |
 | W2 · The law engine | laws 1–13 as code on every answer; verdicts logged only | none | counts of each law's violations on volume 1 |
 | W3 · System 2 | below 0.5, the same question with the same context to the work model; both answers kept | work model | how often it runs, how often the two differ, on volume 1 |
@@ -414,9 +415,33 @@ spoken to stands apart is given its kind by Jev (L6: face to face gathers, remot
 at their spot is not a break). Every verdict is kept with its card (`laws`) and goes into the ledger as applied or held.
 Checked with stand-ins on scenes 1–6 of a scratch copy: 233 moves, 158 walked, 41 already there, 12 talks given a kind,
 3 actors and 34 moves held. Found on the way: a room in a turned building could be shut (its door's plan cell falls
-between world cells), fixed (a corridor cell beside a door counts).
+between world cells); first patched, then fixed at its root by W0's interior topology.
 
-Order: W1 and W2 first (no model calls; they show the size of the problem), then W3 and W4, then W5 and W6, W7 alongside,
+**Built (2026-11-02): W0**, a valid world (the user's research handoff, `Text_to_City_Research_Handoff.md`: separate
+interior topology with explicit portals, a generation-time validator, order-independent chunks, failure codes and
+minimal replays; the same as the field's practice: areas joined by portals rather than one grid over everything, and a
+chunk a pure function of its seed and place). In `apps/playground/src/data/world.ts`:
+
+- *Interior topology.* A turned building's inside is no longer joined cell by cell on the world grid, which aliased its
+  turned plan (a corridor and a room a grid step apart were joined through a wall; a door whose plan cell fell between
+  world cells shut its room). Its plan is walked instead: each plan cell is stood for by the world cell nearest it (its
+  own, else the nearest of its kind on that floor), and two plan cells are joined only by the plan's rules (corridor to
+  corridor, within a room, a room to a corridor at its door, a stair to the floor above). The street joins it only at
+  its doors. A square building's plan is the world grid, and is walked by the same rules.
+- *Order-independent holdings.* A cell two buildings could stand on goes to the first in the source's order
+  (`ownCell`), not to whichever was reached first; a test reaches the chunks in two orders and gets the same holdings
+  and the same walk.
+- *The world's own check* (`worldIssues`): `NO_ENTRANCE` (a building wholly in the graph not reached from the street)
+  and `SHUT_ROOM` (a room not reached). A test runs it on a generated city (none), and on one building with every
+  corridor gone (`NO_ENTRANCE`). It found what the tests had not: 43 rooms on upper floors shut, because a stair whose
+  plan cell no world cell held joined no floors (fixed: stairs are joined on the plan), and one building swallowed by
+  another in a city whose overlaps were not cleared (as the export does). The director runs it round every scene's
+  start and keeps what it finds with the scene (`world`); the ledger holds it for the review (`kind: world`).
+- *Failure codes.* A held walk says why as a code: `NO_TARGET` (nowhere to stand there), `OFF_WALK` (where they stand
+  is off the walk round them and their target), `NO_PATH` (no way there on foot), with the least that replays it (the
+  seed's key, where they stood, the first targets, how they went), in the card's moves and its L10 verdict.
+
+Order: W0 under all of it; W1 and W2 first (no model calls; they show the size of the problem), then W3 and W4, then W5 and W6, W7 alongside,
 then W8. Track A runs in parallel throughout.
 
 ## 10. Decisions for the user

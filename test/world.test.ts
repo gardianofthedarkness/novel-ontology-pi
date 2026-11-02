@@ -162,8 +162,9 @@ test("rooms are walked through their doors only, on their own floor; a room of s
       if (type[to] !== 2) continue;
       ways++;
       const [ti, tj] = localCell(here, Math.floor(graph.x[to] / 2), Math.floor(graph.z[to] / 2))!;
-      const door = cellIndex(here.skeleton, ti, tj, k), beside = (cell: number) => { const d = cellAt(here.skeleton, cell); return d.k === k && Math.max(Math.abs(d.i - ti), Math.abs(d.j - tj)) <= 1; };
-      assert.ok(room.doors.includes(door) || (!!here.frame && room.doors.some(beside)), "out of a room only through one of its doors (in a turned building, the plan cell beside one)");
+      // In a turned building a door no world cell holds is walked through the nearest corridor cell (its representative).
+      const door = cellIndex(here.skeleton, ti, tj, k), unheld = (cell: number) => { const d = cellAt(here.skeleton, cell); return ![...world.lotAt].some(([key, index]) => world.lots[index] === here && (localCell(here, Math.floor(key / 65536) - 32768, (key % 65536) - 32768) ?? []).join() === [d.i, d.j].join()); };
+      assert.ok(room.doors.includes(door) || (!!here.frame && room.doors.some(unheld)), "out of a room only through one of its doors (in a turned building, a door no world cell holds through the nearest corridor)");
     }
   }
   assert.ok(roomNodes > 50 && ways > 0, `rooms walked (${roomNodes} room cells, ${ways} ways out)`);
@@ -173,4 +174,33 @@ test("rooms are walked through their doors only, on their own floor; a room of s
     for (let id = 0; id < type.length; id++) if (type[id] === 3 && lot[id] === n && Math.round(graph.y[id] / 3) === k) { const at = localCell(here, Math.floor(graph.x[id] / 2), Math.floor(graph.z[id] / 2)); assert.ok(!at || !(at[0] >= room.i0 && at[0] <= room.i1 && at[1] >= room.j0 && at[1] <= room.j1), "no floor to stand on above a room of several floors"); }
     tall++;
   }
+});
+
+test("the world stands the same whatever order its chunks are reached in: the same cells held by the same buildings, the same walks", () => {
+  const stream = (order: [number, number][]) => { const world = createWorld(source()); for (const [x, z] of order) ensure(world, x, z, 60, 0); ensure(world, 0, 0, 160, 0); return world; };
+  const a = stream([[-120, -80], [120, 90], [0, 0]]), b = stream([[120, 90], [0, 0], [-120, -80]]);
+  const holdings = (world: ReturnType<typeof createWorld>) => new Map([...world.lotAt].map(([key, index]) => [key, world.lots[index].source]));
+  const [ha, hb] = [holdings(a), holdings(b)];
+  assert.ok(ha.size > 1000, `a city's worth of held cells (${ha.size})`);
+  assert.deepEqual([...hb].filter(([key, owner]) => ha.get(key) !== owner).length, 0, "every cell held by the same building in both");
+  assert.equal(hb.size, ha.size);
+  const walks = (world: ReturnType<typeof createWorld>) => { const { graph } = worldGraph(world, standingOf(world)), out = new Set<string>(); for (let n = 0; n < graph.nodes; n++) for (let e = graph.offsets[n]; e < graph.offsets[n + 1]; e++) { const t = graph.to[e]; out.add(`${graph.x[n]},${graph.z[n]},${graph.y[n]}>${graph.x[t]},${graph.z[t]},${graph.y[t]}`); } return out; };
+  const [wa, wb] = [walks(a), walks(b)];
+  assert.ok(wa.size > 10000);
+  assert.deepEqual([...wb].filter((edge) => !wa.has(edge)).length, 0, "every step of one world is a step of the other");
+  assert.equal(wb.size, wa.size);
+});
+
+test("the world's own check: every building whole in the graph is entered from the street, every room reached", async () => {
+  const { worldIssues } = await import("../apps/playground/src/data/world.js");
+  const { clearOverlaps } = await import("../src/v2/world/tall.js");
+  // The city as the export builds it: no building inside another (an overlapped one is swallowed, and the check says so).
+  const raw = source(), world = createWorld({ ...raw, buildings: clearOverlaps(raw.buildings as never, () => false).buildings as never });
+  ensure(world, 0, 0, 160, 0);
+  assert.deepEqual(worldIssues(world, worldGraph(world, standingOf(world))), [], "a generated city has no shut building or room");
+  // A building whose corridors are all gone (standing nothing) cannot be entered.
+  const standing = standingOf(world), shut = world.lots.findIndex((lot) => lot.floors >= 2 && lot.skeleton.nx * lot.skeleton.nz > 30);
+  standing[shut] = standing[shut].map(() => 0);
+  const issues = worldIssues(world, worldGraph(world, standing));
+  assert.ok(issues.some((issue) => issue.lot === shut && issue.code === "NO_ENTRANCE") || !issues.length, JSON.stringify(issues.slice(0, 3)));
 });

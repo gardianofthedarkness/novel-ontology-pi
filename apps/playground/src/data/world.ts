@@ -177,11 +177,28 @@ export function footprintOf(b: { x: number; z: number; w: number; d: number; ang
  * of the building as it is, not of a rectangle cut out of it), on the cells of its footprint no road and no lot holds;
  * at least half of them, else it stands as a shell only.
  */
-function standTurned(world: World, b: SourceBuilding, lot: Omit<WorldLot, "skeleton" | "rooms" | "side" | "i0" | "j0" | "nx" | "nz" | "frame">, kind: SkeletonKind, seed: number): boolean {
+/**
+ * Whether a cell of building `order`'s footprint is its own: no building before it in the landscape's order covers the
+ * cell's middle (the landscape's own rule, earlier patches win). Decided by the buildings alone, never by which chunk was
+ * reached first, so the world stands the same whatever order it is streamed in (the user's research handoff, 2026-11-02:
+ * a chunk is a function of the seed and its place; the same building held different cells in two runs).
+ */
+function ownCell(world: World, order: number, i: number, j: number): boolean {
+  const x = (i + 0.5) * SKELETON_CELL, z = (j + 0.5) * SKELETON_CELL;
+  for (const other of world.buckets.buildings.get(chunkKey(Math.floor(i / CHUNK), Math.floor(j / CHUNK))) ?? []) {
+    if (other >= order) continue;
+    const b = world.source.buildings[other], dx = x - b.x, dz = z - b.z, c = Math.cos(b.angle), s = Math.sin(b.angle);
+    // Strictly inside: a cell on its edge is not held by its plan either, so it stays this building's.
+    if (Math.abs(dx * c + dz * s) < b.w / 2 && Math.abs(-dx * s + dz * c) < b.d / 2) return false;
+  }
+  return true;
+}
+function standTurned(world: World, b: SourceBuilding, order: number, lot: Omit<WorldLot, "skeleton" | "rooms" | "side" | "i0" | "j0" | "nx" | "nz" | "frame">, kind: SkeletonKind, seed: number): boolean {
   // The building wins over a road the terrain left under it (a street moved since its lots were laid: a 65-floor tower on
-  // one, 2026-11-02); where it is built into a neighbour that already stands, that part is the neighbour's. It stands with
-  // whatever is its own, so every building drawn has its inside (the user: a cinema in a mall walked out of and back into).
-  const foot = footprintOf(b), free = foot.cells.filter(([i, j]) => !world.lotAt.has(cellKey(i, j)));
+  // one, 2026-11-02); where it is built into a neighbour, the part an earlier building covers is that one's (ownCell). It
+  // stands with whatever is its own, so every building drawn has its inside (the user: a cinema in a mall walked out of and
+  // back into).
+  const foot = footprintOf(b), free = foot.cells.filter(([i, j]) => !world.lotAt.has(cellKey(i, j)) && ownCell(world, order, i, j));
   if (foot.cells.length < 4 || free.length < 4) return false;
   const w = Math.max(2 * SKELETON_CELL, b.w), d = Math.max(2 * SKELETON_CELL, b.d);
   const skeleton: Skeleton = generateSkeleton(kind, seed, { width: w, depth: d, floors: lot.floors, cores: (w * d) / (SKELETON_CELL * SKELETON_CELL) > 48 ? 2 : 1 });
@@ -227,7 +244,7 @@ function materialize(world: World, ci: number, cj: number, born: number | string
     world.claimed.add(b.id);
     // At its true size and turn, on the free cells of its footprint (half of them at least).
     const floors = Math.max(1, Math.min(WALK_FLOORS, b.floors)), role = roleOf(b.kind, b.floors);
-    const stood = standTurned(world, b, { id: b.id, label: null, role, floors, height: b.floors, source: b.id, manifold: b.manifold ?? "", era: b.era ?? "modern", born, place: null }, KIND_OF[b.kind] ?? ROLE_KIND[role], seedOf(b.id));
+    const stood = standTurned(world, b, index, { id: b.id, label: null, role, floors, height: b.floors, source: b.id, manifold: b.manifold ?? "", era: b.era ?? "modern", born, place: null }, KIND_OF[b.kind] ?? ROLE_KIND[role], seedOf(b.id));
     if (!stood) world.dropped.set(b.id, born);
   }
   // Clutter on open ground (one cell in ten), never on a road or in front of a door.
@@ -360,12 +377,16 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   const add = (from: number, to: number, dx: number, dz: number, cost: number, kind: number, dir = directionOf(dx, dz)) => edges.push({ from, to, dir, cost, kind });
   const surface = (i: number, j: number) => { const key = cellKey(i, j), index = world.lotAt.get(key) ?? NOT, thing = thingAt.get(key) ?? NOT; return Math.max(index < 0 ? 0 : world.lots[index].floors * FLOOR_HEIGHT, thing < 0 ? 0 : things[thing].top * FLOOR_HEIGHT); };
   const ELEVATION = Math.atan(1 / Math.SQRT2), G = 9.8;
+  // Two cells of one building's plan joined by the plan's rules: corridor to corridor, within one room, a room to the
+  // corridor only at one of its doors.
+  const inPlan = (index: number, a: number, b: number, roomA: number, roomB: number) => {
+    const lot = world.lots[index], corridor = (cell: number) => lot.skeleton.cells[cell] !== MASS && !!standing[index]?.[cell];
+    return (corridor(a) && corridor(b)) || (roomA >= 0 && roomA === roomB) || (roomA >= 0 && corridor(b) && lot.rooms[roomA].doors.includes(b)) || (roomB >= 0 && corridor(a) && lot.rooms[roomB].doors.includes(a));
+  };
   for (const [i, j, k] of cells) {
     const here = what(i, j, k);
     if (!here.type) continue;
-    // Inside a turned building its plan's cells meet the world's diagonally as often as squarely: eight ways there too.
-    const turned = (here.type === 2 || here.type === 3) && here.lot >= 0 && !!world.lots[here.lot]?.frame;
-    const node = nodeId(world, i, j, k), eight = here.type === 1 || here.type === 4 || here.type === 5 || turned;
+    const node = nodeId(world, i, j, k), eight = here.type === 1 || here.type === 4 || here.type === 5;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], ...(eight ? [[1, 1], [1, -1], [-1, 1], [-1, -1]] : [])]) {
       const there = what(i + dx, j + dz, k);
       if (!there.type) continue;
@@ -374,12 +395,10 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       else if (here.type === 5 && there.type === 5) ok = !(dx && dz) || (what(i + dx, j, k).type === 5 && what(i, j + dz, k).type === 5);
       else if (here.type === 4 && there.type === 4) ok = here.lot === there.lot;
       else if (here.lot === there.lot && here.lot >= 0) {
+        // A turned building's inside is walked on its own plan (below), never on the world's neighbours.
+        if (world.lots[here.lot].frame) continue;
         const roomA = here.type === 3 ? roomOf[here.lot][here.local] : NOT, roomB = there.type === 3 ? roomOf[there.lot][there.local] : NOT;
-        // A room opens onto the corridor at its doors; in a turned building the world's neighbour of a room cell may be the
-        // plan cell beside the door (the plan's cells fall between the world's), so one within a cell of a door on the same
-        // floor counts as it (else such a room was shut: people born in it never got out, 2026-11-02).
-        const doorAt = (lot: WorldLot, room: number, cell: number) => { const doors = lot.rooms[room].doors; if (doors.includes(cell)) return true; if (!lot.frame) return false; const c = cellAt(lot.skeleton, cell); return doors.some((door) => { const d = cellAt(lot.skeleton, door); return d.k === c.k && Math.max(Math.abs(d.i - c.i), Math.abs(d.j - c.j)) <= 1; }); };
-        ok = (here.type === 2 && there.type === 2) || (roomA >= 0 && roomA === roomB) || (roomA >= 0 && there.type === 2 && doorAt(world.lots[here.lot], roomA, there.local)) || (roomB >= 0 && here.type === 2 && doorAt(world.lots[there.lot], roomB, here.local));
+        ok = inPlan(here.lot, here.local, there.local, roomA, roomB);
       } else if (k === 0) {
         // The street door: its cell of the plan (or one beside it on the ground floor, a turned plan's cells falling
         // between the world's), to the open ground next to it, any way it faces for a turned building.
@@ -430,6 +449,61 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       }
     }
   }
+  // A turned building's inside on its own plan (the user's research handoff, 2026-11-02: interiors are areas joined to the
+  // street at their doors; a grid aliases a turned plan, and its rooms were shut where a door's plan cell fell between the
+  // world's): on each floor each plan cell is walked through one world cell, its representative (the held cell whose middle
+  // is nearest the plan cell's; for a plan cell no world cell holds, the nearest held cell of the same kind on that floor:
+  // corridor for corridor, the same room for a room's), joined to its plan neighbours by the plan's rules; every other held
+  // cell joins its plan cell's representative. Its street doors are the world's (above).
+  world.lots.forEach((lot, index) => {
+    if (!lot.frame || (box && ((lot.i0 + lot.nx) * SKELETON_CELL < box.x0 || lot.i0 * SKELETON_CELL > box.x1 || (lot.j0 + lot.nz) * SKELETON_CELL < box.z0 || lot.j0 * SKELETON_CELL > box.z1))) return;
+    const s = lot.skeleton, c = Math.cos(lot.frame.angle), sn = Math.sin(lot.frame.angle), held: { i: number; j: number; li: number; lj: number }[] = [];
+    for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) { if (world.lotAt.get(cellKey(i, j)) !== index) continue; const at = localCell(lot, i, j); if (at) held.push({ i, j, li: at[0], lj: at[1] }); }
+    if (!held.length) return;
+    const middle = (li: number, lj: number) => { const u = (li + 0.5) * SKELETON_CELL - (s.nx * SKELETON_CELL) / 2, v = (lj + 0.5) * SKELETON_CELL - (s.nz * SKELETON_CELL) / 2; return [lot.frame!.x + u * c - v * sn, lot.frame!.z + u * sn + v * c]; };
+    const gap = (cell: { i: number; j: number }, [x, z]: number[]) => Math.hypot((cell.i + 0.5) * SKELETON_CELL - x, (cell.j + 0.5) * SKELETON_CELL - z);
+    // What a plan cell is on floor k: "c" corridor, "r<n>" room n, null neither (mass, or open air over a tall room).
+    const kindOf = (li: number, lj: number, k: number) => { const a = cellIndex(s, li, lj, k); if (s.cells[a] !== MASS) return standing[index]?.[a] ? "c" : null; const r = roomOf[index][a]; return r >= 0 && lot.rooms[r].floor === k ? `r${r}` : null; };
+    const representativeOf = (li: number, lj: number, k: number) => {
+      const at = middle(li, lj), own = held.filter((cell) => cell.li === li && cell.lj === lj), kind = kindOf(li, lj, k);
+      const pool = own.length ? own : held.filter((cell) => kind !== null && kindOf(cell.li, cell.lj, k) === kind);
+      return pool.length ? pool.reduce((best, cell) => (gap(cell, at) < gap(best, at) ? cell : best)) : null;
+    };
+    const join = (a: { i: number; j: number } | null, b: { i: number; j: number } | null, k: number) => {
+      if (!a || !b || (a.i === b.i && a.j === b.j) || !inside(a.i, a.j) || !inside(b.i, b.j)) return;
+      const from = nodeId(world, a.i, a.j, k), to = nodeId(world, b.i, b.j, k), dx = b.i - a.i, dz = b.j - a.j, cost = SKELETON_CELL * Math.hypot(dx, dz);
+      add(from, to, dx, dz, cost, EDGE.walk); add(to, from, -dx, -dz, cost, EDGE.walk);
+    };
+    const representatives: ({ i: number; j: number } | null)[][] = [];
+    for (let k = 0; k < lot.floors; k++) {
+      const representative: ({ i: number; j: number } | null)[] = representatives[k] = [];
+      for (let lj = 0; lj < s.nz; lj++) for (let li = 0; li < s.nx; li++) representative[lj * s.nx + li] = representativeOf(li, lj, k);
+      for (let lj = 0; lj < s.nz; lj++) for (let li = 0; li < s.nx; li++) {
+        const a = cellIndex(s, li, lj, k), roomA = roomOf[index][a] >= 0 && lot.rooms[roomOf[index][a]].floor === k ? roomOf[index][a] : NOT;
+        for (const [di, dj] of [[1, 0], [0, 1]]) {
+          if (li + di >= s.nx || lj + dj >= s.nz) continue;
+          const b = cellIndex(s, li + di, lj + dj, k), roomB = roomOf[index][b] >= 0 && lot.rooms[roomOf[index][b]].floor === k ? roomOf[index][b] : NOT;
+          if (inPlan(index, a, b, roomA, roomB)) join(representative[lj * s.nx + li], representative[(lj + dj) * s.nx + li + di], k);
+        }
+      }
+      // Every held cell walks to its own plan cell's representative.
+      for (const cell of held) if (what(cell.i, cell.j, k).type === 2 || what(cell.i, cell.j, k).type === 3) join(cell, representative[cell.lj * s.nx + cell.li], k);
+    }
+    // Its stairs on the plan too: a stair cell's representative to the one a floor up (and from the top floor to the roof),
+    // so a stair no world cell holds still joins its floors.
+    const climb = (a: { i: number; j: number } | null, k: number, b: { i: number; j: number } | null) => {
+      if (!a || !b || !inside(a.i, a.j) || !inside(b.i, b.j)) return;
+      const lower = nodeId(world, a.i, a.j, k), upper = nodeId(world, b.i, b.j, k + 1);
+      add(lower, upper, b.i - a.i, b.j - a.j, 2 + 8 * FLOOR_HEIGHT, EDGE.climb, UP); add(upper, lower, a.i - b.i, a.j - b.j, 2 + FLOOR_HEIGHT, EDGE.descend, DOWN);
+    };
+    for (let k = 0; k < lot.floors; k++) for (let lj = 0; lj < s.nz; lj++) for (let li = 0; li < s.nx; li++) {
+      const a = cellIndex(s, li, lj, k);
+      if (s.cells[a] !== STAIR || !standing[index]?.[a]) continue;
+      const here = representatives[k][lj * s.nx + li];
+      if (k + 1 < lot.floors) { const b = cellIndex(s, li, lj, k + 1); if (s.cells[b] === STAIR && standing[index]?.[b]) climb(here, k, representatives[k + 1][lj * s.nx + li]); }
+      else if (here) climb(here, k, here);
+    }
+  });
   // The halls' ways (underground.ts `up`): stairs from a station's or a mall's end to the nearest pavement; a shaft or a lift
   // from a tank, a channel's end or a deep facility to the street over it; and a ladder where a channel leaves its tank.
   const outdoorNear = (x: number, z: number, radius: number) => { const i0 = Math.floor(x / SKELETON_CELL), j0 = Math.floor(z / SKELETON_CELL); for (let r = 0; r <= radius; r++) for (let di = -r; di <= r; di++) for (let dj = -r; dj <= r; dj++) if (Math.max(Math.abs(di), Math.abs(dj)) === r && what(i0 + di, j0 + dj, 0).type === 1) return [i0 + di, j0 + dj]; return null; };
@@ -560,3 +634,32 @@ export function windowOf(graph: MoveGraph, box: { x0: number; z0: number; x1: nu
   return { graph: { nodes: count, x: pick(graph.x), z: pick(graph.z), y: pick(graph.y), offsets, to: Int32Array.from(to), dir: Uint8Array.from(dir), cost: Float64Array.from(cost), kind: Uint8Array.from(kind) }, local, ids: Int32Array.from(ids) };
 }
 
+
+/** What can be wrong with the world a graph covers (the user's research handoff, 2026-11-02: each failure with a code). */
+export interface WorldIssue { code: "NO_ENTRANCE" | "SHUT_ROOM"; lot: number; source: string; room?: number; nodes: number }
+/**
+ * The world's own check, before anyone walks in it: from the street (every outdoor node of the graph), every building the
+ * graph holds whole is entered, and every room of it reached. A building only partly in the graph (its door may lie
+ * outside it) is not judged.
+ */
+export function worldIssues(world: World, built: WorldGraph): WorldIssue[] {
+  const { graph, type, lot } = built, seen = new Uint8Array(type.length), queue: number[] = [];
+  for (let id = 0; id < type.length; id++) if (type[id] === 1 && graph.offsets[id + 1] > graph.offsets[id]) { seen[id] = 1; queue.push(id); }
+  while (queue.length) { const id = queue.pop()!; for (let e = graph.offsets[id]; e < graph.offsets[id + 1]; e++) { const to = graph.to[e]; if (!seen[to]) { seen[to] = 1; queue.push(to); } } }
+  const inside = new Map<number, { nodes: number; reached: number; rooms: Map<number, { nodes: number; reached: number }> }>();
+  const x0 = Math.min(...graph.x), x1 = Math.max(...graph.x), z0 = Math.min(...graph.z), z1 = Math.max(...graph.z);
+  for (let id = 0; id < type.length; id++) {
+    if ((type[id] !== 2 && type[id] !== 3) || lot[id] < 0 || lot[id] >= world.lots.length || graph.offsets[id + 1] === graph.offsets[id]) continue;
+    const entry = inside.get(lot[id]) ?? inside.set(lot[id], { nodes: 0, reached: 0, rooms: new Map() }).get(lot[id])!;
+    entry.nodes++; if (seen[id]) entry.reached++;
+    if (type[id] === 3) { const here = world.lots[lot[id]], at = localCell(here, Math.floor(graph.x[id] / SKELETON_CELL), Math.floor(graph.z[id] / SKELETON_CELL)); const room = at ? here.rooms.findIndex((box) => box.floor === Math.round(graph.y[id] / FLOOR_HEIGHT) && at[0] >= box.i0 && at[0] <= box.i1 && at[1] >= box.j0 && at[1] <= box.j1) : -1; if (room >= 0) { const r = entry.rooms.get(room) ?? entry.rooms.set(room, { nodes: 0, reached: 0 }).get(room)!; r.nodes++; if (seen[id]) r.reached++; } }
+  }
+  const out: WorldIssue[] = [];
+  for (const [index, entry] of inside) {
+    const here = world.lots[index];
+    if (here.i0 * SKELETON_CELL < x0 || (here.i0 + here.nx) * SKELETON_CELL > x1 || here.j0 * SKELETON_CELL < z0 || (here.j0 + here.nz) * SKELETON_CELL > z1) continue;
+    if (!entry.reached) { out.push({ code: "NO_ENTRANCE", lot: index, source: here.source, nodes: entry.nodes }); continue; }
+    for (const [room, r] of entry.rooms) if (!r.reached) out.push({ code: "SHUT_ROOM", lot: index, source: here.source, room, nodes: r.nodes });
+  }
+  return out;
+}

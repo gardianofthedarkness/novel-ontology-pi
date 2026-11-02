@@ -83,8 +83,10 @@ export function proposalsOf({ run, log, laws, eventOf, record = null }) {
   for (const entry of log.filter(record => record.kind === 'damage')) add({ kind: 'damage', subject: entry.lot, value: { scene: entry.scene, card: entry.card, strength: entry.strength }, evidence: [entry.id] });
   // What the laws decided as the run played (W4): each held move, speaker or actor, and each amended entry, with why.
   for (const scene of record?.scenes ?? []) for (const [card, laws] of [[null, scene.laws ?? []], ...scene.cards.map(entry => [entry.card, entry.laws ?? []])]) {
-    for (const decided of laws) add({ kind: 'law', state: decided.verdict === 'held' ? 'held' : 'applied', source: 'play', law: decided.law, subject: decided.who ?? null, value: { scene: scene.scene, card, verdict: decided.verdict, why: decided.why }, evidence: [] });
+    for (const decided of laws) add({ kind: 'law', state: decided.verdict === 'held' ? 'held' : 'applied', source: 'play', law: decided.law, subject: decided.who ?? null, value: { scene: scene.scene, card, verdict: decided.verdict, why: decided.why, ...(decided.code ? { code: decided.code } : {}) }, evidence: [] });
   }
+  // What the world's own check found round each scene (W0): a broken world, held for the review apart from the story's laws.
+  for (const scene of record?.scenes ?? []) for (const issue of scene.world ?? []) add({ kind: 'world', state: 'held', source: 'check', subject: issue.source ?? null, value: { scene: scene.scene, code: issue.code, lot: issue.lot, ...(issue.room != null ? { room: issue.room } : {}), name: issue.name ?? null }, evidence: [] });
   // What the laws find over the whole run afterwards (W2): held for the review.
   for (const law of laws) for (const broken of law.violations) add({ kind: 'held', state: 'held', subject: broken.who ?? null, law: law.law, value: { what: broken.what, why: broken.why }, evidence: [] });
   return out;

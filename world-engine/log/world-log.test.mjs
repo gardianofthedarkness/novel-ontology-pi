@@ -40,3 +40,10 @@ test('the ledger: locations by canon event, a timeline per strand, damage, and t
   assert.equal(ledger.filter(entry => entry.kind === 'timeline').length, 1);
   assert.deepEqual(ledger.filter(entry => entry.kind === 'held').map(entry => [entry.law, entry.state]), [['L10', 'held']]);
 });
+
+test('the ledger carries a held walk\'s code and the world\'s own check round each scene (W0)', () => {
+  const played = { scenes: [{ scene: 's1', cards: [{ card: 'action:x1', laws: [{ law: 'L10', who: 'a', verdict: 'held', why: 'no way there on foot', code: 'NO_PATH' }] }], world: [{ code: 'SHUT_ROOM', lot: 3, source: 'b3', room: 1, name: 'the shop' }] }] };
+  const ledger = proposalsOf({ run: 'r', log: [], laws: [], eventOf: () => null, record: played });
+  assert.equal(ledger.find(entry => entry.kind === 'law').value.code, 'NO_PATH');
+  assert.deepEqual(ledger.filter(entry => entry.kind === 'world').map(entry => [entry.state, entry.subject, entry.value.code, entry.value.room]), [['held', 'b3', 'SHUT_ROOM', 1]]);
+});

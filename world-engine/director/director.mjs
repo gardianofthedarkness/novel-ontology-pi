@@ -142,15 +142,17 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
       };
       // A move's walk: one draw of the path integral, and six more from the same field (the traces the player draws round it,
       // the spread of where the walk might have gone).
+      // A walk that fails says so with a code (W0: NO_TARGET, OFF_WALK, NO_PATH) and the least that replays it: the seed's
+      // key, where they stood, the first targets and how they went (with the scene's place, enough to solve it again).
       const walk = (scene, key, from, targets, how) => {
-        walk.failed = null;
-        if (!targets.length) { walk.failed = 'no place to stand there'; return null; }
+        walk.failed = null; walk.code = null; walk.replay = { key, from: from[0], targets: targets.slice(0, 8), how };
+        if (!targets.length) { walk.failed = 'no place to stand there'; walk.code = 'NO_TARGET'; return null; }
         const field = E.solve(scene.placeId, key, targets, how, from[0]), built = E.graphOf(W.nodePos(world, from[0]));
         const path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
         if (path) path.ensemble = Array.from({ length: 6 }, (_, n) => E.sampleWalk(built.graph, field, from[0], from[1], seeded(`${key}|${n}`))).filter(Boolean);
         // Why no walk was found (the user's Why panel: people chose a place and never went): where they stand is not on the
         // walk round them and their target, or the walk has no way from there to it.
-        else walk.failed = field.part && field.part.local[from[0]] < 0 ? 'where they stand is off the walk' : 'no way there on foot';
+        else { const off = field.part && field.part.local[from[0]] < 0; walk.failed = off ? 'where they stand is off the walk' : 'no way there on foot'; walk.code = off ? 'OFF_WALK' : 'NO_PATH'; }
         return path;
       };
       const shoot = async (name, size, options) => {
@@ -261,6 +263,9 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
         for (const key of Object.keys(run.starts)) delete run.starts[key];
         Object.assign(run.starts, positions);
         sceneRecord.starts = Object.fromEntries(Object.entries(positions).map(([who, [node]]) => [who, at(node).map(Math.round)]));
+        // The world's own check round the scene (W0, world.ts worldIssues): every building wholly in its graph entered from the
+        // street, every room reached. What fails is recorded with the scene, so a held walk can be told from a broken world.
+        if (anchor !== null && anchor !== undefined && W.worldIssues) { const p = at(anchor), issues = W.worldIssues(world, E.graphOf({ x: p[0], z: p[2] })); if (issues.length) sceneRecord.world = issues.slice(0, 20).map(issue => ({ ...issue, name: lotName(issue.lot) })); }
         // The director's pass (pass.mjs): the narration and description sentences that move someone present join the cards,
         // as actions of those they name, in reading order.
         const passed = await passScene({ reading, text, decide, scene: reads, place: names.get(scene.placeId) ?? scene.placeId, people: Object.fromEntries(Object.keys(positions).map(id => [id, names.get(id) ?? id])) });
@@ -298,7 +303,7 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
           const moveTo = (person, path, how, why) => {
             // Reachable (L10): a move no walk reaches is held with why, and nobody moves.
             if (path && path.length < 2) { cardRecord.moves.push({ person, why: why ?? 'already there', moved: false }); return; }
-            if (!path) { cardRecord.moves.push({ person, why, moved: false }); (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'held', why: walk.failed ?? why ?? 'no walk there' }); return; }
+            if (!path) { cardRecord.moves.push({ person, why, moved: false, ...(walk.code ? { code: walk.code, replay: walk.replay } : {}) }); (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'held', why: walk.failed ?? why ?? 'no walk there', ...(walk.code ? { code: walk.code } : {}) }); return; }
             E.moves.set(`${scene.id}|${card.id}|${person}`, { person, how: how === 'run' ? 'run' : 'walk', path: [...path], ensemble: path.ensemble ?? [] });
             positions[person] = [path.at(-1), positions[person][1]];
             cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))) });
@@ -415,7 +420,7 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
                 if (how === 'flight' || how === 'leap') how2 = 'run';
               }
             }
-            if (!targets?.length) { cardRecord.moves.push({ ...moveRecord, moved: false, why: 'no place to stand there' }); continue; }
+            if (!targets?.length) { cardRecord.moves.push({ ...moveRecord, moved: false, why: 'no place to stand there', code: 'NO_TARGET' }); continue; }
             const path = walk(scene, slug, positions[person], targets, how2);
             moveTo(person, path, how2, path ? null : walk.failed);
             Object.assign(cardRecord.moves.at(-1), moveRecord);
