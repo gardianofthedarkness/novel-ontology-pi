@@ -170,7 +170,8 @@ export function destruction({ played }) {
   return { law: 'L13', checked, violations: out };
 }
 
-export const LAWS = [continuity, twoPlaces, travelTime, talk, actorsThere, reachable, bodies, abilitiesHeld, destruction];
+// L12 (abilitiesHeld) waits for the abilities config the main agent keeps (the user, 2026-11-02: W1 and W2 without it).
+export const LAWS = [continuity, twoPlaces, travelTime, talk, actorsThere, reachable, bodies, destruction];
 /** Every law over a played line: each one's checks and violations. */
 export function checkAll(input) {
   return LAWS.map(law => law(input));

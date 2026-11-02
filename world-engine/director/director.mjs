@@ -22,6 +22,7 @@ const { strandDemo, inlineStrand } = await import('../world/export-strand-demo.m
 const { browser, serve } = await import('../view/two-view-things.mjs');
 const { VENDOR_FILES, PICKER_MODEL, retried } = await import('../live/sim-jev.mjs');
 const { passScene } = await import('./pass.mjs');
+const { writeWorldLog } = await import('../log/write-log.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
@@ -436,6 +437,9 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
       const entry = index.strands.director ??= { title: 'The director', runs: [] };
       entry.runs.push({ id, scenes: E.chosen.length, page: `runs/director/${id}.page.json` }); entry.accepted = id;
       await writeFile(join(folder, 'index.json'), JSON.stringify(index, null, 1));
+      // The run's world log, the laws over it and its proposals to the ontology (Track B W1, W2: logged, nothing applied).
+      const written = await writeWorldLog(novelDir, { run: id, reading });
+      log(`world log: ${JSON.stringify(written.log)}; laws broken: ${Object.entries(written.laws).filter(([, law]) => law.broken).map(([law, { broken }]) => `${law} ${broken}`).join(', ') || 'none'}`);
       }
     } finally { await chrome.close(); server.server.close(); }
   } });

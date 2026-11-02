@@ -309,6 +309,15 @@ the full text included, and writes only answers into the ledger.
 | W7 · UI | Why's Laws, Proposals and review; the run report; changed lines marked in the book | none | the user reads a run's changes without the developer |
 | W8 · Volume 1 again | all of it, with Track A where it is ready | all | against `d20261102081221`: moves, failed walks, speakers settled, laws broken, held and answered, cost |
 
+**Built (2026-11-02): W1 and W2**, without L12 (abilities wait for the main agent's config). `world-engine/log/`
+writes each director run's world log (`stage/world/log/<run>.jsonl`: presence, positions, meetings, blasts, bindings,
+each position ranked and with what it carries on from and whom it is tied to) and its ledger
+(`stage/world/ledger/<run>.jsonl`: location changes by canon event, a timeline per strand, damage, and every law's
+break held for review); `world-engine/laws/` checks the laws (`stage/director/laws.json`). The director writes all three
+after every run. Nothing goes into canon yet: the ledger's proposals wait for decision 1. On run `d20261102081221`:
+172 presences, 69 positions, 56 meetings, 3 blasts, 39 bindings; ranks 160 ruled, 77 answered, 4 stated; 241 location
+changes, 3 timelines, 3 damage records proposed, 112 breaks held.
+
 Order: W1 and W2 first (no model calls; they show the size of the problem), then W3 and W4, then W5 and W6, W7 alongside,
 then W8. Track A runs in parallel throughout.
 
