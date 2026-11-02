@@ -39,7 +39,7 @@ import { levelOf } from "./spatial.js";
  */
 export interface ScriptPlace { label: string; scale: string | null; parent: string | null; unnamed?: boolean; held?: "stated" | "setting" | "em2" | "scene"; scene?: string; near?: string; nears?: string[]; pool?: string; pools?: string[]; elsewhere?: string }
 export interface ScriptScene {
-  id: string; chapter: number; place: string | null; placeBy: "environment" | "action" | "named" | "unnamed" | "carried" | "jev" | "none";
+  id: string; chapter: number; place: string | null; placeBy: "environment" | "action" | "named" | "unnamed" | "carried" | "raised" | "jev" | "none";
   clock: number[] | null; present: string[]; stayed: string[]; firstSeen: string[];
   /** Its node on the time tree (story time), and whether the scene states its time or inherits it: what strands compare (strands.ts). */
   at?: { node: string; stated: boolean };

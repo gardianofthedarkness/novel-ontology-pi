@@ -30,6 +30,23 @@ test("the code rules: one folder, a language profile, and a catalogue of every r
   assert.deepEqual(chooseSetting({ environment: [], action: [], any: [], previous: "d7", past: false, continues: true, ...at }), { place: "d7", by: "carried", branched: [] });
 });
 
+test("a building is a scene's setting only where the scene puts someone there; a carried one stays only close in time", async () => {
+  const { deeperByUnnamed } = await import("../src/v2/rules/index.js");
+  const tree: Record<string, string[]> = { city: ["city"], d7: ["city", "d7"], school: ["city", "d7", "school"], bar: ["city", "d7", "bar"] };
+  const scales: Record<string, string> = { city: "city", d7: "district", school: "building", bar: "building" };
+  const sense = { depth: (id: string) => tree[id]?.length ?? 1, under: (id: string, top: string) => id !== top && (tree[id] ?? []).includes(top), scale: (id: string) => scales[id] ?? null, above: (id: string) => tree[id]?.at(-2) ?? null };
+  const none = { environment: [] as [string, number][], action: [] as [string, number][], past: false, continues: true };
+  assert.deepEqual(chooseSetting({ ...none, any: [["school", 1]], previous: null, ...sense }), { place: "d7", by: "raised", branched: [] }, "named for her uniform: the place above it");
+  assert.equal(chooseSetting({ ...none, any: [["bar", 1]], previous: null, ...sense, called: (id) => id === "bar" }).place, "bar", "called by its kind (酒吧)");
+  assert.equal(chooseSetting({ ...none, action: [["school", 1]], any: [["school", 1]], previous: null, ...sense }).place, "school", "an action there");
+  assert.deepEqual(chooseSetting({ ...none, any: [], previous: "school", ...sense, close: true }), { place: "school", by: "carried", branched: [] });
+  assert.deepEqual(chooseSetting({ ...none, any: [], previous: "school", ...sense, close: false }), { place: "d7", by: "raised", branched: [] }, "another chapter: the building is left");
+  assert.deepEqual(chooseSetting({ ...none, any: [["school", 1]], previous: null, depth: sense.depth, under: sense.under }), { place: "school", by: "named", branched: [] }, "without the scales: as before");
+  const street = { id: "u1", kind: "place", scale: "street", sentences: ["e1"], in: "d7" };
+  assert.equal(deeperByUnnamed([street], new Set(["e1"]), "d7", () => true, true)?.id, "u1", "a street the environment names, out of doors");
+  assert.equal(deeperByUnnamed([street], new Set(["e1"]), "d7", () => true), undefined, "not wider: no street");
+});
+
 test("an entity whose typings settle on another category moves there, under an id of it, with its names", async () => {
   const { Chart } = await import("../src/v2/extraction/em.js");
   const chart = new Chart(), place = chart.mint("place", "region", "魔法侧", ["s1"]);

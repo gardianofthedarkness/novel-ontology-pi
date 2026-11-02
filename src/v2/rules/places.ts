@@ -35,32 +35,61 @@ export function holderIn(path: string[], own: string | null, scaleOf: (id: strin
 /** An unnamed place of this scene or the one before called by the same words is that place. */
 export const sameWords = <S extends { names: string[] }>(text: string, places: S[]) => places.find((place) => place.names.includes(text));
 
-export type SettingBy = "environment" | "action" | "named" | "carried" | "none";
+export type SettingBy = "environment" | "action" | "named" | "carried" | "raised" | "none";
+/** What a setting may know of the scene beyond its tiers (each optional; without them the setting is chosen as before). */
+export interface SettingSense {
+  /** A place's scale (a building and a room are where someone is only when the scene puts them there). */
+  scale?: (id: string) => string | null;
+  /** The scene calls the place by its kind (酒吧 for 飞镖酒吧: a description its name holds). */
+  called?: (id: string) => boolean;
+  /** The nearest place above it the size of a street or larger (where the scene is when it is only talked of). */
+  above?: (id: string) => string | null;
+  /** The scene the last setting came from is close in time and in the same chapter (false: a carried building is left). */
+  close?: boolean;
+}
 /**
  * A scene's setting by tiers: the deepest named place its environment cards name; else the one its action cards name most;
  * else the one it names most (but talk of a place that holds the last setting keeps that one: carried). Then, for action
  * and named, the deepest place under it the scene sets in its environment or names twice. A scene that names none goes on
  * where the last one was, unless it is in the past or does not go on from it. `branched`: other places the environment
  * names off the chosen one's address (two branches of the tree: Jev's to say).
+ *
+ * A building or a room is the setting only where the scene puts someone there (the user, 2026-11-01: talked of is not
+ * there): its environment or action cards name it, or it is called by its kind. Named only, the setting is the place above
+ * it (`raised`: 常盘台中学 named for her uniform, the scene on a street). A building or room carried on from the last scene
+ * stays only when that scene is close in time and in the same chapter; else the place above it.
  */
-export function chooseSetting(input: { environment: [string, number][]; action: [string, number][]; any: [string, number][]; previous: string | null; past: boolean; continues: boolean; depth: (id: string) => number; under: (id: string, top: string) => boolean }): { place: string | null; by: SettingBy; branched: string[] } {
-  const { depth, under, previous, past } = input, set = new Map(input.environment), any = new Map(input.any);
+export function chooseSetting(input: { environment: [string, number][]; action: [string, number][]; any: [string, number][]; previous: string | null; past: boolean; continues: boolean; depth: (id: string) => number; under: (id: string, top: string) => boolean } & SettingSense): { place: string | null; by: SettingBy; branched: string[] } {
+  const { depth, under, previous, past } = input, set = new Map(input.environment), acted = new Map(input.action), any = new Map(input.any);
   const most = (list: [string, number][]) => [...list].sort((a, b) => b[1] - a[1] || depth(b[0]) - depth(a[0]) || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+  const indoors = (id: string) => !!input.scale && ["building", "room"].includes(input.scale(id) ?? "");
+  const there = (id: string) => !indoors(id) || set.has(id) || acted.has(id) || !!input.called?.(id);
+  const up = (id: string) => { let at: string | null = id; for (let n = 0; at && indoors(at) && n < 8; n++) at = input.above?.(at) ?? null; return at; };
+  const close = input.close !== false;
   let place: string | null = null, by: SettingBy = "none", branched: string[] = [];
   if (set.size) {
     place = [...set.keys()].sort((a, b) => depth(b) - depth(a) || (set.get(b) ?? 0) - (set.get(a) ?? 0) || a.localeCompare(b))[0]; by = "environment";
     branched = [...set.keys()].filter((id) => id !== place && !under(place!, id));
   } else if ((place = most(input.action))) by = "action";
-  else if ((place = most(input.any))) { by = "named"; if (previous && !past && under(previous, place)) { place = previous; by = "carried"; } }
-  if (place && (by === "action" || by === "named")) { const deeper = [...any].filter(([id, count]) => under(id, place!) && (set.has(id) || count >= 2)).sort((a, b) => depth(b[0]) - depth(a[0]))[0]; if (deeper) place = deeper[0]; }
-  if (!place && !past && previous && input.continues) { place = previous; by = "carried"; }
+  else if ((place = most(input.any))) {
+    by = "named";
+    if (!there(place)) { const raised = up(place); if (raised) { place = raised; by = "raised"; } }
+    if (previous && !past && under(previous, place) && (close || !indoors(previous))) { place = previous; by = "carried"; }
+  }
+  if (place && by !== "environment" && by !== "carried") { const deeper = [...any].filter(([id, count]) => under(id, place!) && (set.has(id) || count >= 2) && there(id)).sort((a, b) => depth(b[0]) - depth(a[0]))[0]; if (deeper) { place = deeper[0]; if (by === "raised") by = "named"; } }
+  if (!place && !past && previous && input.continues) { if (close || !indoors(previous)) { place = previous; by = "carried"; } else { place = up(previous); by = place ? "raised" : "none"; } }
   return { place, by, branched };
 }
 
-/** The setting more closely: an unnamed building or room the environment names, in the setting (rooms first, then the most named). */
-export function deeperByUnnamed<S extends { id: string; kind: string; sentences: string[]; in: string | null }>(places: S[], environment: Set<string>, setting: string | null, onAddress: (holder: string) => boolean): S | undefined {
-  return places.filter((place) => place.kind !== "place" && place.sentences.some((id) => environment.has(id)) && (!setting || !place.in || place.in === setting || onAddress(place.in)))
-    .sort((a, b) => (a.kind === "room" ? 0 : 1) - (b.kind === "room" ? 0 : 1) || b.sentences.length - a.sentences.length)[0];
+/**
+ * The setting more closely: an unnamed building or room the environment names, in the setting (rooms first, then the most
+ * named); with none, a street it names when the setting is wider than a street (`wide`: a scene out of doors).
+ */
+export function deeperByUnnamed<S extends { id: string; kind: string; sentences: string[]; in: string | null; scale?: string }>(places: S[], environment: Set<string>, setting: string | null, onAddress: (holder: string) => boolean, wide = false): S | undefined {
+  const held = (place: S) => place.sentences.some((id) => environment.has(id)) && (!setting || !place.in || place.in === setting || onAddress(place.in));
+  return places.filter((place) => place.kind !== "place" && held(place))
+    .sort((a, b) => (a.kind === "room" ? 0 : 1) - (b.kind === "room" ? 0 : 1) || b.sentences.length - a.sentences.length)[0]
+    ?? (wide ? places.filter((place) => place.kind === "place" && place.scale === "street" && held(place)).sort((a, b) => b.sentences.length - a.sentences.length)[0] : undefined);
 }
 
 /** A place whose name holds another's name (two characters at least) holds it: 学园都市第七学区 is in 学园都市. */

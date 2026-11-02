@@ -6,12 +6,14 @@
  *   place's name says), one profile per language (zh first);
  * - typing.ts: what code says of a typed string (a locative makes it spatial; the type most batches gave it);
  * - presence.ts: who is present in a scene (matter);
- * - places.ts: the tree's graded law, the place recommender's weights, what place EM takes by rule.
+ * - places.ts: the tree's graded law, the place recommender's weights, what place EM takes by rule;
+ * - time.ts: nearness in story time (two scenes close enough to carry on from one to the other).
  * RULES lists every rule with what it decides and where it lives, those not moved here yet included.
  */
 export * from "./language.js";
 export * from "./places.js";
 export * from "./presence.js";
+export * from "./time.js";
 export * from "./typing.js";
 
 export interface CodeRule {
@@ -39,10 +41,11 @@ export const RULES: CodeRule[] = [
   { name: "stated", decides: "a named place right before another (X的Y, X，Y) holds it", layer: 2, language: true, lives: `${HERE}/language.ts (join)` },
   { name: "evidence weights", decides: "how much each kind of evidence for a parent weighs, and far levels count half", layer: 2, language: false, lives: `${HERE}/places.ts` },
   { name: "sure parent", decides: "a parent taken without Jev: the text's own word, a score of 2, twice the second", layer: 4, language: false, lives: `${HERE}/places.ts` },
-  { name: "setting", decides: "a scene's setting by tiers (environment, action, named), carried on, deepened; two branches go to Jev", layer: 4, language: false, lives: `${HERE}/places.ts` },
+  { name: "setting", decides: "a scene's setting by tiers (environment, action, named), carried on, deepened; two branches go to Jev; a building or room only where the scene puts someone there (talked of: the place above it), carried on only close in time in one chapter", layer: 4, language: false, lives: `${HERE}/places.ts` },
   { name: "holder", decides: "an unnamed place stands in the deepest larger place on its scene's address", layer: 4, language: false, lives: `${HERE}/places.ts` },
   { name: "same words", decides: "an unnamed place of this scene or the one before with the same words is that place", layer: 4, language: false, lives: `${HERE}/places.ts` },
-  { name: "deeper by an unnamed place", decides: "a building or room the environment names is where the scene is, more closely", layer: 4, language: false, lives: `${HERE}/places.ts` },
+  { name: "deeper by an unnamed place", decides: "a building or room the environment names is where the scene is, more closely; with none, a street it names when the setting is wider", layer: 4, language: false, lives: `${HERE}/places.ts` },
+  { name: "close in time", decides: "two scenes on the same day, in the same or the next part of it, are close (a setting or a person carries on between them)", layer: 4, language: false, lives: `${HERE}/time.ts` },
   { name: "habit", decides: "words Jev gave one named place twice, and no other, are that place from then on", layer: 4, language: false, lives: `${HERE}/places.ts` },
   { name: "presence", decides: "who speaks, acts or is spoken to is present; someone only named is not", layer: 4, language: false, lives: `${HERE}/presence.ts` },
   { name: "longest name", decides: "a longer name masks the shorter inside it (御坂妹妹 is not 妹妹)", layer: 1, language: false, lives: "src/v2/extraction/em.ts (mentions)" },

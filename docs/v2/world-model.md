@@ -166,6 +166,12 @@ setting.
 2. **Settings.** Each scene's place by the recommender's tiers (environment, action, named; carried on where nothing is
    named; deeper where the scene sets a place under it). Jev (mode `setting`) only where the scene's environment names
    places on two branches of the tree, or nothing is named and the time tree says the scene does not go on.
+   **Talked of is not there** (the user, 2026-11-01): a building or a room is the setting only where the scene puts someone
+   there (its environment or action cards name it, or the scene calls it by its kind: 酒吧 for 飞镖酒吧); named only, the
+   setting is the place above it (`raised`: a school named for a uniform, the scene out on a street). A building or room
+   carries on to the next scene only when that is close in time (`src/v2/rules/time.ts`) and in the same chapter; else the
+   place above it. A setting wider than a street with a street its environment names (地下通道, 大桥) is that street.
+   Vol 1 (dry, from the saved reading): 7 scenes leave 常盘台中学 (4, 5, 7, 8, 9, 11, 12), 2 get their street (21, 26).
 3. **Unnamed place descriptions,** scene by scene, by rule first: the same words as an unnamed place of this scene or the
    one before are that place; words that name a named place (第七学区的便利店) are held by it; a building, room or street is a
    new unnamed place held by the scene's setting (the deepest place on its address larger than it). Jev (mode

@@ -5,7 +5,7 @@ import { mentions, type Chart } from "./em.js";
 import type { FactEntry } from "./facts.js";
 import type { FlowCard, FlowScene } from "./flow.js";
 import { describedCandidates, fallbackParents, placeIndex, recommendParents, settingTiers, type Candidate } from "./placeRecommend.js";
-import { ACCEPT, chooseSetting, deeperByUnnamed, HABIT, holderIn, isPresent, mayHold, rankOf, sameWords, SCALES, sureParent } from "../rules/index.js";
+import { ACCEPT, chooseSetting, closeInTime, deeperByUnnamed, HABIT, holderIn, isPresent, mayHold, rankOf, sameWords, SCALES, sureParent } from "../rules/index.js";
 import { ReadingGraph } from "./readingGraph.js";
 import type { SpatialMention } from "./spatial.js";
 import type { Decide } from "./typing.js";
@@ -39,7 +39,7 @@ export interface UnnamedPlace { id: string; kind: "place" | "building" | "room";
 export interface PlaceReference { text: string; scene: string; sentences: string[]; entity: string | null; answer: string; confidence: number; by: "rule" | "habit" | "jev" }
 /** What a description of a place has meant (learned as the book goes): a prior for the recommender, and a rule once it holds. */
 export interface PlaceHabit { text: string; place: string; count: number }
-export interface Setting { scene: string; place: string | null; by: "environment" | "action" | "named" | "carried" | "unnamed" | "jev" | "none"; confidence?: number }
+export interface Setting { scene: string; place: string | null; by: "environment" | "action" | "named" | "carried" | "raised" | "unnamed" | "jev" | "none"; confidence?: number }
 export interface Occupancy { who: string; place: string; scene: string; time: string | null; by: "setting" | "spatial"; level?: string | null; sentence?: string }
 export interface PlaceAsked { mode: string; keys: Record<string, string>; manifest: Manifest }
 /** The tree's laws, checked (docs/v2/world-model.md §2.1): n places, r roots, n − r links, no loop, every link graded by scale. */
@@ -124,18 +124,31 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
       return { id: place.id, parent, by: parent ? choice.by : "none", confidence: round(choice.confidence), scale: scale(place.id), scaleBy: scaleOf.get(place.id)!.by, ...(choice.candidates.length ? { candidates: choice.candidates.slice(0, 4).map((candidate): [string, number] => [candidate.id, candidate.score]) } : {}) };
     });
 
-    // 2. Settings.
+    // 2. Settings. A building or room only where the scene puts someone there (its environment or actions name it, or it is
+    // called by its kind: a description its name holds); carried on only close in time, in the same chapter.
+    const groups = new Map<string, Map<string, { type: string; sentences: string[] }>>();
+    for (const description of input.descriptions) for (const sentence of description.sentences) {
+      const scene = index.sceneOf.get(sentence);
+      if (!scene) continue;
+      const of = groups.get(scene) ?? new Map(), entry = of.get(description.text) ?? { type: description.type, sentences: [] };
+      if (!entry.sentences.includes(sentence)) entry.sentences.push(sentence);
+      of.set(description.text, entry); groups.set(scene, of);
+    }
     const timeOf = new Map((input.time?.scenes ?? []).map((scene) => [scene.scene, scene]));
     const depth = (id: string) => address(id).length, under = (id: string, top: string) => id !== top && address(id).includes(top);
+    const above = (id: string) => [...address(id)].reverse().slice(1).find((holder) => rankOf(scale(holder)) >= SCALES.indexOf("street")) ?? null;
+    const namesOf = new Map(places.map((place) => [place.id, place.names]));
     const settings = new Map<string, Setting>(), branched: { key: string; scene: string; candidates: Candidate[]; before: string | null }[] = [];
-    let previous: string | null = null;
+    let previous: string | null = null, from: FlowScene | null = null;
     for (const scene of input.scenes) {
-      const when = timeOf.get(scene.id), past = !!when?.flashback, tiers = settingTiers(index, scene.id);
-      const { place, by, branched: off } = chooseSetting({ ...tiers, previous, past, continues: when?.continuation?.continues !== false, depth, under });
+      const when = timeOf.get(scene.id), past = !!when?.flashback, tiers = settingTiers(index, scene.id), described = [...(groups.get(scene.id)?.keys() ?? [])];
+      const called = (id: string) => described.some((text) => text.length >= 2 && (namesOf.get(id) ?? []).some((name) => name !== text && name.includes(text)));
+      const close = !from || (from.chapter === scene.chapter && closeInTime(timeOf.get(from.id)?.node, when?.node));
+      const { place, by, branched: off } = chooseSetting({ ...tiers, previous, past, continues: when?.continuation?.continues !== false, depth, under, scale, called, above, close });
       // Places its environment names on two branches of the tree: which one is Jev's to say.
       if (off.length) branched.push({ key: "s" + (branched.length + 1), scene: scene.id, before: previous, candidates: [...tiers.environment.map(([id, count]): Candidate => ({ id, score: count, evidence: [{ kind: "setting", weight: count, count }] })), ...(previous && !tiers.environment.some(([id]) => id === previous) ? [{ id: previous, score: 0.5, evidence: [{ kind: "adjacent" as const, weight: 0.5, count: 1 }] }] : [])].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)) });
       settings.set(scene.id, { scene: scene.id, place, by });
-      if (!past && place) previous = place;
+      if (!past && place) { previous = place; from = scene; }
     }
     for (let start = 0; start < branched.length; start += BATCH) {
       const chunk = branched.slice(start, start + BATCH), replies = await ask(settingMode, { asked: chunk }, Object.fromEntries(chunk.map((entry) => [entry.key, entry.scene])));
@@ -146,14 +159,6 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
     }
 
     // 3. Unnamed places, scene by scene.
-    const groups = new Map<string, Map<string, { type: string; sentences: string[] }>>();
-    for (const description of input.descriptions) for (const sentence of description.sentences) {
-      const scene = index.sceneOf.get(sentence);
-      if (!scene) continue;
-      const of = groups.get(scene) ?? new Map(), entry = of.get(description.text) ?? { type: description.type, sentences: [] };
-      if (!entry.sentences.includes(sentence)) entry.sentences.push(sentence);
-      of.set(description.text, entry); groups.set(scene, of);
-    }
     const names = places.flatMap((place) => place.names.map((name): [string, string] => [name, place.id])).sort((a, b) => b[0].length - a[0].length);
     const slots: UnnamedPlace[] = [], references: PlaceReference[] = [], habits = new Map<string, string[]>(), slotsOf = new Map<string, UnnamedPlace[]>();
     let previousSlots: UnnamedPlace[] = [];
@@ -203,7 +208,8 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
     // A building or a room the environment names, in the setting: where the scene is, more closely (rooms first).
     for (const scene of input.scenes) {
       const environment = new Set(scene.sentences.filter((id) => input.kinds[id]?.kind === "environment")), setting = settings.get(scene.id)!;
-      const inner = deeperByUnnamed(slotsOf.get(scene.id) ?? [], environment, setting.place, (holder) => !!setting.place && address(setting.place).includes(holder));
+      const wide = !setting.place || rankOf(scale(setting.place)) > SCALES.indexOf("street");
+      const inner = deeperByUnnamed(slotsOf.get(scene.id) ?? [], environment, setting.place, (holder) => !!setting.place && address(setting.place).includes(holder), wide);
       if (inner) settings.set(scene.id, { scene: scene.id, place: inner.id, by: "unnamed" });
     }
 
