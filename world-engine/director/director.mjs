@@ -156,7 +156,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
       const grow = async (scene, run) => {
         await show();
         const starts = Object.fromEntries(Object.entries(run.starts).map(([who, value]) => [who, dense(value[0])]));
-        const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, spots: [], hit: E.hits?.get(event.id) ?? null, hitThings: null, trace: null,
+        const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, camera: event.camera ?? null, spots: [], hit: E.hits?.get(event.id) ?? null, hitThings: null, trace: null,
           moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)) })) }));
         lastPiece = { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey() };
         return chrome.evaluate(`window.__stage.extend(${JSON.stringify(lastPiece)})`);
@@ -181,13 +181,34 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
           const [x, , z] = at(node), [cx, cz, w, d, angle] = box, dx = x - cx, dz = z - cz, u = dx * Math.cos(angle) + dz * Math.sin(angle), v = -dx * Math.sin(angle) + dz * Math.cos(angle);
           return Math.abs(u) <= w / 2 + 8 && Math.abs(v) <= d / 2 + 8;
         };
+        // A scene's people start together (the user, 2026-11-02: two people of one conversation spawned a kilometre apart, and
+        // a scene going on from the last played far from it): the anchor is where those already here stand (the one nearest
+        // their middle); with none here, spawning's start of the first present (one placed by the text's own words first).
+        // Someone new starts a few metres from the anchor; someone from elsewhere walks to it (off-page beyond 300 m).
+        const present = [...new Set(own?.present ?? Object.keys(run.starts).filter(id => run.starts[id]))];
+        for (const who of present) if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
+        const here = present.filter(who => where.get(who) && inside(where.get(who)[0]));
+        let anchor = null;
+        if (here.length) {
+          const points = here.map(who => at(where.get(who)[0])), mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length);
+          anchor = where.get(here.reduce((best, who) => { const p = at(where.get(who)[0]), q = at(where.get(best)[0]); return Math.hypot(p[0] - mid[0], p[2] - mid[2]) < Math.hypot(q[0] - mid[0], q[2] - mid[2]) ? who : best; }, here[0]))[0];
+        } else {
+          const by = who => spawned?.starts.find(entry => entry.who === who)?.by;
+          const first = present.find(who => ['spatial', 'part'].includes(by(who))) ?? present[0];
+          anchor = first ? startNode(first) : null;
+        }
+        // A spot a few metres from the anchor on its level, the same for the same person each time.
+        const beside = (who, spread = [1.5, 4]) => {
+          if (anchor === null || anchor === undefined) return null;
+          const p = at(anchor), { nodes } = around(p[0], p[2], spread[1] + 2), ring = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) >= spread[0] && Math.hypot(node.x - p[0], node.z - p[2]) <= spread[1]);
+          return ring.length ? ring[Math.floor(seeded(`${scene.id}|${who}|beside`)() * ring.length)].id : anchor;
+        };
         const positions = {}, travels = [];
         sceneRecord.spawned = []; sceneRecord.carried = []; sceneRecord.offPage = [];
-        for (const who of new Set(own?.present ?? Object.keys(run.starts).filter(id => run.starts[id]))) {
-          if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
+        for (const who of present) {
           const was = where.get(who);
-          if (was && inside(was[0])) { positions[who] = was; sceneRecord.carried.push(who); continue; }
-          const dest = startNode(who);
+          if (was && here.includes(who)) { positions[who] = was; sceneRecord.carried.push(who); continue; }
+          const dest = beside(who);
           if (dest === null || dest === undefined) { if (was) positions[who] = was; continue; }
           if (!was) { positions[who] = [dest, 0]; sceneRecord.spawned.push(who); continue; }
           const a = at(was[0]), b = at(dest);
@@ -196,6 +217,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         }
         for (const key of Object.keys(run.starts)) delete run.starts[key];
         Object.assign(run.starts, positions);
+        sceneRecord.starts = Object.fromEntries(Object.entries(positions).map(([who, [node]]) => [who, at(node).map(Math.round)]));
         // The director's pass (pass.mjs): the narration and description sentences that move someone present join the cards,
         // as actions of those they name, in reading order.
         const passed = await passScene({ reading, text, decide, scene: reads, place: names.get(scene.placeId) ?? scene.placeId, people: Object.fromEntries(Object.keys(positions).map(id => [id, names.get(id) ?? id])) });
@@ -206,7 +228,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         scene.events = []; run.events = []; scene.cast = [...new Set([...(scene.cast ?? []), ...Object.keys(positions)])];
         // Those coming from elsewhere walk in first (an event of their own, before the scene's cards).
         if (travels.length) {
-          const event = { id: `arrive:${scene.id}`, text: `(${travels.map(entry => names.get(entry.who) ?? entry.who).join('、')} come here)`, actors: travels.map(entry => entry.who) };
+          const meet = at(travels[0].dest), event = { id: `arrive:${scene.id}`, text: `(${travels.map(entry => names.get(entry.who) ?? entry.who).join('、')} come here)`, actors: travels.map(entry => entry.who), camera: { focus: { x: meet[0], z: meet[2], y0: meet[1], w: 6, d: 6, h: 3 }, radius: 30, elevation: 40, yaw: 0 } };
           scene.events.push(event);
           for (const entry of travels) {
             const p = at(entry.dest), { nodes } = around(p[0], p[2], 6), near = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= 2.5).map(node => node.id);
@@ -267,7 +289,8 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
             // First the text alone: does this person go anywhere in this card?
             const whether = await ask(decide, M.moveWhetherMode, { ...base, pictures: {} }, null);
             const goes = String(whether.replies.find(entry => entry.key === 'moves')?.value ?? 'stays') === 'goes', said_ = whether.replies.find(entry => entry.key === 'line')?.value ?? null;
-            if (whether.replies.find(entry => entry.key === 'breaks')?.value === 'yes') cardRecord.breaks = true;
+            // Destruction only on clear evidence (the user, 2026-11-02: routine things blasted): Jev sure of it, 0.7 or more.
+            { const breaks = whether.replies.find(entry => entry.key === 'breaks'); if (breaks?.value === 'yes' && (breaks.confidence ?? 0) >= 0.7) cardRecord.breaks = true; }
             if (!goes) { cardRecord.moves.push({ person, direction: 'stays', line: said_, moved: false }); continue; }
             cardRecord.camera ??= { focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 };
             const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: 9, blocked: arrow.blocked })) });
@@ -368,6 +391,8 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
           run.events.push({ at: Object.fromEntries(Object.entries(positions).map(([who, value]) => [who, value])) });
           // A card no one was asked about: the producer's camera on the people of the card, as they stood when it began.
           if (!cardRecord.camera) { const points = event.actors.filter(who => positions[who]).map(who => at(positions[who][0])); if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 }; } }
+          // The producer's camera rides with the card's event: the player and World · Live follow it card by card.
+          event.camera = cardRecord.camera ?? null;
           // Streamed: the line as far as this card, played on in World · Live; a moment to watch a move before the next question.
           await grow(scene, run);
           const went = cardRecord.moves.filter(move => move.moved);
@@ -380,7 +405,9 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         await save();
       }
       result = { data: { ...page, title: `The director · ${from} – ${to}`, director: payload() }, calls };
-      // The run as a playable run of the book (stage/simulation/index.json, the Player's list): replayed card by card.
+      // The run as a playable run of the book (stage/simulation/index.json, the Player's list): replayed card by card. A
+      // stand-in's run (rule-made answers) is not one: it is only for trying the loop.
+      if (jev.modelId !== 'stand-in-director') {
       const folder = join(novelDir, 'stage', 'simulation'), id = `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`;
       await mkdir(join(folder, 'runs', 'director'), { recursive: true });
       await writeFile(join(folder, 'runs', 'director', `${id}.page.json`), JSON.stringify(result.data));
@@ -388,6 +415,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
       const entry = index.strands.director ??= { title: 'The director', runs: [] };
       entry.runs.push({ id, scenes: E.chosen.length, page: `runs/director/${id}.page.json` }); entry.accepted = id;
       await writeFile(join(folder, 'index.json'), JSON.stringify(index, null, 1));
+      }
     } finally { await chrome.close(); server.server.close(); }
   } });
   record.finishedAt = new Date().toISOString(); record.calls = calls;
@@ -405,6 +433,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     jev = cachedDecisions(jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), join(resolve(novelDir), 'stage', 'director', 'cache'));
   }
   let live = null;
+  if (values.live && values['stand-in']) { console.error('a stand-in run does not write the live view (its answers are made by rule)'); process.exit(2); }
   if (values.live) { const { createLive } = await import('../live/sim-jev.mjs'); live = await createLive(resolve(novelDir), { command: 'sim direct', lines: [{ id: 'director', title: 'The director: cards played forward' }], model: jev.modelId }); jev = live.watch(jev); }
   try {
     const { record } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });

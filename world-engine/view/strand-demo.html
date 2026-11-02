@@ -451,6 +451,22 @@ function buildPlace(id) {
     const ring = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([-0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0, 0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, -0.5, 0, -0.5], 3));
     if (floorsAt.length) group.add(instancedEdges(ring, floorsAt, 0x7ce6ff, 0.14).lines);
   }
+  // The buildings with no room on the walk grid (data.world.loose: dropped when reached, or never fitted): drawn at their
+  // own footprint and turn as the terrain made them, a shell with no inside, so no part of the city goes missing.
+  if (place.world && data.world.loose?.length) {
+    const looseFill = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: 0.09, depthWrite: false }), byModel = new Map(), boxes = [], up = new THREE.Vector3(0, 1, 0);
+    for (const [x, z, w, d, angle, floors, model] of data.world.loose) {
+      const h = Math.max(1, floors) * FLOOR, turn = new THREE.Quaternion().setFromAxisAngle(up, -angle), shell = model ? shellOf(model) : null;
+      if (shell) { if (!byModel.has(model)) byModel.set(model, []); byModel.get(model).push(new THREE.Matrix4().compose(new THREE.Vector3(x - cx, 0, z - cz), turn, new THREE.Vector3(w / shell.size.x, h / shell.size.y, d / shell.size.z))); }
+      else boxes.push(new THREE.Matrix4().compose(new THREE.Vector3(x - cx, h / 2, z - cz), turn, new THREE.Vector3(w, h, d)));
+    }
+    for (const [model, matrices] of byModel) {
+      const shell = shellOf(model), fills = new THREE.InstancedMesh(shell.fill, looseFill, matrices.length);
+      matrices.forEach((matrix, k) => fills.setMatrixAt(k, matrix));
+      group.add(fills, instancedEdges(shell.edges, matrices, 0x8fd6ff, 0.5).lines);
+    }
+    if (boxes.length) group.add(instancedEdges(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), boxes, 0x7ce6ff, 0.4).lines);
+  }
   const entry = { group, cx, cz, dynamic: null, shownHits: -1, lots, masked: new Set(), chunks, bornAt: place.world ? place.lots.map((lot) => bornAt(lot.born)) : null };
   built.set(id, entry);
   if (place.world) built.set("world", entry);
@@ -491,7 +507,9 @@ function drawSkeletons(id, entry, count, settling = null) {
   const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], roomEdges = [], redRooms = [], walls = [], roofs = [];
   // A hit building's walls and roof, unit by unit; its artistic shell gives way to them.
   place.lots.forEach((lot, n) => {
-    const unborn = (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n);
+    // A building stands from the start (the user, 2026-11-02: parts of the city vanished until the story first reached them);
+    // being reached only switches its inside on (below). Far off in the live story view, it goes.
+    const unborn = !!entry.far?.has(n);
     for (const { part } of entry.lots[n].parts) part.visible = !unborn && (part.isSprite || !structural.has(n));
     if (unborn || !structural.has(n) || entry.masked.has(n)) return;
     for (let k = 0; k < lot.floors; k++) for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if ((i === 0 || j === 0 || i === lot.nx - 1 || j === lot.nz - 1) && !gone[n].has(`3|${i}|${j}|${k}`)) walls.push(unitBox(lot, entry, [3, i, j, k]));
@@ -568,7 +586,7 @@ function fallingOf(place, entry, hit) {
 const falling = new THREE.InstancedMesh(unit, mats.rubble, 600); falling.count = 0; falling.frustumCulled = false; world.add(falling);
 const blast = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0, depthWrite: false })); world.add(blast);
 
-let stopAt = null;
+let stopAt = null, cameraSegment = null;
 let shownNotice = false, shownPlace = null, shownSegment = null, pathLines = [], time = 0, speed = 2, playing = true, follow = true, last = performance.now(), shownScene = -1, glide = null;
 for (const id of Object.keys(data.places)) world.add(buildPlace(id).group);
 // The place tree's places as pins, and a trace above them for every move between places. A place's circle on the canvas
@@ -992,6 +1010,13 @@ function frame(now) {
     else { const pose = peoplePose(segment); if (pose) glide = { to: pose, start: time, seconds: 2.6, direct: true }; else glideTo(segment.scene.place, 2.6); }
     shownPlace = segment.scene.place;
   }
+  // Follow: the producer's camera (the director's shot of each card, docs/v2/director-camera.md) as each card begins: the
+  // view glides there, near and turned as Jev saw it, in the player and in World · Live alike.
+  if (follow && segment.kind === "event" && segment.event.camera && cameraSegment !== segment) {
+    cameraSegment = segment;
+    const pose = producerPose(segment.scene.id, segment.event.camera);
+    if (pose) glide = { to: pose, start: time, seconds: 0.9, direct: true };
+  }
   if (glide && time >= glide.start) {
     if (!glide.from) glide = glideFrom(glide);
     const u = (time - glide.start) / glide.seconds;
@@ -1081,7 +1106,7 @@ function frame(now) {
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
   // Live mode: following is following Jev's focus — the camera and where it looks glide together toward the moment's
   // focus (a whole place away too), and the distance eases toward one that frames it, so each new frame carries on smoothly.
-  if (liveMode && follow && !glide && data.live.focus) {
+  if (liveMode && follow && !glide && data.live.focus && !segment.event?.camera) {
     const f = data.live.focus, ease = 1 - Math.exp(-dt * 1.6), shift = new THREE.Vector3(f.x, 2, f.z).sub(controls.target).multiplyScalar(ease);
     controls.target.add(shift); camera.position.add(shift);
     const away = camera.position.clone().sub(controls.target), distance = away.length(), framed = Math.min(Math.max(distance, 40 + 2 * f.r), 160 + 4 * f.r);
@@ -1091,7 +1116,8 @@ function frame(now) {
   // The world as explored by now: chunks and the faint city's copies of buildings since stood up.
   if (!capture && now - lastCull > 400) { lastCull = now; cullByInterest(entry); }
   // A deep facility's name shows only while the street is seen through.
-  for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.at <= time && chunk.near !== false && (!chunk.under || groundSeen < 0.5);
+  // The ground stands from the start as the buildings do (not only once the story has reached it).
+  for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.near !== false && (!chunk.under || groundSeen < 0.5);
   // The street clears while anyone shown is below it (or the viewer asked), and the levels below brighten.
   const below = xray || [...pawns.values()].some(({ pawn }) => pawn.parent && pawn.position.y < -1);
   groundSeen += ((below ? 0.15 : 0.8) - groundSeen) * Math.min(1, dt * 3);

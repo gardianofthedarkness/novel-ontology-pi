@@ -57,7 +57,7 @@ export const moveWhetherMode: Mode<MoveFocus, unknown> = {
   questions: (focus) => [
     { key: "moves", primitive: "choice", instructions: `Does ${focus.mover.name} go somewhere else in this card?`, options: ["goes", "stays"], optionHints: { goes: "changes place: walks, runs, comes, leaves, follows, jumps, climbs, flies, is carried", stays: "acts where they already are" } },
     { key: "line", primitive: "choice", instructions: "Which line says so?", options: [...focus.card.lines, ...focus.lines].map((line) => line.id) },
-    { key: "breaks", primitive: "choice", instructions: "Does this card break, blast or wreck something (a wall, a building, the ground, a car)?", options: ["yes", "no"], optionHints: { yes: "something is broken, blasted or wrecked in this card", no: "nothing is broken" } },
+    { key: "breaks", primitive: "choice", instructions: "Does the card's own text say outright that something is destroyed in it: a wall breaks, a building collapses, the ground is torn up, a car is crushed?", criteria: "Only clear evidence of destruction in this card's text. A power used, sparks, a fight, a blow to a person, noise, fear, a threat, something broken earlier or only imagined: no.", options: ["yes", "no"], optionHints: { yes: "the text says something is destroyed here", no: "no clear destruction in this card" } },
   ] as DecisionQuestion[],
   budget: 12000,
 };

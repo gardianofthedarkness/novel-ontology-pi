@@ -1250,6 +1250,19 @@ export async function strandDemo(novelDir, options) {
   const detected = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
   // The world's shells as it stands (W.shellsOf), worked out once for each set of chunks reached: every snapshot shares them.
   let shellsKey = -1, shellsMade = [];
+  /**
+   * The buildings of the world that stand neither as a lot nor as a shell (no room for them on the walk grid: dropped when
+   * their chunk was reached, or never fitted): drawn at their own footprint, turned as the terrain made them, with no inside
+   * (the user, 2026-11-02: parts of the city went missing once the simulation ran). [x, z, w, d, angle, floors, model].
+   */
+  const looseNow = worn => {
+    const standing = new Set([...world.lots.map(lot => lot.source), ...(options.worldOnly ? shellsNow() : W.shellsOf(world)).map(shell => shell.source)]);
+    return world.source.buildings.filter(b => !standing.has(b.id)).map(b => {
+      const model = b.model && library.models[b.model] ? b.model : UM.roleModel({ role: W.roleOf(b.kind, b.floors), w: b.w, d: b.d, floors: b.floors, era: b.era }, `loose:${b.id}`, modelSizes);
+      if (model) worn.add(model);
+      return [Math.round(b.x * 10) / 10, Math.round(b.z * 10) / 10, Math.round(b.w * 10) / 10, Math.round(b.d * 10) / 10, Math.round(b.angle * 1000) / 1000, b.floors, model ?? null];
+    });
+  };
   const shellsNow = () => {
     if (world.chunks.size === shellsKey) return shellsMade;
     shellsKey = world.chunks.size;
@@ -1341,7 +1354,7 @@ export async function strandDemo(novelDir, options) {
       macro, terrainShapes, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id), uses: source.buildings.map(b => b.use ?? UM.useOf(b) ?? null), owners: source.buildings.map(b => b.patch ?? null) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
       people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
-      world: { NX, NZ, K, oi, oj, ok, lots: worldLots, shells: worldShells, earlier, underground: undergroundView(),
+      world: { NX, NZ, K, oi, oj, ok, lots: worldLots, shells: worldShells, loose: looseNow(worn), earlier, underground: undergroundView(),
         ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]),
         // Landscape buildings that never stood as lots (under a staged building, or no room on the grid), and when that was settled.
         dropped: [...world.dropped] },
@@ -1365,7 +1378,7 @@ export async function strandDemo(novelDir, options) {
           from: Object.fromEntries((timeline.handoffs.get(scene.id) ?? []).map(handoff => [handoff.person, handoff.from ? (handoff.samePlace ? 'stays' : 'arrives') : 'enters'])),
           objects: placedObjects.get(scene.id) ?? [],
           trace: traces.get(`${scene.id}|start`) ?? null,
-          events: scene.events.map((event, index) => ({ id: event.id, actors: event.actors ?? [], text: clean(event.text), spots: pins(middle(standing(index))), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(denseMove), trace: traces.get(`${scene.id}|${index}`) ?? null })) };
+          events: scene.events.map((event, index) => ({ id: event.id, actors: event.actors ?? [], text: clean(event.text), ...(event.camera ? { camera: event.camera } : {}), spots: pins(middle(standing(index))), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(denseMove), trace: traces.get(`${scene.id}|${index}`) ?? null })) };
       }),
     };
   };
