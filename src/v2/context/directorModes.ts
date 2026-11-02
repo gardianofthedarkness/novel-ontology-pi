@@ -44,14 +44,31 @@ const text = <F extends MoveFocus>(): Source<F, unknown>[] => [
 ];
 const lead = (focus: MoveFocus) => `In scene ${Number(focus.scene.id.slice(-3)) || focus.scene.id} (${focus.scene.place}${focus.scene.when ? `, ${focus.scene.when}` : ""}), the card's lines (card) are being played. ${focus.mover.name} is the person asked about.`;
 
+/**
+ * First, from the text alone (no picture): does the person go somewhere else in this card, or act where they are? The
+ * arrows are asked only of those who go (the first run, 2026-11-02: asked straight away on the arrows, Jev answered
+ * "stays" 45 times in 50, walks through streets among them).
+ */
+export const moveWhetherMode: Mode<MoveFocus, unknown> = {
+  name: "move-whether",
+  task: (focus) => `${lead(focus)} In this card, does ${focus.mover.name} go somewhere else (walk, run, come, leave, follow, jump, climb, fly, get carried), or act where they already are (speak, look, think, pick up, hold, hit someone beside them)?`,
+  sources: text<MoveFocus>().filter((source) => source.name !== "pictures"),
+  cutOrder: ["scene"],
+  questions: (focus) => [
+    { key: "moves", primitive: "choice", instructions: `Does ${focus.mover.name} go somewhere else in this card?`, options: ["goes", "stays"], optionHints: { goes: "changes place: walks, runs, comes, leaves, follows, jumps, climbs, flies, is carried", stays: "acts where they already are" } },
+    { key: "line", primitive: "choice", instructions: "Which line says so?", options: [...focus.card.lines, ...focus.lines].map((line) => line.id) },
+  ] as DecisionQuestion[],
+  budget: 12000,
+};
+
 export const moveDirectionMode: Mode<DirectionFocus, unknown> = {
   name: "move-direction",
-  task: (focus) => `${lead(focus)} Which way does ${focus.mover.name} go in this card, as the picture "arrows" shows it: one of the lettered arrows out of them (each said by what it points at), stays where they are, or goes with someone? And how, and which line says so.`,
+  task: (focus) => `${lead(focus)} ${focus.mover.name} goes somewhere else in this card. Which way, as the picture "arrows" shows it: one of the lettered arrows out of them (each said by what it points at), or with someone? And how, and which line says so.`,
   sources: [...text<DirectionFocus>(), fixed<DirectionFocus>("arrows", (focus) => Object.fromEntries(focus.arrows.map((arrow) => [arrow.letter, arrow.said])))],
   cutOrder: ["scene"],
   questions: (focus) => {
-    const options = [...focus.arrows.map((arrow) => arrow.letter), "stays", ...focus.others.map((other) => `with:${other.id}`)];
-    const hints = Object.fromEntries([...focus.arrows.map((arrow) => [arrow.letter, `arrow ${arrow.letter}: ${arrow.said}`]), ["stays", `${focus.mover.name} does not move in this card`], ...focus.others.map((other) => [`with:${other.id}`, `goes with ${other.name}, to where they go`])]);
+    const options = [...focus.arrows.map((arrow) => arrow.letter), ...focus.others.map((other) => `with:${other.id}`)];
+    const hints = Object.fromEntries([...focus.arrows.map((arrow) => [arrow.letter, `arrow ${arrow.letter}: ${arrow.said}`]), ...focus.others.map((other) => [`with:${other.id}`, `goes with ${other.name}, to where they go`])]);
     const lines = [...focus.card.lines, ...focus.lines].map((line) => line.id);
     return [
       { key: "direction", primitive: "choice", instructions: `Which way does ${focus.mover.name} go?`, options, optionHints: hints },

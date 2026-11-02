@@ -54,7 +54,18 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
   const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [] };
   const save = () => writeFile(join(out, 'run.json'), JSON.stringify(record, null, 1));
   let calls = 0;
-  const decide = Object.assign(async (state, questions, options) => { calls++; return jev.decide(state, questions, options); }, { record: () => {} });
+  // Jev's image service comes and goes (503 "Image processing is unavailable", 529 overloaded): a request is tried again
+  // after a pause, up to four times, before the run stops.
+  const decide = Object.assign(async (state, questions, options) => {
+    calls++;
+    for (let attempt = 0; ; attempt++) {
+      try { return await jev.decide(state, questions, options); } catch (error) {
+        if (attempt >= 4 || !/ 50[23] | 529 /.test(String(error?.message))) throw error;
+        log(`Jev unavailable (${String(error.message).slice(0, 60)}), again in ${20 * (attempt + 1)} s`);
+        await new Promise(done => setTimeout(done, 20000 * (attempt + 1)));
+      }
+    }
+  }, { record: () => {} });
 
   let result = null;
   await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', engine: async E => {
@@ -153,6 +164,10 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
               for (const metres of [2, 5, 10, 20]) { const p = C.arrowEnd(here, direction.vector, metres), what = said(p); if (what !== said(here)) { meets = `${what} (${metres} m)`; blocked = metres === 2 && /a wall/.test(what); break; } }
               return { ...direction, said: meets ?? `more of ${said(here)}`, blocked };
             });
+            // First the text alone: does this person go anywhere in this card?
+            const whether = await ask(decide, M.moveWhetherMode, { ...base, pictures: {} }, null);
+            const goes = String(whether.replies.find(entry => entry.key === 'moves')?.value ?? 'stays') === 'goes', said_ = whether.replies.find(entry => entry.key === 'line')?.value ?? null;
+            if (!goes) { cardRecord.moves.push({ person, direction: 'stays', line: said_, moved: false }); continue; }
             const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: 9, blocked: arrow.blocked })) });
             const asked = await ask(decide, M.moveDirectionMode, { ...base, pictures: { arrows: `${mover.name} now, from 35° above; the lettered arrows go out of them (warm rise, cool fall, level ones flat).` }, arrows: arrows.map(arrow => ({ letter: arrow.letter, said: `${arrow.rise}, toward ${arrow.said}` })), others }, null, { request: { images: { arrows: a.png } } });
             const reply = key => asked.replies.find(entry => entry.key === key)?.value;
