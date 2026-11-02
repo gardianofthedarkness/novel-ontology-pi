@@ -1372,6 +1372,11 @@ export async function strandDemo(novelDir, options) {
   const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: WALK_SEED });
   const data = assemble(runs);
   if (options.live) options.live(snapshot(true), data);
+  // The director's loop (world-engine/director/director.mjs, docs/v2/director-camera.md): the engine as it stands after the
+  // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
+  // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
+  // calls `assemble` for the page as far as it has played.
+  if (options.engine) await options.engine({ world, W, graphOf, reach, solve, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot });
   return data;
 }
 

@@ -849,6 +849,8 @@ function hologram(model, shape, stand = false) {
 let hiddenThings = new Set(), sheetView = null, hitsBefore = null, quiet = capture;
 // The half height (metres) of the top-down map a still is drawing, while it draws one; null otherwise.
 let mapHalf = null;
+// The director's loop poses the people where it has them now (person → node), over the timeline's own positions.
+let posed = null;
 // See-through while playing (and while recording a scene), never on Jev's stills, which mask what they need themselves.
 let seeing = !capture;
 const things = (data.things ?? []).map((thing) => {
@@ -1016,7 +1018,7 @@ function frame(now) {
   for (const [id, { pawn, body }] of pawns) {
     const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
     const travel = segment.kind === "macro" && segment.travels.find((entry) => entry.migration.person === id);
-    const p = !present.has(id) ? null : move ? position(place, move, elapsed) : node == null ? null : at(place, node);
+    const p = posed ? (posed[id] == null ? null : at(place, posed[id])) : !present.has(id) ? null : move ? position(place, move, elapsed) : node == null ? null : at(place, node);
     if (!p) { if (pawn.parent) world.remove(pawn); continue; }
     if (!pawn.parent) world.add(pawn);
     if (travel && elapsed < travel.total) { pawn.position.copy(travelAt(travel, elapsed)); body.material.opacity = 1; movers.push(pawn.position); continue; }
@@ -1431,6 +1433,8 @@ if (capture) {
     scenes: data.scenes.map((scene) => ({ id: scene.id, place: scene.place, events: scene.events.map((event) => event.text) })),
     /** How many of each inside part are drawn now (rooms, halls, room walls, corridors, stairs): for checking a still. */
     insideCounts() { const out = {}; world.traverse((part) => { if (part.isInstancedMesh) for (const name of ["room", "hall", "tall", "roomWall", "corridor", "stair"]) if (part.material === mats[name]) out[name] = (out[name] ?? 0) + part.count; }); return out; },
+    /** Where the director's loop has the people now (person → node of this page's grid); null gives the timeline back. */
+    pose(positions) { posed = positions; },
     /** The labels a still shows now (their text, and the place each names): for checking what a shot carries. */
     labelsShown() { const out = []; world.traverse((part) => { if (part.isSprite && part.userData.text) { let shown = true; for (let at = part; at; at = at.parent) if (!at.visible) shown = false; if (shown) out.push({ text: part.userData.text, place: part.userData.place ?? null }); } }); return out; },
     /** A scene's card: its moment on the timeline (for `at`), and where each of its people stands then (world metres). */

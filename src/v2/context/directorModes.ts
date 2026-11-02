@@ -1,0 +1,93 @@
+/**
+ * The director's questions (docs/v2/director-camera.md §2; the user's design, 2026-11-02): for one person in one action
+ * card, which way they go (the fourteen lettered arrows, stays, or with someone), then where (a spot inside the chosen
+ * arrow's wedge, or none of these), and only when no spot fits, a rough box on a plan, then the exact box and its height.
+ * The text is the card's own lines as written, the lines before it, the scene's lines that name the mover or say where,
+ * its description lines, and where everyone stands now; every line keeps its sentence id, and the direction's answer says
+ * which line it rests on. Pictures come with the request (the camera operator's shots, src/v2/context/camera.ts).
+ */
+import type { DecisionQuestion } from "../../ground/connectors/jev.js";
+import type { Item, Mode, Source } from "./engine.js";
+
+export interface Line { id: string; text: string }
+export interface MoveFocus {
+  scene: { id: string; place: string; when: string | null };
+  /** The card being played: its own sentences, as written. */
+  card: { id: string; lines: Line[] };
+  mover: { id: string; name: string };
+  /** The scene's other lines Jev reads (before the card, naming the mover, saying where, describing the place). */
+  lines: Line[];
+  /** Where everyone in the scene stands now, in words. */
+  now: Record<string, string>;
+  /** What each picture shows. */
+  pictures: Record<string, string>;
+}
+export interface DirectionFocus extends MoveFocus {
+  /** Each arrow: its letter, and what it points at (the first thing it meets). */
+  arrows: { letter: string; said: string }[];
+  /** The others present, for "goes with". */
+  others: { id: string; name: string }[];
+}
+export interface SpotFocus extends MoveFocus { direction: string; spots: { letter: string; said: string }[] }
+export interface HeightFocus extends MoveFocus { direction: string; slices: { letter: string; said: string }[] }
+
+/** How a move goes: its reach comes from it (camera.ts REACH). */
+export const WAYS = ["step", "walk", "run", "leap", "flight"] as const;
+
+const fixed = <F>(name: string, of: (focus: F) => Record<string, unknown>): Source<F, unknown> => ({ name, key: name, quota: 0, keep: true, collect: (focus) => Object.entries(of(focus)).map(([id, fields]): Item => ({ id, score: 1, fields })) });
+const text = <F extends MoveFocus>(): Source<F, unknown>[] => [
+  fixed<F>("card", (focus) => Object.fromEntries(focus.card.lines.map((line) => [line.id, line.text]))),
+  // The scene's other lines: ranked as given (nearest the card first), cut first when over budget.
+  { name: "scene", key: "scene", quota: 40, ranked: true, collect: (focus) => focus.lines.map((line, n): Item => ({ id: line.id, score: 1 - n / 1000, fields: line.text })) },
+  fixed<F>("now", (focus) => focus.now),
+  fixed<F>("pictures", (focus) => focus.pictures),
+];
+const lead = (focus: MoveFocus) => `In scene ${Number(focus.scene.id.slice(-3)) || focus.scene.id} (${focus.scene.place}${focus.scene.when ? `, ${focus.scene.when}` : ""}), the card's lines (card) are being played. ${focus.mover.name} is the person asked about.`;
+
+export const moveDirectionMode: Mode<DirectionFocus, unknown> = {
+  name: "move-direction",
+  task: (focus) => `${lead(focus)} Which way does ${focus.mover.name} go in this card, as the picture "arrows" shows it: one of the lettered arrows out of them (each said by what it points at), stays where they are, or goes with someone? And how, and which line says so.`,
+  sources: [...text<DirectionFocus>(), fixed<DirectionFocus>("arrows", (focus) => Object.fromEntries(focus.arrows.map((arrow) => [arrow.letter, arrow.said])))],
+  cutOrder: ["scene"],
+  questions: (focus) => {
+    const options = [...focus.arrows.map((arrow) => arrow.letter), "stays", ...focus.others.map((other) => `with:${other.id}`)];
+    const hints = Object.fromEntries([...focus.arrows.map((arrow) => [arrow.letter, `arrow ${arrow.letter}: ${arrow.said}`]), ["stays", `${focus.mover.name} does not move in this card`], ...focus.others.map((other) => [`with:${other.id}`, `goes with ${other.name}, to where they go`])]);
+    const lines = [...focus.card.lines, ...focus.lines].map((line) => line.id);
+    return [
+      { key: "direction", primitive: "choice", instructions: `Which way does ${focus.mover.name} go?`, options, optionHints: hints },
+      { key: "how", primitive: "choice", instructions: `How do they go (a step, a walk, a run, a leap, a flight)?`, options: [...WAYS], optionHints: { step: "a step or two", walk: "walking", run: "running", leap: "a jump or leap, a climb", flight: "flying, carried through the air by a power" } },
+      { key: "line", primitive: "choice", instructions: "Which line says where they go (or that they stay)?", options: lines },
+    ] as DecisionQuestion[];
+  },
+  budget: 12000,
+};
+
+export const moveSpotMode: Mode<SpotFocus, unknown> = {
+  name: "move-spot",
+  task: (focus) => `${lead(focus)} They go ${focus.direction}, the shaded wedge on picture "wedge". Where do they end up in this card: one of the spots (spots), or none of these when the text puts them somewhere the spots do not name?`,
+  sources: [...text<SpotFocus>(), fixed<SpotFocus>("spots", (focus) => Object.fromEntries(focus.spots.map((spot) => [spot.letter, spot.said])))],
+  cutOrder: ["scene"],
+  questions: (focus) => [{ key: "spot", primitive: "choice", instructions: `Where does ${focus.mover.name} end up?`, options: [...focus.spots.map((spot) => spot.letter), "none"], optionHints: Object.fromEntries([...focus.spots.map((spot) => [spot.letter, `${spot.letter}: ${spot.said}`]), ["none", "none of these spots"]]) }] as DecisionQuestion[],
+  budget: 12000,
+};
+
+export const moveRoughMode: Mode<MoveFocus & { direction: string }, unknown> = {
+  name: "move-rough",
+  task: (focus) => `${lead(focus)} They go ${focus.direction}. Box roughly where they end up on picture "plan" (straight down, north up, a metre grid; the arrow and its wedge drawn).`,
+  sources: text<MoveFocus & { direction: string }>(),
+  cutOrder: ["scene"],
+  questions: (focus) => [{ key: "box", primitive: "box", instructions: `Box roughly where ${focus.mover.name} ends up on picture "plan".` }] as DecisionQuestion[],
+  budget: 12000,
+};
+
+export const moveExactMode: Mode<HeightFocus, unknown> = {
+  name: "move-exact",
+  task: (focus) => `${lead(focus)} They go ${focus.direction}, about where the rough box was. Picture "plan" is that place close up, straight down, a grid of one metre; picture "heights" is its column from the side, its heights lettered (heights). Box exactly where they end up on "plan", and say at which height.`,
+  sources: [...text<HeightFocus>(), fixed<HeightFocus>("heights", (focus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, slice.said])))],
+  cutOrder: ["scene"],
+  questions: (focus) => [
+    { key: "box", primitive: "box", instructions: `Box exactly where ${focus.mover.name} ends up on picture "plan".` },
+    { key: "height", primitive: "choice", instructions: "At which height?", options: focus.slices.map((slice) => slice.letter), optionHints: Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.letter}: ${slice.said}`])) },
+  ] as DecisionQuestion[],
+  budget: 12000,
+};
