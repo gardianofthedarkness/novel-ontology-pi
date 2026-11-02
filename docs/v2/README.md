@@ -5,6 +5,7 @@ first, then where everyone stands, then how they move. Each part below goes from
 [concept map](concepts.html), grouped by the same stages) to where it is designed and where it lives in code.
 
 Where each step stands: [status.md](status.md). What changed in v2, for a teammate: [whats-new.md](whats-new.md).
+What comes next (a work model beside Jev: card digests, a runtime system 2, memory across scenes): [next-steps.md](next-steps.md).
 
 The four design documents are journals: each section was written when the user decided it, dated, in the order of work.
 Read them by the sections named here rather than from the top.
