@@ -403,6 +403,23 @@ reading's own since §2.0.9), `novel sim terrain`
    question now carries the scene's environment and who is already placed, how far and which way from the middle of the
    map (the red dots).
 
+### 2.0.7a Story strands in v2 (the user's call, 2026-11-01: "v1 has strands already proven to work to some extent, we can build it directly") — built
+
+The v2 story time is one clock with flashbacks (a calendar and a time tree); a v2 book was simulated as one line in
+reading order. Spawning needs each person's own world line: a person carries their position from their own last scene at
+the same place, and arrives from elsewhere otherwise. So v1's strands (`apps/playground/src/data/storyStrands.ts`, about
+0.85 of scene pairs against hand-read gold) now run on the v2 world script, with no model call
+(`src/v2/extraction/strands.ts`):
+- **From the script:** who is present, where (the place tree for the top-level place), a carried place, the chapter, a
+  flashback, and each scene's node on the time tree (`at`: its day and part of the day, stated or inherited; a clock time
+  becomes v1's part of the day). v1 compares a scene's own stated times only.
+- **Then v1's per-fork timeline** (`src/digger/stage/environment.ts`): each scene's fork, and for each person in it the
+  scene they come from and whether it was at the same place.
+- **Run:** `node experiments/v2/strands.mjs <novel-dir> [--time <reading>/v2/time.yaml]` writes `stage/world/strands.json`.
+  On vol 1 (46 scenes, 21 people): 2 lanes, 3 forks (the main line; 黄泉川爱穗's investigation from scene 5, rejoining by
+  scene 26; 根丘 and 食蜂's two scenes), 72 entries carrying on at the same place, 37 from elsewhere; 3 splits at the same
+  place (doubtful), 4 joins, 4 chapters ending apart.
+
 ### 2.0.8 Places in EM and EM², and the place tree from the reading (the user's call, 2026-10-31) — built, run on vol 1
 
 **The check first** (vol 1's reading before this, no requests): of 107 places below a city, a name inside a name or the

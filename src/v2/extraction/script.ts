@@ -18,7 +18,7 @@ import { levelOf } from "./spatial.js";
  *   carries the place of the scene before it, unless it is in the past or the time tree says it does not go on from it;
  *   else it has none (and is not staged).
  * - present: who speaks, acts or is spoken to in its cards (someone only named or described is not there);
- * - clock: null for a scene in the past (the time tree's flashback), else its story-time span;
+ * - clock: null for a scene in the past (the time tree's flashback), else its story-time span; at: its node on the time tree;
  * - firstSeen: who is present for the first time (in reading order, the past aside): where the engine's births are;
  * - timeline: its events (the action cards, with the canon's ids) in reading order;
  * - context: its environment cards, which open each of its questions;
@@ -41,6 +41,8 @@ export interface ScriptPlace { label: string; scale: string | null; parent: stri
 export interface ScriptScene {
   id: string; chapter: number; place: string | null; placeBy: "environment" | "action" | "named" | "unnamed" | "carried" | "jev" | "none";
   clock: number[] | null; present: string[]; stayed: string[]; firstSeen: string[];
+  /** Its node on the time tree (story time), and whether the scene states its time or inherits it: what strands compare (strands.ts). */
+  at?: { node: string; stated: boolean };
   timeline: { type: "event"; id: string; actors: string[] }[]; context?: string;
   /** Who or what its spatial words say is where (src/v2/spatial.ts): evidence for Jev at run time. */
   spatial?: { text: string; sentence: string; level: string | null; who: string[] }[];
@@ -126,7 +128,7 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     const environment = cards.filter((card) => card.kind === "environment").map((card) => card.sentences.map(text).join("")).join(" ");
     const spatial = (result.spatial ?? []).filter((mention) => mention.scene === scene.id).map(({ text: word, sentence, who }) => ({ text: word, sentence, level: levelOf(word), who }));
     return {
-      id: scene.id, chapter: scene.chapter, place, placeBy: by, clock: past ? null : clock, present, stayed: [], firstSeen,
+      id: scene.id, chapter: scene.chapter, place, placeBy: by, clock: past ? null : clock, present, stayed: [], firstSeen, ...(time?.node ? { at: { node: time.node, stated: !time.inherited } } : {}),
       timeline: cards.filter((card) => eventOf.has(card.id)).map((card) => ({ type: "event" as const, id: eventOf.get(card.id)!, actors: cardPeople(result, card).people })),
       ...(environment ? { context: `Environment: ${environment.length > CONTEXT ? `${environment.slice(0, CONTEXT - 1)}…` : environment}` } : {}),
       ...(spatial.length ? { spatial } : {}),
