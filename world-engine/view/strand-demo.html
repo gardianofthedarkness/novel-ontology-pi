@@ -493,7 +493,8 @@ function drawSkeletons(id, entry, count, settling = null) {
     for (let j = 0; j < lot.nz; j++) for (let i = 0; i < lot.nx; i++) if (!gone[n].has(`4|${i}|${j}|${lot.floors}`)) roofs.push(unitBox(lot, entry, [4, i, j, lot.floors]));
   });
   place.lots.forEach((lot, n) => {
-    if (entry.masked.has(n) || (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n)) return;
+    // Its inside only near the scene's people and where Jev looks (`deep`); a building far off stands as its shell.
+    if (entry.masked.has(n) || (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n) || (entry.deep && !entry.deep.has(n))) return;
     for (let cell = 0; cell < lot.cells.length; cell++) {
       const type = lot.cells[cell];
       if (type === "0" || lost[n].has(cell)) continue;
@@ -1036,7 +1037,7 @@ function frame(now) {
   }
   else if (follow && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
   // The world as explored by now: chunks and the faint city's copies of buildings since stood up.
-  if (liveMode && now - lastCull > 400) { lastCull = now; cullByInterest(entry); }
+  if (!capture && now - lastCull > 400) { lastCull = now; cullByInterest(entry); }
   // A deep facility's name shows only while the street is seen through.
   for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.at <= time && chunk.near !== false && (!chunk.under || groundSeen < 0.5);
   // The street clears while anyone shown is below it (or the viewer asked), and the levels below brighten.
@@ -1053,21 +1054,30 @@ function frame(now) {
 }
 
 /**
- * Live mode: what is drawn follows where Jev looks (data.live.focus) and where the people are, never the camera. Ground and
- * buildings within 112 m of them are shown and go beyond 160 m (the room between keeps an edge from flickering).
+ * What is drawn in full follows where Jev looks (data.live.focus, or a still's own focus) and where the people are, never
+ * the camera (the user, 2026-11-02: only the current scene's characters' surroundings and the buildings hit there load,
+ * or the service grows without end). In every view a building's inside (corridors, stairs, rooms) is built only within
+ * 60 m of them and dropped beyond 90 m (the room between keeps an edge from flickering); its shell stays. In the live
+ * story view the ground and buildings beyond 112 m (160 m once shown) go entirely; the terrain stage keeps the whole
+ * city's shells for the user.
  */
-const LOAD = 112, UNLOAD = 160;
+const LOAD = 112, UNLOAD = 160, INSIDE = 60, INSIDE_UNLOAD = 90;
 let lastCull = 0;
-function cullByInterest(entry) {
-  // Terrain spawning (data.terrain): the whole world stays drawn, for the user to wander while Jev works.
-  if (!entry?.chunks || data.terrain) return;
-  const focus = data.live.focus ?? { x: 0, z: 0, r: 0 }, points = [{ x: focus.x, z: focus.z, r: focus.r }, ...[...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => ({ x: pawn.position.x, z: pawn.position.z, r: 0 }))];
+function cullByInterest(entry, shot = null) {
+  if (!entry?.chunks) return;
+  const focus = shot ?? data.live?.focus ?? null, points = [...(focus ? [{ x: focus.x, z: focus.z, r: focus.r ?? 0 }] : []), ...[...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => ({ x: pawn.position.x + entry.cx, z: pawn.position.z + entry.cz, r: 0 }))];
+  if (!points.length) return;
   const gap = (x, z, r) => Math.min(...points.map((p) => Math.hypot(p.x - x, p.z - z) - p.r)) - r;
-  for (const chunk of entry.chunks) { const d = gap(chunk.x, chunk.z, 23); chunk.near = chunk.near === false ? d < LOAD : d < UNLOAD; }
-  const far = new Set();
-  data.world.lots.forEach((lot, n) => { const d = gap((lot.i0 + lot.nx / 2) * CELL, (lot.j0 + lot.nz / 2) * CELL, Math.hypot(lot.nx, lot.nz) * CELL / 2); if (entry.far?.has(n) ? d > LOAD : d > UNLOAD) far.add(n); });
-  const key = [...far].join(",");
-  if (key !== entry.farKey) { entry.far = far; entry.farKey = key; entry.shownHits = -1; }
+  const whole = liveMode && !data.terrain && !shot;
+  if (whole) for (const chunk of entry.chunks) { const d = gap(chunk.x, chunk.z, 23); chunk.near = chunk.near === false ? d < LOAD : d < UNLOAD; }
+  const far = new Set(), deep = new Set();
+  data.world.lots.forEach((lot, n) => {
+    const d = gap((lot.i0 + lot.nx / 2) * CELL, (lot.j0 + lot.nz / 2) * CELL, Math.hypot(lot.nx, lot.nz) * CELL / 2);
+    if (whole && (entry.far?.has(n) ? d > LOAD : d > UNLOAD)) far.add(n);
+    if (entry.deep?.has(n) ? d < INSIDE_UNLOAD : d < INSIDE) deep.add(n);
+  });
+  const key = `${[...far].join(",")}|${[...deep].join(",")}`;
+  if (key !== entry.farKey) { entry.far = far; entry.deep = deep; entry.farKey = key; entry.shownHits = -1; }
 }
 
 /**
@@ -1482,6 +1492,8 @@ if (capture) {
       // Jev's stills start from every building as drawn (see-through while recording takes over again on its own).
       for (const entry of built.values()) { if (entry.masked.size || entry.near?.size) see(entry, new Set()); entry.near = new Set(); entry.frontUntil = new Map(); entry.lots.forEach((lot) => { lot.fade = 1; }); }
       await frames();
+      // Insides only round what this still looks at and the people in it.
+      { const entry = built.get(place), at = focus ?? topdown ?? null; if (entry?.chunks) { cullByInterest(entry, at ? { x: at.x, z: at.z, r: topdown ? topdown.half * 1.2 : (radius ?? 30) * 1.5 } : null); await frames(); } }
       // See through the buildings in front of what the still looks at: the beam of an earlier box, or else the people there.
       if (mask) {
         const entry = built.get(place), local = (spot) => new THREE.Vector3(spot.x - entry.cx, spot.y0 + spot.h / 2, spot.z - entry.cz);

@@ -90,7 +90,23 @@ The corridors and stair cores stay as they were; the rooms are laid again (`apps
 
 Also before the run: every building's marker on its building (a built one kept its canvas spot: 飞镖酒吧 35 m off).
 
-## 6. Order of building
+## 6. What loads, so the service does not grow without end (checked 2026-11-02)
+
+The user: only the current scene's characters' surroundings and the buildings hit there may load in full.
+- **The world streams in where people go** (export-strand-demo.mjs `reach`: chunks within the asked radius plus 32 m);
+  a building no one has reached is a shell. Lots are never let go again, so memory grows with the ground explored (linear,
+  not worse); each reached building gets its whole inside at once (every floor to 40).
+- **The walk graph is a window** (128 m squares, at most 384 m across) round where a walk goes, cached until the world changes.
+- **Destruction is per building hit:** only a hit building is drawn wall by wall and roof by roof.
+- **Drawing (fixed 2026-11-02):** a building's inside is built only within 60 m of the scene's people and where Jev
+  looks (dropped beyond 90 m), in every view: the live story view, the terrain stage and Jev's stills (which built every
+  reached building's inside: 192,000 room-wall pieces in scene 23's still, 25,000 after). The live story view also drops
+  the ground and buildings beyond 112 m.
+- **Still to do in the run's loop:** the old picker (`sim pick`) replays the whole line from its start for every event and
+  rewrites the whole live page (3.3 MB on vol 1 now) each time: work that grows with the square of the story. The
+  director's loop plays forward card by card and writes the world once, then each step's changes.
+
+## 7. Order of building
 
 1. The camera planner (`src/v2/context/camera.ts`): the fourteen directions and their letters, the action's frame along an
    arrow, the column's height slices, reading boxes back. Code, tested.
