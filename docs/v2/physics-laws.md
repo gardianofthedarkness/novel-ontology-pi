@@ -209,11 +209,70 @@ alternative (and says so), reject plays the lawful default (nobody moves) and ho
 | Jump gap, safe drop | 3 m across, 2 floors down | L12 |
 | People per 2 m cell | 3 (a crowd excepted) | L11 |
 
-## 6. Questions for the user
+## 6. Decisions (the user, 2026-11-02)
 
-1. **Strand end.** A strand ends where `strands.json` ends it (its last scene), or at a chapter's end too?
-2. **Arrivals with no clock.** A scene gap with no stated time: anything fits, or a default gap (an hour)?
-3. **Dialogue kind.** Asked of Jev per card, or by rule where the text names the means (a phone)?
-4. **Abilities' limits.** From the text, from the work model per person, or a table per power kind?
-5. **Order of the first checks.** W2 logs every law at once, or L1, L6, L10, L12 first (the ones the run shows matter
-   most)?
+1. **A strand does not end at a chapter's end**, nor at a book's: it may be continued in the next book. Continuity
+   holds to a strand's last scene in whatever book that is; the world state of a strand that reaches a book's end is
+   kept for the universe, for the next book to carry on.
+2. **A scene gap with no stated time: anything fits.** L5 checks only where both scenes state their time; kept so to
+   see how it goes.
+3. **A dialogue card's kind is asked of Jev** (live, group, remote, public).
+4. **Abilities: a config per character**, built and maintained by the main agent (§7). A way a person has (teleport,
+   flight, an upward leap) is a way the physics engine lets them move; the checks pass it.
+5. **All the laws together**: W2 logs every law at once.
+
+## 7. The abilities config (built and maintained by the main agent)
+
+One file per universe, `<library>/universe/abilities.json`, so a character's abilities follow them from book to book
+as their strands do. The main agent writes it through the review CLI (W5), from the text: each entry cites the
+sentences it rests on. Someone with no entry is human: walk, run, stairs, a short jump, a short drop.
+
+```json
+{
+  "version": 1,
+  "people": {
+    "char_000004": {
+      "name": "…",
+      "ways": {
+        "teleport": { "range": 80, "sight": false, "carries": 1 },
+        "flight":   { "height": 30, "range": 300 },
+        "leap":     { "height": 15, "across": 20 },
+        "ride":     { "kind": "car" }
+      },
+      "evidence": ["b0001_s0123"],
+      "by": "agent",
+      "at": "2026-11-02T00:00:00Z"
+    }
+  }
+}
+```
+
+| Way | What the engine allows the person (L12) |
+|---|---|
+| `leap` | from where they stand up to a roof or a ledge no higher than `height` m and no further than `across` m |
+| `flight` | any open cell up to `height` m above the ground, within `range` m of the move's start |
+| `teleport` | any walkable cell within `range` m (in sight only if `sight`), taking up to `carries` people with them |
+| `ride` | roads, at the vehicle's speed (L5) |
+
+W2's checks read the file (and treat an empty one as everyone human); the engine's edges for those ways come with W4.
+
+## 8. W2, first results: every law over run `d20261102081221`
+
+`world-engine/laws/laws.mjs` (the laws, pure checks) and `check-run.mjs` (a run's record and page made into the line as
+played, the laws over it, `stage/director/laws.json`). Logged only, no model calls; the abilities config is still
+empty, so everyone is human.
+
+| Law | Checked | Broken | What breaks |
+|---|---|---|---|
+| L1 continuity, per strand | 93 carried | 4 | people carried from the wrong scene, because the director skipped scenes 36, 38 and 39 (people present, never played) |
+| L2 two places | 0 | 0 | one scene states a clock time; parts of the day are not checked |
+| L5 travel time | 0 | 0 | as L2 (decision 2: a gap with no stated time fits) |
+| L6 talk | 1,011 lines | 68 | 5 speakers not present; 63 speaking to someone beyond 25 m or on another floor (median 18 m apart): remote, or misplaced, until Jev gives each card its kind |
+| L9 actors there | 710 | 19 | someone the reading says acts or speaks has no place in the scene |
+| L10 reachable | 47 chosen moves | 21 | the moves that never walked |
+| L11 bodies | 68 | 0 | |
+| L12 abilities | 47 | 15 | 12 leaps and 3 flights by people the (empty) config gives no such way, 7 of them 美琴's |
+| L13 destruction | 8 | 0 | |
+
+The skipped scenes are a director gap of their own: 7 scenes have no record, 4 with nobody present (15, 20, 41, 43) and
+3 with people (36, 38, 39).
