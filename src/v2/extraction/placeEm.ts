@@ -124,8 +124,8 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
       return { id: place.id, parent, by: parent ? choice.by : "none", confidence: round(choice.confidence), scale: scale(place.id), scaleBy: scaleOf.get(place.id)!.by, ...(choice.candidates.length ? { candidates: choice.candidates.slice(0, 4).map((candidate): [string, number] => [candidate.id, candidate.score]) } : {}) };
     });
 
-    // 2. Settings. A building or room only where the scene puts someone there (its environment or actions name it, or it is
-    // called by its kind: a description its name holds); carried on only close in time, in the same chapter.
+    // 2. Settings. Only a place the scene puts someone in (its environment or actions name it, or it is called by its kind:
+    // a description its name holds); a building or room carried on only close in time.
     const groups = new Map<string, Map<string, { type: string; sentences: string[] }>>();
     for (const description of input.descriptions) for (const sentence of description.sentences) {
       const scene = index.sceneOf.get(sentence);
@@ -143,7 +143,7 @@ export async function placeEm(decide: Decide, input: PlaceEmInput): Promise<Plac
     for (const scene of input.scenes) {
       const when = timeOf.get(scene.id), past = !!when?.flashback, tiers = settingTiers(index, scene.id), described = [...(groups.get(scene.id)?.keys() ?? [])];
       const called = (id: string) => described.some((text) => text.length >= 2 && (namesOf.get(id) ?? []).some((name) => name !== text && name.includes(text)));
-      const close = !from || (from.chapter === scene.chapter && closeInTime(timeOf.get(from.id)?.node, when?.node));
+      const close = !from || closeInTime(timeOf.get(from.id)?.node, when?.node);
       const { place, by, branched: off } = chooseSetting({ ...tiers, previous, past, continues: when?.continuation?.continues !== false, depth, under, scale, called, above, close });
       // Places its environment names on two branches of the tree: which one is Jev's to say.
       if (off.length) branched.push({ key: "s" + (branched.length + 1), scene: scene.id, before: previous, candidates: [...tiers.environment.map(([id, count]): Candidate => ({ id, score: count, evidence: [{ kind: "setting", weight: count, count }] })), ...(previous && !tiers.environment.some(([id]) => id === previous) ? [{ id: previous, score: 0.5, evidence: [{ kind: "adjacent" as const, weight: 0.5, count: 1 }] }] : [])].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)) });

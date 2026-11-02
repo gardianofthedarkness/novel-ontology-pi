@@ -44,7 +44,7 @@ export interface SettingSense {
   called?: (id: string) => boolean;
   /** The nearest place above it the size of a street or larger (where the scene is when it is only talked of). */
   above?: (id: string) => string | null;
-  /** The scene the last setting came from is close in time and in the same chapter (false: a carried building is left). */
+  /** The scene the last setting came from is close in time (false: a carried building or room is left for the place above it). */
   close?: boolean;
 }
 /**
@@ -54,16 +54,17 @@ export interface SettingSense {
  * where the last one was, unless it is in the past or does not go on from it. `branched`: other places the environment
  * names off the chosen one's address (two branches of the tree: Jev's to say).
  *
- * A building or a room is the setting only where the scene puts someone there (the user, 2026-11-01: talked of is not
- * there): its environment or action cards name it, or it is called by its kind. Named only, the setting is the place above
- * it (`raised`: 常盘台中学 named for her uniform, the scene on a street). A building or room carried on from the last scene
- * stays only when that scene is close in time and in the same chapter; else the place above it.
+ * A place is the setting only where the scene puts someone there (the user, 2026-11-01: mentioned is not there; 纽约 and
+ * 第六学区 are talked of, nothing happens there): with `called`, only the places its environment or action cards name, or
+ * that it calls by their kind (酒吧 for 飞镖酒吧), are its setting or deepen it; one only talked of never is (常盘台中学 named
+ * for her uniform, the scene out on a street). A building or room carried on from the last scene stays only when that
+ * scene is close in time; else the place above it (`raised`).
  */
 export function chooseSetting(input: { environment: [string, number][]; action: [string, number][]; any: [string, number][]; previous: string | null; past: boolean; continues: boolean; depth: (id: string) => number; under: (id: string, top: string) => boolean } & SettingSense): { place: string | null; by: SettingBy; branched: string[] } {
   const { depth, under, previous, past } = input, set = new Map(input.environment), acted = new Map(input.action), any = new Map(input.any);
   const most = (list: [string, number][]) => [...list].sort((a, b) => b[1] - a[1] || depth(b[0]) - depth(a[0]) || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
   const indoors = (id: string) => !!input.scale && ["building", "room"].includes(input.scale(id) ?? "");
-  const there = (id: string) => !indoors(id) || set.has(id) || acted.has(id) || !!input.called?.(id);
+  const there = (id: string) => !input.called || set.has(id) || acted.has(id) || input.called(id);
   const up = (id: string) => { let at: string | null = id; for (let n = 0; at && indoors(at) && n < 8; n++) at = input.above?.(at) ?? null; return at; };
   const close = input.close !== false;
   let place: string | null = null, by: SettingBy = "none", branched: string[] = [];
@@ -71,13 +72,12 @@ export function chooseSetting(input: { environment: [string, number][]; action: 
     place = [...set.keys()].sort((a, b) => depth(b) - depth(a) || (set.get(b) ?? 0) - (set.get(a) ?? 0) || a.localeCompare(b))[0]; by = "environment";
     branched = [...set.keys()].filter((id) => id !== place && !under(place!, id));
   } else if ((place = most(input.action))) by = "action";
-  else if ((place = most(input.any))) {
+  else if ((place = most(input.any.filter(([id]) => there(id))))) {
     by = "named";
-    if (!there(place)) { const raised = up(place); if (raised) { place = raised; by = "raised"; } }
     if (previous && !past && under(previous, place) && (close || !indoors(previous))) { place = previous; by = "carried"; }
   }
-  if (place && by !== "environment" && by !== "carried") { const deeper = [...any].filter(([id, count]) => under(id, place!) && (set.has(id) || count >= 2) && there(id)).sort((a, b) => depth(b[0]) - depth(a[0]))[0]; if (deeper) { place = deeper[0]; if (by === "raised") by = "named"; } }
-  if (!place && !past && previous && input.continues) { if (close || !indoors(previous)) { place = previous; by = "carried"; } else { place = up(previous); by = place ? "raised" : "none"; } }
+  if (place && (by === "action" || by === "named")) { const deeper = [...any].filter(([id, count]) => under(id, place!) && (set.has(id) || count >= 2) && there(id)).sort((a, b) => depth(b[0]) - depth(a[0]))[0]; if (deeper) place = deeper[0]; }
+  if (!place && !past && previous && input.continues) { if (close || !indoors(previous)) { place = previous; by = "carried"; } else { const raised = up(previous); place = raised ?? previous; by = raised ? "raised" : "carried"; } }
   return { place, by, branched };
 }
 
