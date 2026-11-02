@@ -202,5 +202,5 @@ test("the world's own check: every building whole in the graph is entered from t
   const standing = standingOf(world), shut = world.lots.findIndex((lot) => lot.floors >= 2 && lot.skeleton.nx * lot.skeleton.nz > 30);
   standing[shut] = standing[shut].map(() => 0);
   const issues = worldIssues(world, worldGraph(world, standing));
-  assert.ok(issues.some((issue) => issue.lot === shut && issue.code === "NO_ENTRANCE") || !issues.length, JSON.stringify(issues.slice(0, 3)));
+  assert.ok(issues.some((issue) => issue.lot === shut && issue.code === "NO_ENTRANCE"), JSON.stringify(issues.slice(0, 3)));
 });

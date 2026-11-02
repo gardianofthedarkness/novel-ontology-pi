@@ -453,7 +453,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   // street at their doors; a grid aliases a turned plan, and its rooms were shut where a door's plan cell fell between the
   // world's): on each floor each plan cell is walked through one world cell, its representative (the held cell whose middle
   // is nearest the plan cell's; for a plan cell no world cell holds, the nearest held cell of the same kind on that floor:
-  // corridor for corridor, the same room for a room's), joined to its plan neighbours by the plan's rules; every other held
+  // corridor for corridor, the same room for a room's; with none, a wall's), joined to its plan neighbours by the plan's rules; every other held
   // cell joins its plan cell's representative. Its street doors are the world's (above).
   world.lots.forEach((lot, index) => {
     if (!lot.frame || (box && ((lot.i0 + lot.nx) * SKELETON_CELL < box.x0 || lot.i0 * SKELETON_CELL > box.x1 || (lot.j0 + lot.nz) * SKELETON_CELL < box.z0 || lot.j0 * SKELETON_CELL > box.z1))) return;
@@ -466,7 +466,10 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     const kindOf = (li: number, lj: number, k: number) => { const a = cellIndex(s, li, lj, k); if (s.cells[a] !== MASS) return standing[index]?.[a] ? "c" : null; const r = roomOf[index][a]; return r >= 0 && lot.rooms[r].floor === k ? `r${r}` : null; };
     const representativeOf = (li: number, lj: number, k: number) => {
       const at = middle(li, lj), own = held.filter((cell) => cell.li === li && cell.lj === lj), kind = kindOf(li, lj, k);
-      const pool = own.length ? own : held.filter((cell) => kind !== null && kindOf(cell.li, cell.lj, k) === kind);
+      // With none of its kind held (a small tower's whole corridor on a floor can fall between world cells), a wall's cell
+      // stands for it, else any held cell: a floor is never cut off by how the grid samples it.
+      const pools = own.length ? [own] : kind === null ? [] : [held.filter((cell) => kindOf(cell.li, cell.lj, k) === kind), held.filter((cell) => kindOf(cell.li, cell.lj, k) === null), held];
+      const pool = pools.find((cells) => cells.length) ?? [];
       return pool.length ? pool.reduce((best, cell) => (gap(cell, at) < gap(best, at) ? cell : best)) : null;
     };
     const join = (a: { i: number; j: number } | null, b: { i: number; j: number } | null, k: number) => {
@@ -647,7 +650,9 @@ export function worldIssues(world: World, built: WorldGraph): WorldIssue[] {
   for (let id = 0; id < type.length; id++) if (type[id] === 1 && graph.offsets[id + 1] > graph.offsets[id]) { seen[id] = 1; queue.push(id); }
   while (queue.length) { const id = queue.pop()!; for (let e = graph.offsets[id]; e < graph.offsets[id + 1]; e++) { const to = graph.to[e]; if (!seen[to]) { seen[to] = 1; queue.push(to); } } }
   const inside = new Map<number, { nodes: number; reached: number; rooms: Map<number, { nodes: number; reached: number }> }>();
-  const x0 = Math.min(...graph.x), x1 = Math.max(...graph.x), z0 = Math.min(...graph.z), z1 = Math.max(...graph.z);
+  // The graph's extent: over the nodes it walks (a loop, not a spread: a city's graph is too big for one call's arguments).
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let id = 0; id < type.length; id++) if (graph.offsets[id + 1] > graph.offsets[id]) { x0 = Math.min(x0, graph.x[id]); x1 = Math.max(x1, graph.x[id]); z0 = Math.min(z0, graph.z[id]); z1 = Math.max(z1, graph.z[id]); }
   for (let id = 0; id < type.length; id++) {
     if ((type[id] !== 2 && type[id] !== 3) || lot[id] < 0 || lot[id] >= world.lots.length || graph.offsets[id + 1] === graph.offsets[id]) continue;
     const entry = inside.get(lot[id]) ?? inside.set(lot[id], { nodes: 0, reached: 0, rooms: new Map() }).get(lot[id])!;
@@ -658,6 +663,10 @@ export function worldIssues(world: World, built: WorldGraph): WorldIssue[] {
   for (const [index, entry] of inside) {
     const here = world.lots[index];
     if (here.i0 * SKELETON_CELL < x0 || (here.i0 + here.nx) * SKELETON_CELL > x1 || here.j0 * SKELETON_CELL < z0 || (here.j0 + here.nz) * SKELETON_CELL > z1) continue;
+    // Judged only with its ground streamed in all round it: a building whose street is not loaded yet is not shut.
+    let loaded = true;
+    for (let ci = Math.floor((here.i0 - 1) / CHUNK); ci <= Math.floor((here.i0 + here.nx) / CHUNK) && loaded; ci++) for (let cj = Math.floor((here.j0 - 1) / CHUNK); cj <= Math.floor((here.j0 + here.nz) / CHUNK); cj++) if (!world.chunks.has(chunkKey(ci, cj))) { loaded = false; break; }
+    if (!loaded) continue;
     if (!entry.reached) { out.push({ code: "NO_ENTRANCE", lot: index, source: here.source, nodes: entry.nodes }); continue; }
     for (const [room, r] of entry.rooms) if (!r.reached) out.push({ code: "SHUT_ROOM", lot: index, source: here.source, room, nodes: r.nodes });
   }

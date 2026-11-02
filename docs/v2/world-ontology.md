@@ -436,7 +436,13 @@ chunk a pure function of its seed and place). In `apps/playground/src/data/world
   corridor gone (`NO_ENTRANCE`). It found what the tests had not: 43 rooms on upper floors shut, because a stair whose
   plan cell no world cell held joined no floors (fixed: stairs are joined on the plan), and one building swallowed by
   another in a city whose overlaps were not cleared (as the export does). The director runs it round every scene's
-  start and keeps what it finds with the scene (`world`); the ledger holds it for the review (`kind: world`).
+  start and keeps what it finds with the scene (`world`); the ledger holds it for the review (`kind: world`). Its first
+  stand-in run (scenes 1–6) found 18 more on the real world. 11 were the check's own (it measured the graph over nodes
+  with no walk, judging buildings half outside it), and 3 more were buildings whose street had not streamed in yet (now
+  judged only with every chunk round them loaded). 4 were real: rooms of a small turned tower whose whole corridor on
+  a floor fell between world cells, so that floor's rooms joined nothing (fixed: with none of its kind held, a wall's
+  cell stands for a plan cell). After it, the same run: nothing found, and of 233 moves 171 walked, 62 already there,
+  none held (W4's check on the same scenes held 34).
 - *Failure codes.* A held walk says why as a code: `NO_TARGET` (nowhere to stand there), `OFF_WALK` (where they stand
   is off the walk round them and their target), `NO_PATH` (no way there on foot), with the least that replays it (the
   seed's key, where they stood, the first targets, how they went), in the card's moves and its L10 verdict.
