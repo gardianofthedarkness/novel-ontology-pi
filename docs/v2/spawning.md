@@ -75,3 +75,7 @@ on a random floor, 9 with others coming from the same scene, 4 on the floor thei
 speaking distance. Things: 8 on the ground, 3 on a random floor, 2 stayed where they were left, 1 by its words; no holder
 found (no action names a thing with one person acting). The 4 scenes with nobody placed have nobody present.
 
+After "mentioned is not there" (2026-11-02; the reading, terrain and spawn rerun): 144 starts. People: 69 carried on, 32 on
+an area's ground, 13 on a random floor, 10 with others from the same scene, 4 by their spatial words, 2 within speaking
+distance. Jev's spot question is now composed for 7 scenes (13 to place), down from 11 (24): the outdoor scenes 4, 7, 8,
+11 and 12 are on the ground of 学园都市 instead of on 常盘台中学's floors.
