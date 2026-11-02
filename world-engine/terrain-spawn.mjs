@@ -710,7 +710,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           if (end === 'street') { const made = formSlots(); await saveSlots(); await live.outcome({ subject: 'streets', text: `${made.spares} building slots from the streets' forms (${made.held} held by buildings already)` }); }
           else await saveSlots();
         } else await levelEnd(end);
-        if (end === 'building' && tenantsLater.length) await placeTenants();
+        // The world built again once the tenants stand in their hosts (the level's end built it before they joined).
+        if (end === 'building' && tenantsLater.length) { await placeTenants(); reshape(); await build(); }
         if (end === until) break; continue;
       }
       if (keptBefore(part.id)) continue;

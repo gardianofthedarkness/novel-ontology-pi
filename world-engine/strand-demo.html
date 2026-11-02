@@ -667,6 +667,19 @@ let decor = () => {};
     bases.forEach(([x, z, w, d, angle, floors], i) => { q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w + 1, floors * FLOOR, d + 1)); bands.setMatrixAt(i, m); });
     world.add(bands);
   }
+  // A composite building's parts (the user, 2026-11-01): each a volume of its own inside its host, a shop at its foot, a
+  // cinema on its upper floors, one under it below the street; gold, outlined, so a part shows through its host.
+  const parts = (data.landscapes ?? []).flatMap((entry) => entry.parts ?? []);
+  if (parts.length) {
+    const rooms = new THREE.InstancedMesh(block, new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.32, depthWrite: false }), parts.length), rims = [];
+    parts.forEach(([x, z, w, d, angle, bottom, height], i) => {
+      q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, bottom, z), q, new THREE.Vector3(w, height, d)); rooms.setMatrixAt(i, m);
+      for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); rims.push(v.x, v.y, v.z); }
+    });
+    world.add(rooms);
+    const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(rims, 3));
+    world.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.9, depthWrite: false })));
+  }
   const roads = (data.landscapes ?? []).flatMap((entry) => entry.roads);
   if (roads.length) {
     const strips = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshBasicMaterial({ color: 0x1d4a60, transparent: true, opacity: terrainStage ? 0.55 : 0.35, depthWrite: false }), roads.length);

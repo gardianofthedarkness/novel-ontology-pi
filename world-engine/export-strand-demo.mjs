@@ -731,6 +731,27 @@ export async function strandDemo(novelDir, options) {
     const fixedOf = b => held.has(b.lot) || decided.has(b.lot) || /:(landmark|bowl|fountain)$/.test(String(b.lot));
     const shaped = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf) : { buildings: placed, roads: localRoads };
     const buildings = shaped.buildings.map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
+    // A composite building's parts (the user, 2026-11-01), each a volume of its own inside its host as the host stands
+    // now: at its foot a shopfront a floor high along its front, one beside the other; on its upper floors its top two;
+    // under it a floor below the street. [x, z, w, d, angle, bottom, height] in world metres, with the part's id.
+    const parts = [];
+    {
+      const byHost = new Map();
+      for (const [id, site] of Object.entries(terrain?.sites ?? {}).filter(([, entry]) => entry.by === 'tenant')) {
+        const slotId = terrain.sites?.[site.in]?.slot ?? site.in, slot = terrain.slots?.[slotId];
+        if (!slot || !here(slot.parent)) continue;
+        const key = slot.lot ?? slot.id, short = key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
+        const host = buildings.find(b => b.id === `${place.id}:${key}` || b.id === `${place.id}:${short}`);
+        if (host) { if (!byHost.has(host)) byHost.set(host, []); byHost.get(host).push({ id, floor: site.floor }); }
+      }
+      for (const [host, tenants] of byHost) {
+        const ux = Math.cos(host.angle), uz = Math.sin(host.angle), at = (s, t) => [host.x + s * ux - t * uz, host.z + s * uz + t * ux];
+        const feet = tenants.filter(t => t.floor === 'foot'), width = host.w / Math.max(1, feet.length), depth = Math.min(8, host.d / 2);
+        feet.forEach((t, k) => { const [x, z] = at(-host.w / 2 + width * (k + 0.5), -host.d / 2 + depth / 2); parts.push({ id: t.id, box: [x, z, Math.max(2, width - 1), depth, host.angle, 0, 3] }); });
+        tenants.filter(t => t.floor === 'upper').forEach(t => parts.push({ id: t.id, box: [host.x, host.z, host.w * 0.8, host.d * 0.8, host.angle, Math.max(3, (host.floors - 2) * 3), Math.min(6, host.floors * 3)] }));
+        tenants.filter(t => t.floor === 'under').forEach(t => parts.push({ id: t.id, box: [host.x, host.z, host.w * 0.8, host.d * 0.8, host.angle, -6, 4] }));
+      }
+    }
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = shaped.roads.map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
@@ -738,7 +759,7 @@ export async function strandDemo(novelDir, options) {
     // and its fingerprint; each building's manifold in `buildings` order.
     const patches = place.landscape.patches.map(patch => ({ id: patch.id, type: patch.type, era: LANDSCAPES[patch.type]?.era ?? 'modern', born: patch.born ?? null, centre: [round(patch.x + wx), round(patch.z + wz)], radius: round(patch.R), height: round(patch.H), manifold: manifoldOf(patch),
       outline: Array.from({ length: 48 }, (_, n) => { const angle = (n / 48) * Math.PI * 2, d = reachOf(patch, [patch.x + Math.cos(angle), patch.z + Math.sin(angle)]); return [round(patch.x + wx + Math.cos(angle) * d), round(patch.z + wz + Math.sin(angle) * d)]; }) }));
-    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), ...(shaped.thickened !== undefined ? { tall: { widened: shaped.widened, trimmed: shaped.trimmed, thickened: shaped.thickened, cleared: shaped.cleared } } : {}), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width, road.level]), plazas: filled.plazas.map(plaza => [round(plaza.x + wx), round(plaza.z + wz), round(plaza.r)]),
+    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), ...(shaped.thickened !== undefined ? { tall: { widened: shaped.widened, trimmed: shaped.trimmed, thickened: shaped.thickened, cleared: shaped.cleared } } : {}), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), parts: parts.map(part => [...part.box.slice(0, 4).map(round), Math.round(part.box[4] * 1000) / 1000, round(part.box[5]), round(part.box[6]), part.id]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width, road.level]), plazas: filled.plazas.map(plaza => [round(plaza.x + wx), round(plaza.z + wz), round(plaza.r)]),
       walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })), underground: under } };
   });
   /** The theme of the manifold at a point: the era of the patch reaching it most surely (modern where no landscape does). */
