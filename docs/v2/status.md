@@ -8,7 +8,8 @@
 | World engine | Borrowing and spawning by type | **in progress**: city to building level built (M0–M5), growth across books next; [design](borrow-and-spawn.md), [milestones](milestones.md) |
 | World engine | Spawning positions | next |
 | World engine | Movement and simulation | **first run**: the director over all of volume 1 (run `d20261102081221`) |
-| Stage 3 | The world and the ontology as one loop | **planned**: [world-ontology.md](world-ontology.md) |
+| Stage 3 · A | The summarization layer (card and scene digests, memory) | **planned**: [next-steps.md](next-steps.md) |
+| Stage 3 · B | The world and the ontology as one loop | **planned**: [world-ontology.md](world-ontology.md) |
 
 ## Extraction — done
 

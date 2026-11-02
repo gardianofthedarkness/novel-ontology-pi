@@ -1,6 +1,6 @@
 # Stage 3: the world and the ontology, one loop (2026-11-02)
 
-**Status:** plan, not built. Written after the first full director run of volume 1 (run `d20261102081221`).
+**Status:** plan (Track B of [next-steps.md](next-steps.md)), not built. Written after the first full director run of volume 1 (run `d20261102081221`).
 
 The user, on what v2 missed:
 
@@ -10,8 +10,9 @@ The user, on what v2 missed:
 > Jev can't simply determine from text). We missed that entirely. We also miss the other way round: the world engine
 > rejecting Jev's proposals to the ontology because physics says no.
 
-This stage holds the work model beside Jev ([next-steps.md](next-steps.md): card digests, a runtime system 2, memory
-across scenes) as one of its parts: the work model reads, the world checks, the ontology keeps what survives.
+This is **Track B** of [next-steps.md](next-steps.md). Track A, the summarization layer (a work model's digest of each
+card and scene, and its memory across scenes), is decoupled from it and built in parallel (the user, 2026-11-02): A
+makes each question better informed, B checks every answer, whatever asked it, and keeps the ontology.
 
 ## 1. What v1 had, and v2 lost
 
@@ -58,8 +59,8 @@ What that leaves, measured on volume 1:
    in.
 2. **Ontology to world, checked: physics can say no.** Every proposal that would change the world or the ontology (from
    the reading, from Jev, from the work model, from a note of the user's) passes the world's laws first. A proposal the
-   laws reject is not applied: it goes back with the reason and what the world would allow, to system 2 and Jev again;
-   one that still fails goes to the pool. Nothing is silently dropped or silently applied.
+   laws reject is not applied: it goes, with the reason and what the world would allow, to a main agent who reviews it
+   with the evidence the text holds (§5, §7). Nothing is silently dropped or silently applied.
 3. **One ledger.** Every proposal and every verdict is a record with its source, its evidence and its state, so the user
    and the developer can see why the ontology says what it says (the Why panel's next tabs).
 
@@ -69,7 +70,7 @@ What that leaves, measured on volume 1:
 |---|---|---|---|
 | **Text** | the reading (extraction) | only through the ledger | sentences, kinds, cards, mentions, EM and EM² with how sure, facts, the place tree, time words |
 | **World log** | the engine at play time, per run | append-only | presence per scene (present, stayed, arrived, left), tracks (anchors and walked segments), meetings, dialogue nodes (kind, parties, nearness), holdings, damage, knowledge entries, bindings (a place to a building's lot, a named room to a skeleton room, a floor), proven time relations |
-| **Memory** | the work model | per card and per scene | the digest of each card; short- and long-term memory ([the design page](next-steps.md)) |
+| **Memory** | the work model (Track A) | per card and per scene | card and scene digests; short- and long-term memory ([next-steps.md](next-steps.md)) |
 | **Ledger** | everyone who proposes; the laws; the gate | append-only | proposals, verdicts (accepted, amended, rejected, held, pinned), their evidence and source |
 | **Canon** | applied from the ledger | by accepted proposals only | the ontology as the rest of the system reads it: entities, events with real summaries, relations, scenes, state changes, timelines, branches |
 
@@ -99,29 +100,38 @@ v1's nine, made physical now that the world is a real city with floors, plus the
 Each law is code, not a model call: a check on a proposal against the world log, giving `ok`, `amend` (with the lawful
 alternatives) or `reject` (with the reason).
 
-## 5. The runtime loop, per card
+## 5. The runtime loop, per card: system 2 and the law engine
+
+System 2, as the user defined it (2026-11-02): **the same context falls to an LLM request when confidence is low.** When
+Jev's answer to a question is below 0.5, the work model is asked the very same question with the very same composed
+context. Whichever answer is used (Jev's when it is sure enough, else the work model's), it goes into the physics law
+engine to see whether it makes sense. If it doesn't, a main agent reviews it with the review CLI (§7), gathering as
+much evidence as it needs from the ontology, the reading and the original book.
 
 ```mermaid
 flowchart TB
-  A[Compose: world state + memory + digest + the card] --> B[Jev proposes: whether, way, spot, box, breaks]
-  B --> C{Laws}
-  C -- ok --> P[Play: walk, gather, blast]
-  C -- amend --> B2[Re-ask with only lawful options marked]
-  C -- reject --> S2[System 2: the work model reasons with the reason]
-  S2 --> B2
-  B2 --> C2{Laws}
-  C2 -- ok --> P
-  C2 -- still no --> H[Hold in the pool; play the lawful default: stay]
-  P --> W[World log]
-  W --> M[Update memory]
-  W --> E[Evidence proposals to the ledger]
+  Q[A question about a card, its composed context] --> J[Jev answers]
+  J --> C1{Jev sure? at least 0.5}
+  C1 -- yes --> L{Physics law engine}
+  C1 -- no --> W[System 2: the work model, same question, same context]
+  W --> L
+  L -- makes sense --> P[Play it; world log; evidence to the ledger]
+  L -- does not --> H[Held: play the lawful default, mark the card]
+  H --> R[Main agent reviews with the review CLI]
+  R --> A[Answer pinned in the ledger]
+  A --> L2{Physics law engine}
+  L2 -- makes sense --> RP[Replay from the cache with the pin]
+  L2 -- does not --> R
 ```
 
-- **Constrained re-asking.** An amended question shows only what the world allows: the reachable spots, the floors the
-  building has, the directions with a walk; the rejected answer is named so Jev knows what failed.
-- **A held card plays its lawful default** (nobody moves) and is marked in Why; the run never waits.
-- **Evidence proposals** after each card: a speaker the nearness law makes certain or impossible, a present person the
-  script missed, a meeting, a custody change.
+- **Both answers are kept** when system 2 ran: Jev's, the work model's, and which was used; the law engine's verdict on
+  the one used.
+- **A held card plays its lawful default** (nobody moves, the line has no speaker) and is marked in Why; the run never
+  waits for the review.
+- **The agent's answer is a proposal too:** the laws check it before it is pinned, as v1's world-first design has it; a
+  pin the laws reject goes back to the agent with the reason.
+- **Evidence proposals** after each played card: a speaker the nearness law makes certain or impossible, a present person
+  the script missed, a meeting, a custody change.
 
 ## 6. The world back into the ontology
 
@@ -141,37 +151,54 @@ Each goes through the ledger: accepted when nothing conflicts and it is world-de
 held for the gate when it changes identity or a fact (EM, speakers against a sure reading). The user's rule stands:
 facts are never approved automatically; world records are the world's own.
 
-## 7. The pool, the gate and the user's notes
+## 7. The review: a main agent with a high-privilege CLI
 
-- **The pool:** held proposals in batches to the main agent (Pi), who answers from the text (`novel source grep`,
-  `similar`, `novel query`) as v1's world-first design has it; answers become pins; the world replays from the cache.
-- **The user's notes** (World · Live's Why) become pool items too: a note on a card is shown to the agent with the card's
-  records, and an answer pins the card.
-- **The gate** sees only identity, facts against a sure reading, cross-book records, and conflicts the laws can't settle.
+What the law engine rejects is reviewed by a main agent: Pi (v1's main agent, through its console's queue), or another
+agent such as Codex, all through the same CLI. The CLI is high privilege: it reads everything the workspace holds,
+the full text included, and writes only answers into the ledger.
+
+| Command | Gives | Status |
+|---|---|---|
+| `novel query <dir> <cypher>` | Cypher on the ontology's graph | exists |
+| `novel source grep <dir> <regex>` | the source text's lines matching a pattern | exists |
+| `novel source similar <dir> <text>` | the passages most like a text (RAG) | exists |
+| `novel source epub <dir> [--doc N] [--grep <regex>]` | the original EPUB read in full, one document or all, or grepped, as published | new |
+| `novel reading <dir> card\|scene\|line <id>` | the v2 reading of a card, a scene or a line: kinds, EM and EM² with how sure, facts, the place and time | new |
+| `novel world log <dir> --scene\|--person\|--card <id>` | the world log: who was where, tracks, meetings, holdings, damage | new |
+| `novel world held <dir>` | the held items: the question, the answers (Jev's, the work model's), the law that failed and why, the lawful alternatives | new |
+| `novel world answer <dir> <item> <option> --reason <text> --evidence <refs>` | an answer, checked by the laws, pinned in the ledger with its evidence | new |
+
+- **Batches:** held items go to the agent in batches (8, as v1); the world never waits for them.
+- **The user's notes** (World · Live's Why) become held items too: a note on a card is shown to the agent with the
+  card's records, and an answer pins the card.
+- **Replay:** pins are replayed from the cache (only what changed is asked again).
+- **The gate** (the user) sees what no agent should settle alone: identity, a fact against a sure reading, cross-book
+  records, and conflicts the agent's answers can't make lawful.
 
 ## 8. What the user sees
 
-- **Why, per card:** Digest, Memory, Jev's questions (with system 2), **Laws** (each check, passed or failed, why), and
-  **Proposals** (what the card proposed to the ontology and the verdict).
-- **The run report:** laws broken and how each was settled; proposals by verdict; the pool's items and answers; the
+- **Why, per card:** Jev's questions (with system 2's answer beside Jev's where it ran), **Laws** (each check, passed or
+  failed, why), **Proposals** (what the card proposed to the ontology and the verdict), and the **review** (the agent's
+  evidence and answer) for a held card. Track A adds Digest and Memory.
+- **The run report:** laws broken and how each was settled; proposals by verdict; the held items and the agent's answers; the
   ontology's changes since the reading (a diff by layer).
 - **Reading:** a line whose speaker the world changed is marked in the book, with the old and new speaker.
 
-## 9. Milestones
+## 9. Milestones (Track B)
 
-| | Builds | No model calls? | Done when |
+| | Builds | Model calls | Done when |
 |---|---|---|---|
-| W1 · World log and ledger | the director writes world-log records (presence, tracks, meetings, holdings, damage, bindings) and evidence proposals; canon's empty files filled from accepted ones | yes | volume 1's run replayed from cache writes them; `state-changes`, `timelines` non-empty |
-| W2 · Laws as checks | laws 1–13 as code on every director proposal; violations logged only | yes | counts of each law's violations on volume 1 |
-| W3 · Saying no | amend and reject: constrained re-asking, the lawful default, held items | Jev only | no move played against a law; failed walks 0 or held with a reason |
-| W4 · The work model | digest and memory ([next-steps.md](next-steps.md) §1, §3) in every composed context | work model | digests read well on scenes 1–3 in Why |
-| W5 · System 2 | the reasoning pass on doubts and rejections ([next-steps.md](next-steps.md) §2) | work model + Jev | before/after on every doubted card |
-| W6 · Back into the ontology | speaker, presence, place, time, binding, EM proposals through the ledger; the pool to the agent; replay with pins | agent | unsure speakers resolved or held; scenes with nobody 0 |
-| W7 · UI | Why's Laws and Proposals tabs; the run report; marked lines in the book | yes | the user reads a run's changes without the developer |
-| W8 · Volume 1 again | all of it | all | against `d20261102081221`: moves, failed walks, speakers resolved, laws broken, cost |
+| W1 · World log and ledger | the director writes world-log records (presence, tracks, meetings, holdings, damage, bindings) and evidence proposals; canon's empty files filled from accepted ones | none | volume 1's run replayed from cache writes them; `state-changes`, `timelines` non-empty |
+| W2 · The law engine | laws 1–13 as code on every answer; verdicts logged only | none | counts of each law's violations on volume 1 |
+| W3 · System 2 | below 0.5, the same question with the same context to the work model; both answers kept | work model | how often it runs, how often the two differ, on volume 1 |
+| W4 · Laws decide | the law engine's verdict acts: what makes sense plays, what doesn't is held and plays the lawful default | none | no move played against a law; failed walks held with a reason |
+| W5 · The review | the CLI's new commands (§7); held items to the main agent in batches; answers checked and pinned; replay with pins; the user's notes as items | agent | every held item of volume 1 answered or sent to the gate |
+| W6 · Back into the ontology | speaker, presence, place, time, binding, EM proposals through the ledger into canon | none | unsure speakers settled or held; scenes with nobody 0 |
+| W7 · UI | Why's Laws, Proposals and review; the run report; changed lines marked in the book | none | the user reads a run's changes without the developer |
+| W8 · Volume 1 again | all of it, with Track A where it is ready | all | against `d20261102081221`: moves, failed walks, speakers settled, laws broken, held and answered, cost |
 
-Order: W1 and W2 first (cheap, they show the size of the problem), then W3, then the work model (W4, W5), then W6 and W7
-together, then W8.
+Order: W1 and W2 first (no model calls; they show the size of the problem), then W3 and W4, then W5 and W6, W7 alongside,
+then W8. Track A runs in parallel throughout.
 
 ## 10. Decisions for the user
 
@@ -181,3 +208,4 @@ together, then W8.
    rechecked, or the world wins?
 4. Abilities (law 12): read from the concepts' owners only, or also asked of the work model per person?
 5. Replays: each run replays the whole volume with pins (cached), or only from the first changed scene?
+6. System 2's threshold: 0.5 for every question, or its own per question kind (whether, direction, spot, speaker)?
