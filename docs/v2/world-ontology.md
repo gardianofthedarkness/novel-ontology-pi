@@ -168,7 +168,7 @@ When a new anchor lands for someone at moment t in strand S (a pin above all):
 
 1. **Their span.** Find their last anchor before t in S (or the strand's start). Everything the world log has for them
    between the two is hypothesis and is re-derived.
-2. **Their track.** Re-solve the span as a bridge on the path integral: from the last anchor to the new one, through
+2. **Their track.** Re-solve the span as a bridge on the path integral (below: it runs backward in time): from the last anchor to the new one, through
    any stated destination in between (rank 2–3 stay fixed), under the laws (L5 time, L10 reach, L12 ways). Their scene
    starts in the span are re-placed on it, so a **spawn** made by rule moves to where the bridge has them (spawning is
    back-propagated too).
@@ -183,6 +183,29 @@ When a new anchor lands for someone at moment t in strand S (a pin above all):
 6. **What comes after t.** Continuity carries the new positions forward. A later answer whose question showed the old
    positions is checked by the laws on replay; only answers that now break a law are asked again (the cache keeps the
    rest).
+
+### The path integral runs backward in time too (the user, 2026-11-02)
+
+The engine's motion is a path integral (`pathIntegral.ts`): every walk weighs e^(−S/T), and a walk is drawn with an
+h-transform, where h[s] is the summed weight of every walk from s into the target set. That h is the propagator run
+**backward from the future**: from where someone must end up, back to every place they could be now. Back-propagation
+is this, not a separate method:
+
+- **A span with an anchor at each end** is a bridge: walks are drawn forward with the new anchor's h (they end there by
+  construction), starting from the last anchor; a stated destination in between splits the span into bridges.
+- **Where they were at a moment in between** (a scene's start, a card's end) is the forward weight from the last anchor
+  times the backward weight to the new one: α(s) · h(s). With a time budget (L5, where the story states the time), the
+  two are the finite-horizon propagators, α_m forward m steps and h_(N−m) backward N − m, so the moment's spread is
+  α_m · h_(N−m); without one, the moment is placed along a drawn bridge by its share of the span's play.
+- **A spawn** made by rule, with an anchor later in the strand and none before, is drawn from spawning's own choices
+  weighted by h: P(start = s) ∝ prior(s) · h(s), so where someone first appears agrees with where they must be later.
+- **Too far to be lawful** shows as weight: when h at the last anchor (or α_N at the new one) is zero, no walk joins
+  them in the time there is, and the anchor pair is a conflict for the review (L5, L10), found by the propagator itself.
+- **The ensemble** (several draws, already drawn for every move) shows how sure the revised track is: tight between
+  close anchors, spread where the story leaves room.
+
+The forward field needs the walk graph reversed (climbing and descending cost differently), solved once per span like
+the backward one.
 
 ### Where it sits
 
