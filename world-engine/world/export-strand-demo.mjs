@@ -1385,7 +1385,9 @@ export async function strandDemo(novelDir, options) {
       }),
     };
   };
-  const { scenes: runs } = await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: WALK_SEED });
+  // The terrain stage (worldOnly) starts no scene: starting one reaches the ground round its people, and a place the terrain
+  // has not built yet stood as an island of empty ground (the user, 2026-11-02); nothing is loaded, every building a shell.
+  const { scenes: runs } = options.worldOnly ? { scenes: Object.fromEntries(chosen.map(scene => [scene.id, { starts: {}, events: [] }])) } : await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: WALK_SEED });
   const data = assemble(runs);
   if (options.live) options.live(snapshot(true), data);
   // The director's loop (world-engine/director/director.mjs, docs/v2/director-camera.md): the engine as it stands after the
