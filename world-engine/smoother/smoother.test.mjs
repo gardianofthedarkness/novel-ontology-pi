@@ -44,3 +44,22 @@ test('who is on the stage: the script\'s presence can miss; acting is strong evi
   assert.ok(on.c.s2 < 0.5, 'only named: likely not there');
   assert.ok(occupation({ reading, script, strands, pins: { remote: { 's2|a': true } } }).on.a.s2 < 0.05, 'the review said remote');
 });
+
+test('continuity is by strand: a person\'s moments chain only along the strands\' entries, never across strands', async () => {
+  const { chainsOf } = await import('./smoother.mjs');
+  const moments = [{ scene: 's1', card: null }, { scene: 's1', card: 'c1' }, { scene: 's2', card: null }, { scene: 's3', card: null }];
+  const strands = { scenes: [{ id: 's1', fork: 'f', entries: [{ person: 'a', from: null }] }, { id: 's2', fork: 'g', entries: [{ person: 'a', from: null }] }, { id: 's3', fork: 'f', entries: [{ person: 'a', from: 's1', samePlace: true }] }] };
+  const chains = chainsOf(moments, 'a', strands);
+  assert.deepEqual(chains.map(chain => chain.map(moment => `${moment.scene}${moment.card ? `:${moment.card}` : ''}`)), [['s1', 's1:c1', 's3'], ['s2']], 's3 follows s1 in strand f; s2, first in strand g, is a chain of its own');
+  assert.equal(chains[0][2].samePlace, true);
+  // In the run: a talk in strand g pulls a there; their moments in strand f stay where they were played.
+  const { page, record, log } = run({ apart: 30, kind: 'live' });
+  page.scenes.push({ id: 's0', starts: { a: node(600) }, events: [] });
+  record.scenes.unshift({ scene: 's0', cards: [] });
+  log.push({ kind: 'presence', scene: 's0', who: 'a', rank: 'ruled' });
+  const twoStrands = { scenes: [{ id: 's0', fork: 'f', entries: [{ person: 'a', from: null }] }, { id: 's1', fork: 'g', entries: [{ person: 'a', from: null }, { person: 'b', from: null }] }] };
+  const apartStrands = smoothRun({ page, log, record, strands: twoStrands }), oneStrand = smoothRun({ page, log, record, strands: { scenes: [{ id: 's0', fork: 'f', entries: [{ person: 'a', from: null }] }, { id: 's1', fork: 'f', entries: [{ person: 'a', from: 's0' }, { person: 'b', from: null }] }] } });
+  assert.deepEqual(apartStrands.chains.a, [['s0'], ['s1']]);
+  assert.ok(apartStrands.people.a[0].shift < 0.5, 'its own strand: s0 untouched by s1');
+  assert.deepEqual(oneStrand.chains.a, [['s0', 's1']]);
+});

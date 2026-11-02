@@ -77,11 +77,11 @@ export function momentsOf({ page, log, record, reading = null }) {
   return { moments: out, decode };
 }
 
-/** A person's drive: how far they go a moment, against everyone's (median metres, from 0.5 to 3 times). */
-function drives(moments) {
-  const step = list => { const gaps = list.slice(1).map((moment, k) => metres(moment.at, list[k].at)).filter(gap => gap > 0.5).sort((a, b) => a - b); return gaps.length ? gaps[Math.floor(gaps.length / 2)] : null; };
-  const all = [...moments.values()].map(step).filter(value => value !== null).sort((a, b) => a - b), middle = all.length ? all[Math.floor(all.length / 2)] : STEP;
-  return new Map([...moments.entries()].map(([who, list]) => { const own = step(list); return [who, own === null ? 1 : Math.min(3, Math.max(0.5, own / middle))]; }));
+/** A person's drive: how far they go a moment along their chains, against everyone's (median metres, ½ to 3 times). */
+function drives(chains) {
+  const step = lists => { const gaps = lists.flatMap(list => list.slice(1).map((moment, k) => metres(moment.at, list[k].at))).filter(gap => gap > 0.5).sort((a, b) => a - b); return gaps.length ? gaps[Math.floor(gaps.length / 2)] : null; };
+  const all = [...chains.values()].map(step).filter(value => value !== null).sort((a, b) => a - b), middle = all.length ? all[Math.floor(all.length / 2)] : STEP;
+  return new Map([...chains.entries()].map(([who, lists]) => { const own = step(lists); return [who, own === null ? 1 : Math.min(3, Math.max(0.5, own / middle))]; }));
 }
 
 /** One person's clouds: forward-backward and the least-action path over their moments, against the others' places (`placeOf`). */
@@ -105,7 +105,9 @@ function smoothOne(list, { decode, drive, placeOf }) {
     }, 0);
     return -(seen + talk);
   }));
-  const walk = (k, a, b) => { const gap = list[k].scene === list[k - 1].scene ? 1 : SCENE_GAP; return -metres(clouds[k - 1][a].at, clouds[k][b].at) / (STEP * drive * gap); };
+  // Between two moments of one scene, or a scene they enter at the same place (the strands' samePlace), one step; into
+  // another scene of the strand, the time a scene change allows.
+  const walk = (k, a, b) => { const gap = list[k].scene === list[k - 1].scene || list[k].samePlace ? 1 : SCENE_GAP; return -metres(clouds[k - 1][a].at, clouds[k][b].at) / (STEP * drive * gap); };
   const alpha = [local[0].slice()], back = [];
   for (let k = 1; k < list.length; k++) alpha.push(clouds[k].map((_, b) => local[k][b] + logSumExp(clouds[k - 1].map((__, a) => alpha[k - 1][a] + walk(k, a, b)))));
   const beta = Array.from({ length: list.length }, (_, k) => clouds[k].map(() => 0));
@@ -127,14 +129,39 @@ function smoothOne(list, { decode, drive, placeOf }) {
 }
 
 /**
- * The run smoothed: per person, each moment's cloud, its least-action spot and how far that is from where they were
- * played; and the run's revisions (moments the smoothing moves by more than 2 m). `pins.meet` (a meeting the review
- * pinned) puts both at the one's place, tight.
+ * A person's continuity (L1, the user, 2026-11-02: by strand, not by scene or card): their moments split into chains
+ * that follow the strands' entries, each scene joined to the one the strands say they come from (stage/world/
+ * strands.json `entries`: from, samePlace); someone first in a strand starts a chain of their own. No chain crosses
+ * from one strand to another unless the strands say so (a fork begins from its parent). Without strands, one chain.
  */
-export function smoothRun({ page, log, record, reading = null, pins = {}, passes = 2 }) {
+export function chainsOf(list, who, strands) {
+  if (!strands?.scenes) return [list.map(moment => ({ ...moment }))];
+  const entryOf = new Map(strands.scenes.flatMap(scene => (scene.entries ?? []).filter(entry => entry.person === who).map(entry => [scene.id, entry])));
+  const chains = [], chainOfScene = new Map();
+  for (const moment of list) {
+    let chain = chainOfScene.get(moment.scene);
+    if (!chain) {
+      const entry = entryOf.get(moment.scene), before = entry?.from ? chainOfScene.get(entry.from) : null;
+      chain = before ?? [];
+      if (!before) chains.push(chain);
+      chainOfScene.set(moment.scene, chain);
+      chain.push({ ...moment, samePlace: !!(before && entry?.samePlace) });
+      continue;
+    }
+    chain.push({ ...moment });
+  }
+  return chains;
+}
+
+/**
+ * The run smoothed: per person, each moment's cloud, its least-action spot and how far that is from where they were
+ * played; and the run's revisions (moments the smoothing moves by more than 2 m). Each person is smoothed along their
+ * strands' chains (chainsOf), never across strands. `pins.meet` (a meeting the review pinned) holds both together, tight.
+ */
+export function smoothRun({ page, log, record, reading = null, strands = null, pins = {}, passes = 2 }) {
   const { moments, decode } = momentsOf({ page, log, record, reading });
-  const drive = drives(moments);
   for (const meet of pins.meet ?? []) for (const [who, other] of [[meet.who, meet.to], [meet.to, meet.who]]) for (const moment of moments.get(who) ?? []) if (moment.scene === meet.scene && (!(meet.cards ?? []).length || (meet.cards ?? []).includes(moment.card))) { const known = moment.talk.find(entry => entry.with === other); if (known) Object.assign(known, { reach: REACH.live, known: true }); else moment.talk.push({ with: other, reach: REACH.live, known: true }); moment.pinned = true; }
+  const chains = new Map([...moments.entries()].map(([who, list]) => [who, chainsOf(list, who, strands)])), drive = drives(chains);
   // People one at a time against the others' latest (Gauss–Seidel): both of a pair moving at once to where the other
   // was would only swap them.
   const smoothed = new Map();
@@ -145,8 +172,13 @@ export function smoothRun({ page, log, record, reading = null, pins = {}, passes
     if (!at) return null;
     return { at, node: k >= 0 ? (list ? list[k].map.node : own[k].node) : null };
   };
-  for (let pass = 0; pass < passes; pass++) for (const [who, list] of moments) smoothed.set(who, smoothOne(list, { decode, drive: drive.get(who) ?? 1, placeOf }));
+  for (let pass = 0; pass < passes; pass++) for (const [who, list] of moments) {
+    // Each chain smoothed on its own; the results back in the person's own order of moments.
+    const done = new Map();
+    for (const chain of chains.get(who)) smoothOne(chain, { decode, drive: drive.get(who) ?? 1, placeOf }).forEach((result, k) => done.set(`${chain[k].scene}|${chain[k].card}`, result));
+    smoothed.set(who, list.map(moment => done.get(`${moment.scene}|${moment.card}`)));
+  }
   const revisions = [];
   for (const [who, list] of smoothed) for (const moment of list) if (moment.shift > 2) revisions.push({ who, scene: moment.scene, card: moment.card, shift: moment.shift, rank: moment.rank, from: moment.played, to: moment.map });
-  return { people: Object.fromEntries(smoothed), drive: Object.fromEntries([...drive.entries()].map(([who, value]) => [who, Math.round(value * 100) / 100])), revisions };
+  return { people: Object.fromEntries(smoothed), chains: Object.fromEntries([...chains.entries()].map(([who, list]) => [who, list.map(chain => [...new Set(chain.map(moment => moment.scene))])])), drive: Object.fromEntries([...drive.entries()].map(([who, value]) => [who, Math.round(value * 100) / 100])), revisions };
 }

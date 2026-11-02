@@ -95,10 +95,11 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   // run.json is the last run's record only if that run is the last one played (a stand-in's run is not on the list).
   const lastRecord = lastRun ? JSON.parse(await readFile(join(out, 'run.json'), 'utf8').catch(() => 'null')) : null;
   const oldRecord = lastRecord && `d${String(lastRecord.startedAt).replace(/\D/g, '').slice(0, 14)}` === lastRun ? lastRecord : null;
-  const smoothed = oldPage && oldRecord && oldLog.length ? SM.smoothRun({ page: oldPage, log: oldLog, record: oldRecord, reading, pins }) : null;
+  const strandsNow = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null'));
+  const smoothed = oldPage && oldRecord && oldLog.length ? SM.smoothRun({ page: oldPage, log: oldLog, record: oldRecord, reading, strands: strandsNow, pins }) : null;
   // Each scene start the smoothing moved: where the least-action history has them, unless the review kept the history.
   const startsMoved = new Map((smoothed?.revisions ?? []).filter(revision => revision.card === null).map(revision => [`${revision.scene}|${revision.who}`, revision]));
-  const onStage = OC.occupation({ reading, script: JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8').catch(() => '{"scenes":[]}')), strands: JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null')), pins });
+  const onStage = OC.occupation({ reading, script: JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8').catch(() => '{"scenes":[]}')), strands: strandsNow, pins });
   const surelyThere = new Set(onStage.proposals.filter(entry => entry.propose === 'present').map(entry => `${entry.scene}|${entry.who}`));
   record.smoothing = smoothed ? { from: lastRun, moments: Object.values(smoothed.people).reduce((n, list) => n + list.length, 0), revisions: smoothed.revisions.length, starts: startsMoved.size, onStage: onStage.proposals.length } : null;
   record.review = { applied: reviewed, from: lastRun, pins: { present: Object.keys(pins.present).length, remote: Object.keys(pins.remote).length, kind: Object.keys(pins.kind).length, arrive: Object.keys(pins.arrive).length, stays: Object.keys(pins.stays).length, meet: pins.meet.length } };
@@ -543,7 +544,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       // on the stage where the script says otherwise.
       try {
         const runLog = (await readFile(join(novelDir, 'stage', 'world', 'log', `${id}.jsonl`), 'utf8')).split('\n').filter(Boolean).map(row => JSON.parse(row));
-        const smoothedNow = SM.smoothRun({ page: JSON.parse(await readFile(join(folder, 'runs', 'director', `${id}.page.json`), 'utf8')), log: runLog, record, reading, pins });
+        const smoothedNow = SM.smoothRun({ page: JSON.parse(await readFile(join(folder, 'runs', 'director', `${id}.page.json`), 'utf8')), log: runLog, record, reading, strands: strandsNow, pins });
         await mkdir(join(novelDir, 'stage', 'world', 'smoothed'), { recursive: true });
         await writeFile(join(novelDir, 'stage', 'world', 'smoothed', `${id}.json`), JSON.stringify({ version: 1, run: id, ...smoothedNow, onStage: onStage.proposals }));
         record.smoothing = { ...(record.smoothing ?? {}), after: { moments: Object.values(smoothedNow.people).reduce((n, list) => n + list.length, 0), revisions: smoothedNow.revisions.length } };

@@ -470,7 +470,12 @@ run stood or walked on in that scene, where whom they speak to stands), S_seen b
 times), S_talk by the card's kind (a kind Jev gave or the review pinned holds the pair within reach; a kind no one gave
 is a mixture, near at 0.8 or else afar, so a pair a kilometre apart is a voice from afar, not a teleport), forward and
 backward in log space, the least-action history by Viterbi, people one at a time against the others' latest (both of a
-pair at once only swap). `occupation.mjs` smooths who is on the stage per scene of a strand (the script a detection with
+pair at once only swap). **Continuity is by strand** (L1; the user, 2026-11-02: not by scene or card, which are only
+when the text is seen): a person's moments are chained along the strands' entries, each scene joined to the one the
+strands say they come from (a `samePlace` entry costs no more than a step), someone first in a strand starting a chain
+of their own; no chain crosses strands unless the strands say so (a fork begins from its parent), and their drive is
+measured along their chains. On the last run: 69 chains for 65 people; 200 moments moved, 56 scene starts (at most
+21 m), against 222 and 65 when the first build chained everyone through the whole run in play order. `occupation.mjs` smooths who is on the stage per scene of a strand (the script a detection with
 η 0.9; acting or speaking ×20, spoken to ×5, named ×1.2; the review's answers near certain). On the last real run
 (volume 1, 0.2 s): 527 moments of 65 people, mean cloud 4.1 m; talks face to face within reach went from 163 to 179 of
 258 (those left apart are a kilometre off, likely phone calls: that run asked no kinds); 222 moments moved more than
