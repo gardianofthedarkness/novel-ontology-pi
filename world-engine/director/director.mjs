@@ -22,6 +22,7 @@ const { strandDemo, inlineStrand } = await import('../world/export-strand-demo.m
 const { browser, serve } = await import('../view/two-view-things.mjs');
 const { VENDOR_FILES, PICKER_MODEL, retried } = await import('../live/sim-jev.mjs');
 const { passScene } = await import('./pass.mjs');
+const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 import { copyFile } from 'node:fs/promises';
 
@@ -57,7 +58,7 @@ export async function readerView(reading, text) {
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
 }
 
-export async function direct(novelDir, { reading, from, to, jev, budget = Infinity, live = null, pace = 0, log = console.error }) {
+export async function direct(novelDir, { reading, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, log = console.error }) {
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -86,7 +87,11 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
   const payload = () => ({ model: record.model, cards: record.scenes.flatMap(scene => scene.cards.map(card => ({ scene: scene.scene, event: card.event, card: card.card, kind: card.pass ? 'pass' : card.kind, lines: card.lines, camera: card.camera ?? null,
     moves: card.moves.map(move => ({ who: move.person, name: names.get(move.person) ?? move.person, moved: !!move.moved, direction: move.direction ?? null, how: move.how ?? null, spot: move.spot ?? null, height: move.height ?? null, boxed: !!move.box, to: move.to ?? null, why: move.why ?? null, line: move.line ?? null })) }))) });
   // Jev's service comes and goes: a request is tried again after a pause (sim-jev.mjs retried).
-  const decide = Object.assign(async (state, questions, options) => { calls++; return retried(() => jev.decide(state, questions, options), log); }, { record: () => {} });
+  // System 2 (system2.mjs, Track B W3): what Jev answers below 0.5 is asked of the work model with the same context; both
+  // answers kept with the card (or the scene, for its pass) being asked about.
+  let asking = null;
+  const asked = withSystem2((state, questions, options) => retried(() => jev.decide(state, questions, options), log), workModel, { note: entry => { if (asking) (asking.system2 ??= []).push(entry); } });
+  const decide = Object.assign(async (state, questions, options) => { calls++; return asked(state, questions, options); }, { record: () => {} });
 
   let result = null;
   await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', engine: async E => {
@@ -184,6 +189,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
       for (const scene of E.chosen) {
         const run = E.runs[scene.id], reads = reading.scenes.find(entry => entry.id === scene.id), sceneRecord = { scene: scene.id, cards: [] };
         record.scenes.push(sceneRecord);
+        asking = sceneRecord;
         if (!run || !reads) continue;
         // The world state (docs/v2/world-engine-redesign.md §1): who stands where carries through the story. Someone seen before
         // carries on from where they are; seen for the first time, they start at spawning's start (spawning happens once);
@@ -267,6 +273,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         const placeName = names.get(scene.placeId) ?? scene.placeId, when = reading.time?.scenes?.find(entry => entry.scene === scene.id)?.when ?? null;
         for (const card of cards) {
           const cardRecord = { card: card.id, kind: card.kind, ...(card.pass ? { pass: true } : {}), event: scene.events.length, lines: card.sentences.map(line), moves: [] };
+          asking = cardRecord;
           await live?.phase(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`);
           sceneRecord.cards.push(cardRecord);
           const event = { id: card.id, text: card.sentences.map(id => text.get(id)?.text ?? '').join('').slice(0, 120), actors: card.people.filter(person => positions[person.id] && person.how.some(how => PRESENT.has(how))).map(person => person.id) };
@@ -457,12 +464,20 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
     jev = cachedDecisions(jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), join(resolve(novelDir), 'stage', 'director', 'cache'));
   }
+  // System 2's work model (WORK_LLM_*), cached as Jev is; without one, system 2 is off and says so.
+  let workModel = null;
+  if (!values['stand-in'] && process.env.WORK_LLM_API_KEY) {
+    const { workModelFromEnv } = await load('dist/src/ground/connectors/workModel.js'), { cachedWork } = await load('dist/src/digger/timeplace/cache.js');
+    workModel = cachedWork(workModelFromEnv(process.env), join(resolve(novelDir), 'stage', 'director', 'cache-work'));
+  } else if (!values['stand-in']) console.error('system 2 off: no work model configured (WORK_LLM_API_KEY)');
   let live = null;
   if (values.live && values['stand-in']) { console.error('a stand-in run does not write the live view (its answers are made by rule)'); process.exit(2); }
   if (values.live) { const { createLive } = await import('../live/sim-jev.mjs'); live = await createLive(resolve(novelDir), { command: 'sim direct', lines: [{ id: 'director', title: 'The director: cards played forward' }], model: jev.modelId }); jev = live.watch(jev); }
   try {
-    const { record } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    const { record } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     const moves = record.scenes.flatMap(scene => scene.cards.flatMap(card => card.moves));
+    const second = record.scenes.flatMap(scene => [...(scene.system2 ?? []), ...scene.cards.flatMap(card => card.system2 ?? [])]);
+    console.error(`system 2: ran on ${second.length} answers, the work model's used for ${second.filter(entry => entry.used === 'work').length}, differing from Jev's on ${second.filter(entry => entry.work && String(entry.work.value) !== String(entry.jev.value)).length}`);
     console.log(JSON.stringify({ calls: record.calls, scenes: record.scenes.length, cards: record.scenes.reduce((n, scene) => n + scene.cards.length, 0), moved: moves.filter(move => move.moved).length, stayed: moves.filter(move => move.direction === 'stays').length, unmoved: moves.filter(move => move.moved === false && move.direction !== 'stays').length }));
     await live?.finish('done');
   } catch (error) { await live?.finish('failed', { error: String(error?.message ?? error).slice(0, 300) }); throw error; }

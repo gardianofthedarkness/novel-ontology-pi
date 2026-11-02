@@ -400,6 +400,13 @@ after every run. Nothing goes into canon yet: the ledger's proposals wait for de
 172 presences, 69 positions, 56 meetings, 3 blasts, 39 bindings; ranks 160 ruled, 77 answered, 4 stated; 241 location
 changes, 3 timelines, 3 damage records proposed, 112 breaks held.
 
+**Built (2026-11-02): W3**, system 2 (`world-engine/director/system2.mjs`): every director question Jev answers below 0.5
+goes to the work model with the same composed state (the pictures named, not sent; every option in words), and its
+answer is used when it is one of the options; a box stays Jev's. Both answers are kept with the card (or the scene, for
+its director's pass) in `run.json` (`system2`), and the run's log says how often it ran, was used and differed. Checked
+end to end on scene 1 with a fake Jev unsure of everything: 148 answers went to the work model in 17 requests. The
+director turns it on when `WORK_LLM_*` is configured (the reading's DeepSeek), and says so when it is not.
+
 Order: W1 and W2 first (no model calls; they show the size of the problem), then W3 and W4, then W5 and W6, W7 alongside,
 then W8. Track A runs in parallel throughout.
 
