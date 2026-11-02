@@ -207,6 +207,38 @@ is this, not a separate method:
 The forward field needs the walk graph reversed (climbing and descending cost differently), solved once per span like
 the backward one.
 
+### The objective: change the history least (the user, 2026-11-02)
+
+> The history should change the least, in space and in destruction energy, when back-propagating multiple
+> possibilities.
+
+A new anchor can usually be met many ways: which tied people move and which stay, who came to whom, which of a bridge's
+draws is kept. Of all the revisions that keep every anchor and break no law, the engine takes the one that changes the
+history least:
+
+J(revision) = Σ over people and moments of the span ‖x′ − x‖ + μ · Σ over blasts |ΔE|
+
+- **Space:** each person, at each moment the world log records (a scene's start, a card's end), the distance between
+  where the revision has them and where the history had them; a floor counts as its height (3 m), so moving someone
+  up a building is a change too.
+- **Destruction energy:** a blast's energy is what it broke (the volume of each building part it took, by how hard the
+  part is); ΔE is a blast added, removed, moved or made stronger or weaker. A revision that leaves every blast as it
+  was costs nothing here; μ weighs a joule of change against a metre.
+- **Constraints, not costs:** anchors (rank 1–3) never move, and every law holds. J ranks only the lawful revisions.
+
+How the engine applies it:
+
+1. **Inside the path integral:** the bridge's action gains a pull toward the old track, a potential V(s) = α · (the
+   distance from s to where the history had the person at that point of the span), so the walks it draws stay near the
+   old history unless the new anchor forces them away (the Feynman–Kac form: weight e^(−(S + ΣV)/T)).
+2. **Between discrete choices:** each alternative (who came to whom; whether a tied person is re-derived or keeps their
+   track because the new one still holds them lawfully) is played out, and the one with the least J is kept; a tied
+   person whose old track stays lawful is not moved at all.
+3. **Among the drawn walks:** of the ensemble's draws, the one with the least J is played; the others stay as the
+   ensemble's spread.
+4. **In the ledger:** each revision records its J (metres and joules changed, and for whom). A revision above a size
+   the user sets goes to the review rather than being applied, so a small pin can't quietly rewrite a chapter.
+
 ### Where it sits
 
 Back-propagation needs the world log with each position's rank and ties (W1), the laws (W2), and pins (W5); it is
@@ -288,4 +320,6 @@ then W8. Track A runs in parallel throughout.
    rechecked, or the world wins?
 4. Abilities (law 12): read from the concepts' owners only, or also asked of the work model per person?
 5. Replays: each run replays the whole volume with pins (cached), or only from the first changed scene?
+7. Back-propagation's weights: μ (a joule of destruction against a metre), α (the pull toward the old track), and the
+   size of a revision above which it goes to the review.
 6. System 2's threshold: 0.5 for every question, or its own per question kind (whether, direction, spot, speaker)?
