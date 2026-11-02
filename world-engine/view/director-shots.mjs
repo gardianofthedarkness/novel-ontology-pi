@@ -29,7 +29,7 @@ export async function directorShots(novelDir, { scene, who = null, arrow = 'A', 
     if (!card?.people.length) throw new Error(`nobody stands in ${scene}`);
     const person = card.people.find(entry => !who || entry.name === who || entry.id === who) ?? card.people[0], at = person.at;
     const chosen = C.DIRECTIONS.find(entry => entry.letter === arrow) ?? C.DIRECTIONS[0], reach = C.REACH[way] ?? C.REACH.walk;
-    const shoot = async (name, size, options) => { await chrome.size(...size); const view = await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: name, place: card.place, at: card.at, people: true, mask: true, frame: size, only: [card.place], ...options })})`); const file = join(out, `${name}.png`); await writeFile(file, Buffer.from(await chrome.still('png'), 'base64')); shots.push({ name, file, view }); return view; };
+    const shoot = async (name, size, options) => { await chrome.size(...size); const view = await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: name, place: card.place, at: card.at, people: true, mask: true, frame: size, only: [card.place], mover: person.id, ...options })})`); const file = join(out, `${name}.png`); await writeFile(file, Buffer.from(await chrome.still('png'), 'base64')); shots.push({ name, file, view }); return view; };
     const focus = { x: at[0], z: at[2], y0: at[1], w: 6, d: 6, h: 3 };
     // a: every arrow, a fixed length for reading (not the reach), from 35° above.
     const shown = 9;
@@ -39,7 +39,8 @@ export async function directorShots(novelDir, { scene, who = null, arrow = 'A', 
     await shoot('b-spot', [1440, 900], { focus, radius: Math.max(16, reach * 0.7), elevation: 35, arrows: [{ at, vector: chosen.vector, letter: chosen.letter, color: chosen.color, length: Math.min(reach, 30) }], ...(wedge ? { wedge: { points: wedge, y: at[1], color: chosen.color } } : {}) });
     // c1: the plan along the arrow.
     const frame = C.frameAlong(at, chosen.vector, reach), half = (frame[2] - frame[0]) / 2;
-    const map = await shoot('c1-rough', [1024, 1024], { topdown: { x: (frame[0] + frame[2]) / 2, z: (frame[1] + frame[3]) / 2, half }, arrows: [{ at, vector: chosen.vector, letter: chosen.letter, color: chosen.color, length: Math.min(reach, half) }], ...(wedge ? { wedge: { points: wedge, y: at[1], color: chosen.color } } : {}) });
+    const step = half > 60 ? 20 : half > 25 ? 10 : 5;
+    const map = await shoot('c1-rough', [1024, 1024], { topdown: { x: (frame[0] + frame[2]) / 2, z: (frame[1] + frame[3]) / 2, half }, grid: { box: frame, step, y: at[1] }, arrows: [{ at, vector: chosen.vector, letter: chosen.letter, color: chosen.color, length: Math.min(reach, half) }], ...(wedge ? { wedge: { points: wedge, y: at[1], color: chosen.color } } : {}) });
     // c2: a rough box where the arrow reaches (Jev's in a run), its column from the side, its heights lettered.
     const end = C.arrowEnd(at, chosen.vector, reach * 0.6), rough = [end[0] - 6, end[2] - 6, end[0] + 6, end[2] + 6];
     const lots = [...(data.world?.lots ?? []), ...(data.world?.shells ?? [])].filter(lot => lot.i0 * CELL < rough[2] && (lot.i0 + lot.nx) * CELL > rough[0] && lot.j0 * CELL < rough[3] && (lot.j0 + lot.nz) * CELL > rough[1]);
@@ -47,8 +48,9 @@ export async function directorShots(novelDir, { scene, who = null, arrow = 'A', 
     const roofs = Math.max(0, ...lots.map(lot => (lot.height ?? lot.floors ?? 1) * FLOOR)), top = way === 'flight' ? 60 : way === 'leap' ? roofs + 15 : roofs + 5;
     const slices = C.columnSlices(lots.map((lot, n) => ({ name: lot.label ?? lot.role ?? `building ${n + 1}`, bottom: 0, floors: lot.height ?? lot.floors ?? 1 })), { top });
     const side = C.sideView(rough, chosen.vector, slices);
-    await shoot('c2-height', [1440, 900], { focus: side.focus, radius: Math.max(12, side.focus.h * 0.55), yaw: side.yaw, elevation: side.elevation, slices: slices.map(slice => ({ box: rough, y: slice.y, label: `${slice.letter} ${slice.said}` })), arrows: [{ at, vector: chosen.vector, letter: chosen.letter, color: chosen.color, length: Math.min(reach, 20) }] });
-    await shoot('c2-exact', [1024, 1024], { topdown: { x: end[0], z: end[2], half: 10 }, boxes: [] , arrows: [{ at, vector: chosen.vector, letter: chosen.letter, color: chosen.color, length: Math.min(reach, 20) }] });
+    const radius = Math.max(12, side.focus.h * 0.55), distance = radius / Math.tan(Math.PI / 8);
+    await shoot('c2-height', [1440, 900], { focus: side.focus, radius, vague: { near: distance * 1.05, far: distance * 1.9 }, yaw: side.yaw, elevation: side.elevation, slices: slices.map(slice => ({ box: rough, y: slice.y, label: `${slice.letter} ${slice.said}` })), arrows: [{ at, vector: chosen.vector, letter: chosen.letter, color: chosen.color, length: Math.min(reach, 20) }] });
+    await shoot('c2-exact', [1024, 1024], { topdown: { x: end[0], z: end[2], half: 10 }, grid: { box: [end[0] - 10, end[2] - 10, end[0] + 10, end[2] + 10], step: 1, y: 0 }, arrows: [{ at, vector: chosen.vector, letter: chosen.letter, color: chosen.color, length: Math.min(reach, 20) }] });
     const manifest = { scene, person: person.name, at, arrow: chosen.letter, way, reach, frame, map: map?.map ?? null, rough, slices };
     await writeFile(join(out, 'manifest.json'), JSON.stringify(manifest, null, 1));
     return { shots: shots.map(shot => shot.file), manifest };

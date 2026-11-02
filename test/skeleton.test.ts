@@ -79,3 +79,27 @@ test("an impact sphere degrades only the cells inside it", async () => {
   assert.ok(degrade(place, index, standing, whole, 1, () => 0).destroyed.length > hit.destroyed.length, "the box alone takes more");
 });
 
+
+test("rooms by where in the building: halls and rooms of several floors at the ends of a big one, a few real doors each", async () => {
+  const { BIG_FLOOR, MASS, cellAt, cellIndex, endPull, furnish, generateSkeleton } = await import("../apps/playground/src/data/skeleton.js");
+  assert.ok(endPull(0, 12) === 1 && endPull(11, 12) === 1 && endPull(6, 12) < 0.25);
+  let ends = 0, middle = 0, tall = 0;
+  for (let seed = 1; seed <= 30; seed++) {
+    const s = generateSkeleton("tower", seed, { width: 30, depth: 24, floors: 12, cores: 2 }), rooms = furnish(s, 1);
+    assert.ok(s.nx * s.nz >= BIG_FLOOR);
+    const owner = new Map<number, number>();
+    rooms.forEach((room, r) => {
+      assert.ok(room.doors.length >= 1 && room.doors.length <= 3, "a door or a few, not every corridor cell");
+      for (const door of room.doors) { const at = cellAt(s, door); assert.equal(at.k, room.floor, "doors on its own floor"); assert.notEqual(s.cells[door], MASS); }
+      for (let k = room.floor; k <= room.top; k++) for (let i = room.i0; i <= room.i1; i++) for (let j = room.j0; j <= room.j1; j++) {
+        const cell = cellIndex(s, i, j, k); assert.equal(s.cells[cell], MASS); assert.ok(!owner.has(cell), "no cell in two rooms"); owner.set(cell, r);
+      }
+      if (room.kind !== "room") { if ([0, 1, 10, 11].includes(room.floor)) ends++; else if (room.floor >= 4 && room.floor <= 7) middle++; }
+      if (room.kind === "tall") { tall++; assert.ok(room.top > room.floor); }
+    });
+  }
+  assert.ok(ends > 3 * Math.max(1, middle), `halls at the ends (${ends}) far more than in the middle (${middle})`);
+  assert.ok(tall > 0, "some rooms rise through floors");
+  const small = furnish(generateSkeleton("house", 3, { width: 12, depth: 10, floors: 2, cores: 1 }), 1);
+  assert.ok(small.every((room) => room.kind === "room" || room.kind === "hall") && small.every((room) => room.top === room.floor));
+});

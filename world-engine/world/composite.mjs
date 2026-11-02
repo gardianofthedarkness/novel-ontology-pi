@@ -33,18 +33,22 @@ export function partsIn({ terrain, buildings, place, here, modelFor }) {
 }
 
 /**
- * Each unbuilt marker of a building the terrain kept on the building standing on its lot, a part's on its part (the user,
- * 2026-11-01: markers 26–66 m off their buildings where a street had moved since its lots were laid as slots). Not what a
- * scene is set in: its grid is laid already. Changes `macro` in place.
+ * Each marker of a building the terrain kept on the building standing on its lot, a part's on its part (the user,
+ * 2026-11-01: markers 26–66 m off their buildings where a street had moved since its lots were laid as slots; 2026-11-02:
+ * built ones too, before the run). Runs after the world is laid, so only the pins and tags move. Changes `macro` in place.
  */
 export function snapMarkers({ terrain, macro, landscapes }) {
   const standingNow = new Map(landscapes.flatMap(entry => entry.source.buildings.map(b => [b.id, b]))), partNow = new Map(landscapes.flatMap(entry => (entry.parts ?? []).map(part => [part[7], part])));
-  for (const node of macro.filter(entry => entry.unbuilt)) {
+  // Every building's marker, built or not (a built one kept its canvas spot, 35 m off its building: 飞镖酒吧, 2026-11-02).
+  for (const node of macro) {
     const site = terrain.sites?.[node.id];
     if (site?.scale !== 'building') continue;
     const slot = site.slot ? terrain.slots?.[site.slot] : null, key = slot ? slot.lot ?? slot.id : null, short = key && key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
     const b = key ? landscapes.map(entry => standingNow.get(`${entry.place}:${key}`) ?? standingNow.get(`${entry.place}:${short}`)).find(Boolean) : null, part = site.by === 'tenant' ? partNow.get(node.id) : null;
     const at = part ? [part[0], part[1]] : b ? [b.x, b.z] : null;
-    if (at) { node.x = Math.round(at[0] * 10) / 10; node.z = Math.round(at[1] * 10) / 10; }
+    if (!at) continue;
+    const moved = node.spotX === node.x && node.spotZ === node.z;
+    node.x = Math.round(at[0] * 10) / 10; node.z = Math.round(at[1] * 10) / 10;
+    if (moved) { node.spotX = node.x; node.spotZ = node.z; }
   }
 }

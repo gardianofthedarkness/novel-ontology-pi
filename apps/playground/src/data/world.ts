@@ -253,7 +253,7 @@ export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Arra
 export function worldGraph(world: World, standing: Uint8Array[], things: PlacedThing[] = [], box?: { x0: number; z0: number; x1: number; z1: number }): WorldGraph {
   const inside = (i: number, j: number) => !box || ((i + 0.5) * SKELETON_CELL >= box.x0 && (i + 0.5) * SKELETON_CELL <= box.x1 && (j + 0.5) * SKELETON_CELL >= box.z0 && (j + 0.5) * SKELETON_CELL <= box.z1);
   const edges: { from: number; to: number; dir: number; cost: number; kind: number }[] = [];
-  const roomOf = world.lots.map((lot) => { const map = new Int32Array(lot.skeleton.cells.length).fill(NOT); lot.rooms.forEach((room, r) => { for (let i = room.i0; i <= room.i1; i++) for (let j = room.j0; j <= room.j1; j++) map[cellIndex(lot.skeleton, i, j, room.floor)] = r; }); return map; });
+  const roomOf = world.lots.map((lot) => { const map = new Int32Array(lot.skeleton.cells.length).fill(NOT); lot.rooms.forEach((room, r) => { for (let level = room.floor; level <= (room.top ?? room.floor); level++) for (let i = room.i0; i <= room.i1; i++) for (let j = room.j0; j <= room.j1; j++) map[cellIndex(lot.skeleton, i, j, level)] = r; }); return map; });
   const thingAt = new Map<number, number>();
   things.forEach((thing, index) => { for (let j = thing.j0; j <= thing.j1; j++) for (let i = thing.i0; i <= thing.i1; i++) { const key = cellKey(i, j), there = thingAt.get(key); if (there === undefined || things[there].top < thing.top) thingAt.set(key, index); } });
   const span = CHUNK;
@@ -278,7 +278,9 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     if (k > lot.floors) return { type: 0, lot: NOT, local: NOT };
     const local = cellIndex(lot.skeleton, i - lot.i0, j - lot.j0, k);
     if (lot.skeleton.cells[local] !== MASS) return { type: standing[index]?.[local] ? 2 : 0, lot: index, local };
-    return { type: roomOf[index][local] >= 0 ? 3 : 0, lot: index, local };
+    // A room is walked on its own floor; a room of several floors is open air above it (its upper floors are no floor).
+    const room = roomOf[index][local];
+    return { type: room >= 0 && lot.rooms[room].floor === k ? 3 : 0, lot: index, local };
   };
   // Every cell to walk: the open ground of materialized chunks, and every lot's cells on every floor up to its roof; and
   // under them, the levels below the street.

@@ -16,6 +16,8 @@ import { partsIn, snapMarkers } from './composite.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`));
+/** A room's kind on the page (its number in a room's row): a room, a hall, a room of several floors. */
+const ROOM_KINDS = ['room', 'hall', 'tall'];
 const PALETTE = ['#7ce6ff', '#ff8fb1', '#ffd36e', '#9dff8a', '#c59bff', '#ff9d5c', '#5cf2c8', '#f2f2f2', '#8fb6ff', '#e0ff6e'];
 // The basic shapes, at unit size (their extents). A sphere is a kind of oval: an oval in a cube-shaped cast.
 const SHAPES = { box: [1, 1, 1], oval: [1, 0.55, 0.7], triangle: [1, 1, 1], diamond: [1, 1, 1], donut: [1, 0.3, 1] };
@@ -1328,7 +1330,7 @@ export async function strandDemo(novelDir, options) {
     const ok = W.UNDER_LEVELS, dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return ((k + ok) * NZ + (j + oj)) * NX + (i + oi); };
     const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
     const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
-      i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1]) }));
+      i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1, room.top ?? room.floor, ROOM_KINDS.indexOf(room.kind ?? 'room'), room.doors]) }));
     notes.world = { chunks: world.chunks.size, lots: world.lots.length, shells: worldShells.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
     return {
       models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,

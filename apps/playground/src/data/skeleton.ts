@@ -150,46 +150,85 @@ export function robustness(s: Skeleton, levels: number[], samples: number, seed 
 }
 
 /**
- * Rooms: whole boxes of mass on one floor, each opening onto circulation.
- * The conditions a room R = [i0..i1] × [j0..j1] on floor k must meet:
- *   (1) R ⊆ mass, and no cell of R in another room;
- *   (2) R holds a door cell: a cell with a corridor or stair beside it (axially);
+ * Rooms: whole boxes of mass, each opening onto circulation through a door or a few.
+ * The conditions a room R = [i0..i1] × [j0..j1] on floors k0..k1 must meet:
+ *   (1) R ⊆ mass on every one of its floors, and no cell of R in another room;
+ *   (2) R holds a door cell on its bottom floor: a cell with a corridor or stair beside it (axially);
  *   (3) R grows from that door cell, a side strip at a time, each with chance
- *       σ(g − α·(|R ∪ strip| − m̄)), only onto free mass;
- * so every room reaches a corridor by construction. Door cells are taken in
- * random order; mass that no room reaches stays solid (structure, shafts).
+ *       σ(g − α·(|R ∪ strip| − m̄_k)), only onto free mass;
+ * so every room reaches a corridor by construction. Mass that no room reaches stays solid (structure, shafts).
+ *
+ * How large, by where in the building (the user, 2026-11-02): in a bigger building halls and rooms of several floors
+ * come first, at the bottom (a lobby, a gym, an auditorium) or the top (a hall, a penthouse), and the rooms between are
+ * the building's usual size. On floor k of F the pull toward the ends is e(k) = max(e^(−k/λ), e^(−(F−1−k)/λ)), λ = max(1,
+ * F/6); a room's mean there is m̄·(1 + 2·e(k)) in a big building (a floor of 60 cells or more, 240 m²), m̄ elsewhere. A
+ * hall (mean a third of the floor's free mass, 12 to 120 cells) is tried on a floor with chance 0.8·e(k) in a big
+ * building, 0.15·e(k) in a small one; one at the bottom or the top of a big building of three floors or more may rise
+ * through two floors (three in a tall one: ten floors and a floor of 120 cells), its upper floors open air over its floor.
+ * A room keeps one door (two for a hall, three for one of several floors), spread along its walls, not every corridor
+ * cell beside it: a way in is a door.
  */
-export interface RoomBox { floor: number; i0: number; j0: number; i1: number; j1: number; doors: number[] }
+export type RoomKind = "room" | "hall" | "tall";
+export interface RoomBox { floor: number; top: number; kind: RoomKind; i0: number; j0: number; i1: number; j1: number; doors: number[] }
 export const ROOM_SIZE: Record<SkeletonKind, number> = { house: 4, school: 18, tower: 6 };
+/** A floor of this many cells or more makes a big building (halls, rooms of several floors). */
+export const BIG_FLOOR = 60;
+
+/** The pull of floor k of F toward the building's ends (1 at the bottom and the top). */
+export const endPull = (k: number, floors: number) => { const lambda = Math.max(1, floors / 6); return Math.max(Math.exp(-k / lambda), Math.exp(-(floors - 1 - k) / lambda)); };
 
 export function furnish(s: Skeleton, seed: number, options: { mean?: number; g?: number; alpha?: number } = {}): RoomBox[] {
-  const mean = options.mean ?? ROOM_SIZE[s.kind as SkeletonKind] ?? 6, g = options.g ?? 3, alpha = options.alpha ?? 0.5;
+  const base = options.mean ?? ROOM_SIZE[s.kind as SkeletonKind] ?? 6, g = options.g ?? 3, alpha = options.alpha ?? 0.5;
   const rng = skeletonStream("rooms", s.kind, s.seed, seed), taken = new Uint8Array(s.cells.length), out: RoomBox[] = [];
-  const free = (i: number, j: number, k: number) => i >= 0 && j >= 0 && i < s.nx && j < s.nz && s.cells[cellIndex(s, i, j, k)] === MASS && !taken[cellIndex(s, i, j, k)];
+  const big = s.nx * s.nz >= BIG_FLOOR, tall = s.floors >= 10 && s.nx * s.nz >= 120;
+  const mass = (i: number, j: number, k: number) => i >= 0 && j >= 0 && i < s.nx && j < s.nz && k < s.floors && s.cells[cellIndex(s, i, j, k)] === MASS && !taken[cellIndex(s, i, j, k)];
   const circulation = (i: number, j: number, k: number) => i >= 0 && j >= 0 && i < s.nx && j < s.nz && s.cells[cellIndex(s, i, j, k)] !== MASS;
   const doorsOf = (i: number, j: number, k: number) => [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([di, dj]) => circulation(i + di, j + dj, k)).map(([di, dj]) => cellIndex(s, i + di, j + dj, k));
-  const seeds: number[] = [];
-  for (let cell = 0; cell < s.cells.length; cell++) { const { i, j, k } = cellAt(s, cell); if (s.cells[cell] === MASS && doorsOf(i, j, k).length) seeds.push(cell); }
-  for (let n = seeds.length - 1; n > 0; n--) { const m = Math.floor(rng() * (n + 1)); [seeds[n], seeds[m]] = [seeds[m], seeds[n]]; }
-  for (const start of seeds) {
-    if (taken[start]) continue;
-    const { i, j, k } = cellAt(s, start), box = { i0: i, j0: j, i1: i, j1: j };
-    taken[start] = 1;
+  // A room grown from a door cell on floor k through `rise` floors (free mass on each), toward its mean; null when it cannot stand.
+  const grow = (start: number, rise: number, mean: number, kind: RoomKind): RoomBox | null => {
+    const { i, j, k } = cellAt(s, start), free = (a: number, b: number) => { for (let level = k; level < k + rise; level++) if (!mass(a, b, level)) return false; return true; };
+    if (!free(i, j)) return null;
+    const box = { i0: i, j0: j, i1: i, j1: j };
     for (let grew = true; grew; ) {
       grew = false;
       for (const side of [0, 1, 2, 3].sort(() => rng() - 0.5)) {
         const strip: [number, number][] = side === 0 ? range(box.j0, box.j1).map((b) => [box.i1 + 1, b]) : side === 1 ? range(box.j0, box.j1).map((b) => [box.i0 - 1, b])
           : side === 2 ? range(box.i0, box.i1).map((a) => [a, box.j1 + 1]) : range(box.i0, box.i1).map((a) => [a, box.j0 - 1]);
         const area = (box.i1 - box.i0 + 1) * (box.j1 - box.j0 + 1) + strip.length;
-        if (!strip.every(([a, b]) => free(a, b, k)) || rng() >= sigmoid(g - alpha * (area - mean))) continue;
-        for (const [a, b] of strip) taken[cellIndex(s, a, b, k)] = 1;
+        if (!strip.every(([a, b]) => free(a, b)) || rng() >= sigmoid(g - alpha * (area - mean) / Math.max(1, mean / 6))) continue;
         if (side === 0) box.i1++; else if (side === 1) box.i0--; else if (side === 2) box.j1++; else box.j0--;
         grew = true;
       }
     }
-    const doors = new Set<number>();
-    for (let a = box.i0; a <= box.i1; a++) for (let b = box.j0; b <= box.j1; b++) for (const door of doorsOf(a, b, k)) doors.add(door);
-    out.push({ floor: k, ...box, doors: [...doors] });
+    // A hall smaller than a third of its mean is no hall: left for rooms.
+    if (kind !== "room" && (box.i1 - box.i0 + 1) * (box.j1 - box.j0 + 1) < Math.max(8, mean / 3)) return null;
+    for (let level = k; level < k + rise; level++) for (let a = box.i0; a <= box.i1; a++) for (let b = box.j0; b <= box.j1; b++) taken[cellIndex(s, a, b, level)] = 1;
+    // Its doors: the circulation cells beside its bottom floor, a few of them spread apart (the first at random, each next
+    // the farthest from those kept).
+    const all = new Set<number>();
+    for (let a = box.i0; a <= box.i1; a++) for (let b = box.j0; b <= box.j1; b++) for (const door of doorsOf(a, b, k)) all.add(door);
+    const candidates = [...all], want = kind === "tall" ? 3 : kind === "hall" ? 2 : 1, doors: number[] = [];
+    if (candidates.length) doors.push(candidates[Math.floor(rng() * candidates.length)]);
+    while (doors.length < Math.min(want, candidates.length)) {
+      const far = (cell: number) => Math.min(...doors.map((door) => { const p = cellAt(s, cell), q = cellAt(s, door); return Math.abs(p.i - q.i) + Math.abs(p.j - q.j); }));
+      doors.push(candidates.filter((cell) => !doors.includes(cell)).sort((x, y) => far(y) - far(x))[0]);
+    }
+    return { floor: k, top: k + rise - 1, kind, ...box, doors };
+  };
+  const seedsOn = (k: number) => { const list: number[] = []; for (let j = 0; j < s.nz; j++) for (let i = 0; i < s.nx; i++) if (mass(i, j, k) && doorsOf(i, j, k).length) list.push(cellIndex(s, i, j, k)); for (let n = list.length - 1; n > 0; n--) { const m = Math.floor(rng() * (n + 1)); [list[n], list[m]] = [list[m], list[n]]; } return list; };
+  // Halls first, the ends of the building before its middle.
+  for (let k = 0; k < s.floors; k++) {
+    const pull = endPull(k, s.floors);
+    if (rng() >= (big ? 0.8 : 0.15) * pull) continue;
+    let freeMass = 0; for (let j = 0; j < s.nz; j++) for (let i = 0; i < s.nx; i++) if (mass(i, j, k)) freeMass++;
+    const mean = Math.max(12, Math.min(120, freeMass / 3)), end = k === 0 || k === s.floors - 2 || k === s.floors - 1;
+    const rise = big && s.floors >= 3 && end && k + 1 < s.floors && rng() < (k === 0 ? 0.5 : 0.3) ? (tall && k + 2 < s.floors ? 3 : 2) : 1;
+    for (const start of seedsOn(k).slice(0, 6)) { const room = grow(start, rise, mean, rise > 1 ? "tall" : "hall") ?? (rise > 1 ? grow(start, 1, mean, "hall") : null); if (room) { out.push(room); break; } }
+  }
+  // Then rooms, larger toward the ends of a big building.
+  for (let k = 0; k < s.floors; k++) {
+    const mean = big ? base * (1 + 2 * endPull(k, s.floors)) : base;
+    for (const start of seedsOn(k)) { if (taken[start]) continue; const room = grow(start, 1, mean, "room"); if (room) out.push(room); }
   }
   return out;
 }

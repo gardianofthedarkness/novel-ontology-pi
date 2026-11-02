@@ -258,7 +258,12 @@ const mats = {
   corridor: new THREE.MeshLambertMaterial({ color: 0x7ce6ff, emissive: 0x0b3a48, transparent: true, opacity: 0.85 }),
   stair: new THREE.MeshLambertMaterial({ color: 0xffb547, emissive: 0x4a2a00, transparent: true, opacity: 0.8 }),
   cut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.9 }),
-  room: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.18, depthWrite: false }),
+  room: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.45, depthWrite: false }),
+  // Rooms hollow (the user, 2026-11-02): a floor and thin walls with a gap at each door, no ceiling; a hall's and a room of
+  // several floors' floor in their own tints.
+  hall: new THREE.MeshLambertMaterial({ color: 0x5a8fb8, transparent: true, opacity: 0.5, depthWrite: false }),
+  tall: new THREE.MeshLambertMaterial({ color: 0x8a7ad6, transparent: true, opacity: 0.5, depthWrite: false }),
+  roomWall: new THREE.MeshLambertMaterial({ color: 0x9fd2f0, transparent: true, opacity: 0.55, depthWrite: false }),
   roomCut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.32, depthWrite: false }),
   // A hit building's units: its walls and roof as panels, and what fell as rubble.
   wall: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.2, depthWrite: false }),
@@ -477,7 +482,7 @@ function drawSkeletons(id, entry, count, settling = null) {
     for (const unit of [...part.blasted, ...part.fallen]) gone[part.lot].add(unit.slice(0, 4).join("|"));
     if (hit !== settling) for (const unit of part.fallen) { const box = unitBox(place.lots[part.lot], entry, unit); rubble.push([box[0], unit[4] + 0.3, box[2], Math.min(box[3], CELL * 0.9), 0.6, Math.min(box[5], CELL * 0.9)]); }
   }
-  const corridors = [], stairs = [], red = [], rooms = [], redRooms = [], walls = [], roofs = [];
+  const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], redRooms = [], walls = [], roofs = [];
   // A hit building's walls and roof, unit by unit; its artistic shell gives way to them.
   place.lots.forEach((lot, n) => {
     const unborn = (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n);
@@ -496,9 +501,17 @@ function drawSkeletons(id, entry, count, settling = null) {
       else if (type === "2") stairs.push([x, k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4]);
       else corridors.push([x, k * FLOOR + 0.15, z, CELL * 0.9, 0.3, CELL * 0.9]);
     }
-    lot.rooms.forEach(([k, i0, j0, i1, j1], r) => { const w = (i1 - i0 + 1) * CELL - 0.35, d = (j1 - j0 + 1) * CELL - 0.35; (cutRooms[n].has(r) ? redRooms : rooms).push([(lot.i0 + (i0 + i1 + 1) / 2) * CELL - entry.cx, k * FLOOR + 1.25, (lot.j0 + (j0 + j1 + 1) / 2) * CELL - entry.cz, w, 2.4, d]); });
+    // Each room hollow: its floor, and a thin wall along each cell edge of its outline but where a door is (the circulation
+    // cell outside that edge is one of its doors), as high as its floors.
+    lot.rooms.forEach(([k, i0, j0, i1, j1, top = k, kind = 0, doors = []], r) => {
+      const cut = cutRooms[n].has(r), x0 = (lot.i0 + i0) * CELL - entry.cx, z0 = (lot.j0 + j0) * CELL - entry.cz, w = (i1 - i0 + 1) * CELL, d = (j1 - j0 + 1) * CELL, h = (top - k + 1) * FLOOR - 0.3, y = k * FLOOR;
+      (cut ? redRooms : kind === 2 ? talls : kind === 1 ? halls : rooms).push([x0 + w / 2, y + 0.06, z0 + d / 2, w - 0.2, 0.12, d - 0.2]);
+      const door = new Set(doors), at = (i, j) => (k * lot.nz + j) * lot.nx + i, wall = cut ? redRooms : roomWalls;
+      for (let i = i0; i <= i1; i++) { const x = (lot.i0 + i + 0.5) * CELL - entry.cx; if (!door.has(at(i, j0 - 1))) wall.push([x, y + h / 2, z0 + 0.06, CELL, h, 0.12]); if (!door.has(at(i, j1 + 1))) wall.push([x, y + h / 2, z0 + d - 0.06, CELL, h, 0.12]); }
+      for (let j = j0; j <= j1; j++) { const z = (lot.j0 + j + 0.5) * CELL - entry.cz; if (!door.has(at(i0 - 1, j))) wall.push([x0 + 0.06, y + h / 2, z, 0.12, h, CELL]); if (!door.has(at(i1 + 1, j))) wall.push([x0 + w - 0.06, y + h / 2, z, 0.12, h, CELL]); }
+    });
   });
-  dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.roomCut, redRooms), instanced(mats.wall, walls), instanced(mats.roof, roofs), instanced(mats.rubble, rubble));
+  dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.hall, halls), instanced(mats.tall, talls), instanced(mats.roomWall, roomWalls), instanced(mats.roomCut, redRooms), instanced(mats.wall, walls), instanced(mats.roof, roofs), instanced(mats.rubble, rubble));
   entry.group.add(dynamic); entry.dynamic = dynamic;
 }
 
@@ -829,6 +842,8 @@ function hologram(model, shape, stand = false) {
 // Things the story mentions: one piece per thing (mentions of one named thing are one thing), shown from its first mention,
 // gliding to wherever a later event puts it, in any place. A big thing carries structure inside; hits break it away.
 let hiddenThings = new Set(), sheetView = null, hitsBefore = null, quiet = capture;
+// The half height (metres) of the top-down map a still is drawing, while it draws one; null otherwise.
+let mapHalf = null;
 // See-through while playing (and while recording a scene), never on Jev's stills, which mask what they need themselves.
 let seeing = !capture;
 const things = (data.things ?? []).map((thing) => {
@@ -1257,6 +1272,15 @@ if (capture) {
    * a red dotted line where a slice cuts a building; an area outlined and named on the ground. Boxes are in world metres.
    */
   /**
+   * A label kept a share of the picture's height (`fraction`): on the screen at any zoom for the perspective camera; on a
+   * top-down map (orthographic, where a sprite is in metres whatever it is told) that share of the map's height in metres.
+   */
+  function screenSized(tag, fraction) {
+    const aspect = tag.scale.x / tag.scale.y;
+    if (mapHalf) { tag.scale.set(aspect * fraction * 2 * mapHalf, fraction * 2 * mapHalf, 1); return tag; }
+    tag.material.sizeAttenuation = false; tag.scale.set(aspect * fraction, fraction, 1); return tag;
+  }
+  /**
    * A direction arrow out of a person (docs/v2/director-camera.md §2a): a shaft and a head from `at` along `vector` for
    * `length` metres, in its colour, faint when blocked at once, its letter (and what it meets) at the tip.
    */
@@ -1268,9 +1292,20 @@ if (capture) {
     const cone = new THREE.Mesh(new THREE.ConeGeometry(radius * 3, head, 12), material); cone.position.y = length - head / 2;
     const body = new THREE.Group(); body.add(shaft, cone); body.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); group.add(body);
     for (const mesh of [shaft, cone]) mesh.renderOrder = 9;
+    // Letters over the people's names: an arrow's letter is what the question asks about.
     // Its letter the same size on the screen at any zoom (a still's labels read alike whatever it frames).
-    const tag = label(arrow.said ? `${arrow.letter} ${arrow.said}` : arrow.letter, arrow.color, 30), aspect = tag.scale.x / tag.scale.y; tag.material.sizeAttenuation = false; tag.scale.set(aspect * 0.035 * scale, 0.035 * scale, 1); tag.position.copy(dir.clone().multiplyScalar(length * 1.08)); group.add(tag);
+    const tag = screenSized(label(arrow.said ? `${arrow.letter} ${arrow.said}` : arrow.letter, arrow.color, 30), 0.035 * scale); tag.renderOrder = 12; tag.position.copy(dir.clone().multiplyScalar(length * 1.08)); group.add(tag);
     group.position.set(arrow.at[0] - entry.cx, arrow.at[1] + 0.9, arrow.at[2] - entry.cz);
+    return group;
+  }
+  /** A metre grid over a box of the ground (§3: every plan carries one), at a height, its step written in a corner. */
+  function metreGrid(place, { box: [x0, z0, x1, z1], step = 5, y = 0 }) {
+    const entry = built.get(place), points = [];
+    for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) points.push(new THREE.Vector3(x - entry.cx, y + 0.25, z0 - entry.cz), new THREE.Vector3(x - entry.cx, y + 0.25, z1 - entry.cz));
+    for (let z = Math.ceil(z0 / step) * step; z <= z1; z += step) points.push(new THREE.Vector3(x0 - entry.cx, y + 0.25, z - entry.cz), new THREE.Vector3(x1 - entry.cx, y + 0.25, z - entry.cz));
+    const group = new THREE.Group(), lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthTest: false }));
+    lines.renderOrder = 7; group.add(lines);
+    const tag = screenSized(label(`grid ${step} m`, "#ffffff", 26), 0.03); tag.position.set(x0 - entry.cx + (x1 - x0) * 0.08, y + 0.5, z0 - entry.cz + (z1 - z0) * 0.04); group.add(tag);
     return group;
   }
   /** The chosen direction's wedge on the ground (§2b): a fan from the person, its colour faint. */
@@ -1390,7 +1425,7 @@ if (capture) {
       return { at: segment.start + 0.05, place: segment.scene.place, people };
     },
     /** One still: `place` at the start of an event, the reader's camera turned by `yaw` about it; `hide` things, `beams` of earlier boxes, `boxes` and a `solved` 3D box drawn for checking. */
-    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], free = [], vague = null, labelScale = 1, dash = 2, arrows = [], wedge = null, people = false, only = null }) {
+    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], free = [], vague = null, labelScale = 1, dash = 2, arrows = [], wedge = null, people = false, only = null, mover = null, grid = null }) {
       // `play`: that many seconds into the event, its hit's effects on (to look at a destruction as it plays).
       // `at`: any moment of the strand, everything playing (to record a scene).
       // Terrain spawning (docs/v2/visual-context-engine.md): a frame of its own size, an explicit camera in world metres,
@@ -1401,6 +1436,7 @@ if (capture) {
       // Just before this event's own hit: the buildings as they stood.
       hitsBefore = beforeHit ? time - 0.02 : null; for (const entry of built.values()) entry.shownHits = -1;
       for (const extra of extras.splice(0)) world.remove(extra);
+      mapHalf = topdown ? topdown.half : null;
       // `only`: the places a director's shot is about keep their pins and names; the others' are hidden for this still.
       const keep = only ? new Set(only) : null; for (const { id: placeId, parts } of placeMarks) for (const part of parts) part.visible = !keep || keep.has(placeId);
       const pose = poseFor(place), offset = pose.position.clone().sub(pose.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
@@ -1425,6 +1461,10 @@ if (capture) {
       // The director's shots (docs/v2/director-camera.md): a person's lettered direction arrows, and the chosen one's wedge.
       for (const arrow of arrows) { const group = directionArrow(place, arrow, labelScale); extras.push(group); world.add(group); }
       if (wedge) { const group = directionWedge(place, wedge); extras.push(group); world.add(group); }
+      // A metre grid on the ground of a plan (`grid`: its box, its step), its step written in a corner.
+      if (grid) { const group = metreGrid(place, grid); extras.push(group); world.add(group); }
+      // The person the shot is about (`mover`): their name raised over the arrows, their ring brighter; the others as ever.
+      for (const [who, { pawn }] of pawns) { const name = pawn.children.find((part) => part.isSprite), ring = pawn.children.find((part) => part.geometry?.type === "RingGeometry"); if (name) name.position.y = who === mover ? 4.2 : 2.5; if (ring) ring.material.opacity = who === mover ? 1 : 0.55; }
       for (const cut of cuts) { const line = terrainCut(place, cut, dash); extras.push(line); world.add(line); }
       // The free ground to build in (the zoom engine's free space): faint squares of the hologram's light cyan on the ground.
       if (free.length) { const entry = built.get(place), sheet = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.12, depthWrite: false }), free.length); free.forEach(([x0, z0, x1, z1], n) => sheet.setMatrixAt(n, new THREE.Matrix4().compose(new THREE.Vector3((x0 + x1) / 2 - entry.cx, 0.3, (z0 + z1) / 2 - entry.cz), new THREE.Quaternion(), new THREE.Vector3(x1 - x0, 1, z1 - z0)))); extras.push(sheet); world.add(sheet); }
