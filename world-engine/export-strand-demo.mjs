@@ -720,7 +720,10 @@ export async function strandDemo(novelDir, options) {
     const placed = [...[...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
     const localRoads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)), held = new Set([...filled.keeps, ...standing].map(b => b.lot));
     const fixedOf = b => held.has(b.lot) || decided.has(b.lot) || /:(landmark|bowl|fountain)$/.test(String(b.lot));
-    const shaped = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf) : { buildings: placed, roads: localRoads };
+    // A shopping centre or a department store the text names is a podium, wide and low (the user, 2026-11-01, a photograph
+    // of one: towers over a mall a block wide): about 70 m a side, a department store 50, grown as a tower is.
+    const podium = b => (decided.has(b.lot) ? (b.use === 'mall' ? 70 : b.use === 'department' ? 50 : 0) : 0);
+    const shaped = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf, podium) : { buildings: placed, roads: localRoads };
     const buildings = shaped.buildings.map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
     // A composite building's parts (the user, 2026-11-01), each its use's model inside its host as the host stands now:
     // on its floor (under the street: −1, −2; its host's own level when the host lies under the street), as large as it is
@@ -739,7 +742,7 @@ export async function strandDemo(novelDir, options) {
       const under = typeof hostSite?.top === 'number' && hostSite.top < 0, bottom = under ? hostSite.top : floor < 0 ? 6 * floor : 3 * (Math.min(floor, host.floors) - 1);
       const [u, v] = site.spot ?? [0, 0], s = u * (host.w - w), t = v * (host.d - d), ux = Math.cos(host.angle), uz = Math.sin(host.angle);
       const model = UM.modelFor({ w, d, floors: site.floors ?? 1, kind: site.kind, use: site.kind, era: 'modern' }, id, modelSizes) ?? null;
-      parts.push({ id, model, box: [host.x + s * ux - t * uz, host.z + s * uz + t * ux, w, d, host.angle, bottom, height] });
+      parts.push({ id, model, host: host.id, area, box: [host.x + s * ux - t * uz, host.z + s * uz + t * ux, w, d, host.angle, bottom, height] });
     }
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
@@ -748,7 +751,7 @@ export async function strandDemo(novelDir, options) {
     // and its fingerprint; each building's manifold in `buildings` order.
     const patches = place.landscape.patches.map(patch => ({ id: patch.id, type: patch.type, era: LANDSCAPES[patch.type]?.era ?? 'modern', born: patch.born ?? null, centre: [round(patch.x + wx), round(patch.z + wz)], radius: round(patch.R), height: round(patch.H), manifold: manifoldOf(patch),
       outline: Array.from({ length: 48 }, (_, n) => { const angle = (n / 48) * Math.PI * 2, d = reachOf(patch, [patch.x + Math.cos(angle), patch.z + Math.sin(angle)]); return [round(patch.x + wx + Math.cos(angle) * d), round(patch.z + wz + Math.sin(angle) * d)]; }) }));
-    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), ...(shaped.thickened !== undefined ? { tall: { widened: shaped.widened, trimmed: shaped.trimmed, thickened: shaped.thickened, cleared: shaped.cleared } } : {}), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), parts: parts.map(part => [...part.box.slice(0, 4).map(round), Math.round(part.box[4] * 1000) / 1000, round(part.box[5]), round(part.box[6]), part.id, part.model]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width, road.level]), plazas: filled.plazas.map(plaza => [round(plaza.x + wx), round(plaza.z + wz), round(plaza.r)]),
+    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), ...(shaped.thickened !== undefined ? { tall: { widened: shaped.widened, trimmed: shaped.trimmed, thickened: shaped.thickened, cleared: shaped.cleared } } : {}), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), parts: parts.map(part => [...part.box.slice(0, 4).map(round), Math.round(part.box[4] * 1000) / 1000, round(part.box[5]), round(part.box[6]), part.id, part.model, part.host, Math.round(part.area)]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width, road.level]), plazas: filled.plazas.map(plaza => [round(plaza.x + wx), round(plaza.z + wz), round(plaza.r)]),
       walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })), underground: under } };
   });
   /** The theme of the manifold at a point: the era of the patch reaching it most surely (modern where no landscape does). */
@@ -833,6 +836,20 @@ export async function strandDemo(novelDir, options) {
     });
   };
   for (const id of ownGrids) groups.set(id, groupOf({ label: name(id), path: (places.get(id)?.path ?? [id]).map(name), scale: inputs.scale?.places[id]?.scale ?? null, kind: kindOf(id), anchor: anchors.find(anchor => anchor.place === id), main: () => { const index = world.lots.findIndex(lot => lot.place === id); return index >= 0 ? index : null; } }));
+  // A building's marker on the building standing on its lot, a composite building's part's on its part (the user,
+  // 2026-11-01: markers 26–66 m off their buildings where a street had moved since its lots were laid as slots). Only
+  // markers, not what a scene is set in (its grid is laid already).
+  if (terrain?.mode === 'spawn') {
+    const standingNow = new Map(landscapes.flatMap(entry => entry.source.buildings.map(b => [b.id, b]))), partNow = new Map(landscapes.flatMap(entry => (entry.parts ?? []).map(part => [part[7], part])));
+    for (const node of macro.filter(entry => entry.unbuilt)) {
+      const site = terrain.sites?.[node.id];
+      if (site?.scale !== 'building') continue;
+      const slot = site.slot ? terrain.slots?.[site.slot] : null, key = slot ? slot.lot ?? slot.id : null, short = key && key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
+      const b = key ? landscapes.map(entry => standingNow.get(`${entry.place}:${key}`) ?? standingNow.get(`${entry.place}:${short}`)).find(Boolean) : null, part = site.by === 'tenant' ? partNow.get(node.id) : null;
+      const at = part ? [part[0], part[1]] : b ? [b.x, b.z] : null;
+      if (at) { node.x = Math.round(at[0] * 10) / 10; node.z = Math.round(at[1] * 10) / 10; }
+    }
+  }
   notes.landscape = { places: landscapes.length, buildings: landscapes.reduce((sum, entry) => sum + entry.buildings.length, 0), temporary: macro.filter(node => node.temporary).length };
   // Between places, people walk the map: its own path integral over a lattice (macroPath.ts), from where they leave one
   // place's grid to where they enter the next, each boundary crossed costing more the more slanted the crossing. Inside

@@ -670,6 +670,37 @@ let decor = () => {};
   // A composite building's parts (the user, 2026-11-01): each a volume of its own inside its host, a shop at its foot, a
   // cinema on its upper floors, one under it below the street; gold, outlined, so a part shows through its host.
   const parts = (data.landscapes ?? []).flatMap((entry) => entry.parts ?? []);
+  // Laid out in its host as the world stands it (its lot, square to the grid; the user, 2026-11-01: parts at a slant to
+  // their host): a floor's parts in rows from its corner, in the order of their random spots, all of them within the
+  // floor (shrunk together when they would fill more than nine tenths of it); its height kept within the host's.
+  {
+    const standing = new Map([...(data.world?.lots ?? []), ...(data.world?.shells ?? [])].filter((lot) => lot.source).map((lot) => [lot.source, lot]));
+    const floors = new Map();
+    for (const part of parts) {
+      const lot = standing.get(part[9]);
+      if (!lot) continue;
+      const key = `${part[9]}|${part[5]}`;
+      if (!floors.has(key)) floors.set(key, { lot, parts: [] });
+      floors.get(key).parts.push(part);
+    }
+    for (const { lot, parts: here } of floors.values()) {
+      const x0 = lot.i0 * CELL, z0 = lot.j0 * CELL, W = lot.nx * CELL, D = lot.nz * CELL, top = (lot.height ?? lot.floors) * FLOOR, room = 0.9 * W * D;
+      const total = here.reduce((sum, part) => sum + (part[10] ?? part[2] * part[3]), 0);
+      let scale = Math.min(1, room / Math.max(1, total)), fits = false;
+      here.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]));
+      for (let tries = 0; tries < 8 && !fits; tries++, scale *= 0.85) {
+        let u = 0.5, v = 0.5, row = 0; fits = true;
+        for (const part of here) {
+          const side = Math.min(W - 1, D - 1, Math.sqrt((part[10] ?? part[2] * part[3]) * scale)), w = side, d = Math.min(D - 1, ((part[10] ?? part[2] * part[3]) * scale) / side);
+          if (u + w > W - 0.5) { u = 0.5; v += row + 0.5; row = 0; }
+          if (v + d > D - 0.5) { fits = false; break; }
+          part.laid = [x0 + u + w / 2, z0 + v + d / 2, w, d];
+          u += w + 0.5; row = Math.max(row, d);
+        }
+      }
+      for (const part of here) if (part.laid) { const [x, z, w, d] = part.laid; part.splice(0, 5, x, z, w, d, 0); part[5] = Math.max(Math.min(part[5], top - part[6]), part[5] < 0 ? part[5] : 0); }
+    }
+  }
   if (parts.length) {
     // Each as its use's model (a shop, a restaurant, a cinema), stretched to its volume; a box where no model came.
     const gold = new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.28, depthWrite: false }), rim = new THREE.LineBasicMaterial({ color: 0xffd98f, transparent: true, opacity: 0.95, depthWrite: false }), rims = [];

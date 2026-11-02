@@ -765,7 +765,8 @@ export function footprintsOverlap(a: Building, b: Building): boolean {
   }
   return true;
 }
-export function tallAndWide(buildings: Building[], roads: Road[], fixed: (b: Building) => boolean): { buildings: Building[]; roads: Road[]; widened: number; trimmed: number; thickened: number; cleared: number } {
+/** `least`: a building's least side whatever its height (a shopping centre's podium: the user, 2026-11-01), grown as a tower is. */
+export function tallAndWide(buildings: Building[], roads: Road[], fixed: (b: Building) => boolean, least: (b: Building) => number = () => 0): { buildings: Building[]; roads: Road[]; widened: number; trimmed: number; thickened: number; cleared: number } {
   // 1. The streets: the statistics of the buildings round each.
   const wide = roads.map((road) => {
     let n = 0, tall = 0;
@@ -796,8 +797,8 @@ export function tallAndWide(buildings: Building[], roads: Road[], fixed: (b: Bui
   const fixedOnes = live.filter(fixed);
   for (const b of order) {
     if (gone.has(b)) continue;
-    const need = topOf(b) / SLENDER;
-    if (topOf(b) > TALL && Math.min(b.w, b.d) < need) {
+    const need = Math.max(topOf(b) > TALL ? topOf(b) / SLENDER : 0, least(b));
+    if (need > 0 && Math.min(b.w, b.d) < need) {
       const reach = need + Math.hypot(b.w, b.d), near = (o: Building) => Math.hypot(o.x - b.x, o.z - b.z) < reach + Math.hypot(o.w, o.d);
       const streets = wide.filter((road) => segmentDistance([b.x, b.z], road.a, road.b) < reach + road.width && !hitsRoad(b, road));
       const stops = [...standing, ...fixedOnes.filter((o) => o !== b)].filter((o) => near(o) && !footprintsOverlap(b, o));
