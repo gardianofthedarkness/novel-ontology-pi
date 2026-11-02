@@ -51,7 +51,6 @@ export const RULES: CodeRule[] = [
   { name: "longest name", decides: "a longer name masks the shorter inside it (御坂妹妹 is not 妹妹)", layer: 1, language: false, lives: "src/v2/extraction/em.ts (mentions)" },
   { name: "proper or description", decides: "a name that is no proper name is a description (EM²'s or place EM's), a routine thing, or skipped", layer: 4, language: false, lives: "src/v2/extraction/em.ts (resolveBatch)" },
   { name: "matter recommender", decides: "a name's candidates by nearness, frequency and shared names", layer: 2, language: false, lives: "src/v2/extraction/em.ts (recommend)" },
-  { name: "move rule", decides: "a narration or description sentence with a word of moving (走到, 来到, 跑进, 离开) is an action; EM² says who moves", layer: 1, language: true, lives: `${HERE}/language.ts (moves), src/v2/extraction/flow.ts` },
   { name: "action rule", decides: "an action where nothing that matters acts is narration", layer: 1, language: false, lives: "src/v2/extraction/flow.ts" },
   { name: "time words", decides: "time words, their families and roles, holidays as days, the kinds that cannot move time", layer: 1, language: true, lives: "src/v2/extraction/time.ts, src/digger/timeplace" },
   { name: "near", decides: "a building the tree puts nowhere, or an unnamed place nothing holds, is sampled near where its scenes are", layer: 4, language: false, lives: "src/v2/extraction/script.ts" },

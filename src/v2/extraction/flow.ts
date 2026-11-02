@@ -13,7 +13,6 @@ import { placeEm, type PlaceResult } from "./placeEm.js";
 import { spatialMentions, type SpatialMention } from "./spatial.js";
 import { CATEGORY_OF, typeNames, type Decide, type Detected, type EntityType } from "./typing.js";
 import { settledCategory, usualType } from "../rules/typing.js";
-import { LANGUAGE } from "../rules/language.js";
 
 /**
  * The v2 reading flow (the user's sketch, 2026-10-30; docs/v2/world-engine-v2.md §2):
@@ -51,7 +50,7 @@ export interface SceneContext {
 export interface StepLog { step: string; requests: number; ms: number; inputChars: number; questionChars?: number; detail?: Record<string, unknown>; contexts?: Record<string, { requests: number; kept: number; cut: number; chars: number }> }
 export interface FlowResult extends RolesResult {
   /** `was`: the kind the classifier gave, where the action rule changed it (nothing that matters acts); `actor`: the thing that did. */
-  scenes: FlowScene[]; cards: FlowCard[]; kinds: Record<string, { kind: SentenceKind; turn: number; confidence: number; was?: SentenceKind; actor?: string; rule?: "move" }>;
+  scenes: FlowScene[]; cards: FlowCard[]; kinds: Record<string, { kind: SentenceKind; turn: number; confidence: number; was?: SentenceKind; actor?: string }>;
   chart: Chart; em: { batch: string; results: EmResult[] }[]; contexts: SceneContext[]; steps: StepLog[];
   /** The fact ledger, in reading order: who each fact is about, its time, and its story period. */
   facts: FactEntry[];
@@ -147,11 +146,6 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   const scenes: FlowScene[] = tiles.flatMap(({ block, spans }) => spans.map((ids) => ({ id: "", index: 0, block: block.id, chapter: block.chapter, sentences: ids }))).map((scene, index) => ({ ...scene, id: `scene_${String(index + 1).padStart(6, "0")}`, index }));
   const kindOf: FlowResult["kinds"] = {};
   for (const { block, kinds: list, turns, confidence } of kinds) block.sentences.forEach((sentence, index) => { kindOf[sentence.id] = { kind: list[index], turn: Number(turns[index].toFixed(3)), confidence: Number(confidence[index].toFixed(3)) }; });
-  // The move rule (src/v2/rules/language.ts `moves`; the user, 2026-11-02: any change of place is played): a narration or
-  // description sentence with a word of moving is an action. Asked in the definitions instead, Jev moved 3 of 35 such
-  // sentences and 217 others back and forth; EM² says who moves, and the action rule below drops it where no one who
-  // matters does. The kind keeps what it was.
-  for (const { block } of kinds) for (const sentence of block.sentences) { const entry = kindOf[sentence.id]; if ((entry.kind === "narration" || entry.kind === "environment") && LANGUAGE.moves.test(sentence.text)) kindOf[sentence.id] = { ...entry, kind: "action", was: entry.kind, rule: "move" }; }
   const cut = (): FlowCard[] => blocks.flatMap((block) => {
     const ids = block.sentences.map((sentence) => sentence.id);
     return kindCards(ids, ids.map((id) => kindOf[id].kind), ids.map((id) => kindOf[id].turn)).map((card) => ({ ...card, block: block.id, sentences: ids.slice(ids.indexOf(card.first), ids.indexOf(card.last) + 1), entities: [], people: [] }));
