@@ -238,3 +238,13 @@ test("composite buildings: a shop, a restaurant, a cinema joins a host where tra
   assert.deepEqual(spotOf("unnamed:x"), spotOf("unnamed:x"));
   assert.ok(spotOf("unnamed:x").every((v) => v >= -0.5 && v <= 0.5) && spotOf("unnamed:x").join() !== spotOf("unnamed:y").join());
 });
+
+test("no building stands inside another: the tallest kept first, what the text placed always; buildings wall to wall stay", async () => {
+  const { clearOverlaps } = await import("../src/v2/world/tall.js");
+  const b = (lot: string, x: number, z: number, w: number, d: number, floors: number, angle = 0) => ({ lot, x, z, w, d, angle, floors, kind: "office" });
+  const tower = b("tower", 0, 0, 40, 40, 60), inside = b("inside", 10, 5, 12, 12, 8), turned = b("turned", 24, 0, 12, 12, 5, 0.7), wall = b("wall", 26, 0, 12, 12, 5);
+  const placed = b("placed", 60, 40, 10, 10, 3), taller = b("taller", 64, 44, 8, 8, 90);
+  const { buildings, overlapped } = clearOverlaps([inside, tower, turned, wall, placed, taller], (o) => o.lot === "placed");
+  assert.deepEqual(buildings.map((o) => o.lot).sort(), ["placed", "tower", "wall"]);
+  assert.equal(overlapped, 3, "the one inside the tower, the turned one cutting its corner and a taller one on what the text placed give way; the one wall to wall at its face stays");
+});

@@ -97,3 +97,23 @@ export function tallAndWide(buildings: Building[], roads: Road[], fixed: (b: Bui
   }
   return { buildings: live.filter((b) => !gone.has(b)), roads: wide, widened: wide.filter((road, k) => road !== roads[k]).length, trimmed, thickened, cleared };
 }
+
+/**
+ * No building stands inside another (the user, 2026-11-02: a district "blowing up", towers thickened and buildings pushed
+ * aside by what stands apart landing in their neighbours, once every building was drawn at its true size): what the text
+ * placed (`fixed`) first, then the tallest first, each kept unless its footprint, less a hand's breadth at each face (so
+ * buildings wall to wall stay), overlaps one kept before it.
+ */
+export function clearOverlaps(buildings: Building[], fixed: (b: Building) => boolean): { buildings: Building[]; overlapped: number } {
+  const CELL = 40, grid = new Map<string, Building[]>(), kept = new Set<Building>();
+  const order = [...buildings].sort((a, b) => Number(fixed(b)) - Number(fixed(a)) || topOf(b) - topOf(a));
+  const inset = (b: Building): Building => ({ ...b, w: Math.max(0.2, b.w - 0.6), d: Math.max(0.2, b.d - 0.6) });
+  const cellsOf = (b: Building) => { const r = Math.hypot(b.w, b.d) / 2, out: string[] = []; for (let i = Math.floor((b.x - r) / CELL); i <= Math.floor((b.x + r) / CELL); i++) for (let j = Math.floor((b.z - r) / CELL); j <= Math.floor((b.z + r) / CELL); j++) out.push(`${i},${j}`); return out; };
+  for (const b of order) {
+    const cells = cellsOf(b), mine = inset(b);
+    if (!fixed(b) && cells.some((cell) => (grid.get(cell) ?? []).some((other) => footprintsOverlap(mine, inset(other))))) continue;
+    kept.add(b);
+    for (const cell of cells) (grid.get(cell) ?? grid.set(cell, []).get(cell)!).push(b);
+  }
+  return { buildings: buildings.filter((b) => kept.has(b)), overlapped: buildings.length - kept.size };
+}
