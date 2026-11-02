@@ -162,7 +162,7 @@ export async function addDirectorNote(workspace, body) {
   await appendFile(notesFile(workspace), `${JSON.stringify(note)}\n`, { mode: 0o644 });
   return note;
 }
-/** Every sentence's kind as the director's reading has it (stage/director/kinds.json), for the reader's colours; null before a run. */
-export async function directorKinds(workspace) {
-  return readFile(resolve(workspace, 'stage', 'director', 'kinds.json'), 'utf8').then(JSON.parse, () => null);
+/** The reading as the reader shows it (stage/director/reading.json: kinds, detected names and what they mean); null before a run. */
+export async function directorReading(workspace) {
+  return readFile(resolve(workspace, 'stage', 'director', 'reading.json'), 'utf8').then(JSON.parse, () => null);
 }

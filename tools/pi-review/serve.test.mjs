@@ -432,7 +432,7 @@ test('notes on the director\'s cards: added from the reader, listed for both, no
   const [note] = JSON.parse((await send(viewer, 'play/notes.json')).body);
   assert.deepEqual([note.card, note.event, note.text], ['action:b0000_s0110', 14, 'jumps to a roof, ends on the street']);
   assert.match(await readFile(join(directory, 'stage', 'director', 'notes.jsonl'), 'utf8'), /ends on the street/);
-  assert.equal((await send(viewer, 'play/kinds.json')).status, 404, 'no kinds before a director run');
-  await writeFile(join(directory, 'stage', 'director', 'kinds.json'), JSON.stringify({ version: 1, kinds: { b0000_s0001: 'spoken' } }));
-  assert.deepEqual(JSON.parse((await send(viewer, 'play/kinds.json')).body).kinds, { b0000_s0001: 'spoken' });
+  assert.equal((await send(viewer, 'play/reading.json')).status, 404, 'no reading before a director run');
+  await writeFile(join(directory, 'stage', 'director', 'reading.json'), JSON.stringify({ version: 2, kinds: { b0000_s0001: 'spoken' } }));
+  assert.deepEqual(JSON.parse((await send(viewer, 'play/reading.json')).body).kinds, { b0000_s0001: 'spoken' });
 });

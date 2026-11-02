@@ -48,11 +48,21 @@ export function standIn() {
   } };
 }
 
+/** The reader's view of a reading: kinds, marks (not everyday things) and the names they point at. */
+export async function readerView(reading, text) {
+  const { sentenceMarks } = await import('../../experiments/v2/marks.mjs');
+  const marks = Object.fromEntries(Object.entries(await sentenceMarks(reading, text)).map(([id, found]) => [id, found.filter(([, , type]) => type !== 'r')]).filter(([, found]) => found.length));
+  const names = Object.fromEntries([...reading.chart.entities.map(entity => [entity.id, [entity.proper?.[0] ?? entity.names?.[0] ?? entity.id, entity.category ?? null]]), ...(reading.slots ?? []).map(slot => [slot.id, [slot.label, slot.kind ?? 'person']])]);
+  return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
+}
+
 export async function direct(novelDir, { reading, from, to, jev, budget = Infinity, live = null, pace = 0, log = console.error }) {
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
-  const spoken = id => (reading.roles?.[id]?.kind === 'spoken' ? reading.roles[id].who?.id ?? null : null);
-  const text = await loadWorkspaceSentences(novelDir), line = id => ({ id, text: text.get(id)?.text ?? '', kind: reading.kinds?.[id]?.kind ?? null, ...(spoken(id) ? { who: spoken(id) } : {}) });
+  // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
+  // threshold no one.
+  const spoken = id => (reading.roles?.[id]?.kind === 'spoken' ? reading.roles[id].who ?? null : null);
+  const text = await loadWorkspaceSentences(novelDir), line = id => ({ id, text: text.get(id)?.text ?? '', kind: reading.kinds?.[id]?.kind ?? null, ...(spoken(id)?.id ? { who: spoken(id).id } : {}), ...(spoken(id) ? { sure: spoken(id).confidence ?? null } : {}) });
   const names = new Map([...reading.chart.entities.map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]), ...(reading.slots ?? []).map(slot => [slot.id, slot.label])]);
   const nameForms = new Map(reading.chart.entities.map(entity => [entity.id, [...new Set([...(entity.proper ?? []), ...(entity.names ?? [])])].filter(form => form.length >= 2)]));
   const sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
@@ -60,8 +70,9 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
   for (const card of reading.cards) { const id = sceneOf.get(card.first); if (id && ['action', 'dialogue'].includes(card.kind)) (cardsOf.get(id) ?? cardsOf.set(id, []).get(id)).push(card); }
   const out = join(novelDir, 'stage', 'director'), shots = join(out, 'shots'), work = join(out, 'page');
   await mkdir(shots, { recursive: true }); await mkdir(work, { recursive: true });
-  // Every sentence's kind, for the reader's whole book (World · Live's play/kinds.json).
-  await writeFile(join(out, 'kinds.json'), JSON.stringify({ version: 1, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])) }));
+  // The reading as the reader shows it over the whole book (World · Live's play/reading.json): every sentence's kind, and the
+  // names, descriptions and times detected in it with whom or what they mean (experiments/v2/marks.mjs, as the reading's page).
+  await writeFile(join(out, 'reading.json'), JSON.stringify(await readerView(reading, new Map([...text].map(([id, entry]) => [id, entry.text])))));
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   const template = await readFile(join(repository, 'world-engine', 'view', 'strand-demo.html'), 'utf8');
   const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [] };

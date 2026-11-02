@@ -11,34 +11,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`).href);
+const { sentenceMarks } = await import('./marks.mjs');
 
 export async function inspect(novelDir, outDir) {
   const { loadBlocks } = await load('dist/src/v2/extraction/base.js');
-  const { mentions } = await load('dist/src/v2/extraction/em.js');
   const data = JSON.parse(await readFile(join(outDir, 'v2', 'data.json'), 'utf8'));
   const blocks = await loadBlocks(novelDir);
   const text = new Map(blocks.flatMap(block => block.sentences.map(sentence => [sentence.id, sentence.text])));
   const order = new Map([...text.keys()].map((id, index) => [id, index]));
 
-  // Where each name, description and time stands in each sentence (longest first, as the card scan reads).
-  const lexicon = [
-    ...data.chart.entities.flatMap(entity => entity.proper.map(name => [name, entity.id])),
-    ...[...new Set(data.em.flatMap(batch => batch.results).filter(entry => entry.outcome === 'description').map(entry => entry.text))].map(name => [name, `desc:${name}`]),
-    // Time words come from story time where the reading has it (each where it stands, with its role).
-    ...(data.time ? [] : data.chart.times.map(node => [node.text, node.id])),
-  ].sort((a, b) => b[0].length - a[0].length);
-  // Everyday things (EM's routine outcome: no entity), marked only where no name, description or time stands.
-  const routine = [...new Set(data.em.flatMap(batch => batch.results).filter(entry => entry.outcome === 'routine').map(entry => entry.text))].map(name => [name, 'routine']).sort((a, b) => b[0].length - a[0].length);
-  const meant = new Map();
-  for (const reference of data.references) for (const id of reference.sentences) meant.set(`${id}\u0000${reference.text}`, reference.entity ?? '');
-  const spans = {};
-  for (const [id, sentence] of text) {
-    const found = mentions(sentence, lexicon).map(hit => hit.id.startsWith('desc:') ? [hit.at, hit.name.length, 'd', meant.get(`${id}\u0000${hit.name}`) ?? null] : [hit.at, hit.name.length, hit.id.slice(0, hit.id.indexOf('_')), hit.id]);
-    for (const word of data.time?.words ?? []) if (word.sentence === id && !found.some(([at, length]) => word.start < at + length && at < word.end)) found.push([word.start, word.end - word.start, 'time', `time:${word.role}:${word.gloss}`]);
-    const taken = found.map(([at, length]) => [at, at + length]);
-    for (const hit of mentions(sentence, routine)) if (!taken.some(([from, to]) => hit.at < to && hit.at + hit.name.length > from)) found.push([hit.at, hit.name.length, 'r', 'routine']);
-    if (found.length) spans[id] = found;
-  }
+  const spans = await sentenceMarks(data, text);
   // EM's results for the strings a sentence holds (its listing batch: the latest batch starting at or before it).
   const batches = data.em.map(batch => ({ ...batch, at: order.get(batch.batch) ?? -1 })).sort((a, b) => a.at - b.at);
   const emOf = {};
