@@ -55,3 +55,8 @@ test("an entity whose typings settle on another category moves there, under an i
   assert.ok(!chart.entities.has(place.id) && chart.entities.get(moved)?.category === "concept" && !moved.startsWith("loc_"));
   assert.equal(chart.exact("魔法侧")?.id, moved);
 });
+
+test("the move rule's words: going somewhere is a move, being somewhere is not", () => {
+  for (const text of ["他们来到一座建筑。", "上条走到门前。", "美琴跑进了小巷中。", "她离开了宿舍。", "他上楼去了。"]) assert.ok(LANGUAGE.moves.test(text), text);
+  for (const text of ["他站在门前。", "美琴在小巷里。", "风很冷。"]) assert.ok(!LANGUAGE.moves.test(text), text);
+});
