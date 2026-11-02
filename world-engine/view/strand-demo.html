@@ -34,6 +34,8 @@
   body.live .stage { position: fixed; inset: 0; aspect-ratio: auto; border: 0; border-radius: 0; }
   /* Live mode: Jev's panel for the moment over the world (the event played, then what Jev decided), bottom on a phone. */
   body.live #trace { position: fixed; z-index: 20; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: max(64px, calc(env(safe-area-inset-bottom) + 64px)); max-height: 34vh; background: #0b1620e6; }
+  /* A phone, upright or on its side: World · Live's subtitle and Why say the moment; this box would cover them. */
+  @media (max-width: 560px), (orientation: landscape) and (max-height: 520px) { body.live #trace { display: none !important; } }
   @media (max-width: 719px) { body.live #trace { max-height: 22vh; bottom: max(60px, calc(env(safe-area-inset-bottom) + 60px)); } }
   @media (min-width: 720px) { body.live #trace { left: auto; bottom: auto; top: max(10px, env(safe-area-inset-top)); width: 380px; max-height: 60vh; } }
   .trace .moment { font-size: 13px; color: var(--ink); margin-bottom: 6px; }
