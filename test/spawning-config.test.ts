@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { LANDSCAPES } from "../src/ground/stage/landscape.js";
+import { LANDSCAPES } from "../src/v2/world/landscape.js";
 import { TERRAIN_KINDS } from "../src/v2/context/terrainModes.js";
 import { LANGUAGE } from "../src/v2/rules/language.js";
 
 // The spawning configurations (docs/v2/borrow-and-spawn.md §5), read from the repository's root (npm test): every kind a
 // file names must be one Jev can answer at its level, and every building use one the language profile or the landscapes know.
-const read = (name: string) => JSON.parse(readFileSync(resolve(process.cwd(), "config", "spawning", `${name}.json`), "utf8"));
+const read = (name: string) => JSON.parse(readFileSync(resolve(process.cwd(), "config", "terrain", `${name}.json`), "utf8"));
 const isCount = (count: unknown) => (Number.isInteger(count) && (count as number) >= 0) || (Array.isArray(count) && count.length === 2 && count.every((n) => Number.isInteger(n) && n >= 0) && count[0] <= count[1]);
 
 for (const [name, parent, level] of [["city", "city", "district"], ["district", "district", "street"]] as const) {

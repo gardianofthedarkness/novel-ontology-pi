@@ -272,9 +272,9 @@ export async function terrainIo(novelDir, outDir, { run = 'run 11', ref = 'terra
   for (const file of new Set(parts.flatMap(part => part.pictures.map(picture => picture.file)))) await copyFile(join(live, file), join(terrainDir, file));
 
   // The world as kept: the engine's own page in live mode (the whole world drawn on the terrain stage), three.js beside it.
-  const { inlineStrand } = await import(pathToFileURL(join(repository, 'world-engine', 'export-strand-demo.mjs')).href);
-  const { VENDOR_FILES } = await import(pathToFileURL(join(repository, 'world-engine', 'sim-jev.mjs')).href);
-  const template = await readFile(join(repository, 'world-engine', 'strand-demo.html'), 'utf8');
+  const { inlineStrand } = await import(pathToFileURL(join(repository, 'world-engine', 'world', 'export-strand-demo.mjs')).href);
+  const { VENDOR_FILES } = await import(pathToFileURL(join(repository, 'world-engine', 'live', 'sim-jev.mjs')).href);
+  const template = await readFile(join(repository, 'world-engine', 'view', 'strand-demo.html'), 'utf8');
   const world = inlineStrand(template, { ...data, title: `Terrain · ${run}`, live: { ...data.live, moment: `Terrain · ${run}: the world as kept` } }, { name: `Terrain · ${run}`, vendor: true });
   refuseText('terrain/world/index.html', world);
   await mkdir(join(terrainDir, 'world'), { recursive: true });

@@ -279,7 +279,7 @@ function NamedBuildings({ mark, shapes, reducedMotion }: { mark: FloorMark; shap
 }
 
 /**
- * A building's insides as the strand page draws them (world-engine/strand-demo.html): corridor slabs,
+ * A building's insides as the strand page draws them (world-engine/view/strand-demo.html): corridor slabs,
  * stair cores and rooms floor by floor; once a hit reaches it, its walls and roof unit by unit, what is
  * cut off from the ground in red, and what fell as rubble.
  */

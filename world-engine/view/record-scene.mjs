@@ -5,7 +5,7 @@
  * stage; the frames go to ffmpeg as a WebM (VP8), through one file of concatenated JPEG frames (the ffmpeg Playwright
  * keeps reads neither a pipe nor a file pattern, but reads an image stream from a file).
  *
- *   node world-engine/record-scene.mjs <strand-page.html> <scene-id> <out.webm> --vendor <dir> [--fps 15] [--speed 2] [--ffmpeg <path>]
+ *   node world-engine/view/record-scene.mjs <strand-page.html> <scene-id> <out.webm> --vendor <dir> [--fps 15] [--speed 2] [--ffmpeg <path>]
  *
  * The page is the strand exporter's output with --vendor; <dir> holds its three.js files. Renders with the installed
  * Google Chrome, headless. ffmpeg defaults to the one Playwright keeps in its cache.
@@ -20,7 +20,7 @@ import { browser, serve } from './two-view-things.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, fps: { type: 'string', default: '15' }, speed: { type: 'string', default: '2' }, ffmpeg: { type: 'string', default: `${homedir()}/Library/Caches/ms-playwright/ffmpeg-1011/ffmpeg-mac` } } });
 const [page, scene, out] = positionals;
-if (!page || !scene || !out || !values.vendor) throw new Error('Usage: node world-engine/record-scene.mjs <strand-page.html> <scene-id> <out.webm> --vendor <dir> [--fps 15] [--speed 2]');
+if (!page || !scene || !out || !values.vendor) throw new Error('Usage: node world-engine/view/record-scene.mjs <strand-page.html> <scene-id> <out.webm> --vendor <dir> [--fps 15] [--speed 2]');
 const fps = Number(values.fps), step = Number(values.speed) / fps, started = Date.now();
 const { server, url } = await serve(resolve(page), resolve(values.vendor)), chrome = await browser();
 const stream = `${resolve(out)}.mjpeg`, frameFile = createWriteStream(stream);

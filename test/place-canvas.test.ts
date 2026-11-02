@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addPart, addUnit, adopt, bear, bearChain, centralBuild, dwellingFor, emptyCanvas, holderFor, LEAST, sampledIn, worldOf, type BuildArea, type Canvas } from "../src/ground/stage/placeCanvas.js";
+import { addPart, addUnit, adopt, bear, bearChain, centralBuild, dwellingFor, emptyCanvas, holderFor, LEAST, sampledIn, worldOf, type BuildArea, type Canvas } from "../src/v2/world/placeCanvas.js";
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 /** Every child circle lies inside its parent's, and no two siblings overlap. */

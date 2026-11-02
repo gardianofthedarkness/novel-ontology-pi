@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fillLandscape, frameOf, LANDSCAPE_VERSION, LANDSCAPES, patchFromBox, STREET_TYPES, type LandscapeType, type Manifold, type Patch } from "../src/ground/stage/landscape.js";
-import { hallsOf } from "../src/ground/stage/underground.js";
-import type { Building } from "../src/ground/stage/cityFill.js";
+import { fillLandscape, frameOf, LANDSCAPE_VERSION, LANDSCAPES, patchFromBox, STREET_TYPES, type LandscapeType, type Manifold, type Patch } from "../src/v2/world/landscape.js";
+import { hallsOf } from "../src/v2/world/underground.js";
+import type { Building } from "../src/v2/world/cityFill.js";
 
 const manifold: Manifold = { gradient: 0.2, core: 0.3, spread: 0.4, tail: 0.05, index: 5 };
 const street = (type: LandscapeType, w = 300, d = 110, median = 15): Patch => ({ ...patchFromBox(type, `s:${type}`, `s:${type}`, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, undefined, { median, manifold }), borrowed: true });
@@ -11,7 +11,7 @@ const fill = (patches: Patch[]) => fillLandscape({ version: LANDSCAPE_VERSION, s
 const own = (patch: Patch, landmarks: Building[]) => landmarks.filter((b) => b.lot.startsWith(`${patch.id}:`));
 
 test("every street type builds its own form: rows down both sides of its road, a ring round its square, a compound, water and a bridge; the same each time", () => {
-  // A crossing is the ground's own (two of the city's roads meeting: config/spawning/street.json `takes`): no form of its own.
+  // A crossing is the ground's own (two of the city's roads meeting: config/terrain/street.json `takes`): no form of its own.
   assert.equal(own(street("crossing", 160, 160), fill([street("crossing", 160, 160)]).landmarks).length, 0, "a crossing: no form");
   for (const type of STREET_TYPES.filter((type) => type !== "crossing")) {
     const patch = street(type, type === "square" || type === "centre" ? 220 : 300, type === "square" || type === "centre" ? 220 : 110), result = fill([patch]), mine = own(patch, result.landmarks), lots = (part: string) => mine.filter((b) => b.lot.includes(part));
@@ -62,7 +62,7 @@ test("a street's buildings take their uses from its kind's list (a shopping stre
 });
 
 test("the terrain view draws a building as a model of its use whose floors hold its own, the nearest by proportions; old models only on ancient ground", async () => {
-  const { modelFor, roleModel, useOf } = await import("../src/ground/stage/useModels.js");
+  const { modelFor, roleModel, useOf } = await import("../src/v2/world/useModels.js");
   const table = {
     uses: { office: { fill: { "office-c": [3, 8], "tower-a": [10, 45] } }, house: { fill: { "suburban-01": [1, 3] } }, apartment: { fill: { "kk-apartment": [3, 7] }, named: { "brick-small": [3, 6] } }, warehouse: { fill: {} } },
     kinds: { tower: "office", office: "office", house: "house", cottage: "house", apartment: "apartment", warehouse: "warehouse" },
@@ -85,7 +85,7 @@ test("the terrain view draws a building as a model of its use whose floors hold 
 });
 
 test("the underground: a part below the street becomes the hall its name says (a car park, a passage), else one by its proportions; every kind says what it lies under", async () => {
-  const U = await import("../src/ground/stage/underground.js"), { undergroundKindOf } = await import("../src/v2/rules/language.js");
+  const U = await import("../src/v2/world/underground.js"), { undergroundKindOf } = await import("../src/v2/rules/language.js");
   assert.deepEqual(["地下停车场", "地下通道 (scene 21)", "地下街", "防空洞", "共同沟", "地铁站", "地下二层", "广场"].map((label) => undergroundKindOf(label)), ["parking", "corridor", "mall", "shelter", "utility", "station", "basement", null]);
   const shape = { id: "s", x: 0, z: 0, w: 114, d: 22, top: -6 };
   assert.equal(U.shapeHall(shape).kind, "corridor", "a long shape: a passage");
@@ -96,7 +96,7 @@ test("the underground: a part below the street becomes the hall its name says (a
 });
 
 test("what a street is laid on: an avenue along the arterial roads its ground made, a square on a plaza, a station on none", async () => {
-  const { formsFor, STREET_ON } = await import("../src/ground/stage/landscape.js");
+  const { formsFor, STREET_ON } = await import("../src/v2/world/landscape.js");
   const ground = {
     roads: [{ a: [0, 0] as [number, number], b: [200, 200] as [number, number], level: "arterial" }, { a: [0, 300] as [number, number], b: [40, 300] as [number, number], level: "arterial" }, { a: [0, 0] as [number, number], b: [0, 160] as [number, number], level: "local" }],
     waters: [{ a: [500, 0] as [number, number], b: [500, 400] as [number, number] }],

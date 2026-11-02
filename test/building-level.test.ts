@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formOf, LANDSCAPES, patchFromBox } from "../src/ground/stage/landscape.js";
-import { shapeHall } from "../src/ground/stage/underground.js";
+import { formOf, LANDSCAPES, patchFromBox } from "../src/v2/world/landscape.js";
+import { shapeHall } from "../src/v2/world/underground.js";
 import { FLOATING, terrainHeights, terrainThickness } from "../src/v2/context/terrainModes.js";
-import { withSlots, type KeptSlot } from "../src/v2/spawning/tree.js";
+import { withSlots, type KeptSlot } from "../src/v2/terrain/tree.js";
 
 // The building level (docs/v2/borrow-and-spawn.md §6, §8.9): a street's buildings as its form builds them are its building
 // slots; a building that borrows one stands in that street; floating objects asked their distance from the ground and
@@ -55,7 +55,7 @@ test("a floating object is asked how far it is from the ground and how thick it 
 });
 
 test("a street that takes the ground's own: an avenue on a wide road, a crossing where wide roads meet; no form, the fill stays", async () => {
-  const { formsTaking, fillLandscape } = await import("../src/ground/stage/landscape.js");
+  const { formsTaking, fillLandscape } = await import("../src/v2/world/landscape.js");
   const road = (id: string, a: [number, number], b: [number, number], width: number, level: string) => ({ id, a, b, width, level });
   const roads = [road("A1", [-200, 0], [0, 0], 18, "arterial"), road("A2", [0, 0], [200, 0], 18, "arterial"), road("C1", [0, -150], [0, 0], 12, "collector"), road("C2", [0, 0], [0, 150], 12, "collector"), road("L1", [100, 0], [100, 120], 8, "local")];
   const avenue = formsTaking({ road: 18 }, roads);
@@ -70,9 +70,9 @@ test("a street that takes the ground's own: an avenue on a wide road, a crossing
 
 test("the building level is asked as every level is: its kinds the uses the streets spawn and the models draw, its heights in floors", async () => {
   const { TERRAIN_KINDS, terrainKinds } = await import("../src/v2/context/terrainModes.js");
-  const { MODELS } = await import("../src/ground/stage/useModels.js");
+  const { MODELS } = await import("../src/v2/world/useModels.js");
   const { readFileSync } = await import("node:fs");
-  const street = JSON.parse(readFileSync("config/spawning/street.json", "utf8")).types as Record<string, { uses: Record<string, number> }>;
+  const street = JSON.parse(readFileSync("config/terrain/street.json", "utf8")).types as Record<string, { uses: Record<string, number> }>;
   const kinds = TERRAIN_KINDS.building;
   for (const use of new Set(Object.values(street).flatMap((type) => Object.keys(type.uses)))) assert.ok(kinds[use], `${use}: a street spawns it, so Jev may choose it`);
   for (const [kind, entry] of Object.entries(kinds)) {
@@ -88,7 +88,7 @@ test("the building level is asked as every level is: its kinds the uses the stre
 });
 
 test("the building inventory: every type a use the world draws, its words and floors; the search finds a building by its name and leans on what stands round it", async () => {
-  const { loadBuildingTypes, searchBuildingTypes, wordScore } = await import("../src/v2/spawning/inventory.js");
+  const { loadBuildingTypes, searchBuildingTypes, wordScore } = await import("../src/v2/terrain/inventory.js");
   const { TERRAIN_KINDS } = await import("../src/v2/context/terrainModes.js");
   const types = loadBuildingTypes();
   assert.ok(Object.keys(types).length >= 60, "many types: too many to offer them all");
@@ -114,7 +114,7 @@ test("the building inventory: every type a use the world draws, its words and fl
 });
 
 test("the building level's search by meaning: with an embedder the nearest by vectors, the name's own words still counting", async () => {
-  const { searchBuildingTypes } = await import("../src/v2/spawning/inventory.js");
+  const { searchBuildingTypes } = await import("../src/v2/terrain/inventory.js");
   const types = { a: { use: "shop", describe: "alpha", words: ["甲"] }, b: { use: "office", describe: "beta", words: ["乙"] } };
   const embedder = { embed: async (texts: string[]) => texts.map((text) => (text.includes("beta") || text.includes("办公") ? [0, 1] : [1, 0])) };
   assert.equal((await searchBuildingTypes({ label: "办公的地方", around: [] }, types, 2, embedder))[0].id, "b", "by meaning");
@@ -122,7 +122,7 @@ test("the building level's search by meaning: with an embedder the nearest by ve
 });
 
 test("the search decides a building's type when it is sure, Jev only when it is not", async () => {
-  const { isSure, SURE } = await import("../src/v2/spawning/inventory.js");
+  const { isSure, SURE } = await import("../src/v2/terrain/inventory.js");
   const found = (a: number, b: number, meaning: number | null = 0.6, words = 11) => [{ id: "x", score: a, words, meaning }, { id: "y", score: b, words: 0, meaning }];
   assert.ok(isSure(found(7, 7 - SURE.lead)), "by meaning: its first well ahead");
   assert.ok(!isSure(found(7, 6.8)), "close behind: Jev is asked");
@@ -131,11 +131,11 @@ test("the search decides a building's type when it is sure, Jev only when it is 
 
 test("every level's heights: a minimum, the text's own measures offered; far heights never share a lot", async () => {
   const { buildingHeights, terrainHeightMode, withMeasures } = await import("../src/v2/context/terrainModes.js");
-  const { heightsShare, loadHeights } = await import("../src/v2/spawning/config.js");
-  const { loadBuildingTypes } = await import("../src/v2/spawning/inventory.js");
+  const { heightsShare, loadHeights } = await import("../src/v2/terrain/config.js");
+  const { loadBuildingTypes } = await import("../src/v2/terrain/inventory.js");
   const { measuresIn, numberOf } = await import("../src/v2/context/measures.js");
   const chart = loadHeights(), types = loadBuildingTypes();
-  // The dictionary (config/spawning/heights.json), whole (the user, 2026-11-01): every building type its least floors,
+  // The dictionary (config/terrain/heights.json), whole (the user, 2026-11-01): every building type its least floors,
   // every area kind of every level its least median, each among the heights its kind is offered.
   for (const [id, type] of Object.entries(types)) if (type.use) assert.ok(Number.isInteger(chart.buildings[id]) && chart.buildings[id] >= 1, `${id}: its least floors (${chart.buildings[id]})`);
   assert.deepEqual(Object.keys(chart.buildings).sort(), Object.keys(types).filter((id) => types[id].use).sort(), "no type left out, none extra");
@@ -178,7 +178,8 @@ test("every level's heights: a minimum, the text's own measures offered; far hei
 });
 
 test("tall buildings and the streets round them: above 100 m the taller the thicker, a street wider the more towers stand round it", async () => {
-  const { tallAndWide, footprintsOverlap, SLENDER, TALL } = await import("../src/ground/stage/landscape.js");
+  const { tallAndWide, footprintsOverlap, TALL } = await import("../src/v2/world/tall.js");
+  const { SLENDER } = await import("../src/v2/world/landscape.js");
   const b = (lot: string, x: number, z: number, w: number, d: number, floors: number) => ({ lot, x, z, w, d, angle: 0, floors, kind: "tower" });
   const road = { id: "A:1", a: [-200, 100] as [number, number], b: [200, 100] as [number, number], width: 8, level: "arterial" as const };
   // A 300 m tower 10 m wide grows to 300 / SLENDER; the low building it now covers goes, the fixed one beside it stays.
@@ -200,8 +201,8 @@ test("tall buildings and the streets round them: above 100 m the taller the thic
 });
 
 test("composite buildings: a shop, a restaurant, a cinema joins a host where travel is least; its floor and size fixed or asked, at a spot of that floor", async () => {
-  const { chooseHost, loadTenancies, partFloors, partSizes, spotOf } = await import("../src/v2/spawning/composite.js");
-  const { loadBuildingTypes } = await import("../src/v2/spawning/inventory.js");
+  const { chooseHost, loadTenancies, partFloors, partSizes, spotOf } = await import("../src/v2/terrain/composite.js");
+  const { loadBuildingTypes } = await import("../src/v2/terrain/inventory.js");
   const { TERRAIN_KINDS } = await import("../src/v2/context/terrainModes.js");
   const tenancies = loadTenancies(), types = loadBuildingTypes();
   // Every tenant is a type of the inventory; every host use one the world draws.

@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { LANDSCAPES } from "../src/ground/stage/landscape.js";
-import { MODELS } from "../src/ground/stage/useModels.js";
+import { LANDSCAPES } from "../src/v2/world/landscape.js";
+import { MODELS } from "../src/v2/world/useModels.js";
 
 // The model table (config/models.json, docs/v2/model-kit.md) against the library and the buildings the world makes, read
 // from the repository's root (npm test).
 const read = (...path: string[]) => JSON.parse(readFileSync(resolve(process.cwd(), ...path), "utf8"));
-const library = read("apps", "playground", "src", "data", "architectureModels.json"), street = read("config", "spawning", "street.json");
+const library = read("apps", "playground", "src", "data", "architectureModels.json"), street = read("config", "terrain", "street.json");
 
 test("model kit: every model the table names is in the library, its floors a range", () => {
   for (const [use, entry] of Object.entries(MODELS.uses))

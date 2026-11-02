@@ -100,7 +100,7 @@ const SCENES = 5;
 /** The sentences it carries from them in all: each mention with a sentence either side, then wider rings. */
 const SENTENCES = 15;
 
-/** A manifold (src/ground/stage/landscape.ts): gradient, core, spread, tail share, tail index. */
+/** A manifold (src/v2/world/landscape.ts): gradient, core, spread, tail share, tail index. */
 const M = (gradient: number, spread: number, tail = 0, index = 5) => ({ gradient, core: 0.3, spread, tail, index });
 /**
  * The kinds of terrain a part may be, by its level (the user's calls, 2026-10-31): a city is what kind of city it is; a
@@ -136,7 +136,7 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
   },
   // The street level's own kinds (docs/v2/world-engine-v2.md §2.0.12, §2.0.13): the street-level land use, each built as its
   // own street form (landscape.ts STREET_TYPES) on its own manifold; an avenue and a crossing take the city's own roads
-  // (config/spawning/street.json `takes`). An underground passage is spatial, no street.
+  // (config/terrain/street.json `takes`). An underground passage is spatial, no street.
   street: {
     shopping: { hint: "a shopping street: shops of a few storeys on both sides, signs, a tower at a corner", ground: "shopping", manifold: M(0, 0.35, 0.05), medians: [6, 9, 12, 18, 25] },
     centre: { hint: "a modern commercial centre: a mall podium with towers over it, a plaza with screens, wide roads round it", ground: "centre", manifold: M(0.4, 0.6, 0.1), medians: [12, 20, 30, 45, 70, 100] },
@@ -151,7 +151,7 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium", manifold: M(0, 0.2), medians: [15, 25, 35, 50] },
   },
   // The building level's own kinds (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01: every level asked alike, its
-  // type and its height): a building's use, as the streets' buildings take them (config/spawning/street.json) and the model
+  // type and its height): a building's use, as the streets' buildings take them (config/terrain/street.json) and the model
   // table draws them (config/models.json). A building's height is its own (no manifold) and its scenes' alone: every kind
   // is offered the same slices (BUILDING_FLOORS), nothing in its hint says how tall it is.
   building: {
@@ -240,7 +240,7 @@ export const UNDERGROUND: [number, string][] = [[-60, "deep underground"], [-30,
  */
 export function terrainHeights(scale: string, kind: string, average?: { factor: number; underground?: boolean }, least?: number): { measure: "median" | "top" | "average" | "elevation"; slices: Slice[]; standard?: number } {
   const entry = terrainKind(scale, kind), median = !!entry?.ground && !!entry.medians;
-  // Its minimum, a hard gate (config/spawning/heights.json `areas`, the user, 2026-11-01): its medians (or a natural
+  // Its minimum, a hard gate (config/terrain/heights.json `areas`, the user, 2026-11-01): its medians (or a natural
   // ground's tops) from `least` up, `least` the lowest; without one, its own lowest.
   const gated = (values: number[]) => (least === undefined ? values : [least, ...values.filter((value) => value > least)]);
   // A floating object is asked first how far it is from the ground (then its thickness: terrainThickness).
@@ -265,7 +265,7 @@ export function terrainHeights(scale: string, kind: string, average?: { factor: 
 export const BUILDING_FLOORS = [1, 2, 3, 5, 8, 12, 20, 35, 60, 100];
 /**
  * A building's height slices: under the street, then the floors from its type's least (its minimum, a hard gate as every
- * area kind's: the user, 2026-11-01; config/spawning/heights.json), its roof at three metres a floor, each said in floors.
+ * area kind's: the user, 2026-11-01; config/terrain/heights.json), its roof at three metres a floor, each said in floors.
  */
 export const buildingHeights = (least = 1, floors: number[] = BUILDING_FLOORS): { measure: "top"; slices: Slice[]; standard?: number } => {
   const above = [least, ...floors.filter((f) => f > least)];

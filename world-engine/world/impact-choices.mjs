@@ -11,7 +11,7 @@
  *      only the point marked, which is measured in metres to compare a box with the choice.
  * The exporter breaks every building the chosen sphere reaches, a step down its percolation curve inside the sphere.
  *
- *   node world-engine/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--fresh] [--model jev-1.14.0]
+ *   node world-engine/world/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--fresh] [--model jev-1.14.0]
  *
  * Writes <novel-dir>/stage/impacts.json, saved after every fight. Answers are reused unless --fresh. `novel sim pick`
  * runs the same choices (pickImpacts) on the book's story lines.
@@ -20,9 +20,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { browser, serve } from './two-view-things.mjs';
+import { browser, serve } from '../view/two-view-things.mjs';
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const SIZES = [4, 8, 16, 32];
 
 /** Every fight on a strand's stage (the page's window.__stage.fights, or the same made from its data), keyed as its answer is kept. */
@@ -96,7 +96,7 @@ export async function pickImpacts({ chrome, jev, stage, fights, save, budget = I
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { vendor: { type: 'string' }, out: { type: 'string' }, fresh: { type: 'boolean' }, model: { type: 'string', default: 'jev-1.14.0' } } });
   const [page, novelDir] = positionals.map(path => resolve(path));
-  if (!page || !novelDir || !values.vendor) throw new Error('Usage: node world-engine/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--fresh]');
+  if (!page || !novelDir || !values.vendor) throw new Error('Usage: node world-engine/world/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--fresh]');
   const { jevFromEnv } = await import(pathToFileURL(`${repository}/dist/src/ground/connectors/jev.js`));
   const jev = jevFromEnv({ ...process.env, JEV_MODEL: values.model }), report = `${novelDir}/stage/impacts.json`, out = values.out ? resolve(values.out) : null;
   const fights = values.fresh ? {} : (JSON.parse(await readFile(report, 'utf8').catch(() => 'null'))?.fights ?? {});

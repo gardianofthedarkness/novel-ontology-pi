@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addPatch, circleOf, depthInside, fillLandscape, firstLandscape, groundFor, insideBy, LANDSCAPE_TYPES, LANDSCAPES, ownerOf, samplePatch, type Landscape, type LandscapeType } from "../src/ground/stage/landscape.js";
+import { addPatch, circleOf, depthInside, fillLandscape, firstLandscape, groundFor, insideBy, LANDSCAPE_TYPES, LANDSCAPES, ownerOf, samplePatch, type Landscape, type LandscapeType } from "../src/v2/world/landscape.js";
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const fill = (type: LandscapeType, seed = "loc_mock") => fillLandscape(firstLandscape(seed, type));
@@ -32,7 +32,7 @@ test("each type fills like its landscape: towers tallest, then shops, homes and 
 });
 
 test("a place is filled from its centre with a probabilistic edge: every lot belongs to a patch, the edge fades over the type's softness, a castle's is a wall", async () => {
-  const { ownerOfLot, membership } = await import("../src/ground/stage/landscape.js");
+  const { ownerOfLot, membership } = await import("../src/v2/world/landscape.js");
   const landscape = firstLandscape("loc_mock", "residential"), filled = fillLandscape(landscape), patch = landscape.patches[0], soft = LANDSCAPES.residential.soft;
   assert.ok(filled.fabric.lots.length > 40);
   for (const lot of filled.fabric.lots) assert.ok(ownerOfLot(landscape, lot), `${lot.id} belongs to a patch`);
@@ -91,7 +91,7 @@ test("Jev picks each open place's landscape from what the analysis knows of it; 
 });
 
 test("heights: every type keeps under its cap; skyscraper cores peak anywhere up to 600 m and never past it", async () => {
-  const { PEAK } = await import("../src/ground/stage/landscape.js");
+  const { PEAK } = await import("../src/v2/world/landscape.js");
   for (const type of LANDSCAPE_TYPES) for (const seed of ["a", "b", "c"]) {
     const tallest = Math.max(0, ...fill(type, `loc_${seed}`).fabric.buildings.map((b) => b.floors * 3));
     assert.ok(tallest <= LANDSCAPES[type].cap + 3, `${type}/${seed}: ${tallest} m within its cap of ${LANDSCAPES[type].cap} m`);
@@ -102,7 +102,7 @@ test("heights: every type keeps under its cap; skyscraper cores peak anywhere up
 });
 
 test("modern ground merges at any height: a new part rises to meet a tall core at the seam, past its own cap; ancient ground never overlaps anything", async () => {
-  const { overlaps } = await import("../src/ground/stage/landscape.js");
+  const { overlaps } = await import("../src/v2/world/landscape.js");
   const towers = { ...samplePatch("skyscrapers", "p0", "loc_tall"), R: 180, H: 600 }, core: Landscape = { version: 1, seed: "loc_tall", patches: [towers] };
   const merged: Landscape = { ...core, patches: [towers, { ...samplePatch("residential", "p1", "loc_tall"), x: 180 + 0.6 * 280, z: 0, R: 280 }] }, filled = fillLandscape(merged), patch = merged.patches[1];
   // The seam: within the 600 m core's merge reach (85 m); far: well past it.
@@ -119,7 +119,7 @@ test("modern ground merges at any height: a new part rises to meet a tall core a
 });
 
 test("merging two height manifolds: each lot by a seam draws from the older ground with its membership as the chance, so heights step across smoothly, either way round", async () => {
-  const { meanHeight } = await import("../src/ground/stage/landscape.js");
+  const { meanHeight } = await import("../src/v2/world/landscape.js");
   const bands = (filled: ReturnType<typeof fillLandscape>, id: string, older: Parameters<typeof insideBy>[0], edges: number[]) => edges.slice(1).map((high, n) => {
     const list = filled.fabric.buildings.filter((b) => filled.owner[b.lot] === id && -insideBy(older, [b.x, b.z]) >= edges[n] && -insideBy(older, [b.x, b.z]) < high);
     return { n: list.length, mean: mean(list.map((b) => b.floors * 3)), tall: list.filter((b) => b.floors * 3 > LANDSCAPES.residential.cap).length / Math.max(1, list.length) };
@@ -145,7 +145,7 @@ test("merging two height manifolds: each lot by a seam draws from the older grou
 });
 
 test("a district starts as a box at its parent's centre; a box Jev draws becomes a patch centred in it, as large as fits it", async () => {
-  const { defaultBox, patchFromBox, reachOf } = await import("../src/ground/stage/landscape.js");
+  const { defaultBox, patchFromBox, reachOf } = await import("../src/v2/world/landscape.js");
   const start = defaultBox("residential", [10, -20]);
   assert.deepEqual([(start.x0 + start.x1) / 2, (start.z0 + start.z1) / 2], [10, -20], "the default box is the centre");
   const patch = patchFromBox("residential", "p1", "loc_d", { x0: 100, z0: 50, x1: 400, z1: 250 });
@@ -157,14 +157,14 @@ test("a district starts as a box at its parent's centre; a box Jev draws becomes
 });
 
 test("taller cores stand on wider plots with wider streets: no building more than eight times as tall as it is wide", async () => {
-  const { SLENDER, streetsFor } = await import("../src/ground/stage/landscape.js");
+  const { SLENDER, streetsFor } = await import("../src/v2/world/landscape.js");
   const core = (H: number): Landscape => ({ version: 1, seed: "loc_tall", patches: [{ ...samplePatch("skyscrapers", "p0", "loc_tall"), R: 200, H }] });
   const low = fillLandscape(core(120)), high = fillLandscape(core(600));
   for (const filled of [low, high]) for (const b of filled.fabric.buildings) assert.ok(b.floors * 3 <= SLENDER * Math.max(b.w, b.d) + 6, `${b.lot}: ${b.floors * 3} m on ${Math.round(b.w)} × ${Math.round(b.d)} m`);
   const widest = (filled: typeof low) => Math.max(...filled.fabric.roads.map((road) => road.width)), plots = (filled: typeof low) => mean(filled.fabric.lots.map((lot) => lot.area));
   assert.ok(widest(high) >= 2 * widest(low) * 0.9 && streetsFor(core(600).patches[0]) === 2.5, `wider streets round the 600 m core (${Math.round(widest(low))} m → ${Math.round(widest(high))} m)`);
   // Only super-tall ground widens: a 120 m core, and the 600 m core's outer ground, keep the type's own plots and streets.
-  const { superTallAt, SUPER_TALL } = await import("../src/ground/stage/landscape.js"), outer: [number, number] = [core(600).patches[0].x + 170, core(600).patches[0].z];
+  const { superTallAt, SUPER_TALL } = await import("../src/v2/world/landscape.js"), outer: [number, number] = [core(600).patches[0].x + 170, core(600).patches[0].z];
   assert.ok(superTallAt(core(120).patches[0], [core(120).patches[0].x, core(120).patches[0].z]) === 0 && streetsFor(core(120).patches[0]) === 1, "no super-tall ground under a 120 m core");
   assert.ok(superTallAt(core(600).patches[0], outer) === 0 && streetsFor(core(600).patches[0], outer) === 1 && SUPER_TALL === 250, "regular streets at the 600 m core's edge");
   const regular = (filled: typeof low) => mean(filled.fabric.lots.filter((lot) => Math.hypot(...lot.centre) > 150).map((lot) => lot.area));
@@ -178,7 +178,7 @@ test("taller cores stand on wider plots with wider streets: no building more tha
 });
 
 test("a stadium is an oval bowl with open ground round it; a commercial quarter has a plaza with a fountain and a boulevard through it", async () => {
-  const { bowlOf, plazaOf, boulevardOf } = await import("../src/ground/stage/landscape.js");
+  const { bowlOf, plazaOf, boulevardOf } = await import("../src/v2/world/landscape.js");
   const arena = firstLandscape("loc_arena", "stadium"), stadium = fillLandscape(arena), bowl = bowlOf(arena.patches[0]);
   assert.ok(stadium.landmarks.some((mark) => mark.kind === "stadium" && mark.w > mark.d), "one oval bowl");
   assert.ok(stadium.fabric.lots.every((lot) => Math.hypot(lot.centre[0] - bowl.x, lot.centre[1] - bowl.z) > bowl.d / 2), "no lot in the bowl");
@@ -205,7 +205,7 @@ test("the manifold under a place: its own landscape (the main agent's over Jev's
 });
 
 test("a patch on its kind's manifold, round Jev's median: a CBD's wide spread and heavy tail, its landmark at the core's 99th percentile, no cap", async () => {
-  const { patchFromBox, peakOf, LANDSCAPE_VERSION } = await import("../src/ground/stage/landscape.js");
+  const { patchFromBox, peakOf, LANDSCAPE_VERSION } = await import("../src/v2/world/landscape.js");
   const box = { x0: -300, z0: -300, x1: 300, z1: 300 }, median = (list: number[]) => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)];
   const heights = (type: LandscapeType, made: { median: number; manifold: { gradient: number; core: number; spread: number; tail: number; index: number } }) => {
     const patch = patchFromBox(type, "p0", "loc_manifold", box, undefined, made), fill = fillLandscape({ version: LANDSCAPE_VERSION, seed: "loc_manifold", patches: [patch] });
@@ -223,7 +223,7 @@ test("a patch on its kind's manifold, round Jev's median: a CBD's wide spread an
 });
 
 test("a pool's member borrows its pool's default ground where it stands: its patch claims those lots first", async () => {
-  const { patchFromBox, ownerOfLot, LANDSCAPE_VERSION } = await import("../src/ground/stage/landscape.js");
+  const { patchFromBox, ownerOfLot, LANDSCAPE_VERSION } = await import("../src/v2/world/landscape.js");
   const pool = patchFromBox("skyscrapers", "p0", "pool", { x0: -200, z0: -200, x1: 200, z1: 200 });
   const square = { ...patchFromBox("park", "unnamed:s1", "unnamed:s1", { x0: 40, z0: 40, x1: 160, z1: 160 }), borrowed: true };
   const owner = (patches: typeof pool[]) => ownerOfLot({ version: LANDSCAPE_VERSION, seed: "pool", patches }, { id: "lot", centre: [100, 100] })?.id;
@@ -232,7 +232,7 @@ test("a pool's member borrows its pool's default ground where it stands: its pat
 });
 
 test("a part under the street (its median below 0): its surface stays open, and a hall stands that deep over its ground", async () => {
-  const { patchFromBox, LANDSCAPE_VERSION } = await import("../src/ground/stage/landscape.js"), { hallsOf } = await import("../src/ground/stage/underground.js");
+  const { patchFromBox, LANDSCAPE_VERSION } = await import("../src/v2/world/landscape.js"), { hallsOf } = await import("../src/v2/world/underground.js");
   const passage = { ...patchFromBox("commercial", "unnamed:p", "unnamed:p", { x0: -90, z0: -15, x1: 90, z1: 15 }, undefined, { median: -12, manifold: { gradient: 0, core: 0.3, spread: 0.3, tail: 0, index: 5 } }), borrowed: true };
   const landscape = { version: LANDSCAPE_VERSION, seed: "pool", patches: [passage] }, fill = fillLandscape(landscape);
   assert.equal(fill.fabric.buildings.length, 0, "nothing stands on it");

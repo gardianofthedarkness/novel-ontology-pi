@@ -1,2 +1,2 @@
-// The nav grids live with the stage faculties that store answers keyed to their spots (src/ground/stage); the view reads the same module.
-export * from "../../../../src/ground/stage/holoNav.js";
+// The nav grids live with the stage faculties that store answers keyed to their spots (src/v2/world); the view reads the same module.
+export * from "../../../../src/v2/world/holoNav.js";

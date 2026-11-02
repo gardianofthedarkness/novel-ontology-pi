@@ -5,15 +5,16 @@
 // sampled from the path integral (an exact h-transform draw, plus a small ensemble to show the spread).
 // Where each move ends comes from Jev's spot answers in the book's movement report. The page carries scene
 // and event summaries, names and places; no quotes or source text.
-//   npm run build && node world-engine/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text]
+//   npm run build && node world-engine/world/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text]
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { mapPicture } from './world-map.mjs';
+import { partsIn, snapMarkers } from './composite.mjs';
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`));
 const PALETTE = ['#7ce6ff', '#ff8fb1', '#ffd36e', '#9dff8a', '#c59bff', '#ff9d5c', '#5cf2c8', '#f2f2f2', '#8fb6ff', '#e0ff6e'];
 // The basic shapes, at unit size (their extents). A sphere is a kind of oval: an oval in a cube-shaped cast.
@@ -59,13 +60,14 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt, BLAST_ENERGY } = await load('dist/apps/playground/src/data/structure.js');
-  const C = await load('dist/src/ground/stage/placeCanvas.js'), { fillLandscape, tallAndWide, formsFor, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold } = await load('dist/src/ground/stage/landscape.js'), U = await load('dist/src/ground/stage/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const { tallAndWide } = await load('dist/src/v2/world/tall.js');
+  const C = await load('dist/src/v2/world/placeCanvas.js'), { fillLandscape, formsFor, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold } = await load('dist/src/v2/world/landscape.js'), U = await load('dist/src/v2/world/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
   const { stageKindOf, scaleOfName } = await load('dist/src/digger/stage/scale.js');
-  const { continuityTies } = await load('dist/src/v2/extraction/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/ground/stage/useModels.js'), Z = await load('dist/src/v2/context/zoom.js');
-  const SP = await load('dist/src/v2/spawning/config.js'), spawning = SP.loadSpawning(), TM = await load('dist/src/v2/context/terrainModes.js');
+  const { continuityTies } = await load('dist/src/v2/extraction/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/v2/rules/language.js'), UM = await load('dist/src/v2/world/useModels.js'), Z = await load('dist/src/v2/context/zoom.js');
+  const SP = await load('dist/src/v2/terrain/config.js'), spawning = SP.loadSpawning(), TM = await load('dist/src/v2/context/terrainModes.js');
   // A kept part's manifold is its kind's as configured now (Jev gives only its median): a kind tuned (the CBD's tail, the
   // user, 2026-11-01) shows in a world already kept, with no question asked again.
   const manifoldOfSite = site => TM.terrainKind(site.scale, site.kind)?.manifold ?? site.manifold;
@@ -73,7 +75,7 @@ export async function strandDemo(novelDir, options) {
   const fills = new WeakMap(), fillOf = landscape => { const known = fills.get(landscape); if (known?.n === landscape.patches.length) return known.filled; const filled = fillLandscape(landscape); fills.set(landscape, { n: landscape.patches.length, filled }); return filled; };
   const { skeletonStream: stream, generateSkeleton, SKELETON_CELL } = await load('dist/apps/playground/src/data/skeleton.js');
   const { solveWalk, sampleWalk: walkSample, temperatureBound, directionOf } = await load('dist/apps/playground/src/data/pathIntegral.js');
-  const { navGrid } = await load('dist/src/ground/stage/holoNav.js');
+  const { navGrid } = await load('dist/src/v2/world/holoNav.js');
   const inputs = await stageInputs(novelDir), answers = await latestStrandAnswers(novelDir), strands = storyStrands(inputs.data, answers ?? {});
   const staged = new Map(inputs.movementScenes.map(scene => [scene.id, scene])), byIndex = new Map(inputs.data.scenes.map(scene => [scene.id, scene.index]));
   const all = inputs.data.scenes.map(scene => { const stage = staged.get(scene.id); return { id: scene.id, index: scene.index, placeId: stage?.placeId ?? scene.placeIds[0] ?? null, flashback: scene.flashback, cast: stage?.cast ?? answers?.presence.get(scene.id) ?? scene.characterIds, events: stage?.events }; });
@@ -90,12 +92,12 @@ export async function strandDemo(novelDir, options) {
   // scene's composed context, where someone first seen starts (the level, then a box on a map of the place), who came to
   // whom when two people talking face to face are apart, and the box a group gathers in. Cached under stage/world/cache.
   const worldScript = inputs.worldFirst ? inputs.world : null, worldScene = new Map((worldScript?.scenes ?? []).map(scene => [scene.id, scene]));
-  // Terrain and spawns (world-engine/terrain.mjs), when they were asked: where Jev put each main site in the place that holds
+  // Terrain and spawns (world-engine/terrain/terrain.mjs), when they were asked: where Jev put each main site in the place that holds
   // it, and which scenes start anew (everyone present placed afresh, with the scene's environment in the question).
   const terrain = JSON.parse(await readFile(`${novelDir}/stage/terrain.json`, 'utf8').catch(() => 'null'));
   // Borrowing and spawning by type (docs/v2/borrow-and-spawn.md): no pools; a spare or shared slot is an area of its level,
   // a named place stands in its slot's area, an unnamed mention in the slot it shares this book (the tree changed in place).
-  if (terrain?.mode === 'spawn') (await load('dist/src/v2/spawning/tree.js')).withSlots(inputs, Object.values(terrain.slots ?? {}), terrain.book, Object.fromEntries(Object.entries(terrain.sites ?? {}).filter(([, site]) => site.by === 'tenant' && site.parent).map(([id, site]) => [id, site.parent])));
+  if (terrain?.mode === 'spawn') (await load('dist/src/v2/terrain/tree.js')).withSlots(inputs, Object.values(terrain.slots ?? {}), terrain.book, Object.fromEntries(Object.entries(terrain.sites ?? {}).filter(([, site]) => site.by === 'tenant' && site.parent).map(([id, site]) => [id, site.parent])));
   const spawnPlan = JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
   const anew = sceneId => spawnPlan?.scenes?.[sceneId]?.spawn === 'new';
   let jev = null;
@@ -188,7 +190,7 @@ export async function strandDemo(novelDir, options) {
   // inside, a small skeleton that hits can break; every thing joins the walk once placed (its top walkable, the street
   // under a grounded one blocked) and moves when a later event mentions it elsewhere.
   const found = JSON.parse(await readFile(`${novelDir}/stage/objects.json`, 'utf8').catch(() => 'null'));
-  // Jev's three calls per thing (world-engine/two-view-things.mjs): which model it is, then a box on two views of each placement.
+  // Jev's three calls per thing (world-engine/view/two-view-things.mjs): which model it is, then a box on two views of each placement.
   const twoView = JSON.parse(await readFile(`${novelDir}/stage/thing-boxes.json`, 'utf8').catch(() => 'null')), boxes = twoView?.placements ?? {};
   const library = JSON.parse(await readFile(`${repository}/apps/playground/src/data/architectureModels.json`, 'utf8'));
   // Building EM (experiments/world-first/buildings.mjs): with it, a building the text mentions is never a box; it is its
@@ -262,7 +264,7 @@ export async function strandDemo(novelDir, options) {
     }
   };
   notes.things = { mentions: mentions.length, things: entities.length, withStructure: entities.filter(entity => entity.struct).length };
-  // Where each fight hits and how big, as Jev chose (world-engine/impact-choices.mjs): a sphere on a building, or no damage.
+  // Where each fight hits and how big, as Jev chose (world-engine/world/impact-choices.mjs): a sphere on a building, or no damage.
   const impacts = JSON.parse(await readFile(`${novelDir}/stage/impacts.json`, 'utf8').catch(() => 'null'))?.fights ?? {};
   notes.impacts = { sphere: 0, none: 0 };
   const damage = (scene, event, at, seed) => {
@@ -392,7 +394,7 @@ export async function strandDemo(novelDir, options) {
   // The same over the whole book (every staged scene, whatever the strand): what the central build's places sit toward.
   const book = all.filter(scene => staged.has(scene.id) && scene.events?.length), bookPlace = new Map(book.map(scene => [scene.id, scene.placeId])), bookTimeline = forkTimeline(book, strands);
   const bookTrips = book.flatMap(scene => (bookTimeline.handoffs.get(scene.id) ?? []).filter(handoff => handoff.from && !handoff.samePlace).map(handoff => ({ from: bookPlace.get(handoff.from), to: scene.placeId })));
-  // The macro view is the canvas of places (src/ground/stage/placeCanvas.ts). Before any scene, the central build: every
+  // The macro view is the canvas of places (src/v2/world/placeCanvas.ts). Before any scene, the central build: every
   // area larger than a building in the ontology's place tree (a city, district or street by Jev's scale, or before Jev has
   // scaled it the generic part of its name) is a circle of its own, the larger first, as large as what is built in it; one
   // the ontology puts in no larger area dwells at a random spot of the build (seeded by its id) until it is named. Then, in
@@ -412,7 +414,7 @@ export async function strandDemo(novelDir, options) {
     // Where the place tree gives a place no parent, the terrain step's (stage/terrain.json: which site holds which) is used.
     const terrainPath = (id, seen = new Set([id])) => { const parent = terrain?.sites?.[id]?.parent; if (!parent || seen.has(parent)) return null; seen.add(parent); return [...(terrainPath(parent, seen) ?? [parent]), id]; };
     const pathOf = id => { const path = treePath.get(id) ?? places.get(id)?.path ?? [id], above = terrainPath(path[0]); return above ? [...above.slice(0, -1), ...path] : path; };
-    // The manifold under each place (groundFor, src/ground/stage/landscape.ts): Jev's landscape (novel stage landscape), or
+    // The manifold under each place (groundFor, src/v2/world/landscape.ts): Jev's landscape (novel stage landscape), or
     // the main agent's answer over it; a place without one is built by the terrain rules as the ground of the nearest
     // larger place that has one, else as its scale suggests, so the world is never bare.
     // Terrain spawning's answer for a place, where it was asked (stage/terrain.json): its ground's type wins over the
@@ -658,7 +660,7 @@ export async function strandDemo(novelDir, options) {
     for (let at = id; at; at = macroOf.get(at)?.parent) { const entry = ground.get(at); if (entry?.type) parts.unshift(`${label(at)} ${entry.type} (${entry.by === 'jev' ? `Jev ${Math.round((entry.confidence ?? 0) * 100)}%` : entry.by === 'terrain' ? `terrain, as ${label(entry.from)}` : entry.by})`); }
     return parts.join(' › ');
   };
-  // Each open place's landscape, filled (src/ground/stage/landscape.ts), in map metres: what stands around the staged grids,
+  // Each open place's landscape, filled (src/v2/world/landscape.ts), in map metres: what stands around the staged grids,
   // never on them (nor on the units and circles built inside it). Derived view data: only nominated buildings are canon.
   const modelSizes = Object.fromEntries(Object.entries(library.models).map(([id, model]) => [id, model.size]));
   // On a plain map only terrain's ground stands: what terrain kept, and what a pool's members borrowed (no stand-in area's).
@@ -725,26 +727,9 @@ export async function strandDemo(novelDir, options) {
     const podium = b => (decided.has(b.lot) ? (b.use === 'mall' ? 70 : b.use === 'department' ? 50 : 0) : 0);
     const shaped = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf, podium) : { buildings: placed, roads: localRoads };
     const buildings = shaped.buildings.map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
-    // A composite building's parts (the user, 2026-11-01), each its use's model inside its host as the host stands now:
-    // on its floor (under the street: −1, −2; its host's own level when the host lies under the street), as large as it is
-    // (m², squarish, within the host), at its spot of that floor; roughly, no tiling, no stairs.
-    // [x, z, w, d, angle, bottom, height] in world metres, with the part's id and model.
-    const parts = [];
-    for (const [id, site] of Object.entries(terrain?.sites ?? {}).filter(([, entry]) => entry.by === 'tenant')) {
-      const hostSite = terrain.sites?.[site.in], slot = terrain.slots?.[hostSite?.slot ?? site.in];
-      if (!slot || !here(slot.parent)) continue;
-      const key = slot.lot ?? slot.id, short = key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
-      const host = buildings.find(b => b.id === `${place.id}:${key}` || b.id === `${place.id}:${short}`);
-      if (!host) continue;
-      const area = site.area ?? 100, w = Math.min(host.w * 0.9, Math.max(4, Math.sqrt(area))), d = Math.min(host.d * 0.9, Math.max(4, area / w)), height = 3 * (site.floors ?? 1);
-      // An older run's floor said in words: at its foot, its upper floors, under it.
-      const floor = typeof site.floor === 'number' ? site.floor : site.floor === 'upper' ? host.floors - 1 : site.floor === 'under' ? -1 : 1;
-      const under = typeof hostSite?.top === 'number' && hostSite.top < 0, bottom = under ? hostSite.top : floor < 0 ? 6 * floor : 3 * (Math.min(floor, host.floors) - 1);
-      const [u, v] = site.spot ?? [0, 0], s = u * (host.w - w), t = v * (host.d - d), ux = Math.cos(host.angle), uz = Math.sin(host.angle);
-      const model = UM.modelFor({ w, d, floors: site.floors ?? 1, kind: site.kind, use: site.kind, era: 'modern' }, id, modelSizes) ?? null;
-      parts.push({ id, model, host: host.id, area, box: [host.x + s * ux - t * uz, host.z + s * uz + t * ux, w, d, host.angle, bottom, height] });
-    }
-    // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
+    // A composite building's parts, each its use's model inside its host (composite.mjs).
+    const parts = partsIn({ terrain, buildings, place, here, modelFor: (b, id) => UM.modelFor(b, id, modelSizes) });
+    // What lies under it (hallsOf, src/v2/world/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = shaped.roads.map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
     // Each patch (manifold) in birth order: its type and era, its centre and radius, its outline as 48 points (world metres),
@@ -836,20 +821,8 @@ export async function strandDemo(novelDir, options) {
     });
   };
   for (const id of ownGrids) groups.set(id, groupOf({ label: name(id), path: (places.get(id)?.path ?? [id]).map(name), scale: inputs.scale?.places[id]?.scale ?? null, kind: kindOf(id), anchor: anchors.find(anchor => anchor.place === id), main: () => { const index = world.lots.findIndex(lot => lot.place === id); return index >= 0 ? index : null; } }));
-  // A building's marker on the building standing on its lot, a composite building's part's on its part (the user,
-  // 2026-11-01: markers 26–66 m off their buildings where a street had moved since its lots were laid as slots). Only
-  // markers, not what a scene is set in (its grid is laid already).
-  if (terrain?.mode === 'spawn') {
-    const standingNow = new Map(landscapes.flatMap(entry => entry.source.buildings.map(b => [b.id, b]))), partNow = new Map(landscapes.flatMap(entry => (entry.parts ?? []).map(part => [part[7], part])));
-    for (const node of macro.filter(entry => entry.unbuilt)) {
-      const site = terrain.sites?.[node.id];
-      if (site?.scale !== 'building') continue;
-      const slot = site.slot ? terrain.slots?.[site.slot] : null, key = slot ? slot.lot ?? slot.id : null, short = key && key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
-      const b = key ? landscapes.map(entry => standingNow.get(`${entry.place}:${key}`) ?? standingNow.get(`${entry.place}:${short}`)).find(Boolean) : null, part = site.by === 'tenant' ? partNow.get(node.id) : null;
-      const at = part ? [part[0], part[1]] : b ? [b.x, b.z] : null;
-      if (at) { node.x = Math.round(at[0] * 10) / 10; node.z = Math.round(at[1] * 10) / 10; }
-    }
-  }
+  // Markers on the buildings standing on their lots, a part's on its part (composite.mjs).
+  if (terrain?.mode === 'spawn') snapMarkers({ terrain, macro, landscapes });
   notes.landscape = { places: landscapes.length, buildings: landscapes.reduce((sum, entry) => sum + entry.buildings.length, 0), temporary: macro.filter(node => node.temporary).length };
   // Between places, people walk the map: its own path integral over a lattice (macroPath.ts), from where they leave one
   // place's grid to where they enter the next, each boundary crossed costing more the more slanted the crossing. Inside
@@ -1533,8 +1506,8 @@ export function inlineStrand(template, data, { name = 'One Strand', fragment = f
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { from: { type: 'string' }, to: { type: 'string' }, fork: { type: 'string' }, title: { type: 'string' }, name: { type: 'string' }, fragment: { type: 'boolean' }, vendor: { type: 'boolean' }, set: { type: 'string' }, records: { type: 'boolean' }, accept: { type: 'boolean' } } });
-  const usage = 'Usage: node world-engine/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text] [--name text] [--fragment] [--vendor]\n       node world-engine/export-strand-demo.mjs --set <strands.json> <out.html> [--name text] [--fragment] [--vendor] [--records [--accept]]   (strands.json: [{ id, label, name, novel, from, to, fork, title }], one page with a strand picker)';
-  const template = await readFile(`${repository}/world-engine/strand-demo.html`, 'utf8'), started = Date.now();
+  const usage = 'Usage: node world-engine/world/export-strand-demo.mjs <novel-dir> <out.html> --from <scene-id> --to <scene-id> [--fork <scene-id>] [--title text] [--name text] [--fragment] [--vendor]\n       node world-engine/world/export-strand-demo.mjs --set <strands.json> <out.html> [--name text] [--fragment] [--vendor] [--records [--accept]]   (strands.json: [{ id, label, name, novel, from, to, fork, title }], one page with a strand picker)';
+  const template = await readFile(`${repository}/world-engine/view/strand-demo.html`, 'utf8'), started = Date.now();
   // One page per strand, or one page carrying a set of strands to pick from.
   const entries = values.set ? JSON.parse(await readFile(values.set, 'utf8')) : [{ ...values, novel: positionals[0] }], out = values.set ? positionals[0] : positionals[1];
   if (!out || entries.some(entry => !entry.novel || !entry.from || !entry.to) || (values.set && entries.some(entry => !/^[A-Za-z0-9_-]+$/.test(entry.id ?? '') || !entry.label))) throw new Error(usage);

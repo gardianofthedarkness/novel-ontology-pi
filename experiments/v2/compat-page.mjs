@@ -1,8 +1,8 @@
 // The street compatibility reference page (docs/v2/street-compatibility.html; docs/v2/world-engine-v2.md §2.0.15), made
 // from the code's own tables, so it is made again whenever they change: which street kinds may share ground (OVERLAPS in
 // src/v2/context/terrainModes.ts), which building uses each street kind's buildings take (LANDSCAPES' uses in
-// src/ground/stage/landscape.ts), the words that give a building its use (the language profile, src/v2/rules/language.ts),
-// and which 3D models stand for each use (src/ground/stage/useModels.ts, over apps/playground/src/data/architectureModels.json).
+// src/v2/world/landscape.ts), the words that give a building its use (the language profile, src/v2/rules/language.ts),
+// and which 3D models stand for each use (src/v2/world/useModels.ts, over apps/playground/src/data/architectureModels.json).
 //
 //   npm run build && node experiments/v2/compat-page.mjs [out.html]
 import { readFile, writeFile } from 'node:fs/promises';
@@ -15,9 +15,9 @@ const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 const esc = text => String(text).replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]);
 
 export async function compatPage() {
-  const T = await load('dist/src/v2/context/terrainModes.js'), { LANDSCAPES } = await load('dist/src/ground/stage/landscape.js');
-  const { USE_MODELS, BUILT_SHAPES, UNDERGROUND_MODELS } = await load('dist/src/ground/stage/useModels.js'), { ZH } = await load('dist/src/v2/rules/language.js');
-  const U = await load('dist/src/ground/stage/underground.js');
+  const T = await load('dist/src/v2/context/terrainModes.js'), { LANDSCAPES } = await load('dist/src/v2/world/landscape.js');
+  const { USE_MODELS, BUILT_SHAPES, UNDERGROUND_MODELS } = await load('dist/src/v2/world/useModels.js'), { ZH } = await load('dist/src/v2/rules/language.js');
+  const U = await load('dist/src/v2/world/underground.js');
   const library = JSON.parse(await readFile(join(repository, 'apps/playground/src/data/architectureModels.json'), 'utf8'));
   const themes = JSON.parse(await readFile(join(repository, 'apps/playground/src/data/modelThemes.json'), 'utf8'));
   const commit = (() => { try { return execFileSync('git', ['-C', repository, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } })();
@@ -143,26 +143,26 @@ footer { font-size: 12px; color: var(--muted); }
 
 <section>
   <h2>Street kind × building use</h2>
-  <p>Each street kind's form lays out its own buildings; each row building takes a use from its kind's list (the share shown), and a form's pieces have their own (a centre's mall podium and office towers, a station's hall). A building tied to a street by continuity dwells in one of its buildings of its use, Jev not asked; a use no street has (flagged) is always planted by Jev. Source: <code>uses</code> in <code>LANDSCAPES</code>, <code>src/ground/stage/landscape.ts</code>.</p>
+  <p>Each street kind's form lays out its own buildings; each row building takes a use from its kind's list (the share shown), and a form's pieces have their own (a centre's mall podium and office towers, a station's hall). A building tied to a street by continuity dwells in one of its buildings of its use, Jev not asked; a use no street has (flagged) is always planted by Jev. Source: <code>uses</code> in <code>LANDSCAPES</code>, <code>src/v2/world/landscape.ts</code>.</p>
   <div class="scroll"><table class="matrix"><thead><tr><th></th>${kinds.map(kind => `<th scope="col" title="${esc(kind.hint)}">${esc(kind.id)}${kind.ground !== kind.id ? ` → ${esc(kind.ground)}` : ''}</th>`).join('')}</tr></thead><tbody>${useRows}</tbody></table></div>
 </section>
 
 <section>
   <h2>Building use × 3D models</h2>
-  <p>Which models of the library can draw each use: its own, or a stand-in until one is made; a gap is drawn as a plain block. ✦ marks a shape built from the library in <code>ArchitectureHolograms.tsx</code>. The words are the language profile's: a building whose name has one takes that use. Sources: <code>src/ground/stage/useModels.ts</code>, <code>src/v2/rules/language.ts</code>.</p>
+  <p>Which models of the library can draw each use: its own, or a stand-in until one is made; a gap is drawn as a plain block. ✦ marks a shape built from the library in <code>ArchitectureHolograms.tsx</code>. The words are the language profile's: a building whose name has one takes that use. Sources: <code>src/v2/world/useModels.ts</code>, <code>src/v2/rules/language.ts</code>.</p>
   <div class="scroll"><table class="wide"><thead><tr><th>use</th><th>fit</th><th>models</th><th>words (zh)</th><th>streets that have it</th></tr></thead><tbody>${modelRows}</tbody></table></div>
 </section>
 
 <section>
   <h2>Underground × street: what lies under what</h2>
-  <p>The city's common underground spaces, grouped as the literature does: transport (the subway's tunnels, stations and passages), commerce (an underground shopping street, under a road or under a station's plaza, as Japan's 地下街), parking, utilities (a utility tunnel, the storm water), a civil defence shelter (often a car park in peace), a building's basement, and the deep facilities. Each usually lies under the street kinds marked; anything kept below the street may share ground with anything above it. A part kept below the street becomes the hall its name says (the words below), else a passage or a hall by its proportions. Source: <code>LIES_UNDER</code> in <code>src/ground/stage/underground.ts</code>.</p>
+  <p>The city's common underground spaces, grouped as the literature does: transport (the subway's tunnels, stations and passages), commerce (an underground shopping street, under a road or under a station's plaza, as Japan's 地下街), parking, utilities (a utility tunnel, the storm water), a civil defence shelter (often a car park in peace), a building's basement, and the deep facilities. Each usually lies under the street kinds marked; anything kept below the street may share ground with anything above it. A part kept below the street becomes the hall its name says (the words below), else a passage or a hall by its proportions. Source: <code>LIES_UNDER</code> in <code>src/v2/world/underground.ts</code>.</p>
   <div class="legend"><span>● usually under it</span><span>○ under any street</span><span>· seldom</span></div>
   <div class="scroll"><table class="matrix"><thead><tr><th></th>${kinds.map(kind => `<th scope="col">${esc(kind.id)}</th>`).join('')}</tr></thead><tbody>${underRows}</tbody></table></div>
 </section>
 
 <section>
   <h2>Underground type × 3D models</h2>
-  <p>Which models dress each kind of hall in the terrain view (a passage's tunnel along it, the mall over a mall, the bunker over a shelter); a gap is drawn as its volume. Searched on the web (2026-10-31): one CC0 subway kit, not downloaded; no free car park, storm-water or basement model. Sources: <code>UNDERGROUND_MODELS</code> in <code>src/ground/stage/useModels.ts</code>, <code>undergroundKinds</code> in <code>src/v2/rules/language.ts</code>.</p>
+  <p>Which models dress each kind of hall in the terrain view (a passage's tunnel along it, the mall over a mall, the bunker over a shelter); a gap is drawn as its volume. Searched on the web (2026-10-31): one CC0 subway kit, not downloaded; no free car park, storm-water or basement model. Sources: <code>UNDERGROUND_MODELS</code> in <code>src/v2/world/useModels.ts</code>, <code>undergroundKinds</code> in <code>src/v2/rules/language.ts</code>.</p>
   <div class="scroll"><table class="wide"><thead><tr><th>kind</th><th>what it is</th><th>fit</th><th>models</th><th>words (zh)</th></tr></thead><tbody>${underModelRows}</tbody></table></div>
 </section>
 

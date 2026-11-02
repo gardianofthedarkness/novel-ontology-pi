@@ -14,8 +14,8 @@ Everything is under `<novel-dir>/stage/`:
 | `simulation/runs/<strand>/<run>.json` | One run of a strand: its full record (below), never overwritten | the exporter with `--records` |
 | `simulation/<strand>.json` | The strand's accepted run, where readers look | the exporter with `--records` |
 | `objects.json` | Buildings and large visible things detected per scene, matched to a model or shape | `novel stage objects` |
-| `thing-boxes.json` | Jev's model pick per thing, and per placement its spot choice, close-up or sky answers and cast | `novel sim pick` (or `world-engine/two-view-things.mjs`) |
-| `impacts.json` | Jev's impact choice per fight: the spot (or no damage), the size, the box asked for comparison | `novel sim pick` (or `world-engine/impact-choices.mjs`) |
+| `thing-boxes.json` | Jev's model pick per thing, and per placement its spot choice, close-up or sky answers and cast | `novel sim pick` (or `world-engine/view/two-view-things.mjs`) |
+| `impacts.json` | Jev's impact choice per fight: the spot (or no damage), the size, the box asked for comparison | `novel sim pick` (or `world-engine/world/impact-choices.mjs`) |
 | `simulation/picks.json` | What the last `novel sim pick` left: the inputs it ended on, its lines, questions left; the checklist reads it | `novel sim pick` |
 | `simulation/live.json` | What the last `novel sim pick` or `run` did, or is doing: its lines, phase, calls spent, the question Jev is on | `novel sim pick`, `novel sim run` |
 | `sim-decisions.json` | The live simulation's decisions per event (`<scene>|<event index>`): where the people go (Jev on a picture of the event as it began, the movement step's answer shape), and the chain of every answer before it, so a changed answer has the events after it asked again | `novel sim pick` |
@@ -98,9 +98,9 @@ novel sim run <novel-dir> --auto N
 - The scripts underneath still run alone, for trying their options:
 
 ```bash
-node world-engine/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir>
-node world-engine/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir>
-node world-engine/export-strand-demo.mjs --set <strands.json> <out.html> --vendor --records [--accept]
+node world-engine/view/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir>
+node world-engine/world/impact-choices.mjs <strand-page.html> <novel-dir> --vendor <dir>
+node world-engine/world/export-strand-demo.mjs --set <strands.json> <out.html> --vendor --records [--accept]
 ```
 
 - The first two ask Jev (model picks and placements; impacts) and keep their answers, so a re-run only asks what changed.

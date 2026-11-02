@@ -8,7 +8,7 @@ import { pickArchitecture, type ArchitecturePlace } from "../src/digger/stage/ar
 import { pickScales, scaleOfName, stageKindOf, SCALE_HINTS, type ScalePlace } from "../src/digger/stage/scale.js";
 import { askMovement, sceneCallLimit, type MovementScene } from "../src/digger/stage/movement.js";
 import { prepareStage } from "../src/digger/stage/prep.js";
-import { navGrid } from "../src/ground/stage/holoNav.js";
+import { navGrid } from "../src/v2/world/holoNav.js";
 import { describeError } from "../src/ground/errors.js";
 import { initWorkspace } from "../src/ground/workspace/init.js";
 import { stageInputs } from "../src/cli/commands/extract/stageCommands.js";

@@ -175,7 +175,7 @@
     setTimeout(() => { if (next === frame && !ready) drop(frame); }, 30000);
     document.body.append(next);
   };
-  // Terrain spawning (world-engine/terrain-spawn.mjs) in step mode waits for the user after each proposal: Next step lets it
+  // Terrain spawning (world-engine/terrain/terrain-spawn.mjs) in step mode waits for the user after each proposal: Next step lets it
   // keep that one and go on to the next; Run on lets it run without waiting (pressed again, it waits after each again).
   const step = async (mode) => {
     const reply = await fetch(`terrain/step${query}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { averageOverMedian } from "../src/ground/stage/landscape.js";
+import { averageOverMedian } from "../src/v2/world/landscape.js";
 import { TERRAIN_KINDS } from "../src/v2/context/terrainModes.js";
-import { defaultResolver, loadSpawning } from "../src/v2/spawning/config.js";
-import { unify } from "../src/v2/spawning/heights.js";
-import { energyOf, layOut, radiusOf, type Standing } from "../src/v2/spawning/topology.js";
+import { defaultResolver, loadSpawning } from "../src/v2/terrain/config.js";
+import { unify } from "../src/v2/terrain/heights.js";
+import { energyOf, layOut, radiusOf, type Standing } from "../src/v2/terrain/topology.js";
 
 // One city of manifolds (docs/v2/borrow-and-spawn.md §8): its districts laid out by its topology, its heights unified.
 const metropolis = defaultResolver(loadSpawning())({ id: "c1", label: "a metropolis", level: "city", kind: "metropolis" })!;

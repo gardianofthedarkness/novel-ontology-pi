@@ -1,6 +1,6 @@
 # The underground: halls in the ground
 
-**Status (2026-10-30):** built as below, as world engine 3, in `src/ground/stage/underground.ts`, `world.ts` and the exporter. The measured choice of three underground answers is in §6.1. Flooding is still for later. Building EM is in §9 (`experiments/world-first/buildings.mjs`).
+**Status (2026-10-30):** built as below, as world engine 3, in `src/v2/world/underground.ts`, `world.ts` and the exporter. The measured choice of three underground answers is in §6.1. Flooding is still for later. Building EM is in §9 (`experiments/world-first/buildings.mjs`).
 
 A redesign of what lies under the world (user, 2026-10-30): **underground places are halls, not buildings.** A hall is a void carved in soil or rock, and it stands or falls by the ground around it. A building stands or falls by its own walls and slabs. So gravity, damage and collapse follow different logic underground, and walking, generation and drawing change with them. This replaces the first version (four flat levels of walkable cells, built 2026-10-29 in `world.ts`). Nothing here is built yet.
 

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { DecisionModel } from "../../ground/connectors/jev.js";
 import type { Entity } from "../../ground/ontology/types.js";
 import type { ChangeProposal } from "../../solidifier/merge/changeset.js";
-import { LANDSCAPE_HINTS, LANDSCAPE_TYPES, type Landscape, type LandscapeType } from "../../ground/stage/landscape.js";
+import { LANDSCAPE_HINTS, LANDSCAPE_TYPES, type Landscape, type LandscapeType } from "../../v2/world/landscape.js";
 
 /**
  * Stage faculty — landscape: what the ground of a place looks like from above, one Jev choice per open place (a

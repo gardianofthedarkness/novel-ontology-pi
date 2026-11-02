@@ -1,7 +1,7 @@
 /**
  * The spawning configurations (docs/v2/borrow-and-spawn.md §2.1, §5; the user's design, 2026-11-01): what an area of each
  * type spawns one level down. Read across the levels they make a tree: a city's kind gives districts of each kind and how
- * many, a district's kind streets, a street's kind buildings by density and use. The files in config/spawning/ are the
+ * many, a district's kind streets, a street's kind buildings by density and use. The files in config/terrain/ are the
  * defaults; a configuration is resolved through a resolver, so a universe's own files, a place's own and a function or a
  * review of the place can be layered over them later (§5) without changing the engine.
  */
@@ -33,9 +33,9 @@ export interface SpawningFiles {
   street: Record<string, Density>;
 }
 
-const DEFAULTS = fileURLToPath(new URL("../../../../config/spawning/", import.meta.url));
+const DEFAULTS = fileURLToPath(new URL("../../../../config/terrain/", import.meta.url));
 
-/** The default configurations (config/spawning/), or another folder's of the same shape. */
+/** The default configurations (config/terrain/), or another folder's of the same shape. */
 export function loadSpawning(folder = DEFAULTS): SpawningFiles {
   const read = (name: string) => JSON.parse(readFileSync(`${folder.replace(/\/?$/, "/")}${name}.json`, "utf8")).types;
   return { city: read("city"), district: read("district"), street: read("street") };

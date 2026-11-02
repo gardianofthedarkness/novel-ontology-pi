@@ -24,7 +24,7 @@ and every question gets both.
 
 | Today | The problem |
 |---|---|
-| Each step draws its own pictures: births a PNG writer (`world-engine/world-map.mjs`), things the capture loop's ghosts (`two-view-things.mjs`), terrain the landscape mock page (`terrain.mjs`), movement its spots | Four renderers, four ideas of a camera, a scale and a label. What Jev saw is not what the user sees. |
+| Each step draws its own pictures: births a PNG writer (`world-engine/world/world-map.mjs`), things the capture loop's ghosts (`two-view-things.mjs`), terrain the landscape mock page (`terrain.mjs`), movement its spots | Four renderers, four ideas of a camera, a scale and a label. What Jev saw is not what the user sees. |
 | The live page shows the last question and a picture | The answer's effect on the world is not shown where it happens; a wrong placement is found later, by reading. |
 | One camera in the player, moved by "Follow Jev" | The user cannot look elsewhere while Jev works, or look at Jev's view from outside. |
 | The engine replays the whole line at every event | Every birth question is recorded again and again (the vol 1 run asked 134 birth questions on the first load and kept repeating them per event). |
@@ -166,7 +166,7 @@ grounds a pool on its members' span; the live page's names by level and `focusOn
 ### 5.1 What it may place
 
 Only terrain: a **manifold** (a landscape patch: its type, centre, radius and outline from the type's family, its height
-profile; `src/ground/stage/landscape.ts`) or a **basic shape** of ground (a plateau, a basin, a hill, a raised platform, a
+profile; `src/v2/world/landscape.ts`) or a **basic shape** of ground (a plateau, a basin, a hill, a raised platform, a
 cut or a ramp). Never a named or specific building: buildings are what the manifold's fill spawns underneath it.
 
 ### 5.2 The order
@@ -312,7 +312,7 @@ the engine makes the spread. A CBD's spread is wide: researched, not guessed.
   (extreme value fits to 325 skyscrapers in 81 cities). Average height within 2 km of the centre scales as N^0.34 with
   the city's population; across a whole city the tallest stands 45–90 times its average (New York, Chicago, Toronto;
   Schläpfer, Lee & Bettencourt).
-- **The CBD manifold** (`manifoldHeight` in `src/ground/stage/landscape.ts`). At a fraction r of the way from the core to
+- **The CBD manifold** (`manifoldHeight` in `src/v2/world/landscape.ts`). At a fraction r of the way from the core to
   the edge, the local median is M · ((r + 0.3)^−0.5 / (0.707 + 0.3)^−0.5): the power gradient, steeper than the
   city-wide −0.3 for a commercial core (0.3 keeps the core finite), scaled so the median over the district's area
   (r = 1/√2) is Jev's M. Each

@@ -337,7 +337,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 <div class="blocks">
 <article class="block"><header><h3>Canvas of places</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
 <p>Places are born when the story first needs them, smallest first: a building brings its district and city into being around it. A circle grows to enclose its ground, named buildings and children; a growing circle pushes its siblings aside whole.</p>
-<dl class="facts"><dt>Files</dt><dd><code>src/ground/stage/placeCanvas.ts</code> (199 lines)</dd><dt>Tests</dt><dd>12 in <code>test/place-canvas.test.ts</code></dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>src/v2/world/placeCanvas.ts</code> (199 lines)</dd><dt>Tests</dt><dd>12 in <code>test/place-canvas.test.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>Scale</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
 <p>How big a place is on the ladder region › city › district › street › building › room. Jev was right on 64 of 66 places of the vols 1–4 snapshot; the name's generic part on 44 to 54.</p>
@@ -345,15 +345,15 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>Architecture</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
 <p>Which building a place is: the name shortlists up to four kinds, then Jev picks among their pictures under neutral option names, so the pictures decide, not the words.</p>
-<dl class="facts"><dt>Decides with</dt><dd>Jev choice on pictures</dd><dt>Files</dt><dd><code>src/digger/stage/architecture.ts</code>, <code>src/ground/stage/placeArchitecture.ts</code></dd></dl></article>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice on pictures</dd><dt>Files</dt><dd><code>src/digger/stage/architecture.ts</code>, <code>src/v2/world/placeArchitecture.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>Landscape manifold</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
 <p>The ground of each open place (city, district, street) by type: skyscrapers, commercial, residential, industrial, harbour, park, stadium, village, castle, farm. Each type is a family of shapes (a patch with an outline and a height profile) drawn from a seed. A place without Jev's answer gets its ground by terrain rules (its ancestors, its scale): <code>groundFor</code> says which (Jev, agent, terrain, scale, none).</p>
-<dl class="facts"><dt>Decides with</dt><dd>Jev choice per open place; unsure answers (under 0.5) go to Pi as landscape items</dd><dt>Files</dt><dd><code>src/ground/stage/landscape.ts</code> (324 lines), <code>src/digger/stage/landscape.ts</code></dd><dt>Tests</dt><dd>13 in <code>test/landscape.test.ts</code></dd></dl></article>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice per open place; unsure answers (under 0.5) go to Pi as landscape items</dd><dt>Files</dt><dd><code>src/v2/world/landscape.ts</code> (324 lines), <code>src/digger/stage/landscape.ts</code></dd><dt>Tests</dt><dd>13 in <code>test/landscape.test.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>City fill</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
 <p>A city's whole circle covered from a recipe seeded by its id, so nothing is stored: arterial roads as Voronoi super-blocks, blocks split until small enough (each split a road), lots with a road along one side. Runs keep only what they change (a named building borrowing a lot, growth).</p>
-<dl class="facts"><dt>Files</dt><dd><code>src/ground/stage/cityFill.ts</code> (277 lines)</dd><dt>Tests</dt><dd>6 in <code>test/city-fill.test.ts</code></dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>src/v2/world/cityFill.ts</code> (277 lines)</dd><dt>Tests</dt><dd>6 in <code>test/city-fill.test.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>District boxes</h3><div class="chips"><span class="chip built">Built</span><span class="chip gap">Trial only</span></div></header>
 <p>Jev places each district in its city from above, in story order: the city so far, the districts placed, this district in its current box; it keeps the box or draws a better one, over up to three turns.</p>
@@ -374,7 +374,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 <div class="blocks">
 <article class="block"><header><h3>Ground bands and halls</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
 <p>Soil to 12 m, weathered rock to 40 m, hard rock below, each with the span it can hold. Hall kinds: subway tunnel, station and passage; underground mall; storm-water tank and channel; deep lab, military and quantum facilities. Pillars stand where a roof would span too far.</p>
-<dl class="facts"><dt>Files</dt><dd><code>src/ground/stage/underground.ts</code> (249 lines)</dd><dt>Docs</dt><dd><code>docs/underground-design.md</code></dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>src/v2/world/underground.ts</code> (249 lines)</dd><dt>Docs</dt><dd><code>docs/underground-design.md</code></dd></dl></article>
 
 <article class="block"><header><h3>Three depth choices</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
 <p>Jev picks one of three overlapping intervals, so it is never asked to tell many levels apart: shallow (0–25 m: basements, car parks, malls), subway (5–20 m, by kind) and deep (20–110 m). A box on the chosen interval's picture finds the hall. Measured over six cities, the box lands in the right hall 94–96% (shallow), 99% (subway), about 99% (deep).</p>
@@ -390,7 +390,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>The wake hook</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>Each hall belongs to the smallest area its middle lies in. That area's underground (its halls, its ways up, its collapse) is laid only once a character goes down there; until then it is drawn but never walked.</p>
-<dl class="facts"><dt>Files</dt><dd><code>world-engine/export-strand-demo.mjs</code> (awake, bornUnder, hallUnder)</dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>world-engine/world/export-strand-demo.mjs</code> (awake, bornUnder, hallUnder)</dd></dl></article>
 
 <article class="block"><header><h3>Collapse after a blast</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip gap">Gap</span></div></header>
 <p>A confined blast widens the roof's span (twice the distance to the nearest support); past what the band holds, the roof caves in to a dome, a choke, or (soil halls only) a dent in the street of up to 3 m. Deep halls fill partly with dirt and never break the ground. People buried by a cave-in climb out to the nearest open cell of their hall.</p>
@@ -436,7 +436,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>Births: where someone starts</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>The first time someone is seen, Jev boxes where they are on a picture of their level: the map around the place, a slice of a floor (to pick a room), or one of the three underground choices. A person in a room whose floor the text does not give gets a random floor of their building (the same every run) and a close-up slice of it.</p>
-<dl class="facts"><dt>Decides with</dt><dd>Jev box on a map picture drawn in plain Node (no browser)</dd><dt>Files</dt><dd><code>export-strand-demo.mjs</code>, <code>world-engine/world-map.mjs</code> (93 lines)</dd></dl></article>
+<dl class="facts"><dt>Decides with</dt><dd>Jev box on a map picture drawn in plain Node (no browser)</dd><dt>Files</dt><dd><code>export-strand-demo.mjs</code>, <code>world-engine/world/world-map.mjs</code> (93 lines)</dd></dl></article>
 
 <article class="block"><header><h3>Meetings and gatherings</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>A live dialogue brings its two parties within talking distance (the same floor, 4 m); a group dialogue is one box Jev draws, everyone held inside it, on their floor or interval.</p>
@@ -444,7 +444,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>Movement: spots and paths</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
 <p>Where each move ends comes from Jev's spot answers; the way there is drawn from a path integral: every walk weighs exp(−S/T), S adding metres, climbs (×λ), falls and a turning cost (κ). A walk is one exact draw (the h-transform), plus a small ensemble to show the spread. Between places, people walk the map's own lattice, crossing place boundaries squarely.</p>
-<dl class="facts"><dt>Files</dt><dd><code>pathIntegral.ts</code> (128), <code>macroPath.ts</code> (77), <code>src/ground/stage/holoNav.ts</code> (240)</dd><dt>Tests</dt><dd><code>test/path-integral.test.ts</code> (3), <code>test/macro-path.test.ts</code></dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>pathIntegral.ts</code> (128), <code>macroPath.ts</code> (77), <code>src/v2/world/holoNav.ts</code> (240)</dd><dt>Tests</dt><dd><code>test/path-integral.test.ts</code> (3), <code>test/macro-path.test.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>Who goes together</h3><div class="chips"><span class="chip built">Built</span><span class="chip gap">Not in the live picker</span></div></header>
 <p>Pairs Jev rates at 0.5 or more are joined into groups; a group's leader walks and the others end beside it. The v1 movement step (<code>novel stage movement</code>) asks these pairs; the live picker does not, and treats two people the event names going to the same spot as together.</p>
@@ -452,15 +452,15 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>Things in their places</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>Large things the scenes mention (3 m or more) are matched to a model: Jev picks it on a labelled sheet of every model and basic shape. Each placement is boxed on the reader's view, then on a low side view at six turns in one request, keeping the surest; a third view only when still unsure.</p>
-<dl class="facts"><dt>Decides with</dt><dd>Jev choice (model) and boxes on rendered pictures</dd><dt>Files</dt><dd><code>world-engine/two-view-things.mjs</code> (382 lines), <code>src/digger/stage/objects.ts</code> (296 lines)</dd></dl></article>
+<dl class="facts"><dt>Decides with</dt><dd>Jev choice (model) and boxes on rendered pictures</dd><dt>Files</dt><dd><code>world-engine/view/two-view-things.mjs</code> (382 lines), <code>src/digger/stage/objects.ts</code> (296 lines)</dd></dl></article>
 
 <article class="block"><header><h3>Fights and destruction</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>Where a fight hits: lettered red spheres at likely impact points, Jev picks one or "no damage"; how big: concentric spheres 4, 8, 16 and 32 m across. Every building the sphere reaches loses structural units; its standing cells step down their percolation curve. A fight underground is centred on its fighter and caves in halls (page 5). Damage other story lines left on the world is applied in story order.</p>
-<dl class="facts"><dt>Files</dt><dd><code>world-engine/impact-choices.mjs</code> (119 lines), <code>export-strand-demo.mjs</code>, <code>structure.ts</code></dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>world-engine/world/impact-choices.mjs</code> (119 lines), <code>export-strand-demo.mjs</code>, <code>structure.ts</code></dd></dl></article>
 
 <article class="block"><header><h3>Runs and records</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span></div></header>
 <p>Each run is kept with its book as a versioned record (what it was made from, the engine version, the accepted run); the host plays the accepted runs. Derived view data, never canon.</p>
-<dl class="facts"><dt>Files</dt><dd><code>export-strand-demo.mjs</code> (keepRun, ENGINE_VERSION 3), <code>src/cli/commands/extract/simCommands.ts</code></dd><dt>Tests</dt><dd><code>world-engine/strand-records.test.mjs</code></dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>export-strand-demo.mjs</code> (keepRun, ENGINE_VERSION 3), <code>src/cli/commands/extract/simCommands.ts</code></dd><dt>Tests</dt><dd><code>world-engine/world/strand-records.test.mjs</code></dd></dl></article>
 </div>
 <div class="pager"></div>
 </section>
@@ -473,7 +473,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 <div class="blocks">
 <article class="block"><header><h3>novel sim pick</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span><span class="chip gap">Slow</span></div></header>
 <p>Walks a story line forward event by event in headless Chrome: on a picture of each event as it begins, Jev decides where the people go, where the things stand and where the fight hits; the engine plays it and the next event begins from what it made. Pi may spend at most 60 calls a command.</p>
-<dl class="facts"><dt>Measured</dt><dd>A recorded pick: 449 s, of which Jev 28 s. Before each event question, 2–6 s replaying the engine from the line's start and reopening the page in Chrome; a 222 s stretch before the first event question is not yet accounted for.</dd><dt>Files</dt><dd><code>world-engine/sim-jev.mjs</code> (333 lines)</dd></dl></article>
+<dl class="facts"><dt>Measured</dt><dd>A recorded pick: 449 s, of which Jev 28 s. Before each event question, 2–6 s replaying the engine from the line's start and reopening the page in Chrome; a 222 s stretch before the first event question is not yet accounted for.</dd><dt>Files</dt><dd><code>world-engine/live/sim-jev.mjs</code> (333 lines)</dd></dl></article>
 
 <article class="block"><header><h3>novel sim run</h3><div class="chips"><span class="chip built">Built</span><span class="chip tested">Tested</span><span class="chip live">Seen live</span></div></header>
 <p>Plays a line with the answers it has, no model calls; <code>--pace 0.5–5</code> seconds a moment so the live view shows every moment as the engine plays it.</p></article>
@@ -504,7 +504,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 <article class="block"><header><h3>The player</h3><div class="chips"><span class="chip built">Built</span><span class="chip live">Seen live</span></div></header>
 <p>One page: the world, its people and their traces over time, blasts as red spheres, the underground seen through a see-through ground (halls, pillars, piles, dents; kiosks and steps at stations). three.js ships beside the page, never from a CDN, because the CDN fails on the phone.</p>
-<dl class="facts"><dt>Files</dt><dd><code>world-engine/strand-demo.html</code> (1,278 lines)</dd></dl></article>
+<dl class="facts"><dt>Files</dt><dd><code>world-engine/view/strand-demo.html</code> (1,278 lines)</dd></dl></article>
 </div>
 <div class="pager"></div>
 </section>

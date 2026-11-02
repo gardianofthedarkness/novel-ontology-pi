@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildingsOf, defaultResolver, loadSpawning, pickCount, seeded, spawnsOf } from "../src/v2/spawning/config.js";
-import { admissible, chooseSlots, countsIn, spawnChildren, type LevelProblem, type Mention, type Point, type Slot } from "../src/v2/spawning/slots.js";
+import { buildingsOf, defaultResolver, loadSpawning, pickCount, seeded, spawnsOf } from "../src/v2/terrain/config.js";
+import { admissible, chooseSlots, countsIn, spawnChildren, type LevelProblem, type Mention, type Point, type Slot } from "../src/v2/terrain/slots.js";
 
 // Borrowing and spawning by type (docs/v2/borrow-and-spawn.md), on plain data: one city, its districts' slots, books of mentions.
 const files = loadSpawning(), resolver = defaultResolver(files);
@@ -99,7 +99,7 @@ test("the same book and slots give the same choice", () => {
 });
 
 test("the slot tree: pools gone, their members in the pool's area; spare and shared slots are places; names and shares under their slots", async () => {
-  const { withSlots, defaultTerrain } = await import("../src/v2/spawning/tree.js");
+  const { withSlots, defaultTerrain } = await import("../src/v2/terrain/tree.js");
   const inputs = {
     placeTree: [
       { id: "c1", label: "City", parentId: null, path: ["c1"] },

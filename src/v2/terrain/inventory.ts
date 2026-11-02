@@ -1,7 +1,7 @@
 /**
  * The building level's inventory and its search (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01): a universe has too
  * many kinds of building to offer Jev them all, so a building's name and the sentences round it in its scenes are searched
- * against the inventory (config/spawning/building-types.json), and Jev chooses among the ten nearest, given the scenes.
+ * against the inventory (config/terrain/building-types.json), and Jev chooses among the ten nearest, given the scenes.
  *
  * The search is semantic when an embedding model is configured (the OpenAI-compatible connector,
  * src/ground/connectors/embeddings.ts: the name and the sentences against each type's description and words); without one
@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 /** A type: what it is (saying nothing of its height: that is its scenes'), what the text may call it, its coarse use. */
 export interface BuildingType { use?: string; shape?: string; describe: string; words: string[] }
-const DEFAULT = fileURLToPath(new URL("../../../../config/spawning/building-types.json", import.meta.url));
+const DEFAULT = fileURLToPath(new URL("../../../../config/terrain/building-types.json", import.meta.url));
 /** The inventory: every building type, by id. */
 export const loadBuildingTypes = (file = DEFAULT): Record<string, BuildingType> => JSON.parse(readFileSync(file, "utf8")).types;
 

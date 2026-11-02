@@ -4,14 +4,19 @@ The world engine's scripts: the second stage of v2, which builds the world the e
 checkout (`npm run build`) and on a world-first workspace (`experiments/v2/workspace.mjs`). The guide:
 [docs/v2/README.md](../docs/v2/README.md).
 
-| File | Step | What it does |
-| --- | --- | --- |
-| `terrain-spawn.mjs` | Terrain (done) | Part by part, asks Jev each place's kind and height with two pictures, then sizes, places, settles and lays it; `novel sim terrain` runs it. With `--spawn` (next: docs/v2/borrow-and-spawn.md) a part borrows or spawns a slot of its kind instead of pools, level by level; `--from <level>` runs a level again |
-| `export-strand-demo.mjs`, `strand-demo.html` | The view | One strand's world as a page: the places from the place tree, pins with their status, the settle playback; also the page World · Live and Jev's pictures are drawn from |
-| `sim-jev.mjs` | Movement (later) | The stage simulation decided live, as `novel sim pick` runs it; the vendored three.js files |
-| `world-map.mjs` | The view | A top-down map around a point, for Jev's box questions |
-| `two-view-things.mjs`, `impact-choices.mjs` | Spawning, movement | Jev places a strand's things, and a fight's damage, from pictures the reader would see |
-| `record-scene.mjs` | The view | One scene recorded as a video |
-| `terrain.mjs`, `landscape-mock.html` | Terrain (first version) | The earlier terrain-and-spawn plan, kept for `novel sim terrain --sites` |
+One folder for each layer of the concept map (`src/v2/concepts.ts`):
 
-Tests: `npm run world-engine:test`.
+| Folder | File | What it does |
+| --- | --- | --- |
+| `terrain/` | `terrain-spawn.mjs` | The terrain loop (done, 2026-11-01): level by level, part by part, Jev asked each place's kind and height with two pictures, then sized, placed, settled and laid; buildings typed by the inventory's search, held to the minimum gate; `novel sim terrain` |
+| `terrain/` | `tenants.mjs` | Composite buildings: a shop, a restaurant, a cinema joins its host, on a floor at a size |
+| `terrain/` | `terrain.mjs` | The earlier terrain-and-spawn plan, kept for `novel sim terrain --sites` |
+| `world/` | `export-strand-demo.mjs` | The world built from the terrain: the canvas, the filled landscapes, tall buildings and wide streets, the world's lots; one strand's page data |
+| `world/` | `composite.mjs` | Where a composite building's parts stand in their host; markers on what stands |
+| `world/` | `world-map.mjs`, `impact-choices.mjs` | A top-down map for Jev's box questions; where a fight hits and how big |
+| `view/` | `strand-demo.html`, `landscape-mock.html` | The page the world is seen in, and the first terrain mock |
+| `view/` | `building-list.mjs` | The Buildings panel's list in World · Live |
+| `view/` | `two-view-things.mjs`, `record-scene.mjs` | Jev placing a strand's things on two pictures; a scene recorded as a video |
+| `live/` | `sim-jev.mjs` | The live record World · Live reads (Jev's questions, the world at each moment), and the stage simulation decided live |
+
+Tests: `npm run world-engine:test` (`world-engine/*/*.test.mjs`).

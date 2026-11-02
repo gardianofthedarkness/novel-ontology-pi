@@ -4,8 +4,8 @@
  *
  * simulateLine: one story line's page (the engine's player, inlined) in capture mode in headless Chrome, served on loopback
  * with three.js beside it, walked forward event by event: on a picture of each event as it begins, Jev decides where the
- * people go, where the things it mentions stand (world-engine/two-view-things.mjs) and where its fight hits and how big
- * (world-engine/impact-choices.mjs); the engine plays the event with those answers and the next event begins from what it made.
+ * people go, where the things it mentions stand (world-engine/view/two-view-things.mjs) and where its fight hits and how big
+ * (world-engine/world/impact-choices.mjs); the engine plays the event with those answers and the next event begins from what it made.
  * Every answer is saved as it comes (stage/sim-decisions.json, stage/thing-boxes.json, stage/impacts.json, which the engine
  * reads), chained to the answers before it, so a stopped run continues and a changed answer is followed by fresh ones.
  *
@@ -18,11 +18,11 @@ import { access, copyFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { compactData, ENGINE_VERSION, inlineStrand, runStrand } from './export-strand-demo.mjs';
-import { fightWork, pickImpacts, SIZES } from './impact-choices.mjs';
-import { browser, CHROME, pickModels, placementWork, placeThings, serve } from './two-view-things.mjs';
+import { compactData, ENGINE_VERSION, inlineStrand, runStrand } from '../world/export-strand-demo.mjs';
+import { fightWork, pickImpacts, SIZES } from '../world/impact-choices.mjs';
+import { browser, CHROME, pickModels, placementWork, placeThings, serve } from '../view/two-view-things.mjs';
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 /** Box questions need Jev 1.14; the analysis keeps its own pinned model. */
 export const PICKER_MODEL = 'jev-1.14.0';
 /** three.js for a player page, from the app's own dependency: only the files the page imports (path beside the page → file in the repository). */
@@ -65,7 +65,7 @@ export async function simulateLine(novelDir, strand, { jev, budget = Infinity, l
   await access(CHROME).catch(() => { throw new Error(`The pictures Jev answers on are drawn by Google Chrome, headless, which is not at ${CHROME} (NOVEL_CHROME names another).`); });
   const { MANNERS, DIRECTIONS, DIRECTION_HINT } = await import(pathToFileURL(join(repository, 'dist', 'src', 'ground', 'stage', 'holoNav.js')).href);
   const work = await mkdtemp(join(tmpdir(), 'sim-live-'));
-  const template = await readFile(join(repository, 'world-engine', 'strand-demo.html'), 'utf8');
+  const template = await readFile(join(repository, 'world-engine', 'view', 'strand-demo.html'), 'utf8');
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   const boxesFile = join(novelDir, 'stage', 'thing-boxes.json'), impactsFile = join(novelDir, 'stage', 'impacts.json'), decisionsFile = join(novelDir, 'stage', 'sim-decisions.json');
   const boxes = JSON.parse(await readFile(boxesFile, 'utf8').catch(() => 'null')) ?? {};

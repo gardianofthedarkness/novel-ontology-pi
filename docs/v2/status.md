@@ -46,7 +46,7 @@ What the terrain step learned, kept as rules:
 
 Open on terrain, not blocking the next step: the canvas places a kept district by direction rather than at its exact
 offset, so an outline can sit beside its towers; the fix is for the canvas to honour the kept offset (`bear` in
-`src/ground/stage/placeCanvas.ts`).
+`src/v2/world/placeCanvas.ts`).
 
 ## World engine: borrowing and spawning by type — in progress
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pickImpacts } from './impact-choices.mjs';
+import { pickImpacts } from '../world/impact-choices.mjs';
 import { createLive, outcomeView } from './sim-jev.mjs';
 
 /** A browser that draws nothing: stills are a fixed picture, impact spots two letters, a measure 6 m across. */

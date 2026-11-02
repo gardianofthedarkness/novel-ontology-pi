@@ -48,7 +48,7 @@ src/v2/context/      the context engine and its modes (reading, places, terrain)
 src/v2/rules/        what code decides alone: the rules catalogue, the language profile
 src/v2/concepts.ts   the concept map
 world-engine/        the world engine's scripts: terrain spawning, the strand page, Jev's line, the world map
-src/ground/stage/    the world's ground: the canvas of places, landscapes, lots, the underground
+src/v2/world/    the world's ground: the canvas of places, landscapes, lots, the underground
 tools/pi-review/     the host and its pages (World · Live, the replay)
 experiments/v2/      runs and pages: the reading, the workspace, comparisons, the concept and compatibility pages
 docs/v2/             the design: start at docs/v2/README.md

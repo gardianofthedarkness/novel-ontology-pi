@@ -3,7 +3,7 @@
  * passes by is part of a larger building (a mall, a tower's foot, a station, an underground mall), not a building of its
  * own. It joins a host under its holder where the characters' travel is least and takes no lot. Its floor and size: fixed
  * for some types (a convenience store on floor one), else asked of Jev in one question; it stands at a random spot of that
- * floor. Which types are tenants, the hosts each may join: config/spawning/composite.json.
+ * floor. Which types are tenants, the hosts each may join: config/terrain/composite.json.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,7 @@ import { seeded } from "./config.js";
 
 /** A tenant type: the uses of the buildings it may be part of (the likeliest first); a fixed floor and size; how many floors tall. */
 export interface Tenancy { in: string[]; floor?: number; size?: number; floors?: number }
-const DEFAULT = fileURLToPath(new URL("../../../../config/spawning/composite.json", import.meta.url));
+const DEFAULT = fileURLToPath(new URL("../../../../config/terrain/composite.json", import.meta.url));
 /** The tenant types, by building type. */
 export const loadTenancies = (file = DEFAULT): Record<string, Tenancy> => JSON.parse(readFileSync(file, "utf8")).tenants;
 

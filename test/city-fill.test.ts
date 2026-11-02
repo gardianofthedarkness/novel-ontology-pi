@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { borrowLots, borrowRoad, growToReach, materialize, placeChild, polygonArea, spawnOf, type City, type Circle, type Fabric } from "../src/ground/stage/cityFill.js";
+import { borrowLots, borrowRoad, growToReach, materialize, placeChild, polygonArea, spawnOf, type City, type Circle, type Fabric } from "../src/v2/world/cityFill.js";
 
 // An invented city, 600 m across at birth.
 const city: City = { seed: "loc_mock_city", r0: 300, r: 300 };

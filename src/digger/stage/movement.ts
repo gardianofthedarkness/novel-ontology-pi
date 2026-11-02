@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { DecisionAnswer, DecisionModel, DecisionQuestion } from "../../ground/connectors/jev.js";
-import { ARCHITECTURE_LABEL, type ArchitectureKind } from "../../ground/stage/placeArchitecture.js";
-import { DIRECTIONS, DIRECTION_HINT, MANNERS, centreSpot, navGrid, type Manner } from "../../ground/stage/holoNav.js";
+import { ARCHITECTURE_LABEL, type ArchitectureKind } from "../../v2/world/placeArchitecture.js";
+import { DIRECTIONS, DIRECTION_HINT, MANNERS, centreSpot, navGrid, type Manner } from "../../v2/world/holoNav.js";
 
 /**
  * Stage faculty 2 — movement: who moves where inside a scene's building, and

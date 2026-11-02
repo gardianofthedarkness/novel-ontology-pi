@@ -22,7 +22,7 @@ import { prepareStage, prepFingerprint, type StagePlan } from "../../../digger/s
 import { pickScales, scaleFingerprint, SCALES, type ScalePlace, type ScaleReport } from "../../../digger/stage/scale.js";
 import { LANDSCAPE_UNSURE, landscapeFingerprint, landscapeProposal, OPEN_SCALES, pickLandscapes, type LandscapePick, type LandscapePlace, type LandscapeReport } from "../../../digger/stage/landscape.js";
 import { landscapeItem, loadPool, writePool } from "./worldCommands.js";
-import { firstLandscape, type Landscape } from "../../../ground/stage/landscape.js";
+import { firstLandscape, type Landscape } from "../../../v2/world/landscape.js";
 import { loadWorkspaceSentences, pendingTreeLinks } from "./timeplaceCommands.js";
 
 /**

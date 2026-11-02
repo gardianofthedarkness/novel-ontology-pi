@@ -11,7 +11,7 @@ modern living area.
   carts.
 - **Houses were offices.** A `house` had no model of its own, so it took `office-c`, a small Kenney office, as a stand-in.
   In vol 1's dwelling areas that was 331 of the 371 low buildings.
-- **The city's ground was shops.** A city's `open` ground was the commercial landscape (`config/spawning/city.json`), so
+- **The city's ground was shops.** A city's `open` ground was the commercial landscape (`config/terrain/city.json`), so
   the ground between its districts was about 1,270 shop blocks. A real city's ground between its centres is mostly
   housing.
 - **Three tables picked models, and they disagreed:**
@@ -59,7 +59,7 @@ to 2.1 MB, most of it the three brick buildings. A page embeds only the models i
 
 ## 4. How a building takes its model
 
-`modelFor` and `roleModel` in `src/ground/stage/useModels.ts`:
+`modelFor` and `roleModel` in `src/v2/world/useModels.ts`:
 
 1. **Ancient ground:** the building's kind's old models, one of them by a seed.
 2. **Otherwise, its use** (its own, else its kind's, else its role's). Of that use's models:
@@ -73,7 +73,7 @@ a Kenney tower. A factory is one of the industrial kit's ten factories, a wareho
 
 ## 5. The M2 tuning
 
-`open` in `config/spawning/city.json` is now `residential` for a metropolis and a city (a town's already was). A city's
+`open` in `config/terrain/city.json` is now `residential` for a metropolis and a city (a town's already was). A city's
 open ground keeps its landscape in `stage/terrain.json` from the run that laid it out (`site.open.ground`), so a book's
 world changes only when its city level runs again.
 

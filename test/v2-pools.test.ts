@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addUnit, centralBuild, dwellInGround, dwellInStreets, dwellingFor, emptyCanvas, holderFor, POOL_SPACING, tiedSpot } from "../src/ground/stage/placeCanvas.js";
+import { addUnit, centralBuild, dwellInGround, dwellInStreets, dwellingFor, emptyCanvas, holderFor, POOL_SPACING, tiedSpot } from "../src/v2/world/placeCanvas.js";
 import { buildingUseOf } from "../src/v2/rules/language.js";
 import { continuityTies, emptyRegistry, evenPick, withPools } from "../src/v2/extraction/pools.js";
 import type { ReadingScript } from "../src/v2/extraction/script.js";

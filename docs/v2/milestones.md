@@ -23,23 +23,23 @@ call); a real Jev run only when the user asks.
 ## M0 — Design and configuration
 
 - [x] Design with the objective and its guards: `docs/v2/borrow-and-spawn.md`
-- [x] Draft configurations: `config/spawning/city.json`, `district.json`, `street.json` (street densities read off today's landscapes)
+- [x] Draft configurations: `config/terrain/city.json`, `district.json`, `street.json` (street densities read off today's landscapes)
 - [x] `test/spawning-config.test.ts`: every kind one Jev can answer at its level, every use one the world knows
 - [x] Decided: spares built and shown, a pinned slot visible to Jev (3); cross-parent ties at 0.3 (4); JSON, layered later (5)
 - [x] Decided: damage by option A, terrain a book at once, the simulation splits damaged shares (1, §2.8); a new name spawns when its type's slots are all named, and a nominated place is permanent (2, §2.4, §4.5); unnamed shares and damage cleared for the next book (§4.5)
 
 ## M1 — Slots, borrowing and spawning in code (no model call)
 
-- [x] Load the configurations through a resolver (defaults only for now; the seam for M8); spawn a parent's slots (a range picked once by a seed, kept): `src/v2/spawning/config.ts`
-- [x] The rules (`admissible` in `src/v2/spawning/slots.ts`): a name takes a slot of its own; an unnamed mention shares, never with a mention of its own scene; spawn only as §2.4 allows; a place whose holder is higher up borrows under that holder (§2.5)
+- [x] Load the configurations through a resolver (defaults only for now; the seam for M8); spawn a parent's slots (a range picked once by a seed, kept): `src/v2/terrain/config.ts`
+- [x] The rules (`admissible` in `src/v2/terrain/slots.ts`): a name takes a slot of its own; an unnamed mention shares, never with a mention of its own scene; spawn only as §2.4 allows; a place whose holder is higher up borrows under that holder (§2.5)
 - [x] The level's choice energy: travel (cross-parent ties at 0.3) and pins, an unplaced slot costed where the engine would place it
 - [ ] Positions: today's settle with the spare term γ at a level's end: moved to M3
 - [x] Greedy in narrative order, then moves (a name to a better free slot, two names exchanging, an unnamed mention to a better share): `chooseSlots`
 - [x] One mention at a time for the engine's step mode (`improve: false`, the level's earlier parts as fixed places), the moves when the level ends (`assigned`)
 - [x] Slots in the universe's registry (`universe/terrain.json` `slots`), mirrored in the book's `terrain.json`: type, owner name, sharers by book and scene, damage, the configuration layer, kept offset, size; a slot no name owns kept as a site of its own (`by: "slot"`, `spare`)
-- [x] The slot tree (`src/v2/spawning/tree.ts`): no pools; spare and shared slots as places; names and shares under their slots; read alike by terrain spawning and the export
+- [x] The slot tree (`src/v2/terrain/tree.ts`): no pools; spare and shared slots as places; names and shares under their slots; read alike by terrain spawning and the export
 - [x] World · Live: a spare slot has no pin, its name grey and only on the ground
-- [x] `novel sim terrain <dir> --spawn [--from city|district|street]`, beside today's path until M7 (`world-engine/terrain-spawn.mjs`: each level ends with the moves, its spares placed, its areas' children spawned)
+- [x] `novel sim terrain <dir> --spawn [--from city|district|street]`, beside today's path until M7 (`world-engine/terrain/terrain-spawn.mjs`: each level ends with the moves, its spares placed, its areas' children spawned)
 - [x] Tests (`test/spawning-slots.test.ts`): the bound (§3) over 20 synthetic books (240 unnamed mentions: 14 districts, flat once names stop), names exclusive and permanent across books, same-scene unnamed apart, unnamed shares and damage cleared at a new book, the same order gives the same world
 
 **Pass:** tests green; today's terrain path unchanged (its tests and a stand-in run as before).
@@ -63,7 +63,7 @@ city is one ground of manifolds that fade into each other, laid out by a topolog
 which kinds sit near or apart); a district is a centre of function on it. M1's tune is folded in: the layout by topology
 replaces "placed by the first borrower"; districts as patches of the city's ground replace "areas at exact offsets".
 
-- [x] Topology in `config/spawning/city.json`: each city kind's rings and pairs (§8.2), checked by the configuration test
+- [x] Topology in `config/terrain/city.json`: each city kind's rings and pairs (§8.2), checked by the configuration test
 - [x] At the city level's end, each city's district manifolds spawned where the city's energy is least (topology, pairs,
       pressure of the fading functions), each kept with its kind, centre, size and seed: the city's map, in the registry
 - [x] The export builds a spawn-mode city's districts as patches of the city's own ground, not areas cut out of it; a spare
@@ -84,7 +84,7 @@ within the deformation limit (a higher part lowers only the highest non-nominate
 
 Moved to later levels: below and above the street apart, and a share asked its kind only (M4, streets).
 
-**Result (2026-11-01, stand-in answers, `--spawn --until city`):** `src/v2/spawning/topology.ts` (the layout),
+**Result (2026-11-01, stand-in answers, `--spawn --until city`):** `src/v2/terrain/topology.ts` (the layout),
 `heights.ts` (unification within the deformation limit), `averageOverMedian` in the landscape engine, the map log at
 `universe/maps/<book>.json`.
 - Each metropolis: 6 district manifolds, radius 991 m; CBDs at 0.24 and 0.30 of the radius, dwelling areas 0.46–0.64,
@@ -334,7 +334,7 @@ buildings, all on lots of their kind with their heights. Not yet run with Jev: a
 **The user's building level (after the first asked run):**
 - [x] Shapes at the building level: a floating one asked its distance from the ground and its thickness, merging into
       the buildings there; a ground shape asked its top, pushing them outward; both placed where travel is least.
-- [x] An inventory of about 90 building types (`config/spawning/building-types.json`), searched by a building's name and
+- [x] An inventory of about 90 building types (`config/terrain/building-types.json`), searched by a building's name and
       the sentences round it; Jev chooses among the ten nearest and the shapes. The search is by words until an
       embedding model is configured.
 - [x] A rare type with no lot of its use under its holder stands where travel is least and pushes the buildings round it
@@ -391,7 +391,7 @@ tokens for the 54):**
 
 **Heights at every level, after that run (the user, 2026-11-01; borrow-and-spawn.md §8.9):**
 - [x] A minimum at every level: area kinds had theirs (their least median); a building type's least floors
-      (`config/spawning/heights.json`, for an East Asian megacity) are now its lowest slice above the street (an office
+      (`config/terrain/heights.json`, for an East Asian megacity) are now its lowest slice above the street (an office
       three floors, a hospital four).
 - [x] The text's own measures (`src/v2/context/measures.ts`): a number and a unit of height in a place's name and own
       sentences (五十层, 两百米高, 地下三层, 35 floors), found by pattern, offered as slices of their own, "as the text
@@ -458,7 +458,7 @@ from 58 and 100 before):**
   tallest 849 m (the CBD's tail).
 - [x] After it (the user: "those offices, you know their usual type, set that usual height as the minimum gate";
       "every area type needs a minimum gate, the type configuration dictionary needs to be fulfilled"): one dictionary,
-      `config/spawning/heights.json`, whole. Every building type at its usual height (an office building 12 floors, a
+      `config/terrain/heights.json`, whole. Every building type at its usual height (an office building 12 floors, a
       mixed-use street building 8, a real-estate firm's office building 12, a block of flats 10, a hotel 15, a hospital 8,
       a school 4, a tower 30); every area kind of every level at its least median (as before, now in the dictionary and
       read from it). On this run's answers 17 buildings would be lifted: 豚草不动产写字楼 1 → 12 floors; 大厦, 两栋大楼 and
@@ -472,6 +472,12 @@ from 58 and 100 before):**
   cache). The two convenience stores on floor one, as fixed; at the fifty-storey tower's foot the sushi restaurant 200 m²
   and the patisserie and donut shop on floor one, the ramen shop one floor under the street (42% sure); the cinema on a
   mall lot's floor 4, 500 m²; the cinema of 购物中心 its whole ground floor, 358 m².
+
+**The terrain loop: basically done (the user, 2026-11-01).** City, district, street and building levels, each asked as
+every level is; the building inventory, the minimum gate, the text's measures, composite buildings, tall buildings and
+wide streets, the Buildings panel. The repository was then laid out by the concept map's layers (`src/v2/terrain`,
+`src/v2/world`, `world-engine/{terrain,world,view,live}`; config in `config/terrain`). Next: spawning positions, where
+each character and thing stands when a scene begins.
 
 **The building level with Jev on the whole dictionary (2026-11-01, on the host at 0f632a6; 47 questions, 36 paid and 11
 from the cache; 190,936 input and 3,816 output tokens):**

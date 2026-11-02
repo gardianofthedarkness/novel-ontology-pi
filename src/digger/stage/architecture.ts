@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DecisionModel } from "../../ground/connectors/jev.js";
-import { architectureCandidates, type ArchitectureKind } from "../../ground/stage/placeArchitecture.js";
+import { architectureCandidates, type ArchitectureKind } from "../../v2/world/placeArchitecture.js";
 
 /**
  * Stage faculty 1 — architecture: which building each place is, a sub-kind

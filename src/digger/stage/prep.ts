@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { ArchitectureKind } from "../../ground/stage/placeArchitecture.js";
-import { navGrid, solveChain, type ChainStep, type MovePlan } from "../../ground/stage/holoNav.js";
-import { ARCHITECTURE_LABEL } from "../../ground/stage/placeArchitecture.js";
+import type { ArchitectureKind } from "../../v2/world/placeArchitecture.js";
+import { navGrid, solveChain, type ChainStep, type MovePlan } from "../../v2/world/holoNav.js";
+import { ARCHITECTURE_LABEL } from "../../v2/world/placeArchitecture.js";
 import type { ArchitectureReport } from "./architecture.js";
 import type { MovementReport } from "./movement.js";
 

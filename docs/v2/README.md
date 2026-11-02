@@ -51,12 +51,12 @@ lays its streets.
 
 | Step | Design | Code |
 | --- | --- | --- |
-| The loop for one part, what it keeps | visual-context-engine.md §5.1–5.6 | `world-engine/terrain-spawn.mjs` |
-| Kinds by level, how high, the median and its manifold | §5.7, §5.8 | `src/v2/context/terrainModes.ts`, `src/ground/stage/landscape.ts` |
-| Pins as suggestions, compatibility, street forms | world-engine-v2.md §2.0.13–2.0.15 | `terrainModes.ts` (`OVERLAPS`), `src/ground/stage/placeCanvas.ts` |
-| Buildings, shells, the underground | §2.0.16–2.0.18 | `src/ground/stage/useModels.ts`, `underground.ts`, `cityFill.ts` |
+| The loop for one part, what it keeps | visual-context-engine.md §5.1–5.6 | `world-engine/terrain/terrain-spawn.mjs` |
+| Kinds by level, how high, the median and its manifold | §5.7, §5.8 | `src/v2/context/terrainModes.ts`, `src/v2/world/landscape.ts` |
+| Pins as suggestions, compatibility, street forms | world-engine-v2.md §2.0.13–2.0.15 | `terrainModes.ts` (`OVERLAPS`), `src/v2/world/placeCanvas.ts` |
+| Buildings, shells, the underground | §2.0.16–2.0.18 | `src/v2/world/useModels.ts`, `underground.ts`, `cityFill.ts` |
 | Free ground, sized by pins, placement as one optimization | §2.0.20, §2.0.21 | `src/v2/context/zoom.ts` (`sizeByPins`, `placeArea`, `roomFor`) |
-| Settling, pins that say what is settled | §2.0.22 | `zoom.ts` (`settle`), `world-engine/strand-demo.html` |
+| Settling, pins that say what is settled | §2.0.22 | `zoom.ts` (`settle`), `world-engine/view/strand-demo.html` |
 | What a terrain question carries: the scenes around the name | visual-context-engine.md §5.10 | `terrainModes.ts` (`sources`) |
 | Pictures the places fill, turned; common sense | §5.11 | `zoom.ts` (`fillFrame`), `terrain-spawn.mjs` |
 | The zoom engine, pins not circles, the live view | §3, §4.1, §5.9 | `zoom.ts`, `tools/pi-review/sim-world.html` |
@@ -68,7 +68,7 @@ Run: `node dist/src/cli/cli.js sim terrain <novel-dir>` (one part per step; `--r
 ### Borrowing and spawning by type — next
 
 The user's redesign of how places get their areas (it replaces sampling pools, §2.0.11–2.0.12): each type spawns its
-children by a configuration (`config/spawning/`), a place borrows a slot of its type in its parent or spawns one, level
+children by a configuration (`config/terrain/`), a place borrows a slot of its type in its parent or spawns one, level
 by level in narrative order, keeping the characters' travel least. Design: [borrow-and-spawn.md](borrow-and-spawn.md);
 progress: [milestones.md](milestones.md).
 

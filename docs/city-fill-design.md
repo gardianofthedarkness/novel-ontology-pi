@@ -77,7 +77,7 @@ A room is not a lot and not a circle: it is a box on a floor of a building, so i
 
 ## The first mock (built)
 
-**The recipe:** `src/ground/stage/cityFill.ts`, version 1.
+**The recipe:** `src/v2/world/cityFill.ts`, version 1.
 - **Main roads:** the plane is cut into super-blocks, the Voronoi cells of one jittered site per 180 m square. Each depends only on the sites around it, so any window of the city agrees with the whole. Their edges are 18 m arterial roads.
 - **Blocks:** each super-block is split across its longer side again and again; the first split is a 12 m collector road, later ones 8 m local roads.
 - **Lots and buildings:** blocks are split into lots, keeping only lots that face a road. Each lot's building stands back from its edges, faces its road, and has floors from a density field fixed by the radius the city was born with. Its kind follows from its floors: skyscraper, tower, office or house.
@@ -112,7 +112,7 @@ The city has 2,710 lots, 2,686 buildings and 561 roads within 585 m, built in ab
 
 The plain city filled every circle with the same kind of buildings, so a future city and an ancient one looked alike. Now a place's ground has a **landscape**, picked by Jev, and is filled **from its centre** only.
 
-- **Types** (`src/ground/stage/landscape.ts`):
+- **Types** (`src/v2/world/landscape.ts`):
   - modern skyscrapers;
   - a commercial quarter;
   - a living area;
@@ -179,7 +179,7 @@ A city that spans books needs its landscape from all of them, not from the first
 - beside it, a walled castle quarter, docks, a village and fields;
 - a named building pinned to the lot it borrowed.
 
-**Drawn as the frontend's cyan holograms** (`world-engine/landscape-mock.html`): a faint cyan fill with cyan edges (white for named buildings), fields and lawns as faint ground. The building forms:
+**Drawn as the frontend's cyan holograms** (`world-engine/view/landscape-mock.html`): a faint cyan fill with cyan edges (white for named buildings), fields and lawns as faint ground. The building forms:
 - **Baked Kenney models:** 13 towers, 3 skyscrapers, offices and the keep.
 - **Procedural forms per landscape:**
   - stepped and twin skyscrapers, and spires;
@@ -195,7 +195,7 @@ A city that spans books needs its landscape from all of them, not from the first
 
 ## Places as circles, built from the bottom up (the canvas)
 
-A design change from the user (2026-10-29): a recognised district like 第七学区 is a circle of its own, born on the canvas on its own. It is not a box inside its city's map. The build order runs upward, from the smallest units known to belong to bigger areas, and each circle grows as things are built inside it (`src/ground/stage/placeCanvas.ts`).
+A design change from the user (2026-10-29): a recognised district like 第七学区 is a circle of its own, born on the canvas on its own. It is not a box inside its city's map. The build order runs upward, from the smallest units known to belong to bigger areas, and each circle grows as things are built inside it (`src/v2/world/placeCanvas.ts`).
 
 - **Own frames:** every open place (city, district, street) is a circle in its own frame, at an offset in its parent's frame. Buildings and rooms are units: a lot in the nearest open place that holds them.
 - **Bottom-up births:** when the story first names a place, each missing place above it is born, outermost first, so the smallest is born into the circle that holds it. A building in 第七学区 brings 学园都市 and 第七学区 into being and then takes a lot.
@@ -245,7 +245,7 @@ A design change from the user (2026-10-29): a recognised district like 第七学
 
 The user asked that the systems from here build on #83's design (`novel sim`, versioned runs, the app's player), not the io page alone. Branch `claude/place-canvas` starts from #83's head.
 
-- **Modules with the stage:** `cityFill.ts`, `landscape.ts` and `placeCanvas.ts` moved to `src/ground/stage/`, as #82 did with the nav grids. The view re-exports them, and the CLI faculty never imports the frontend.
+- **Modules with the stage:** `cityFill.ts`, `landscape.ts` and `placeCanvas.ts` moved to `src/v2/world/`, as #82 did with the nav grids. The view re-exports them, and the CLI faculty never imports the frontend.
 - **`novel stage landscape <dir>`:**
   - one Jev choice per city, district and street (by Jev's scale), kept in `stage/landscape.json`;
   - proposes a `cs_stage_landscape_*` packet, each place's landscape as its `landscape` property;

@@ -38,7 +38,7 @@ has its tables only in the standard's own text.
   | dwelling (a district) | 8–50 | 12, 18, 25, 35, 50, 70 | 0.25, 0.02 → 0.4, 0.06: wider, with residential towers |
   | residential (a street) | 6–25 | 9, 12, 18, 25, 35, 50 | 0.25, 0.02 → 0.35, 0.05 |
 
-- **Ground**, in `LANDSCAPES` in `src/ground/stage/landscape.ts`:
+- **Ground**, in `LANDSCAPES` in `src/v2/world/landscape.ts`:
   - a living area's lots are 400–1,200 m² (blocks of flats), up from 250–700;
   - a building of four floors or more is flats, down from five;
   - a residential street's buildings likewise.

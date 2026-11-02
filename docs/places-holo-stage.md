@@ -296,7 +296,7 @@ Next:
 
 ### One strand, continuous (demo)
 
-https://gardianofthedarkness.github.io/novel-ontology-pi/stage-strand/ plays book 2's Christmas Eve battle in 3D, start to end. It covers scenes 29–64 of the strand that starts at scene 6: Misaka and Shokuhou against Anna Sprengel across 购物美食大街, 第十五学区 and 第七学区. Built with `world-engine/export-strand-demo.mjs` into the `world-engine/strand-demo.html` player (three.js from a CDN).
+https://gardianofthedarkness.github.io/novel-ontology-pi/stage-strand/ plays book 2's Christmas Eve battle in 3D, start to end. It covers scenes 29–64 of the strand that starts at scene 6: Misaka and Shokuhou against Anna Sprengel across 购物美食大街, 第十五学区 and 第七学区. Built with `world-engine/world/export-strand-demo.mjs` into the `world-engine/view/strand-demo.html` player (three.js from a CDN).
 
 - **Places from the place tree** (`placeGroup.ts`):
   - A street or district is composed of architectures: its building children take named lots, as 医院 and 地铁站 do in 第七学区, and generated buildings fill the rest.

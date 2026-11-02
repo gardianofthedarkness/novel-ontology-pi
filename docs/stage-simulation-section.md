@@ -17,7 +17,7 @@ The engine now runs as a product step; the engine itself is unchanged (`runStran
 
 ## Production, phase 2 (built): Jev's pickers and the live page
 
-- **`novel sim pick <dir> --auto N --max-calls M`** simulates each line live, forward in story time (`simulateLine` in `world-engine/sim-jev.mjs`), in headless Chrome. First a model per thing. Then event by event, on a picture of the event as it begins (people where earlier moves left them, things where earlier answers put them, buildings as earlier blasts left them), Jev decides together: who moves, to which of the place's spots (pinned and named on the picture), how and which way (one call); where each thing the event mentions stands (`two-view-things.mjs`); where its fight hits and how big (`impact-choices.mjs`). The engine plays the event with those answers and the next event begins from what it made. Each event's answers are chained to every answer before them (`stage/sim-decisions.json`): a changed answer, or a changed book, has everything after it asked again. Within a call budget; a stopped run continues where it stopped. Box questions use Jev 1.14. The engine takes an event's movement from the live decision when there is one, else from the movement step's answers in words.
+- **`novel sim pick <dir> --auto N --max-calls M`** simulates each line live, forward in story time (`simulateLine` in `world-engine/live/sim-jev.mjs`), in headless Chrome. First a model per thing. Then event by event, on a picture of the event as it begins (people where earlier moves left them, things where earlier answers put them, buildings as earlier blasts left them), Jev decides together: who moves, to which of the place's spots (pinned and named on the picture), how and which way (one call); where each thing the event mentions stands (`two-view-things.mjs`); where its fight hits and how big (`impact-choices.mjs`). The engine plays the event with those answers and the next event begins from what it made. Each event's answers are chained to every answer before them (`stage/sim-decisions.json`): a changed answer, or a changed book, has everything after it asked again. Within a call budget; a stopped run continues where it stopped. Box questions use Jev 1.14. The engine takes an event's movement from the live decision when there is one, else from the movement step's answers in words.
 - **The checklist** asks for `pick` until it leaves nothing (`picks.json`, against the book's inputs), then `run`. Pi may run `pick` with `--max-calls` at most 60.
 - **The live page** (`play/live?volume=N`; the player and the app's **Simulation** link lead to it while a command runs) shows each question's pictures as Jev gets them, its answers drawn on them (boxes, the chosen option with how sure), and a picture of what each answer made; **Replay** plays the recording at its recorded pace, 1× to 32×. The player can show each line's newest run (`newest=1`) before the user accepts it.
 
@@ -33,7 +33,7 @@ Still open: the movement step (in words) still runs before the simulation, for r
    - The `novel-stage` skill works the analysis checklist first.
    - So the animation waits on, and is reported as part of, the analysis.
 2. **The new engine lives in a demo script.**
-   - `world-engine/export-strand-demo.mjs` does the whole run: places composed from the place tree, the per-fork walk, the path-integral sampler, placed things, damage, and the page export.
+   - `world-engine/world/export-strand-demo.mjs` does the whole run: places composed from the place tree, the per-fork walk, the path-integral sampler, placed things, damage, and the page export.
    - No `novel` command runs it.
    - Its output is a page, not data.
 3. **Strands are picked by hand** (`--from`, `--to`, `--fork`), and the strand list for a page is a hand-written JSON (`--set`).
@@ -58,7 +58,7 @@ Still open: the movement step (in words) still runs before the simulation, for r
    - Traces, migrations, damage states and placed things exist only inside the exported page.
    - The timeline page is not told about migrations.
 7. **The frontend is a standalone page.**
-   - `world-engine/strand-demo.html` gets its data inlined at export. It is not part of the app and does not read live data.
+   - `world-engine/view/strand-demo.html` gets its data inlined at export. It is not part of the app and does not read live data.
    - Its picker lists only what was exported.
    - Read mode (`?read`) and clips (`?clips`) still play the older `stage/plan.json`.
 8. **Pi cannot run all of it.** The Pi guard allows `novel stage show|scale|architecture|movement|prep`; `objects` and `forks` are not on its list.
@@ -138,7 +138,7 @@ The analysis ends at its own last reviewed step. The simulation reads a pinned s
 - [ ] Pi guard: an allowlist for the `novel sim` verbs with bounded options (the `objects` and `forks` gap closes with it).
 
 ### 7. Its own frontend page: the game section
-- [ ] Port the player (`world-engine/strand-demo.html`) into the app as its own page, for example `?play&book=N#strand`.
+- [ ] Port the player (`world-engine/view/strand-demo.html`) into the app as its own page, for example `?play&book=N#strand`.
   - It reads runs from the host API instead of inlined data.
   - The picker comes from the list of runs.
   - Progress shows while a run computes.

@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { LANDSCAPE_TYPES } from "../../../ground/stage/landscape.js";
+import { LANDSCAPE_TYPES } from "../../../v2/world/landscape.js";
 import type { LandscapePick } from "../../../digger/stage/landscape.js";
 
 /**

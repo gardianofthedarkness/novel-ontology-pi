@@ -7,9 +7,9 @@
 // underground-design.md §6.1), it is what lies there from above: the halls of that choice by kind (and every building's
 // basement just under the street), with their pillars, in the dark of the ground. Plain Node: a small PNG writer, no browser.
 import { deflateSync } from 'node:zlib';
-import { CORRIDOR, MASS, cellIndex } from '../dist/apps/playground/src/data/skeleton.js';
-import { basementsOf } from '../dist/apps/playground/src/data/world.js';
-import { boundsOf, inHall, intervalsOf, pillarAt } from '../dist/src/ground/stage/underground.js';
+import { CORRIDOR, MASS, cellIndex } from '../../dist/apps/playground/src/data/skeleton.js';
+import { basementsOf } from '../../dist/apps/playground/src/data/world.js';
+import { boundsOf, inHall, intervalsOf, pillarAt } from '../../dist/src/v2/world/underground.js';
 
 /** The halls' colours on a picture underground: the subway, a mall, the storm water, a deep facility, a basement. */
 const HALL_COLOUR = { station: [110, 210, 225], tunnel: [80, 170, 190], corridor: [95, 190, 205], mall: [230, 190, 110], tank: [110, 150, 235], channel: [90, 130, 220], lab: [235, 140, 160], military: [215, 120, 120], quantum: [200, 150, 235] };

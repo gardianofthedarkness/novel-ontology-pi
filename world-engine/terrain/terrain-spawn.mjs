@@ -26,24 +26,26 @@
  * `spawn` (docs/v2/borrow-and-spawn.md, the user's design of 2026-11-01): borrowing and spawning by type instead of pools.
  * Level by level, every city, then every district, then every street, named and unnamed alike in the order the text first
  * comes to them: a part Jev gave a kind borrows the slot of that kind its holder has that raises the characters' travel
- * least, or spawns one where it can borrow nothing (src/v2/spawning); a level ends with the moves that lower the travel, its
- * spare slots placed, and every area of it spawning its children's slots by its kind's configuration (config/spawning).
+ * least, or spawns one where it can borrow nothing (src/v2/terrain); a level ends with the moves that lower the travel, its
+ * spare slots placed, and every area of it spawning its children's slots by its kind's configuration (config/terrain).
  * `from` (city, district, street) drops that level and every level under it, to run them again; `until` stops after a level.
  * A parent whose configuration has a topology (a city) lays its children out at its level's end as manifolds of its own
  * ground, by its topology, their heights unified (§8); every change to the map is logged by book (§8.8).
  *
- *   npm run build && node world-engine/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn [--from <level>]]   (N: stop after that many parts)
+ *   npm run build && node world-engine/terrain/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn [--from <level>]]   (N: stop after that many parts)
  */
 import { copyFile, mkdir, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { browser, serve } from './two-view-things.mjs';
-import { createLive, PICKER_MODEL, VENDOR_FILES } from './sim-jev.mjs';
-import { inlineStrand, strandDemo } from './export-strand-demo.mjs';
+import { browser, serve } from '../view/two-view-things.mjs';
+import { createLive, PICKER_MODEL, VENDOR_FILES } from '../live/sim-jev.mjs';
+import { inlineStrand, strandDemo } from '../world/export-strand-demo.mjs';
+import { buildingList as listBuildings } from '../view/building-list.mjs';
+import { tenantPlacer } from './tenants.mjs';
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..'), load = path => import(pathToFileURL(`${repository}/${path}`).href);
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(`${repository}/${path}`).href);
 const round = value => Math.round(value * 10) / 10;
 /** An unnamed place's words, without its scene (two of the same words are the same place: world-engine-v2.md §2.0.12). */
 const baseName = label => String(label).replace(/ \(scene \d+\)$/, '');
@@ -72,7 +74,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const { ask } = await load('dist/src/v2/context/engine.js'), T = await load('dist/src/v2/context/terrainModes.js');
   const { continuityTies, universeOf } = await load('dist/src/v2/extraction/pools.js');
   // The zoom engine (docs/v2/visual-context-engine.md §4.1): every frame Jev is shown and every box it answers.
-  const Z = await load('dist/src/v2/context/zoom.js'), { LANDSCAPES, formsFor, formsTaking, averageOverMedian } = await load('dist/src/ground/stage/landscape.js');
+  const Z = await load('dist/src/v2/context/zoom.js'), { LANDSCAPES, formsFor, formsTaking, averageOverMedian } = await load('dist/src/v2/world/landscape.js');
   const inputs = await stageInputs(novelDir), [line] = await simStrandList(novelDir);
   if (!line) throw new Error('Terrain spawning needs the world loop\'s line: a world-first book with its world script and staged scenes.');
   const folder = join(novelDir, 'stage', 'terrain');
@@ -122,17 +124,17 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const universe = universeOf(novelDir), registryFile = join(universe.dir, 'terrain.json');
   const registry = JSON.parse(await readFile(registryFile, 'utf8').catch(() => 'null')) ?? { version: 1, places: {} };
   // Borrowing and spawning by type (`spawn`): slots instead of pools, kept in the universe's registry (they outlive the book),
-  // mirrored in the book's terrain for the export; the stage inputs read as the slot tree (src/v2/spawning/tree.ts).
-  const S = spawn ? { ...(await load('dist/src/v2/spawning/config.js')), ...(await load('dist/src/v2/spawning/slots.js')), ...(await load('dist/src/v2/spawning/tree.js')), ...(await load('dist/src/v2/spawning/topology.js')), ...(await load('dist/src/v2/spawning/heights.js')) } : null;
-  // The building level's inventory (config/spawning/building-types.json) and its search: by meaning when an embedding model
-  // is configured (the embedding connector), else by words (src/v2/spawning/inventory.ts).
-  const I = spawn ? await load('dist/src/v2/spawning/inventory.js') : null, buildingTypes = I ? I.loadBuildingTypes() : {};
+  // mirrored in the book's terrain for the export; the stage inputs read as the slot tree (src/v2/terrain/tree.ts).
+  const S = spawn ? { ...(await load('dist/src/v2/terrain/config.js')), ...(await load('dist/src/v2/terrain/slots.js')), ...(await load('dist/src/v2/terrain/tree.js')), ...(await load('dist/src/v2/terrain/topology.js')), ...(await load('dist/src/v2/terrain/heights.js')) } : null;
+  // The building level's inventory (config/terrain/building-types.json) and its search: by meaning when an embedding model
+  // is configured (the embedding connector), else by words (src/v2/terrain/inventory.ts).
+  const I = spawn ? await load('dist/src/v2/terrain/inventory.js') : null, buildingTypes = I ? I.loadBuildingTypes() : {};
   const embedder = spawn ? await (async () => { try { const { loadConfig } = await load('dist/src/cli/config.js'), { loadEmbedder } = await load('dist/src/ground/connectors/embeddings.js'), cfg = loadConfig(process.env); return cfg.embeddings.status === 'deferred' ? null : loadEmbedder({ provider: cfg.embeddings.provider, model: cfg.embeddings.model, dimension: cfg.embeddings.dimension, baseUrl: cfg.embeddings.baseUrl, apiKey: process.env.EMBEDDING_API_KEY?.trim() || null }); } catch { return null; } })() : null;
-  // A building type's least floors, its minimum (config/spawning/heights.json; the user, 2026-11-01); the measures a place's
+  // A building type's least floors, its minimum (config/terrain/heights.json; the user, 2026-11-01); the measures a place's
   // sentences give, offered at every level.
   const H = spawn ? S.loadHeights() : null, M = await load('dist/src/v2/context/measures.js');
-  // Composite buildings (config/spawning/composite.json; the user, 2026-11-01): the tenant types, the hosts each may join.
-  const CP = spawn ? await load('dist/src/v2/spawning/composite.js') : null, tenancies = CP ? CP.loadTenancies() : {};
+  // Composite buildings (config/terrain/composite.json; the user, 2026-11-01): the tenant types, the hosts each may join.
+  const CP = spawn ? await load('dist/src/v2/terrain/composite.js') : null, tenancies = CP ? CP.loadTenancies() : {};
   const LEVELS = ['city', 'district', 'street', 'building'], bookId = universe.book, resolver = spawn ? S.defaultResolver() : null;
   if (spawn) { terrain.mode = 'spawn'; terrain.book = bookId; registry.slots ??= {}; terrain.slots = registry.slots; }
   // The map's log, by book (docs/v2/borrow-and-spawn.md §8.8): every change to the map in order, so a book can be played again.
@@ -169,7 +171,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   }
   // How tightly continuity ties the places (§2.0.14): the pin's suggestion, and the places Jev is told it is tied to.
   const ties = inputs.world?.scenes ? continuityTies(inputs.world) : {};
-  const template = await readFile(join(repository, 'world-engine', 'strand-demo.html'), 'utf8');
+  const template = await readFile(join(repository, 'world-engine', 'view', 'strand-demo.html'), 'utf8');
   const work = await mkdtemp(join(tmpdir(), 'terrain-engine-'));
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   await writeFile(join(work, 'index.html'), '');
@@ -177,14 +179,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   live.encoder(png => chrome.evaluate(`(async () => { const image = new Image(); image.src = 'data:image/png;base64,${png}'; await image.decode(); const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight; canvas.getContext('2d').drawImage(image, 0, 0); return canvas.toDataURL('image/jpeg', 0.78).split(',')[1]; })()`));
   // World · Live is told where to look (the focus): the proposal, or the place just kept; `terrain` keeps the whole world drawn.
   let data = null, snapshot = null, reference = null, builds = 0, focus = null;
-  // The building level as World · Live lists it (its Buildings panel; the user, 2026-11-01): each building's type and who
-  // typed it, its height against its type's minimum, how sure Jev was; a tenant's host and floor. Names only.
-  const buildingList = () => Object.entries(terrain.sites).filter(([, site]) => site.scale === 'building').map(([id, site]) => ({
-    id, label: site.label, type: site.type ?? site.shape ?? site.kind ?? null, use: site.kind ?? null, by: site.by, typeBy: site.typeBy ?? null,
-    ...(typeof site.top === 'number' ? { top: site.top } : {}), ...(site.type && H?.buildings[site.type] ? { least: H.buildings[site.type] * 3 } : {}),
-    sure: { kind: site.confidence?.kind ?? null, height: site.confidence?.height ?? null }, street: site.parentLabel ?? null,
-    ...(site.by === 'tenant' ? { in: site.in, inLabel: site.inLabel, floor: site.floor, area: site.area ?? null, partBy: site.partBy ?? null, partSure: site.partSure ?? null } : {}), ...(site.tenant ? { alone: true } : {}),
-  }));
+  // The building level as World · Live lists it (its Buildings panel: view/building-list.mjs).
+  const buildingList = () => listBuildings(terrain, H);
   const show = (moment, proposal = null) => (snapshot ? live.world({ ...snapshot, moment, ...(focus ? { focus } : {}), ...(spawn ? { notes: { ...snapshot.notes, buildings: buildingList() } } : {}) }, { ...data, terrain: { proposal } }) : null);
   const build = async (kept = null) => {
     const started = Date.now();
@@ -354,7 +350,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       }
     };
     // The sites of the slots no name owns (spare, or shared this book): the export builds each as an area of its level
-    // (src/v2/spawning/tree.ts), on its first sharer's terrain, else its kind's default (§2.2); a spare one has no pin.
+    // (src/v2/terrain/tree.ts), on its first sharer's terrain, else its kind's default (§2.2); a spare one has no pin.
     const syncSlots = () => {
       for (const slot of Object.values(registry.slots)) {
         // A building slot is a lot of its street's form (§6): no area of its own; what borrows it has its site.
@@ -450,49 +446,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       await saveSlots();
       return { street: kept.parent, at: node ? [node.x + kept.toward[0], node.z + kept.toward[1]] : slot.at, size: kept.size, box: terrain.sites[part.id].box ?? Z.turnedBox(slot.at, kept.size, kept.turn ?? 0) };
     };
-    // The composite buildings (the user, 2026-11-01): a shop, a restaurant, a cinema the text passes by joins a building of
-    // a use that holds such places (a mall, a tower's foot, a station, an underground mall) under its holder, where the
-    // characters' travel is least: one kept at this level, or a spare lot of that use. It takes no lot and is asked nothing.
-    // With no host there, it borrows a lot of its own at its type's least floors, still asked nothing. Placed once the
-    // level's buildings and their moves are done, so its host stands where it will stay.
-    const tenantsLater = [];
-    const placeTenants = async () => {
-      for (const { part, city, type, kind, tenancy, sure, what, found, about } of tenantsLater) {
-        const holder = holderOf(part, city), { travel } = travelFor(part), under = id => id === holder || within(id, holder);
-        const kept = Object.entries(terrain.sites).filter(([id, site]) => id !== part.id && site.scale === 'building' && site.by === 'borrow' && site.slot && site.parent && under(site.parent) && Array.isArray(site.toward) && nodeOf(site.parent))
-          .map(([id, site]) => { const node = nodeOf(site.parent); return { id, use: site.kind, at: [node.x + site.toward[0], node.z + site.toward[1]], kept: true, top: site.top ?? null, parent: site.parent, toward: site.toward, label: site.label, type: site.type ?? site.kind, size: site.size, box: site.box }; });
-        const spare = slotsAt('building').filter(slot => slot.at && slot.toward && under(slot.parent) && !slot.owner && !S.sharersIn(slot, bookId).length)
-          .map(slot => ({ id: slot.id, use: slot.kind, at: slot.at, kept: false, top: null, parent: slot.parent, toward: slot.toward, label: `a ${slot.kind} lot`, type: slot.kind, size: slot.size, box: Z.turnedBox(slot.at, slot.size, slot.turn ?? 0) }));
-        const host = CP.chooseHost(tenancy, [...kept, ...spare], travel), base = { label: part.label, scale: 'building', kind, holder, type, typeBy: sure ? 'search' : 'jev', offered: found.map(entry => entry.id), confidence: { kind: what?.confidence ?? null } };
-        if (!host) {
-          const lot = await borrowBuilding(part, city, kind);
-          if (!lot) { await live.outcome({ subject: part.label, text: `a ${type}: no building to be part of and no lot of its own under ${name(holder)}` }); continue; }
-          const top = (H.buildings[type] || 1) * 3;
-          Object.assign(terrain.sites[part.id], { ...base, top, tenant: 'alone' });
-          await live.outcome({ subject: part.label, text: `${part.label}: a ${type}, no building of ${tenancy.in.join(', ')} under ${name(holder)} to be part of: a lot of its own, ${top / 3} floor${top === 3 ? '' : 's'}, asked nothing` });
-          await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: lot.box, top });
-        } else {
-          // Its floor and size (the user, 2026-11-01): fixed for some types (a convenience store on floor one), else asked of
-          // Jev in one question, read from its scenes; a random spot of that floor, its model there roughly.
-          const floorsUp = typeof host.top === 'number' && host.top > 0 ? Math.round(host.top / 3) : null, area = Array.isArray(host.size) ? Math.round(host.size[0] * host.size[1]) : null;
-          let floor = tenancy.floor ?? null, size = tenancy.size ?? null, reply = null;
-          if (floor === null || size === null) {
-            const floors = CP.partFloors(floorsUp), sizes = CP.partSizes(area);
-            reply = (await ask(decide, T.terrainPartMode, { ...about, pictures: {}, kind: type, host: { label: host.label, type: host.type, floors: floorsUp, area }, floors, sizes }, stores)).replies;
-            const of = (key, options) => options.find(option => option.letter === reply.find(entry => entry.key === key)?.value)?.value ?? null;
-            floor ??= of('floor', floors) ?? 1; size ??= of('size', sizes) ?? 100;
-          }
-          const sureOf = key => reply?.find(entry => entry.key === key)?.confidence ?? null;
-          terrain.sites[part.id] = { ...base, parent: host.parent, parentLabel: name(host.parent), toward: host.toward, box: host.box, in: host.id, inLabel: host.label, floor, area: size, floors: tenancy.floors ?? 1, spot: CP.spotOf(part.id), partBy: reply ? 'jev' : 'fixed', ...(reply ? { partSure: { floor: sureOf('floor'), size: sureOf('size') } } : {}), by: 'tenant' };
-          if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
-          logMap({ level: 'building', what: 'tenant', place: part.id, in: host.id, floor, area: size });
-          await live.outcome({ subject: part.label, text: `${part.label}: a ${type}, part of ${host.label} in ${name(host.parent)}, ${floor < 0 ? `${-floor} floor${floor === -1 ? '' : 's'} under the street` : `floor ${floor}`}, about ${size} m²${reply ? ' (Jev)' : ', as its type always is'}` });
-          await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: host.box, top: null });
-        }
-        await saveSlots(); placed++;
-      }
-      tenantsLater.length = 0;
-    };
+    // The composite buildings (terrain/tenants.mjs): a tenant waits for the level's buildings, then joins its host.
+    const tenants = tenantPlacer({ terrain, H, S, T, CP, Z, bookId, stores, ask, decide, live, name: id => name(id), holderOf: (...a) => holderOf(...a), travelFor: part => travelFor(part), within: (...a) => within(...a), nodeOf: id => nodeOf(id), slotsAt: level => slotsAt(level), borrowBuilding: (...a) => borrowBuilding(...a), show: (...a) => show(...a), logMap: entry => logMap(entry), saveSlots: () => saveSlots() });
     // A building Jev answered with a shape (§8.9; the user, 2026-11-01): it stands where travel is least under its holder,
     // a building's size; a floating one (a platform, a sphere, a ring, a cavern) merges into the buildings there, a ground
     // shape (a hill, a plateau, a basin, a ramp) pushes them outward. Nominated, as every shape.
@@ -660,7 +615,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         syncSlots(); spares++;
       }
       adoptChildren(level);
-      // Every area of the level spawns its children's slots by its kind (config/spawning): a city its districts', a district
+      // Every area of the level spawns its children's slots by its kind (config/terrain): a city its districts', a district
       // its streets'; a street's building slots are its form's lots (formSlots, after the street level's build).
       let born = 0;
       if (S.CHILD[level] !== 'building') for (const [id, site] of Object.entries(terrain.sites).filter(([sid, site]) => site.scale === level && site.kind && (level === 'city' || site.by === 'slot' || (site.slot && !sid.startsWith('unnamed:'))))) {
@@ -721,7 +676,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           else await saveSlots();
         } else await levelEnd(end);
         // The world built again once the tenants stand in their hosts (the level's end built it before they joined).
-        if (end === 'building' && tenantsLater.length) { await placeTenants(); reshape(); await build(); }
+        if (end === 'building' && tenants.waiting()) { placed += await tenants.place(); reshape(); await build(); }
         if (end === until) break; continue;
       }
       if (keptBefore(part.id)) continue;
@@ -801,7 +756,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // A tenant (composite.json) joins a host once the level's buildings stand, asked nothing more; one a scene is set in
         // stays a building of its own (the stage walks in it).
         const tenancy = !shape && type ? tenancies[type] : null, setting = (inputs.data?.scenes ?? []).some(scene => scene.placeId === part.id || scene.placeIds?.includes(part.id));
-        if (tenancy && !setting) { tenantsLater.push({ part, city, type, kind, tenancy, sure, what, found, about }); await live.outcome({ subject: part.label, text: `a ${type}: part of a larger building, placed once the level's buildings stand` }); continue; }
+        if (tenancy && !setting) { tenants.defer({ part, city, type, kind, tenancy, sure, what, found, about }); await live.outcome({ subject: part.label, text: `a ${type}: part of a larger building, placed once the level's buildings stand` }); continue; }
         // A building borrows a lot of its kind (or stands apart, a rare one); a shape stands where travel is least.
         let lot = shape ? placeShape(part, city, shape) : await borrowBuilding(part, city, kind);
         if (!lot) { await live.outcome({ subject: part.label, text: `no street under ${name(holderOf(part, city))} to stand in` }); continue; }
@@ -1252,6 +1207,6 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, parts: { type: 'string' }, spawn: { type: 'boolean' }, from: { type: 'string' }, until: { type: 'string' }, 'probe-heights': { type: 'boolean' } } });
   const [novelDir] = positionals, levels = ['city', 'district', 'street', 'building'];
-  if (!novelDir || (values.from && !levels.includes(values.from)) || (values.until && !levels.includes(values.until))) { console.error('usage: node world-engine/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn] [--from city|district|street] [--until city|district|street]'); process.exit(2); }
+  if (!novelDir || (values.from && !levels.includes(values.from)) || (values.until && !levels.includes(values.until))) { console.error('usage: node world-engine/terrain/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn] [--from city|district|street] [--until city|district|street]'); process.exit(2); }
   console.log(JSON.stringify(await terrainSpawn(resolve(novelDir), { run: values.run, parts: values.parts ? Number(values.parts) : Infinity, spawn: values.spawn, from: values.from ?? null, until: values.until ?? null, heightProbe: !!values['probe-heights'], log: line => console.error(line) })));
 }

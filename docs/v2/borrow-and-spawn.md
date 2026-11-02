@@ -98,7 +98,7 @@ with their pictures, sizing by pins, placement as one optimization, settling, st
 A shared slot is one place through time: what happens to it in one scene is still true in the next. So two unnamed
 mentions may be one slot only if it is not damaged between their scenes. That makes sharing depend on what happens in the
 scenes, a runtime dependency, while terrain runs a whole book at once. The reading has no damage step today; damage is
-decided in the simulation (impacts and destruction, `world-engine/impact-choices.mjs`), after terrain.
+decided in the simulation (impacts and destruction, `world-engine/world/impact-choices.mjs`), after terrain.
 
 | Option | Terrain runs | What it costs |
 | --- | --- | --- |
@@ -202,7 +202,7 @@ offset.
 
 ## 5. The configuration files
 
-`config/spawning/` holds one file a level, each read as a layer of the tree:
+`config/terrain/` holds one file a level, each read as a layer of the tree:
 
 | File | Parent level → child level | What a type gives |
 | --- | --- | --- |
@@ -213,7 +213,7 @@ offset.
 **Layered, so a universe or a place can have its own (the user, 2026-11-01; an option, not built now).** The files here
 are the defaults. The configuration for a parent is resolved in layers, the last that has one wins:
 
-1. the defaults, `config/spawning/<level>.json`;
+1. the defaults, `config/terrain/<level>.json`;
 2. a universe's own, `<library>/universe/spawning/<level>.json`, edited by the user for that universe;
 3. a place's own, in the same file under `places` by name or id (学园都市 with its 23 districts);
 4. a function of the place: code, or a review by Jev or an agent, given the place's evidence (its scenes, its facts, its
@@ -224,7 +224,7 @@ again the same way. The loader takes a resolver from the start, so layers 2–4 
 
 Every kind named must be one Jev can answer at that level (`TERRAIN_KINDS`) and every use one the language profile or
 the landscapes know; `test/spawning-config.test.ts` checks this. The drafts are a start to be tuned: `street.json`'s
-densities and uses are read off today's landscapes (`LANDSCAPES` in `src/ground/stage/landscape.ts`: lot size, cover,
+densities and uses are read off today's landscapes (`LANDSCAPES` in `src/v2/world/landscape.ts`: lot size, cover,
 uses), so the building level starts from what the world already builds.
 
 ## 6. The building level
@@ -237,7 +237,7 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
 **As built (M5, 2026-11-01).**
 - **A street's building slots are the lots its form builds.** That is its frontage, the rows behind it out to its edge with
   a 4 m lane between, and a square's rings out to its edge. Each lot is a slot of its use, read from the world just built at
-  every street level's end (`formSlots` in `world-engine/terrain-spawn.mjs`) and kept at its offset from its street.
+  every street level's end (`formSlots` in `world-engine/terrain/terrain-spawn.mjs`) and kept at its offset from its street.
   - A slot a building holds stays where it is.
   - The spares are the form's again after every street level, so they follow their street.
   - `street.json`'s densities are what the forms build on their own ground, measured. In a city, the roads crossing a
@@ -259,13 +259,13 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
     in a CBD). Now it has the city's 14 or so buildings along its road.
 - **A building is asked as every part is (the user, 2026-11-01: every level the same process).**
   - **The search decides when it is sure, Jev when it is not (the user, 2026-11-01).** By meaning, the search is sure when
-    its first type leads its second by 0.5 or more (`SURE` in `src/v2/spawning/inventory.ts`). On 70 names judged by
+    its first type leads its second by 0.5 or more (`SURE` in `src/v2/terrain/inventory.ts`). On 70 names judged by
     hand, 56 were sure, all of them right; the 14 unsure held all three of its wrong firsts. When it is unsure, Jev is
     shown the skyline and the map and asked its kind among ten. A universe has too many kinds of building to
     offer them all (the user, 2026-11-01), so the building's name and the sentences round it in its scenes (its own or
-    those naming it, one either side) are searched against the inventory (`config/spawning/building-types.json`: about
+    those naming it, one either side) are searched against the inventory (`config/terrain/building-types.json`: about
     80 types, each with a description, its Chinese, Japanese and English words, and its coarse use, or its shape: a tunnel,
-    a cavern, a raised deck). The ten nearest are offered, the shapes beside them (`src/v2/spawning/inventory.ts`).
+    a cavern, a raised deck). The ten nearest are offered, the shapes beside them (`src/v2/terrain/inventory.ts`).
     - The search is by meaning when an embedding model is configured, else by words. By words: a type's words in the
       building's name count most (its longest, so 便利商店 is a convenience store, not any 店), then the character pairs
       they share with it (回转寿司店 is a 寿司 shop), then its words in the sentences round it.
@@ -295,7 +295,7 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
   - In World · Live it blinks on its lot while its height is asked, then is kept.
   - Before (the first M5 run), its use came from the language profile and its height from its street, so Jev saw no
     building level at all.
-- **A composite building's part** (the user, 2026-11-01; `config/spawning/composite.json`, `src/v2/spawning/composite.ts`).
+- **A composite building's part** (the user, 2026-11-01; `config/terrain/composite.json`, `src/v2/terrain/composite.ts`).
   A shop, a restaurant, a bar, a cinema the text passes by is part of a larger building, not a building of its own: a
   convenience store at a tower's foot, a cinema on a mall's upper floors, a ramen shop in a station.
   - Its type is found as every building's (the search, or Jev when the search is unsure). It takes no lot.
@@ -318,7 +318,7 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
     merges into the buildings there.
   - A ground shape (a hill, a plateau, a basin, a ramp) is asked its top and pushes the buildings round it outward.
   - Both are nominated, as every shape.
-- **No place of its own.** A building slot is not a place in the tree (`src/v2/spawning/tree.ts`): the building that
+- **No place of its own.** A building slot is not a place in the tree (`src/v2/terrain/tree.ts`): the building that
   borrows it stands in its street, on that lot exactly. A staged building's grid clears the fill there; a marker stands on
   the lot.
 - **Floating objects.** A platform, a sphere, a ring or a cavern (`FLOATING` in `src/v2/context/terrainModes.ts`) is asked
@@ -352,7 +352,7 @@ on it, each with its id and location. Everything else (the buildings, the roads,
 from the map. A slot (§2.2) is a manifold; a spare slot is a manifold no name holds; borrowing (§2.3) assigns a place to a
 manifold's centre of function.
 
-This is the landscape engine's own model already (`src/ground/stage/landscape.ts`): a place's ground is its patches (a
+This is the landscape engine's own model already (`src/v2/world/landscape.ts`): a place's ground is its patches (a
 centre, a radius, a seeded shape, a kind), each claiming ground by its membership σ(signed distance / softness), a newer one
 only where the older ones passed over, modern heights merging across the seams. What changes is that a city's districts
 become patches of the city's ground instead of areas cut out of it (M1 built each slot as a place of the canvas, its ground
@@ -466,7 +466,7 @@ of the book before it with that book's log applied; `--from <level>` drops the b
   no slice under the street for a city or a district); a city's average asked on pictures across it.
 - **Every level's minimum, and the text's measures (the user, 2026-11-01, after the building level's run).**
   - *The minimum at every level.* An area kind's is its least median; a building type's is its least floors
-    (`config/spawning/heights.json`, for an East Asian megacity), so a tower is offered nothing under thirty floors
+    (`config/terrain/heights.json`, for an East Asian megacity), so a tower is offered nothing under thirty floors
     above the street. Every type's minimum is in one dictionary, whole (the user, after the live run: 豚草不动产写字楼
     a real-estate office at 1 floor; "every area type needs a minimum gate"): each building type at its usual height (an
     office building 12 floors, a block of flats 10, a hotel 15, a hospital 8, a school 4, a real-estate firm's office
@@ -494,7 +494,7 @@ commercial centre's towers, a helipad or a sky garden in the air. M4's world had
 and platforms at 100 m over dwelling areas. Two hard rules:
 
 - **Where a street kind may stand** is a tuning of the configuration (the user's call): `only` in
-  `config/spawning/district.json` lists, for the kinds that cannot be anywhere, the district kinds they may stand in (an
+  `config/terrain/district.json` lists, for the kinds that cannot be anywhere, the district kinds they may stand in (an
   avenue and a commercial centre only in a CBD); they are neither borrowed nor spawned elsewhere (a spawn with nowhere
   allowed goes to the tallest district there is). An industrial district spawns no avenue.
 - **Raised objects** (a platform at some height) stand only where the area's tallest buildings (its manifold's 98th
@@ -510,7 +510,7 @@ and platforms at 100 m over dwelling areas. Two hard rules:
 The old engine's rules were in the code but did not run in a city of manifolds: a manifold's buildings skipped the
 `SLENDER` cut, and wider plots and streets came only on ground of 250 m, which no v2 area reaches (the tallest CBD's
 core median here, 147 m). The world had 104 buildings over 8:1, up to 98 floors on a 4.3 m footprint, and roads of a
-few fixed widths. Now (`tallAndWide` in `src/ground/stage/landscape.ts`, run by the export in spawn mode):
+few fixed widths. Now (`tallAndWide` in `src/v2/world/landscape.ts`, run by the export in spawn mode):
 
 - **Above 100 m (`TALL`), the taller the thicker.** No side under its height / `SLENDER` (8): the tallest first, each
   grown round its middle or off it, as far as no street and no building kept before it stops it; the lower fill it

@@ -387,7 +387,7 @@ against the last reading (`experiments/v2/compare.mjs`; the listing came from th
 
 After the whole extraction and the world script (which says where each scene happens: the v1 world loop's then, the
 reading's own since §2.0.9), `novel sim terrain`
-(`world-engine/terrain.mjs`), recorded on the host's live page:
+(`world-engine/terrain/terrain.mjs`), recorded on the host's live page:
 1. **Terrain.** The book's main sites (the places its scenes happen in), in story order of their first scene, each placed
    by Jev in the place that holds it on the place tree, on a picture of that place from above: its ground (the
    landscape the engine fills, the manifold), the sites placed so far by name, and boxes O (over the middle) and A–H
@@ -732,7 +732,7 @@ Built, in the order 5, 1, 2, 3, 4:
   office). `dwellInStreets` (`placeCanvas.ts`): a pool's building tied to one of the pool's kept streets dwells in one of
   that street's buildings of its use (the most tied street first, one building each); one whose use its tied streets do
   not have is marked for Jev; the live page labels them "in a building of …" and "for Jev". Which models of the 3D library
-  stand for each use (own, a stand-in, or a gap) is `USE_MODELS` (`src/ground/stage/useModels.ts`). The reference page
+  stand for each use (own, a stand-in, or a gap) is `USE_MODELS` (`src/v2/world/useModels.ts`). The reference page
   [street-compatibility.html](street-compatibility.html), made from these tables by `experiments/v2/compat-page.mjs`
   (`npm run build && node experiments/v2/compat-page.mjs`), shows street × street, street × use and use × model.
   On vol 1 with stand-in answers (random street kinds): 8 pins moved off ground they may not share, the 5 named places

@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createWorld, ensure, inscribed, nodeNear, nodePos, spotsNear, worldGraph, worldSpot, CHUNK, type WorldSource } from "../apps/playground/src/data/world.js";
-import { addPatch, fillLandscape, firstLandscape } from "../src/ground/stage/landscape.js";
-import { collapse, hallsOf, intervalPrecision, subwayOf, type Hall } from "../src/ground/stage/underground.js";
+import { addPatch, fillLandscape, firstLandscape } from "../src/v2/world/landscape.js";
+import { collapse, hallsOf, intervalPrecision, subwayOf, type Hall } from "../src/v2/world/underground.js";
 import { solveWalk, sampleWalk, temperatureBound } from "../apps/playground/src/data/pathIntegral.js";
 import { skeletonStream } from "../apps/playground/src/data/skeleton.js";
 

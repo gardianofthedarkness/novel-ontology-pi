@@ -5,7 +5,7 @@ import { boundsOf, inHall, intervalsOf, pillarAt, type Hall } from "./undergroun
 
 /**
  * The stage's world: one city, streamed in as the story reaches it. Its source is the canvas of places with each open
- * place's landscape filled (src/ground/stage): every building, road and plaza in world metres. The world is cut into
+ * place's landscape filled (src/v2/world): every building, road and plaza in world metres. The world is cut into
  * chunks of 32 m; a chunk is materialized (its roads and plazas laid on the 2 m grid, each source building standing on it
  * becoming a lot with its own circulation skeleton) the first moment someone, something or a blast comes within reach of
  * it, and remembers that moment, so a run can show the world being explored. A staged building (a scene's own place) is an
@@ -28,7 +28,7 @@ const nodeKey = (i: number, j: number, k: number) => cellKey(i, j) * 1024 + k + 
  * - Every building of 2 floors or more has basements under its footprint, a floor per 3 m (one; two from 10 floors; three
  *   from 20), down its stair core, with a car park's pillars on an 8 m grid.
  * - The halls of `source.underground` (stations and tunnels, malls, the storm-water tank and channels, deep facilities;
- *   src/ground/stage/underground.ts) lie on the grid at their floor's level, with their pillars, when their chunk is laid.
+ *   src/v2/world/underground.ts) lie on the grid at their floor's level, with their pillars, when their chunk is laid.
  *   They are reached by their ways up (a station's and a mall's ends to the pavement, a shaft from a tank or a channel's
  *   end, a lift to a deep facility from the building over it or the street), and a channel meets its tank where it starts.
  * - A hall's cell closes under a pile of fallen ground 2 m or more (a cave-in: `underDamage`).
@@ -59,7 +59,7 @@ export interface SourceBuilding { id: string; x: number; z: number; w: number; d
 export interface SourceRoad { a: [number, number]; b: [number, number]; width: number; level: string }
 /** A staged place where the canvas put it: a building of its own (`own`, a site) on its spot, or the middle of an open place. */
 export interface Anchor { place: string; label: string; x: number; z: number; own: boolean; role: BuildingRole; floors: number; era?: string }
-/** What lies under the city (hallsOf and subwayOf in src/ground/stage/underground.ts), in world metres; `area`: the place each hall's middle lies in. */
+/** What lies under the city (hallsOf and subwayOf in src/v2/world/underground.ts), in world metres; `area`: the place each hall's middle lies in. */
 export interface WorldUnderground { halls: (Hall & { area?: string | null })[] }
 export interface WorldSource { buildings: SourceBuilding[]; roads: SourceRoad[]; plazas: { x: number; z: number; r: number }[]; anchors: Anchor[]; underground?: WorldUnderground }
 
