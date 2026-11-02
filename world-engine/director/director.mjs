@@ -20,7 +20,7 @@ const C = await load('dist/src/v2/context/camera.js'), M = await load('dist/src/
 const S = await load('dist/apps/playground/src/data/skeleton.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
 const { strandDemo, inlineStrand } = await import('../world/export-strand-demo.mjs');
 const { browser, serve } = await import('../view/two-view-things.mjs');
-const { VENDOR_FILES, PICKER_MODEL } = await import('../live/sim-jev.mjs');
+const { VENDOR_FILES, PICKER_MODEL, retried } = await import('../live/sim-jev.mjs');
 const { passScene } = await import('./pass.mjs');
 import { copyFile } from 'node:fs/promises';
 
@@ -84,18 +84,8 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
    */
   const payload = () => ({ model: record.model, cards: record.scenes.flatMap(scene => scene.cards.map(card => ({ scene: scene.scene, event: card.event, card: card.card, kind: card.pass ? 'pass' : card.kind, lines: card.lines, camera: card.camera ?? null,
     moves: card.moves.map(move => ({ who: move.person, name: names.get(move.person) ?? move.person, moved: !!move.moved, direction: move.direction ?? null, how: move.how ?? null, spot: move.spot ?? null, height: move.height ?? null, boxed: !!move.box, to: move.to ?? null, why: move.why ?? null, line: move.line ?? null })) }))) });
-  // Jev's image service comes and goes (503 "Image processing is unavailable", 529 overloaded): a request is tried again
-  // after a pause, up to four times, before the run stops.
-  const decide = Object.assign(async (state, questions, options) => {
-    calls++;
-    for (let attempt = 0; ; attempt++) {
-      try { return await jev.decide(state, questions, options); } catch (error) {
-        if (attempt >= 4 || !/ 50[23] | 529 /.test(String(error?.message))) throw error;
-        log(`Jev unavailable (${String(error.message).slice(0, 60)}), again in ${20 * (attempt + 1)} s`);
-        await new Promise(done => setTimeout(done, 20000 * (attempt + 1)));
-      }
-    }
-  }, { record: () => {} });
+  // Jev's service comes and goes: a request is tried again after a pause (sim-jev.mjs retried).
+  const decide = Object.assign(async (state, questions, options) => { calls++; return retried(() => jev.decide(state, questions, options), log); }, { record: () => {} });
 
   let result = null;
   await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', engine: async E => {

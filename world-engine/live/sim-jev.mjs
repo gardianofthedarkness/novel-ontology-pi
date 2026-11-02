@@ -334,3 +334,17 @@ export function outcomeView({ kind, key, base, thing, record, box, none, focus, 
   const size = `${round(box.x[1] - box.x[0])}×${round(box.z[1] - box.z[0])}×${round(box.y[1] - box.y[0])} m`, where = record?.universe ? 'out in space' : record?.chosen === 'sky' ? `in the sky, ${round(box.y[0])} m up` : `at ghost ${record?.chosen}, ${round(box.y[0])} m up`;
   return { subject: thing, text: `${size}, ${where}`, capture: { ...base, mask: true, id: `${key}#outcome`, focus: { x: (box.x[0] + box.x[1]) / 2, y0: box.y[0], z: (box.z[0] + box.z[1]) / 2, w: box.x[1] - box.x[0], h: box.y[1] - box.y[0], d: box.z[1] - box.z[0] }, solved: box } };
 }
+
+/**
+ * A Jev request tried again while Jev's service is away (503 "Image processing is unavailable", 529 overloaded): after a
+ * pause that grows (20 s, 40 s, …), up to four times, before the run stops. The director and the terrain loop ask through it.
+ */
+export async function retried(request, log = console.error) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await request(); } catch (error) {
+      if (attempt >= 4 || !/ 50[23] | 529 /.test(String(error?.message))) throw error;
+      log(`Jev unavailable (${String(error.message).slice(0, 60)}), again in ${20 * (attempt + 1)} s`);
+      await new Promise(done => setTimeout(done, 20000 * (attempt + 1)));
+    }
+  }
+}

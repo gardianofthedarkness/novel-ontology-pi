@@ -40,7 +40,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { browser, serve } from '../view/two-view-things.mjs';
-import { createLive, PICKER_MODEL, VENDOR_FILES } from '../live/sim-jev.mjs';
+import { createLive, PICKER_MODEL, retried, VENDOR_FILES } from '../live/sim-jev.mjs';
 import { inlineStrand, strandDemo } from '../world/export-strand-demo.mjs';
 import { buildingList as listBuildings } from '../view/building-list.mjs';
 import { tenantPlacer } from './tenants.mjs';
@@ -92,7 +92,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const asking = live.watch(jev);
   let calls = 0;
   const contexts = [];
-  const decide = Object.assign(async (state, questions, options) => { calls++; return asking.decide(state, questions, options); }, { record: manifest => contexts.push(manifest) });
+  // Jev's service comes and goes (an overloaded 529 stopped a run, 2026-11-02): a request is tried again after a pause.
+  const decide = Object.assign(async (state, questions, options) => { calls++; return retried(() => asking.decide(state, questions, options)); }, { record: manifest => contexts.push(manifest) });
 
   // Step mode (the user's call): after each proposal the run waits for the user's next step (World · Live's buttons).
   const stepFile = join(folder, 'step.json');
