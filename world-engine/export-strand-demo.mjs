@@ -742,14 +742,17 @@ export async function strandDemo(novelDir, options) {
         if (!slot || !here(slot.parent)) continue;
         const key = slot.lot ?? slot.id, short = key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
         const host = buildings.find(b => b.id === `${place.id}:${key}` || b.id === `${place.id}:${short}`);
-        if (host) { if (!byHost.has(host)) byHost.set(host, []); byHost.get(host).push({ id, floor: site.floor }); }
+        if (host) { if (!byHost.has(host)) byHost.set(host, []); byHost.get(host).push({ id, floor: site.floor, use: site.kind }); }
       }
       for (const [host, tenants] of byHost) {
         const ux = Math.cos(host.angle), uz = Math.sin(host.angle), at = (s, t) => [host.x + s * ux - t * uz, host.z + s * uz + t * ux];
-        const feet = tenants.filter(t => t.floor === 'foot'), width = host.w / Math.max(1, feet.length), depth = Math.min(8, host.d / 2);
-        feet.forEach((t, k) => { const [x, z] = at(-host.w / 2 + width * (k + 0.5), -host.d / 2 + depth / 2); parts.push({ id: t.id, box: [x, z, Math.max(2, width - 1), depth, host.angle, 0, 3] }); });
-        tenants.filter(t => t.floor === 'upper').forEach(t => parts.push({ id: t.id, box: [host.x, host.z, host.w * 0.8, host.d * 0.8, host.angle, Math.max(3, (host.floors - 2) * 3), Math.min(6, host.floors * 3)] }));
-        tenants.filter(t => t.floor === 'under').forEach(t => parts.push({ id: t.id, box: [host.x, host.z, host.w * 0.8, host.d * 0.8, host.angle, -6, 4] }));
+        // A shop a unit of its own, 14 m of frontage at most, the row centred on the host's front.
+        const feet = tenants.filter(t => t.floor === 'foot'), width = Math.min(14, host.w / Math.max(1, feet.length)), depth = Math.min(8, host.d / 2), row = width * feet.length;
+        feet.forEach((t, k) => { const [x, z] = at(-row / 2 + width * (k + 0.5), -host.d / 2 + depth / 2); parts.push({ ...t, box: [x, z, Math.max(2, width - 1), depth, host.angle, 0, 3] }); });
+        tenants.filter(t => t.floor === 'upper').forEach(t => parts.push({ ...t, box: [host.x, host.z, host.w * 0.8, host.d * 0.8, host.angle, Math.max(3, (host.floors - 2) * 3), Math.min(6, host.floors * 3)] }));
+        tenants.filter(t => t.floor === 'under').forEach(t => parts.push({ ...t, box: [host.x, host.z, host.w * 0.8, host.d * 0.8, host.angle, -6, 4] }));
+        // Each drawn as a building of its use (the model kit's, as the city's buildings are), stretched to its volume.
+        for (const part of parts) part.model ??= UM.modelFor({ w: part.box[2], d: part.box[3], floors: Math.max(1, Math.round(part.box[6] / 3)), kind: part.use, use: part.use, era: 'modern' }, part.id, modelSizes) ?? null;
       }
     }
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
@@ -759,7 +762,7 @@ export async function strandDemo(novelDir, options) {
     // and its fingerprint; each building's manifold in `buildings` order.
     const patches = place.landscape.patches.map(patch => ({ id: patch.id, type: patch.type, era: LANDSCAPES[patch.type]?.era ?? 'modern', born: patch.born ?? null, centre: [round(patch.x + wx), round(patch.z + wz)], radius: round(patch.R), height: round(patch.H), manifold: manifoldOf(patch),
       outline: Array.from({ length: 48 }, (_, n) => { const angle = (n / 48) * Math.PI * 2, d = reachOf(patch, [patch.x + Math.cos(angle), patch.z + Math.sin(angle)]); return [round(patch.x + wx + Math.cos(angle) * d), round(patch.z + wz + Math.sin(angle) * d)]; }) }));
-    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), ...(shaped.thickened !== undefined ? { tall: { widened: shaped.widened, trimmed: shaped.trimmed, thickened: shaped.thickened, cleared: shaped.cleared } } : {}), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), parts: parts.map(part => [...part.box.slice(0, 4).map(round), Math.round(part.box[4] * 1000) / 1000, round(part.box[5]), round(part.box[6]), part.id]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width, road.level]), plazas: filled.plazas.map(plaza => [round(plaza.x + wx), round(plaza.z + wz), round(plaza.r)]),
+    return { place: place.id, types: place.landscape.patches.map(patch => patch.type), ...(shaped.thickened !== undefined ? { tall: { widened: shaped.widened, trimmed: shaped.trimmed, thickened: shaped.thickened, cleared: shaped.cleared } } : {}), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), parts: parts.map(part => [...part.box.slice(0, 4).map(round), Math.round(part.box[4] * 1000) / 1000, round(part.box[5]), round(part.box[6]), part.id, part.model]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width, road.level]), plazas: filled.plazas.map(plaza => [round(plaza.x + wx), round(plaza.z + wz), round(plaza.r)]),
       walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })), underground: under } };
   });
   /** The theme of the manifold at a point: the era of the patch reaching it most surely (modern where no landscape does). */
@@ -1311,6 +1314,8 @@ export async function strandDemo(novelDir, options) {
     }
     notes.detected = { buildings: lotNames.size, objects: [...placedObjects.values()].reduce((sum, list) => sum + list.length, 0) };
     const worn = new Set(entities.filter(entity => entity.model && entity.placed.length).map(entity => entity.model));
+    // A composite building's parts, each drawn as its use's model.
+    for (const entry of landscapes) for (const part of entry.parts ?? []) if (part[8] && library.models[part[8]]) worn.add(part[8]);
     // A deep facility is dressed in the modern kit's model of its kind (kk-lab, kk-military, kk-quantum).
     for (const hall of world.source.underground?.halls ?? []) if (['lab', 'military', 'quantum'].includes(hall.kind)) worn.add(`kk-${hall.kind}`);
     // A lot is drawn as its building's model (its use's, config/models.json), else as its role's use's (useModels.ts roleModel).

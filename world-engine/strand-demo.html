@@ -671,14 +671,20 @@ let decor = () => {};
   // cinema on its upper floors, one under it below the street; gold, outlined, so a part shows through its host.
   const parts = (data.landscapes ?? []).flatMap((entry) => entry.parts ?? []);
   if (parts.length) {
-    const rooms = new THREE.InstancedMesh(block, new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.32, depthWrite: false }), parts.length), rims = [];
-    parts.forEach(([x, z, w, d, angle, bottom, height], i) => {
-      q.setFromAxisAngle(up, -angle); m.compose(new THREE.Vector3(x, bottom, z), q, new THREE.Vector3(w, height, d)); rooms.setMatrixAt(i, m);
+    // Each as its use's model (a shop, a restaurant, a cinema), stretched to its volume; a box where no model came.
+    const gold = new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.28, depthWrite: false }), rim = new THREE.LineBasicMaterial({ color: 0xffd98f, transparent: true, opacity: 0.95, depthWrite: false }), rims = [];
+    parts.forEach(([x, z, w, d, angle, bottom, height, , model]) => {
+      q.setFromAxisAngle(up, -angle);
+      const shell = model ? shellOf(model) : null;
+      if (shell) {
+        for (const part of [new THREE.Mesh(shell.fill, gold), new THREE.LineSegments(shell.edges, rim)]) { part.scale.set(w / shell.size.x, height / shell.size.y, d / shell.size.z); part.quaternion.copy(q); part.position.set(x, bottom, z); world.add(part); }
+        return;
+      }
+      m.compose(new THREE.Vector3(x, bottom, z), q, new THREE.Vector3(w, height, d));
+      const box = new THREE.Mesh(block, gold); box.applyMatrix4(m); world.add(box);
       for (let n = 0; n < outline.length; n += 3) { v.set(outline[n], outline[n + 1], outline[n + 2]).applyMatrix4(m); rims.push(v.x, v.y, v.z); }
     });
-    world.add(rooms);
-    const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(rims, 3));
-    world.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.9, depthWrite: false })));
+    if (rims.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(rims, 3)); world.add(new THREE.LineSegments(geometry, rim)); }
   }
   const roads = (data.landscapes ?? []).flatMap((entry) => entry.roads);
   if (roads.length) {
