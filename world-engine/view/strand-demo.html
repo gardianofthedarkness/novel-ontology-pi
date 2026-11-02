@@ -14,6 +14,7 @@
   html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
   .wrap { max-width: 1180px; margin: 0 auto; padding-block: 12px 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   @media (prefers-reduced-motion: reduce) { .fade, .flash { transition: none; } }
+
   .eyebrow { font-size: 11px; letter-spacing: .14em; color: var(--accent); }
   h1 { font-size: 18px; margin: 2px 0; font-weight: 600; }
   .crumb { color: var(--dim); font-size: 13px; min-height: 20px; }
@@ -563,6 +564,7 @@ function fallingOf(place, entry, hit) {
 const falling = new THREE.InstancedMesh(unit, mats.rubble, 600); falling.count = 0; falling.frustumCulled = false; world.add(falling);
 const blast = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0, depthWrite: false })); world.add(blast);
 
+let stopAt = null;
 let shownNotice = false, shownPlace = null, shownSegment = null, pathLines = [], time = 0, speed = 2, playing = true, follow = true, last = performance.now(), shownScene = -1, glide = null;
 for (const id of Object.keys(data.places)) world.add(buildPlace(id).group);
 // The place tree's places as pins, and a trace above them for every move between places. A place's circle on the canvas
@@ -905,6 +907,8 @@ function glideTo(id, seconds, start = time) { glide = { to: poseFor(id), start, 
 function glideFrom(glide) {
   const from = { target: controls.target.clone(), position: camera.position.clone() }, d = from.target.distanceTo(glide.to.target);
   const midTarget = from.target.clone().lerp(glide.to.target, 0.5);
+  // A replay's glide to the producer's viewpoint goes straight there (no climb over the city).
+  if (glide.direct) return { ...glide, from, mid: { target: midTarget, position: from.position.clone().lerp(glide.to.position, 0.5) } };
   return { ...glide, from, mid: { target: midTarget, position: midTarget.clone().add(new THREE.Vector3(d * 0.2, Math.max(140, d * 0.85), d * 0.55)) } };
 }
 function showPaths(segment, entry) {
@@ -935,7 +939,10 @@ function position(place, move, elapsed) {
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (playing) { time += dt * speed; if (time >= total) time = liveMode ? total - 0.001 : 0; }
+  // A card being replayed (the director's cards) stops at its end.
+  if (stopAt !== null && time >= stopAt) { time = stopAt - 0.001; playing = false; stopAt = null; $("play").textContent = "▶ Play"; if (liveMode) parent.postMessage({ type: "cardEnded" }, location.origin); }
   const segment = segmentAt(time), place = segment.place, elapsed = time - segment.start, entry = buildPlace(segment.scene.place);
+  if (replaying && segment.kind === "event" && (replaying.scene !== segment.scene.id || replaying.event !== segment.eventIndex)) { replaying = { scene: segment.scene.id, event: segment.eventIndex }; if (liveMode) parent.postMessage({ type: "card", ...replaying }, location.origin); }
   if (shownPlace !== segment.scene.place) {
     if (shownPlace === null) { const pose = poseFor(segment.scene.place); camera.position.copy(pose.position); controls.target.copy(pose.target); }
     else if (segment.kind === "macro") glideTo(segment.scene.place, segment.glide.seconds, segment.start + segment.glide.from);
@@ -1133,6 +1140,8 @@ if (liveMode) {
   addEventListener("message", (event) => {
     if (event.source !== parent || event.origin !== origin) return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
+    if (event.data?.type === "replay") { replayCard(event.data); return; }
+    if (event.data?.type === "live") { replaying = null; stopAt = null; playing = true; speed = 2; time = total - 0.001; return; }
     if (event.data?.type === "underground") { xray = !!event.data.on; return; }
     // A page around the world (the terrain io's step list) picks a place: the same as clicking it here.
     if (event.data?.type === "focus") { focusOn(event.data.id); return; }
@@ -1223,6 +1232,31 @@ $("jev").setAttribute("aria-pressed", String(tracing));
 // Live mode: the panel goes over the world (the side column is not shown).
 if (liveMode) document.body.append($("trace"));
 $("jev").addEventListener("click", () => { tracing = !tracing; $("jev").setAttribute("aria-pressed", String(tracing)); if (shownSegment) showTrace(shownSegment); });
+
+// The director's cards (world-engine/director/director.mjs), replayed in the live world (the user, 2026-11-02: as if filmed
+// for VR): the world view (tools/pi-review/sim-world.html) asks for a card; the view glides to the producer's camera (Jev's
+// shot of it) and the line plays on from there, slowly, the viewer's camera free all the while; `once` stops at the card's
+// end. Each card reached is told back to the world view, which marks it in its list.
+let replaying = null;
+function producerPose(sceneId, cam) {
+  const placeId = data.scenes.find((scene) => scene.id === sceneId)?.place, entry = placeId ? buildPlace(placeId) : null;
+  if (!entry || !cam?.focus) return null;
+  const pose = poseFor(placeId), offset = pose.position.clone().sub(pose.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), cam.yaw ?? 0);
+  const target = new THREE.Vector3(cam.focus.x - entry.cx, cam.focus.y0 + (cam.focus.h ?? 3) / 2, cam.focus.z - entry.cz);
+  offset.setLength((cam.radius ?? 16) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  if (cam.elevation != null) { const length = offset.length(), level = new THREE.Vector3(offset.x, 0, offset.z).normalize(), up = THREE.MathUtils.degToRad(cam.elevation); offset.copy(level.multiplyScalar(Math.cos(up) * length)).setY(Math.max(2 - target.y, Math.sin(up) * length)); }
+  return { target, position: target.clone().add(offset) };
+}
+function replayCard({ scene, event, camera: cam = null, once = false, slow = true }) {
+  const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.eventIndex === event);
+  if (!segment) return;
+  shownPlace = segment.scene.place; follow = false;
+  const pose = producerPose(scene, cam);
+  // The glide to the producer's viewpoint (a second and a half), then the line plays from the card on.
+  glide = pose ? { to: pose, start: segment.start, seconds: 1.5, direct: true } : null;
+  time = segment.start + 0.001; stopAt = once ? segment.end : null; playing = true; speed = slow ? 0.5 : 1;
+  replaying = { scene, event };
+}
 
 $("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "⏸ Pause" : "▶ Play"; });
 $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (!follow) controls.target.set(0, 4, 0); });

@@ -7,7 +7,8 @@
 // Each move is walked on the world's path integral (its windowed walk graph, rooms through their doors). Nothing is
 // replayed: the engine is built once (export-strand-demo.mjs's `engine` hook) and the page written once a scene.
 //   npm run build && node world-engine/director/director.mjs <novel-dir> --reading <reading>/v2/data.json --from <scene> --to <scene>
-//     [--budget 60] [--stand-in] [--live]
+//     [--budget 60] [--stand-in] [--live] [--pace 6]
+// --pace: seconds the live view is given to play each move before the next question (6 with --live).
 // --stand-in answers every question by rule (no model call), for trying the loop; without it Jev is asked (paid).
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -41,7 +42,7 @@ export function standIn() {
   } };
 }
 
-export async function direct(novelDir, { reading, from, to, jev, budget = Infinity, live = null, log = console.error }) {
+export async function direct(novelDir, { reading, from, to, jev, budget = Infinity, live = null, pace = 0, log = console.error }) {
   const text = await loadWorkspaceSentences(novelDir), line = id => ({ id, text: text.get(id)?.text ?? '' });
   const names = new Map(reading.chart.entities.map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]));
   const nameForms = new Map(reading.chart.entities.map(entity => [entity.id, [...new Set([...(entity.proper ?? []), ...(entity.names ?? [])])].filter(form => form.length >= 2)]));
@@ -55,6 +56,12 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
   const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [] };
   const save = () => writeFile(join(out, 'run.json'), JSON.stringify(record, null, 1));
   let calls = 0;
+  /**
+   * What the player shows of the run (strand-demo.html's card list): every card played, in order, with its own lines as
+   * written, who moved and what Jev answered, the producer's camera, and its event on the timeline.
+   */
+  const payload = () => ({ model: record.model, cards: record.scenes.flatMap(scene => scene.cards.map(card => ({ scene: scene.scene, event: card.event, card: card.card, kind: card.pass ? 'pass' : card.kind, lines: card.lines, camera: card.camera ?? null,
+    moves: card.moves.map(move => ({ who: move.person, name: names.get(move.person) ?? move.person, moved: !!move.moved, direction: move.direction ?? null, how: move.how ?? null, spot: move.spot ?? null, height: move.height ?? null, boxed: !!move.box, to: move.to ?? null, why: move.why ?? null, line: move.line ?? null })) }))) });
   // Jev's image service comes and goes (503 "Image processing is unavailable", 529 overloaded): a request is tried again
   // after a pause, up to four times, before the run stops.
   const decide = Object.assign(async (state, questions, options) => {
@@ -116,6 +123,8 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         return { view, png };
       };
 
+      // The live world's snapshot with the cards in its notes (World · Live's Cards panel reads them there).
+      const noted = moment => { const shot = E.snapshot(true); return { ...shot, moment, notes: { ...shot.notes, director: payload() } }; };
       for (const scene of E.chosen) {
         const run = E.runs[scene.id], reads = reading.scenes.find(entry => entry.id === scene.id), sceneRecord = { scene: scene.id, cards: [] };
         record.scenes.push(sceneRecord);
@@ -133,7 +142,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         await show(true);
         const placeName = names.get(scene.placeId) ?? scene.placeId, when = reading.time?.scenes?.find(entry => entry.scene === scene.id)?.when ?? null;
         for (const card of cards) {
-          const cardRecord = { card: card.id, kind: card.kind, ...(card.pass ? { pass: true } : {}), moves: [] };
+          const cardRecord = { card: card.id, kind: card.kind, ...(card.pass ? { pass: true } : {}), event: scene.events.length, lines: card.sentences.map(line), moves: [] };
           await live?.phase(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`);
           sceneRecord.cards.push(cardRecord);
           const event = { id: card.id, text: card.sentences.map(id => text.get(id)?.text ?? '').join('').slice(0, 120), actors: card.people.filter(person => positions[person.id] && person.how.some(how => PRESENT.has(how))).map(person => person.id) };
@@ -176,6 +185,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
             const whether = await ask(decide, M.moveWhetherMode, { ...base, pictures: {} }, null);
             const goes = String(whether.replies.find(entry => entry.key === 'moves')?.value ?? 'stays') === 'goes', said_ = whether.replies.find(entry => entry.key === 'line')?.value ?? null;
             if (!goes) { cardRecord.moves.push({ person, direction: 'stays', line: said_, moved: false }); continue; }
+            cardRecord.camera ??= { focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 };
             const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: 9, blocked: arrow.blocked })) });
             const asked = await ask(decide, M.moveDirectionMode, { ...base, pictures: { arrows: `${mover.name} now, from 35° above; the lettered arrows go out of them (warm rise, cool fall, level ones flat).` }, arrows: arrows.map(arrow => ({ letter: arrow.letter, said: `${arrow.rise}, toward ${arrow.said}` })), others }, null, { request: { images: { arrows: a.png } } });
             const reply = key => asked.replies.find(entry => entry.key === key)?.value;
@@ -244,15 +254,30 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
             await save();
           }
           run.events.push({ at: Object.fromEntries(Object.entries(positions).map(([who, value]) => [who, value])) });
+          // A card no one was asked about: the producer's camera on the people of the card, as they stood when it began.
+          if (!cardRecord.camera) { const points = event.actors.filter(who => positions[who]).map(who => at(positions[who][0])); if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 }; } }
           // Streamed: the world as far as this card, each time someone has moved.
-          if (live && cardRecord.moves.some(move => move.moved)) { const data = await show(true); await live.world({ ...E.snapshot(true), moment: `scene ${Number(scene.id.slice(-3))}: ${cardRecord.moves.filter(move => move.moved).map(move => names.get(move.person) ?? move.person).join(', ')} moved` }, data); }
+          if (live && cardRecord.moves.some(move => move.moved)) {
+            const data = await show(true);
+            await live.world(noted(`scene ${Number(scene.id.slice(-3))}: ${cardRecord.moves.filter(move => move.moved).map(move => names.get(move.person) ?? move.person).join(', ')} moved`), { ...data, director: payload() });
+            // `pace`: a moment for the live view to play the move before the next question (the user: too fast to see).
+            if (pace) await new Promise(done => setTimeout(done, pace * 1000));
+          }
         }
         log(`${scene.id}: ${cards.length} cards, ${sceneRecord.cards.reduce((n, card) => n + card.moves.filter(move => move.moved).length, 0)} moves, ${calls} calls so far`);
         await save();
         const data = await show(true);
-        if (live) await live.world({ ...E.snapshot(true), moment: `director: scene ${Number(scene.id.slice(-3))} played` }, data);
+        if (live) await live.world(noted(`director: scene ${Number(scene.id.slice(-3))} played`), { ...data, director: payload() });
       }
-      result = { data: page, calls };
+      result = { data: { ...page, title: `The director · ${from} – ${to}`, director: payload() }, calls };
+      // The run as a playable run of the book (stage/simulation/index.json, the Player's list): replayed card by card.
+      const folder = join(novelDir, 'stage', 'simulation'), id = `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`;
+      await mkdir(join(folder, 'runs', 'director'), { recursive: true });
+      await writeFile(join(folder, 'runs', 'director', `${id}.page.json`), JSON.stringify(result.data));
+      const index = JSON.parse(await readFile(join(folder, 'index.json'), 'utf8').catch(() => 'null')) ?? { version: 2, strands: {} };
+      const entry = index.strands.director ??= { title: 'The director', runs: [] };
+      entry.runs.push({ id, scenes: E.chosen.length, page: `runs/director/${id}.page.json` }); entry.accepted = id;
+      await writeFile(join(folder, 'index.json'), JSON.stringify(index, null, 1));
     } finally { await chrome.close(); server.server.close(); }
   } });
   record.finishedAt = new Date().toISOString(); record.calls = calls;
@@ -261,7 +286,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node world-engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8'));
   let jev = standIn();
@@ -272,7 +297,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let live = null;
   if (values.live) { const { createLive } = await import('../live/sim-jev.mjs'); live = await createLive(resolve(novelDir), { command: 'sim direct', lines: [{ id: 'director', title: 'The director: cards played forward' }], model: jev.modelId }); jev = live.watch(jev); }
   try {
-    const { record } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev, budget: values.budget ? Number(values.budget) : Infinity, live });
+    const { record } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     const moves = record.scenes.flatMap(scene => scene.cards.flatMap(card => card.moves));
     console.log(JSON.stringify({ calls: record.calls, scenes: record.scenes.length, cards: record.scenes.reduce((n, scene) => n + scene.cards.length, 0), moved: moves.filter(move => move.moved).length, stayed: moves.filter(move => move.direction === 'stays').length, unmoved: moves.filter(move => move.moved === false && move.direction !== 'stays').length }));
     await live?.finish('done');
