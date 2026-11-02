@@ -192,8 +192,8 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
               const frame = C.frameAlong(here, arrow.vector, reach), half = (frame[2] - frame[0]) / 2, step = half > 60 ? 20 : half > 25 ? 10 : 5;
               const c1 = await shoot(`${slug}-c1`, [1024, 1024], { ...shotBase, topdown: { x: (frame[0] + frame[2]) / 2, z: (frame[1] + frame[3]) / 2, half }, grid: { box: frame, step, y: here[1] }, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, half) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
               const roughAsked = await ask(decide, M.moveRoughMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, pictures: { plan: `straight down, north up, ${Math.round(half * 2)} m across, a grid of ${step} m; ${mover.name}'s arrow and its wedge drawn.` } }, null, { request: { images: { plan: c1.png } } });
-              const roughBox = roughAsked.replies.find(entry => entry.key === 'box')?.value, map = c1.view?.map;
-              if (roughBox && map) {
+              const roughReply = roughAsked.replies.find(entry => entry.key === 'box'), roughBox = roughReply?.box ?? roughReply?.value, map = c1.view?.map;
+              if (roughBox?.left !== undefined && map) {
                 const rough = C.planToGround([roughBox.left, roughBox.top, roughBox.right, roughBox.bottom], map), mid = [(rough[0] + rough[2]) / 2, (rough[1] + rough[3]) / 2], zoom = Math.max(6, (rough[2] - rough[0]) * 0.75, (rough[3] - rough[1]) * 0.75);
                 // c2: the rough box zoomed top-down, and its column from the side with its heights lettered.
                 const spot = around(mid[0], mid[1], zoom + 4);
@@ -203,8 +203,8 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
                 const plan = await shoot(`${slug}-c2-plan`, [1024, 1024], { ...shotBase, topdown: { x: mid[0], z: mid[1], half: zoom }, grid: { box: [mid[0] - zoom, mid[1] - zoom, mid[0] + zoom, mid[1] + zoom], step: 1, y: 0 } });
                 const heights = await shoot(`${slug}-c2-side`, [1440, 900], { ...shotBase, focus: side.focus, radius, vague: { near: distance * 1.05, far: distance * 1.9 }, yaw: side.yaw, elevation: side.elevation, slices: slices.map(slice => ({ box: rough, y: slice.y, label: `${slice.letter} ${slice.said}` })) });
                 const exactAsked = await ask(decide, M.moveExactMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, slices: slices.map(slice => ({ letter: slice.letter, said: slice.said })), pictures: { plan: `the rough box's ground close up, straight down, north up, ${Math.round(zoom * 2)} m across, a grid of 1 m.`, heights: 'the rough box\'s column from the side, its heights lettered.' } }, null, { request: { images: { plan: plan.png, heights: heights.png } } });
-                const exactBox = exactAsked.replies.find(entry => entry.key === 'box')?.value, height = slices.find(slice => slice.letter === exactAsked.replies.find(entry => entry.key === 'height')?.value) ?? slices.find(slice => slice.y === 0);
-                const exact = exactBox && plan.view?.map ? C.planToGround([exactBox.left, exactBox.top, exactBox.right, exactBox.bottom], plan.view.map) : rough;
+                const exactReply = exactAsked.replies.find(entry => entry.key === 'box'), exactBox = exactReply?.box ?? exactReply?.value, height = slices.find(slice => slice.letter === exactAsked.replies.find(entry => entry.key === 'height')?.value) ?? slices.find(slice => slice.y === 0);
+                const exact = exactBox?.left !== undefined && plan.view?.map ? C.planToGround([exactBox.left, exactBox.top, exactBox.right, exactBox.bottom], plan.view.map) : rough;
                 moveRecord.box = exact; moveRecord.height = height ? height.said : null;
                 // The cells a person can stand on in the box, at the height said (in the air: the nearest under it).
                 const inBox = spot.nodes.filter(node => node.x >= exact[0] - 1 && node.x <= exact[2] + 1 && node.z >= exact[1] - 1 && node.z <= exact[3] + 1);
