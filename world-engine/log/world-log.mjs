@@ -38,7 +38,7 @@ export function worldLog({ run, record, page, spawn, strands }) {
       if (node == null) continue;
       const at = point(decode(node)), before = last.get(who);
       let fields;
-      if (sceneRecord.revised?.includes(who)) { const revision = record.revisions?.find(entry => entry.applied && entry.who === who && entry.moments?.includes(scene.id)); fields = { how: 'revised', rank: 'ruled', source: 'back-propagated', from: before?.id ?? null, ...(revision ? { anchor: { scene: revision.scene, to: revision.to, item: revision.item } } : {}) }; }
+      if (sceneRecord.revised?.includes(who)) { const revision = record.revisions?.find(entry => entry.applied && entry.who === who && entry.scene === scene.id); fields = { how: 'revised', rank: 'ruled', source: 'smoothed', from: before?.id ?? null, ...(revision ? { metres: revision.metres } : {}) }; }
       else if (sceneRecord.carried.includes(who)) fields = { how: 'carried', rank: before?.rank ?? 'ruled', source: 'carried', from: before?.id ?? null };
       else if (sceneRecord.spawned.includes(who)) { const by = spawned?.starts?.find(entry => entry.who === who)?.by ?? null; fields = { how: 'spawned', rank: STATED_BY.has(by) ? 'stated' : 'ruled', source: `spawn:${by ?? 'anchor'}` }; }
       else if (sceneRecord.offPage.includes(who)) fields = { how: 'arrived', rank: 'ruled', source: 'off-page', from: before?.id ?? null };
@@ -90,8 +90,8 @@ export function proposalsOf({ run, log, laws, eventOf, record = null }) {
   }
   // What the world's own check found round each scene (W0): a broken world, held for the review apart from the story's laws.
   for (const scene of record?.scenes ?? []) for (const issue of scene.world ?? []) add({ kind: 'world', state: 'held', source: 'check', subject: issue.source ?? null, value: { scene: scene.scene, code: issue.code, lot: issue.lot, ...(issue.room != null ? { room: issue.room } : {}), name: issue.name ?? null }, evidence: [] });
-  // Back-propagation's revisions (§5a, W5): applied below the limit, else held for the review (class R), with their size.
-  for (const revision of (record?.revisions ?? []).filter(entry => !entry.other)) add({ kind: 'revision', state: revision.applied ? 'applied' : 'held', source: 'back-propagation', subject: revision.who, value: { scene: revision.scene, to: revision.to, moments: revision.moments ?? [], metres: revision.metres ?? null, item: revision.item ?? null, ...(revision.held ? { why: `no bridge (${revision.held})` } : {}) }, evidence: [] });
+  // The smoothing's revisions of scene starts (§5a, W5b): applied below the limit, else held for the review (class R).
+  for (const revision of record?.revisions ?? []) add({ kind: 'revision', state: revision.applied ? 'applied' : 'held', source: 'smoothing', subject: revision.who, value: { scene: revision.scene, moments: revision.moments ?? [], metres: revision.metres ?? null, rank: revision.rank ?? null }, evidence: [] });
   // What the laws find over the whole run afterwards (W2): held for the review.
   for (const law of laws) for (const broken of law.violations) add({ kind: 'held', state: 'held', subject: broken.who ?? null, law: law.law, value: { what: broken.what, why: broken.why }, evidence: [] });
   return out;

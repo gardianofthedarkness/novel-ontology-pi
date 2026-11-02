@@ -245,6 +245,51 @@ Back-propagation needs the world log with each position's rank and ties (W1), th
 built with W5 and runs on every pin from then on. The meetings (who came to whom, a group's box) come back with L6 once
 Jev gives each dialogue card its kind.
 
+### Back-propagation is Bayesian smoothing (the user, 2026-11-02, with the research handoff "Trap reconstruction")
+
+> Every character or object is a particle: its states are a distribution, not a fixed set. Every character has a
+> complex, unmeasurable motivation, an energy level of action. Back-propagation in the particle path integral is
+> Bayesian smoothing: it turns discrete, uncertain observations at intervals into continuous clouds. Buildings are like
+> magnetic fields. And least change does not conflict with it: it is Schwinger's action principle, where we define our
+> own action.
+
+Our path integral weighs a walk by e^(−S/T), a positive weight, so it is a Markov process, and its h (the summed weight of
+every way on to the targets) is the backward message of a smoother: a moment's cloud is the forward weight times the
+backward one, α·β, the handoff's forward-backward (its §5 and the Gaussian smoother of its §12). **We define the
+action**, and the posterior of a history is e^(−S/T) of it:
+
+S = S_walk + S_seen + S_talk + S_events
+
+- **S_walk**, the walk: the effort of moving between moments (metres, a floor as three), at each person's own
+  temperature, their *drive* (the unmeasurable motivation: how far and how fast they go), estimated from how they move.
+- **S_seen**, the observations (the handoff's blinking readouts): where the text puts someone at a moment, as tight as
+  its rank (pinned and stated tight, met close, Jev's answer wider, a rule's default wide). **Least change is this
+  term**: the history as played is itself a weak observation of every moment, so a revision moves people only as far as
+  the stronger observations ask.
+- **S_talk**, the couplings: a face-to-face line puts its speaker within reach of whom they speak to; a public one,
+  within earshot (iterated between the two clouds).
+- **S_events**, events at their rates (a blast, an entrance, an exit), the handoff's marked point process; not a penalty
+  on a path.
+
+The most probable history is the one of least action (Viterbi over the clouds), and each moment keeps its cloud: the
+spread of where the person may have been, tight between close observations, wide where the story leaves room. The laws
+are the action's walls: what they forbid has no weight at all.
+
+**Occupation** (the handoff's injection and annihilation, its detector efficiency): who is on the stage is a hidden
+state per scene too. The script's presence is a detection that can miss; acting or speaking on a card is a strong
+detection; a mention a weak one; staying on from one scene to the next in a strand the transition. A missed detection is
+not absence: someone who acts but is not in the script is likely there, and the smoother says how likely.
+
+**Buildings are a topology** (the user: "more of a topology idea"): like a magnetic field, which does no work
+((qv×B)·v = 0) and only bends the paths, a building decides which way one can go (rooms joined at their doors, floors at
+their stairs: W0's portals) without changing what going costs. No drift term.
+
+**W5b · The smoother** replaces the first cut's bridge: per person and strand, the moments they are on the stage (scene
+starts and card ends), a cloud of candidate spots at each (where they were played, the walk's other draws, the scene's
+spots, where those with them stood), forward-backward over the clouds in log space, the least-action path, the clouds
+kept; occupation per scene alongside. The director starts each scene where the smoothed history has them (a revision
+above the limit still goes to the review), and Why shows each person's cloud and how far the smoothing moved them.
+
 ## 6. The world back into the ontology
 
 | Proposal from the world | When | Example |
@@ -417,6 +462,23 @@ Checked with stand-ins on scenes 1–6 of a scratch copy: 233 moves, 158 walked,
 3 actors and 34 moves held. Found on the way: a room in a turned building could be shut (its door's plan cell falls
 between world cells); first patched, then fixed at its root by W0's interior topology.
 
+**Built (2026-11-02): W5b, the smoother** (`world-engine/smoother/`), replacing W5's first-cut bridge (`backprop.mjs`,
+removed). `smoother.mjs` takes a run's page, world log and record: each person's moments (a scene's start, every card
+they move or talk on), a cloud of up to 48 spots at each (where they were played, the walk's other draws, every node the
+run stood or walked on in that scene, where whom they speak to stands), S_seen by rank (σ: pinned 1.5 m, stated and met
+3, answered 8, ruled 20), S_walk over the person's drive (their median metres a moment against everyone's, ½ to 3
+times), S_talk by the card's kind (a kind Jev gave or the review pinned holds the pair within reach; a kind no one gave
+is a mixture, near at 0.8 or else afar, so a pair a kilometre apart is a voice from afar, not a teleport), forward and
+backward in log space, the least-action history by Viterbi, people one at a time against the others' latest (both of a
+pair at once only swap). `occupation.mjs` smooths who is on the stage per scene of a strand (the script a detection with
+η 0.9; acting or speaking ×20, spoken to ×5, named ×1.2; the review's answers near certain). On the last real run
+(volume 1, 0.2 s): 527 moments of 65 people, mean cloud 4.1 m; talks face to face within reach went from 163 to 179 of
+258 (those left apart are a kilometre off, likely phone calls: that run asked no kinds); 222 moments moved more than
+2 m, none over 50; the director would start 65 scenes' people where the smoothing has them (at most 25 m) and add the
+one person surely there whom the script left out (the review sees the rest of the likelihoods). Each run's smoothing is
+written to `stage/world/smoothed/<run>.json`; Why shows each person's cloud and shift per card, the report the totals.
+Not yet: clouds drawn in the 3D view; card moments re-placed (only scene starts are); events (blasts) in the action.
+
 **Built (2026-11-02): W0**, a valid world (the user's research handoff, `Text_to_City_Research_Handoff.md`: separate
 interior topology with explicit portals, a generation-time validator, order-independent chunks, failure codes and
 minimal replays; the same as the field's practice: areas joined by portals rather than one grid over everything, and a
@@ -463,7 +525,7 @@ the same CLI).
   Pi may run all of them (tools/pi-review/guard.mjs) and none that writes. At the next run's start the answers become
   pins under the laws (`novel world apply`, or the director itself; an answer that would put someone in two places at
   one stated moment, L2, goes back with why), and the director plays by them: presence, remote actors, talk kinds,
-  arrivals, stays. A talk answered **face to face** is a meeting pinned, an anchor: back-propagation draws a bridge
+  arrivals, stays. (The first cut of back-propagation below, a bridge, is replaced by W5b's smoother.) A talk answered **face to face** is a meeting pinned, an anchor: back-propagation draws a bridge
   from each of the two people's last anchor to the other (who came to whom is a choice: both ways are drawn and the
   one that changes the history least is kept), places their scene starts in the span on it, keeps the draw with the
   least J, and applies it below 300 m (above, it is held for the review as class R). The world log ranks what the

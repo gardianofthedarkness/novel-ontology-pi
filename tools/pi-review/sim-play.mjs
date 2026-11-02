@@ -179,7 +179,10 @@ export async function directorReview(workspace) {
   const [record, index] = await Promise.all([json('stage', 'director', 'run.json'), json('stage', 'simulation', 'index.json')]);
   if (!record) return null;
   const run = index?.strands?.director?.accepted ?? null;
-  const [ledger, pool, answers, canon, pins] = await Promise.all([run ? lines('stage', 'world', 'ledger', `${run}.jsonl`) : [], lines('stage', 'world', 'pool.jsonl'), lines('stage', 'world', 'answers.jsonl'), lines('stage', 'world', 'canon.jsonl'), json('stage', 'world', 'pins.json')]);
+  const [ledger, pool, answers, canon, pins, smoothed] = await Promise.all([run ? lines('stage', 'world', 'ledger', `${run}.jsonl`) : [], lines('stage', 'world', 'pool.jsonl'), lines('stage', 'world', 'answers.jsonl'), lines('stage', 'world', 'canon.jsonl'), json('stage', 'world', 'pins.json'), run ? json('stage', 'world', 'smoothed', `${run}.json`) : null]);
+  // Each card's smoothed moments (W5b): per person, how wide their cloud is and how far the least-action history moves them.
+  const cloudsAt = new Map();
+  for (const [who, list] of Object.entries(smoothed?.people ?? {})) for (const moment of list) { const key = `${moment.scene}|${moment.card ?? 'start'}`; (cloudsAt.get(key) ?? cloudsAt.set(key, []).get(key)).push({ who, rank: moment.rank, spread: moment.spread, shift: moment.shift, cloud: moment.cloud.length }); }
   const items = [...new Map(pool.map(item => [item.id, item])).values()], answerOf = new Map(answers.map(answer => [answer.item, answer]));
   const reviewOf = item => ({ kind: item.kind, question: item.question, options: item.options, status: item.status, ...(item.note ? { note: item.note } : {}), ...(answerOf.get(item.id) ? { answer: answerOf.get(item.id).verdict, reason: answerOf.get(item.id).reason, at: answerOf.get(item.id).at } : {}) });
   const cards = {};
@@ -187,7 +190,8 @@ export async function directorReview(workspace) {
     const ids = new Set(card.lines?.map(line => line.id) ?? []);
     const proposals = ledger.filter(entry => entry.value?.card === card.card && entry.value?.scene === scene.scene || String(entry.value?.what ?? '').startsWith(`${scene.scene} · ${card.card}`) || [...ids].some(id => String(entry.value?.what ?? '') === `${scene.scene} · ${id}`)).map(entry => ({ kind: entry.kind, state: entry.state, law: entry.law ?? null, subject: entry.subject ?? null, why: entry.value?.why ?? entry.value?.verdict ?? null }));
     const review = items.filter(item => item.scene === scene.scene && ((item.cards ?? []).includes(card.card) || (item.lines ?? []).some(id => ids.has(id)) || item.card === card.card)).map(reviewOf);
-    if (card.laws?.length || card.system2?.length || card.talk || proposals.length || review.length) cards[`${scene.scene}|${card.card}`] = { laws: card.laws ?? [], system2: card.system2 ?? [], talk: card.talk ?? null, proposals, review };
+    const clouds = [...(cloudsAt.get(`${scene.scene}|${card.card}`) ?? []), ...(scene.cards[0] === card ? (cloudsAt.get(`${scene.scene}|start`) ?? []).map(entry => ({ ...entry, start: true })) : [])];
+    if (card.laws?.length || card.system2?.length || card.talk || proposals.length || review.length || clouds.length) cards[`${scene.scene}|${card.card}`] = { laws: card.laws ?? [], system2: card.system2 ?? [], talk: card.talk ?? null, proposals, review, clouds };
   }
   const count = (rows, key) => rows.reduce((sum, row) => ({ ...sum, [key(row)]: (sum[key(row)] ?? 0) + 1 }), {});
   const laws = record.scenes.flatMap(scene => [...(scene.laws ?? []), ...scene.cards.flatMap(card => card.laws ?? [])]);
@@ -202,8 +206,9 @@ export async function directorReview(workspace) {
     proposals: count(ledger, entry => `${entry.kind} ${entry.state}`),
     review: { ...count(items, item => item.status), answered: answers.length, held: record.review?.held ?? null, applied: record.review?.applied ?? null },
     canon: record.review?.canon ?? null, canonWrites: canon.filter(entry => entry.run === run && !entry.undo).length,
-    revisions: (record.revisions ?? []).map(revision => ({ who: revision.who, to: revision.to, scene: revision.scene, metres: revision.metres ?? null, applied: !!revision.applied, ...(revision.held ? { held: revision.held } : {}) })),
+    revisions: (record.revisions ?? []).map(revision => ({ who: revision.who, scene: revision.scene, metres: revision.metres ?? null, applied: !!revision.applied })),
     world: record.scenes.flatMap(scene => (scene.world ?? []).map(issue => ({ scene: scene.scene, code: issue.code, name: issue.name }))),
+    smoothing: smoothed ? { moments: Object.values(smoothed.people).reduce((n, list) => n + list.length, 0), revisions: smoothed.revisions.length, meanSpread: (() => { const all = Object.values(smoothed.people).flat(); return all.length ? Math.round(all.reduce((sum, moment) => sum + moment.spread, 0) / all.length * 10) / 10 : null; })(), onStage: (smoothed.onStage ?? []).length, started: record.smoothing ?? null } : null,
   };
   return { version: 1, run, cards, report, speakers };
 }

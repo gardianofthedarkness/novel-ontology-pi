@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bundlesOf, heldItems, lawAgainst, pinsFrom } from './review.mjs';
-import { leastChange, spansOf } from './backprop.mjs';
 
 const ledger = [
   { id: 'r:p1', kind: 'held', state: 'held', law: 'L6', subject: 'a', value: { what: 's2 · b0_s1', why: 'a speaks to b from 40 m: remote, or someone is misplaced (kind not asked yet)' } },
@@ -45,24 +44,6 @@ test('answers into pins: a talk face to face is a meeting to back-propagate from
   assert.match(failed.get(of('actor').id), /^L2/, 'present in s2 while s9 has them elsewhere at the same moment');
   assert.equal(pins.present['s2|c'], undefined);
   assert.equal(lawAgainst({ item: of('actor'), verdict: 'remote' }, { script, pins }), null);
-});
-
-test('back-propagation: the span from the last anchor to a pinned meeting, at its place; the draw that changes the history least', () => {
-  const log = [
-    { id: 'r:1', kind: 'presence', strand: 'f', scene: 's1', place: 'p', who: 'a', at: { x: -100, y: 0, z: 0 }, rank: 'stated' },
-    { id: 'r:2', kind: 'presence', strand: 'f', scene: 's2', place: 'p', who: 'a', at: { x: 50, y: 0, z: 0 }, rank: 'ruled' },
-    { id: 'r:3', kind: 'presence', strand: 'f', scene: 's2b', place: 'p', who: 'a', at: { x: 900, y: 0, z: 0 }, rank: 'ruled' },
-    { id: 'r:4', kind: 'presence', strand: 'f', scene: 's2c', place: 'p', who: 'a', at: { x: 40, y: 0, z: 0 }, rank: 'ruled' },
-    { id: 'r:5', kind: 'presence', strand: 'f', scene: 's2', place: 'p', who: 'b', at: { x: 100, y: 0, z: 0 }, rank: 'ruled' },
-    { id: 'r:6', kind: 'presence', strand: 'f', scene: 's3', place: 'p', who: 'a', at: { x: 60, y: 0, z: 0 }, rank: 'ruled' },
-    { id: 'r:7', kind: 'position', strand: 'f', scene: 's3', place: 'p', card: 'dialogue:x', who: 'b', at: { x: 100, y: 0, z: 10 }, rank: 'ruled' },
-  ];
-  const [span] = spansOf({ pins: { meet: [{ scene: 's3', cards: ['dialogue:x'], who: 'a', to: 'b' }] }, log });
-  assert.deepEqual([span.from, span.target, span.moments.map(moment => moment.scene)], [{ x: 40, y: 0, z: 0 }, { x: 100, y: 0, z: 10 }, ['s2c', 's3']], 'their stay round the meeting, not the scene far off before it');
-  const straight = Array.from({ length: 11 }, (_, n) => ({ x: n * 10, y: 0, z: 0 })), wide = straight.map(p => ({ ...p, z: 40 }));
-  const best = leastChange([wide, straight], span.moments);
-  assert.equal(best.draw, 1, 'the draw nearer the old history');
-  assert.ok(best.J < leastChange([wide], span.moments).J);
 });
 
 test('identity from the world: one description met twice in a strand, never together; a description beside a named person sharing companions', async () => {

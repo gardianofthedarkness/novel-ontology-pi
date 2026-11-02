@@ -24,7 +24,7 @@ const { VENDOR_FILES, PICKER_MODEL, retried } = await import('../live/sim-jev.mj
 const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
-const R = await import('../review/review.mjs'), B = await import('../review/backprop.mjs'), C6 = await import('../review/canon.mjs');
+const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
@@ -82,15 +82,26 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   const template = await readFile(join(repository, 'world-engine', 'view', 'strand-demo.html'), 'utf8');
   const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [] };
   // The review (Track B W5, review.mjs): the main agent's answers since the last run become pins under the laws, and the
-  // director plays by them: presence, remote actors, talk kinds, arrivals, stays; a meeting pinned is an anchor, and the
-  // person's scene starts before it are back-propagated onto a bridge to it (backprop.mjs), least change kept. The
-  // reading played from is recorded for the review CLI (novel reading).
+  // director plays by them: presence, remote actors, talk kinds, arrivals, stays. Back-propagation is Bayesian smoothing
+  // (W5b, smoother.mjs): the last run smoothed with every observation it had (the review's pins among them), each scene
+  // starts its people where the least-action history has them, a revision above the limit held for the review; who is on
+  // the stage is smoothed too (occupation.mjs), and someone surely there whom the script left out is added. The reading
+  // played from is recorded for the review CLI (novel reading).
   if (readingPath) await writeFile(join(out, 'reading-path.json'), JSON.stringify({ path: resolve(readingPath) }));
   const reviewed = await R.applyAnswers(novelDir).catch(error => ({ error: String(error.message ?? error) }));
   const pins = await R.loadPins(novelDir), lastRun = await R.latestRun(novelDir);
   const oldLog = lastRun ? (await readFile(join(novelDir, 'stage', 'world', 'log', `${lastRun}.jsonl`), 'utf8').catch(() => '')).split('\n').filter(Boolean).map(row => JSON.parse(row)) : [];
-  const spans = B.spansOf({ pins, log: oldLog });
-  record.review = { applied: reviewed, from: lastRun, pins: { present: Object.keys(pins.present).length, remote: Object.keys(pins.remote).length, kind: Object.keys(pins.kind).length, arrive: Object.keys(pins.arrive).length, stays: Object.keys(pins.stays).length, meet: pins.meet.length }, spans: spans.length };
+  const oldPage = lastRun ? JSON.parse(await readFile(join(novelDir, 'stage', 'simulation', 'runs', 'director', `${lastRun}.page.json`), 'utf8').catch(() => 'null')) : null;
+  // run.json is the last run's record only if that run is the last one played (a stand-in's run is not on the list).
+  const lastRecord = lastRun ? JSON.parse(await readFile(join(out, 'run.json'), 'utf8').catch(() => 'null')) : null;
+  const oldRecord = lastRecord && `d${String(lastRecord.startedAt).replace(/\D/g, '').slice(0, 14)}` === lastRun ? lastRecord : null;
+  const smoothed = oldPage && oldRecord && oldLog.length ? SM.smoothRun({ page: oldPage, log: oldLog, record: oldRecord, reading, pins }) : null;
+  // Each scene start the smoothing moved: where the least-action history has them, unless the review kept the history.
+  const startsMoved = new Map((smoothed?.revisions ?? []).filter(revision => revision.card === null).map(revision => [`${revision.scene}|${revision.who}`, revision]));
+  const onStage = OC.occupation({ reading, script: JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8').catch(() => '{"scenes":[]}')), strands: JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null')), pins });
+  const surelyThere = new Set(onStage.proposals.filter(entry => entry.propose === 'present').map(entry => `${entry.scene}|${entry.who}`));
+  record.smoothing = smoothed ? { from: lastRun, moments: Object.values(smoothed.people).reduce((n, list) => n + list.length, 0), revisions: smoothed.revisions.length, starts: startsMoved.size, onStage: onStage.proposals.length } : null;
+  record.review = { applied: reviewed, from: lastRun, pins: { present: Object.keys(pins.present).length, remote: Object.keys(pins.remote).length, kind: Object.keys(pins.kind).length, arrive: Object.keys(pins.arrive).length, stays: Object.keys(pins.stays).length, meet: pins.meet.length } };
   record.revisions = [];
   const save = () => writeFile(join(out, 'run.json'), JSON.stringify(record, null, 1));
   let calls = 0;
@@ -200,36 +211,17 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       // `entries`), else from where they last stood in that strand; someone first in this strand is never carried in from
       // another one. Without strands, the one state of before.
       const strands = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null'));
-      // A span's bridge (backprop.mjs): drawn once, from the last anchor to beside the one met, and the draw that moves the
-      // history least kept; above the limit it is held for the review (a pinned 'apply' lets it through).
-      const bridgeOf = (span, scene) => {
-        if (span.bridge !== undefined) return span.bridge;
-        // Who came to whom: every way round of the meeting is drawn, and only the least change may apply.
-        const group = spans.filter(entry => entry.group === span.group);
-        if (group.length > 1 && group.every(entry => entry.bridge === undefined)) {
-          for (const entry of group) drawBridge(entry, scene);
-          const kept = group.filter(entry => entry.bridge).sort((a, b) => a.bridge.J - b.bridge.J)[0];
-          for (const entry of group) if (entry.bridge && entry !== kept) { entry.bridge.applied = false; const noted = record.revisions.find(revision => revision.span === entry); if (noted) { noted.applied = false; noted.other = true; } }
-          return span.bridge;
-        }
-        return drawBridge(span, scene);
-      };
-      const drawBridge = (span, scene) => {
-        if (span.bridge !== undefined) return span.bridge;
-        span.bridge = null;
-        const nodeAt = p => { E.reach(p.x, p.z, 24); return W.nodeNear(world, E.graphOf({ x: p.x, z: p.z }), p.x, p.z, Math.round(p.y / FLOOR)) ?? W.nodeNear(world, E.graphOf({ x: p.x, z: p.z }), p.x, p.z, null); };
-        const fromNode = nodeAt(span.from), toNode = nodeAt(span.target);
-        if (fromNode === null || fromNode === undefined || toNode === null || toNode === undefined) return span.bridge;
-        const t = at(toNode), ring = around(t[0], t[2], 4).nodes.filter(node => Math.abs(node.y - t[1]) < 1 && Math.hypot(node.x - t[0], node.z - t[2]) <= 3).map(node => node.id);
-        const path = walk(scene, `${span.scene}|${span.who}|bridge`, [fromNode, 0], ring.length ? ring : [toNode], 'walk');
-        const draws = path ? [path, ...(path.ensemble ?? [])].map(draw => draw.map(id => { const [x, y, z] = at(id); return { id, x, y, z }; })) : [];
-        const best = B.leastChange(draws, span.moments);
-        if (!best) { record.revisions.push({ who: span.who, to: span.to, scene: span.scene, item: span.item, held: walk.code ?? 'NO_PATH' }); return span.bridge; }
-        const decided = pins.revise?.[`${span.scene}|${span.who}`], forced = decided === 'apply';
-        span.bridge = { ...best, applied: decided === 'keep' ? false : best.J <= B.REVISION_LIMIT || forced };
-        record.revisions.push({ who: span.who, to: span.to, scene: span.scene, item: span.item, from: span.fromRecord, moments: span.moments.map(moment => moment.scene), metres: Math.round(best.J), applied: span.bridge.applied, ...(forced ? { forced: true } : {}) });
-        Object.defineProperty(record.revisions.at(-1), 'span', { value: span, enumerable: false });
-        return span.bridge;
+      // A scene start the smoothing moved (W5b): the least-action spot, from the last run's page, as a node of this world.
+      const smoothedStart = (scene, who) => {
+        const revision = startsMoved.get(`${scene.id}|${who}`);
+        if (!revision) return null;
+        const decided = pins.revise?.[`${scene.id}|${who}`];
+        const applied = decided === 'keep' ? false : revision.shift <= SM.REVISION_LIMIT || decided === 'apply';
+        if (!record.revisions.some(entry => entry.scene === scene.id && entry.who === who)) record.revisions.push({ who, scene: scene.id, moments: [scene.id], metres: Math.round(revision.shift), rank: revision.rank, applied, by: 'smoothing' });
+        if (!applied) return null;
+        const p = revision.to;
+        E.reach(p.x, p.z, 24);
+        return W.nodeNear(world, E.graphOf({ x: p.x, z: p.z }), p.x, p.z, Math.round(p.y / FLOOR)) ?? null;
       };
       const strandScene = new Map((strands?.scenes ?? []).map(entry => [entry.id, entry]));
       const endOf = new Map(), lastIn = new Map();
@@ -274,7 +266,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // their middle); with none here, spawning's start of the first present (one placed by the text's own words first).
         // Someone new starts a few metres from the anchor; someone from elsewhere walks to it (off-page beyond 300 m).
         // Presence as the script has it, with the review's pins over it (someone answered present or not, W5).
-        const pinnedIn = Object.entries(pins.present).filter(([key, value]) => value && key.startsWith(`${scene.id}|`)).map(([key]) => key.slice(scene.id.length + 1));
+        const pinnedIn = [...Object.entries(pins.present).filter(([key, value]) => value && key.startsWith(`${scene.id}|`)).map(([key]) => key.slice(scene.id.length + 1)), ...[...surelyThere].filter(key => key.startsWith(`${scene.id}|`)).map(key => key.slice(scene.id.length + 1))];
         const present = [...new Set([...(own?.present ?? Object.keys(run.starts).filter(id => run.starts[id])), ...pinnedIn])].filter(who => pins.present[`${scene.id}|${who}`] !== false);
         if (pinnedIn.length || present.length < (own?.present?.length ?? present.length)) sceneRecord.pinned = { present: pinnedIn, absent: (own?.present ?? []).filter(who => !present.includes(who)) };
         for (const who of present) if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
@@ -298,9 +290,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         };
         const positions = {}, travels = [];
         sceneRecord.spawned = []; sceneRecord.carried = []; sceneRecord.offPage = [];
-        // Back-propagated (§5a): someone whose span to a pinned meeting runs through this scene's start stands where the
-        // bridge to it has them, if the revision is small enough to apply.
-        const revisedAt = who => { const span = spans.find(entry => entry.who === who && entry.moments.some(moment => moment.scene === scene.id)); if (!span) return null; const bridge = bridgeOf(span, scene); if (!bridge?.applied) return null; return bridge.placed[span.moments.findIndex(moment => moment.scene === scene.id)]?.id ?? null; };
+        // Smoothed (§5a, W5b): someone whose start the least-action history moves stands where it has them.
+        const revisedAt = who => smoothedStart(scene, who);
         sceneRecord.revised = [];
         for (const who of present) {
           const from = was.get(who), revised = revisedAt(who);
@@ -548,6 +539,15 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       // The run's world log, the laws over it and its proposals to the ontology (Track B W1, W2: logged, nothing applied).
       const written = await writeWorldLog(novelDir, { run: id, reading });
       log(`world log: ${JSON.stringify(written.log)}; laws broken: ${Object.entries(written.laws).filter(([, law]) => law.broken).map(([law, { broken }]) => `${law} ${broken}`).join(', ') || 'none'}`);
+      // This run smoothed (W5b): each person's clouds and least-action history, for Why and the report, and who is likely
+      // on the stage where the script says otherwise.
+      try {
+        const runLog = (await readFile(join(novelDir, 'stage', 'world', 'log', `${id}.jsonl`), 'utf8')).split('\n').filter(Boolean).map(row => JSON.parse(row));
+        const smoothedNow = SM.smoothRun({ page: JSON.parse(await readFile(join(folder, 'runs', 'director', `${id}.page.json`), 'utf8')), log: runLog, record, reading, pins });
+        await mkdir(join(novelDir, 'stage', 'world', 'smoothed'), { recursive: true });
+        await writeFile(join(novelDir, 'stage', 'world', 'smoothed', `${id}.json`), JSON.stringify({ version: 1, run: id, ...smoothedNow, onStage: onStage.proposals }));
+        record.smoothing = { ...(record.smoothing ?? {}), after: { moments: Object.values(smoothedNow.people).reduce((n, list) => n + list.length, 0), revisions: smoothedNow.revisions.length } };
+      } catch (error) { record.smoothing = { ...(record.smoothing ?? {}), error: String(error.message ?? error) }; }
       // What the run settled into canon (W6, canon.mjs), each by its gate, undoable; the graph rebuilt from the bundle. First,
       // so what it holds (the lines no one could settle, the audits) goes to the review with the rest.
       try {
