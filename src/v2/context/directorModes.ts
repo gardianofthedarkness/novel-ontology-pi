@@ -137,3 +137,21 @@ export const directorPassMode: Mode<PassFocus, unknown> = {
   ]) as DecisionQuestion[],
   budget: 14000,
 };
+
+/**
+ * Does a scene go straight on from the one before (the user, 2026-11-02: people jumped between scenes that tell one
+ * continuous story)? Asked from the text alone: the end of the scene before and the start of this one, and who is in each.
+ * Yes: everyone in both carries on from where they ended; no: the scene's own starts (spawning's).
+ */
+export interface GoesOnFocus { before: { id: string; place: string; lines: Line[]; people: string[] }; now: { id: string; place: string; lines: Line[]; people: string[] } }
+export const sceneGoesOnMode: Mode<GoesOnFocus, unknown> = {
+  name: "scene-goes-on",
+  task: (focus) => `Two scenes of a novel, one after the other: the end of the first (before, set in ${focus.before.place}) and the start of the next (now, set in ${focus.now.place}). Does the next scene go straight on from the first, the same moment carrying on with the people where they were (the narration may only have turned to someone else there), or is it a jump to another time or place?`,
+  sources: [
+    fixed<GoesOnFocus>("before", (focus) => ({ people: focus.before.people.join(", "), ...Object.fromEntries(focus.before.lines.map((line) => [line.id, line.text])) })),
+    fixed<GoesOnFocus>("now", (focus) => ({ people: focus.now.people.join(", "), ...Object.fromEntries(focus.now.lines.map((line) => [line.id, line.text])) })),
+  ],
+  cutOrder: [],
+  questions: () => [{ key: "goes_on", primitive: "choice", instructions: "Does the next scene go straight on from the first?", options: ["yes", "no"], optionHints: { yes: "the same moment carries on: the people go on from where they were", no: "a jump: another time, another place, or other people" } }] as DecisionQuestion[],
+  budget: 8000,
+};

@@ -44,7 +44,7 @@ export function standIn() {
 
 export async function direct(novelDir, { reading, from, to, jev, budget = Infinity, live = null, pace = 0, log = console.error }) {
   const text = await loadWorkspaceSentences(novelDir), line = id => ({ id, text: text.get(id)?.text ?? '' });
-  const names = new Map(reading.chart.entities.map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]));
+  const names = new Map([...reading.chart.entities.map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]), ...(reading.slots ?? []).map(slot => [slot.id, slot.label])]);
   const nameForms = new Map(reading.chart.entities.map(entity => [entity.id, [...new Set([...(entity.proper ?? []), ...(entity.names ?? [])])].filter(form => form.length >= 2)]));
   const sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
   const cardsOf = new Map();
@@ -128,12 +128,36 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
       };
 
       // The live world's snapshot with the cards in its notes (World · Live's Cards panel reads them there).
-      const noted = moment => { const shot = E.snapshot(true); return { ...shot, moment, notes: { ...shot.notes, director: payload() } }; };
+      // `focus`: where the live view's Follow Jev looks (the card's people), else the engine's own.
+      const noted = (moment, focus = null) => { const shot = E.snapshot(true); return { ...shot, moment, ...(focus ? { focus } : {}), notes: { ...shot.notes, director: payload() } }; };
+      const spawn = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'spawn.json'), 'utf8').catch(() => 'null'));
+      const script = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8'));
+      let before = null;
       for (const scene of E.chosen) {
         const run = E.runs[scene.id], reads = reading.scenes.find(entry => entry.id === scene.id), sceneRecord = { scene: scene.id, cards: [] };
         record.scenes.push(sceneRecord);
         if (!run || !reads) continue;
         const positions = Object.fromEntries(Object.entries(run.starts).filter(([, value]) => value));
+        // The scene's unnamed people (EM² slots who speak, act or are spoken to: 领路人, 看守的男人) at spawning's starts.
+        const own = script.scenes.find(entry => entry.id === scene.id);
+        for (const who of own?.present ?? []) {
+          if (positions[who]) continue;
+          const start = spawn?.scenes?.find(entry => entry.id === scene.id)?.starts.find(entry => entry.who === who);
+          if (!start) continue;
+          E.reach(start.at[0], start.at[1], 24);
+          const node = W.nodeNear(world, E.graphOf({ x: start.at[0], z: start.at[1] }), start.at[0], start.at[1], Math.round(start.y / FLOOR)) ?? W.nodeNear(world, E.graphOf({ x: start.at[0], z: start.at[1] }), start.at[0], start.at[1], null);
+          if (node === null) continue;
+          positions[who] = [node, 0]; run.starts[who] = [node, 0];
+          if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
+        }
+        // Does it go straight on from the scene before (asked from the text)? Then everyone in both carries on from where they ended.
+        if (before && budget > calls) {
+          const tail = before.reads.sentences.slice(-6).map(line), head = reads.sentences.slice(0, 6).map(line);
+          const asked = await ask(decide, M.sceneGoesOnMode, { before: { id: before.scene.id, place: names.get(before.scene.placeId) ?? before.scene.placeId, lines: tail, people: Object.keys(before.positions).map(id => names.get(id) ?? id) }, now: { id: scene.id, place: names.get(scene.placeId) ?? scene.placeId, lines: head, people: Object.keys(positions).map(id => names.get(id) ?? id) } }, null);
+          const goesOn = asked.replies.find(entry => entry.key === 'goes_on')?.value === 'yes';
+          sceneRecord.goesOn = goesOn;
+          if (goesOn) for (const who of Object.keys(positions)) if (before.positions[who]) { positions[who] = before.positions[who]; run.starts[who] = before.positions[who]; }
+        }
         // The director's pass (pass.mjs): the narration and description sentences that move someone present join the cards,
         // as actions of those they name, in reading order.
         const passed = await passScene({ reading, text, decide, scene: reads, place: names.get(scene.placeId) ?? scene.placeId, people: Object.fromEntries(Object.keys(positions).map(id => [id, names.get(id) ?? id])) });
@@ -263,11 +287,12 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
           // Streamed: the world as far as this card, each time someone has moved.
           if (live && cardRecord.moves.some(move => move.moved)) {
             const data = await show(true);
-            await live.world(noted(`scene ${Number(scene.id.slice(-3))}: ${cardRecord.moves.filter(move => move.moved).map(move => names.get(move.person) ?? move.person).join(', ')} moved`), { ...data, director: payload() });
+            await live.world(noted(`scene ${Number(scene.id.slice(-3))}: ${cardRecord.moves.filter(move => move.moved).map(move => names.get(move.person) ?? move.person).join(', ')} moved`, cardRecord.camera ? { x: cardRecord.camera.focus.x, z: cardRecord.camera.focus.z, r: 24 } : null), { ...data, director: payload() });
             // `pace`: a moment for the live view to play the move before the next question (the user: too fast to see).
             if (pace) await new Promise(done => setTimeout(done, pace * 1000));
           }
         }
+        before = { scene, reads, positions: { ...positions } };
         log(`${scene.id}: ${cards.length} cards, ${sceneRecord.cards.reduce((n, card) => n + card.moves.filter(move => move.moved).length, 0)} moves, ${calls} calls so far`);
         await save();
         const data = await show(true);

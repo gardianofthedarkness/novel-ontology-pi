@@ -71,6 +71,7 @@ const CONTEXT = 600;
 
 export function readingScript(result: FlowResult, text: (sentence: string) => string): ReadingScript {
   const entity = (id: string) => result.chart.entities.get(id), category = (id: string) => entity(id)?.category;
+  const personSlots = new Set((result.slots ?? []).filter((slot) => slot.kind === "person").map((slot) => slot.id));
   const label = (id: string) => entity(id)?.proper[0] ?? entity(id)?.names[0] ?? id;
   const parentOf = new Map((result.places?.places ?? []).map((entry) => [entry.id, entry.parent]));
   const depth = (id: string) => { let n = 0; for (let at = parentOf.get(id), seen = new Set([id]); at && !seen.has(at); at = parentOf.get(at)) { seen.add(at); n++; } return n; };
@@ -139,7 +140,8 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     // Its story-time span; a scene the tree gives no period keeps the one before.
     const indices = (time?.periods ?? []).map((id) => storyIndex.get(id)).filter((value): value is number => typeof value === "number");
     if (!past) clock = indices.length ? [Math.min(...indices), Math.max(...indices)] : clock ?? [0, 0];
-    const present = [...new Set(cards.flatMap((card) => card.people.filter((person) => category(person.id) === "person" && isPresent(person)).map((person) => person.id)))];
+    // Present: who speaks, acts or is spoken to; an unnamed person (an EM² slot: 领路人, 看守的男人) as much as a named one.
+    const present = [...new Set(cards.flatMap((card) => card.people.filter((person) => (category(person.id) === "person" || personSlots.has(person.id)) && isPresent(person)).map((person) => person.id)))];
     const firstSeen = past ? [] : present.filter((id) => !seen.has(id));
     if (!past) for (const id of present) seen.add(id);
     const environment = cards.filter((card) => card.kind === "environment").map((card) => card.sentences.map(text).join("")).join(" ");
