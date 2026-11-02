@@ -325,6 +325,28 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     const room = roomOf[index][local];
     return { type: room >= 0 && lot.rooms[room].floor === k ? 3 : 0, lot: index, local };
   };
+  // A building's street doors (the user, 2026-11-02: people chose a building and never got in): its entrance cell of the
+  // plan, and for a turned plan the ground-floor cells beside it, where they face open ground; where none does (the
+  // building stands against a neighbour, or another holds that cell), the ground-floor corridor cell nearest the entrance
+  // that faces open ground.
+  const doors = new Map<number, Set<number>>();
+  const doorsOf = (index: number): Set<number> => {
+    const known = doors.get(index);
+    if (known) return known;
+    const lot = world.lots[index], s = lot.skeleton, e = cellAt(s, s.entrance), open: { cell: number; gap: number }[] = [];
+    for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) {
+      if (world.lotAt.get(cellKey(i, j)) !== index) continue;
+      const at = localCell(lot, i, j);
+      if (!at) continue;
+      const cell = cellIndex(s, at[0], at[1], 0);
+      if (s.cells[cell] === MASS || ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([di, dj]) => what(i + di, j + dj, 0).type === 1)) continue;
+      open.push({ cell, gap: Math.max(Math.abs(at[0] - e.i), Math.abs(at[1] - e.j)) });
+    }
+    const near = open.filter(({ cell, gap }) => cell === s.entrance || (!!lot.frame && gap <= 1));
+    const chosen = new Set((near.length ? near : open.sort((a, b) => a.gap - b.gap).slice(0, 1)).map(({ cell }) => cell));
+    doors.set(index, chosen);
+    return chosen;
+  };
   // Every cell to walk: the open ground of materialized chunks, and every lot's cells on every floor up to its roof; and
   // under them, the levels below the street.
   const cells: [number, number, number][] = [];
@@ -358,8 +380,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
         // The street door: its cell of the plan (or one beside it on the ground floor, a turned plan's cells falling
         // between the world's), to the open ground next to it, any way it faces for a turned building.
         const lot = here.type === 2 ? world.lots[here.lot] : there.type === 2 ? world.lots[there.lot] : null, inside = here.type === 2 ? here : there;
-        const door = (cell: number) => { if (!lot) return false; if (cell === lot.skeleton.entrance) return true; if (!lot.frame) return false; const a = cellAt(lot.skeleton, cell), e = cellAt(lot.skeleton, lot.skeleton.entrance); return a.k === 0 && Math.max(Math.abs(a.i - e.i), Math.abs(a.j - e.j)) <= 1; };
-        ok = !!lot && (!dx || !!lot.frame) && door(inside.local) && (here.type === 1 || there.type === 1);
+        ok = !!lot && (!dx || !!lot.frame) && doorsOf(inside.lot).has(inside.local) && (here.type === 1 || there.type === 1);
       }
       if (ok) add(node, nodeId(world, i + dx, j + dz, k), dx, dz, SKELETON_CELL * Math.hypot(dx, dz), EDGE.walk);
     }

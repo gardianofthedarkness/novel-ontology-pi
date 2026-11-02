@@ -141,6 +141,9 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         const field = E.solve(scene.placeId, key, targets, how, from[0]), built = E.graphOf(W.nodePos(world, from[0]));
         const path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
         if (path) path.ensemble = Array.from({ length: 6 }, (_, n) => E.sampleWalk(built.graph, field, from[0], from[1], seeded(`${key}|${n}`))).filter(Boolean);
+        // Why no walk was found (the user's Why panel: people chose a place and never went): where they stand is not on the
+        // walk round them and their target, or the walk has no way from there to it.
+        else walk.failed = field.part && field.part.local[from[0]] < 0 ? 'where they stand is off the walk' : 'no way there on foot';
         return path;
       };
       const shoot = async (name, size, options) => {
@@ -372,7 +375,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
             }
             if (!targets?.length) { cardRecord.moves.push({ ...moveRecord, moved: false, why: 'no place to stand there' }); continue; }
             const path = walk(scene, slug, positions[person], targets, how2);
-            moveTo(person, path, how2, null);
+            moveTo(person, path, how2, path ? null : walk.failed);
             Object.assign(cardRecord.moves.at(-1), moveRecord);
             await save();
           }
