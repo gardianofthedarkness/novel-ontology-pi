@@ -1,5 +1,8 @@
 # Next steps: a work model beside Jev (2026-11-02)
 
+Part of [Stage 3: the world and the ontology, one loop](world-ontology.md) (milestones W4 and W5 there): the work model
+reads, the world's laws check, the ontology keeps what survives.
+
 After the first full run of volume 1 on the director (604 cards in 39 scenes, 68 moves, 3 blasts; run
 `d20261102081221`), the user on why v2 plays less smoothly than v1:
 
