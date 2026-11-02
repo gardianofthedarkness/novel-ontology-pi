@@ -244,6 +244,14 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   const rolesLog = meter("roles (EM²)"), rolesDecide = decideFor(rolesLog);
   const resolved = await timed(rolesLog, () => resolveRoles(rolesDecide, { scenes, kinds: kindOf, chart, named, descriptions: [...described].map(([text, type]) => ({ text, type })), recommended: new Map(contexts.map((context) => [context.scene, context.recommended])), facts, text, position: pos, present: options.present }));
 
+  // A move the move rule found with no one said to move (the subject left out: 但是就算来到了车站前面) is the move of the
+  // person who last spoke or acted in the scene before it; with no one before it, it stays no one's (narration, below).
+  const sceneOfSentence = new Map(scenes.flatMap((scene) => scene.sentences.map((id) => [id, scene] as const)));
+  for (const [id, role] of Object.entries(resolved.roles)) {
+    if (role.kind !== "action" || kindOf[id]?.rule !== "move" || role.who.id || role.who.answer !== "none") continue;
+    const scene = sceneOfSentence.get(id), before = scene ? scene.sentences.slice(0, scene.sentences.indexOf(id)).reverse().map((other) => resolved.roles[other]).find((other) => other?.who.id && chart.entities.get(other.who.id)?.category === "person") : undefined;
+    if (before?.who.id) resolved.roles[id] = { ...role, who: { ...role.who, id: before.who.id, answer: before.who.id }, matters: Math.max(role.matters ?? 1, 0.5) };
+  }
   // The user's rule for actions: an action is something that matters acting or moving (a person, a crowd, a vehicle, a
   // weapon, a thing with a name of its own, a building or a place), or the story going back in time. One where nothing that
   // matters acts is narration (no one acts, an everyday thing does, or EM² says it is background): the cards are cut again,
