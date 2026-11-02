@@ -178,43 +178,47 @@ function travelOf(migration) {
   return { migration, exit, entry, curve, exitEnd, mapEnd, total: mapEnd + (entry?.time.total ?? 0) };
 }
 
-// The timeline: a card per scene, then its events, each as long as its slowest move or long enough to read; hits counted per place.
-const segments = [];
-let clock = 0;
-const hitsSoFar = {};
-for (const [index, scene] of data.scenes.entries()) {
-  const place = data.places[scene.place], positions = { ...scene.starts };
-  hitsSoFar[keyOf(scene.place)] ??= 0;
-  // People coming from another place: the macro view first, in 2D.
-  const migrations = data.migrations.filter((migration) => migration.scene === scene.id);
-  if (migrations.length) {
-    // The camera rises once the first of them is out of the old place's grid, and comes down on the new place as the last arrives at its edge.
-    const travels = migrations.map(travelOf), length = Math.max(MACRO, ...travels.map((travel) => travel.total + 0.6));
-    const glideFrom = Math.min(...travels.map((travel) => travel.exitEnd)), glideTo = Math.max(...travels.map((travel) => travel.mapEnd));
-    segments.push({ kind: "macro", scene, index, place, start: clock, end: clock + length, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)], migrations, travels, glide: { from: glideFrom, seconds: Math.max(1.5, glideTo - glideFrom) } });
-    clock += length;
+// The timeline: a card per scene, then its events, each as long as its slowest move or long enough to read; hits counted per
+// place. Built again in place when the director's loop grows the line (`extend`): the page is not loaded again.
+const segments = [], eventStart = new Map(), sceneStart = new Map(), placeHits = {};
+let total = 0;
+function buildTimeline() {
+  segments.length = 0; eventStart.clear(); sceneStart.clear(); for (const key of Object.keys(placeHits)) delete placeHits[key];
+  let clock = 0;
+  const hitsSoFar = {};
+  for (const [index, scene] of data.scenes.entries()) {
+    const place = data.places[scene.place], positions = { ...scene.starts };
+    hitsSoFar[keyOf(scene.place)] ??= 0;
+    // People coming from another place: the macro view first, in 2D.
+    const migrations = data.migrations.filter((migration) => migration.scene === scene.id);
+    if (migrations.length) {
+      // The camera rises once the first of them is out of the old place's grid, and comes down on the new place as the last arrives at its edge.
+      const travels = migrations.map(travelOf), length = Math.max(MACRO, ...travels.map((travel) => travel.total + 0.6));
+      const glideFrom = Math.min(...travels.map((travel) => travel.exitEnd)), glideTo = Math.max(...travels.map((travel) => travel.mapEnd));
+      segments.push({ kind: "macro", scene, index, place, start: clock, end: clock + length, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)], migrations, travels, glide: { from: glideFrom, seconds: Math.max(1.5, glideTo - glideFrom) } });
+      clock += length;
+    }
+    segments.push({ kind: "card", scene, index, place, start: clock, end: clock + CARD, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)] });
+    clock += CARD;
+    for (const [eventIndex, event] of scene.events.entries()) {
+      if (event.hit) hitsSoFar[keyOf(scene.place)]++;
+      const moves = event.moves.map((move) => ({ ...move, time: timing(place, move) }));
+      const length = Math.max(READ, event.hit ? 2.6 : 0, ...moves.map((move) => move.time.total + 0.6));
+      segments.push({ kind: "event", scene, index, eventIndex, event, place, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[keyOf(scene.place)] });
+      for (const move of moves) positions[move.person] = move.path.at(-1);
+      clock += length;
+    }
   }
-  segments.push({ kind: "card", scene, index, place, start: clock, end: clock + CARD, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)] });
-  clock += CARD;
-  for (const [eventIndex, event] of scene.events.entries()) {
-    if (event.hit) hitsSoFar[keyOf(scene.place)]++;
-    const moves = event.moves.map((move) => ({ ...move, time: timing(place, move) }));
-    const length = Math.max(READ, event.hit ? 2.6 : 0, ...moves.map((move) => move.time.total + 0.6));
-    segments.push({ kind: "event", scene, index, eventIndex, event, place, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[keyOf(scene.place)] });
-    for (const move of moves) positions[move.person] = move.path.at(-1);
-    clock += length;
-  }
+  total = clock;
+  for (const segment of segments) { if (segment.kind === "event") eventStart.set(`${segment.scene.id}|${segment.eventIndex}`, segment.start); if (segment.kind === "card") sceneStart.set(segment.scene.id, segment.start); }
+  for (const scene of data.scenes) for (const event of scene.events) if (event.hit) (placeHits[keyOf(scene.place)] ??= []).push(event.hit);
+  // Damage other story lines left on the world before this one (the engine applied it from stage/simulation/world.json): drawn
+  // as hits from the start, before this line's own.
+  const earlierHits = (data.world?.earlier ?? []).map((entry) => ({ lot: entry.lot, destroyed: entry.destroyed, fell: entry.fell, cutOff: [], cutRooms: [], blasted: entry.blasted.length ? entry.blasted : null, fallen: entry.fallen }));
+  if (earlierHits.length) placeHits.world = [...earlierHits, ...(placeHits.world ?? [])];
 }
-const total = clock;
-const eventStart = new Map(segments.filter((segment) => segment.kind === "event").map((segment) => [`${segment.scene.id}|${segment.eventIndex}`, segment.start]));
-const placeHits = {};
-for (const scene of data.scenes) for (const event of scene.events) if (event.hit) (placeHits[keyOf(scene.place)] ??= []).push(event.hit);
-// Damage other story lines left on the world before this one (the engine applied it from stage/simulation/world.json): drawn
-// as hits from the start, before this line's own.
-const earlierHits = (data.world?.earlier ?? []).map((entry) => ({ lot: entry.lot, destroyed: entry.destroyed, fell: entry.fell, cutOff: [], cutRooms: [], blasted: entry.blasted.length ? entry.blasted : null, fallen: entry.fallen }));
-if (earlierHits.length) placeHits.world = [...earlierHits, ...(placeHits.world ?? [])];
+buildTimeline();
 // When the world first reached each chunk and lot: its event's start (a scene's opening for `<scene>|start`).
-const sceneStart = new Map(segments.filter((segment) => segment.kind === "card").map((segment) => [segment.scene.id, segment.start]));
 const bornAt = (key) => { if (key === undefined || key === null) return 0; const [scene, event] = String(key).split("|"); return event === "start" ? sceneStart.get(scene) ?? 0 : eventStart.get(key) ?? sceneStart.get(scene) ?? 0; };
 const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low < high) { const mid = (low + high + 1) >> 1; if (segments[mid].start <= t) low = mid; else high = mid - 1; } return segments[low]; };
 
@@ -890,8 +894,14 @@ function drawStructure(item, count) {
 }
 // Each place's damage, as of now on the strand: the hits that have happened there so far.
 const hitTimes = {};
-for (const segment of segments) if (segment.kind === "event" && segment.event.hit) (hitTimes[keyOf(segment.scene.place)] ??= []).push(segment.start);
-if (earlierHits.length) hitTimes.world = [...earlierHits.map(() => -1), ...(hitTimes.world ?? [])];
+// Built again when the director's loop grows the line (a hit added is played from its event on).
+function buildHitTimes() {
+  for (const key of Object.keys(hitTimes)) delete hitTimes[key];
+  for (const segment of segments) if (segment.kind === "event" && segment.event.hit) (hitTimes[keyOf(segment.scene.place)] ??= []).push(segment.start);
+  const earlier = data.world?.earlier ?? [];
+  if (earlier.length) hitTimes.world = [...earlier.map(() => -1), ...(hitTimes.world ?? [])];
+}
+buildHitTimes();
 // A notice above each building broken earlier in the story, from the moment it stands here.
 const notices = [...Map.groupBy(data.world?.earlier ?? [], (entry) => entry.lot)].map(([index, entries]) => {
   const lot = data.world.lots[index], first = entries[0], tag = label(`broken earlier${entries.length > 1 ? ` ×${entries.length}` : ""} · ${String(first.label ?? first.scene).slice(0, 16)}`, "#ff8a8a", 26);
@@ -902,6 +912,26 @@ const sphereLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.Ico
 const boxLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.95 })); boxLines.visible = false; world.add(boxLines);
 /** Where the camera rests on a place, and a glide to it: out over both places, across, and down, like a hand on the mouse. */
 const poseFor = (id) => { const spot = macroAt.get(id) ?? { x: 0, z: 0 }, place = data.places[id], span = place.world ? 64 : Math.max(place.NX, place.NZ) * CELL; return { target: new THREE.Vector3(spot.x, 4, spot.z), position: new THREE.Vector3(spot.x + span * 0.45, span * 0.8, spot.z + span * 0.95) }; };
+/**
+ * The line grown in place (docs/v2/world-engine-redesign.md §2, §4): a scene's starts and its events so far, each with its
+ * moves as walked and its hit, the timeline built again. The director's page and World · Live's frame take the same pieces
+ * (`grid`: the world grid they were made on; a frame on another grid waits for the page made on the new one). Live, the
+ * frame held at the line's end plays the new piece on from there; a reader replaying an earlier card is left where they are.
+ */
+const gridOf = () => `${data.world?.NX}x${data.world?.NZ}+${data.world?.oi},${data.world?.oj},${data.world?.ok}`;
+function extendLine({ scene, starts = null, events = null, cast = null, grid = null, focus = null }) {
+  if (grid && grid !== gridOf()) return null;
+  const own = data.scenes.find((entry) => entry.id === scene);
+  if (!own) return null;
+  if (starts) own.starts = starts;
+  if (events) own.events = events;
+  if (cast) own.cast = cast;
+  if (focus && data.live) data.live.focus = focus;
+  buildTimeline(); buildHitTimes();
+  for (const entry of built.values()) entry.shownHits = -1;
+  const last = segments.filter((segment) => segment.scene.id === scene).at(-1);
+  return { total, end: last?.end ?? total, grid: gridOf() };
+}
 /**
  * Where a scene's people stand as it begins, as a camera pose a little above and beside them: the one world's scenes glide
  * there (the user: following the place's pin lost people moving between places), not to their place's pin.
@@ -1157,6 +1187,7 @@ if (liveMode) {
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
     if (event.data?.type === "replay") { replayCard(event.data); return; }
     if (event.data?.type === "continue") { continueTo(event.data); return; }
+    if (event.data?.type === "extend") { extendLine(event.data); return; }
     if (event.data?.type === "speed") { speed = event.data.speed ?? speed; return; }
     if (event.data?.type === "live") { replaying = null; stopAt = null; playing = true; speed = 2; time = total - 0.001; return; }
     if (event.data?.type === "underground") { xray = !!event.data.on; return; }
@@ -1498,6 +1529,11 @@ if (capture) {
     scenes: data.scenes.map((scene) => ({ id: scene.id, place: scene.place, events: scene.events.map((event) => event.text) })),
     /** How many of each inside part are drawn now (rooms, halls, room walls, corridors, stairs): for checking a still. */
     insideCounts() { const out = {}; world.traverse((part) => { if (part.isInstancedMesh) for (const name of ["room", "hall", "tall", "roomWall", "corridor", "stair"]) if (part.material === mats[name]) out[name] = (out[name] ?? 0) + part.count; }); return out; },
+    /**
+     * The director's loop grows the line in place (docs/v2/world-engine-redesign.md §2): a scene's starts and its events
+     * so far (each with its moves as walked, its hit), the timeline built again; returns when the last event ends.
+     */
+    extend: (piece) => extendLine(piece),
     /** Where the director's loop has the people now (person → node of this page's grid); null gives the timeline back. */
     pose(positions) { posed = positions; },
     /** The labels a still shows now (their text, and the place each names): for checking what a shot carries. */

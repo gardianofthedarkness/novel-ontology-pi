@@ -125,6 +125,7 @@
   // time as the reader scrolls): every sentence as written; those of a card played are underlined (green where someone moved)
   // and tapped play it in this world, the camera free; Continue plays on to the next move and stops there.
   const volume = new URLSearchParams(location.search).get("volume") ?? "active";
+  let pieceSeq = 0, lastPiece = null;
   let cards = [], cardKey = "", cardAt = -1, cardOfSentence = new Map(), rspeed = 2, nextBlock = 0, loading = false, bookDone = false;
   const says = (m) => `${esc(m.name)}: ${m.moved ? `went${m.direction && m.direction !== "stays" ? ` (arrow ${esc(m.direction)}${m.how ? `, ${esc(m.how)}` : ""})` : ""} to ${esc(m.to ?? "?")}${m.spot && m.spot !== "none" ? ` · spot: ${esc(m.spot)}` : m.boxed ? ` · boxed${m.height ? `, ${esc(m.height)}` : ""}` : ""}` : m.direction === "stays" ? "stays" : `did not move${m.why ? ` (${esc(m.why)})` : ""}`}`;
   const mark = () => { for (const span of $("book").querySelectorAll(".s")) { const n = cardOfSentence.get(span.dataset.id); span.classList.toggle("played", n !== undefined); span.classList.toggle("moved", n !== undefined && cards[n].moves.some((m) => m.moved)); span.classList.toggle("current", n !== undefined && n === cardAt); } };
@@ -251,7 +252,7 @@
     if (message?.type === "camera" && shown && event.source === shown.contentWindow) { camera = message; showFollow(!!message.follow); }
     if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; lastTouch = Date.now(); if (!touching) swap(); }
     if (message?.type === "interact" && shown && event.source === shown.contentWindow) lastTouch = Date.now();
-    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.moment = message.moment; ready = true; swap(); }
+    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
     if (message?.type === "failed" && next && event.source === next.contentWindow) drop(next);
   });
   const load = (run) => {
@@ -283,6 +284,10 @@
         if (terrain && state.lines?.[0]?.mode) $("runOn").setAttribute("aria-pressed", String(state.lines[0].mode === "run"));
         const world = state.world;
         listBuildings(world?.notes?.buildings); listSpawn(world?.notes?.spawn); listCards(world?.notes?.director);
+        // The director's line, grown piece by piece (its live notes' extend): each new piece goes to the frame, which plays it on
+        // from where it is; a frame loaded later takes the latest when it is ready.
+        const piece = world?.notes?.extend;
+        if (piece?.seq && piece.seq !== pieceSeq) { pieceSeq = piece.seq; lastPiece = piece; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ ...piece, type: "extend" }, origin); }
         if (world) {
           $("where").textContent = `${world.moment ?? ""}${world.final ? " · end" : ""}`;
           // The manifold the moment stands on: each place's ground, and who set it (Jev, the main agent, or the terrain rules).

@@ -57,6 +57,7 @@ export const moveWhetherMode: Mode<MoveFocus, unknown> = {
   questions: (focus) => [
     { key: "moves", primitive: "choice", instructions: `Does ${focus.mover.name} go somewhere else in this card?`, options: ["goes", "stays"], optionHints: { goes: "changes place: walks, runs, comes, leaves, follows, jumps, climbs, flies, is carried", stays: "acts where they already are" } },
     { key: "line", primitive: "choice", instructions: "Which line says so?", options: [...focus.card.lines, ...focus.lines].map((line) => line.id) },
+    { key: "breaks", primitive: "choice", instructions: "Does this card break, blast or wreck something (a wall, a building, the ground, a car)?", options: ["yes", "no"], optionHints: { yes: "something is broken, blasted or wrecked in this card", no: "nothing is broken" } },
   ] as DecisionQuestion[],
   budget: 12000,
 };

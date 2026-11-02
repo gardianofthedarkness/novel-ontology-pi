@@ -28,15 +28,21 @@ const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
 const seeded = text => { let h = 2166136261; for (const c of text) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } let s = h >>> 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 const round = value => Math.round(value * 10) / 10;
 
-/** A stand-in director (no model): arrows by turn, every other spot question answered "none" so boxes are tried too. */
+/**
+ * A stand-in director (no model), answering about as the text does: the pass finds a move in one sentence of twelve, a card
+ * goes somewhere one time in three and breaks something one time in fifteen; arrows by turn; every other spot question
+ * answered "none" so the boxes are tried too.
+ */
 export function standIn() {
   let n = 0;
   return { modelId: 'stand-in-director', async decide(_state, questions) {
     n++;
-    return questions.map(question => {
-      if (question.primitive === 'box') return { key: question.key, value: { left: 0.42, top: 0.42, right: 0.58, bottom: 0.58 }, confidence: 0.5 };
-      const options = question.options ?? [];
-      const value = question.key === 'direction' ? options[n % Math.min(6, options.length)] : question.key === 'spot' ? (n % 2 ? options[0] : 'none') : question.key === 'how' ? 'walk' : question.key === 'height' ? (options.find(o => /ground/.test(question.optionHints?.[o] ?? '')) ?? options[0]) : options[0];
+    return questions.map((question, k) => {
+      if (question.primitive === 'box') return { key: question.key, value: { left: 0.42, top: 0.42, right: 0.58, bottom: 0.58 }, box: { left: 0.42, top: 0.42, right: 0.58, bottom: 0.58 }, confidence: 0.5 };
+      const options = question.options ?? [], turn = n + k;
+      const value = question.key.endsWith('|show') ? (turn % 12 ? 'none' : 'moves') : question.key === 'moves' ? (n % 3 ? 'stays' : 'goes') : question.key === 'breaks' ? (n % 15 ? 'no' : 'yes')
+        : question.key === 'direction' ? options[n % Math.min(6, options.length)] : question.key === 'spot' ? (n % 2 ? options[0] : 'none') : question.key === 'how' ? 'walk'
+        : question.key === 'height' ? (options.find(o => /ground/.test(question.optionHints?.[o] ?? '')) ?? options[0]) : options[0];
       return { key: question.key, value, confidence: 0.5 };
     });
   } };
@@ -129,35 +135,67 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
 
       // The live world's snapshot with the cards in its notes (World · Live's Cards panel reads them there).
       // `focus`: where the live view's Follow Jev looks (the card's people), else the engine's own.
-      const noted = (moment, focus = null) => { const shot = E.snapshot(true); return { ...shot, moment, ...(focus ? { focus } : {}), notes: { ...shot.notes, director: payload() } }; };
+      const noted = (moment, focus = null, extend = null) => { const shot = E.snapshot(true); return { ...shot, moment, ...(focus ? { focus } : {}), notes: { ...shot.notes, director: payload(), ...(extend ? { extend } : {}) } }; };
+      // Streamed (docs/v2/world-engine-redesign.md §4): after every card, the scene's piece of the line (its starts and events so
+      // far) in the live notes, which World · Live's frame plays on from where it is; the whole page only when the world grid
+      // has changed (the frame then loads it, and takes the pieces after).
+      const gridKey = () => `${page.world.NX}x${page.world.NZ}+${page.world.oi},${page.world.oj},${page.world.ok}`;
+      let lastPiece = null, sentGrid = null, seq = 0;
+      const stream = async (moment, focus = null) => {
+        if (!live) return;
+        const full = gridKey() !== sentGrid;
+        await live.world(noted(moment, focus, lastPiece ? { ...lastPiece, seq: ++seq, ...(focus ? { focus } : {}) } : null), full ? { ...page, director: payload() } : null);
+        if (full) sentGrid = gridKey();
+      };
       const spawn = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'spawn.json'), 'utf8').catch(() => 'null'));
       const script = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8'));
       let before = null;
+      const where = new Map();
+      // The page's line grown in place to this moment (strand-demo.html `extend`): the scene's starts and its events so far,
+      // each with its moves as walked; the page is loaded again only when the world has grown.
+      const grow = async (scene, run) => {
+        await show();
+        const starts = Object.fromEntries(Object.entries(run.starts).map(([who, value]) => [who, dense(value[0])]));
+        const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, spots: [], hit: E.hits?.get(event.id) ?? null, hitThings: null, trace: null,
+          moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)) })) }));
+        lastPiece = { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey() };
+        return chrome.evaluate(`window.__stage.extend(${JSON.stringify(lastPiece)})`);
+      };
       for (const scene of E.chosen) {
         const run = E.runs[scene.id], reads = reading.scenes.find(entry => entry.id === scene.id), sceneRecord = { scene: scene.id, cards: [] };
         record.scenes.push(sceneRecord);
         if (!run || !reads) continue;
-        const positions = Object.fromEntries(Object.entries(run.starts).filter(([, value]) => value));
-        // The scene's unnamed people (EM² slots who speak, act or are spoken to: 领路人, 看守的男人) at spawning's starts.
-        const own = script.scenes.find(entry => entry.id === scene.id);
-        for (const who of own?.present ?? []) {
-          if (positions[who]) continue;
-          const start = spawn?.scenes?.find(entry => entry.id === scene.id)?.starts.find(entry => entry.who === who);
-          if (!start) continue;
+        // The world state (docs/v2/world-engine-redesign.md §1): who stands where carries through the story. Someone seen before
+        // carries on from where they are; seen for the first time, they start at spawning's start (spawning happens once);
+        // standing outside the scene's place, they travel to their start in it (walked; beyond 300 m they arrive off-page).
+        const own = script.scenes.find(entry => entry.id === scene.id), spawned = spawn?.scenes?.find(entry => entry.id === scene.id);
+        const startNode = who => {
+          const start = spawned?.starts.find(entry => entry.who === who);
+          if (!start) return run.starts[who]?.[0] ?? null;
           E.reach(start.at[0], start.at[1], 24);
-          const node = W.nodeNear(world, E.graphOf({ x: start.at[0], z: start.at[1] }), start.at[0], start.at[1], Math.round(start.y / FLOOR)) ?? W.nodeNear(world, E.graphOf({ x: start.at[0], z: start.at[1] }), start.at[0], start.at[1], null);
-          if (node === null) continue;
-          positions[who] = [node, 0]; run.starts[who] = [node, 0];
+          const built = E.graphOf({ x: start.at[0], z: start.at[1] });
+          return W.nodeNear(world, built, start.at[0], start.at[1], Math.round(start.y / FLOOR)) ?? W.nodeNear(world, built, start.at[0], start.at[1], null);
+        };
+        const inside = node => {
+          const box = spawned?.target?.box; if (!box || spawned.target.kind === 'area') return true;
+          const [x, , z] = at(node), [cx, cz, w, d, angle] = box, dx = x - cx, dz = z - cz, u = dx * Math.cos(angle) + dz * Math.sin(angle), v = -dx * Math.sin(angle) + dz * Math.cos(angle);
+          return Math.abs(u) <= w / 2 + 8 && Math.abs(v) <= d / 2 + 8;
+        };
+        const positions = {}, travels = [];
+        sceneRecord.spawned = []; sceneRecord.carried = []; sceneRecord.offPage = [];
+        for (const who of new Set(own?.present ?? Object.keys(run.starts).filter(id => run.starts[id]))) {
           if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
+          const was = where.get(who);
+          if (was && inside(was[0])) { positions[who] = was; sceneRecord.carried.push(who); continue; }
+          const dest = startNode(who);
+          if (dest === null || dest === undefined) { if (was) positions[who] = was; continue; }
+          if (!was) { positions[who] = [dest, 0]; sceneRecord.spawned.push(who); continue; }
+          const a = at(was[0]), b = at(dest);
+          if (Math.hypot(a[0] - b[0], a[2] - b[2]) <= 300) { positions[who] = was; travels.push({ who, from: was, dest }); }
+          else { positions[who] = [dest, was[1]]; sceneRecord.offPage.push(who); }
         }
-        // Does it go straight on from the scene before (asked from the text)? Then everyone in both carries on from where they ended.
-        if (before && budget > calls) {
-          const tail = before.reads.sentences.slice(-6).map(line), head = reads.sentences.slice(0, 6).map(line);
-          const asked = await ask(decide, M.sceneGoesOnMode, { before: { id: before.scene.id, place: names.get(before.scene.placeId) ?? before.scene.placeId, lines: tail, people: Object.keys(before.positions).map(id => names.get(id) ?? id) }, now: { id: scene.id, place: names.get(scene.placeId) ?? scene.placeId, lines: head, people: Object.keys(positions).map(id => names.get(id) ?? id) } }, null);
-          const goesOn = asked.replies.find(entry => entry.key === 'goes_on')?.value === 'yes';
-          sceneRecord.goesOn = goesOn;
-          if (goesOn) for (const who of Object.keys(positions)) if (before.positions[who]) { positions[who] = before.positions[who]; run.starts[who] = before.positions[who]; }
-        }
+        for (const key of Object.keys(run.starts)) delete run.starts[key];
+        Object.assign(run.starts, positions);
         // The director's pass (pass.mjs): the narration and description sentences that move someone present join the cards,
         // as actions of those they name, in reading order.
         const passed = await passScene({ reading, text, decide, scene: reads, place: names.get(scene.placeId) ?? scene.placeId, people: Object.fromEntries(Object.keys(positions).map(id => [id, names.get(id) ?? id])) });
@@ -166,8 +204,24 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         const position = new Map(reads.sentences.map((id, n) => [id, n]));
         const cards = [...(cardsOf.get(scene.id) ?? []), ...moving].filter(card => card.people.some(person => positions[person.id] && person.how.some(how => PRESENT.has(how)))).sort((a, b) => (position.get(a.first) ?? 0) - (position.get(b.first) ?? 0));
         scene.events = []; run.events = []; scene.cast = [...new Set([...(scene.cast ?? []), ...Object.keys(positions)])];
+        // Those coming from elsewhere walk in first (an event of their own, before the scene's cards).
+        if (travels.length) {
+          const event = { id: `arrive:${scene.id}`, text: `(${travels.map(entry => names.get(entry.who) ?? entry.who).join('、')} come here)`, actors: travels.map(entry => entry.who) };
+          scene.events.push(event);
+          for (const entry of travels) {
+            const p = at(entry.dest), { nodes } = around(p[0], p[2], 6), near = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= 2.5).map(node => node.id);
+            const path = walk(scene, `${scene.id}|${entry.who}|arrive`, entry.from, near.length ? near : [entry.dest], 'walk');
+            if (path && path.length > 1) { E.moves.set(`${scene.id}|${event.id}|${entry.who}`, { person: entry.who, how: 'walk', path: [...path], ensemble: path.ensemble ?? [] }); positions[entry.who] = [path.at(-1), entry.from[1]]; }
+            else positions[entry.who] = [entry.dest, entry.from[1]];
+          }
+          run.events.push({ at: { ...positions } });
+          sceneRecord.arrivals = travels.map(entry => entry.who);
+        }
         await live?.phase(`scene ${Number(scene.id.slice(-3))}: ${cards.length} cards`);
         await show(true);
+        await grow(scene, run);
+        await stream(`scene ${Number(scene.id.slice(-3))} begins${sceneRecord.arrivals?.length ? ` · ${sceneRecord.arrivals.map(who => names.get(who) ?? who).join(', ')} come in` : ''}`);
+        if (pace && sceneRecord.arrivals?.length) await new Promise(done => setTimeout(done, pace * 1000));
         const placeName = names.get(scene.placeId) ?? scene.placeId, when = reading.time?.scenes?.find(entry => entry.scene === scene.id)?.when ?? null;
         for (const card of cards) {
           const cardRecord = { card: card.id, kind: card.kind, ...(card.pass ? { pass: true } : {}), event: scene.events.length, lines: card.sentences.map(line), moves: [] };
@@ -194,7 +248,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
             if (calls >= budget) { cardRecord.moves.push({ person, why: 'budget spent' }); continue; }
             const here = at(positions[person][0]), mover = { id: person, name: names.get(person) ?? person }, slug = `${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-${person}`;
             await show();
-            await chrome.evaluate(`window.__stage.pose(${JSON.stringify(Object.fromEntries(Object.entries(positions).map(([who, [node]]) => [who, dense(node)])))})`);
+            const played = await grow(scene, run);
             const others = Object.keys(positions).filter(who => who !== person).map(who => ({ id: who, name: names.get(who) ?? who }));
             const now = Object.fromEntries(Object.entries(positions).map(([who, [node]]) => { const p = at(node); return [names.get(who) ?? who, `${said(p)}${who === person ? '' : `, ${Math.round(Math.hypot(p[0] - here[0], p[2] - here[2]))} m from ${mover.name}`}`]; }));
             // The text: the card's own lines; before it, the scene's lines naming the mover, saying where or describing the place, nearest first.
@@ -202,7 +256,8 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
             const others_ = reads.sentences.map((id, n) => ({ id, n })).filter(({ id, n }) => !card.sentences.includes(id) && (Math.abs(n - first) <= 4 || spatial.has(id) || reading.kinds[id]?.kind === 'environment' || forms.some(form => (text.get(id)?.text ?? '').includes(form))));
             const context = others_.sort((a, b) => Math.abs(a.n - first) - Math.abs(b.n - first)).map(({ id }) => line(id));
             const base = { scene: { id: scene.id, place: placeName, when }, card: { id: card.id, lines: card.sentences.map(line) }, mover, lines: context, now };
-            const shotBase = { place: scene.placeId, at: (await chrome.evaluate(`window.__stage.sceneCard(${JSON.stringify(scene.id)})`))?.at ?? 0, only: [scene.placeId], mover: person };
+            // Every picture is of the line as played to this moment: people where their walks ended, buildings as broken.
+            const shotBase = { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], mover: person };
             // a. The direction: every arrow, said by what it meets.
             const arrows = C.DIRECTIONS.map(direction => {
               let blocked = false, meets = null;
@@ -212,6 +267,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
             // First the text alone: does this person go anywhere in this card?
             const whether = await ask(decide, M.moveWhetherMode, { ...base, pictures: {} }, null);
             const goes = String(whether.replies.find(entry => entry.key === 'moves')?.value ?? 'stays') === 'goes', said_ = whether.replies.find(entry => entry.key === 'line')?.value ?? null;
+            if (whether.replies.find(entry => entry.key === 'breaks')?.value === 'yes') cardRecord.breaks = true;
             if (!goes) { cardRecord.moves.push({ person, direction: 'stays', line: said_, moved: false }); continue; }
             cardRecord.camera ??= { focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 };
             const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: 9, blocked: arrow.blocked })) });
@@ -281,22 +337,47 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
             Object.assign(cardRecord.moves.at(-1), moveRecord);
             await save();
           }
+          // Destruction (docs/v2/world-engine-redesign.md §3): a card the text says breaks something is asked where it hits (lettered
+          // red spheres on the world as played) and how big (spheres of 4, 8, 16 and 32 m from two sides); the blast is applied
+          // to the world and played before the next card.
+          if (cardRecord.breaks && calls < budget) {
+            const played = await grow(scene, run), at_ = Math.max(0, (played?.end ?? 0) - 0.02), slug = `${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-hit`;
+            await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: `${slug}-look`, place: scene.placeId, at: at_, only: [scene.placeId], frame: [1440, 900] })})`);
+            const spots = await chrome.evaluate(`window.__stage.impactSpots(${JSON.stringify({ place: scene.placeId })})`) ?? [];
+            const about = `A still of a 3D model of a place in a novel, as the story stands at this card. Blue lattices are the buildings' corridors and orange their stairs; small labelled figures are people.\nThe card: ${event.text}`;
+            if (spots.length) {
+              // Framed on the spots: their middle, far enough back to hold them all.
+              const mid = [spots.reduce((sum, spot) => sum + spot.x, 0) / spots.length, spots.reduce((sum, spot) => sum + spot.y, 0) / spots.length, spots.reduce((sum, spot) => sum + spot.z, 0) / spots.length];
+              const spread = Math.max(10, ...spots.map(spot => Math.hypot(spot.x - mid[0], spot.z - mid[2])));
+              const where = await shoot(`${slug}-where`, [1440, 900], { place: scene.placeId, at: at_, only: [scene.placeId], focus: { x: mid[0], z: mid[2], y0: mid[1] - 1, w: 2, d: 2, h: 2 }, radius: spread * 1.3 + 4, elevation: 35, spheres: spots.map(spot => ({ ...spot, r: 2.5 })) });
+              const letters = spots.map(spot => spot.label);
+              const [pick] = await decide(`${about}\nPicture "where": the place at this moment, with ${letters.length} lettered red spheres where it might break a building.`, [{ key: 'where', primitive: 'choice', instructions: 'Which lettered red sphere in picture "where" is where this card breaks something? Answer none if it breaks nothing.', options: [...letters, 'none'], optionHints: Object.fromEntries([...spots.map(spot => [spot.label, `${spot.label}: on ${spot.from}`]), ['none', 'it breaks nothing']]) }], { images: { where: where.png } });
+              const chosen = spots.find(spot => spot.label === pick?.value);
+              cardRecord.hit = { pick: pick?.value ?? null };
+              if (chosen) {
+                const SIZES = [4, 8, 16, 32], focus = { x: chosen.x, y0: chosen.y - 1, z: chosen.z, w: 2, h: 2, d: 2 }, rings = SIZES.map((size, n) => ({ x: chosen.x, y: chosen.y, z: chosen.z, r: size / 2, label: `${n + 1}`, outline: true }));
+                const near = await shoot(`${slug}-near`, [1440, 900], { place: scene.placeId, at: at_, only: [scene.placeId], focus, radius: 22, spheres: rings }), side = await shoot(`${slug}-side`, [1440, 900], { place: scene.placeId, at: at_, only: [scene.placeId], focus, radius: 22, yaw: Math.PI / 2, elevation: 20, spheres: rings });
+                const [size] = await decide(`${about}\nPictures "near" and "side": where it hits, close up from two sides, four red spheres round the point labelled 1 to 4: ${SIZES.map((size, n) => `${n + 1} is ${size} m across`).join(', ')}.`, [{ key: 'size', primitive: 'choice', instructions: 'Which labelled sphere is the size of what this card breaks?', options: SIZES.map((_, n) => `${n + 1}`) }], { images: { near: near.png, side: side.png } });
+                const r = (SIZES[Number(size?.value) - 1] ?? 8) / 2;
+                E.reach(chosen.x, chosen.z, r + 16);
+                E.hitSphere(scene, { id: event.id }, { x: chosen.x, y: chosen.y, z: chosen.z, r }, 0.9, `${scene.id}|${event.id}|hit`);
+                cardRecord.hit = { pick: chosen.label, on: chosen.from, across: r * 2, struck: !!E.hits.get(event.id) };
+              }
+            }
+          }
           run.events.push({ at: Object.fromEntries(Object.entries(positions).map(([who, value]) => [who, value])) });
           // A card no one was asked about: the producer's camera on the people of the card, as they stood when it began.
           if (!cardRecord.camera) { const points = event.actors.filter(who => positions[who]).map(who => at(positions[who][0])); if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 }; } }
-          // Streamed: the world as far as this card, each time someone has moved.
-          if (live && cardRecord.moves.some(move => move.moved)) {
-            const data = await show(true);
-            await live.world(noted(`scene ${Number(scene.id.slice(-3))}: ${cardRecord.moves.filter(move => move.moved).map(move => names.get(move.person) ?? move.person).join(', ')} moved`, cardRecord.camera ? { x: cardRecord.camera.focus.x, z: cardRecord.camera.focus.z, r: 24 } : null), { ...data, director: payload() });
-            // `pace`: a moment for the live view to play the move before the next question (the user: too fast to see).
-            if (pace) await new Promise(done => setTimeout(done, pace * 1000));
-          }
+          // Streamed: the line as far as this card, played on in World · Live; a moment to watch a move before the next question.
+          await grow(scene, run);
+          const went = cardRecord.moves.filter(move => move.moved);
+          await stream(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${went.length ? ` · ${went.map(move => names.get(move.person) ?? move.person).join(', ')} moved` : ''}`, cardRecord.camera ? { x: cardRecord.camera.focus.x, z: cardRecord.camera.focus.z, r: 24 } : null);
+          if (pace && went.length) await new Promise(done => setTimeout(done, pace * 1000));
         }
         before = { scene, reads, positions: { ...positions } };
+        for (const [who, value] of Object.entries(positions)) where.set(who, value);
         log(`${scene.id}: ${cards.length} cards, ${sceneRecord.cards.reduce((n, card) => n + card.moves.filter(move => move.moved).length, 0)} moves, ${calls} calls so far`);
         await save();
-        const data = await show(true);
-        if (live) await live.world(noted(`director: scene ${Number(scene.id.slice(-3))} played`), { ...data, director: payload() });
       }
       result = { data: { ...page, title: `The director · ${from} – ${to}`, director: payload() }, calls };
       // The run as a playable run of the book (stage/simulation/index.json, the Player's list): replayed card by card.

@@ -64,21 +64,23 @@ export async function spawnBook(novelDir, { reading = null } = {}) {
     const composed = await compose(spawnSpotMode, { scene: { id: scene.id, label: `${Number(scene.id.slice(-3))}`, when: scene.at?.node ?? null }, place: { name: nameOf(scene.place), kind: 'building', floors: here.floors }, subjects, spots, lines }, null);
     asks.set(scene.id, { subjects: subjects.map(subject => subject.id), spots, document: composed.document, questions: composed.questions.map(question => question.key) });
   }
-  return { script, starts, asks, nameOf };
+  // Each scene's place as built (its kind, footprint and floors): the director's loop tells by it who is already there.
+  const targets = new Map(script.scenes.map(scene => [scene.id, scene.place ? target(scene.id, scene.place) : null]));
+  return { script, starts, asks, nameOf, targets };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, live: { type: 'boolean' } } });
   if (!novelDir) { console.error('usage: node world-engine/spawning/spawn.mjs <novel-dir> [--reading <data.json>]'); process.exit(2); }
   const reading = values.reading ? JSON.parse(await readFile(values.reading, 'utf8')) : null;
-  const { script, starts, asks, nameOf } = await spawnBook(novelDir, { reading });
+  const { script, starts, asks, nameOf, targets } = await spawnBook(novelDir, { reading });
   const all = [...starts.values()].flat(), by = {}, unplaced = script.scenes.filter(scene => !(starts.get(scene.id) ?? []).length).map(scene => scene.id);
   for (const start of all) by[`${start.kind} ${start.by}`] = (by[`${start.kind} ${start.by}`] ?? 0) + 1;
   console.log(`scenes ${script.scenes.length}, starts ${all.length} (people ${all.filter(start => start.kind === 'person').length}, things ${all.filter(start => start.kind === 'thing').length})`);
   console.log('by', JSON.stringify(by));
   console.log(`scenes with nobody placed: ${unplaced.length}${unplaced.length ? ` (${unplaced.slice(0, 8).join(', ')}${unplaced.length > 8 ? ' …' : ''})` : ''}`);
   console.log(`Jev's spot question, composed for ${asks.size} scenes (${[...asks.values()].reduce((n, ask) => n + ask.subjects.length, 0)} to place); not asked yet`);
-  const scenes = script.scenes.map(scene => ({ id: scene.id, place: scene.place, when: scene.at?.node ?? null, starts: starts.get(scene.id) ?? [], ...(asks.has(scene.id) ? { ask: asks.get(scene.id) } : {}) }));
+  const scenes = script.scenes.map(scene => { const built = targets.get(scene.id); return { id: scene.id, place: scene.place, when: scene.at?.node ?? null, ...(built ? { target: { kind: built.kind, box: built.box, floors: built.floors } } : {}), starts: starts.get(scene.id) ?? [], ...(asks.has(scene.id) ? { ask: asks.get(scene.id) } : {}) }; });
   await writeFile(join(novelDir, 'stage', 'world', 'spawn.json'), JSON.stringify({ version: 1, from: 'rules', scenes }, null, 1));
   console.log('written', join(novelDir, 'stage', 'world', 'spawn.json'));
   // World · Live (--live): the world built again (people at their starts) and the spawn list beside it, with each
