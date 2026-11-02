@@ -136,6 +136,60 @@ flowchart TB
 - **Evidence proposals** after each played card: a speaker the nearness law makes certain or impossible, a present person
   the script missed, a meeting, a custody change.
 
+## 5a. Ground truth and back-propagation (the user, 2026-11-02)
+
+> While Jev's live play makes a correction that the main agent confirms, what it proposed is now ground truth: the engine
+> back-propagates the existing ontology logs, until the last ground truth, for all characters in the strand.
+
+v1 had the principle ([../world-first-design.md](../world-first-design.md) §8.3: a person's track is anchors joined by free
+segments; a live meeting re-samples each mover's segment from their last anchor as a bridge ending at the meeting), and
+its own status table says the re-timing was never built ("a meeting is walked at the dialogue, from where the mover is,
+not re-timed back to their last anchor"). v1's code that is there: the meetings (`export-strand-demo.mjs` meetingOf:
+who came to whom, a group's box), the pool, its pins and replays (`experiments/world-first/pool.mjs`,
+`src/cli/commands/extract/worldCommands.ts`). v2's director uses none of it: its talk gathers by rule.
+
+### What counts as ground truth
+
+Every position in the world log carries how it came to be, ranked:
+
+| Rank | Source | Example |
+|---|---|---|
+| 1 | **Pinned**: the main agent's answer, or Jev's confirmed by it (W5), checked by the laws | "she was on the roof all along" |
+| 2 | **Stated**: the text puts someone at a spot, read surely (a spatial word, a named room bound) | "in the office on the third floor" |
+| 3 | **Met**: a live meeting or a group's box (L6) | two people talking face to face |
+| 4 | **Answered**: Jev's or the work model's answer that the laws passed | a move to a spot in a wedge |
+| 5 | **Ruled**: the engine's default | spawning's start, carry on, a gathering walk, off-page |
+
+An **anchor** is a position of rank 1–3. Ranks 4–5 are hypotheses between anchors.
+
+### Back-propagation
+
+When a new anchor lands for someone at moment t in strand S (a pin above all):
+
+1. **Their span.** Find their last anchor before t in S (or the strand's start). Everything the world log has for them
+   between the two is hypothesis and is re-derived.
+2. **Their track.** Re-solve the span as a bridge on the path integral: from the last anchor to the new one, through
+   any stated destination in between (rank 2–3 stay fixed), under the laws (L5 time, L10 reach, L12 ways). Their scene
+   starts in the span are re-placed on it, so a **spawn** made by rule moves to where the bridge has them (spawning is
+   back-propagated too).
+3. **Everyone tied to them.** A position derived from theirs is re-derived the same way back to that person's own last
+   anchor: someone who went "with" them, someone gathered to them to talk, a group whose box was drawn round them. The
+   ties are recorded with each move, so the set is exact; it stays inside S.
+4. **The laws again.** Every law is re-run over the revised span. What still breaks goes to the review; a revision may
+   not move any anchor (rank 1–3): a conflict with one is a conflict for the agent, never silently resolved.
+5. **The logs.** The world log keeps both: the old span marked superseded by this revision, the new one current, with
+   the anchor that caused it. Canon's records derived from the span (presence, places, meetings, speakers) are
+   re-proposed through the ledger.
+6. **What comes after t.** Continuity carries the new positions forward. A later answer whose question showed the old
+   positions is checked by the laws on replay; only answers that now break a law are asked again (the cache keeps the
+   rest).
+
+### Where it sits
+
+Back-propagation needs the world log with each position's rank and ties (W1), the laws (W2), and pins (W5); it is
+built with W5 and runs on every pin from then on. The meetings (who came to whom, a group's box) come back with L6 once
+Jev gives each dialogue card its kind.
+
 ## 6. The world back into the ontology
 
 | Proposal from the world | When | Example |
@@ -191,11 +245,11 @@ the full text included, and writes only answers into the ledger.
 
 | | Builds | Model calls | Done when |
 |---|---|---|---|
-| W1 · World log and ledger | the director writes world-log records (presence, tracks, meetings, holdings, damage, bindings) and evidence proposals; canon's empty files filled from accepted ones | none | volume 1's run replayed from cache writes them; `state-changes`, `timelines` non-empty |
+| W1 · World log and ledger | the director writes world-log records (presence, tracks, meetings, holdings, damage, bindings), each position with its rank (§5a) and what it was derived from, and evidence proposals; canon's empty files filled from accepted ones | none | volume 1's run replayed from cache writes them; `state-changes`, `timelines` non-empty |
 | W2 · The law engine | laws 1–13 as code on every answer; verdicts logged only | none | counts of each law's violations on volume 1 |
 | W3 · System 2 | below 0.5, the same question with the same context to the work model; both answers kept | work model | how often it runs, how often the two differ, on volume 1 |
 | W4 · Laws decide | the law engine's verdict acts: what makes sense plays, what doesn't is held and plays the lawful default | none | no move played against a law; failed walks held with a reason |
-| W5 · The review | the CLI's new commands (§7); held items to the main agent in batches; answers checked and pinned; replay with pins; the user's notes as items | agent | every held item of volume 1 answered or sent to the gate |
+| W5 · The review | the CLI's new commands (§7), on v1's pool, pins and replays; held items to the main agent in batches; answers checked and pinned; **back-propagation from every pin** (§5a); the user's notes as items | agent | every held item of volume 1 answered or sent to the gate |
 | W6 · Back into the ontology | speaker, presence, place, time, binding, EM proposals through the ledger into canon | none | unsure speakers settled or held; scenes with nobody 0 |
 | W7 · UI | Why's Laws, Proposals and review; the run report; changed lines marked in the book | none | the user reads a run's changes without the developer |
 | W8 · Volume 1 again | all of it, with Track A where it is ready | all | against `d20261102081221`: moves, failed walks, speakers settled, laws broken, held and answered, cost |

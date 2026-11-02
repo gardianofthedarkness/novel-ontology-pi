@@ -102,6 +102,10 @@ is never carried into another strand.
 **Checks.** A person proposed present in a scene of strand S at time t is where S left them; a position read from
 another strand's state is rejected.
 
+**Anchors.** Within a strand, positions are ranked (pinned, stated, met, answered, ruled); a pinned or stated one is
+ground truth, and a new one back-propagates through the strand to each character's last ground truth
+([world-ontology.md](world-ontology.md) §5a).
+
 ### L2 · Nobody is in two places at once
 
 **Rule.** Two scenes at overlapping times (on the time tree) can't share a person at different places. Parallel strands
