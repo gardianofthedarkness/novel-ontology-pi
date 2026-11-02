@@ -33,6 +33,8 @@ export const RUBBLE = 0.6;
 
 export interface Structure {
   nx: number; nz: number; floors: number; i0: number; j0: number;
+  /** A building standing at its true size and turn (world.ts WorldLot.frame): its units are laid in that frame. */
+  frame?: { x: number; z: number; angle: number };
   /** Per unit: its kind (0 where the skeleton has solid mass), and its grid place (k is the floor; the roof is k = floors). */
   kind: Uint8Array; i: Int16Array; j: Int16Array; k: Int16Array;
   /** Where the skeleton's cells end: units below this index are the skeleton's cells, in its order. */
@@ -40,7 +42,7 @@ export interface Structure {
 }
 
 /** A lot's structural units: its skeleton cells, then the walls floor by floor (outer cells in row order), then the roof. */
-export function structureOf(lot: { i0: number; j0: number; skeleton: Pick<Skeleton, "nx" | "nz" | "floors" | "cells"> }): Structure {
+export function structureOf(lot: { i0: number; j0: number; frame?: { x: number; z: number; angle: number }; skeleton: Pick<Skeleton, "nx" | "nz" | "floors" | "cells"> }): Structure {
   const { nx, nz, floors } = lot.skeleton, cells = nx * nz * floors, outer: [number, number][] = [];
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) if (i === 0 || j === 0 || i === nx - 1 || j === nz - 1) outer.push([i, j]);
   const count = cells + outer.length * floors + nx * nz, kind = new Uint8Array(count), ii = new Int16Array(count), jj = new Int16Array(count), kk = new Int16Array(count);
@@ -48,7 +50,7 @@ export function structureOf(lot: { i0: number; j0: number; skeleton: Pick<Skelet
   let n = cells;
   for (let k = 0; k < floors; k++) for (const [i, j] of outer) { kind[n] = UNIT.wall; ii[n] = i; jj[n] = j; kk[n] = k; n++; }
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { kind[n] = UNIT.roof; ii[n] = i; jj[n] = j; kk[n] = floors; n++; }
-  return { nx, nz, floors, i0: lot.i0, j0: lot.j0, kind, i: ii, j: jj, k: kk, cells };
+  return { nx, nz, floors, i0: lot.i0, j0: lot.j0, ...(lot.frame ? { frame: lot.frame } : {}), kind, i: ii, j: jj, k: kk, cells };
 }
 
 /** Everything standing at first: every unit that is not solid mass. */
@@ -58,6 +60,10 @@ export const intact = (structure: Structure) => Uint8Array.from(structure.kind, 
 export function unitAt(structure: Structure, unit: number) {
   const kind = structure.kind[unit], k = structure.k[unit];
   const y = kind === UNIT.roof ? k * FLOOR_HEIGHT : kind === UNIT.corridor ? k * FLOOR_HEIGHT + 0.15 : k * FLOOR_HEIGHT + FLOOR_HEIGHT / 2;
+  if (structure.frame) {
+    const u = (structure.i[unit] + 0.5) * SKELETON_CELL - (structure.nx * SKELETON_CELL) / 2, v = (structure.j[unit] + 0.5) * SKELETON_CELL - (structure.nz * SKELETON_CELL) / 2, c = Math.cos(structure.frame.angle), s = Math.sin(structure.frame.angle);
+    return { x: structure.frame.x + u * c - v * s, y, z: structure.frame.z + u * s + v * c };
+  }
   return { x: (structure.i0 + structure.i[unit] + 0.5) * SKELETON_CELL, y, z: (structure.j0 + structure.j[unit] + 0.5) * SKELETON_CELL };
 }
 

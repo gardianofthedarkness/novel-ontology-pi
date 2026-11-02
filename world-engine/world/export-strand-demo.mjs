@@ -1064,7 +1064,7 @@ export async function strandDemo(novelDir, options) {
     const lot = own && !(boxed && boxed.floors > floor) ? own : boxed;
     let node = null, room = null;
     if (inside && lot && lot.floors > floor) {
-      const ci = Math.floor(point.x / 2) - lot.i0, cj = Math.floor(point.z / 2) - lot.j0, rooms = (lot.rooms ?? []).map((box, n) => ({ box, n })).filter(entry => entry.box.floor === floor);
+      const [ci, cj] = W.localCell(lot, Math.floor(point.x / 2), Math.floor(point.z / 2)) ?? [Math.floor(point.x / 2) - lot.i0, Math.floor(point.z / 2) - lot.j0], rooms = (lot.rooms ?? []).map((box, n) => ({ box, n })).filter(entry => entry.box.floor === floor);
       const gap = ({ box }) => Math.hypot((box.i0 + box.i1) / 2 - ci, (box.j0 + box.j1) / 2 - cj);
       room = rooms.find(({ box }) => ci >= box.i0 && ci <= box.i1 && cj >= box.j0 && cj <= box.j1) ?? rooms.sort((a, b) => gap(a) - gap(b))[0] ?? null;
       if (room) {
@@ -1072,7 +1072,8 @@ export async function strandDemo(novelDir, options) {
         for (let id = 0; id < built.type.length; id++) {
           if (!built.type[id] || built.graph.offsets[id + 1] === built.graph.offsets[id]) continue;
           const p = W.nodePos(world, id);
-          if (p.k !== floor || p.i < lot.i0 + room.box.i0 || p.i > lot.i0 + room.box.i1 || p.j < lot.j0 + room.box.j0 || p.j > lot.j0 + room.box.j1) continue;
+          const at = p.k === floor ? W.localCell(lot, p.i, p.j) : null;
+          if (!at || at[0] < room.box.i0 || at[0] > room.box.i1 || at[1] < room.box.j0 || at[1] > room.box.j1) continue;
           const d = Math.hypot(p.x - point.x, p.z - point.z);
           if (d < far) { far = d; node = id; }
         }
@@ -1266,7 +1267,7 @@ export async function strandDemo(novelDir, options) {
   const shellsNow = () => {
     if (world.chunks.size === shellsKey) return shellsMade;
     shellsKey = world.chunks.size;
-    shellsMade = W.shellsOf(world).map(shell => { const model = shell.model && library.models[shell.model] ? shell.model : UM.roleModel({ role: shell.role, w: shell.nx * SKELETON_CELL, d: shell.nz * SKELETON_CELL, floors: shell.height ?? shell.floors, era: shell.era }, `shell:${shell.source}`, modelSizes); return { ...shell, model }; });
+    shellsMade = W.shellsOf(world).map(shell => { const model = shell.model && library.models[shell.model] ? shell.model : UM.roleModel({ role: shell.role, w: shell.frame?.w ?? shell.nx * SKELETON_CELL, d: shell.frame?.d ?? shell.nz * SKELETON_CELL, floors: shell.height ?? shell.floors, era: shell.era }, `shell:${shell.source}`, modelSizes); return { ...shell, model }; });
     return shellsMade;
   };
   /**
@@ -1329,7 +1330,7 @@ export async function strandDemo(novelDir, options) {
     if (options.worldOnly) for (const model of ['kk-tunnel', 'kk-mall', 'kk-military']) worn.add(model);
     // One world: a lot is named whichever place named it.
     const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
-    const shellOf = (placeId, lot, index) => { const name = named(placeId, index), own = !name && sourceModel.get(lot.source); if (own && library.models[own]) { worn.add(own); return own; } const floors = lot.height ?? lot.floors, model = UM.roleModel({ role: lot.role, w: lot.nx * SKELETON_CELL, d: lot.nz * SKELETON_CELL, floors: name?.model === 'skyscraper' ? Math.max(floors, 25) : floors, era: lot.era, named: name?.model }, `${placeId}:${index}`, modelSizes); if (model) worn.add(model); return model; };
+    const shellOf = (placeId, lot, index) => { const name = named(placeId, index), own = !name && sourceModel.get(lot.source); if (own && library.models[own]) { worn.add(own); return own; } const floors = lot.height ?? lot.floors, model = UM.roleModel({ role: lot.role, w: lot.skeleton.nx * SKELETON_CELL, d: lot.skeleton.nz * SKELETON_CELL, floors: name?.model === 'skyscraper' ? Math.max(floors, 25) : floors, era: lot.era, named: name?.model }, `${placeId}:${index}`, modelSizes); if (model) worn.add(model); return model; };
     const shells = world.lots.map((lot, index) => shellOf('world', lot, index));
     // The terrain stage (§2.0.18): every building no one has reached yet stands as its shell (the engine's lot with its
     // tiling, destruction and inside switched off), drawn as a lot's shell is; reached, it stands as a full lot.
@@ -1343,7 +1344,9 @@ export async function strandDemo(novelDir, options) {
     const ok = W.UNDER_LEVELS, dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return ((k + ok) * NZ + (j + oj)) * NX + (i + oi); };
     const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
     const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
-      i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1, room.top ?? room.floor, ROOM_KINDS.indexOf(room.kind ?? 'room'), room.doors]) }));
+      i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place,
+      // A turned lot's plan (sx × sz cells, `cells` in its order) stands in its own frame [x, z, angle] at the building's true size.
+      sx: lot.skeleton.nx, sz: lot.skeleton.nz, frame: lot.frame ? [Math.round(lot.frame.x * 100) / 100, Math.round(lot.frame.z * 100) / 100, Math.round(lot.frame.angle * 10000) / 10000] : null, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1, room.top ?? room.floor, ROOM_KINDS.indexOf(room.kind ?? 'room'), room.doors]) }));
     notes.world = { chunks: world.chunks.size, lots: world.lots.length, shells: worldShells.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
     return {
       models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,

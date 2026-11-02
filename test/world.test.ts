@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createWorld, ensure, inscribed, nodeId, nodeNear, nodePos, spotsNear, worldGraph, worldSpot, CHUNK, type WorldSource } from "../apps/playground/src/data/world.js";
+import { createWorld, ensure, inscribed, localCell, nodeId, nodeNear, nodePos, spotsNear, worldGraph, worldSpot, CHUNK, type WorldSource } from "../apps/playground/src/data/world.js";
 import { addPatch, fillLandscape, firstLandscape } from "../src/v2/world/landscape.js";
 import { collapse, hallsOf, intervalPrecision, subwayOf, type Hall } from "../src/v2/world/underground.js";
 import { solveWalk, sampleWalk, temperatureBound } from "../apps/playground/src/data/pathIntegral.js";
@@ -24,7 +24,8 @@ test("the world streams in by chunks as the action reaches it: the city's own bu
   const more = ensure(world, 120, 0, 40, 5);
   assert.ok(more > 0 && world.lots.length > near, "going further streams in more of the city");
   assert.ok(world.lots.filter((lot) => lot.born === 5).length > 0 && [...world.chunks.values()].includes(5), "what was explored later remembers when");
-  for (const a of world.lots) for (const b of world.lots) if (a !== b) assert.ok(a.i0 + a.nx <= b.i0 || b.i0 + b.nx <= a.i0 || a.j0 + a.nz <= b.j0 || b.j0 + b.nz <= a.j0, "lots never overlap");
+  // A world cell is held by one lot at most (lotAt), and lies inside that lot's own plan.
+  for (const [key, index] of world.lotAt) { const lot = world.lots[index], i = Math.floor(key / 65536) - 32768, j = (key % 65536) - 32768; assert.ok(localCell(lot, i, j), "a held cell lies in its lot's plan"); }
 });
 
 test("node ids are never renumbered as the world grows, so positions kept from earlier moments stay valid", () => {
@@ -69,19 +70,22 @@ test("every source building in the explored ground either stands as a lot or is 
   assert.ok(settled.filter((b) => stood.has(b.id)).length >= settled.length * 0.85, `most stand (${settled.filter((b) => stood.has(b.id)).length} of ${settled.length})`);
 });
 
-test("a thin building turned off the grid stands turned to the nearest axis, and one a road crosses stands on the free part; one wholly on a road, or under a staged building, is dropped", () => {
+test("a building stands at its true size and turn (its plan in its own frame), over a road the terrain left under it, and built into a neighbour with what is its own; one under a staged building is dropped", () => {
   const road = { a: [-200, 40] as [number, number], b: [200, 40] as [number, number], width: 12, level: "street" };
   const world = createWorld({ roads: [road], plazas: [], anchors: [{ place: "inn", label: "Inn", x: 100, z: 0, own: true, role: "office", floors: 6 }], buildings: [
     { id: "thin", x: 9, z: 9, w: 22, d: 9, angle: 0.35, floors: 6, kind: "office" },
     { id: "edge", x: 41, z: 31, w: 16, d: 16, angle: 0, floors: 6, kind: "office" },
     { id: "road", x: 70, z: 40, w: 8, d: 8, angle: 0, floors: 4, kind: "office" },
     { id: "under", x: 100, z: 2, w: 10, d: 10, angle: 0, floors: 4, kind: "office" },
+    { id: "into", x: 49, z: 31, w: 16, d: 16, angle: 0, floors: 6, kind: "office" },
   ] });
   ensure(world, 50, 20, 100, 0);
   const lot = (id: string) => world.lots.find((entry) => entry.source === id);
-  assert.ok(lot("thin") && lot("thin")!.nx > lot("thin")!.nz, "the thin turned building stands, long along x");
-  assert.ok(lot("edge") && (lot("edge")!.j0 + lot("edge")!.nz) * 2 <= 34, "the crossed one stands short of the road");
-  assert.ok(!lot("road") && world.dropped.has("road"));
+  assert.ok(lot("thin")?.frame && Math.abs(lot("thin")!.frame!.angle - 0.35) < 1e-9 && lot("thin")!.skeleton.nx === 11 && lot("thin")!.skeleton.nz > 3, "the thin turned building stands at its true turn and size (22 m by 9 m)");
+  const held = (id: string) => [...world.lotAt].filter(([, index]) => world.lots[index] === lot(id)).map(([key]) => key);
+  assert.equal(held("edge").length, 64, "the crossed one holds its whole footprint, the road under it too");
+  assert.ok(lot("road") && held("road").length === 16, "one wholly on a road stands");
+  assert.ok(lot("into") && held("into").length === 32 && held("into").every((key) => ((Math.floor(key / 65536) - 32768) + 0.5) * 2 >= 49), "one built into a neighbour holds what is its own");
   assert.ok(!lot("under") && world.dropped.has("under"));
 });
 
@@ -150,22 +154,23 @@ test("rooms are walked through their doors only, on their own floor; a room of s
   for (let node = 0; node < graph.nodes; node++) {
     if (type[node] !== 3) continue;
     roomNodes++;
-    const here = world.lots[lot[node]], i = Math.floor(graph.x[node] / 2) - here.i0, j = Math.floor(graph.z[node] / 2) - here.j0, k = Math.round(graph.y[node] / 3);
+    const here = world.lots[lot[node]], [i, j] = localCell(here, Math.floor(graph.x[node] / 2), Math.floor(graph.z[node] / 2))!, k = Math.round(graph.y[node] / 3);
     const room = here.rooms.find((box) => box.floor === k && i >= box.i0 && i <= box.i1 && j >= box.j0 && j <= box.j1)!;
     assert.ok(room, "a room node is in a room, on its own floor");
     for (let e = graph.offsets[node]; e < graph.offsets[node + 1]; e++) {
       const to = graph.to[e];
       if (type[to] !== 2) continue;
       ways++;
-      const ti = Math.floor(graph.x[to] / 2) - here.i0, tj = Math.floor(graph.z[to] / 2) - here.j0;
-      assert.ok(room.doors.includes(cellIndex(here.skeleton, ti, tj, k)), "out of a room only through one of its doors");
+      const [ti, tj] = localCell(here, Math.floor(graph.x[to] / 2), Math.floor(graph.z[to] / 2))!;
+      const door = cellIndex(here.skeleton, ti, tj, k);
+      assert.ok(room.doors.includes(door), "out of a room only through one of its doors");
     }
   }
   assert.ok(roomNodes > 50 && ways > 0, `rooms walked (${roomNodes} room cells, ${ways} ways out)`);
   let tall = 0;
   for (const [n, here] of world.lots.entries()) for (const room of here.rooms.filter((box) => box.top > box.floor)) for (let k = room.floor + 1; k <= room.top; k++) {
-    const above = nodeId(world, here.i0 + room.i0, here.j0 + room.j0, k);
-    assert.ok(above >= type.length || type[above] === 0 || lot[above] !== n, "no floor to stand on above a room of several floors");
+    // The world cells over the room's plan cells, on its upper floors: none stands as a room of it.
+    for (let id = 0; id < type.length; id++) if (type[id] === 3 && lot[id] === n && Math.round(graph.y[id] / 3) === k) { const at = localCell(here, Math.floor(graph.x[id] / 2), Math.floor(graph.z[id] / 2)); assert.ok(!at || !(at[0] >= room.i0 && at[0] <= room.i1 && at[1] >= room.j0 && at[1] <= room.j1), "no floor to stand on above a room of several floors"); }
     tall++;
   }
 });
