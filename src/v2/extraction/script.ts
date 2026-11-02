@@ -43,9 +43,26 @@ export interface ScriptScene {
   clock: number[] | null; present: string[]; stayed: string[]; firstSeen: string[];
   /** Its node on the time tree (story time), and whether the scene states its time or inherits it: what strands compare (strands.ts). */
   at?: { node: string; stated: boolean };
+  /** The things its cards name (named things, vehicles, weapons), each with who holds it in the scene: spawning (sceneThings). */
+  things?: { id: string; holder: string | null }[];
   timeline: { type: "event"; id: string; actors: string[] }[]; context?: string;
   /** Who or what its spatial words say is where (src/v2/spatial.ts): evidence for Jev at run time. */
   spatial?: { text: string; sentence: string; level: string | null; who: string[] }[];
+}
+/**
+ * The things a scene's cards name, and who holds each (spawning, docs/v2/spawning.md §2): a thing in an action whose only
+ * actor is one person is that person's in the scene (the one most often so); else nobody's, and it stays where it is.
+ */
+export function sceneThings(cards: { kind: string; entities: { id: string }[]; people: { id: string; how?: string[] }[] }[], category: (id: string) => string | undefined): { id: string; holder: string | null }[] {
+  const ids = [...new Set(cards.flatMap((card) => card.entities.map((hit) => hit.id)).filter((id) => category(id) === "thing"))];
+  return ids.map((id) => {
+    const count = new Map<string, number>();
+    for (const card of cards.filter((entry) => entry.kind === "action" && entry.entities.some((hit) => hit.id === id))) {
+      const actors = [...new Set(card.people.filter((person) => category(person.id) === "person" && (person.how ?? []).includes("acts")).map((person) => person.id))];
+      if (actors.length === 1) count.set(actors[0], (count.get(actors[0]) ?? 0) + 1);
+    }
+    return { id, holder: [...count].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null };
+  });
 }
 export interface ReadingScript { version: 2; from: "v2-reading"; places: Record<string, ScriptPlace>; scenes: ScriptScene[] }
 
@@ -129,6 +146,7 @@ export function readingScript(result: FlowResult, text: (sentence: string) => st
     const spatial = (result.spatial ?? []).filter((mention) => mention.scene === scene.id).map(({ text: word, sentence, who }) => ({ text: word, sentence, level: levelOf(word), who }));
     return {
       id: scene.id, chapter: scene.chapter, place, placeBy: by, clock: past ? null : clock, present, stayed: [], firstSeen, ...(time?.node ? { at: { node: time.node, stated: !time.inherited } } : {}),
+      ...((things) => (things.length ? { things } : {}))(sceneThings(cards, category)),
       timeline: cards.filter((card) => eventOf.has(card.id)).map((card) => ({ type: "event" as const, id: eventOf.get(card.id)!, actors: cardPeople(result, card).people })),
       ...(environment ? { context: `Environment: ${environment.length > CONTEXT ? `${environment.slice(0, CONTEXT - 1)}…` : environment}` } : {}),
       ...(spatial.length ? { spatial } : {}),

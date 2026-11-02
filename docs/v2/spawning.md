@@ -2,7 +2,7 @@
 
 Where each person and each thing of a scene stands when the scene begins, on the world the terrain built. The second step
 of the world engine, after terrain; movement takes over from these positions, event by event (world-engine-v2.md §4).
-Status: **designed with the user (2026-11-01), not built.**
+Status: **designed with the user (2026-11-01); the rules built (§7), Jev's spot question next.**
 
 ## 1. What it decides
 
@@ -62,3 +62,16 @@ who decided it.
 
 - **Crowds:** people only seen (passers-by, an audience): to discuss.
 - A person coming from another place sooner than they could have travelled there: a check, then.
+
+## 7. Built: the rules (2026-11-01)
+
+`src/v2/spawning/positions.ts` (the rules, plain data), `world-engine/spawning/spawn.mjs` (on a book: its script, strands,
+terrain and the last build's page; writes `stage/world/spawn.json`). The world script keeps each scene's things and who
+holds each (`sceneThings`: a thing in an action whose only actor is one person is theirs in the scene). Until Jev's spot
+question is built, a building with no spatial word starts everyone on a random floor.
+
+Vol 1 (46 scenes; no model call): 144 starts, 130 people and 14 things. People: 72 carried on, 23 on an area's ground, 21
+on a random floor, 9 with others coming from the same scene, 4 on the floor their spatial words say, 1 drawn within
+speaking distance. Things: 8 on the ground, 3 on a random floor, 2 stayed where they were left, 1 by its words; no holder
+found (no action names a thing with one person acting). The 4 scenes with nobody placed have nobody present.
+
