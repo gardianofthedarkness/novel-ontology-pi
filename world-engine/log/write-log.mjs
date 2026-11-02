@@ -23,7 +23,7 @@ export async function writeWorldLog(novelDir, { run, reading }) {
   const eventOf = card => eventBySentence.get(String(card).slice(String(card).indexOf(':') + 1)) ?? null;
   const log = worldLog({ run, record, page, spawn, strands });
   const laws = checkAll({ played: playedLine({ record, page, reading }), strands, script, speakers: speakersOf(reading) });
-  const ledger = proposalsOf({ run, log, laws, eventOf });
+  const ledger = proposalsOf({ run, log, laws, eventOf, record });
   await mkdir(join(dir, 'stage', 'world', 'log'), { recursive: true }); await mkdir(join(dir, 'stage', 'world', 'ledger'), { recursive: true });
   await writeFile(join(dir, 'stage', 'world', 'log', `${run}.jsonl`), jsonl(log), { mode: 0o644 });
   await writeFile(join(dir, 'stage', 'world', 'ledger', `${run}.jsonl`), jsonl(ledger), { mode: 0o644 });

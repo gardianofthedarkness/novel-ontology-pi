@@ -68,7 +68,7 @@ export function worldLog({ run, record, page, spawn, strands }) {
  * each with its evidence (log ids) and state. Nothing is applied here: world records wait for the user's decision on
  * applying them without review, and the laws' breaks are held for the review.
  */
-export function proposalsOf({ run, log, laws, eventOf }) {
+export function proposalsOf({ run, log, laws, eventOf, record = null }) {
   const out = [];
   let n = 0;
   const add = fields => out.push({ id: `${run}:p${++n}`, run, state: 'proposed', ...fields });
@@ -81,7 +81,11 @@ export function proposalsOf({ run, log, laws, eventOf }) {
   for (const strand of [...new Set(log.map(record => record.strand).filter(Boolean))]) add({ kind: 'timeline', subject: strand, value: { id: `tl_strand_${strand}`, scenes: [...new Set(log.filter(record => record.strand === strand).map(record => record.scene))] }, evidence: [] });
   // Damage the world took.
   for (const entry of log.filter(record => record.kind === 'damage')) add({ kind: 'damage', subject: entry.lot, value: { scene: entry.scene, card: entry.card, strength: entry.strength }, evidence: [entry.id] });
-  // What the laws say no to: held for the review.
+  // What the laws decided as the run played (W4): each held move, speaker or actor, and each amended entry, with why.
+  for (const scene of record?.scenes ?? []) for (const [card, laws] of [[null, scene.laws ?? []], ...scene.cards.map(entry => [entry.card, entry.laws ?? []])]) {
+    for (const decided of laws) add({ kind: 'law', state: decided.verdict === 'held' ? 'held' : 'applied', source: 'play', law: decided.law, subject: decided.who ?? null, value: { scene: scene.scene, card, verdict: decided.verdict, why: decided.why }, evidence: [] });
+  }
+  // What the laws find over the whole run afterwards (W2): held for the review.
   for (const law of laws) for (const broken of law.violations) add({ kind: 'held', state: 'held', subject: broken.who ?? null, law: law.law, value: { what: broken.what, why: broken.why }, evidence: [] });
   return out;
 }

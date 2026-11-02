@@ -375,7 +375,11 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       else if (here.type === 4 && there.type === 4) ok = here.lot === there.lot;
       else if (here.lot === there.lot && here.lot >= 0) {
         const roomA = here.type === 3 ? roomOf[here.lot][here.local] : NOT, roomB = there.type === 3 ? roomOf[there.lot][there.local] : NOT;
-        ok = (here.type === 2 && there.type === 2) || (roomA >= 0 && roomA === roomB) || (roomA >= 0 && there.type === 2 && world.lots[here.lot].rooms[roomA].doors.includes(there.local)) || (roomB >= 0 && here.type === 2 && world.lots[there.lot].rooms[roomB].doors.includes(here.local));
+        // A room opens onto the corridor at its doors; in a turned building the world's neighbour of a room cell may be the
+        // plan cell beside the door (the plan's cells fall between the world's), so one within a cell of a door on the same
+        // floor counts as it (else such a room was shut: people born in it never got out, 2026-11-02).
+        const doorAt = (lot: WorldLot, room: number, cell: number) => { const doors = lot.rooms[room].doors; if (doors.includes(cell)) return true; if (!lot.frame) return false; const c = cellAt(lot.skeleton, cell); return doors.some((door) => { const d = cellAt(lot.skeleton, door); return d.k === c.k && Math.max(Math.abs(d.i - c.i), Math.abs(d.j - c.j)) <= 1; }); };
+        ok = (here.type === 2 && there.type === 2) || (roomA >= 0 && roomA === roomB) || (roomA >= 0 && there.type === 2 && doorAt(world.lots[here.lot], roomA, there.local)) || (roomB >= 0 && here.type === 2 && doorAt(world.lots[there.lot], roomB, here.local));
       } else if (k === 0) {
         // The street door: its cell of the plan (or one beside it on the ground floor, a turned plan's cells falling
         // between the world's), to the open ground next to it, any way it faces for a turned building.

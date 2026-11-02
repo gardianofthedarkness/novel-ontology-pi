@@ -4,7 +4,7 @@ import { createWorld, ensure, inscribed, localCell, nodeId, nodeNear, nodePos, s
 import { addPatch, fillLandscape, firstLandscape } from "../src/v2/world/landscape.js";
 import { collapse, hallsOf, intervalPrecision, subwayOf, type Hall } from "../src/v2/world/underground.js";
 import { solveWalk, sampleWalk, temperatureBound } from "../apps/playground/src/data/pathIntegral.js";
-import { skeletonStream } from "../apps/playground/src/data/skeleton.js";
+import { cellAt, skeletonStream } from "../apps/playground/src/data/skeleton.js";
 
 // A filled commercial district as the world's source, with a staged building of its own at its middle.
 function source(): WorldSource {
@@ -162,8 +162,8 @@ test("rooms are walked through their doors only, on their own floor; a room of s
       if (type[to] !== 2) continue;
       ways++;
       const [ti, tj] = localCell(here, Math.floor(graph.x[to] / 2), Math.floor(graph.z[to] / 2))!;
-      const door = cellIndex(here.skeleton, ti, tj, k);
-      assert.ok(room.doors.includes(door), "out of a room only through one of its doors");
+      const door = cellIndex(here.skeleton, ti, tj, k), beside = (cell: number) => { const d = cellAt(here.skeleton, cell); return d.k === k && Math.max(Math.abs(d.i - ti), Math.abs(d.j - tj)) <= 1; };
+      assert.ok(room.doors.includes(door) || (!!here.frame && room.doors.some(beside)), "out of a room only through one of its doors (in a turned building, the plan cell beside one)");
     }
   }
   assert.ok(roomNodes > 50 && ways > 0, `rooms walked (${roomNodes} room cells, ${ways} ways out)`);

@@ -143,7 +143,8 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
       // A move's walk: one draw of the path integral, and six more from the same field (the traces the player draws round it,
       // the spread of where the walk might have gone).
       const walk = (scene, key, from, targets, how) => {
-        if (!targets.length) return null;
+        walk.failed = null;
+        if (!targets.length) { walk.failed = 'no place to stand there'; return null; }
         const field = E.solve(scene.placeId, key, targets, how, from[0]), built = E.graphOf(W.nodePos(world, from[0]));
         const path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
         if (path) path.ensemble = Array.from({ length: 6 }, (_, n) => E.sampleWalk(built.graph, field, from[0], from[1], seeded(`${key}|${n}`))).filter(Boolean);
@@ -178,6 +179,20 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
       const script = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8'));
       let before = null;
       const where = new Map();
+      // Continuity per strand (L1, docs/v2/physics-laws.md; the user, 2026-11-02: it holds to a strand's end and never across
+      // strands): someone comes into a scene from the scene the strands say they come from (stage/world/strands.json
+      // `entries`), else from where they last stood in that strand; someone first in this strand is never carried in from
+      // another one. Without strands, the one state of before.
+      const strands = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null'));
+      const strandScene = new Map((strands?.scenes ?? []).map(entry => [entry.id, entry]));
+      const endOf = new Map(), lastIn = new Map();
+      const prior = (who, sceneId) => {
+        const own = strandScene.get(sceneId);
+        if (!own) return where.get(who) ?? null;
+        const entry = (own.entries ?? []).find(item => item.person === who);
+        if (!entry?.from) return null;
+        return endOf.get(entry.from)?.[who] ?? lastIn.get(strandScene.get(entry.from)?.fork)?.get(who) ?? lastIn.get(own.fork)?.get(who) ?? null;
+      };
       // The page's line grown in place to this moment (strand-demo.html `extend`): the scene's starts and its events so far,
       // each with its moves as walked; the page is loaded again only when the world has grown.
       const grow = async (scene, run) => {
@@ -213,11 +228,13 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
         // Someone new starts a few metres from the anchor; someone from elsewhere walks to it (off-page beyond 300 m).
         const present = [...new Set(own?.present ?? Object.keys(run.starts).filter(id => run.starts[id]))];
         for (const who of present) if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
-        const here = present.filter(who => where.get(who) && inside(where.get(who)[0]));
+        const was = new Map(present.map(who => [who, prior(who, scene.id)]));
+        sceneRecord.laws = present.filter(who => where.get(who) && !was.get(who)).map(who => ({ law: 'L1', who, verdict: 'amend', why: 'first in this strand: not carried in from another strand' }));
+        const here = present.filter(who => was.get(who) && inside(was.get(who)[0]));
         let anchor = null;
         if (here.length) {
-          const points = here.map(who => at(where.get(who)[0])), mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length);
-          anchor = where.get(here.reduce((best, who) => { const p = at(where.get(who)[0]), q = at(where.get(best)[0]); return Math.hypot(p[0] - mid[0], p[2] - mid[2]) < Math.hypot(q[0] - mid[0], q[2] - mid[2]) ? who : best; }, here[0]))[0];
+          const points = here.map(who => at(was.get(who)[0])), mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length);
+          anchor = was.get(here.reduce((best, who) => { const p = at(was.get(who)[0]), q = at(was.get(best)[0]); return Math.hypot(p[0] - mid[0], p[2] - mid[2]) < Math.hypot(q[0] - mid[0], q[2] - mid[2]) ? who : best; }, here[0]))[0];
         } else {
           const by = who => spawned?.starts.find(entry => entry.who === who)?.by;
           const first = present.find(who => ['spatial', 'part'].includes(by(who))) ?? present[0];
@@ -232,14 +249,14 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
         const positions = {}, travels = [];
         sceneRecord.spawned = []; sceneRecord.carried = []; sceneRecord.offPage = [];
         for (const who of present) {
-          const was = where.get(who);
-          if (was && here.includes(who)) { positions[who] = was; sceneRecord.carried.push(who); continue; }
+          const from = was.get(who);
+          if (from && here.includes(who)) { positions[who] = from; sceneRecord.carried.push(who); continue; }
           const dest = beside(who);
-          if (dest === null || dest === undefined) { if (was) positions[who] = was; continue; }
-          if (!was) { positions[who] = [dest, 0]; sceneRecord.spawned.push(who); continue; }
-          const a = at(was[0]), b = at(dest);
-          if (Math.hypot(a[0] - b[0], a[2] - b[2]) <= 300) { positions[who] = was; travels.push({ who, from: was, dest }); }
-          else { positions[who] = [dest, was[1]]; sceneRecord.offPage.push(who); }
+          if (dest === null || dest === undefined) { if (from) positions[who] = from; continue; }
+          if (!from) { positions[who] = [dest, 0]; sceneRecord.spawned.push(who); continue; }
+          const a = at(from[0]), b = at(dest);
+          if (Math.hypot(a[0] - b[0], a[2] - b[2]) <= 300) { positions[who] = from; travels.push({ who, from, dest }); }
+          else { positions[who] = [dest, from[1]]; sceneRecord.offPage.push(who); }
         }
         for (const key of Object.keys(run.starts)) delete run.starts[key];
         Object.assign(run.starts, positions);
@@ -279,19 +296,36 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
           const event = { id: card.id, text: card.sentences.map(id => text.get(id)?.text ?? '').join('').slice(0, 120), actors: card.people.filter(person => positions[person.id] && person.how.some(how => PRESENT.has(how))).map(person => person.id) };
           scene.events.push(event);
           const moveTo = (person, path, how, why) => {
-            if (!path || path.length < 2) { cardRecord.moves.push({ person, why, moved: false }); return; }
+            // Reachable (L10): a move no walk reaches is held with why, and nobody moves.
+            if (path && path.length < 2) { cardRecord.moves.push({ person, why: why ?? 'already there', moved: false }); return; }
+            if (!path) { cardRecord.moves.push({ person, why, moved: false }); (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'held', why: walk.failed ?? why ?? 'no walk there' }); return; }
             E.moves.set(`${scene.id}|${card.id}|${person}`, { person, how: how === 'run' ? 'run' : 'walk', path: [...path], ensemble: path.ensemble ?? [] });
             positions[person] = [path.at(-1), positions[person][1]];
             cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))) });
           };
+          // Actors are there (L9): someone the card says acts or speaks, with no place in the scene, is held (a presence the
+          // script may have missed), never played.
+          for (const person of card.people.filter(entry => !positions[entry.id] && entry.how.some(how => how === 'acts' || how === 'speaks'))) (cardRecord.laws ??= []).push({ law: 'L9', who: person.id, verdict: 'held', why: 'acts or speaks, but is not present' });
           if (card.kind === 'dialogue') {
-            // Those spoken to come within speaking distance (2–4 m) of the first speaker, on the speaker's floor.
+            // Talk needs nearness, by its kind (L6; the user, 2026-11-02: the kind asked of Jev): where someone spoken to stands
+            // apart from the first speaker, Jev says what kind of talk it is. Face to face (live, group), they come within
+            // speaking distance (2–4 m) on the speaker's floor; remote, everyone stays where they are; public, those within
+            // earshot (25 m, the same floor) hear it where they stand, and anyone beyond is held.
             const speaker = card.people.find(person => positions[person.id] && person.how.includes('speaks'))?.id;
-            if (speaker) for (const person of card.people.filter(entry => entry.id !== speaker && positions[entry.id] && entry.how.includes('addressed'))) {
-              const a = at(positions[speaker][0]), b = at(positions[person.id][0]);
-              if (Math.hypot(a[0] - b[0], a[2] - b[2]) <= 5 && Math.abs(a[1] - b[1]) < 1) continue;
-              const { nodes } = around(a[0], a[2], 8), ring = nodes.filter(node => Math.abs(node.y - a[1]) < 1 && Math.hypot(node.x - a[0], node.z - a[2]) >= 2 && Math.hypot(node.x - a[0], node.z - a[2]) <= 4).map(node => node.id);
-              moveTo(person.id, walk(scene, `${scene.id}|${card.id}|${person.id}|talk`, positions[person.id], ring, 'walk'), 'walk', `spoken to by ${names.get(speaker)}`);
+            const gap = id => { const a = at(positions[speaker][0]), b = at(positions[id][0]); return { metres: Math.hypot(a[0] - b[0], a[2] - b[2]), floors: Math.round(Math.abs(a[1] - b[1]) / FLOOR) }; };
+            const apart = speaker ? card.people.filter(entry => entry.id !== speaker && positions[entry.id] && entry.how.includes('addressed')).map(entry => entry.id).filter(id => gap(id).metres > 5 || gap(id).floors > 0) : [];
+            let kind = 'live';
+            if (apart.length && calls < budget) {
+              const others = Object.keys(positions).filter(id => id !== speaker).map(id => ({ name: names.get(id) ?? id, ...gap(id) }));
+              const { replies } = await ask(decide, M.dialogueKindMode, { scene: { id: scene.id, place: placeName }, lines: card.sentences.map(line), speaker: names.get(speaker) ?? speaker, people: others }, null);
+              const said = replies.find(reply => reply.key === 'kind');
+              kind = String(said?.value ?? 'live'); cardRecord.talk = { kind, confidence: said?.confidence ?? null };
+            }
+            for (const id of apart) {
+              if (kind === 'remote') { (cardRecord.laws ??= []).push({ law: 'L6', who: id, verdict: 'ok', why: 'remote: stays where they are' }); continue; }
+              if (kind === 'public') { const { metres, floors } = gap(id); (cardRecord.laws ??= []).push(metres <= 25 && !floors ? { law: 'L6', who: id, verdict: 'ok', why: 'public: within earshot' } : { law: 'L6', who: id, verdict: 'held', why: `public, but ${Math.round(metres)} m away${floors ? `, ${floors} floors apart` : ''}: out of earshot` }); continue; }
+              const a = at(positions[speaker][0]), { nodes } = around(a[0], a[2], 8), ring = nodes.filter(node => Math.abs(node.y - a[1]) < 1 && Math.hypot(node.x - a[0], node.z - a[2]) >= 2 && Math.hypot(node.x - a[0], node.z - a[2]) <= 4).map(node => node.id);
+              moveTo(id, walk(scene, `${scene.id}|${card.id}|${id}|talk`, positions[id], ring, 'walk'), 'walk', `spoken to by ${names.get(speaker)}`);
             }
           } else for (const person of card.people.filter(entry => positions[entry.id] && entry.how.includes('acts')).map(entry => entry.id)) {
             if (calls >= budget) { cardRecord.moves.push({ person, why: 'budget spent' }); continue; }
@@ -430,6 +464,9 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
         await stream(`scene ${Number(scene.id.slice(-3))} played`, null, true);
         before = { scene, reads, positions: { ...positions } };
         for (const [who, value] of Object.entries(positions)) where.set(who, value);
+        endOf.set(scene.id, { ...positions });
+        const fork = strandScene.get(scene.id)?.fork;
+        if (fork) { const inStrand = lastIn.get(fork) ?? lastIn.set(fork, new Map()).get(fork); for (const [who, value] of Object.entries(positions)) inStrand.set(who, value); }
         log(`${scene.id}: ${cards.length} cards, ${sceneRecord.cards.reduce((n, card) => n + card.moves.filter(move => move.moved).length, 0)} moves, ${calls} calls so far`);
         await save();
       }

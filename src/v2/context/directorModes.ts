@@ -156,3 +156,23 @@ export const sceneGoesOnMode: Mode<GoesOnFocus, unknown> = {
   questions: () => [{ key: "goes_on", primitive: "choice", instructions: "Does the next scene go straight on from the first?", options: ["yes", "no"], optionHints: { yes: "the same moment carries on: the people go on from where they were", no: "a jump: another time, another place, or other people" } }] as DecisionQuestion[],
   budget: 8000,
 };
+
+/**
+ * A dialogue card's kind (L6, docs/v2/physics-laws.md; the user, 2026-11-02: asked of Jev): face to face (two, or a
+ * group), remote (a phone, a message, a letter, telepathy), or one voice to everyone around. Asked from the card's lines
+ * and who is present and how far apart, only where those it speaks to stand apart from the speaker: the kind decides
+ * whether they come together (face to face) or stay where they are (remote, public).
+ */
+export interface TalkFocus { scene: { id: string; place: string }; lines: Line[]; speaker: string; people: { name: string; metres: number; floors: number }[] }
+export const TALK_KINDS = { live: "two people face to face", group: "three or more face to face, together", remote: "apart: a phone, a video call, a message, a letter, telepathy", public: "one voice to everyone around: a shout, an announcement, a loudspeaker" } as const;
+export const dialogueKindMode: Mode<TalkFocus, unknown> = {
+  name: "dialogue-kind",
+  task: (focus) => `A conversation in a novel, in ${focus.scene.place}: its lines, who speaks first (${focus.speaker}), and the others present with how far each stands from the speaker now. What kind of talk is it?`,
+  sources: [
+    fixed<TalkFocus>("lines", (focus) => Object.fromEntries(focus.lines.map((line) => [line.id, line.text]))),
+    fixed<TalkFocus>("present", (focus) => Object.fromEntries(focus.people.map((person) => [person.name, `${Math.round(person.metres)} m from ${focus.speaker}${person.floors ? `, ${person.floors} floor${person.floors === 1 ? "" : "s"} apart` : ""}`]))),
+  ],
+  cutOrder: [],
+  questions: () => [{ key: "kind", primitive: "choice", instructions: "What kind of talk is it?", options: Object.keys(TALK_KINDS), optionHints: { ...TALK_KINDS } }] as DecisionQuestion[],
+  budget: 6000,
+};

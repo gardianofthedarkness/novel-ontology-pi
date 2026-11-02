@@ -407,6 +407,15 @@ its director's pass) in `run.json` (`system2`), and the run's log says how often
 end to end on scene 1 with a fake Jev unsure of everything: 148 answers went to the work model in 17 requests. The
 director turns it on when `WORK_LLM_*` is configured (the reading's DeepSeek), and says so when it is not.
 
+**Built (2026-11-02): W4**, the laws deciding as the director plays: continuity per strand at every scene's start (L1:
+someone comes in from the scene the strands name, never from another strand's state); each dialogue card where someone
+spoken to stands apart is given its kind by Jev (L6: face to face gathers, remote moves nobody, public is heard within
+25 m and held beyond); an actor with no place is held (L9); a move no walk reaches is held with why (L10; someone already
+at their spot is not a break). Every verdict is kept with its card (`laws`) and goes into the ledger as applied or held.
+Checked with stand-ins on scenes 1–6 of a scratch copy: 233 moves, 158 walked, 41 already there, 12 talks given a kind,
+3 actors and 34 moves held. Found on the way: a room in a turned building could be shut (its door's plan cell falls
+between world cells), fixed (a corridor cell beside a door counts).
+
 Order: W1 and W2 first (no model calls; they show the size of the problem), then W3 and W4, then W5 and W6, W7 alongside,
 then W8. Track A runs in parallel throughout.
 
