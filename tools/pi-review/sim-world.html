@@ -61,6 +61,8 @@
   .reader .ctl #rgo { border-color: var(--jev); color: var(--bg); background: var(--jev); }
   .reader .book { overflow-y: auto; overscroll-behavior: contain; padding: 6px 12px 40px; font-size: 15px; line-height: 1.85; color: #c9d6de; }
   .reader .book p { margin: 0 0 .6em; }
+  /* Its header, kinds, controls, then the book taking the rest. */
+  .blist.reader { grid-template-rows: auto auto auto minmax(0, 1fr); }
   /* The EPUB as published: its headings and pictures, in this panel's type. */
   .reader .book .doc { border-bottom: 1px solid var(--line); padding-bottom: 1em; margin-bottom: 1em; }
   .reader .book .doc h1, .reader .book .doc h2, .reader .book .doc h3 { color: var(--ink); font-size: 17px; line-height: 1.5; margin: 1em 0 .6em; text-wrap: balance; }
@@ -431,7 +433,20 @@
     if (n !== undefined) playCard(n);
     subtitle(allSentences[cursor]);
   });
-  $("copen").addEventListener("click", () => { loadKinds(); if (!nextBlock) loadBlock(); });
+  // Opened, the book is laid out from its start whatever read along has fetched already (Auto may run before Read is opened).
+  // Then it is shown at the sentence being read or the card playing, the book laid out as far as that (forty documents at most).
+  const reveal = async (id) => {
+    if (!id) return;
+    for (let n = 0; n < 40 && !bookDone && !$("book").querySelector(`.s[data-id="${id}"]`); n++) { while (loading) await new Promise((done) => setTimeout(done, 100)); if (!$("book").querySelector(`.s[data-id="${id}"]`)) await loadBlock(); }
+    if (id === allSentences[cursor]?.id) for (const span of $("book").querySelectorAll(`.s[data-id="${id}"]`)) span.classList.add("reading");
+    $("book").querySelector(`.s[data-id="${id}"]`)?.scrollIntoView({ block: "center" });
+  };
+  $("copen").addEventListener("click", async () => {
+    if ($("clist").hidden) return;
+    loadKinds();
+    if (!$("book").querySelector(".doc, p")) await loadBlock();
+    reveal(auto || cursor ? allSentences[cursor]?.id : cards[cardAt]?.lines[0]?.id);
+  });
   $("rgo").addEventListener("click", () => { setAuto(false); goOn(); });
   $("cnow").addEventListener("click", () => { setAuto(false); $("replaying").hidden = true; send({ type: "live" }); });
   $("cagain").addEventListener("click", () => playCard(Math.max(0, cardAt)));
