@@ -38,7 +38,8 @@ export function worldLog({ run, record, page, spawn, strands }) {
       if (node == null) continue;
       const at = point(decode(node)), before = last.get(who);
       let fields;
-      if (sceneRecord.carried.includes(who)) fields = { how: 'carried', rank: before?.rank ?? 'ruled', source: 'carried', from: before?.id ?? null };
+      if (sceneRecord.revised?.includes(who)) { const revision = record.revisions?.find(entry => entry.applied && entry.who === who && entry.moments?.includes(scene.id)); fields = { how: 'revised', rank: 'ruled', source: 'back-propagated', from: before?.id ?? null, ...(revision ? { anchor: { scene: revision.scene, to: revision.to, item: revision.item } } : {}) }; }
+      else if (sceneRecord.carried.includes(who)) fields = { how: 'carried', rank: before?.rank ?? 'ruled', source: 'carried', from: before?.id ?? null };
       else if (sceneRecord.spawned.includes(who)) { const by = spawned?.starts?.find(entry => entry.who === who)?.by ?? null; fields = { how: 'spawned', rank: STATED_BY.has(by) ? 'stated' : 'ruled', source: `spawn:${by ?? 'anchor'}` }; }
       else if (sceneRecord.offPage.includes(who)) fields = { how: 'arrived', rank: 'ruled', source: 'off-page', from: before?.id ?? null };
       else fields = { how: 'arrived', rank: 'ruled', source: 'walked in', from: before?.id ?? null };
@@ -52,9 +53,11 @@ export function worldLog({ run, record, page, spawn, strands }) {
         const said = moves.find(entry => entry.person === move.person && entry.moved), why = String(said?.why ?? '');
         const talk = why.startsWith('spoken to by '), together = why.startsWith('with ');
         const tie = talk || together ? Object.keys(scene.starts).find(id => page.people?.[id]?.name === why.replace(/^(spoken to by|with) /, '')) ?? null : null;
-        const fields = event.id.startsWith('arrive') ? { rank: 'ruled', source: 'walked in' } : talk ? { rank: 'ruled', source: 'talk' } : together ? { rank: 'answered', source: 'with' } : { rank: 'answered', source: 'answer', way: said?.direction ?? null };
+        const fields = said?.pinned ? { rank: 'pinned', source: talk ? 'met (the review)' : 'the review' } : event.id.startsWith('arrive') ? { rank: 'ruled', source: 'walked in' } : talk ? { rank: 'ruled', source: 'talk' } : together ? { rank: 'answered', source: 'with' } : { rank: 'answered', source: 'answer', way: said?.direction ?? null };
         last.set(move.person, add({ kind: 'position', strand, scene: scene.id, place: scene.place, card: card?.card ?? event.id, who: move.person, at: point(decode(move.path.at(-1))), how: move.how, metres: round(metresOf(move.path, decode)), from: last.get(move.person)?.id ?? null, ...(tie ? { ties: [tie] } : {}), ...fields }));
       }
+      // An arrival the review pinned (no walk, they get there): where they are now, at the rank of the pin.
+      for (const move of moves.filter(entry => entry.arrived && entry.at)) last.set(move.person, add({ kind: 'position', strand, scene: scene.id, place: scene.place, card: card.card, who: move.person, at: point(move.at), how: 'arrived', metres: 0, from: last.get(move.person)?.id ?? null, rank: 'pinned', source: 'the review' }));
       const gathered = moves.filter(move => String(move.why ?? '').startsWith('spoken to by '));
       if (card?.kind === 'dialogue' && gathered.length) add({ kind: 'meeting', strand, scene: scene.id, card: card.card, parties: [...new Set(gathered.map(move => move.person))], rank: 'ruled', source: 'talk gathers' });
       if (event.hit) add({ kind: 'damage', strand, scene: scene.id, card: card?.card ?? event.id, lot: event.hit.lot ?? null, sphere: event.hit.sphere ?? null, strength: event.hit.strength ?? null, rank: 'answered', source: 'blast' });
@@ -87,6 +90,8 @@ export function proposalsOf({ run, log, laws, eventOf, record = null }) {
   }
   // What the world's own check found round each scene (W0): a broken world, held for the review apart from the story's laws.
   for (const scene of record?.scenes ?? []) for (const issue of scene.world ?? []) add({ kind: 'world', state: 'held', source: 'check', subject: issue.source ?? null, value: { scene: scene.scene, code: issue.code, lot: issue.lot, ...(issue.room != null ? { room: issue.room } : {}), name: issue.name ?? null }, evidence: [] });
+  // Back-propagation's revisions (§5a, W5): applied below the limit, else held for the review (class R), with their size.
+  for (const revision of (record?.revisions ?? []).filter(entry => !entry.other)) add({ kind: 'revision', state: revision.applied ? 'applied' : 'held', source: 'back-propagation', subject: revision.who, value: { scene: revision.scene, to: revision.to, moments: revision.moments ?? [], metres: revision.metres ?? null, item: revision.item ?? null, ...(revision.held ? { why: `no bridge (${revision.held})` } : {}) }, evidence: [] });
   // What the laws find over the whole run afterwards (W2): held for the review.
   for (const law of laws) for (const broken of law.violations) add({ kind: 'held', state: 'held', subject: broken.who ?? null, law: law.law, value: { what: broken.what, why: broken.why }, evidence: [] });
   return out;

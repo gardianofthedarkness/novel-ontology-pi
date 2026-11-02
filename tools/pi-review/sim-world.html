@@ -106,6 +106,11 @@
   .reader .qa .pics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
   .reader .qa .pics img { width: 120px; height: auto; border-radius: 4px; border: 1px solid var(--line); }
   .reader .notes ol { margin: 6px 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+  /* The laws, system 2, the card's proposals and the review (Track B W7); the run's report; a line whose speaker the world changed. */
+  .reader .qa .v-held, .reader .qa .v-proposed.held { color: #ff9a8a; } .reader .qa .v-ok, .reader .qa .v-applied { color: #8fd18f; } .reader .qa .v-pinned, .reader .qa .v-amend { color: #e8c46a; }
+  .reader .qa .tag { display: inline-block; min-width: 3.2em; font-weight: 600; }
+  .reader .report table { border-collapse: collapse; font-size: 12px; margin: 4px 0; } .reader .report td { padding: 1px 8px 1px 0; vertical-align: top; }
+  .reader .book .s.respoken { text-decoration: line-through wavy #ff9a8a; text-decoration-thickness: 1px; }
   .reader .notes li { margin: 3px 0; overflow-wrap: anywhere; }
   .reader .notes li small { color: var(--dim); }
   .reader .notes textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--ink); background: #0b1a24; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 4px 0; }
@@ -157,7 +162,7 @@
 </section>
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
 <section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
-<section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (➜: someone moved). Tap one to play it here.</span></header><div class="keys" aria-label="Sentence kinds"><span class="k-spoken">dialogue</span><span class="k-action">action</span><span class="k-environment">environment</span><span class="k-thought">thought</span><span class="k-fact">fact</span><span class="k-narration">narration</span><span class="m-person">person</span><span class="m-place">place</span><span class="m-thing">thing</span><span class="m-time">time</span></div><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="rauto" aria-pressed="false">Auto</button><button data-cps="5" aria-pressed="false">Read slow</button><button data-cps="8" aria-pressed="true">normal</button><button data-cps="14" aria-pressed="false">fast</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div><details class="why" id="cwhy"><summary>Why · Jev's questions and our notes <span id="cnotecount"></span></summary><div id="cqa" class="qa"></div><div class="notes"><ol id="cnotes"></ol><textarea id="cnote" rows="2" placeholder="What looks wrong in this card? (where, who, what the text says)"></textarea><div class="ctl"><button id="csend">Add note</button><button id="call">All notes</button></div><ol id="callnotes" hidden></ol></div></details></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
+<section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (➜: someone moved). Tap one to play it here.</span></header><div class="keys" aria-label="Sentence kinds"><span class="k-spoken">dialogue</span><span class="k-action">action</span><span class="k-environment">environment</span><span class="k-thought">thought</span><span class="k-fact">fact</span><span class="k-narration">narration</span><span class="m-person">person</span><span class="m-place">place</span><span class="m-thing">thing</span><span class="m-time">time</span></div><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="rauto" aria-pressed="false">Auto</button><button data-cps="5" aria-pressed="false">Read slow</button><button data-cps="8" aria-pressed="true">normal</button><button data-cps="14" aria-pressed="false">fast</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div><details class="why" id="cwhy"><summary>Why · Jev's questions, the laws, the review and our notes <span id="cnotecount"></span></summary><div id="claws" class="qa"></div><div id="cqa" class="qa"></div><div class="notes"><ol id="cnotes"></ol><textarea id="cnote" rows="2" placeholder="What looks wrong in this card? (where, who, what the text says)"></textarea><div class="ctl"><button id="csend">Add note</button><button id="call">All notes</button><button id="creportgo">Run report</button></div><ol id="callnotes" hidden></ol><div id="creport" class="qa report" hidden></div></div></details></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
 <section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
 <div class="sub" id="sub" hidden aria-live="polite"><b id="subwho"></b><span id="subtx"></span></div>
@@ -210,7 +215,7 @@
   // The reading as the reader shows it (play/reading.json, from the director's reading; the user, 2026-11-02: a transparent
   // design): each sentence's kind, and the names, descriptions and times detected in it, marked where they stand with
   // whom or what they mean, as the reading's page marks them.
-  let kindOf = null, marksOf = new Map(), namesOf = new Map();
+  let kindOf = null, marksOf = new Map(), namesOf = new Map(), review = null;
   const textOf = new Map();
   const loadKinds = async () => {
     if (kindOf) return;
@@ -245,7 +250,7 @@
       }
     }
   };
-  const mark = () => { for (const span of $("book").querySelectorAll(".s")) { const n = cardOfSentence.get(span.dataset.id), kind = kindOf?.get(span.dataset.id); if (kind && !span.classList.contains(`k-${kind}`)) span.classList.add(`k-${kind}`); span.classList.toggle("played", n !== undefined); span.classList.toggle("moved", n !== undefined && cards[n].moves.some((m) => m.moved)); span.classList.toggle("current", n !== undefined && n === cardAt); } };
+  const mark = () => { for (const span of $("book").querySelectorAll(".s")) { const n = cardOfSentence.get(span.dataset.id), kind = kindOf?.get(span.dataset.id); if (kind && !span.classList.contains(`k-${kind}`)) span.classList.add(`k-${kind}`); span.classList.toggle("played", n !== undefined); span.classList.toggle("moved", n !== undefined && cards[n].moves.some((m) => m.moved)); span.classList.toggle("current", n !== undefined && n === cardAt); const changed = review?.speakers?.[span.dataset.id]; span.classList.toggle("respoken", !!changed); if (changed) span.title = `speaker: ${namesOf.get(changed.from)?.[0] ?? changed.from} → ${changed.to ? namesOf.get(changed.to)?.[0] ?? changed.to : "someone else"} (${changed.by})`; } };
   // Why: the questions Jev was asked for a card, from the question log (live/frames.jsonl, the latest run's: from its last
   // first call), matched by the card's place in its scene ("scene 1 · card 15/20 · …"); and the notes on it.
   let frames = null, framesKey = "", notes = [];
@@ -261,9 +266,34 @@
   const valueOf = (value) => { const names = new Map(cards.flatMap((card) => card.moves.map((m) => [m.who, m.name]))); return (value && typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")).replace(/(char|slot)_\d+(_\d+)?/g, (id) => names.get(id) ?? namesOf.get(id)?.[0] ?? id); };
   const loadNotes = async () => { notes = await fetch(`notes.json${query}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])).catch(() => []); $("cnotecount").textContent = notes.length ? `· ${notes.length} note${notes.length === 1 ? "" : "s"}` : ""; };
   const noteRow = (note, play) => { const li = document.createElement("li"); li.innerHTML = `<small>${esc(note.at.slice(5, 16).replace("T", " "))} · ${esc(note.scene ?? "")} ${esc(note.card)}</small><br>${esc(note.text)}`; if (play) { li.style.cursor = "pointer"; li.addEventListener("click", () => { const n = cards.findIndex((card) => card.card === note.card && card.scene === note.scene); if (n >= 0) { playCard(n); showCard(n); } }); } return li; };
+  // What the laws, system 2, the ledger and the review made of the run (play/review.json, sim-play.mjs directorReview).
+  const loadReview = async () => { review = await fetch(`review.json${query}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null); mark(); return review; };
+  const verdictTag = (verdict) => `<span class="tag v-${esc(String(verdict).split(" ")[0])}">${esc(verdict)}</span>`;
+  const lawsHtml = (card) => {
+    const own = review?.cards?.[`${card.scene}|${card.card}`];
+    if (!own) return review ? `<div class="f"><b>The laws</b><div class="q"><i>nothing held or decided on this card</i></div></div>` : "";
+    const laws = own.laws.map((law) => `<div class="q">${verdictTag(law.verdict)} ${esc(law.law)} · ${esc(valueOf(law.who ?? ""))} <i>${esc(law.why ?? "")}${law.code ? ` (${esc(law.code)})` : ""}</i></div>`).join("");
+    const talk = own.talk ? `<div class="q">talk: <span class="a">${esc(own.talk.kind)}</span>${own.talk.pinned ? " <i>(the review)</i>" : typeof own.talk.confidence === "number" ? ` <i>(Jev ${Math.round(own.talk.confidence * 100)}%)</i>` : ""}</div>` : "";
+    const second = own.system2.map((entry) => `<div class="q"><i>${esc(entry.asked ?? entry.key)}</i><br>Jev <span class="${(entry.jev?.confidence ?? 1) < 0.5 ? "low" : ""}">${esc(valueOf(entry.jev?.value))} ${typeof entry.jev?.confidence === "number" ? Math.round(entry.jev.confidence * 100) + "%" : ""}</span> · work model <span class="a">${entry.work ? `${esc(valueOf(entry.work.value))} ${Math.round(entry.work.confidence * 100)}%` : "no answer"}</span> · used: <b>${esc(entry.used)}</b></div>`).join("");
+    const proposals = own.proposals.map((entry) => `<div class="q">${verdictTag(entry.state)} ${esc(entry.kind)}${entry.law ? ` ${esc(entry.law)}` : ""} · ${esc(valueOf(entry.subject ?? ""))} <i>${esc(entry.why ?? "")}</i></div>`).join("");
+    const asked = own.review.map((item) => `<div class="q"><i>${esc(item.question)}</i><br>${item.answer ? `${verdictTag(item.status === "applied" ? "pinned" : item.status)} <span class="a">${esc(item.answer)}</span> <i>${esc(item.reason ?? "")}</i>` : `${verdictTag("held")} <i>waiting for the main agent (${esc(item.options.join(" / "))})</i>`}${item.note ? `<br><i>${esc(item.note)}</i>` : ""}</div>`).join("");
+    return [laws || talk ? `<div class="f"><b>The laws · as the card played</b>${talk}${laws}</div>` : "", second ? `<div class="f"><b>System 2 · below 50%, the same question to the work model</b>${second}</div>` : "", proposals ? `<div class="f"><b>Proposals · to the ontology</b>${proposals}</div>` : "", asked ? `<div class="f"><b>The review · the main agent's</b>${asked}</div>` : ""].join("");
+  };
+  const reportHtml = () => {
+    const r = review?.report;
+    if (!r) return "No run report yet.";
+    const rows = (object) => Object.entries(object ?? {}).sort().map(([key, value]) => `<tr><td>${esc(key)}</td><td>${esc(typeof value === "object" ? JSON.stringify(value) : value)}</td></tr>`).join("");
+    return `<div class="f"><b>Run ${esc(r.run ?? "")} · ${esc(r.from ?? "")} – ${esc(r.to ?? "")} · ${esc(r.model ?? "")} · ${r.calls ?? "?"} calls</b>
+      <table><tr><td colspan="2"><b>The laws</b></td></tr>${rows(r.laws)}<tr><td colspan="2"><b>System 2</b></td></tr>${rows(r.system2)}<tr><td colspan="2"><b>Proposals</b></td></tr>${rows(r.proposals)}<tr><td colspan="2"><b>The review</b></td></tr>${rows(r.review)}<tr><td colspan="2"><b>Into canon</b></td></tr>${rows(r.canon?.applied ? { ...Object.fromEntries(Object.entries(r.canon.applied).map(([k, v]) => [`${k} applied`, v])), ...Object.fromEntries(Object.entries(r.canon.held ?? {}).map(([k, v]) => [`${k} held`, v])) } : r.canon ?? {})}</table>
+      ${r.revisions.length ? `<b>Back-propagated</b>${r.revisions.map((v) => `<div class="q">${verdictTag(v.applied ? "applied" : "held")} ${esc(valueOf(v.who))} → ${esc(valueOf(v.to))} in ${esc(v.scene)} · ${v.metres ?? "?"} m${v.held ? ` · ${esc(v.held)}` : ""}</div>`).join("")}` : ""}
+      ${r.world.length ? `<b>The world's own check</b>${r.world.map((w) => `<div class="q">${verdictTag("held")} ${esc(w.scene)} ${esc(w.code)} ${esc(w.name ?? "")}</div>`).join("")}` : ""}</div>`;
+  };
+  loadReview();
+  $("creportgo").addEventListener("click", async () => { $("creport").hidden = !$("creport").hidden; if (!$("creport").hidden) { if (!review) await loadReview(); $("creport").innerHTML = reportHtml(); } });
   const showWhy = async () => {
     const card = cards[cardAt];
     if (!$("cwhy").open) return;
+    $("claws").innerHTML = card ? lawsHtml(card) : "";
     $("cnotes").replaceChildren(...notes.filter((note) => card && note.card === card.card && note.scene === card.scene).map((note) => noteRow(note, false)));
     $("callnotes").replaceChildren(...notes.slice().reverse().map((note) => noteRow(note, true)));
     if (!card) { $("cqa").textContent = "Tap a played sentence to see its card."; return; }
@@ -275,7 +305,7 @@
     if (cards[cardAt] !== card) return;
     $("cqa").innerHTML = saidHtml + (own.length ? own.map((frame) => `<div class="f"><b>${esc(frame.phase.slice(phase.length + 3) || phase)} · call ${frame.call}</b>${frame.questions.map((q, k) => { const a = frame.answers.find((answer) => answer.key === q.key) ?? frame.answers[k]; return `<div class="q"><i>${esc(q.instructions)}</i><br><span class="a">${esc(valueOf(a?.value ?? a?.box))}</span>${typeof a?.confidence === "number" ? ` <span class="${a.confidence < 0.6 ? "low" : ""}">${Math.round(a.confidence * 100)}%</span>` : ""}${a?.top?.length > 1 ? ` <i>· else ${a.top.slice(1, 3).map(([v, c]) => `${esc(valueOf(v))} ${Math.round(c * 100)}%`).join(", ")}</i>` : ""}</div>`; }).join("")}${frame.pictures?.length ? `<div class="pics">${frame.pictures.map((picture) => `<a href="live/${esc(picture.file)}${esc(query)}" target="_blank" rel="noopener"><img loading="lazy" alt="${esc(picture.name)}" src="live/${esc(picture.file)}${esc(query)}"></a>`).join("")}</div>` : ""}</div>`).join("") : saidHtml ? "" : "No question was asked for this card.");
   };
-  $("cwhy").addEventListener("toggle", () => { if ($("cwhy").open) loadNotes().then(showWhy); });
+  $("cwhy").addEventListener("toggle", () => { if ($("cwhy").open) Promise.all([loadNotes(), loadReview()]).then(showWhy); });
   $("call").addEventListener("click", () => { $("callnotes").hidden = !$("callnotes").hidden; });
   $("csend").addEventListener("click", async () => {
     const card = cards[cardAt], text = $("cnote").value.trim();

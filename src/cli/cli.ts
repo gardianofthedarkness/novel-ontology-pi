@@ -66,6 +66,7 @@ import { checklistCommand } from "./commands/extract/checklistCommands.js";
 import { SIM_USAGE, simPick, simRun, simShow, simStrands, simTerrain } from "./commands/extract/simCommands.js";
 import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js";
 import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
+import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
 import { STAGE_USAGE, stageArchitecture, stageLandscape, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
@@ -147,6 +148,13 @@ const COMMANDS: Record<string, string> = {
   "novel source grep <novel-dir> <regex> [--limit N]": "Original sentences matching a regular expression, with sentence and scene ids (read-only)",
   "novel source similar <novel-dir> <text> [--limit N]": "The original passages most like a text (lexical retrieval), with sentence and scene ids (read-only)",
   "novel world pool|batch|answer <novel-dir> …": "World-first review pool: what the world flagged, a batch for the main agent, and its answers (novel world answer <dir> <batch> <item> <option> --reason <text>)",
+  "novel world log <novel-dir> --scene|--person|--card <id> [--run <id>]": "The world log of the last director run: who was where, moves, meetings, blasts, and the laws' verdicts (read-only)",
+  "novel world held <novel-dir> [--run <id>] [--budget N]": "A director run's held items (what the laws could not settle, and the user's notes) into the review pool, one batch per scene by reach",
+  "novel world apply <novel-dir>": "The main agent's answers into the pins the director plays by, under the laws (what they turn back returns to the pool)",
+  "novel world canon <novel-dir> [--run <id>]": "What a director run settled into canon by its gates: presence, place, speakers, where each person is, strands (undoable)",
+  "novel world undo <novel-dir> --run <id>": "A director run's writes to canon taken back, each record to what it replaced",
+  "novel reading <novel-dir> card|scene|line <id>": "The v2 reading of a card, a scene or a line: kinds, speakers and how sure, people, place and time, with the text (read-only)",
+  "novel source epub <novel-dir> [--doc N] [--grep <regex>] [--offset N] [--limit N]": "The original EPUB as published: its documents, one document's paragraphs, or the paragraphs matching (read-only)",
   "novel search <novel-dir> <text> [--limit N]":
     "Graph-first text search (Cypher CONTAINS scan)",
   "novel state <novel-dir> <character-id> [--at <event-id>]":
@@ -733,6 +741,20 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "reading") {
+    const novelDir = positional[1];
+    if (!novelDir || !positional[2] || !positional[3]) throw new Error("Usage: novel reading <novel-dir> card|scene|line <id>");
+    out(await readingShow(novelDir, positional[2], positional[3]), pretty);
+    return;
+  }
+
+  if (cmd === "source" && sub === "epub") {
+    const novelDir = positional[2], number = (name: string) => { const value = flag(positional, name); if (value === undefined) return undefined; if (!/^\d+$/.test(value)) throw new Error(`${name} must be a whole number.`); return Number(value); };
+    if (!novelDir) throw new Error("Usage: novel source epub <novel-dir> [--doc N] [--grep <regex>] [--offset N] [--limit N]");
+    out(await sourceEpub(novelDir, { doc: number("--doc"), grep: flag(positional, "--grep"), offset: number("--offset"), limit: number("--limit") }), pretty);
+    return;
+  }
+
   if (cmd === "source") {
     const novelDir = positional[2];
     if (!["grep", "similar"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel source grep|similar <novel-dir> <regex|text> [--limit N]");
@@ -745,8 +767,13 @@ async function main(): Promise<void> {
 
   if (cmd === "world") {
     const novelDir = positional[2];
-    if (!["pool", "batch", "answer"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel world pool <novel-dir> | batch <novel-dir> <batch-id> | answer <novel-dir> <batch-id> <item> <option> --reason <text>");
+    if (!["pool", "batch", "answer", "log", "held", "apply", "canon", "undo"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel world pool <novel-dir> | batch <novel-dir> <batch-id> | answer <novel-dir> <batch-id> <item> <option> --reason <text> | log <novel-dir> --scene|--person|--card <id> | held <novel-dir> [--run <id>] [--budget N] | apply <novel-dir> | canon <novel-dir> [--run <id>] | undo <novel-dir> --run <id>");
     if (sub === "pool") { out(await worldPool(novelDir), pretty); return; }
+    if (sub === "log") { out(await worldLogShow(novelDir, { scene: flag(positional, "--scene"), person: flag(positional, "--person"), card: flag(positional, "--card"), run: flag(positional, "--run") }), pretty); return; }
+    if (sub === "held") { const budget = flag(positional, "--budget"); out(await worldHeld(novelDir, { run: flag(positional, "--run"), budget: budget === undefined ? undefined : Number(budget) }), pretty); return; }
+    if (sub === "apply") { out(await worldApply(novelDir), pretty); return; }
+    if (sub === "canon") { out(await worldCanon(novelDir, { run: flag(positional, "--run") }), pretty); return; }
+    if (sub === "undo") { out(await worldUndo(novelDir, { run: flag(positional, "--run") }), pretty); return; }
     if (sub === "batch") { if (!positional[3]) throw new Error("Usage: novel world batch <novel-dir> <batch-id>"); out(await worldBatch(novelDir, positional[3]), pretty); return; }
     const reason = flag(positional, "--reason");
     if (!positional[3] || !positional[4] || !positional[5] || positional[5].startsWith("--") || !reason) throw new Error("Usage: novel world answer <novel-dir> <batch-id> <item> <option> --reason <text>");

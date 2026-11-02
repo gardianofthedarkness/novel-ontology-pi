@@ -1,3 +1,11 @@
+/** Flags and values, each flag once and from `allowed` (name → the pattern its value must match). */
+const pairs = (rest, allowed) => {
+  if (rest.length % 2) return false;
+  const seen = new Set();
+  for (let index = 0; index < rest.length; index += 2) { const pattern = allowed[rest[index]]; if (!pattern || seen.has(rest[index]) || !pattern.test(rest[index + 1])) return false; seen.add(rest[index]); }
+  return true;
+};
+
 export function tokenize(command) {
   const tokens = [];
   let value = '';
@@ -370,9 +378,13 @@ function permit(command, scope) {
   if (verb === 'graph') valid = operation === 'build' && tokens.length === 3 && tokens[2] === `${novel}/ontology`;
   if (verb === 'query') valid = operation === novel && tokens.length === 3 && /^\s*MATCH\b/i.test(tokens[2]) && !/\b(CREATE|MERGE|SET|DELETE|DROP|ALTER|COPY|LOAD|INSTALL|ATTACH|CALL|REMOVE)\b|;/i.test(tokens[2]);
   // The original text, read-only: a regular expression, or the passages most like a text.
-  if (verb === 'source') valid = ['grep', 'similar'].includes(operation) && tokens[2] === novel && !!tokens[3] && (tokens.length === 4 || tokens.length === 6 && tokens[4] === '--limit' && /^\d+$/.test(tokens[5]) && Number(tokens[5]) >= 1 && Number(tokens[5]) <= 50);
+  if (verb === 'source') valid = ['grep', 'similar'].includes(operation) && tokens[2] === novel && !!tokens[3] && (tokens.length === 4 || tokens.length === 6 && tokens[4] === '--limit' && /^\d+$/.test(tokens[5]) && Number(tokens[5]) >= 1 && Number(tokens[5]) <= 50)
+    // The original EPUB as published (Track B W5): its documents, one of them paged, or its paragraphs matching.
+    || operation === 'epub' && tokens[2] === novel && pairs(tokens.slice(3), { '--doc': /^\d{1,4}$/, '--grep': /^.{1,200}$/su, '--offset': /^\d{1,6}$/, '--limit': /^\d{1,3}$/ });
+  // The v2 reading of a card, a scene or a line (W5).
+  if (verb === 'reading') valid = operation === novel && tokens.length === 4 && ['card', 'scene', 'line'].includes(tokens[2]) && /^[\w:.-]{1,80}$/.test(tokens[3]);
   // A world-first book's review pool: read it, read a batch, answer one item (an option of it, with a reason).
-  if (verb === 'world') valid = tokens[2] === novel && (operation === 'pool' && tokens.length === 3 || operation === 'batch' && tokens.length === 4 && /^wb_[a-f0-9]{16}$/.test(tokens[3]) || operation === 'answer' && tokens.length === 8 && /^wb_[a-f0-9]{16}$/.test(tokens[3]) && /^wi_[a-f0-9]{16}$/.test(tokens[4]) && !!tokens[5] && tokens[6] === '--reason' && !!tokens[7] && tokens[7].length <= 600);
+  if (verb === 'world') valid = tokens[2] === novel && (operation === 'pool' && tokens.length === 3 || operation === 'log' && pairs(tokens.slice(3), { '--scene': /^[\w:.-]{1,80}$/, '--person': /^[\w:.-]{1,80}$/, '--card': /^[\w:.-]{1,80}$/, '--run': /^d\d{14}$/ }) && tokens.length > 3 || operation === 'batch' && tokens.length === 4 && /^wb_[a-f0-9]{16}$/.test(tokens[3]) || operation === 'answer' && tokens.length === 8 && /^wb_[a-f0-9]{16}$/.test(tokens[3]) && /^wi_[a-f0-9]{16}$/.test(tokens[4]) && !!tokens[5] && tokens[6] === '--reason' && !!tokens[7] && tokens[7].length <= 600);
   if (verb === 'search') valid = operation === novel && (tokens.length === 3 || tokens.length === 5 && tokens[3] === '--limit' && /^\d+$/.test(tokens[4]) && Number(tokens[4]) >= 1 && Number(tokens[4]) <= 30);
   if (verb === 'inspect') valid = operation === novel && tokens.length === 2;
   if (verb === 'timeline') valid = operation === 'list' && tokens.length === 3 && tokens[2] === novel;

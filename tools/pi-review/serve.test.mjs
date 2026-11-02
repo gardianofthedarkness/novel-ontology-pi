@@ -435,4 +435,13 @@ test('notes on the director\'s cards: added from the reader, listed for both, no
   assert.equal((await send(viewer, 'play/reading.json')).status, 404, 'no reading before a director run');
   await writeFile(join(directory, 'stage', 'director', 'reading.json'), JSON.stringify({ version: 2, kinds: { b0000_s0001: 'spoken' } }));
   assert.deepEqual(JSON.parse((await send(viewer, 'play/reading.json')).body).kinds, { b0000_s0001: 'spoken' });
+  // What the laws and the review made of the run (W7): per card, and the run's report.
+  assert.equal((await send(viewer, 'play/review.json')).status, 404, 'no review before a director run');
+  await mkdir(join(directory, 'stage', 'world', 'ledger'), { recursive: true });
+  await writeFile(join(directory, 'stage', 'director', 'run.json'), JSON.stringify({ model: 'm', from: 's1', to: 's1', scenes: [{ scene: 'scene_000001', cards: [{ card: 'dialogue:b0000_s0001', lines: [{ id: 'b0000_s0001' }], laws: [{ law: 'L6', who: 'char_1', verdict: 'held', why: 'out of earshot' }] }] }] }));
+  await writeFile(join(directory, 'stage', 'world', 'pool.jsonl'), JSON.stringify({ id: 'wi_1', kind: 'talk', scene: 'scene_000001', lines: ['b0000_s0001'], question: 'How?', options: ['live', 'remote'], status: 'answered' }) + '\n');
+  await writeFile(join(directory, 'stage', 'world', 'answers.jsonl'), JSON.stringify({ item: 'wi_1', verdict: 'remote', reason: 'a phone, b0000_s0001' }) + '\n');
+  const review = JSON.parse((await send(viewer, 'play/review.json')).body), card = review.cards['scene_000001|dialogue:b0000_s0001'];
+  assert.deepEqual([card.laws[0].verdict, card.review[0].answer], ['held', 'remote']);
+  assert.deepEqual(review.report.laws, { 'L6 held': 1 });
 });

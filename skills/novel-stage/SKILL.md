@@ -94,3 +94,42 @@ for the simulation, in its player (the **Simulation** link, `play/?volume=N`)
 and its live page (`play/live?volume=N`);
 no rebuild is needed. Do not run `--no-jev` unless the user asks for a free
 run; it leaves scales and buildings guessed from names and nobody moving.
+
+## The world's held items (the review)
+
+After a director run, what the physics laws could not settle comes to you as
+a batch per scene: a message names it (`World review wb_…`). You are the main
+agent for these: every answer you give is pinned, and the director plays by
+it on its next run. Nobody checks your answers but the laws, so answer from
+the text, never by default.
+
+1. `novel world batch <dir> <batch>` lists the items: each has a question,
+   its options, the scene, its cards or lines, and the law that held it.
+2. Read the evidence before answering: `novel reading <dir> card <card>` (the
+   lines, who says them and how sure, who acts), `novel reading <dir> scene
+   <scene>` (place, time, who is present, the scene's text),
+   `novel world log <dir> --scene <scene>` (who stood where, who moved, the
+   laws' verdicts), `novel source grep <dir> <regex>`, `novel source similar
+   <dir> <text>`, and `novel source epub <dir> --grep <regex>` (the book as
+   published, when the extracted text seems cut or garbled).
+3. Answer each item with one of its options:
+   `novel world answer <dir> <batch> <item> <option> --reason "<why, citing
+   sentence ids>"`. What the options mean:
+   - `actor`: someone acts or speaks but the world has no place for them.
+     `present` (they are there), `not present`, `remote` (they act from
+     elsewhere: a phone, a message, a broadcast, a power at a distance).
+   - `speaker`: a line's speaker (the reading's) has no place in the scene.
+     `present`, `remote`, `not the speaker` (someone else says it).
+   - `talk`: two people talk from far apart. `live` (face to face: they
+     were together, so the world moves one of them to the other, back to
+     their last sure position), `group`, `remote`, `public` (aloud, heard by
+     everyone near).
+   - `reach`: a move found no walk. `arrives` (they get there), `stays`,
+     `another way` (a leap, flight, a vehicle; say which in the reason).
+   - `continuity`, `two-places`, `travel`, `blast`, `revision`, `note`: as
+     their question says. A `note` is the user's own, on a card: say what is
+     wrong in the option and how it should be in the reason.
+4. One reason may settle several items of a scene; cite the sentences for
+   each. If the text cannot settle an item, answer what it says least
+   against and say so in the reason. The world goes on meanwhile; an answer
+   the laws turn back comes back in a later batch with why.

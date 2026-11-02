@@ -24,6 +24,7 @@ const { VENDOR_FILES, PICKER_MODEL, retried } = await import('../live/sim-jev.mj
 const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
+const R = await import('../review/review.mjs'), B = await import('../review/backprop.mjs'), C6 = await import('../review/canon.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
@@ -58,7 +59,7 @@ export async function readerView(reading, text) {
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
 }
 
-export async function direct(novelDir, { reading, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, log = console.error }) {
+export async function direct(novelDir, { reading, readingPath = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, log = console.error }) {
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -78,6 +79,17 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   const template = await readFile(join(repository, 'world-engine', 'view', 'strand-demo.html'), 'utf8');
   const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [] };
+  // The review (Track B W5, review.mjs): the main agent's answers since the last run become pins under the laws, and the
+  // director plays by them: presence, remote actors, talk kinds, arrivals, stays; a meeting pinned is an anchor, and the
+  // person's scene starts before it are back-propagated onto a bridge to it (backprop.mjs), least change kept. The
+  // reading played from is recorded for the review CLI (novel reading).
+  if (readingPath) await writeFile(join(out, 'reading-path.json'), JSON.stringify({ path: resolve(readingPath) }));
+  const reviewed = await R.applyAnswers(novelDir).catch(error => ({ error: String(error.message ?? error) }));
+  const pins = await R.loadPins(novelDir), lastRun = await R.latestRun(novelDir);
+  const oldLog = lastRun ? (await readFile(join(novelDir, 'stage', 'world', 'log', `${lastRun}.jsonl`), 'utf8').catch(() => '')).split('\n').filter(Boolean).map(row => JSON.parse(row)) : [];
+  const spans = B.spansOf({ pins, log: oldLog });
+  record.review = { applied: reviewed, from: lastRun, pins: { present: Object.keys(pins.present).length, remote: Object.keys(pins.remote).length, kind: Object.keys(pins.kind).length, arrive: Object.keys(pins.arrive).length, stays: Object.keys(pins.stays).length, meet: pins.meet.length }, spans: spans.length };
+  record.revisions = [];
   const save = () => writeFile(join(out, 'run.json'), JSON.stringify(record, null, 1));
   let calls = 0;
   /**
@@ -186,6 +198,37 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
       // `entries`), else from where they last stood in that strand; someone first in this strand is never carried in from
       // another one. Without strands, the one state of before.
       const strands = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null'));
+      // A span's bridge (backprop.mjs): drawn once, from the last anchor to beside the one met, and the draw that moves the
+      // history least kept; above the limit it is held for the review (a pinned 'apply' lets it through).
+      const bridgeOf = (span, scene) => {
+        if (span.bridge !== undefined) return span.bridge;
+        // Who came to whom: every way round of the meeting is drawn, and only the least change may apply.
+        const group = spans.filter(entry => entry.group === span.group);
+        if (group.length > 1 && group.every(entry => entry.bridge === undefined)) {
+          for (const entry of group) drawBridge(entry, scene);
+          const kept = group.filter(entry => entry.bridge).sort((a, b) => a.bridge.J - b.bridge.J)[0];
+          for (const entry of group) if (entry.bridge && entry !== kept) { entry.bridge.applied = false; const noted = record.revisions.find(revision => revision.span === entry); if (noted) { noted.applied = false; noted.other = true; } }
+          return span.bridge;
+        }
+        return drawBridge(span, scene);
+      };
+      const drawBridge = (span, scene) => {
+        if (span.bridge !== undefined) return span.bridge;
+        span.bridge = null;
+        const nodeAt = p => { E.reach(p.x, p.z, 24); return W.nodeNear(world, E.graphOf({ x: p.x, z: p.z }), p.x, p.z, Math.round(p.y / FLOOR)) ?? W.nodeNear(world, E.graphOf({ x: p.x, z: p.z }), p.x, p.z, null); };
+        const fromNode = nodeAt(span.from), toNode = nodeAt(span.target);
+        if (fromNode === null || fromNode === undefined || toNode === null || toNode === undefined) return span.bridge;
+        const t = at(toNode), ring = around(t[0], t[2], 4).nodes.filter(node => Math.abs(node.y - t[1]) < 1 && Math.hypot(node.x - t[0], node.z - t[2]) <= 3).map(node => node.id);
+        const path = walk(scene, `${span.scene}|${span.who}|bridge`, [fromNode, 0], ring.length ? ring : [toNode], 'walk');
+        const draws = path ? [path, ...(path.ensemble ?? [])].map(draw => draw.map(id => { const [x, y, z] = at(id); return { id, x, y, z }; })) : [];
+        const best = B.leastChange(draws, span.moments);
+        if (!best) { record.revisions.push({ who: span.who, to: span.to, scene: span.scene, item: span.item, held: walk.code ?? 'NO_PATH' }); return span.bridge; }
+        const decided = pins.revise?.[`${span.scene}|${span.who}`], forced = decided === 'apply';
+        span.bridge = { ...best, applied: decided === 'keep' ? false : best.J <= B.REVISION_LIMIT || forced };
+        record.revisions.push({ who: span.who, to: span.to, scene: span.scene, item: span.item, from: span.fromRecord, moments: span.moments.map(moment => moment.scene), metres: Math.round(best.J), applied: span.bridge.applied, ...(forced ? { forced: true } : {}) });
+        Object.defineProperty(record.revisions.at(-1), 'span', { value: span, enumerable: false });
+        return span.bridge;
+      };
       const strandScene = new Map((strands?.scenes ?? []).map(entry => [entry.id, entry]));
       const endOf = new Map(), lastIn = new Map();
       const prior = (who, sceneId) => {
@@ -228,7 +271,10 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
         // a scene going on from the last played far from it): the anchor is where those already here stand (the one nearest
         // their middle); with none here, spawning's start of the first present (one placed by the text's own words first).
         // Someone new starts a few metres from the anchor; someone from elsewhere walks to it (off-page beyond 300 m).
-        const present = [...new Set(own?.present ?? Object.keys(run.starts).filter(id => run.starts[id]))];
+        // Presence as the script has it, with the review's pins over it (someone answered present or not, W5).
+        const pinnedIn = Object.entries(pins.present).filter(([key, value]) => value && key.startsWith(`${scene.id}|`)).map(([key]) => key.slice(scene.id.length + 1));
+        const present = [...new Set([...(own?.present ?? Object.keys(run.starts).filter(id => run.starts[id])), ...pinnedIn])].filter(who => pins.present[`${scene.id}|${who}`] !== false);
+        if (pinnedIn.length || present.length < (own?.present?.length ?? present.length)) sceneRecord.pinned = { present: pinnedIn, absent: (own?.present ?? []).filter(who => !present.includes(who)) };
         for (const who of present) if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
         const was = new Map(present.map(who => [who, prior(who, scene.id)]));
         sceneRecord.laws = present.filter(who => where.get(who) && !was.get(who)).map(who => ({ law: 'L1', who, verdict: 'amend', why: 'first in this strand: not carried in from another strand' }));
@@ -250,8 +296,13 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
         };
         const positions = {}, travels = [];
         sceneRecord.spawned = []; sceneRecord.carried = []; sceneRecord.offPage = [];
+        // Back-propagated (§5a): someone whose span to a pinned meeting runs through this scene's start stands where the
+        // bridge to it has them, if the revision is small enough to apply.
+        const revisedAt = who => { const span = spans.find(entry => entry.who === who && entry.moments.some(moment => moment.scene === scene.id)); if (!span) return null; const bridge = bridgeOf(span, scene); if (!bridge?.applied) return null; return bridge.placed[span.moments.findIndex(moment => moment.scene === scene.id)]?.id ?? null; };
+        sceneRecord.revised = [];
         for (const who of present) {
-          const from = was.get(who);
+          const from = was.get(who), revised = revisedAt(who);
+          if (revised !== null && revised !== undefined) { positions[who] = [revised, from?.[1] ?? 0]; sceneRecord.revised.push(who); continue; }
           if (from && here.includes(who)) { positions[who] = from; sceneRecord.carried.push(who); continue; }
           const dest = beside(who);
           if (dest === null || dest === undefined) { if (from) positions[who] = from; continue; }
@@ -303,6 +354,9 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
           const moveTo = (person, path, how, why) => {
             // Reachable (L10): a move no walk reaches is held with why, and nobody moves.
             if (path && path.length < 2) { cardRecord.moves.push({ person, why: why ?? 'already there', moved: false }); return; }
+            const pinKey = `${scene.id}|${card.id}|${person}`;
+            if (!path && pins.arrive[pinKey] && walk.replay?.targets?.length) { positions[person] = [walk.replay.targets[0], positions[person][1]]; { const [x, y, z] = at(walk.replay.targets[0]); cardRecord.moves.push({ person, why: 'arrives (pinned by the review)', moved: true, arrived: true, pinned: true, to: said([x, y, z]), at: { x: round(x), y: round(y), z: round(z) } }); } (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'pinned', why: 'no walk there, but they get there (the review)' }); return; }
+            if (!path && pins.stays[pinKey]) { cardRecord.moves.push({ person, why: 'stays (pinned by the review)', moved: false, pinned: true }); (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'ok', why: 'they stay (the review)' }); return; }
             if (!path) { cardRecord.moves.push({ person, why, moved: false, ...(walk.code ? { code: walk.code, replay: walk.replay } : {}) }); (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'held', why: walk.failed ?? why ?? 'no walk there', ...(walk.code ? { code: walk.code } : {}) }); return; }
             E.moves.set(`${scene.id}|${card.id}|${person}`, { person, how: how === 'run' ? 'run' : 'walk', path: [...path], ensemble: path.ensemble ?? [] });
             positions[person] = [path.at(-1), positions[person][1]];
@@ -310,7 +364,7 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
           };
           // Actors are there (L9): someone the card says acts or speaks, with no place in the scene, is held (a presence the
           // script may have missed), never played.
-          for (const person of card.people.filter(entry => !positions[entry.id] && entry.how.some(how => how === 'acts' || how === 'speaks'))) (cardRecord.laws ??= []).push({ law: 'L9', who: person.id, verdict: 'held', why: 'acts or speaks, but is not present' });
+          for (const person of card.people.filter(entry => !positions[entry.id] && entry.how.some(how => how === 'acts' || how === 'speaks'))) (cardRecord.laws ??= []).push(pins.remote[`${scene.id}|${person.id}`] ? { law: 'L9', who: person.id, verdict: 'ok', why: 'remote (pinned by the review)' } : { law: 'L9', who: person.id, verdict: 'held', why: 'acts or speaks, but is not present' });
           if (card.kind === 'dialogue') {
             // Talk needs nearness, by its kind (L6; the user, 2026-11-02: the kind asked of Jev): where someone spoken to stands
             // apart from the first speaker, Jev says what kind of talk it is. Face to face (live, group), they come within
@@ -320,7 +374,9 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
             const gap = id => { const a = at(positions[speaker][0]), b = at(positions[id][0]); return { metres: Math.hypot(a[0] - b[0], a[2] - b[2]), floors: Math.round(Math.abs(a[1] - b[1]) / FLOOR) }; };
             const apart = speaker ? card.people.filter(entry => entry.id !== speaker && positions[entry.id] && entry.how.includes('addressed')).map(entry => entry.id).filter(id => gap(id).metres > 5 || gap(id).floors > 0) : [];
             let kind = 'live';
-            if (apart.length && calls < budget) {
+            const pinnedKind = pins.kind[card.id] ?? card.sentences.map(id => pins.kind[`line:${id}`]).find(Boolean);
+            if (pinnedKind) { kind = pinnedKind; cardRecord.talk = { kind, pinned: true }; }
+            else if (apart.length && calls < budget) {
               const others = Object.keys(positions).filter(id => id !== speaker).map(id => ({ name: names.get(id) ?? id, ...gap(id) }));
               const { replies } = await ask(decide, M.dialogueKindMode, { scene: { id: scene.id, place: placeName }, lines: card.sentences.map(line), speaker: names.get(speaker) ?? speaker, people: others }, null);
               const said = replies.find(reply => reply.key === 'kind');
@@ -331,6 +387,7 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
               if (kind === 'public') { const { metres, floors } = gap(id); (cardRecord.laws ??= []).push(metres <= 25 && !floors ? { law: 'L6', who: id, verdict: 'ok', why: 'public: within earshot' } : { law: 'L6', who: id, verdict: 'held', why: `public, but ${Math.round(metres)} m away${floors ? `, ${floors} floors apart` : ''}: out of earshot` }); continue; }
               const a = at(positions[speaker][0]), { nodes } = around(a[0], a[2], 8), ring = nodes.filter(node => Math.abs(node.y - a[1]) < 1 && Math.hypot(node.x - a[0], node.z - a[2]) >= 2 && Math.hypot(node.x - a[0], node.z - a[2]) <= 4).map(node => node.id);
               moveTo(id, walk(scene, `${scene.id}|${card.id}|${id}|talk`, positions[id], ring, 'walk'), 'walk', `spoken to by ${names.get(speaker)}`);
+              if (pins.meet.some(meet => meet.scene === scene.id && [meet.who, meet.to].includes(id) && [meet.who, meet.to].includes(speaker))) cardRecord.moves.at(-1).pinned = true;
             }
           } else for (const person of card.people.filter(entry => positions[entry.id] && entry.how.includes('acts')).map(entry => entry.id)) {
             if (calls >= budget) { cardRecord.moves.push({ person, why: 'budget spent' }); continue; }
@@ -489,6 +546,18 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
       // The run's world log, the laws over it and its proposals to the ontology (Track B W1, W2: logged, nothing applied).
       const written = await writeWorldLog(novelDir, { run: id, reading });
       log(`world log: ${JSON.stringify(written.log)}; laws broken: ${Object.entries(written.laws).filter(([, law]) => law.broken).map(([law, { broken }]) => `${law} ${broken}`).join(', ') || 'none'}`);
+      // What the laws held goes to the main agent (W5): one batch per scene by reach, sent to its console when one is given.
+      const held = await R.holdForReview(novelDir, { run: id, name: who => names.get(who) ?? who }).catch(error => ({ error: String(error.message ?? error) }));
+      record.review.held = { held: held.held, asked: held.asked, left: held.left, batches: held.batches?.length ?? 0, ...(held.error ? { error: held.error } : {}) };
+      if (agent && held.batches?.length) record.review.sent = Object.keys(await R.sendToAgent(novelDir, agent.console, { expiresAt: agent.expiresAt })).length;
+      log(`review: ${held.held ?? 0} held, ${held.batches?.length ?? 0} batches${agent ? ' sent to the main agent' : ''}`);
+      // What the run settled into canon (W6, canon.mjs), each by its gate, undoable; the graph rebuilt from the bundle.
+      try {
+        record.review.canon = await C6.toCanon(novelDir, { run: id, reading });
+        const { buildGraphFromBundle } = await load('dist/src/ground/connectors/ladybug.js');
+        await buildGraphFromBundle(join(novelDir, 'ontology'), join(novelDir, 'ontology', 'graph.lbug'));
+      } catch (error) { record.review.canon = { error: String(error.message ?? error) }; }
+      log(`canon: ${JSON.stringify(record.review.canon)}`);
       }
     } finally { await chrome.close(); server.server.close(); }
   } });
@@ -498,7 +567,7 @@ export async function direct(novelDir, { reading, from, to, jev, workModel = nul
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node world-engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8'));
   let jev = standIn();
@@ -516,7 +585,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (values.live && values['stand-in']) { console.error('a stand-in run does not write the live view (its answers are made by rule)'); process.exit(2); }
   if (values.live) { const { createLive } = await import('../live/sim-jev.mjs'); live = await createLive(resolve(novelDir), { command: 'sim direct', lines: [{ id: 'director', title: 'The director: cards played forward' }], model: jev.modelId }); jev = live.watch(jev); }
   try {
-    const { record } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    // --agent <host state dir>: the main agent's console (Pi, through the host's queue) the held batches are sent to.
+    const agentLinks = values.agent ? JSON.parse(await readFile(join(resolve(values.agent), 'links.json'), 'utf8').catch(() => '{}')) : null;
+    const agent = values.agent ? { console: join(resolve(values.agent), 'runtime', 'pi-console'), expiresAt: agentLinks?.expiresAt ? Date.parse(agentLinks.expiresAt) || agentLinks.expiresAt : Date.now() + 3600_000 } : null;
+    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, agent, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     const moves = record.scenes.flatMap(scene => scene.cards.flatMap(card => card.moves));
     const second = record.scenes.flatMap(scene => [...(scene.system2 ?? []), ...scene.cards.flatMap(card => card.system2 ?? [])]);
     console.error(`system 2: ran on ${second.length} answers, the work model's used for ${second.filter(entry => entry.used === 'work').length}, differing from Jev's on ${second.filter(entry => entry.work && String(entry.work.value) !== String(entry.jev.value)).length}`);

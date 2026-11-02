@@ -248,3 +248,14 @@ test("no building stands inside another: the tallest kept first, what the text p
   assert.deepEqual(buildings.map((o) => o.lot).sort(), ["placed", "tower", "wall"]);
   assert.equal(overlapped, 3, "the one inside the tower, the turned one cutting its corner and a taller one on what the text placed give way; the one wall to wall at its face stays");
 });
+
+test("two buildings the text placed one inside the other: the later moves to the nearest clear spot, the first stays", async () => {
+  const { clearOverlaps } = await import("../src/v2/world/tall.js");
+  const b = (lot: string, x: number, z: number, w: number, d: number, floors: number, angle = 0) => ({ lot, x, z, w, d, angle, floors, kind: "office" });
+  const tower = b("tower", 178, 666, 56, 38, 100), office = b("office", 153, 666, 26, 16, 10, 3.835);
+  const { buildings, overlapped, moved } = clearOverlaps([office, tower], () => true);
+  assert.deepEqual([overlapped, moved], [0, 1]);
+  const [still, aside] = [buildings.find((o) => o.lot === "tower")!, buildings.find((o) => o.lot === "office")!];
+  assert.deepEqual([still.x, still.z], [178, 666]);
+  assert.ok(aside.x < 153 && Math.hypot(aside.x - 153, aside.z - 666) <= 30, `moved away from the tower, not far: ${aside.x}, ${aside.z}`);
+});

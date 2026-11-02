@@ -442,10 +442,46 @@ chunk a pure function of its seed and place). In `apps/playground/src/data/world
   judged only with every chunk round them loaded). 4 were real: rooms of a small turned tower whose whole corridor on
   a floor fell between world cells, so that floor's rooms joined nothing (fixed: with none of its kind held, a wall's
   cell stands for a plan cell). After it, the same run: nothing found, and of 233 moves 171 walked, 62 already there,
-  none held (W4's check on the same scenes held 34).
+  none held (W4's check on the same scenes held 34). Scenes 13–17 then showed one more: a 10-floor office from the text's
+  slots standing inside a 100-floor tower from another slot, both kept because overlaps gave way only for buildings
+  the text had not placed (fixed: one the text placed moves to the nearest clear spot, `tall.ts clearOverlaps`; still
+  unchecked: overlaps between two places' buildings, which the check would show).
 - *Failure codes.* A held walk says why as a code: `NO_TARGET` (nowhere to stand there), `OFF_WALK` (where they stand
   is off the walk round them and their target), `NO_PATH` (no way there on foot), with the least that replays it (the
   seed's key, where they stood, the first targets, how they went), in the card's moves and its L10 verdict.
+
+**Built (2026-11-02): W5, W6 and W7**, with Pi as the main agent (the user, 2026-11-02: Codex and others later, through
+the same CLI).
+
+- *W5 · The review* (`world-engine/review/review.mjs`, `backprop.mjs`). After every run the ledger's held entries and the
+  user's notes become pool items (v1's pool, batches and answers), **one question per person or pair and scene**: the
+  same break on several cards or lines is one item, so one answer settles them all (the last real run's 112 held breaks
+  are 57 questions in 23 scenes). Scenes are ordered by reach (how often their people appear later in the strand) and
+  batched (10 at most, a budget of 12 scenes a run); `--agent <host state>` sends them to Pi's console. The review CLI:
+  `novel reading <dir> card|scene|line <id>`, `novel world log <dir> --scene|--person|--card <id>`, `novel source epub
+  <dir> [--doc N] [--grep <regex>]`, with v1's `novel world batch|answer`, `novel source grep|similar` and `novel query`;
+  Pi may run all of them (tools/pi-review/guard.mjs) and none that writes. At the next run's start the answers become
+  pins under the laws (`novel world apply`, or the director itself; an answer that would put someone in two places at
+  one stated moment, L2, goes back with why), and the director plays by them: presence, remote actors, talk kinds,
+  arrivals, stays. A talk answered **face to face** is a meeting pinned, an anchor: back-propagation draws a bridge
+  from each of the two people's last anchor to the other (who came to whom is a choice: both ways are drawn and the
+  one that changes the history least is kept), places their scene starts in the span on it, keeps the draw with the
+  least J, and applies it below 300 m (above, it is held for the review as class R). The world log ranks what the
+  review pinned `pinned` and the re-placed starts `revised` (source back-propagated). First cut: the span keeps to the
+  person's stay round the meeting (their scene starts within 60 m of where they stood at it, back to their last anchor:
+  a scene's place is often only the city, and the first try drew a 700 m bridge through scenes elsewhere), and only
+  scene starts are re-placed.
+- *W6 · Back into the ontology* (`world-engine/review/canon.mjs`). After every run: each scene's presence (who played in
+  it, people of the book only), place and speakers (the reading's, unknown where the laws held them or the review
+  rejected them), where each person is at a scene's end (a state change after its last event; held where a law held
+  them there), and a timeline per strand, appended to canon's bundle (last write wins), the graph rebuilt. Every write is
+  logged in `stage/world/canon.jsonl` with what it replaced: `novel world undo <dir> --run <id>` takes a run's writes
+  back. Not yet: time relations, EM merges, damage (no canon schema for a building's state yet).
+- *W7 · UI* (World · Live's reader): Why shows, per card, the laws as it played (with the talk's kind, Jev's or the
+  review's), system 2's answer beside Jev's, the card's proposals, and the review's question with the agent's answer and
+  reason; **Run report** shows the run's laws by verdict, system 2, proposals by state, the review, canon's writes, the
+  revisions and the world's own check; a line whose speaker the review rejected is struck through in the book, with the
+  change on hover (`play/review.json`, sim-play.mjs directorReview).
 
 Order: W0 under all of it; W1 and W2 first (no model calls; they show the size of the problem), then W3 and W4, then W5 and W6, W7 alongside,
 then W8. Track A runs in parallel throughout.

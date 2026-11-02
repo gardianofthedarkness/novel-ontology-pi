@@ -166,3 +166,42 @@ export async function addDirectorNote(workspace, body) {
 export async function directorReading(workspace) {
   return readFile(resolve(workspace, 'stage', 'director', 'reading.json'), 'utf8').then(JSON.parse, () => null);
 }
+
+/**
+ * What the laws, system 2, the ledger and the review made of the director's last run (Track B W7), for World · Live's
+ * Why: per card, the laws' verdicts, system 2's answers beside Jev's, the card's proposals to the ontology and the review's
+ * items with the main agent's answers; the run's report (laws by verdict, proposals by state, the review, canon's
+ * writes, the revisions); and the lines whose speaker the world changed. Read-only.
+ */
+export async function directorReview(workspace) {
+  const dir = resolve(workspace), json = (...path) => readFile(resolve(dir, ...path), 'utf8').then(JSON.parse, () => null);
+  const lines = (...path) => readFile(resolve(dir, ...path), 'utf8').then(text => text.split('\n').filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } }), () => []);
+  const [record, index] = await Promise.all([json('stage', 'director', 'run.json'), json('stage', 'simulation', 'index.json')]);
+  if (!record) return null;
+  const run = index?.strands?.director?.accepted ?? null;
+  const [ledger, pool, answers, canon, pins] = await Promise.all([run ? lines('stage', 'world', 'ledger', `${run}.jsonl`) : [], lines('stage', 'world', 'pool.jsonl'), lines('stage', 'world', 'answers.jsonl'), lines('stage', 'world', 'canon.jsonl'), json('stage', 'world', 'pins.json')]);
+  const items = [...new Map(pool.map(item => [item.id, item])).values()], answerOf = new Map(answers.map(answer => [answer.item, answer]));
+  const reviewOf = item => ({ kind: item.kind, question: item.question, options: item.options, status: item.status, ...(item.note ? { note: item.note } : {}), ...(answerOf.get(item.id) ? { answer: answerOf.get(item.id).verdict, reason: answerOf.get(item.id).reason, at: answerOf.get(item.id).at } : {}) });
+  const cards = {};
+  for (const scene of record.scenes) for (const card of scene.cards) {
+    const ids = new Set(card.lines?.map(line => line.id) ?? []);
+    const proposals = ledger.filter(entry => entry.value?.card === card.card && entry.value?.scene === scene.scene || String(entry.value?.what ?? '').startsWith(`${scene.scene} · ${card.card}`) || [...ids].some(id => String(entry.value?.what ?? '') === `${scene.scene} · ${id}`)).map(entry => ({ kind: entry.kind, state: entry.state, law: entry.law ?? null, subject: entry.subject ?? null, why: entry.value?.why ?? entry.value?.verdict ?? null }));
+    const review = items.filter(item => item.scene === scene.scene && ((item.cards ?? []).includes(card.card) || (item.lines ?? []).some(id => ids.has(id)) || item.card === card.card)).map(reviewOf);
+    if (card.laws?.length || card.system2?.length || card.talk || proposals.length || review.length) cards[`${scene.scene}|${card.card}`] = { laws: card.laws ?? [], system2: card.system2 ?? [], talk: card.talk ?? null, proposals, review };
+  }
+  const count = (rows, key) => rows.reduce((sum, row) => ({ ...sum, [key(row)]: (sum[key(row)] ?? 0) + 1 }), {});
+  const laws = record.scenes.flatMap(scene => [...(scene.laws ?? []), ...scene.cards.flatMap(card => card.laws ?? [])]);
+  const speakers = {};
+  for (const [line, who] of Object.entries(pins?.notSpeaker ?? {})) speakers[line] = { from: who, to: null, by: 'the review' };
+  const report = {
+    run, model: record.model, from: record.from, to: record.to, startedAt: record.startedAt, finishedAt: record.finishedAt ?? null, calls: record.calls ?? null,
+    laws: count(laws, law => `${law.law} ${law.verdict}`),
+    system2: { ran: record.scenes.reduce((n, scene) => n + (scene.system2?.length ?? 0) + scene.cards.reduce((m, card) => m + (card.system2?.length ?? 0), 0), 0), used: record.scenes.reduce((n, scene) => n + [...(scene.system2 ?? []), ...scene.cards.flatMap(card => card.system2 ?? [])].filter(entry => entry.used === 'work').length, 0) },
+    proposals: count(ledger, entry => `${entry.kind} ${entry.state}`),
+    review: { ...count(items, item => item.status), answered: answers.length, held: record.review?.held ?? null, applied: record.review?.applied ?? null },
+    canon: record.review?.canon ?? null, canonWrites: canon.filter(entry => entry.run === run && !entry.undo).length,
+    revisions: (record.revisions ?? []).map(revision => ({ who: revision.who, to: revision.to, scene: revision.scene, metres: revision.metres ?? null, applied: !!revision.applied, ...(revision.held ? { held: revision.held } : {}) })),
+    world: record.scenes.flatMap(scene => (scene.world ?? []).map(issue => ({ scene: scene.scene, code: issue.code, name: issue.name }))),
+  };
+  return { version: 1, run, cards, report, speakers };
+}

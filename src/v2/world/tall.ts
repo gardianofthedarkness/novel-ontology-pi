@@ -102,18 +102,36 @@ export function tallAndWide(buildings: Building[], roads: Road[], fixed: (b: Bui
  * No building stands inside another (the user, 2026-11-02: a district "blowing up", towers thickened and buildings pushed
  * aside by what stands apart landing in their neighbours, once every building was drawn at its true size): what the text
  * placed (`fixed`) first, then the tallest first, each kept unless its footprint, less a hand's breadth at each face (so
- * buildings wall to wall stay), overlaps one kept before it.
+ * buildings wall to wall stay), overlaps one kept before it; one the text placed is moved to the nearest clear spot.
  */
-export function clearOverlaps(buildings: Building[], fixed: (b: Building) => boolean): { buildings: Building[]; overlapped: number } {
+export function clearOverlaps(buildings: Building[], fixed: (b: Building) => boolean): { buildings: Building[]; overlapped: number; moved: number } {
   const CELL = 40, grid = new Map<string, Building[]>(), kept = new Set<Building>();
   const order = [...buildings].sort((a, b) => Number(fixed(b)) - Number(fixed(a)) || topOf(b) - topOf(a));
   const inset = (b: Building): Building => ({ ...b, w: Math.max(0.2, b.w - 0.6), d: Math.max(0.2, b.d - 0.6) });
   const cellsOf = (b: Building) => { const r = Math.hypot(b.w, b.d) / 2, out: string[] = []; for (let i = Math.floor((b.x - r) / CELL); i <= Math.floor((b.x + r) / CELL); i++) for (let j = Math.floor((b.z - r) / CELL); j <= Math.floor((b.z + r) / CELL); j++) out.push(`${i},${j}`); return out; };
+  const clashes = (b: Building) => { const mine = inset(b); return cellsOf(b).some((cell) => (grid.get(cell) ?? []).some((other) => footprintsOverlap(mine, inset(other)))); };
+  // Where a building the text placed stands clear when it would stand in one placed before it (W0's check found a
+  // 10-floor office inside a 100-floor tower, both from the text's slots): the nearest spot out of the way, rings of 2 m
+  // out to 60 m, the directions away from what it hits first; none, and it gives way like any other.
+  const aside = (b: Building): Building | null => {
+    const hit = cellsOf(b).flatMap((cell) => grid.get(cell) ?? []).find((other) => footprintsOverlap(inset(b), inset(other)));
+    const away = hit ? Math.atan2(b.z - hit.z, b.x - hit.x) : 0;
+    for (let r = 2; r <= 60; r += 2) for (let k = 0; k < 16; k++) {
+      const turn = away + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 8), moved = { ...b, x: b.x + r * Math.cos(turn), z: b.z + r * Math.sin(turn) };
+      if (!clashes(moved)) return moved;
+    }
+    return null;
+  };
+  const placed = new Map<Building, Building>(), movedAside: Building[] = [];
   for (const b of order) {
-    const cells = cellsOf(b), mine = inset(b);
-    if (!fixed(b) && cells.some((cell) => (grid.get(cell) ?? []).some((other) => footprintsOverlap(mine, inset(other))))) continue;
-    kept.add(b);
-    for (const cell of cells) (grid.get(cell) ?? grid.set(cell, []).get(cell)!).push(b);
+    let here = b;
+    if (clashes(b)) {
+      const moved = fixed(b) ? aside(b) : null;
+      if (!moved) continue;
+      here = moved; movedAside.push(b);
+    }
+    kept.add(b); placed.set(b, here);
+    for (const cell of cellsOf(here)) (grid.get(cell) ?? grid.set(cell, []).get(cell)!).push(here);
   }
-  return { buildings: buildings.filter((b) => kept.has(b)), overlapped: buildings.length - kept.size };
+  return { buildings: buildings.filter((b) => kept.has(b)).map((b) => placed.get(b)!), overlapped: buildings.length - kept.size, moved: movedAside.length };
 }

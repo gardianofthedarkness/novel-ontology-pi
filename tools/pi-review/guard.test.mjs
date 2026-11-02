@@ -297,6 +297,18 @@ test('Pi may search the original text and answer a world-first book\'s review ba
   assert.throws(() => authorizeScoped('novel source grep /other/book 刺猬头', defaultScope));
 });
 
+test('Pi may read the evidence for the world\'s held items: the reading, the world log and the EPUB, read-only (W5)', () => {
+  const novel = defaultScope.novel, ok = command => { try { return !!authorizeScoped(command, defaultScope); } catch { return false; } };
+  assert.ok(ok(`novel reading ${novel} card dialogue:b0000_s0300`));
+  assert.ok(ok(`novel reading ${novel} scene scene_000003`));
+  assert.ok(ok(`novel world log ${novel} --scene scene_000003`));
+  assert.ok(ok(`novel world log ${novel} --person char_000004 --run d20261102081221`));
+  assert.ok(ok(`novel source epub ${novel}`));
+  assert.ok(ok(`novel source epub ${novel} --doc 8 --offset 100 --limit 50`));
+  assert.ok(ok(`novel source epub ${novel} --grep 便利店`));
+  for (const command of [`novel reading /other/book card x`, `novel reading ${novel} chapter 1`, `novel world log ${novel}`, `novel world log ${novel} --scene a --scene b`, `novel world held ${novel}`, `novel world apply ${novel}`, `novel source epub ${novel} --doc`, `novel source epub ${novel} --write x`]) assert.ok(!ok(command), command);
+});
+
 test('Pi may pace a simulation run for the live view, within 0.5–5 s a moment, and nothing else new', async () => {
   const book = defaultScope.novel, ok = command => { try { return authorize(command).kind === 'cli'; } catch { return false; } };
   assert.ok(ok(`novel sim run ${book} --strand world --pace 2`));
