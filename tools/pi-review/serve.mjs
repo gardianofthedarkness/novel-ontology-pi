@@ -11,7 +11,7 @@ import { bookCatalog } from './book-catalog.mjs';
 import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
-import { addDirectorNote, directorNotes, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
+import { addDirectorNote, directorKinds, directorNotes, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -212,10 +212,12 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         send(200, JSON.stringify(step), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         return;
       }
-      if (scopedPath === '/play/notes' || scopedPath === '/play/notes.json') {
-        // Notes on the director's cards (sim-play.mjs directorNotes): added from World · Live's reader, read by both.
+      if (scopedPath === '/play/notes' || scopedPath === '/play/notes.json' || scopedPath === '/play/kinds.json') {
+        // Notes on the director's cards (sim-play.mjs directorNotes): added from World · Live's reader, read by both; and
+        // every sentence's kind for the reader's colours.
         const volume = url.searchParams.get('volume') ?? 'active';
         if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); request.resume(); return; }
+        if (scopedPath === '/play/kinds.json') { const kinds = await bounded(async () => directorKinds(await resolveWorkspace(volume))); if (!kinds) { send(404); return; } send(200, JSON.stringify(kinds), { 'Content-Type': 'application/json; charset=utf-8' }); return; }
         if (scopedPath === '/play/notes.json') { send(200, JSON.stringify(await bounded(async () => directorNotes(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8' }); return; }
         let body = '';
         for await (const chunk of request) { body += chunk; if (body.length > 4096) { send(413); return; } }

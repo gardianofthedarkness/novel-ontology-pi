@@ -34,6 +34,7 @@
   body.live .stage { position: fixed; inset: 0; aspect-ratio: auto; border: 0; border-radius: 0; }
   /* Live mode: Jev's panel for the moment over the world (the event played, then what Jev decided), bottom on a phone. */
   body.live #trace { position: fixed; z-index: 20; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: max(64px, calc(env(safe-area-inset-bottom) + 64px)); max-height: 34vh; background: #0b1620e6; }
+  @media (max-width: 719px) { body.live #trace { max-height: 22vh; bottom: max(60px, calc(env(safe-area-inset-bottom) + 60px)); } }
   @media (min-width: 720px) { body.live #trace { left: auto; bottom: auto; top: max(10px, env(safe-area-inset-top)); width: 380px; max-height: 60vh; } }
   .trace .moment { font-size: 13px; color: var(--ink); margin-bottom: 6px; }
   .stage canvas { display: block; width: 100% !important; height: 100% !important; }
@@ -182,8 +183,12 @@ function travelOf(migration) {
 // place. Built again in place when the director's loop grows the line (`extend`): the page is not loaded again.
 const segments = [], eventStart = new Map(), sceneStart = new Map(), placeHits = {};
 let total = 0;
+// A dialogue card's spoken lines (the director's cards, each line with its kind and speaker): the card lasts long enough to
+// read them (SAY a character), each line shown in a bubble over its speaker for its share of the card.
+const SAY = 0.16;
 function buildTimeline() {
   segments.length = 0; eventStart.clear(); sceneStart.clear(); for (const key of Object.keys(placeHits)) delete placeHits[key];
+  const sayings = new Map((data.director?.cards ?? []).map((card) => [`${card.scene}|${card.event}`, card.lines.filter((line) => line.kind === "spoken" && line.text.trim())]));
   let clock = 0;
   const hitsSoFar = {};
   for (const [index, scene] of data.scenes.entries()) {
@@ -203,8 +208,11 @@ function buildTimeline() {
     for (const [eventIndex, event] of scene.events.entries()) {
       if (event.hit) hitsSoFar[keyOf(scene.place)]++;
       const moves = event.moves.map((move) => ({ ...move, time: timing(place, move) }));
-      const length = Math.max(READ, event.hit ? 2.6 : 0, ...moves.map((move) => move.time.total + 0.6));
-      segments.push({ kind: "event", scene, index, eventIndex, event, place, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[keyOf(scene.place)] });
+      const said = sayings.get(`${scene.id}|${eventIndex}`) ?? [], chars = said.reduce((sum, line) => sum + line.text.length, 0);
+      const length = Math.max(READ, event.hit ? 2.6 : 0, chars ? chars * SAY + 0.6 : 0, ...moves.map((move) => move.time.total + 0.6));
+      let from = 0;
+      const says = said.map((line) => { const span = ((length - 0.6) * line.text.length) / chars, entry = { ...line, from, to: from + span }; from += span; return entry; });
+      segments.push({ kind: "event", scene, index, eventIndex, event, place, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[keyOf(scene.place)], says });
       for (const move of moves) positions[move.person] = move.path.at(-1);
       clock += length;
     }
@@ -286,6 +294,26 @@ function label(text, fill = "#ffffff", size = 28) {
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })); sprite.scale.set(width / canvas.height * 1.3, 1.3, 1); sprite.renderOrder = 10;
   sprite.userData.text = text;
+  return sprite;
+}
+/**
+ * A speech bubble: the line wrapped (sixteen characters a row, five rows at most), on a light card with a tail, its edge in
+ * the speaker's colour (dashed grey when who says it is unsure).
+ */
+let bubble = null;
+function speechBubble(text, edge) {
+  const size = 30, per = 16, rows = [];
+  for (let at = 0; at < text.length && rows.length < 5; at += per) rows.push(text.slice(at, at + per));
+  if (rows.length * per < text.length) rows[4] = `${rows[4].slice(0, per - 1)}…`;
+  const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d"), font = `500 ${size}px system-ui, "PingFang SC", sans-serif`;
+  ctx.font = font; const width = Math.ceil(Math.max(...rows.map((row) => ctx.measureText(row).width))) + 36, height = rows.length * (size + 10) + 28, tail = 18;
+  canvas.width = width; canvas.height = height + tail;
+  ctx.fillStyle = "rgba(246,250,252,.96)"; ctx.strokeStyle = edge ?? "#8a9aa6"; ctx.lineWidth = 4; if (!edge) ctx.setLineDash([10, 8]);
+  ctx.beginPath(); ctx.roundRect(2, 2, width - 4, height - 4, 18); ctx.moveTo(width / 2 - 14, height - 3); ctx.lineTo(width / 2, height + tail - 2); ctx.lineTo(width / 2 + 14, height - 3); ctx.fill(); ctx.stroke();
+  ctx.font = font; ctx.fillStyle = "#0b1620"; ctx.textBaseline = "top"; rows.forEach((row, n) => ctx.fillText(row, 18, 16 + n * (size + 10)));
+  const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
+  const tall = 0.9 * rows.length + 0.9; sprite.scale.set((tall * canvas.width) / canvas.height, tall, 1); sprite.renderOrder = 11;
   return sprite;
 }
 /** A place's pin at a point of the ground: a stem and a head, seen through everything, `size` as its name's; no extent. */
@@ -1130,6 +1158,13 @@ function frame(now) {
     if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
   }
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
+  // The line being said, in a bubble over its speaker (or, unsure who says it, over the card's first person present).
+  const saying = segment.kind === "event" && !quiet ? segment.says?.find((line) => elapsed >= line.from && elapsed < line.to) : null;
+  const speaker = saying ? [saying.who, ...(segment.event.actors ?? [])].map((id) => id && pawns.get(id)?.pawn).find((pawn) => pawn?.parent) : null;
+  if (saying && speaker) {
+    if (bubble?.userData.line !== saying) { if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); } bubble = speechBubble(saying.text, saying.who ? data.people[saying.who]?.color ?? "#ffffff" : null); bubble.userData.line = saying; world.add(bubble); }
+    bubble.position.copy(speaker.position).add(new THREE.Vector3(0, 3.3 + bubble.scale.y / 2, 0));
+  } else if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); bubble = null; }
   // Live mode: following is following Jev's focus — the camera and where it looks glide together toward the moment's
   // focus (a whole place away too), and the distance eases toward one that frames it, so each new frame carries on smoothly.
   if (liveMode && follow && !glide && data.live.focus && !segment.event?.camera) {
