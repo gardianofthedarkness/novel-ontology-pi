@@ -29,6 +29,7 @@ export const OPTIONS = {
   blast: ['no blast', 'the text breaks something'],
   note: ['presence', 'speaker', 'place', 'move', 'time', 'nothing'],
   revision: ['apply', 'keep the history'],
+  audit: ['right', 'wrong'],
 };
 
 /** A ledger entry's scene, card and line, from its value (a play-time verdict) or its `what` ("scene · card · who"). */
@@ -57,6 +58,16 @@ export function heldItems({ ledger, notes = [], name = id => id, at = new Date()
   };
   // A revision too big to apply on its own (§5a, class R): the agent says whether the history changes that much.
   for (const entry of ledger.filter(row => row.state === 'held' && row.kind === 'revision' && row.value?.metres !== null && row.value?.metres !== undefined)) item(`revision|${entry.value.scene}|${entry.subject}|${entry.value.to}`, { scene: entry.value.scene, card: null, law: null, ledger: entry.id, kind: 'revision', subjects: [entry.subject, entry.value.to], names: [name(entry.subject), name(entry.value.to)], question: `A pinned meeting of ${name(entry.subject)} and ${name(entry.value.to)} in ${entry.value.scene} moves ${name(entry.subject)} by ${entry.value.metres} m in all at the starts of ${entry.value.moments.join(', ')} (back-propagated from it). Should the history change that much?`, options: OPTIONS.revision, evidence: [`revision ${entry.id}`] });
+  // A line the world could not settle (W6, speakers.mjs): who says it, of those there (and Jev's guess from elsewhere).
+  for (const entry of ledger.filter(row => row.state === 'held' && row.kind === 'speaker')) {
+    const v = entry.value, options = [...new Set(v.candidates ?? [])].filter(id => id !== v.to);
+    item(`who-speaks|${v.line}`, { scene: v.scene, card: v.card, line: v.line, law: null, ledger: entry.id, kind: 'who-speaks', subjects: options, names: options.map(name), question: `In ${v.scene}, who says line ${v.line}${v.to ? ` (to ${name(v.to)})` : ''}? The reading was unsure; the world could not settle it: ${v.why}. Those there: ${options.map(id => `${id} = ${name(id)}`).join(', ')}.`, options: [...options, 'none of them'], evidence: [`line ${v.line}`, `card ${v.card}`, `ledger ${entry.id}`] });
+  }
+  // An audit (§7b): a share of what the world settled on its own, checked; too many wrong and the class goes to the review.
+  for (const entry of ledger.filter(row => row.state === 'held' && row.kind === 'audit')) {
+    const v = entry.value;
+    item(`audit|${entry.class}|${v.line ?? entry.subject}`, { scene: v.scene, card: v.card, line: v.line, law: null, ledger: entry.id, kind: 'audit', audits: entry.class, subjects: v.who ? [v.who] : [], names: v.who ? [name(v.who)] : [], question: `An audit of what the world settled on its own: in ${v.scene}, line ${v.line} is said by ${name(v.who)} (${v.why}). Is that right?`, options: OPTIONS.audit, evidence: [`line ${v.line}`, `card ${v.card}`, `ledger ${entry.id}`] });
+  }
   for (const entry of ledger.filter(row => row.state === 'held' && (row.kind === 'law' || row.kind === 'held'))) {
     const law = entry.law, { scene, card, line } = whereOf(entry), who = entry.subject, why = entry.value?.why ?? '';
     const evidence = [`${law}: ${why}`, ...(card ? [`card ${card}`] : []), ...(line ? [`line ${line}`] : []), `ledger ${entry.id}`];
@@ -106,7 +117,12 @@ export async function holdForReview(novelDir, { run = null, budget = 12, size = 
   const notes = await readJsonl(join(novelDir, 'stage', 'director', 'notes.jsonl')), strands = await readJson(join(novelDir, 'stage', 'world', 'strands.json'));
   const names = name ?? (id => id);
   const known = new Map((await loadPool(novelDir)).map(item => [item.id, item]));
-  const fresh = heldItems({ ledger, notes, name: names }).filter(item => !known.has(item.id));
+  // Identity from the world (W6, identity.mjs): two who are never together in a strand, with the same people round them.
+  const readingPath = (await readJson(join(novelDir, 'stage', 'director', 'reading-path.json')))?.path;
+  const slots = readingPath ? (await readJson(readingPath, {}))?.slots ?? [] : [];
+  const { identityProposals } = await import('./identity.mjs');
+  const identities = identityProposals({ log, slots, strands }).map(({ a, b, why }) => ({ id: itemId(`identity|${[a, b].sort().join('|')}`), status: 'open', attempts: 0, at: new Date().toISOString(), kind: 'identity', scene: null, card: null, law: null, cards: [], lines: [], subjects: [a, b], names: [names(a), names(b)], question: `Are ${names(a)} (${a}) and ${names(b)} (${b}) the same person? The world never has them together: ${why.replace(/(char|slot)_[\d_]+/g, id => `${names(id)}`)}.`, options: ['same', 'different'], evidence: [why] }));
+  const fresh = [...heldItems({ ledger, notes, name: names }), ...identities].filter(item => !known.has(item.id));
   await writePool(novelDir, fresh);
   const open = (await loadPool(novelDir)).filter(item => item.status === 'open');
   const bundles = bundlesOf(open, { log, strands, budget });
@@ -118,7 +134,7 @@ export async function holdForReview(novelDir, { run = null, budget = 12, size = 
 
 /** The pins the director plays by (v1's, with v2's: remote actors, arrivals, stays, meetings, speakers, notes). */
 export async function loadPins(novelDir) {
-  return { present: {}, same: [], different: [], kind: {}, landscape: {}, remote: {}, arrive: {}, stays: {}, meet: [], revise: {}, notSpeaker: {}, notes: {}, abilities: [], strands: [], time: [], ...await readJson(join(novelDir, 'stage', 'world', 'pins.json'), {}) };
+  return { present: {}, same: [], different: [], kind: {}, landscape: {}, remote: {}, arrive: {}, stays: {}, meet: [], revise: {}, speaker: {}, audits: {}, notSpeaker: {}, notes: {}, abilities: [], strands: [], time: [], ...await readJson(join(novelDir, 'stage', 'world', 'pins.json'), {}) };
 }
 export async function savePins(novelDir, pins) {
   await mkdir(join(novelDir, 'stage', 'world'), { recursive: true });
@@ -168,6 +184,12 @@ export function pinsFrom(pins, settled, { script }) {
     if (item.kind === 'continuity' && answer.verdict === 'as played') pins.strands.push({ scene: item.scene, who, reason: answer.reason });
     if (item.kind === 'two-places' && answer.verdict !== 'both') pins.present[`${item.scenes[answer.verdict === 'not in the first' ? 0 : 1]}|${who}`] = false;
     if (item.kind === 'travel') { if (answer.verdict === 'not in the later scene') pins.present[key] = false; else if (answer.verdict === 'more time passes') pins.time.push({ scene: item.scene, reason: answer.reason }); else pins.abilities.push({ who, scene: item.scene, reason: answer.reason }); }
+    if (item.kind === 'who-speaks') for (const line of item.lines ?? []) pins.speaker[line] = answer.verdict === 'none of them' ? null : answer.verdict;
+    if (item.kind === 'audit') {
+      const audit = (pins.audits[item.audits] ??= { right: 0, wrong: 0 });
+      audit[answer.verdict === 'right' ? 'right' : 'wrong']++;
+      if (answer.verdict === 'wrong' && item.audits === 'speaker') for (const line of item.lines ?? []) pins.notSpeaker[line] = who;
+    }
     if (item.kind === 'revision') pins.revise[`${item.scene}|${who}`] = answer.verdict === 'apply' ? 'apply' : 'keep';
     if (item.kind === 'note' || item.kind === 'blast') pins.notes[item.card ?? item.id] = { verdict: answer.verdict, reason: answer.reason };
   }

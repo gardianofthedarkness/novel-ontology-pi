@@ -192,7 +192,9 @@ export async function directorReview(workspace) {
   const count = (rows, key) => rows.reduce((sum, row) => ({ ...sum, [key(row)]: (sum[key(row)] ?? 0) + 1 }), {});
   const laws = record.scenes.flatMap(scene => [...(scene.laws ?? []), ...scene.cards.flatMap(card => card.laws ?? [])]);
   const speakers = {};
-  for (const [line, who] of Object.entries(pins?.notSpeaker ?? {})) speakers[line] = { from: who, to: null, by: 'the review' };
+  // Lines whose speaker the world settled where the reading was unsure (W6), and those the review settled or ruled out.
+  for (const [line, entry] of Object.entries((await json('stage', 'world', 'speakers.json'))?.lines ?? {})) speakers[line] = { from: null, to: entry.who, by: entry.by === 'review' ? 'the review' : 'the world' };
+  for (const [line, who] of Object.entries(pins?.notSpeaker ?? {})) speakers[line] = { from: who, to: speakers[line]?.to ?? null, by: 'the review' };
   const report = {
     run, model: record.model, from: record.from, to: record.to, startedAt: record.startedAt, finishedAt: record.finishedAt ?? null, calls: record.calls ?? null,
     laws: count(laws, law => `${law.law} ${law.verdict}`),

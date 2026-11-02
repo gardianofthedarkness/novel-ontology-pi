@@ -65,7 +65,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
   // threshold no one.
   const spoken = id => (reading.roles?.[id]?.kind === 'spoken' ? reading.roles[id].who ?? null : null);
-  const text = await loadWorkspaceSentences(novelDir), line = id => ({ id, text: text.get(id)?.text ?? '', kind: reading.kinds?.[id]?.kind ?? null, ...(spoken(id)?.id ? { who: spoken(id).id } : {}), ...(spoken(id) ? { sure: spoken(id).confidence ?? null } : {}) });
+  // Where the reading is unsure, the speaker the world settled on the last run (W6, speakers.mjs), marked as the world's.
+  const settledSpeakers = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'speakers.json'), 'utf8').catch(() => '{}')).lines ?? {};
+  const text = await loadWorkspaceSentences(novelDir), line = id => ({ id, text: text.get(id)?.text ?? '', kind: reading.kinds?.[id]?.kind ?? null, ...(spoken(id)?.id ? { who: spoken(id).id } : settledSpeakers[id]?.who ? { who: settledSpeakers[id].who, by: settledSpeakers[id].by } : {}), ...(spoken(id) ? { sure: spoken(id).confidence ?? null } : {}) });
   const names = new Map([...reading.chart.entities.map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]), ...(reading.slots ?? []).map(slot => [slot.id, slot.label])]);
   const nameForms = new Map(reading.chart.entities.map(entity => [entity.id, [...new Set([...(entity.proper ?? []), ...(entity.names ?? [])])].filter(form => form.length >= 2)]));
   const sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
@@ -546,18 +548,19 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       // The run's world log, the laws over it and its proposals to the ontology (Track B W1, W2: logged, nothing applied).
       const written = await writeWorldLog(novelDir, { run: id, reading });
       log(`world log: ${JSON.stringify(written.log)}; laws broken: ${Object.entries(written.laws).filter(([, law]) => law.broken).map(([law, { broken }]) => `${law} ${broken}`).join(', ') || 'none'}`);
-      // What the laws held goes to the main agent (W5): one batch per scene by reach, sent to its console when one is given.
-      const held = await R.holdForReview(novelDir, { run: id, name: who => names.get(who) ?? who }).catch(error => ({ error: String(error.message ?? error) }));
-      record.review.held = { held: held.held, asked: held.asked, left: held.left, batches: held.batches?.length ?? 0, ...(held.error ? { error: held.error } : {}) };
-      if (agent && held.batches?.length) record.review.sent = Object.keys(await R.sendToAgent(novelDir, agent.console, { expiresAt: agent.expiresAt })).length;
-      log(`review: ${held.held ?? 0} held, ${held.batches?.length ?? 0} batches${agent ? ' sent to the main agent' : ''}`);
-      // What the run settled into canon (W6, canon.mjs), each by its gate, undoable; the graph rebuilt from the bundle.
+      // What the run settled into canon (W6, canon.mjs), each by its gate, undoable; the graph rebuilt from the bundle. First,
+      // so what it holds (the lines no one could settle, the audits) goes to the review with the rest.
       try {
         record.review.canon = await C6.toCanon(novelDir, { run: id, reading });
         const { buildGraphFromBundle } = await load('dist/src/ground/connectors/ladybug.js');
         await buildGraphFromBundle(join(novelDir, 'ontology'), join(novelDir, 'ontology', 'graph.lbug'));
       } catch (error) { record.review.canon = { error: String(error.message ?? error) }; }
       log(`canon: ${JSON.stringify(record.review.canon)}`);
+      // What the laws held goes to the main agent (W5): one batch per scene by reach, sent to its console when one is given.
+      const held = await R.holdForReview(novelDir, { run: id, name: who => names.get(who) ?? who }).catch(error => ({ error: String(error.message ?? error) }));
+      record.review.held = { held: held.held, asked: held.asked, left: held.left, batches: held.batches?.length ?? 0, ...(held.error ? { error: held.error } : {}) };
+      if (agent && held.batches?.length) record.review.sent = Object.keys(await R.sendToAgent(novelDir, agent.console, { expiresAt: agent.expiresAt })).length;
+      log(`review: ${held.held ?? 0} held, ${held.batches?.length ?? 0} batches${agent ? ' sent to the main agent' : ''}`);
       }
     } finally { await chrome.close(); server.server.close(); }
   } });

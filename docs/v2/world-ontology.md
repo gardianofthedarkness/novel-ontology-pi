@@ -476,7 +476,25 @@ the same CLI).
   rejected them), where each person is at a scene's end (a state change after its last event; held where a law held
   them there), and a timeline per strand, appended to canon's bundle (last write wins), the graph rebuilt. Every write is
   logged in `stage/world/canon.jsonl` with what it replaced: `novel world undo <dir> --run <id>` takes a run's writes
-  back. Not yet: time relations, EM merges, damage (no canon schema for a building's state yet).
+  back. Not yet: time relations, damage (no canon schema for a building's state yet).
+
+  **W6 completed (2026-11-02).** *Speakers settled by the world* (`speakers.mjs`): a spoken line's speaker is the
+  review's (a pin), else the reading's when sure and there, else, the reading unsure, Jev's own guess (at least 20%)
+  when the world has them there and within earshot of whom they speak to, else the card's only speaker there; a guess
+  naming someone not there (perhaps a phone) and everything else is held as a `who-speaks` question (those there as
+  options). On the last real run's 1,600 spoken lines: 1,006 the reading's, 446 the world's, 143 held; canon's speakers
+  went from 1,011 lines to 1,362 of 1,640. The settled ones are the director's too: a line the reading was unsure of
+  gets its bubble, and World · Live underlines it (dotted) with who settled it. *Audits* (§7b): 2% of what the world
+  settles on its own goes to the review as `right`/`wrong`; a wrong one rules that speaker out of the line for good,
+  and a class with at least 5 audits over 20% wrong is routed to the review until it falls. *Identity*
+  (`identity.mjs`): from the world log, two slots of one description met in a strand one after the other and never
+  together, and a description never with a named person who is in a scene beside it, sharing at least two companions
+  (each description's two likeliest), as `identity` questions (12 a run); `same` for a named person writes the
+  description's words as their aliases in canon. *Places:* a scene at an unnamed place takes its nearest named one up
+  the script's tree. On the last real run: canon's 39 played scenes all have presence and a place (none had either),
+  98 scene-end locations (27 held), 125 presence edges in the graph (0 before), 3 strand timelines; the review has 143
+  `who-speaks`, 8 audits and 12 identities besides the laws' 57; undo returns canon exactly as it was. Not yet: time
+  relations, a place's container, a room's floor, building identity, splits.
 - *W7 · UI* (World · Live's reader): Why shows, per card, the laws as it played (with the talk's kind, Jev's or the
   review's), system 2's answer beside Jev's, the card's proposals, and the review's question with the agent's answer and
   reason; **Run report** shows the run's laws by verdict, system 2, proposals by state, the review, canon's writes, the

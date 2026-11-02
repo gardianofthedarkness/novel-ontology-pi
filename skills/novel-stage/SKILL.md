@@ -126,6 +126,16 @@ the text, never by default.
      everyone near).
    - `reach`: a move found no walk. `arrives` (they get there), `stays`,
      `another way` (a leap, flight, a vehicle; say which in the reason).
+   - `who-speaks`: the reading was unsure who says a line and the world
+     could not settle it. Answer with the id of the one who says it (the
+     question names who each id is), or `none of them`.
+   - `audit`: something the world settled on its own (a line's speaker),
+     checked: `right` or `wrong`. Too many wrong and the world stops settling
+     that kind on its own until it is right again, so check it as carefully
+     as a question.
+   - `identity`: two who are never together, with the same people round
+     them: `same` or `different`. A description answered `same` as a named
+     person becomes one of their names in the ontology.
    - `continuity`, `two-places`, `travel`, `blast`, `revision`, `note`: as
      their question says. A `note` is the user's own, on a card: say what is
      wrong in the option and how it should be in the reason.
