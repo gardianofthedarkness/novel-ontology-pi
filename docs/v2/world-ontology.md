@@ -79,6 +79,9 @@ the ledger's pins, so an answer the user or the agent gave is never lost.
 
 ## 4. The laws, for v2's 3D world
 
+The deeper discussion, with what the engine enforces today and each law's rule: [physics-laws.md](physics-laws.md). Continuity is
+scoped to a strand (the user, 2026-11-02): it holds to the end of a strand and never carries into another.
+
 v1's nine, made physical now that the world is a real city with floors, plus the checks the 3D world allows:
 
 | Law | Evidence the world gives the ontology | Proposals it rejects | v2 now |
