@@ -287,6 +287,34 @@ the full text included, and writes only answers into the ledger.
 - **The gate** (the user) sees what no agent should settle alone: identity, a fact against a sure reading, cross-book
   records, and conflicts the agent's answers can't make lawful.
 
+## 7a. v1's review boundary (for decision 1)
+
+How v1 formats the ontology and what its review gate covers (`src/ground/connectors/bundle.ts`,
+`src/solidifier/merge/{changeset,semantic,apply}.ts`, [../unified-review.md](../unified-review.md),
+[../world-first-design.md](../world-first-design.md) §11):
+
+- **Format.** A per-book bundle of JSONL files, the source of truth (`entities`, `relations`, `events`, `scenes`,
+  `timelines`, `branches`, `state-changes`; the graph is rebuilt from them). Writes come only as **ChangeSets** of
+  proposals (`upsert_entity`, `create_event`, `create_scene`, `add_relation`, `add_alias`, `set_state_change`), applied
+  by one path (`applyChangeSet`) and only when the set is **approved**.
+- **Reviewed (semantic facts).** Each proposal is split into facts, each needing original evidence and a decision
+  (accept, hold, reject with a reason): an entity's **identity**; an **alias**; a **state change**; an event's
+  **actors**; a scene's **presence**, **mentions**, **location**, each dialogue **turn** (speaker, addressee) and each
+  **dialogue member**; every **relation** (except an event's own actor's `PARTICIPATES_IN`). Unreviewed facts default
+  to held; nothing accepted without the source shown.
+- **Not reviewed: the source's organisation.** The ids, sentences, chapter and order of scenes and events (what the
+  facts hang on) publish with the set.
+- **Bypassing review, by design:**
+  - `novel ingest --base-layer`, only in a world-first workspace: the base layer (scenes, events, dialogue exchanges, the
+    roster) applied without fact review (`manifest.worldFirst`); `--auto-approve` is a separate, explicit mode.
+  - **The world loop's own records** (world-first): presence, place, time, dialogue kind and parties, starts and moves
+    are the world's, kept by its laws, never reviewed; the stage's outputs live in `stage/`, not in canon.
+  - **EM from world evidence:** a merge with no conflict against the laws applied automatically, flagged
+    (`emFromWorld`), undoable; anything else to packets.
+  - **What the laws can't settle** goes to the main agent's pool (pins, replay), not to the user.
+- **The user's gate** saw only low-confidence identity merges, conflicts the laws can't settle, and cross-book packets
+  (the universe's causality, atlas and calendar), each through the same review lifecycle (show, evidence, decide, apply).
+
 ## 8. What the user sees
 
 - **Why, per card:** Jev's questions (with system 2's answer beside Jev's where it ran), **Laws** (each check, passed or
