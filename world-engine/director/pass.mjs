@@ -24,7 +24,7 @@ export async function passScene({ reading, text, decide, scene, place, people })
     const batch = asked.slice(start, start + BATCH).map(({ id, n }) => ({ id, before: line(n - 1).slice(0, 160), text: line(n), after: line(n + 1).slice(0, 160) }));
     const { replies } = await ask(decide, M.directorPassMode, { scene: { id: scene.id, place }, people: Object.entries(people).map(([id, name]) => ({ id, name })), batch }, null);
     for (const entry of batch) {
-      const show = replies.find(reply => reply.key === `show:${entry.id}`), who = replies.find(reply => reply.key === `who:${entry.id}`);
+      const show = replies.find(reply => reply.key === `${entry.id}|show`), who = replies.find(reply => reply.key === `${entry.id}|who`);
       out[entry.id] = { show: String(show?.value ?? 'none'), who: who?.value === 'all' ? Object.keys(people) : who?.value && people[who.value] ? [String(who.value)] : [], confidence: show?.confidence ?? null };
     }
   }

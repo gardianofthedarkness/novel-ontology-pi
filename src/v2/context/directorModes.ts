@@ -132,8 +132,8 @@ export const directorPassMode: Mode<PassFocus, unknown> = {
   ],
   cutOrder: [],
   questions: (focus) => focus.batch.flatMap((entry) => [
-    { key: `show:${entry.id}`, primitive: "choice", instructions: `What does an animation show of sentences.${entry.id}.text? (shows)`, options: Object.keys(SHOWS), optionHints: { moves: "someone changes place", acts: "someone does something visible in place", none: "nothing to show" } },
-    { key: `who:${entry.id}`, primitive: "choice", instructions: `Who does it in sentences.${entry.id}.text (the one it names, or means when it leaves them out)?`, options: [...focus.people.map((person) => person.id), "all", "none"], optionHints: Object.fromEntries([...focus.people.map((person) => [person.id, person.name]), ["all", "they: everyone present"], ["none", "no one present who matters"]]) },
+    { key: `${entry.id}|show`, primitive: "choice", instructions: `What does an animation show of sentences.${entry.id}.text? (shows)`, options: Object.keys(SHOWS), optionHints: { moves: "someone changes place", acts: "someone does something visible in place", none: "nothing to show" } },
+    { key: `${entry.id}|who`, primitive: "choice", instructions: `Who does it in sentences.${entry.id}.text (the one it names, or means when it leaves them out)?`, options: [...focus.people.map((person) => person.id), "all", "none"], optionHints: Object.fromEntries([...focus.people.map((person) => [person.id, person.name]), ["all", "they: everyone present"], ["none", "no one present who matters"]]) },
   ]) as DecisionQuestion[],
   budget: 14000,
 };
