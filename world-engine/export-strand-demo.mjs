@@ -687,15 +687,6 @@ export async function strandDemo(novelDir, options) {
       if (typeof site.top === 'number' && site.top > 0) { if (named) entry.named = site.top; else entry.tops.push(site.top); }
       decided.set(key, entry); if (key.startsWith(`${slot.parent}:`)) decided.set(key.slice(slot.parent.length + 1), entry);
     }
-    // A composite building (the user, 2026-11-01): a host with tenants at its foot (shops under a tower) is drawn with them
-    // as its base, a floor high, where it stands four floors or more; tenants on its upper floors or under it are inside it.
-    const podiums = new Set();
-    for (const site of Object.values(terrain?.sites ?? {}).filter(entry => entry.by === 'tenant' && entry.floor === 'foot')) {
-      const slotId = terrain.sites?.[site.in]?.slot ?? site.in, slot = terrain.slots?.[slotId];
-      if (!slot) continue;
-      const key = slot.lot ?? slot.id; podiums.add(key); if (key.startsWith(`${slot.parent}:`)) podiums.add(key.slice(slot.parent.length + 1));
-    }
-    const withTenants = b => (podiums.has(b.lot) && b.floors >= 4 ? { ...b, base: { floors: Math.max(1, b.base?.floors ?? 0), kind: 'shop' } } : b);
     // Its height is its scenes' (the user, 2026-11-01): taller than any model of its use stands for, it is drawn as a tower
     // (its use's models yield to its kind's: useModels.ts), never cut down to its use's.
     const tallest = use => Math.max(0, ...Object.values(UM.MODELS.uses[use]?.fill ?? {}).map(([, most]) => most));
@@ -726,34 +717,29 @@ export async function strandDemo(novelDir, options) {
     // Tall buildings and the streets round them (landscape.ts tallAndWide; the user, 2026-11-01), in a city of manifolds: a
     // street wider the more towers stand round it, a building above 100 m as thick as its height needs. After the fill, so
     // its lots and the slots naming them stay; what the text placed (and a landmark, a keep) is never cleared or cut.
-    const placed = [...[...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided).map(withTenants);
+    const placed = [...[...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
     const localRoads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)), held = new Set([...filled.keeps, ...standing].map(b => b.lot));
     const fixedOf = b => held.has(b.lot) || decided.has(b.lot) || /:(landmark|bowl|fountain)$/.test(String(b.lot));
     const shaped = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf) : { buildings: placed, roads: localRoads };
     const buildings = shaped.buildings.map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
-    // A composite building's parts (the user, 2026-11-01), each a volume of its own inside its host as the host stands
-    // now: at its foot a shopfront a floor high along its front, one beside the other; on its upper floors its top two;
-    // under it a floor below the street. [x, z, w, d, angle, bottom, height] in world metres, with the part's id.
+    // A composite building's parts (the user, 2026-11-01), each its use's model inside its host as the host stands now:
+    // on its floor (under the street: −1, −2; its host's own level when the host lies under the street), as large as it is
+    // (m², squarish, within the host), at its spot of that floor; roughly, no tiling, no stairs.
+    // [x, z, w, d, angle, bottom, height] in world metres, with the part's id and model.
     const parts = [];
-    {
-      const byHost = new Map();
-      for (const [id, site] of Object.entries(terrain?.sites ?? {}).filter(([, entry]) => entry.by === 'tenant')) {
-        const slotId = terrain.sites?.[site.in]?.slot ?? site.in, slot = terrain.slots?.[slotId];
-        if (!slot || !here(slot.parent)) continue;
-        const key = slot.lot ?? slot.id, short = key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
-        const host = buildings.find(b => b.id === `${place.id}:${key}` || b.id === `${place.id}:${short}`);
-        if (host) { if (!byHost.has(host)) byHost.set(host, []); byHost.get(host).push({ id, floor: site.floor, use: site.kind }); }
-      }
-      for (const [host, tenants] of byHost) {
-        const ux = Math.cos(host.angle), uz = Math.sin(host.angle), at = (s, t) => [host.x + s * ux - t * uz, host.z + s * uz + t * ux];
-        // A shop a unit of its own, 14 m of frontage at most, the row centred on the host's front.
-        const feet = tenants.filter(t => t.floor === 'foot'), width = Math.min(14, host.w / Math.max(1, feet.length)), depth = Math.min(8, host.d / 2), row = width * feet.length;
-        feet.forEach((t, k) => { const [x, z] = at(-row / 2 + width * (k + 0.5), -host.d / 2 + depth / 2); parts.push({ ...t, box: [x, z, Math.max(2, width - 1), depth, host.angle, 0, 3] }); });
-        tenants.filter(t => t.floor === 'upper').forEach(t => parts.push({ ...t, box: [host.x, host.z, host.w * 0.8, host.d * 0.8, host.angle, Math.max(3, (host.floors - 2) * 3), Math.min(6, host.floors * 3)] }));
-        tenants.filter(t => t.floor === 'under').forEach(t => parts.push({ ...t, box: [host.x, host.z, host.w * 0.8, host.d * 0.8, host.angle, -6, 4] }));
-        // Each drawn as a building of its use (the model kit's, as the city's buildings are), stretched to its volume.
-        for (const part of parts) part.model ??= UM.modelFor({ w: part.box[2], d: part.box[3], floors: Math.max(1, Math.round(part.box[6] / 3)), kind: part.use, use: part.use, era: 'modern' }, part.id, modelSizes) ?? null;
-      }
+    for (const [id, site] of Object.entries(terrain?.sites ?? {}).filter(([, entry]) => entry.by === 'tenant')) {
+      const hostSite = terrain.sites?.[site.in], slot = terrain.slots?.[hostSite?.slot ?? site.in];
+      if (!slot || !here(slot.parent)) continue;
+      const key = slot.lot ?? slot.id, short = key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
+      const host = buildings.find(b => b.id === `${place.id}:${key}` || b.id === `${place.id}:${short}`);
+      if (!host) continue;
+      const area = site.area ?? 100, w = Math.min(host.w * 0.9, Math.max(4, Math.sqrt(area))), d = Math.min(host.d * 0.9, Math.max(4, area / w)), height = 3 * (site.floors ?? 1);
+      // An older run's floor said in words: at its foot, its upper floors, under it.
+      const floor = typeof site.floor === 'number' ? site.floor : site.floor === 'upper' ? host.floors - 1 : site.floor === 'under' ? -1 : 1;
+      const under = typeof hostSite?.top === 'number' && hostSite.top < 0, bottom = under ? hostSite.top : floor < 0 ? 6 * floor : 3 * (Math.min(floor, host.floors) - 1);
+      const [u, v] = site.spot ?? [0, 0], s = u * (host.w - w), t = v * (host.d - d), ux = Math.cos(host.angle), uz = Math.sin(host.angle);
+      const model = UM.modelFor({ w, d, floors: site.floors ?? 1, kind: site.kind, use: site.kind, era: 'modern' }, id, modelSizes) ?? null;
+      parts.push({ id, model, box: [host.x + s * ux - t * uz, host.z + s * uz + t * ux, w, d, host.angle, bottom, height] });
     }
     // What lies under it (hallsOf, src/ground/stage/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));

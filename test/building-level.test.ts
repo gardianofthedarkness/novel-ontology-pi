@@ -199,8 +199,8 @@ test("tall buildings and the streets round them: above 100 m the taller the thic
   assert.ok(face.d < 10 && face.z < 90, `the face given up: ${face.d} m deep at z ${face.z}`);
 });
 
-test("composite buildings: a shop, a restaurant, a cinema joins a host where travel is least, at its foot, upper floors or under it; asked nothing", async () => {
-  const { chooseHost, floorOf, loadTenancies } = await import("../src/v2/spawning/composite.js");
+test("composite buildings: a shop, a restaurant, a cinema joins a host where travel is least; its floor and size fixed or asked, at a spot of that floor", async () => {
+  const { chooseHost, loadTenancies, partFloors, partSizes, spotOf } = await import("../src/v2/spawning/composite.js");
   const { loadBuildingTypes } = await import("../src/v2/spawning/inventory.js");
   const { TERRAIN_KINDS } = await import("../src/v2/context/terrainModes.js");
   const tenancies = loadTenancies(), types = loadBuildingTypes();
@@ -222,9 +222,18 @@ test("composite buildings: a shop, a restaurant, a cinema joins a host where tra
   assert.equal(chooseHost(tenancies.cinema, hosts, travel)?.id, "mall");
   assert.equal(chooseHost(tenancies.bank, hosts, travel)?.id, "lot", "an office lot nearer than the tower");
   assert.equal(chooseHost(tenancies.cinema, hosts.filter((host) => host.use !== "mall"), travel), null, "no mall: no host");
-  // Under the street with its host or its own words; else its type's place.
-  assert.equal(floorOf(tenancies["convenience-store"], hosts[3], []), "under");
-  assert.equal(floorOf(tenancies["ramen-shop"], hosts[1], ["那家拉面店开在地下一层。"]), "under");
-  assert.equal(floorOf(tenancies["ramen-shop"], hosts[1], []), "foot");
-  assert.equal(floorOf(tenancies.cinema, hosts[0], []), "upper");
+  // A convenience store always on floor one, about 120 m², asked nothing; a cinema asked, two floors tall.
+  assert.deepEqual([tenancies["convenience-store"].floor, tenancies["convenience-store"].size], [1, 120]);
+  assert.ok(tenancies.cinema.floor === undefined && tenancies.cinema.floors === 2);
+  for (const [type, tenancy] of Object.entries(tenancies)) assert.equal(tenancy.floor === undefined, tenancy.size === undefined, `${type}: a fixed floor with a fixed size`);
+  // Its floors: two under the street, then its host's up to its top; its sizes up to a floor of its host.
+  const floors = partFloors(35);
+  assert.deepEqual(floors.slice(0, 3).map((option) => option.value), [-2, -1, 1]);
+  assert.deepEqual([floors.at(-1)!.value, floors.at(-1)!.said], [35, "floor 35, its top floor"]);
+  assert.ok(floors.length <= 20 && partFloors(null).at(-1)!.value === 20);
+  const sizes = partSizes(600);
+  assert.deepEqual(sizes.map((option) => option.value), [20, 50, 100, 200, 500, 600]);
+  // Its spot on that floor: random, the same each time.
+  assert.deepEqual(spotOf("unnamed:x"), spotOf("unnamed:x"));
+  assert.ok(spotOf("unnamed:x").every((v) => v >= -0.5 && v <= 0.5) && spotOf("unnamed:x").join() !== spotOf("unnamed:y").join());
 });

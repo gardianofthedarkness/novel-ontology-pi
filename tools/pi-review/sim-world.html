@@ -83,12 +83,14 @@
   const pct = (v) => (typeof v === "number" ? `${Math.round(v * 100)}%` : "");
   const height = (b) => (typeof b.top !== "number" ? "no height" : b.top < 0 ? `${-b.top} m under the street` : `${Math.round(b.top / 3)} fl`);
   const FLOOR = { foot: "at its foot", upper: "on its upper floors", under: "under it, below the street" };
+  const floorOf = (f) => (typeof f === "number" ? (f < 0 ? `${-f} floor${f === -1 ? "" : "s"} under the street` : `floor ${f}`) : FLOOR[f] ?? f);
+  const partOf = (b) => `part of ${esc(b.inLabel)}, ${floorOf(b.floor)}${typeof b.area === "number" ? `, about ${b.area} m²` : ""}, ${b.partBy === "jev" ? `<span class="by jev">Jev</span> <span class="${(b.partSure?.floor ?? 1) < 0.3 ? "low" : ""}">${pct(b.partSure?.floor)}</span>/${pct(b.partSure?.size)} sure` : b.partBy === "fixed" ? "as its type always is" : "asked nothing"}`;
   const row = (b, part) => {
     const li = document.createElement("li"); li.tabIndex = 0; if (part) li.className = "part";
     const typed = b.typeBy === "jev" ? `<span class="by jev">Jev ${pct(b.sure.kind)}</span>` : b.typeBy === "search" ? `<span class="by">search</span>` : "";
     const sure = typeof b.sure.height === "number" ? ` · Jev <span class="${b.sure.height < 0.3 ? "low" : ""}">${pct(b.sure.height)} sure</span>` : "";
     const least = typeof b.least === "number" && typeof b.top === "number" && b.top >= 0 ? ` · min ${Math.round(b.least / 3)} fl${b.top === b.least ? " (at it)" : ""}` : "";
-    li.innerHTML = `<span class="name">${part ? "↳ " : ""}${esc(b.label)}</span><span class="what">${esc(b.type ?? "—")} ${typed}</span><span class="what">${part ? `part of ${esc(b.inLabel)}, ${FLOOR[b.floor] ?? b.floor}, asked nothing` : `${b.by === "shape" ? "a shape · " : ""}${height(b)}${least}${sure}${b.alone ? " · no host near: a lot of its own" : ""}${b.street ? ` · ${esc(b.street)}` : ""}`}</span>`;
+    li.innerHTML = `<span class="name">${part ? "↳ " : ""}${esc(b.label)}</span><span class="what">${esc(b.type ?? "—")} ${typed}</span><span class="what">${part ? partOf(b) : `${b.by === "shape" ? "a shape · " : ""}${height(b)}${least}${sure}${b.alone ? " · no host near: a lot of its own" : ""}${b.street ? ` · ${esc(b.street)}` : ""}`}</span>`;
     const focus = () => { for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "focus", id: b.id }, origin); if (camera) camera.follow = false; showFollow(false); };
     li.addEventListener("click", focus); li.addEventListener("keydown", (event) => { if (event.key === "Enter") focus(); });
     return li;

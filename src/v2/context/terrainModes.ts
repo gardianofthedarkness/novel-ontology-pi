@@ -401,6 +401,22 @@ export const terrainHeightMode: Mode<HeightFocus, TerrainStores> = {
   budget: BUDGET,
 };
 
+/** A composite building's part (the user, 2026-11-01): its host, and the floors and sizes it may be (composite.ts). */
+export interface PartOfFocus extends PartFocus { kind: string; host: { label: string; type: string; floors: number | null; area: number | null }; floors: { letter: string; value: number; said: string }[]; sizes: { letter: string; value: number; said: string }[] }
+// Which floor of its host a part is on, and how large it is (the user, 2026-11-01): one question, read from its scenes; no
+// picture, since it stands at a random spot of that floor, roughly, its model inside its host's.
+export const terrainPartMode: Mode<PartOfFocus, TerrainStores> = {
+  name: "terrain-part",
+  task: (focus) => `${focus.part.label} (${focus.kind}) is part of a larger building, ${focus.host.label} (${focus.host.type}${focus.host.floors ? `, ${focus.host.floors} floors` : ""}${focus.host.area ? `, about ${focus.host.area} m² a floor` : ""}). On which of its floors is it, and how large is it? Read it from the scenes it is in, as the text tells them (scenes); where the text says nothing, what a place of its kind usually is in such a building.`,
+  sources: [...sources<PartOfFocus>("height"), fixed("floors", "floors", (focus: PartOfFocus) => Object.fromEntries(focus.floors.map((option) => [option.letter, option.said]))) as Source<PartOfFocus, TerrainStores>, fixed("sizes", "sizes", (focus: PartOfFocus) => Object.fromEntries(focus.sizes.map((option) => [option.letter, option.said]))) as Source<PartOfFocus, TerrainStores>],
+  cutOrder: ["environment", "standing", "facts"],
+  questions: (focus) => [
+    { key: "floor", primitive: "choice", instructions: `Which floor of ${focus.host.label} is ${focus.part.label} on?`, options: focus.floors.map((option) => option.letter), optionHints: Object.fromEntries(focus.floors.map((option) => [option.letter, `${option.letter}: ${option.said}`])) },
+    { key: "size", primitive: "choice", instructions: `How large is ${focus.part.label}, its floor area?`, options: focus.sizes.map((option) => option.letter), optionHints: Object.fromEntries(focus.sizes.map((option) => [option.letter, `${option.letter}: ${option.said}`])) },
+  ],
+  budget: BUDGET,
+};
+
 export const terrainMemberMode: Mode<MemberFocus, TerrainStores> = {
   name: "terrain-member",
   task: (focus) => `Places a novel names. For each, say whether it is part of ${focus.city.label} (a district or a street of it).`,

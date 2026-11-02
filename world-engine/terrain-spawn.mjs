@@ -183,7 +183,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     id, label: site.label, type: site.type ?? site.shape ?? site.kind ?? null, use: site.kind ?? null, by: site.by, typeBy: site.typeBy ?? null,
     ...(typeof site.top === 'number' ? { top: site.top } : {}), ...(site.type && H?.buildings[site.type] ? { least: H.buildings[site.type] * 3 } : {}),
     sure: { kind: site.confidence?.kind ?? null, height: site.confidence?.height ?? null }, street: site.parentLabel ?? null,
-    ...(site.by === 'tenant' ? { in: site.in, inLabel: site.inLabel, floor: site.floor } : {}), ...(site.tenant ? { alone: true } : {}),
+    ...(site.by === 'tenant' ? { in: site.in, inLabel: site.inLabel, floor: site.floor, area: site.area ?? null, partBy: site.partBy ?? null, partSure: site.partSure ?? null } : {}), ...(site.tenant ? { alone: true } : {}),
   }));
   const show = (moment, proposal = null) => (snapshot ? live.world({ ...snapshot, moment, ...(focus ? { focus } : {}), ...(spawn ? { notes: { ...snapshot.notes, buildings: buildingList() } } : {}) }, { ...data, terrain: { proposal } }) : null);
   const build = async (kept = null) => {
@@ -457,12 +457,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     // level's buildings and their moves are done, so its host stands where it will stay.
     const tenantsLater = [];
     const placeTenants = async () => {
-      for (const { part, city, type, kind, tenancy, sure, what, found } of tenantsLater) {
+      for (const { part, city, type, kind, tenancy, sure, what, found, about } of tenantsLater) {
         const holder = holderOf(part, city), { travel } = travelFor(part), under = id => id === holder || within(id, holder);
         const kept = Object.entries(terrain.sites).filter(([id, site]) => id !== part.id && site.scale === 'building' && site.by === 'borrow' && site.slot && site.parent && under(site.parent) && Array.isArray(site.toward) && nodeOf(site.parent))
-          .map(([id, site]) => { const node = nodeOf(site.parent); return { id, use: site.kind, at: [node.x + site.toward[0], node.z + site.toward[1]], kept: true, top: site.top ?? null, parent: site.parent, toward: site.toward, label: site.label, box: site.box }; });
+          .map(([id, site]) => { const node = nodeOf(site.parent); return { id, use: site.kind, at: [node.x + site.toward[0], node.z + site.toward[1]], kept: true, top: site.top ?? null, parent: site.parent, toward: site.toward, label: site.label, type: site.type ?? site.kind, size: site.size, box: site.box }; });
         const spare = slotsAt('building').filter(slot => slot.at && slot.toward && under(slot.parent) && !slot.owner && !S.sharersIn(slot, bookId).length)
-          .map(slot => ({ id: slot.id, use: slot.kind, at: slot.at, kept: false, top: null, parent: slot.parent, toward: slot.toward, label: `a ${slot.kind} lot`, box: Z.turnedBox(slot.at, slot.size, slot.turn ?? 0) }));
+          .map(slot => ({ id: slot.id, use: slot.kind, at: slot.at, kept: false, top: null, parent: slot.parent, toward: slot.toward, label: `a ${slot.kind} lot`, type: slot.kind, size: slot.size, box: Z.turnedBox(slot.at, slot.size, slot.turn ?? 0) }));
         const host = CP.chooseHost(tenancy, [...kept, ...spare], travel), base = { label: part.label, scale: 'building', kind, holder, type, typeBy: sure ? 'search' : 'jev', offered: found.map(entry => entry.id), confidence: { kind: what?.confidence ?? null } };
         if (!host) {
           const lot = await borrowBuilding(part, city, kind);
@@ -472,11 +472,21 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           await live.outcome({ subject: part.label, text: `${part.label}: a ${type}, no building of ${tenancy.in.join(', ')} under ${name(holder)} to be part of: a lot of its own, ${top / 3} floor${top === 3 ? '' : 's'}, asked nothing` });
           await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: lot.box, top });
         } else {
-          const floor = CP.floorOf(tenancy, host, textsOf(part));
-          terrain.sites[part.id] = { ...base, parent: host.parent, parentLabel: name(host.parent), toward: host.toward, box: host.box, in: host.id, inLabel: host.label, floor, by: 'tenant' };
+          // Its floor and size (the user, 2026-11-01): fixed for some types (a convenience store on floor one), else asked of
+          // Jev in one question, read from its scenes; a random spot of that floor, its model there roughly.
+          const floorsUp = typeof host.top === 'number' && host.top > 0 ? Math.round(host.top / 3) : null, area = Array.isArray(host.size) ? Math.round(host.size[0] * host.size[1]) : null;
+          let floor = tenancy.floor ?? null, size = tenancy.size ?? null, reply = null;
+          if (floor === null || size === null) {
+            const floors = CP.partFloors(floorsUp), sizes = CP.partSizes(area);
+            reply = (await ask(decide, T.terrainPartMode, { ...about, pictures: {}, kind: type, host: { label: host.label, type: host.type, floors: floorsUp, area }, floors, sizes }, stores)).replies;
+            const of = (key, options) => options.find(option => option.letter === reply.find(entry => entry.key === key)?.value)?.value ?? null;
+            floor ??= of('floor', floors) ?? 1; size ??= of('size', sizes) ?? 100;
+          }
+          const sureOf = key => reply?.find(entry => entry.key === key)?.confidence ?? null;
+          terrain.sites[part.id] = { ...base, parent: host.parent, parentLabel: name(host.parent), toward: host.toward, box: host.box, in: host.id, inLabel: host.label, floor, area: size, floors: tenancy.floors ?? 1, spot: CP.spotOf(part.id), partBy: reply ? 'jev' : 'fixed', ...(reply ? { partSure: { floor: sureOf('floor'), size: sureOf('size') } } : {}), by: 'tenant' };
           if (!terrain.order.includes(part.id)) terrain.order.push(part.id);
-          logMap({ level: 'building', what: 'tenant', place: part.id, in: host.id, floor });
-          await live.outcome({ subject: part.label, text: `${part.label}: a ${type}, part of ${host.label} in ${name(host.parent)}, ${floor === 'foot' ? 'at its foot' : floor === 'upper' ? 'on its upper floors' : 'under the street'}; asked nothing` });
+          logMap({ level: 'building', what: 'tenant', place: part.id, in: host.id, floor, area: size });
+          await live.outcome({ subject: part.label, text: `${part.label}: a ${type}, part of ${host.label} in ${name(host.parent)}, ${floor < 0 ? `${-floor} floor${floor === -1 ? '' : 's'} under the street` : `floor ${floor}`}, about ${size} m²${reply ? ' (Jev)' : ', as its type always is'}` });
           await show(`${part.label}: kept`, { id: part.id, label: part.label, kind, box: host.box, top: null });
         }
         await saveSlots(); placed++;
@@ -791,7 +801,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // A tenant (composite.json) joins a host once the level's buildings stand, asked nothing more; one a scene is set in
         // stays a building of its own (the stage walks in it).
         const tenancy = !shape && type ? tenancies[type] : null, setting = (inputs.data?.scenes ?? []).some(scene => scene.placeId === part.id || scene.placeIds?.includes(part.id));
-        if (tenancy && !setting) { tenantsLater.push({ part, city, type, kind, tenancy, sure, what, found }); await live.outcome({ subject: part.label, text: `a ${type}: part of a larger building, placed once the level's buildings stand` }); continue; }
+        if (tenancy && !setting) { tenantsLater.push({ part, city, type, kind, tenancy, sure, what, found, about }); await live.outcome({ subject: part.label, text: `a ${type}: part of a larger building, placed once the level's buildings stand` }); continue; }
         // A building borrows a lot of its kind (or stands apart, a rare one); a shape stands where travel is least.
         let lot = shape ? placeShape(part, city, shape) : await borrowBuilding(part, city, kind);
         if (!lot) { await live.outcome({ subject: part.label, text: `no street under ${name(holderOf(part, city))} to stand in` }); continue; }
