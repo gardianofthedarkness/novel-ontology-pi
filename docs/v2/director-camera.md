@@ -106,7 +106,22 @@ The user: only the current scene's characters' surroundings and the buildings hi
   rewrites the whole live page (3.3 MB on vol 1 now) each time: work that grows with the square of the story. The
   director's loop plays forward card by card and writes the world once, then each step's changes.
 
-## 7. Order of building
+## 7. Built: the director's loop, and its first run (2026-11-02)
+
+`world-engine/director/director.mjs` plays a line's scenes forward card by card on the engine as the export built it
+(`strandDemo`'s `engine` hook: its world, walk windows, solver and page assembler), people posed on the page where the
+loop has them (`__stage.pose`), the page written once a scene (and reloaded only when the world has grown). Per person
+acting in an action card: first, from the text alone, whether they go anywhere (`move-whether`; asked on the arrows
+straight away, Jev answered "stays" 45 times in 50); then the arrows, the spot in the wedge, and only then the two boxes.
+Jev's image service's 503s and 529s are tried again after a pause.
+
+Scenes 1–13 of vol 1 (92 calls, about a minute): 105 cards; 65 people asked, 55 stay (read again by hand: knocking on a
+door, turning round, bending down, a lunge into someone beside them: right), 10 go (8 to a spot, 2 boxed); 15 moves walked
+with the 6 of 20 dialogue gatherings. What is not played: travel the text tells in narration (walking to the station
+front, to 小萌's door), which is in no action card; and inside a building the shots look at it from outside (the cut at
+the mover's floor is not built yet).
+
+## 8. Order of building
 
 1. The camera planner (`src/v2/context/camera.ts`): the fourteen directions and their letters, the action's frame along an
    arrow, the column's height slices, reading boxes back. Code, tested.
