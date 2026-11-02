@@ -74,7 +74,23 @@ For each card: its own sentences as written; the lines just before; every line o
 where; the scene's description lines; where everyone stands now in words (place, floor, spot). Each line keeps its
 sentence id, and an answer says which line it rests on. The events' repeated "（原文：…）" is dropped.
 
-## 5. Order of building
+## 5. Rooms, before the run (the user, 2026-11-02)
+
+The corridors and stair cores stay as they were; the rooms are laid again (`apps/playground/src/data/skeleton.ts`
+`furnish`):
+- **By where in the building.** A bigger building (a floor of 60 cells, 240 m², or more) has halls and rooms of several
+  floors, at its bottom (a lobby, a gym, an auditorium) or its top (a hall, a penthouse); its rooms grow larger toward its
+  ends (mean m̄·(1 + 2·e(k)), e the pull toward the ends, 1 at the bottom and the top) and keep the building's usual size
+  between. A small building rarely has a hall.
+- **Doors.** A room keeps one door (a hall two, a room of several floors three), spread along its walls, not every
+  corridor cell beside it; the walk graph leaves a room only through them, and a room of several floors is walked on its
+  own floor, open air above it.
+- **Drawn hollow:** its floor, thin walls with a gap at each door and a bright line along their tops, no ceiling.
+- Vol 1's world (2026-11-02): 23,995 rooms in 598 buildings, 699 halls and 58 rooms of several floors.
+
+Also before the run: every building's marker on its building (a built one kept its canvas spot: 飞镖酒吧 35 m off).
+
+## 6. Order of building
 
 1. The camera planner (`src/v2/context/camera.ts`): the fourteen directions and their letters, the action's frame along an
    arrow, the column's height slices, reading boxes back. Code, tested.

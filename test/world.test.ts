@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createWorld, ensure, inscribed, nodeNear, nodePos, spotsNear, worldGraph, worldSpot, CHUNK, type WorldSource } from "../apps/playground/src/data/world.js";
+import { createWorld, ensure, inscribed, nodeId, nodeNear, nodePos, spotsNear, worldGraph, worldSpot, CHUNK, type WorldSource } from "../apps/playground/src/data/world.js";
 import { addPatch, fillLandscape, firstLandscape } from "../src/v2/world/landscape.js";
 import { collapse, hallsOf, intervalPrecision, subwayOf, type Hall } from "../src/v2/world/underground.js";
 import { solveWalk, sampleWalk, temperatureBound } from "../apps/playground/src/data/pathIntegral.js";
@@ -139,4 +139,33 @@ test("halls stand at rest; a blast that breaks a shallow hall's lining dents the
   assert.ok(caved.pillars.length > 0 && caved.failed.length > 0);
   assert.notEqual(caved.stopped, "dent");
   assert.deepEqual(caved.dent, {});
+});
+
+test("rooms are walked through their doors only, on their own floor; a room of several floors is open air above it", async () => {
+  const { cellIndex } = await import("../apps/playground/src/data/skeleton.js");
+  const world = createWorld(source());
+  ensure(world, 0, 0, 60, 0);
+  const built = worldGraph(world, standingOf(world)), { graph, type, lot } = built;
+  let roomNodes = 0, ways = 0;
+  for (let node = 0; node < graph.nodes; node++) {
+    if (type[node] !== 3) continue;
+    roomNodes++;
+    const here = world.lots[lot[node]], i = Math.floor(graph.x[node] / 2) - here.i0, j = Math.floor(graph.z[node] / 2) - here.j0, k = Math.round(graph.y[node] / 3);
+    const room = here.rooms.find((box) => box.floor === k && i >= box.i0 && i <= box.i1 && j >= box.j0 && j <= box.j1)!;
+    assert.ok(room, "a room node is in a room, on its own floor");
+    for (let e = graph.offsets[node]; e < graph.offsets[node + 1]; e++) {
+      const to = graph.to[e];
+      if (type[to] !== 2) continue;
+      ways++;
+      const ti = Math.floor(graph.x[to] / 2) - here.i0, tj = Math.floor(graph.z[to] / 2) - here.j0;
+      assert.ok(room.doors.includes(cellIndex(here.skeleton, ti, tj, k)), "out of a room only through one of its doors");
+    }
+  }
+  assert.ok(roomNodes > 50 && ways > 0, `rooms walked (${roomNodes} room cells, ${ways} ways out)`);
+  let tall = 0;
+  for (const [n, here] of world.lots.entries()) for (const room of here.rooms.filter((box) => box.top > box.floor)) for (let k = room.floor + 1; k <= room.top; k++) {
+    const above = nodeId(world, here.i0 + room.i0, here.j0 + room.j0, k);
+    assert.ok(above >= type.length || type[above] === 0 || lot[above] !== n, "no floor to stand on above a room of several floors");
+    tall++;
+  }
 });

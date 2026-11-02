@@ -264,6 +264,7 @@ const mats = {
   hall: new THREE.MeshLambertMaterial({ color: 0x5a8fb8, transparent: true, opacity: 0.5, depthWrite: false }),
   tall: new THREE.MeshLambertMaterial({ color: 0x8a7ad6, transparent: true, opacity: 0.5, depthWrite: false }),
   roomWall: new THREE.MeshLambertMaterial({ color: 0x9fd2f0, transparent: true, opacity: 0.55, depthWrite: false }),
+  roomEdge: new THREE.LineBasicMaterial({ color: 0xd8f1ff, transparent: true, opacity: 0.85 }),
   roomCut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.32, depthWrite: false }),
   // A hit building's units: its walls and roof as panels, and what fell as rubble.
   wall: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.2, depthWrite: false }),
@@ -482,7 +483,7 @@ function drawSkeletons(id, entry, count, settling = null) {
     for (const unit of [...part.blasted, ...part.fallen]) gone[part.lot].add(unit.slice(0, 4).join("|"));
     if (hit !== settling) for (const unit of part.fallen) { const box = unitBox(place.lots[part.lot], entry, unit); rubble.push([box[0], unit[4] + 0.3, box[2], Math.min(box[3], CELL * 0.9), 0.6, Math.min(box[5], CELL * 0.9)]); }
   }
-  const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], redRooms = [], walls = [], roofs = [];
+  const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], roomEdges = [], redRooms = [], walls = [], roofs = [];
   // A hit building's walls and roof, unit by unit; its artistic shell gives way to them.
   place.lots.forEach((lot, n) => {
     const unborn = (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n);
@@ -507,10 +508,13 @@ function drawSkeletons(id, entry, count, settling = null) {
       const cut = cutRooms[n].has(r), x0 = (lot.i0 + i0) * CELL - entry.cx, z0 = (lot.j0 + j0) * CELL - entry.cz, w = (i1 - i0 + 1) * CELL, d = (j1 - j0 + 1) * CELL, h = (top - k + 1) * FLOOR - 0.3, y = k * FLOOR;
       (cut ? redRooms : kind === 2 ? talls : kind === 1 ? halls : rooms).push([x0 + w / 2, y + 0.06, z0 + d / 2, w - 0.2, 0.12, d - 0.2]);
       const door = new Set(doors), at = (i, j) => (k * lot.nz + j) * lot.nx + i, wall = cut ? redRooms : roomWalls;
-      for (let i = i0; i <= i1; i++) { const x = (lot.i0 + i + 0.5) * CELL - entry.cx; if (!door.has(at(i, j0 - 1))) wall.push([x, y + h / 2, z0 + 0.06, CELL, h, 0.12]); if (!door.has(at(i, j1 + 1))) wall.push([x, y + h / 2, z0 + d - 0.06, CELL, h, 0.12]); }
-      for (let j = j0; j <= j1; j++) { const z = (lot.j0 + j + 0.5) * CELL - entry.cz; if (!door.has(at(i0 - 1, j))) wall.push([x0 + 0.06, y + h / 2, z, 0.12, h, CELL]); if (!door.has(at(i1 + 1, j))) wall.push([x0 + w - 0.06, y + h / 2, z, 0.12, h, CELL]); }
+      // Each wall piece also draws its top edge as a line, so a room reads as a hollow box at any zoom.
+      const piece = (px, pz, sx, sz) => { wall.push([px, y + h / 2, pz, sx, h, sz]); const top = y + h; if (sx > sz) roomEdges.push(px - sx / 2, top, pz, px + sx / 2, top, pz); else roomEdges.push(px, top, pz - sz / 2, px, top, pz + sz / 2); };
+      for (let i = i0; i <= i1; i++) { const x = (lot.i0 + i + 0.5) * CELL - entry.cx; if (!door.has(at(i, j0 - 1))) piece(x, z0 + 0.06, CELL, 0.12); if (!door.has(at(i, j1 + 1))) piece(x, z0 + d - 0.06, CELL, 0.12); }
+      for (let j = j0; j <= j1; j++) { const z = (lot.j0 + j + 0.5) * CELL - entry.cz; if (!door.has(at(i0 - 1, j))) piece(x0 + 0.06, z, 0.12, CELL); if (!door.has(at(i1 + 1, j))) piece(x0 + w - 0.06, z, 0.12, CELL); }
     });
   });
+  if (roomEdges.length) dynamic.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(roomEdges, 3)), mats.roomEdge));
   dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.hall, halls), instanced(mats.tall, talls), instanced(mats.roomWall, roomWalls), instanced(mats.roomCut, redRooms), instanced(mats.wall, walls), instanced(mats.roof, roofs), instanced(mats.rubble, rubble));
   entry.group.add(dynamic); entry.dynamic = dynamic;
 }
@@ -1415,6 +1419,8 @@ if (capture) {
     things: (data.things ?? []).map(({ id, name, model, shape, size, height, airborne, placed }) => ({ id, name, model, shape, size, height, airborne, placed })),
     places: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, kind: place.kind, lots: place.lots.length, world: !!place.world, theme: place.theme ?? null }])),
     scenes: data.scenes.map((scene) => ({ id: scene.id, place: scene.place, events: scene.events.map((event) => event.text) })),
+    /** How many of each inside part are drawn now (rooms, halls, room walls, corridors, stairs): for checking a still. */
+    insideCounts() { const out = {}; world.traverse((part) => { if (part.isInstancedMesh) for (const name of ["room", "hall", "tall", "roomWall", "corridor", "stair"]) if (part.material === mats[name]) out[name] = (out[name] ?? 0) + part.count; }); return out; },
     /** The labels a still shows now (their text, and the place each names): for checking what a shot carries. */
     labelsShown() { const out = []; world.traverse((part) => { if (part.isSprite && part.userData.text) { let shown = true; for (let at = part; at; at = at.parent) if (!at.visible) shown = false; if (shown) out.push({ text: part.userData.text, place: part.userData.place ?? null }); } }); return out; },
     /** A scene's card: its moment on the timeline (for `at`), and where each of its people stands then (world metres). */
