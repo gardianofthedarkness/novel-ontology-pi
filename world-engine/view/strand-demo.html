@@ -1139,8 +1139,12 @@ if (liveMode) {
   // The camera is the viewer's: the world view hands each new frame the camera the last one had, and whether it follows.
   addEventListener("message", (event) => {
     if (event.source !== parent || event.origin !== origin) return;
+    // Unframed (a page on its own, or a check), its own camera messages are not a world view's.
+    if (parent === window && event.data?.type === "camera") return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
     if (event.data?.type === "replay") { replayCard(event.data); return; }
+    if (event.data?.type === "continue") { continueTo(event.data); return; }
+    if (event.data?.type === "speed") { speed = event.data.speed ?? speed; return; }
     if (event.data?.type === "live") { replaying = null; stopAt = null; playing = true; speed = 2; time = total - 0.001; return; }
     if (event.data?.type === "underground") { xray = !!event.data.on; return; }
     // A page around the world (the terrain io's step list) picks a place: the same as clicking it here.
@@ -1247,15 +1251,29 @@ function producerPose(sceneId, cam) {
   if (cam.elevation != null) { const length = offset.length(), level = new THREE.Vector3(offset.x, 0, offset.z).normalize(), up = THREE.MathUtils.degToRad(cam.elevation); offset.copy(level.multiplyScalar(Math.cos(up) * length)).setY(Math.max(2 - target.y, Math.sin(up) * length)); }
   return { target, position: target.clone().add(offset) };
 }
-function replayCard({ scene, event, camera: cam = null, once = false, slow = true }) {
+/** For checking a replay: where the timeline and the camera stand. */
+window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
+function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null }) {
   const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.eventIndex === event);
   if (!segment) return;
   shownPlace = segment.scene.place; follow = false;
   const pose = producerPose(scene, cam);
   // The glide to the producer's viewpoint (a second and a half), then the line plays from the card on.
   glide = pose ? { to: pose, start: segment.start, seconds: 1.5, direct: true } : null;
-  time = segment.start + 0.001; stopAt = once ? segment.end : null; playing = true; speed = slow ? 0.5 : 1;
+  time = segment.start + 0.001; stopAt = once ? segment.end : null; playing = true; speed = pace ?? (slow ? 0.5 : 2);
   replaying = { scene, event };
+}
+/**
+ * Continue (the reading panel): on from where the world is to the end of the next card where someone moves; the view glides
+ * to that card's producer viewpoint as it begins. A long stretch of nothing moving (over eight seconds) is skipped.
+ */
+function continueTo({ scene, event, camera: cam = null, speed: pace = 2 }) {
+  const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.eventIndex === event);
+  if (!segment) return;
+  if (time > segment.start || segment.start - time > 8) time = Math.max(0, segment.start - 0.6);
+  follow = false; stopAt = segment.end; playing = true; speed = pace; replaying = replaying ?? { scene, event };
+  const pose = producerPose(scene, cam);
+  glide = pose ? { to: pose, start: Math.max(time, segment.start - 0.6), seconds: 1.2, direct: true } : null;
 }
 
 $("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "⏸ Pause" : "▶ Play"; });

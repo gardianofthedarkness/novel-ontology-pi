@@ -110,10 +110,14 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         for (let id = 0; id < type.length; id++) if (type[id] && graph.offsets[id + 1] > graph.offsets[id] && Math.abs(graph.x[id] - x) <= radius && Math.abs(graph.z[id] - z) <= radius) nodes.push({ id, x: graph.x[id], y: graph.y[id], z: graph.z[id], type: type[id], lot: lot[id] });
         return { built, nodes };
       };
+      // A move's walk: one draw of the path integral, and six more from the same field (the traces the player draws round it,
+      // the spread of where the walk might have gone).
       const walk = (scene, key, from, targets, how) => {
         if (!targets.length) return null;
         const field = E.solve(scene.placeId, key, targets, how, from[0]), built = E.graphOf(W.nodePos(world, from[0]));
-        return E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
+        const path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
+        if (path) path.ensemble = Array.from({ length: 6 }, (_, n) => E.sampleWalk(built.graph, field, from[0], from[1], seeded(`${key}|${n}`))).filter(Boolean);
+        return path;
       };
       const shoot = async (name, size, options) => {
         await chrome.size(...size);
@@ -149,7 +153,7 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
           scene.events.push(event);
           const moveTo = (person, path, how, why) => {
             if (!path || path.length < 2) { cardRecord.moves.push({ person, why, moved: false }); return; }
-            E.moves.set(`${scene.id}|${card.id}|${person}`, { person, how: how === 'run' ? 'run' : 'walk', path, ensemble: [] });
+            E.moves.set(`${scene.id}|${card.id}|${person}`, { person, how: how === 'run' ? 'run' : 'walk', path: [...path], ensemble: path.ensemble ?? [] });
             positions[person] = [path.at(-1), positions[person][1]];
             cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))) });
           };
