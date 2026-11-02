@@ -464,6 +464,15 @@ from 58 and 100 before):**
       read from it). On this run's answers 17 buildings would be lifted: 豚草不动产写字楼 1 → 12 floors; 大厦, 两栋大楼 and
       大楼 (scene 29) 3 → 12; the flats 5 → 10; the hospital 4 → 8. A minimum lifts; 大楼 (scene 2) stays at 100 floors.
 
+**Composite parts on their floors (the user, 2026-11-01; borrow-and-spawn.md §6; with Jev on the host, 00:17 UTC):**
+- [x] A part's floor and size: fixed for a convenience store (floor one, 120 m²), a drugstore, a florist, a bank branch;
+      else one question to Jev with no picture. Its use's model on that floor of its host, at a random spot, roughly.
+- [x] The Buildings panel in World · Live shows each part's floor, size and who chose them.
+- Run: 9 paid calls for 9 parts (14,416 input and 1,469 output tokens; the buildings' questions answered from the
+  cache). The two convenience stores on floor one, as fixed; at the fifty-storey tower's foot the sushi restaurant 200 m²
+  and the patisserie and donut shop on floor one, the ramen shop one floor under the street (42% sure); the cinema on a
+  mall lot's floor 4, 500 m²; the cinema of 购物中心 its whole ground floor, 358 m².
+
 **The building level with Jev on the whole dictionary (2026-11-01, on the host at 0f632a6; 47 questions, 36 paid and 11
 from the cache; 190,936 input and 3,816 output tokens):**
 - **The minimum held everywhere:** 豚草不动产写字楼 at 12 floors (42% sure), every office 12 or more, the flats 10, the
