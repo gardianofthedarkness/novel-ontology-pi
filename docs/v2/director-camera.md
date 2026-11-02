@@ -123,12 +123,19 @@ the mover's floor is not built yet).
 
 **Every move an action (the user, 2026-11-02).** Told in the sentence kinds' definitions that any change of place is an
 action, Jev moved 3 of the 35 narration and description sentences holding a word of moving, and 217 other sentences
-changed kind back and forth (its run-to-run noise is larger than the wording's effect; that reading was set aside). So it
-is a code rule (`LANGUAGE.moves`, the move rule in src/v2/extraction/flow.ts): such a sentence is an action, EM² says who
-moves, a move with no one said to move (the subject left out) is that of whoever last spoke or acted before it, and the
-action rule drops the rest. Vol 1: 44 marked, 33 kept (443 action cards, from 417). Scenes 1–13 played again: 18 moves,
-the narrated walks among them (to 小萌's door); most of these scenes' travel is between scenes (carried by spawning) or only
-said or thought ("we'll go to 小萌's place first"), which is not a move.
+changed kind back and forth (its run-to-run noise is larger than the wording's effect). A word list (the move rule) was
+tried and taken out again: it holds for one language and the words someone thought of (the user: not generalizable). The
+director's pass (§7a) asks instead.
+
+### 7a. The director's pass (the user, 2026-11-02: a mini Jev call per narrative sentence, not a word list)
+
+`world-engine/director/pass.mjs` (`directorPassMode`): every narration and description sentence of a scene, asked on its
+own with the line either side and the people present, twenty a request: does someone change place in it, do something
+visible where they are, or is there nothing to show; and who (one present, or "they": everyone). The reading is not
+changed; the director plays the sentences that move someone as action cards of those it names, the "does X go anywhere"
+question still in front of them. Scenes 1–13 (407 sentences, 27 requests): two runs from empty caches agreed on 404
+(99.3%); 10–11 moves, among them "they came to a building that looked like containers" (all three present), with a few the
+same both times that a reader would not call moves ("这条路既容易迷路").
 
 ## 8. Order of building
 

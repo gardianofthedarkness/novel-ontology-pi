@@ -108,3 +108,32 @@ export const moveExactMode: Mode<HeightFocus, unknown> = {
   ] as DecisionQuestion[],
   budget: 12000,
 };
+
+/**
+ * The director's pass (docs/v2/director-camera.md §7a; the user, 2026-11-02: a mini Jev call, not a word list): which
+ * narration and description sentences the animation should show. Each sentence is asked on its own with only the line
+ * either side and the people present: does someone change place in it, do something visible where they are, or is there
+ * nothing to show; and who. Batched by scene. The reading's sentence kinds stay as they are: a sentence the pass says moves
+ * someone is played as an action card, its mover the one it names.
+ */
+export interface PassFocus {
+  scene: { id: string; place: string };
+  people: { id: string; name: string }[];
+  batch: { id: string; before: string; text: string; after: string }[];
+}
+export const SHOWS = { moves: "someone who matters changes place in it: walks, runs, arrives, comes in, goes out, leaves, climbs, jumps, flies, is carried", acts: "someone who matters does something visible where they are: falls, hits, grabs, hides, turns, sits down", none: "nothing to show: a feeling, a thought, commentary, how someone looks, the background, something only planned, imagined, said or remembered, a figure of speech" } as const;
+export const directorPassMode: Mode<PassFocus, unknown> = {
+  name: "director-pass",
+  task: (focus) => `Sentences of a novel's scene (${focus.scene.place}), each with the line before and after it (sentences). For each sentence's own text (the lines before and after are only there to tell who and what it means; what they say is not this sentence's), should an animation of the scene show it, and who does it (people: those present)?`,
+  definitions: () => ({ shows: { ...SHOWS } }),
+  sources: [
+    fixed<PassFocus>("people", (focus) => Object.fromEntries(focus.people.map((person) => [person.id, person.name]))),
+    fixed<PassFocus>("sentences", (focus) => Object.fromEntries(focus.batch.map((entry) => [entry.id, { before: entry.before, text: entry.text, after: entry.after }]))),
+  ],
+  cutOrder: [],
+  questions: (focus) => focus.batch.flatMap((entry) => [
+    { key: `show:${entry.id}`, primitive: "choice", instructions: `What does an animation show of sentences.${entry.id}.text? (shows)`, options: Object.keys(SHOWS), optionHints: { moves: "someone changes place", acts: "someone does something visible in place", none: "nothing to show" } },
+    { key: `who:${entry.id}`, primitive: "choice", instructions: `Who does it in sentences.${entry.id}.text (the one it names, or means when it leaves them out)?`, options: [...focus.people.map((person) => person.id), "all", "none"], optionHints: Object.fromEntries([...focus.people.map((person) => [person.id, person.name]), ["all", "they: everyone present"], ["none", "no one present who matters"]]) },
+  ]) as DecisionQuestion[],
+  budget: 14000,
+};

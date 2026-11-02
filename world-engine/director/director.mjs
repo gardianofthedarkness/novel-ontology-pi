@@ -20,6 +20,7 @@ const S = await load('dist/apps/playground/src/data/skeleton.js'), { loadWorkspa
 const { strandDemo, inlineStrand } = await import('../world/export-strand-demo.mjs');
 const { browser, serve } = await import('../view/two-view-things.mjs');
 const { VENDOR_FILES, PICKER_MODEL } = await import('../live/sim-jev.mjs');
+const { passScene } = await import('./pass.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
@@ -120,13 +121,20 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
         record.scenes.push(sceneRecord);
         if (!run || !reads) continue;
         const positions = Object.fromEntries(Object.entries(run.starts).filter(([, value]) => value));
-        const cards = (cardsOf.get(scene.id) ?? []).filter(card => card.people.some(person => positions[person.id] && person.how.some(how => PRESENT.has(how))));
+        // The director's pass (pass.mjs): the narration and description sentences that move someone present join the cards,
+        // as actions of those they name, in reading order.
+        const passed = await passScene({ reading, text, decide, scene: reads, place: names.get(scene.placeId) ?? scene.placeId, people: Object.fromEntries(Object.keys(positions).map(id => [id, names.get(id) ?? id])) });
+        sceneRecord.pass = passed;
+        const moving = Object.entries(passed).filter(([, entry]) => entry.show === 'moves' && entry.who.length).map(([id, entry]) => ({ id: `pass:${id}`, kind: 'action', first: id, sentences: [id], people: entry.who.map(who => ({ id: who, how: ['acts'] })), pass: true }));
+        const position = new Map(reads.sentences.map((id, n) => [id, n]));
+        const cards = [...(cardsOf.get(scene.id) ?? []), ...moving].filter(card => card.people.some(person => positions[person.id] && person.how.some(how => PRESENT.has(how)))).sort((a, b) => (position.get(a.first) ?? 0) - (position.get(b.first) ?? 0));
         scene.events = []; run.events = []; scene.cast = [...new Set([...(scene.cast ?? []), ...Object.keys(positions)])];
         await live?.phase(`scene ${Number(scene.id.slice(-3))}: ${cards.length} cards`);
         await show(true);
         const placeName = names.get(scene.placeId) ?? scene.placeId, when = reading.time?.scenes?.find(entry => entry.scene === scene.id)?.when ?? null;
         for (const card of cards) {
-          const cardRecord = { card: card.id, kind: card.kind, moves: [] };
+          const cardRecord = { card: card.id, kind: card.kind, ...(card.pass ? { pass: true } : {}), moves: [] };
+          await live?.phase(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`);
           sceneRecord.cards.push(cardRecord);
           const event = { id: card.id, text: card.sentences.map(id => text.get(id)?.text ?? '').join('').slice(0, 120), actors: card.people.filter(person => positions[person.id] && person.how.some(how => PRESENT.has(how))).map(person => person.id) };
           scene.events.push(event);
@@ -236,6 +244,8 @@ export async function direct(novelDir, { reading, from, to, jev, budget = Infini
             await save();
           }
           run.events.push({ at: Object.fromEntries(Object.entries(positions).map(([who, value]) => [who, value])) });
+          // Streamed: the world as far as this card, each time someone has moved.
+          if (live && cardRecord.moves.some(move => move.moved)) { const data = await show(true); await live.world({ ...E.snapshot(true), moment: `scene ${Number(scene.id.slice(-3))}: ${cardRecord.moves.filter(move => move.moved).map(move => names.get(move.person) ?? move.person).join(', ')} moved` }, data); }
         }
         log(`${scene.id}: ${cards.length} cards, ${sceneRecord.cards.reduce((n, card) => n + card.moves.filter(move => move.moved).length, 0)} moves, ${calls} calls so far`);
         await save();
