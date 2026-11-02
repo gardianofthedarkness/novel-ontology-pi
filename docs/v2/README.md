@@ -72,7 +72,7 @@ children by a configuration (`config/terrain/`), a place borrows a slot of its t
 by level in narrative order, keeping the characters' travel least. Design: [borrow-and-spawn.md](borrow-and-spawn.md);
 progress: [milestones.md](milestones.md).
 
-### Spawning positions — later
+### Spawning positions — next
 
 Where each character and thing stands when a scene begins, on the terrain the first step built: the scene's place from the
 world script, who is there from EM², and a spot inside the place's built ground. Terrain spawning was designed as "the first

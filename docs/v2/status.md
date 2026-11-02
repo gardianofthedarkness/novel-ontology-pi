@@ -6,7 +6,7 @@
 | Extraction | The place tree, the world script, pools | **done** |
 | World engine | Terrain | **done**: run 11 (commit `44cf6a1`, tag `terrain-run11`) |
 | World engine | Borrowing and spawning by type | **in progress**: city to building level built (M0–M5), growth across books next; [design](borrow-and-spawn.md), [milestones](milestones.md) |
-| World engine | Spawning positions | later |
+| World engine | Spawning positions | next |
 | World engine | Movement and simulation | later |
 
 ## Extraction — done
@@ -62,7 +62,7 @@ borrow by their use; floating objects asked their distance from the ground and t
 by one model table of CC0 kits ([model-kit.md](model-kit.md)); living areas are an East Asian megacity's
 ([living-areas.md](living-areas.md)). Next: growth across books (M6).
 
-## World engine: spawning positions — later
+## World engine: spawning positions — next
 
 Where each character and thing stands when a scene begins: the scene's place (the world script), who is there (EM²), and a
 spot in that place's built ground. Designed in outline (visual-context-engine.md §5, world-engine-v2.md §4); its own
