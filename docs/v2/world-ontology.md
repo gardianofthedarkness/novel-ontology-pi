@@ -315,6 +315,57 @@ How v1 formats the ontology and what its review gate covers (`src/ground/connect
 - **The user's gate** saw only low-confidence identity merges, conflicts the laws can't settle, and cross-book packets
   (the universe's causality, atlas and calendar), each through the same review lifecycle (show, evidence, decide, apply).
 
+## 7b. Review gates for v2: review by exception (proposed 2026-11-02)
+
+The user's concern with v1's boundary: the world log now records many kinds of things, and reviewing them as v1
+reviewed facts would bury the user. On volume 1 alone one run wrote 339 world records and 359 ledger entries, and the
+reading has 2,196 roles (643 under 0.5). The proposal: **nothing is reviewed as a record; only exceptions are, in three
+gates of shrinking volume, each gate seeing bundles, not lines.**
+
+### The three gates
+
+| Gate | Who | Sees | Volume on volume 1 (estimate) |
+|---|---|---|---|
+| **G0 · The laws** | code | every proposal, every run | all of it, in milliseconds |
+| **G1 · The main agent** | Pi (or Codex) with the review CLI | what G0 holds, bundled by scene; a sample of what G0 passed | today 112 held items in 23 scenes, so ~23 bundles; fewer once system 2 and Jev's dialogue kinds run |
+| **G2 · The user** | you | identity, abilities, big revisions, what G1 can't settle | a handful per book |
+
+### Classes: what goes where
+
+| Class | Examples | Route |
+|---|---|---|
+| **W · World mechanics** | positions, walks, tracks, meetings by rule, bindings, blast geometry | never reviewed; the world log only; canon gets their summary (where each person is at a scene's end) applied automatically when lawful |
+| **S · Story state the world derives** | presence, a scene's place, time relations, a line's speaker, hurt, a building damaged | applied automatically when G0 passes and it agrees with the reading or the reading was unsure (below 0.5); otherwise G1 |
+| **R · Revisions** (back-propagation) | a pin's re-derived span | applied when its size J is below the threshold; above it G1; far above it G2 |
+| **I · Identity** | a merge or a split, a new person, a description that means someone | a clean merge (no law against it, strong evidence) applied with a flag, undoable, as v1; anything else G1; G1 unsure goes to G2 |
+| **A · Abilities** | the per-character config (it lets someone past the physics) | written by G1 with evidence; every change shown to G2 as a short list, since one wrong entry changes everything a person does |
+| **X · Cross-book** | a strand continued into the next book, the atlas, the calendar | G1, then G2 as one bundle per book |
+
+### What keeps the volume down
+
+1. **Bundles, not records.** G1 gets one item per scene: the scene's held breaks together, with its text, the world log's
+   records for it and the alternatives the laws allow. One answer can settle several breaks (one misplaced person
+   explains three L6 breaks). G2 gets one item per identity question, one list of ability changes, one bundle per book.
+2. **Reach decides priority.** Each item is scored by how much it would change (its J, §5a) times how far it reaches
+   (the later scenes and people that depend on it, from the log's ties). Items are answered highest first, within a
+   budget per run (G1 a fixed number of bundles; G2 at most a few); what's left over stays held and plays its lawful
+   default. Nothing waits on review.
+3. **Audits instead of approvals.** Of what G0 passes and is applied automatically, a small random share (say 2%) goes
+   to G1 as an audit. Each class keeps its audit error rate; a class whose rate rises above a limit is routed to G1
+   automatically until it falls again. The gates tighten where the engine is wrong and loosen where it's right.
+4. **Everything applied is undoable.** Canon changes only through the ledger, and every applied entry can be reverted
+   with what depended on it. A note on a card in World · Live (Why) is the user's way to reverse or pin, at the moment
+   they notice, without reviewing anything ahead of time.
+5. **The reading's own answers stay out of review.** v2's extraction is not reviewed per fact (as v1's was): its answers
+   are the text layer, trusted by their confidence; a weak one is checked by the world (G0) and system 2 rather than by
+   a person.
+
+### Your rule, kept
+
+Facts are never approved automatically by a person or an agent acting for one: what applies automatically is only what
+the laws pass in classes W and S (and clean merges, flagged), and each class's audit rate is on record. Anything that
+changes identity, abilities or another book reaches a gate.
+
 ## 8. What the user sees
 
 - **Why, per card:** Jev's questions (with system 2's answer beside Jev's where it ran), **Laws** (each check, passed or
@@ -351,7 +402,8 @@ then W8. Track A runs in parallel throughout.
 
 ## 10. Decisions for the user
 
-1. World records (presence, positions, bindings) applied without review, facts and identity always through the gate?
+1. Review gates: review by exception in three gates (G0 laws, G1 main agent, G2 the user), classes W, S, R, I, A, X as
+   proposed in §7b? Its numbers to set: the audit share, the error-rate limit per class, G1's budget per run, G2's.
 2. EM merges from world evidence: applied with a flag as v1 decided (2026-10-29), or always to the gate now?
 3. When the laws reject a reading's sure answer (a speaker at 0.9 out of earshot): the reading wins and the world is
    rechecked, or the world wins?
