@@ -10,3 +10,7 @@ novels/*/ontology/graph.lbug*
 .env.*
 !.env.example
 __pycache__/
+
+# Obsidian (docs/ is a vault): per-user state stays local
+docs/.obsidian/*
+!docs/.obsidian/app.json

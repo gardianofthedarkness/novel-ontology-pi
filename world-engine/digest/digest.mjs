@@ -20,13 +20,13 @@ export const TALK = ['live', 'group', 'remote', 'public'];
 export const ACTIVITIES = ['standing', 'sitting', 'lying', 'strolling', 'walking', 'running', 'working', 'fighting', 'riding', 'gone'];
 const WINDOW = 30, CONTEXT = 3;
 
-const SCENE_SYSTEM = [
+export const SCENE_SYSTEM = [
   'You read one scene of a Chinese light novel that is being staged in a 3D city, and summarize it for the people who stage it.',
   'Use only the ids given for people. Keep every text field short (under 30 words), in English.',
   'Reply with JSON only, in the shape asked.',
 ].join(' ');
 
-const WINDOW_SYSTEM = [
+export const WINDOW_SYSTEM = [
   'You read a passage of a Chinese light novel that is being staged in a 3D city, sentence by sentence, and say what each sentence does to the people\'s positions, the things they carry, and how they talk.',
   'List only changes of position; leave out anyone who stays where they are. Be thorough: every verb of motion (走, 跑, 跳, 进, 出, 来, 去, 回, 靠近, 退, 跟, 追, 逃, 爬, 飞, 穿过, 冲) is a move, and so is small motion: a dodge, a step back, closing in, pacing, turning to walk off, wandering down a street.',
   'When someone carries, leads or takes another along, give a move for each of them, the one taken along "with" the other. For going elsewhere, say where they end up in "to".',
@@ -35,7 +35,7 @@ const WINDOW_SYSTEM = [
   'Use only the ids given for people and sentences. Reply with JSON only, in the shape asked.',
 ].join(' ');
 
-const SCENE_SHAPE = {
+export const SCENE_SHAPE = {
   summary: 'what happens, in order (2-4 sentences)',
   where: 'where the scene plays: indoors or outdoors, the kind of place',
   continues: 'how it follows the scene before: carries straight on | later the same day | another day | elsewhere at the same time | a flashback',
@@ -43,7 +43,7 @@ const SCENE_SHAPE = {
   people: [{ who: '<person id>', doing: 'their routine through the scene when not acting: one of ' + ACTIVITIES.join('|'), start: 'where they are at the start (words)', end: 'where they are at the end (words)', holding: ['objects they carry: short names in Chinese as the text calls them; not body parts, clothes worn, or people'] }],
   memory: 'what the next scene needs to know: who is where, with whom, heading where, carrying what, hurt or not, what is going on (under 80 words)',
 };
-const WINDOW_SHAPE = {
+export const WINDOW_SHAPE = {
   moves: [{ sentence: '<sentence id>', who: '<person id>', motion: MOTIONS.filter(motion => motion !== 'still').join('|') + ' (step: within 2 m; nearby: within about 10 m; elsewhere: further, or into another building, floor, roof)', toward: '<person id they approach, or null>', away: '<person id or null>', with: '<person id they go with, or null>', to: 'where they end up, in words, or null', how: HOWS.join('|'), basis: 'stated | implied', sure: '0..1' }],
   facts: [{ sentence: '<sentence id>', who: '<person id>', kind: FACT_KINDS.join('|'), value: 'floor: ground|upper|<number>; near/apart: <person id>; feature: ' + FEATURES.join('|') + '; otherwise null', basis: 'stated | implied', sure: '0..1' }],
   items: [{ sentence: '<sentence id>', item: 'short name in Chinese, as the text calls it', event: ITEM_EVENTS.join('|'), who: '<person id holding or acting on it, or null>', to: '<person id it is given to, or null>', size: 'metres across (a phone 0.15, a bag 0.4, a sword 1, a car 4)' }],

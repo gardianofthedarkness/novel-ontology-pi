@@ -164,7 +164,7 @@ export const STATE = {
   combat: [
     { state: 'Exchanges', what: 'attacker, target, kind and shape of the attack, outcome', log: 'exchange', laws: ['L12', 'L13'], to: 'relation.PARTICIPATES_IN', also: 'event.conflict', gate: 'held', status: 'proposed', note: 'the attack\'s kind, shape and outcome properties of each participant\'s relation to the event; CAUSES from it to what it broke' },
     { state: 'Knock-backs and dodges', log: 'position', laws: ['L1', 'L10'], smoothed: true, to: 'stateChange.location', gate: 'applied', status: 'partial' },
-    { state: 'Injury and condition', what: 'hurt, unconscious, bound', log: 'condition', laws: [], to: 'stateChange.conditionAdd', gate: 'held', status: 'proposed', schema: true },
+    { state: 'Injury and condition', what: 'hurt, unconscious, bound', log: 'condition', laws: [], to: 'stateChange.conditionsAdd', also: 'stateChange.conditionsRemove', gate: 'held', status: 'proposed', note: 'the field added 2026-11-03 (set add/remove, as possessions)' },
     { state: 'Abilities shown', log: 'exchange', laws: ['L12'], to: 'entity.Character.abilities', gate: 'held', status: 'proposed' },
     { state: 'What breaks', log: 'damage', laws: ['L13'], to: 'entity.Location.damage', gate: 'applied', status: 'built' },
     { state: 'Its camera', what: 'the zoom and view angle the scale faculty recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'partial' },

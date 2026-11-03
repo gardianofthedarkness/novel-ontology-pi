@@ -23,7 +23,7 @@ const fieldOf = fact => {
   if (fact.field === 'dialogue-member') return `dialogue-member:${fact.candidateOnly ? 'unresolved-candidate' : 'initially-assigned'}`;
   return fact.field === 'relation' ? `relation:${['CAUSES', 'CAUSED_BY', 'PARTICIPATES_IN', 'PRESENT_IN', 'MENTIONED_IN', 'LOCATED_AT', 'KNOWS', 'SPEAKS_TO', 'ADDRESSES', 'OWNS', 'MEMBER_OF', 'STATE_BEFORE', 'STATE_AFTER', 'FORKS_FROM', 'PRECEDES'].includes(fact.value.type) ? fact.value.type : 'other'}` : fact.field;
 };
-const stateFields = ['characterId', 'afterEventId', 'emotions', 'knowledgeAdd', 'goalsAdd', 'relationships', 'location', 'possessionsAdd', 'possessionsRemove'];
+const stateFields = ['characterId', 'afterEventId', 'emotions', 'knowledgeAdd', 'goalsAdd', 'relationships', 'location', 'possessionsAdd', 'possessionsRemove', 'conditionsAdd', 'conditionsRemove'];
 
 export function summarizeReviewImpact(packet, audit = []) {
   const facts = semanticFacts(packet);

@@ -10,19 +10,19 @@ import { BLOCK_TYPES, DAMPING, DIRECTORS, FACULTIES, FLOW, GATES, LAWS, LOG_KIND
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const START = '<!-- specialists:start -->', END = '<!-- specialists:end -->';
-const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const firedBy = faculty => faculty.always ? `always (each ${faculty.always})` : [...(faculty.types ?? []).map(type => BLOCK_TYPES[type].label), ...(faculty.signals ?? []).map(signal => SIGNALS[signal].label)].join(', ');
-const readers = id => Object.entries(DIRECTORS).filter(([, director]) => director.reads.includes(id)).map(([key, director]) => ({ key, label: director.label, own: director.reads[0] === id }));
-const fires = type => Object.entries(FACULTIES).filter(([, faculty]) => faculty.types?.includes(type)).map(([, faculty]) => faculty.label);
-const metres = ([near, far]) => `${near}–${far >= 1000 ? `${far / 1000} km` : `${far} m`}`;
+export const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+export const firedBy = faculty => faculty.always ? `always (each ${faculty.always})` : [...(faculty.types ?? []).map(type => BLOCK_TYPES[type].label), ...(faculty.signals ?? []).map(signal => SIGNALS[signal].label)].join(', ');
+export const readers = id => Object.entries(DIRECTORS).filter(([, director]) => director.reads.includes(id)).map(([key, director]) => ({ key, label: director.label, own: director.reads[0] === id }));
+export const fires = type => Object.entries(FACULTIES).filter(([, faculty]) => faculty.types?.includes(type)).map(([, faculty]) => faculty.label);
+export const metres = ([near, far]) => `${near}–${far >= 1000 ? `${far / 1000} km` : `${far} m`}`;
 // A target in words: the record and its field, relation or event type.
 const RECORD = { scene: 'Scene', stateChange: 'StateChange', relation: 'Relation', event: 'Event', entity: 'Entity', timeline: 'Timeline' };
 const FILE = { scene: 'scenes', stateChange: 'state-changes', relation: 'relations', event: 'events', entity: 'entities', timeline: 'timelines' };
-const where = to => { const t = target(to); if (!t) return 'the run only'; return t.base === 'entity' ? `${t.a}.properties.${t.b}` : t.base === 'relation' ? `${t.a} relation` : t.base === 'event' ? `${t.a} event` : `${RECORD[t.base]}.${t.a}`; };
-const lands = entry => [entry.to, entry.also].filter(Boolean).map(where).join(' + ') || 'the run only';
-const lawsOf = entry => entry.laws.length ? entry.laws.join(', ') : '—';
+export const where = to => { const t = target(to); if (!t) return 'the run only'; return t.base === 'entity' ? `${t.a}.properties.${t.b}` : t.base === 'relation' ? `${t.a} relation` : t.base === 'event' ? `${t.a} event` : `${RECORD[t.base]}.${t.a}`; };
+export const lands = entry => [entry.to, entry.also].filter(Boolean).map(where).join(' + ') || 'the run only';
+export const lawsOf = entry => entry.laws.length ? entry.laws.join(', ') : '—';
 /** Each ontology file, and which directors' state reaches it. */
-const intoFiles = () => { const out = new Map(); for (const [id, states] of Object.entries(STATE)) for (const entry of states) for (const to of [entry.to, entry.also].filter(Boolean)) { const file = FILE[target(to).base]; (out.get(file) ?? out.set(file, new Map()).get(file)).set(id, [...(out.get(file).get(id) ?? []), entry.state]); } return out; };
+export const intoFiles = () => { const out = new Map(); for (const [id, states] of Object.entries(STATE)) for (const entry of states) for (const to of [entry.to, entry.also].filter(Boolean)) { const file = FILE[target(to).base]; (out.get(file) ?? out.set(file, new Map()).get(file)).set(id, [...(out.get(file).get(id) ?? []), entry.state]); } return out; };
 
 /** The markdown for next-steps.md. */
 export function markdown() {

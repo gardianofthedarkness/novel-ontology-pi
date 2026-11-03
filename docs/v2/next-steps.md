@@ -191,7 +191,9 @@ asking on the text and on fixed reference pictures; a thing in motion is played 
 The relationship lives in one registry, `world-engine/director/specialists.mjs` (block types, the reading's signals,
 faculties, directors, the gate `firing()`, `lead()`), checked by `specialists.test.mjs` (every type fires or damps,
 every faculty is fired and read, the built questions are modes in the code). The tables below and the plan page are
-written from it by `node world-engine/director/specialists-doc.mjs`; change the registry, not them.
+written from it by `node world-engine/director/specialists-doc.mjs`; change the registry, not them. A page per faculty and
+per director, with how each is asked and its options (built ones run through their own modes), is in
+[directing/Directing.md](directing/Directing.md), written by `directing-vault.mjs` from `specialists.mjs` and `questions.mjs`.
 
 <!-- specialists:start -->
 _Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; change the registry, not this._
@@ -292,7 +294,7 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 |---|---|---|---|---|---|---|
 | Exchanges (attacker, target, kind and shape of the attack, outcome) | exchange (new) | L12, L13 |  | PARTICIPATES_IN relation + conflict event; the attack's kind, shape and outcome properties of each participant's relation to the event; CAUSES from it to what it broke | held | proposed |
 | Knock-backs and dodges | position | L1, L10 | yes | StateChange.location | applied | partial |
-| Injury and condition (hurt, unconscious, bound) | condition (new) | — |  | StateChange.conditionAdd (new field) | held | proposed |
+| Injury and condition (hurt, unconscious, bound) | condition (new) | — |  | StateChange.conditionsAdd + StateChange.conditionsRemove; the field added 2026-11-03 (set add/remove, as possessions) | held | proposed |
 | Abilities shown | exchange (new) | L12 |  | Character.properties.abilities | held | proposed |
 | What breaks | damage | L13 |  | Location.properties.damage | applied | built |
 | Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — |  | the run only | run | partial |
@@ -321,7 +323,7 @@ Into each ontology file:
 |---|---|
 | `scenes.jsonl` | Stage manager (Who is on stage, The set); Routine director (Who talks with whom, through what) |
 | `relations.jsonl` | Stage manager (Who is on stage, The set, Beats and who led them); Routine director (Positions in the room, Who talks with whom, through what, Formations and attention); Character director (Bonds and first meetings); Mega-scene director (Crowds); Combat director (Exchanges); Transport specialist (Where things are, Ownership); Architect (Rooms) |
-| `state-changes.jsonl` | Stage manager (Facts about where people are); Routine director (Positions in the room); Character director (Feelings, Bonds and first meetings, Intent); Mega-scene director (Journeys); Combat director (Knock-backs and dodges, Injury and condition); Transport specialist (Who holds, drives or rides, Who holds, drives or rides) |
+| `state-changes.jsonl` | Stage manager (Facts about where people are); Routine director (Positions in the room); Character director (Feelings, Bonds and first meetings, Intent); Mega-scene director (Journeys); Combat director (Knock-backs and dodges, Injury and condition, Injury and condition); Transport specialist (Who holds, drives or rides, Who holds, drives or rides) |
 | `events.jsonl` | Stage manager (Beats and who led them); Mega-scene director (Journeys, A catastrophe's extent); Combat director (Exchanges) |
 | `entities.jsonl` | Mega-scene director (A catastrophe's extent, Crowds); Combat director (Abilities shown, What breaks); Transport specialist (Vehicles and weapons); Architect (Which building it is, Floors, uses, look, Floors, uses, look, Changes to it) |
 <!-- specialists:end -->

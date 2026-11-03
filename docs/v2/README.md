@@ -9,6 +9,11 @@ What comes next, two tracks in parallel ([next-steps.md](next-steps.md)): A, the
 scene digests and memory); B, [the world and the ontology as one loop](world-ontology.md) (system 2, the physics law
 engine on every answer, a main agent's review with a high-privilege CLI, the world's evidence back into the ontology).
 
+The director as faculties and specialists (Track A, A4–A5): [directing/Directing.md](directing/Directing.md), a page per
+faculty and per director, how each is asked and what it may answer, all written from the code
+(`node world-engine/director/directing-vault.mjs`). `docs/` opens as an Obsidian vault: standard markdown links, HTML
+dashboards listed beside the notes.
+
 The four design documents are journals: each section was written when the user decided it, dated, in the order of work.
 Read them by the sections named here rather than from the top.
 

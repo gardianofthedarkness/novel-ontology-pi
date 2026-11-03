@@ -69,3 +69,18 @@ test('only the directors who record action take the zoom: they read the scale fa
   assert.deepEqual(lead(fired, 0), { lead: 'routine', with: ['character', 'transport'] });
   assert.equal(lead({ props: [true] }, 0).lead, 'routine', 'a state director never leads');
 });
+
+test('a page per faculty and per director: each faculty says how it is asked, each director its Jev questions, the notes in sync', async () => {
+  const { FACULTY_ASKS, DIRECTOR_QUESTIONS, directorQuestions } = await import('./questions.mjs');
+  assert.deepEqual(Object.keys(FACULTY_ASKS).sort(), Object.keys(FACULTIES).sort());
+  assert.deepEqual(Object.keys(DIRECTOR_QUESTIONS).sort(), Object.keys(DIRECTORS).sort());
+  const asked = await directorQuestions();
+  for (const [id, entries] of Object.entries(asked)) for (const entry of entries) {
+    assert.ok(entry.questions.length, `${id}: ${entry.mode ?? entry.key} asks something`);
+    for (const question of entry.questions) assert.ok(question.primitive === 'box' || question.options.length, `${id} · ${question.key}: options`);
+  }
+  assert.ok(asked.mega[0].questions[0].options.includes('with:<another>'), 'a built question is the mode\'s own');
+  const { spawnSync } = await import('node:child_process');
+  const run = spawnSync(process.execPath, [new URL('./directing-vault.mjs', import.meta.url).pathname, '--check'], { encoding: 'utf8' });
+  assert.equal(run.status, 0, `run node world-engine/director/directing-vault.mjs: ${run.stdout}${run.stderr}`);
+});

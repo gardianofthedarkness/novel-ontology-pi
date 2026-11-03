@@ -249,7 +249,7 @@ export function materializeSemantic(changeset: ChangeSet, knownEntities: Entity[
     } else if (fact.field === "state") {
       const state = next as Omit<StateChange, "id">;
       const scores = (scores: unknown) => record(scores) && Object.values(scores).every(score => typeof score === "number" && Number.isFinite(score) && Math.abs(score) <= 1);
-      if (!record(state) || !scores(state.emotions) || !scores(state.relationships) || ![state.knowledgeAdd, state.goalsAdd, state.possessionsAdd, state.possessionsRemove].every(strings) || state.location !== null && typeof state.location !== "string") throw new Error("Invalid character state");
+      if (!record(state) || !scores(state.emotions) || !scores(state.relationships) || ![state.knowledgeAdd, state.goalsAdd, state.possessionsAdd, state.possessionsRemove].every(strings) || ![state.conditionsAdd ?? [], state.conditionsRemove ?? []].every(strings) || state.location !== null && typeof state.location !== "string") throw new Error("Invalid character state");
       resolved = typed(state.characterId, ["Character"]) && typed(state.afterEventId, ["Event"]) && resolveIds(Object.keys(state.relationships), ["Character"]);
       if (resolved) projected.push({ ...proposal, payload: structuredClone(state) });
     } else if (fact.field === "relation") {
