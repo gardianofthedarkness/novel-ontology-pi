@@ -179,3 +179,38 @@ export async function digestScenes(work, { scenes, line, kind, peopleOf, placeOf
   }
   return out;
 }
+
+// ── Scale and view (M5; the user, 2026-11-03: "an implicit or scale faculty of summarization pass the zoom and view angle
+// recommendation to it's associated directors and the directors camera man") ─────────────────────────────────────────
+export const ZOOMS = { room: 15, street: 80, block: 300, district: 1500, city: 5000 };
+export const ANGLES = ['eye level', 'over a shoulder', 'high', 'top-down', 'low, looking up', 'aerial'];
+export const REACHES = { 'under 50 m': 50, '50–300 m': 300, '300 m – 2 km': 2000, 'over 2 km': 5000 };
+export const SCALE_SYSTEM = 'You read one beat of a light novel being staged in a 3D city, and recommend to its camera operator how far out to stand and from where to look. The scale is often only implied: leaping between towers, crossing districts, a fight in one room. Reply with JSON only.';
+export const SCALE_SHAPE = { zoom: Object.keys(ZOOMS).join(' | ') + ' (how wide the beat plays: a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km, the city)', metres: 'a number: metres across the frame', angle: ANGLES.join(' | '), from: '<person id> | <place> | none: whose eyes or which landmark it is seen from', reach: Object.keys(REACHES).join(' | ') + ': how far its moves go', sure: '0..1' };
+
+/** A beat's scale, checked: zoom and metres agree (metres within the zoom's band), angle, reach. */
+export function checkScale(reply) {
+  const zoom = oneOf(reply?.zoom, Object.keys(ZOOMS), 'street'), band = ZOOMS[zoom];
+  const metres = Math.max(band / 3, Math.min(band * 2, Number(reply?.metres) || band));
+  return { zoom, metres: Math.round(metres), angle: oneOf(reply?.angle, ANGLES, 'high'), from: reply?.from ? String(reply.from).slice(0, 60) : null, reach: oneOf(reply?.reach, Object.keys(REACHES), 'under 50 m'), sure: sure(reply?.sure) };
+}
+
+/**
+ * Each beat of a scene given its scale: `beats` [{ n, type, lead, sentences }]; one request a beat, `parallel` at once.
+ * A failed request leaves the beat at a street's scale, marked unsure.
+ */
+export async function scaleBeats(work, { scene, beats, line, kind, people, digest = null, parallel = 4 }) {
+  const out = new Array(beats.length);
+  let next = 0;
+  const one = async n => {
+    const beat = beats[n];
+    const reply = await work.generate({ system: SCALE_SYSTEM, maxTokens: 300, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+      task: 'How wide does this beat play, from what angle and whose view, and how far do its moves go? Reply in this JSON shape.', shape: SCALE_SHAPE,
+      scene: { id: scene.id, where: digest?.where ?? null, summary: digest?.summary ?? null }, beat: { type: beat.type, lead: beat.lead }, people: people.map(person => ({ id: person.id, name: person.name })),
+      lines: beat.sentences.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
+    }) }).then(parsed).catch(() => null);
+    out[n] = { n: beat.n, ...(reply ? checkScale(reply) : { ...checkScale(null), sure: 0, failed: true }) };
+  };
+  await Promise.all(Array.from({ length: Math.min(parallel, beats.length) }, async () => { while (next < beats.length) await one(next++); }));
+  return out;
+}

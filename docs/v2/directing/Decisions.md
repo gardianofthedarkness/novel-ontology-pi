@@ -39,3 +39,11 @@ Newest last. Back to [Directing](Directing.md).
 7. **The cast gathers within 80 m of its middle.** Anyone carried in from further walks in (to 300 m) or is placed.
    In scene 40 the rooftop fight spreads its cast about 180 m, so scene 41 moved six of them back together. *Your
    call:* 80 m, or tie it to the scene's scale band once M5's scale faculty gives one.
+
+## From M5: scale and view (2026-11-03)
+
+8. **Real distances need Jev's own answers.** The stand-in proves the pictures, reach and camera follow the zoom (scene
+   26's traversal beat: an aerial frame 200 m out over the towers); whether Jev then chooses the far tower is only seen
+   in a paid run. *Your call:* a small paid run of scenes 1 and 26 before W10 (about 40–80 Jev calls), or wait for W10.
+9. **The scale reader is one request a beat** (96 beats in volume 1, cheap on the work model), asked as each scene
+   begins, so a run waits a few seconds a scene. *Your call:* fine, or fold it into the scene digest's request.

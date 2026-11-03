@@ -470,6 +470,17 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         };
         const nodeAt = id => { const p = at(id), found = around(p[0], p[2], 3).nodes.find(node => node.id === id); return describe(found ?? { id, x: p[0], y: p[1], z: p[2], type: 0, lot: -1 }); };
         let factsUpTo = -1, itemsUpTo = -1, cameraBeat = null, cameraGroup = new Set();
+        // Scale and view (M5): each beat of the scene given its zoom, angle and reach by the work model; only the action
+        // directors' questions and their camera operator read them.
+        const sceneBeats = gate && digestMeter ? gate.beats.map((beat, n) => ({ ...beat, n })).filter(beat => beat.scene === scene.id) : [];
+        const order_ = reads.sentences, scaleOf = new Map();
+        if (sceneBeats.length) {
+          const span = beat => { const a = order_.indexOf(beat.first), b = order_.indexOf(beat.last); return order_.slice(Math.max(0, a), (b < 0 ? order_.length : b + 1)).slice(0, 40); };
+          const scales = await DG.scaleBeats(digestMeter, { scene, beats: sceneBeats.map(beat => ({ ...beat, sentences: span(beat) })), line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id })), digest: dg?.digest ?? null });
+          for (const entry of scales) scaleOf.set(entry.n, entry);
+          sceneRecord.scales = scales;
+        }
+        const ELEVATION = { 'eye level': 12, 'over a shoulder': 20, high: 45, 'top-down': 80, 'low, looking up': 6, aerial: 60 };
         // What people carry as the scene begins (the scene digest). A thing someone here held before is drawn with them only
         // if the scene says they still carry it (else it was left behind); someone elsewhere keeps what they hold.
         const personNames = [...names.values()].filter(name => typeof name === 'string');
@@ -483,6 +494,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         }
         for (const card of cards) {
           const cardRecord = { card: card.id, kind: card.kind, ...(card.pass ? { pass: true } : {}), event: scene.events.length, lines: card.sentences.map(line), moves: [] };
+          // The beat's scale (M5): Jev's pictures and the moves' reach sized by its zoom (a street's 32 m without one).
+          const scale = scaleOf.get(beatOf.get(card.first)?.n) ?? null, frameRadius = Math.min(400, Math.max(16, (scale?.metres ?? 32) / 2)), reachOf = how => Math.max(C.REACH[how] ?? C.REACH.walk, Math.min(600, DG.REACHES[scale?.reach] ?? 0));
+          if (scale) cardRecord.scale = { zoom: scale.zoom, metres: scale.metres, angle: scale.angle, reach: scale.reach };
           asking = cardRecord;
           await live?.phase(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`);
           sceneRecord.cards.push(cardRecord);
@@ -635,7 +649,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             // a. The direction: every arrow, said by what it meets.
             const arrows = C.DIRECTIONS.map(direction => {
               let blocked = false, meets = null;
-              for (const metres of [2, 5, 10, 20]) { const p = C.arrowEnd(here, direction.vector, metres), what = said(p); if (what !== said(here)) { meets = `${what} (${metres} m)`; blocked = metres === 2 && /a wall/.test(what); break; } }
+              for (const metres of [2, 5, 10, 20].map(d => Math.round(d * frameRadius / 16))) { const p = C.arrowEnd(here, direction.vector, metres), what = said(p); if (what !== said(here)) { meets = `${what} (${metres} m)`; blocked = metres <= 2 && /a wall/.test(what); break; } }
               return { ...direction, said: meets ?? `more of ${said(here)}`, blocked };
             });
             // First the text alone: does this person go anywhere in this card? (Not asked when the digest says they go elsewhere.)
@@ -647,7 +661,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
               if (!goes) { cardRecord.moves.push({ person, direction: 'stays', line: said_, moved: false }); return; }
             }
             cardRecord.camera ??= { focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 };
-            const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: 9, blocked: arrow.blocked })) });
+            const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: frameRadius, elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.max(9, frameRadius * 0.55), blocked: arrow.blocked })) });
             const asked = await ask(decide, M.moveDirectionMode, { ...base, pictures: { arrows: `${mover.name} now, from 35° above; the lettered arrows go out of them (warm rise, cool fall, level ones flat).` }, arrows: arrows.map(arrow => ({ letter: arrow.letter, said: `${arrow.rise}, toward ${arrow.said}` })), others }, null, { request: { images: { arrows: a.png } } });
             const reply = key => asked.replies.find(entry => entry.key === key)?.value;
             const choice = String(reply('direction') ?? 'stays'), how = String(reply('how') ?? 'walk'), because = reply('line') ?? null;
@@ -660,9 +674,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
               moveTo(person, walk(scene, `${slug}|with`, positions[person], near, how), how, `with ${names.get(leader)}`);
               return;
             }
-            const arrow = arrows.find(entry => entry.letter === choice) ?? arrows[0], reach = C.REACH[how] ?? C.REACH.walk;
+            const arrow = arrows.find(entry => entry.letter === choice) ?? arrows[0], reach = reachOf(how);
             // The spots are looked for within 100 m (a flight's far end is boxed, not listed): the world streams in no further.
-            const pool = around(here[0], here[2], Math.min(reach, 100) + 10), wedge = C.wedgeOnGround(here, arrow.vector, reach);
+            const pool = around(here[0], here[2], Math.min(reach, 400) + 10), wedge = C.wedgeOnGround(here, arrow.vector, reach);
             // b. The spot: rooms, roofs, open ground and people inside the wedge, nearest first.
             const spots = [], groups = new Map();
             for (const node of pool.nodes) {
@@ -675,7 +689,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             const offered = spots.filter(spot => spot.nodes.length).sort((x, y) => x.d - y.d).slice(0, 16).map((spot, n) => ({ ...spot, letter: String.fromCharCode(65 + n) }));
             let targets = null, how2 = how;
             if (offered.length) {
-              const b = await shoot(`${slug}-b`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: Math.max(16, reach * 0.7), elevation: 35, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, 30) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
+              const b = await shoot(`${slug}-b`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: Math.max(frameRadius, Math.min(reach, 400) * 0.7), elevation: 35, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, Math.max(30, frameRadius)) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
               const spotAsked = await ask(decide, M.moveSpotMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, pictures: { wedge: `${mover.name}, the chosen arrow and its wedge, as far as a ${how} reaches.` }, spots: offered.map(spot => ({ letter: spot.letter, said: `${spot.what} (${Math.round(spot.d)} m)` })) }, null, { request: { images: { wedge: b.png } } });
               const spot = String(spotAsked.replies.find(entry => entry.key === 'spot')?.value ?? 'none'), chosen = offered.find(entry => entry.letter === spot);
               moveRecord.spot = chosen ? chosen.what : 'none';
@@ -786,7 +800,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           if (key !== cameraBeat) { cameraBeat = key; cameraGroup = new Set(); }
           for (const who of [...event.actors, ...cardRecord.moves.filter(move => move.moved && !String(move.why ?? '').startsWith('background')).map(move => move.person)]) if (positions[who]) cameraGroup.add(who);
           { const points = [...cameraGroup].filter(who => positions[who]).map(who => at(positions[who][0]));
-            if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length), spread = Math.max(0, ...points.map(p => Math.hypot(p[0] - mid[0], p[2] - mid[2]))); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(16, spread * 1.2 + 6), elevation: 35, yaw: 0 }; } }
+            if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length), spread = Math.max(0, ...points.map(p => Math.hypot(p[0] - mid[0], p[2] - mid[2]))); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(16, spread * 1.2 + 6, scale ? Math.min(400, scale.metres / 2) : 0), elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35, yaw: 0 }; } }
           // The producer's camera rides with the card's event: the player and World · Live follow it card by card.
           event.camera = cardRecord.camera ?? null;
           // Streamed: the line as far as this card, played on in World · Live; a moment to watch a move before the next question.

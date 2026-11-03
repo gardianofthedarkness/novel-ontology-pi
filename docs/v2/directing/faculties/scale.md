@@ -2,16 +2,16 @@
 type: "faculty"
 id: "scale"
 aliases: ["Scale and view"]
-status: "proposed"
+status: "built"
 fired_by: ["always: each beat"]
 read_by: ["routine", "mega", "combat"]
-tags: ["directing/faculty", "status/proposed"]
+tags: ["directing/faculty", "status/built"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
 # Scale and view
 
-A summary faculty: the work model reading the text. Status: **proposed**. Back to [Directing](../Directing.md).
+A summary faculty: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs scaleBeats (M5); the director sizes the action directors' pictures, reach and camera by it`). Back to [Directing](../Directing.md).
 
 ## What it writes
 

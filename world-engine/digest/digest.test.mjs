@@ -59,3 +59,12 @@ test('things are objects: not body parts, people, or names in English', async ()
   const { isThing } = await import('./digest.mjs');
   assert.deepEqual(['手机', '右手', '指尖', '幼女', '幼女的书包', 'a phone', '幼女 in a car', '伞'].map(name => isThing(name, ['幼女', '御坂美琴'])), [true, false, false, false, true, false, false, true]);
 });
+
+test('scale and view: a beat\'s zoom and metres agree, its angle and reach from their lists; a failed beat a street, unsure', async () => {
+  const { checkScale, scaleBeats } = await import('./digest.mjs');
+  assert.deepEqual(checkScale({ zoom: 'district', metres: 20, angle: 'aerial', reach: '300 m – 2 km', sure: 0.8 }), { zoom: 'district', metres: 500, angle: 'aerial', from: null, reach: '300 m – 2 km', sure: 0.8 });
+  const work = { generate: async ({ prompt }) => { const { beat } = JSON.parse(prompt); if (beat.type === 'catastrophe') throw new Error('down'); return JSON.stringify({ zoom: beat.type === 'traversal' ? 'block' : 'room', metres: 250, angle: 'high', reach: '50–300 m' }); } };
+  const out = await scaleBeats(work, { scene: { id: 's' }, beats: [{ n: 4, type: 'traversal', lead: 'mega', sentences: ['x'] }, { n: 5, type: 'catastrophe', lead: 'combat', sentences: ['y'] }], line: () => '', kind: () => null, people: [] });
+  assert.deepEqual(out.map(entry => [entry.n, entry.zoom, entry.metres]), [[4, 'block', 250], [5, 'street', 80]]);
+  assert.equal(out[1].failed, true);
+});
