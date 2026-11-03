@@ -23,6 +23,7 @@ test('the gate: a dense stretch fires its faculty with hysteresis and a margin; 
   assert.deepEqual(lead(fired, 4), { lead: 'mega', with: ['combat'] });
   assert.equal(lead(fired, 8).lead, 'routine');
   assert.equal(damped(block({ interior: 0.6, routine: 0.3 })), true);
+  assert.equal(damped(block({ interior: 0.6, routine: 0.3 }), { choreography: [true] }, 0), false, 'a fight narrated through thought is not stilled');
   assert.equal(Object.keys(FACULTIES).length >= 8, true);
 });
 

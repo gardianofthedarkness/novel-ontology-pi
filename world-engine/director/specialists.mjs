@@ -266,8 +266,16 @@ export function firing(windows, { kOn = 1.5, kOff = 0.5, minimum = 2 } = {}) {
   return out;
 }
 
-/** Whether a window is damped: a damping type is its largest share. */
-export const damped = window => { const top = Object.entries(window.block?.distribution ?? {}).sort((a, b) => b[1] - a[1])[0]; return !!top && DAMPING.includes(top[0]); };
+/**
+ * Whether a window is damped (no implied moves, no drift): its damping types (interior, exposition, memory) hold at least
+ * `share` of it, and no action director's own faculty fired there. Volume 1 narrates thought through its fights (scenes 21,
+ * 26: interior the largest share), so a top type alone would still a fight.
+ */
+export function damped(window, fired = {}, n = 0, { share = 0.6 } = {}) {
+  const held = DAMPING.reduce((sum, type) => sum + (window.block?.distribution?.[type] ?? 0), 0);
+  const acting = Object.values(DIRECTORS).filter(director => director.kind === 'action').some(director => fired[director.reads[0]]?.[n]);
+  return held >= share && !acting;
+}
 
 /**
  * Who leads a window's beat: of the action directors, the one whose fired faculties weigh most there (its own faculty
@@ -277,7 +285,9 @@ export const damped = window => { const top = Object.entries(window.block?.distr
  */
 export function lead(fired, n) {
   const weight = id => DIRECTORS[id].reads.reduce((sum, faculty, k) => sum + (!FACULTIES[faculty].always && fired[faculty]?.[n] ? (k === 0 ? 2 : 1) : 0), 0);
-  const ranked = Object.keys(DIRECTORS).filter(id => DIRECTORS[id].kind !== 'stage').map(id => ({ id, weight: weight(id), action: DIRECTORS[id].kind === 'action' })).filter(entry => entry.weight > 0).sort((a, b) => b.weight - a.weight);
+  // Equal weights: the one whose fired faculties stand higher on their mixed index there (firing()'s `index`).
+  const strength = id => DIRECTORS[id].reads.reduce((sum, faculty) => sum + (!FACULTIES[faculty].always && fired[faculty]?.[n] ? fired.index?.[faculty]?.[n] ?? 0 : 0), 0);
+  const ranked = Object.keys(DIRECTORS).filter(id => DIRECTORS[id].kind !== 'stage').map(id => ({ id, weight: weight(id), strength: strength(id), action: DIRECTORS[id].kind === 'action' })).filter(entry => entry.weight > 0).sort((a, b) => b.weight - a.weight || b.strength - a.strength);
   const first = ranked.find(entry => entry.action)?.id ?? 'routine';
   return { lead: first, with: ranked.filter(entry => entry.id !== first).map(entry => entry.id) };
 }
