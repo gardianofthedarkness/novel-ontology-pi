@@ -185,10 +185,10 @@ table.state small, table small { color: var(--muted); }
 <tr><td>Confrontation</td><td>a fight or standoff: blows, dodges, powers used on someone</td><td>21–22, 25–31, 40</td><td><span class="pill fired">Choreography</span></td></tr>
 <tr><td>Pursuit / traversal</td><td>going somewhere at scale: chases, escapes, crossing the city</td><td>the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34)</td><td><span class="pill fired">Journeys</span></td></tr>
 <tr><td>Mediated exchange</td><td>talk through a channel: a phone, a door, a broadcast, a message</td><td>phone calls (12, 29, 33), through a door (42–43)</td><td><span class="pill fired">Conversation and blocking</span></td></tr>
-<tr><td>Interior flow</td><td>thought, reflection, free indirect thought</td><td>18, 36, the long narration and thought stretches</td><td><span class="pill damp">damps the world</span> <span class="pill fired">Inner state</span></td></tr>
-<tr><td>Exposition</td><td>world-building and background with no one acting</td><td>the Board (37), R&amp;C Occultics (39)</td><td><span class="pill damp">damps the world</span></td></tr>
+<tr><td>Interior flow</td><td>thought, reflection, free indirect thought</td><td>18, 36, the long narration and thought stretches</td><td><span class="pill fired">Inner state</span></td></tr>
+<tr><td>Exposition</td><td>world-building and background with no one acting</td><td>the Board (37), R&amp;C Occultics (39)</td><td><span class="pill damp">fires no reader</span></td></tr>
 <tr><td>Establishing / ambience</td><td>where and when: the place, weather, crowds, mood</td><td>the openings of 1, 2, 10, 45</td><td><span class="pill fired">Ambience</span> <span class="pill fired">Set description</span></td></tr>
-<tr><td>Memory / flashback</td><td>what happened before this scene's now</td><td>35</td><td><span class="pill damp">damps the world</span></td></tr>
+<tr><td>Memory / flashback</td><td>what happened before this scene's now</td><td>35</td><td><span class="pill damp">fires no reader</span></td></tr>
 <tr><td>Spectacle / catastrophe</td><td>the world itself changing: ground splits, floods, collapses</td><td>21, 22, 26, 27</td><td><span class="pill fired">Choreography</span></td></tr>
 </tbody></table></div>
 <h2>Faculties and specialist directors</h2>
@@ -333,7 +333,8 @@ lead(beat) = the action director whose fired faculties weigh most (its own 2, ot
   <li><b>Hysteresis:</b> the off line sits below the on line, so a faculty doesn't flicker on a single line.</li>
   <li><b>Co-firing:</b> several faculties may be on at once (a fight during a chase fires choreography and journeys).</li>
   <li><b>Smoothing:</b> a hidden Markov model over the block types, with Jev's distributions as soft observations, as <code>occupation.mjs</code> does for presence. Its change points are the beats, where the camera may cut.</li>
-  <li><b>Damping wins over drift:</b> while interior flow, exposition or memory is dense, no implied move or background drift plays.</li>
+  <li><b>Faculties co-fire</b> (the user, 2026-11-03): wherever the evidence is sufficient, several fire at once; thought fires the inner-state faculty beside a fight's choreography. Nothing holds the world still; exposition and memory simply fire no reader.</li>
+  <li><b>Smoothed per strand:</b> the block types are smoothed forward and backward along each strand before the index reads them, since the run is a back-test and every later block is evidence too.</li>
   <li><b>Signals from the reading:</b> named vehicles and weapons fire props (and so the transport specialist), named or described buildings fire the set description (the architect), crowd slots fire ambience, and a jump in the scene frame's scale fires journeys.</li>
   <li><b>Who leads:</b> a fight alone is the combat director's; a fight during a chase is the mega-scene director's, with the combat director answering the attack questions; with nothing fired, the routine director leads.</li>
 </ul>

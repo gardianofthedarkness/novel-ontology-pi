@@ -91,3 +91,27 @@ Newest last. Back to [Directing](Directing.md).
 17. **The background's routine moves most:** 1,317 of 2,194 moves in the rehearsal are routine drift (the rule-made
     digest has everyone walking or standing). The real digest decides who walks, so W10 will differ; it is the knob for
     how busy scenes look. *Your call:* keep the drift spans (strolling 2–4 m, walking 3–6 m a card), or calm them.
+
+## Your answers (2026-11-03)
+
+- **1 · Faculties co-fire.** "Multiple faculties are allowed to fire at the same time if evidence sufficient." No type
+  holds the world still any more; thought fires the inner-state faculty beside whatever else the evidence fires.
+- **2 · Smoothing per strand.** "Because our data is simply back tested, we don't need to predict the future. You can
+  do smoothing on type distribution confidence scores per strand." The block types are smoothed forward and backward
+  along each strand (not decoded scene by scene); the beats and the mixed index read the smoothed distributions.
+- **7 · No hard-coded distance.** "Any sort of problem should be inferred by laws of physics. Propose a new physics if
+  there's issues that can't be solved." The 80 m gathering and the 300 m walk-in go: presence in a scene is its frame
+  (L16), and whether someone walks in is the travel time the story allows (L5, L17). New laws proposed in
+  [physics-laws.md](../physics-laws.md) §9.
+- **8 · Referential distance.** "Proportional or referential semantic distance description dynamically adjusted might
+  work better" than metres in semantic space. The scale reader now says a referent (the room, the street, the
+  building, a landmark…) and how many of it; the director measures that referent in the world.
+- **10 · Yes, and tunnelling.** "When positioning during when destruction happens, later ground truth Bayesian smooth
+  both path and both state of destruction. The destruction of building is also quantum and back propagatable."
+  Proposed as L18 (designed; built after W10's paths).
+- **11 · A controlled test of Jev's picking.** Baked-in vectors, semantic descriptions, or small thumbnail references:
+  which makes Jev pick more precisely. Run on cases with a known answer.
+- **16 · The city is part of back-propagation.** "Terrain can be dynamically redrawn if cost of travel time is
+  impossible and review of ability groups suggest low energy level of supporting such move." Proposed as L19 (designed).
+
+Not answered yet: 3, 4, 5, 6, 9, 12–15, 17.

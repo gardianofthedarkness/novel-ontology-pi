@@ -6,7 +6,7 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BLOCK_TYPES, DAMPING, DIRECTORS, FACULTIES, FLOW, GATES, LAWS, LOG_KINDS, SIGNALS, STATE, registryProblems } from './specialists.mjs';
+import { BLOCK_TYPES, QUIET, DIRECTORS, FACULTIES, FLOW, GATES, LAWS, LOG_KINDS, SIGNALS, STATE, registryProblems } from './specialists.mjs';
 import { FACULTY_ASKS, builtAsks, directorQuestions, generalistAsks } from './questions.mjs';
 import { firedBy, fires, lands, lawsOf, metres, readers } from './specialists-doc.mjs';
 
@@ -60,7 +60,7 @@ function index() {
     '## Directors', '', '| Director | Kind | Zoom | Plays | Status |', '|---|---|---|---|---|',
     ...Object.entries(DIRECTORS).map(([id, director]) => `| ${directorLink(id, 'root')} | ${director.kind} | ${director.scale ? metres(director.scale) : '—'} | ${director.reads.map(faculty => facultyLink(faculty, 'root')).join(', ')} | ${director.status} |`), '',
     '## Block types', '', '| Type | What it is | In volume 1 | Fires |', '|---|---|---|---|',
-    ...Object.entries(BLOCK_TYPES).map(([id, type]) => `| ${type.label} | ${type.means} | ${type.volume1} | ${[...(DAMPING.includes(id) ? ['damps the world'] : []), ...fires(id)].join(', ')} |`), '',
+    ...Object.entries(BLOCK_TYPES).map(([id, type]) => `| ${type.label} | ${type.means} | ${type.volume1} | ${[...(QUIET.includes(id) ? ['fires no reader'] : []), ...fires(id)].join(', ')} |`), '',
     '## How state flows into the ontology', '', ...FLOW.map((step, n) => `${n + 1}. **${step.step}**: ${step.what} (\`${step.code}\`)`), '', ...Object.entries(GATES).map(([gate, what]) => `- **${gate}**: ${what}`), ''].join('\n');
 }
 

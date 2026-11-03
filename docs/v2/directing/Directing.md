@@ -44,10 +44,10 @@ The director as readers and specialists (docs/v2/next-steps.md A4–A5). Faculti
 | Confrontation | a fight or standoff: blows, dodges, powers used on someone | 21–22, 25–31, 40 | Choreography |
 | Pursuit / traversal | going somewhere at scale: chases, escapes, crossing the city | the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34) | Journeys |
 | Mediated exchange | talk through a channel: a phone, a door, a broadcast, a message | phone calls (12, 29, 33), through a door (42–43) | Conversation and blocking |
-| Interior flow | thought, reflection, free indirect thought | 18, 36, the long narration and thought stretches | damps the world, Inner state |
-| Exposition | world-building and background with no one acting | the Board (37), R&C Occultics (39) | damps the world |
+| Interior flow | thought, reflection, free indirect thought | 18, 36, the long narration and thought stretches | Inner state |
+| Exposition | world-building and background with no one acting | the Board (37), R&C Occultics (39) | fires no reader |
 | Establishing / ambience | where and when: the place, weather, crowds, mood | the openings of 1, 2, 10, 45 | Ambience, Set description |
-| Memory / flashback | what happened before this scene's now | 35 | damps the world |
+| Memory / flashback | what happened before this scene's now | 35 | fires no reader |
 | Spectacle / catastrophe | the world itself changing: ground splits, floods, collapses | 21, 22, 26, 27 | Choreography |
 
 ## How state flows into the ontology

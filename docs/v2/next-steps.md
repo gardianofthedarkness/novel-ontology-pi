@@ -211,10 +211,10 @@ _Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; 
 | Confrontation | a fight or standoff: blows, dodges, powers used on someone | 21–22, 25–31, 40 | Choreography |
 | Pursuit / traversal | going somewhere at scale: chases, escapes, crossing the city | the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34) | Journeys |
 | Mediated exchange | talk through a channel: a phone, a door, a broadcast, a message | phone calls (12, 29, 33), through a door (42–43) | Conversation and blocking |
-| Interior flow | thought, reflection, free indirect thought | 18, 36, the long narration and thought stretches | damps the world, Inner state |
-| Exposition | world-building and background with no one acting | the Board (37), R&C Occultics (39) | damps the world |
+| Interior flow | thought, reflection, free indirect thought | 18, 36, the long narration and thought stretches | Inner state |
+| Exposition | world-building and background with no one acting | the Board (37), R&C Occultics (39) | fires no reader |
 | Establishing / ambience | where and when: the place, weather, crowds, mood | the openings of 1, 2, 10, 45 | Ambience, Set description |
-| Memory / flashback | what happened before this scene's now | 35 | damps the world |
+| Memory / flashback | what happened before this scene's now | 35 | fires no reader |
 | Spectacle / catastrophe | the world itself changing: ground splits, floods, collapses | 21, 22, 26, 27 | Choreography |
 
 **Summary faculties** (the work model reads the text) and the directors that play them (own: the director's first faculty):
@@ -369,6 +369,24 @@ What W10 is measured on, against W8 (`d20261103011140`) and W9 (`d20261103060830
 | Scenes played | 39 of 46 | 39 of 46 | 46 accounted for |
 | Jev calls | 792 | 269 | under 400 |
 | Crowd | — | 93 walkers | a field, no walkers |
+
+### A7. The world back-tested: smoothing, referents, physics (the user, 2026-11-03)
+
+The user's answers to [Decisions](directing/Decisions.md) 1–17 turn several rules into one principle: the run is a
+back-test, so everything is smoothed with all its evidence, before and after; nothing is a hard-coded distance; and the
+world itself (destruction, the city's layout) is part of what is smoothed.
+
+1. **Faculties co-fire** on sufficient evidence; no type holds the world still.
+2. **Block types smoothed per strand**: forward-backward over each strand's blocks in story order, across its scenes;
+   the beats and the mixed index read the smoothed distributions and their confidence.
+3. **Referential distance**: the scale reader names a referent and a multiple (two rooms, the street, three buildings,
+   as far as a landmark); the director measures it in the world. Journeys' distances the same.
+4. **Distances from physics** ([physics-laws.md](physics-laws.md) §9): presence in the frame (L16), displacement as
+   speed times story time (L17).
+5. **A controlled test of Jev's picking**: on cases with a known answer, does Jev pick more precisely with vectors drawn
+   in the picture, with semantic descriptions, or with small thumbnail references.
+6. **Tunnelling and destruction as a smoothed state** (L18), then **the city in back-propagation** (L19): designed, built
+   after W10.
 
 ### Order of work (Track A)
 

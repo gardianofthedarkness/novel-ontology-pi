@@ -280,3 +280,19 @@ empty, so everyone is human.
 
 The skipped scenes are a director gap of their own: 7 scenes have no record, 4 with nobody present (15, 20, 41, 43) and
 3 with people (36, 38, 39).
+
+## 9. New physics (the user, 2026-11-03: "there should be no hard coded distance … propose a new physics")
+
+Every distance the director used as a constant (80 m to gather a cast, 300 m to walk in, 2–4 m of drift a card, 25 m
+of earshot) becomes a consequence of a law: of a referent measured in the world, of a speed and the time the story
+gives, or of the smoothing. Human scale (a body, an arm's reach) is the only unit kept, as the referent "a person".
+
+| Law | Says | Replaces |
+|---|---|---|
+| **L16 · Presence in the frame** | Someone in a scene stands within its frame: the extent the scale reader names (a room, a street, a block, a landmark's reach) as measured in the world. Outside it, they are elsewhere, and come in by L5/L17 | the 80 m gathering |
+| **L17 · Displacement** | Every move covers its way's speed times the time it takes: the story's clock between scenes, or a card's share of its beat's duration (the scale reader says how long a beat lasts). Drift, a stroll, a walk-in are this | 2–4 m drift spans, the 300 m walk-in |
+| **L18 · Tunnelling and destruction as a state** | A body may cross matter only where that matter is destroyed at that time. Destruction is a hidden state of each building part (intact, damaged, gone) with a distribution over time, observed by the text's breaks and by paths that cross it, and smoothed forward and backward like positions: a later line that shows a wall already gone revises when it went, and the path through it | blasts applied once, forward only |
+| **L19 · Elastic terrain** | Where the story's time cannot carry someone between two places at any way their abilities allow (L5, the abilities review), the places themselves are latent: the terrain's specs, configs and vectors may move them nearer, at the cost of their own prior, smoothed with everything else. The city is part of back-propagation | a fixed city that makes the story impossible |
+
+Order: L16 and L17 now (they replace constants the director has); L18 once W10's paths and blasts are recorded as
+smoothable states; L19 after, since moving the city changes every path in it.

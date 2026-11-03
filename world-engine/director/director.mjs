@@ -80,7 +80,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   const sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
   // The beats (M3, gate.mjs) of a reading with blocks: each sentence's beat, its type and its lead. The camera cuts only
   // at a beat's start (M4).
-  const gate = reading.blocks?.length ? G.gateOf(G.windowsOf(reading)) : null, beatOf = new Map();
+  // Smoothed per strand (the user, 2026-11-03): each scene's fork from the workspace's strands.
+  const forkOf = new Map((JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null'))?.scenes ?? []).map(entry => [entry.id, entry.fork]));
+  const gate = reading.blocks?.length ? G.gateOf(G.windowsOf(reading), { strandOf: scene => forkOf.get(scene) ?? null }) : null, beatOf = new Map();
   if (gate) { const order = reading.scenes.flatMap(entry => entry.sentences), at_ = new Map(order.map((id, n) => [id, n])); gate.beats.forEach((beat, n) => { for (let k = at_.get(beat.first); k <= at_.get(beat.last); k++) if (!beatOf.has(order[k])) beatOf.set(order[k], { n, type: beat.type, lead: beat.lead }); }); }
   const cardsOf = new Map();
   for (const card of reading.cards) { const id = sceneOf.get(card.first); if (id && ['action', 'dialogue'].includes(card.kind)) (cardsOf.get(id) ?? cardsOf.set(id, []).get(id)).push(card); }

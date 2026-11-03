@@ -6,7 +6,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BLOCK_TYPES, DAMPING, DIRECTORS, FACULTIES, FLOW, GATES, LAWS, LOG_KINDS, SIGNALS, STATE, registryProblems, target } from './specialists.mjs';
+import { BLOCK_TYPES, QUIET, DIRECTORS, FACULTIES, FLOW, GATES, LAWS, LOG_KINDS, SIGNALS, STATE, registryProblems, target } from './specialists.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const START = '<!-- specialists:start -->', END = '<!-- specialists:end -->';
@@ -28,7 +28,7 @@ export const intoFiles = () => { const out = new Map(); for (const [id, states] 
 export function markdown() {
   const lines = ['_Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; change the registry, not this._', ''];
   lines.push('**Block types** (Jev, in the kinds pass, as one distribution a window):', '', '| Type | What it is | In volume 1 | Fires |', '|---|---|---|---|');
-  for (const [id, type] of Object.entries(BLOCK_TYPES)) lines.push(`| ${type.label} | ${type.means} | ${type.volume1} | ${[...(DAMPING.includes(id) ? ['damps the world'] : []), ...fires(id)].join(', ')} |`);
+  for (const [id, type] of Object.entries(BLOCK_TYPES)) lines.push(`| ${type.label} | ${type.means} | ${type.volume1} | ${[...(QUIET.includes(id) ? ['fires no reader'] : []), ...fires(id)].join(', ')} |`);
   lines.push('', '**Summary faculties** (the work model reads the text) and the directors that play them (own: the director\'s first faculty):', '', '| Faculty | Fired by | Writes | Read by | Status |', '|---|---|---|---|---|');
   for (const [id, faculty] of Object.entries(FACULTIES)) lines.push(`| ${faculty.label} | ${firedBy(faculty)} | ${faculty.writes.join('; ')} | ${readers(id).map(entry => `${entry.label}${entry.own ? ' (own)' : ''}`).join(', ')} | ${faculty.status} |`);
   lines.push('', '**Specialist directors.** The stage manager always runs; action directors record action, read the scale faculty and hold a camera (one of them leads each beat); state directors keep what rides with people and things, with no zoom and no camera:', '', '| Director | Kind | Plays | Zoom | Camera | Asks Jev | Status |', '|---|---|---|---|---|---|---|');
@@ -48,7 +48,7 @@ export function markdown() {
 export function html() {
   const pill = status => `<span class="pill ${status === 'built' ? 'always' : status === 'partial' ? 'damp' : 'fired'}">${status}</span>`;
   const ids = Object.keys(DIRECTORS);
-  const types = Object.entries(BLOCK_TYPES).map(([id, type]) => `<tr><td>${esc(type.label)}</td><td>${esc(type.means)}</td><td>${esc(type.volume1)}</td><td>${[...(DAMPING.includes(id) ? ['<span class="pill damp">damps the world</span>'] : []), ...fires(id).map(label => `<span class="pill fired">${esc(label)}</span>`)].join(' ')}</td></tr>`).join('\n');
+  const types = Object.entries(BLOCK_TYPES).map(([id, type]) => `<tr><td>${esc(type.label)}</td><td>${esc(type.means)}</td><td>${esc(type.volume1)}</td><td>${[...(QUIET.includes(id) ? ['<span class="pill damp">fires no reader</span>'] : []), ...fires(id).map(label => `<span class="pill fired">${esc(label)}</span>`)].join(' ')}</td></tr>`).join('\n');
   const matrix = Object.entries(FACULTIES).map(([id, faculty]) => `<tr><th scope="row">${esc(faculty.label)}<br><small>${esc(firedBy(faculty))}</small></th>${ids.map(key => { const k = DIRECTORS[key].reads.indexOf(id); return `<td class="cell">${k === 0 ? '<b title="its own">●</b>' : k > 0 ? '<span title="reads">○</span>' : ''}</td>`; }).join('')}</tr>`).join('\n');
   const faculties = Object.entries(FACULTIES).map(([id, faculty]) => `<div class="card ${faculty.always ? 'always' : 'fired'}"><span class="tag">${faculty.always ? `Always on · each ${faculty.always}` : 'Fired'}</span> ${pill(faculty.status)}<h3>${esc(faculty.label)}</h3><dl>
     <dt>Fired by</dt><dd>${esc(firedBy(faculty))}</dd><dt>Writes</dt><dd>${faculty.writes.map(esc).join('; ')}</dd><dt>Read by</dt><dd>${readers(id).map(entry => esc(entry.label)).join(', ')}</dd>${faculty.code ? `<dt>Code</dt><dd><code>${esc(faculty.code)}</code></dd>` : ''}</dl></div>`).join('\n');

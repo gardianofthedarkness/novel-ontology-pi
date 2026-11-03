@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DIRECTORS, FACULTIES, damped, firing, lead, registryProblems } from './specialists.mjs';
+import { DIRECTORS, FACULTIES, firing, lead, registryProblems } from './specialists.mjs';
 
-test('the registry holds together: every type fires or damps, every faculty is fired and read, every director reads', () => {
+test('the registry holds together: every type fires or is quiet, every faculty is fired and read, every director reads', () => {
   assert.deepEqual(registryProblems(), []);
   for (const director of Object.values(DIRECTORS)) assert.ok(director.asks.length && (director.kind !== 'action' || director.scale[0] < director.scale[1]));
 });
@@ -22,8 +22,6 @@ test('the gate: a dense stretch fires its faculty with hysteresis and a margin; 
   assert.equal(lead(fired, 2).lead, 'combat');
   assert.deepEqual(lead(fired, 4), { lead: 'mega', with: ['combat'] });
   assert.equal(lead(fired, 8).lead, 'routine');
-  assert.equal(damped(block({ interior: 0.6, routine: 0.3 })), true);
-  assert.equal(damped(block({ interior: 0.6, routine: 0.3 }), { choreography: [true] }, 0), false, 'a fight narrated through thought is not stilled');
   assert.equal(Object.keys(FACULTIES).length >= 8, true);
 });
 
