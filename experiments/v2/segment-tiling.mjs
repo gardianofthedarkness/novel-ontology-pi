@@ -51,10 +51,11 @@ export function smoothedRuns(ids, cut, observed) {
   for (let k = 1; k < ids.length; k++) { const e = emit(ids[k]); forward.push(normal(TYPES.map((_, t) => e[t] * step(forward[k - 1], t, k)))); }
   const backward = new Array(ids.length); backward[ids.length - 1] = TYPES.map(() => 1 / T);
   for (let k = ids.length - 2; k >= 0; k--) { const e = emit(ids[k + 1]); backward[k] = normal(TYPES.map((_, s) => TYPES.reduce((sum, __, t) => sum + (s === t ? 1 - move(k + 1) : move(k + 1) / (T - 1)) * e[t] * backward[k + 1][t], 0))); }
-  const runs = [];
+  const runs = [], posterior = {};
   ids.forEach((id, k) => { const post = normal(forward[k].map((p, t) => p * backward[k][t])), best = post.indexOf(Math.max(...post)), type = TYPES[best];
+    posterior[id] = Object.fromEntries(TYPES.map((name, t) => [name, Math.round(post[t] * 1000) / 1000]));
     if (runs.at(-1)?.type === type) { runs.at(-1).last = id; runs.at(-1).n++; } else runs.push({ first: id, last: id, n: 1, type, confidence: Math.round(post[best] * 100) / 100 }); });
-  return runs;
+  return Object.assign(runs, { posterior });
 }
 
 /** Segments from the cut probabilities: a scene's first sentence begins one, and every sentence Jev holds more likely than not to begin another. */
@@ -119,7 +120,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const beats = (gate?.beats ?? []).filter(beat => beat.scene === sceneId).map(beat => ({ type: beat.type, first: beat.first, last: beat.last, n: position.get(beat.last) - position.get(beat.first) + 1 }));
     const observed = Object.fromEntries(segments.flatMap(segment => segment.sentences.map(id => [id, { distribution: segment.distribution, confidence: segment.confidence }])));
     const runs = mode === 'smoothed' ? smoothedRuns(ids, cut, observed) : null;
-    out.push({ scene: sceneId, sentences: ids.length, mode, segments: (runs ?? segments).map(({ sentences, distribution, ...rest }) => rest), beats, cutsAbove: { half: Object.values(cut).filter(p => p > 0.5).length, near: Object.values(cut).filter(p => p > 0.3 && p <= 0.5).length } });
+    // Each sentence's type distribution as asked (its segment's) and, smoothed, as the forward-backward has it.
+    const distributions = Object.fromEntries(ids.map(id => [id, { asked: observed[id]?.distribution ?? {}, ...(runs ? { smoothed: runs.posterior[id] } : {}) }]));
+    out.push({ scene: sceneId, sentences: ids.length, mode, distributions, segments: (runs ?? segments).map(({ sentences, distribution, ...rest }) => rest), beats, cutsAbove: { half: Object.values(cut).filter(p => p > 0.5).length, near: Object.values(cut).filter(p => p > 0.3 && p <= 0.5).length } });
     console.error(`${sceneId}: ${ids.length} sentences, ${(runs ?? segments).length} segments (beats from blocks: ${beats.length})`);
   }
   await writeFile(resolve(values.out ?? 'segments-trial.json'), JSON.stringify({ model: live.modelId, usage, scenes: out }, null, 1));

@@ -295,3 +295,23 @@ fixes:
 
 Decision: segments replace the 12-sentence blocks as the type questions' input (M14), with the cut's purpose kept;
 memory and standoff attitude go to the type question itself (decision 25, and a time cue for memory).
+
+### The whole distribution, not the top type (2026-11-03)
+
+The user: "we don't need the first type to be 100% true because we have all type confidence distribution". The same
+sixty labelled sentences, scored on each method's whole distribution for the sentence (blocks: the mean of the windows
+holding it; segments: its segment's, then the forward-backward posterior):
+
+| Method | Mean probability on the true type | True type in the top three | Log-loss |
+|---|---|---|---|
+| Blocks, raw | 0.44 | 53/60 | 1.27 |
+| Blocks, smoothed (the gate now) | 0.46 | 50/60 | 2.12 |
+| Segments, raw | 0.55 | 51/60 | 1.32 |
+| **Segments, smoothed** | **0.58** | 49/60 | 2.05 |
+
+- **Segments carry more of the truth**: about a quarter more probability on the true type (0.58 against 0.46), with
+  the true type within the top three as often as the blocks (about 85% for every method).
+- **Smoothing sharpens too far, for both**: it lifts the mean on the truth a little but, where it is wrong, leaves the
+  truth almost nothing (log-loss from about 1.3 to about 2.1). A flashback or a standoff then has no second type left
+  for its faculty to fire on. The beats can take the smoothed type; the faculties' mixed index should read a softer
+  posterior (the smoothing tempered, or the raw distribution beside it).
