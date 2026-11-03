@@ -31,8 +31,8 @@ export function markdown() {
   for (const [id, type] of Object.entries(BLOCK_TYPES)) lines.push(`| ${type.label} | ${type.means} | ${type.volume1} | ${[...(DAMPING.includes(id) ? ['damps the world'] : []), ...fires(id)].join(', ')} |`);
   lines.push('', '**Summary faculties** (the work model reads the text) and the directors that play them (own: the director\'s first faculty):', '', '| Faculty | Fired by | Writes | Read by | Status |', '|---|---|---|---|---|');
   for (const [id, faculty] of Object.entries(FACULTIES)) lines.push(`| ${faculty.label} | ${firedBy(faculty)} | ${faculty.writes.join('; ')} | ${readers(id).map(entry => `${entry.label}${entry.own ? ' (own)' : ''}`).join(', ')} | ${faculty.status} |`);
-  lines.push('', '**Specialist directors** (Jev, on pictures framed at their scale):', '', '| Director | Plays | Scale | Camera | Asks Jev | Status |', '|---|---|---|---|---|---|');
-  for (const director of Object.values(DIRECTORS)) lines.push(`| ${director.label}${director.always ? ' (always)' : ''} | ${director.role} | ${metres(director.scale)} | ${director.camera} | ${director.asks.map(ask => `${ask.name}${ask.status === 'built' ? ' (built)' : ask.status === 'partial' ? ' (partial)' : ''}`).join('; ')} | ${director.status} |`);
+  lines.push('', '**Specialist directors.** The stage manager always runs; action directors record action, read the scale faculty and hold a camera (one of them leads each beat); state directors keep what rides with people and things, with no zoom and no camera:', '', '| Director | Kind | Plays | Zoom | Camera | Asks Jev | Status |', '|---|---|---|---|---|---|---|');
+  for (const director of Object.values(DIRECTORS)) lines.push(`| ${director.label} | ${director.kind} | ${director.role} | ${director.scale ? metres(director.scale) : '—'} | ${director.camera ?? '—'} | ${director.asks.map(ask => `${ask.name}${ask.status === 'built' ? ' (built)' : ask.status === 'partial' ? ' (partial)' : ''}`).join('; ')} | ${director.status} |`);
   lines.push('', '**State and the ontology.** What each director keeps as it plays, and how it flows:', '', ...FLOW.map((step, n) => `${n + 1}. **${step.step}**: ${step.what} (\`${step.code}\`)`), '', 'Gates: ' + Object.entries(GATES).map(([gate, what]) => `**${gate}**, ${what}`).join('; ') + '.', '');
   for (const [id, states] of Object.entries(STATE)) {
     lines.push(`*${DIRECTORS[id].label}*`, '', '| State | World log | Laws | Smoothed | Into the ontology | Gate | Status |', '|---|---|---|---|---|---|---|');
@@ -52,8 +52,9 @@ export function html() {
   const matrix = Object.entries(FACULTIES).map(([id, faculty]) => `<tr><th scope="row">${esc(faculty.label)}<br><small>${esc(firedBy(faculty))}</small></th>${ids.map(key => { const k = DIRECTORS[key].reads.indexOf(id); return `<td class="cell">${k === 0 ? '<b title="its own">●</b>' : k > 0 ? '<span title="reads">○</span>' : ''}</td>`; }).join('')}</tr>`).join('\n');
   const faculties = Object.entries(FACULTIES).map(([id, faculty]) => `<div class="card ${faculty.always ? 'always' : 'fired'}"><span class="tag">${faculty.always ? `Always on · each ${faculty.always}` : 'Fired'}</span> ${pill(faculty.status)}<h3>${esc(faculty.label)}</h3><dl>
     <dt>Fired by</dt><dd>${esc(firedBy(faculty))}</dd><dt>Writes</dt><dd>${faculty.writes.map(esc).join('; ')}</dd><dt>Read by</dt><dd>${readers(id).map(entry => esc(entry.label)).join(', ')}</dd>${faculty.code ? `<dt>Code</dt><dd><code>${esc(faculty.code)}</code></dd>` : ''}</dl></div>`).join('\n');
-  const directors = Object.values(DIRECTORS).map(director => `<div class="card ${director.always ? 'always' : 'fired'}"><span class="tag">${director.always ? 'Always on' : `Leads when its faculties fire`}</span> ${pill(director.status)}<h3>${esc(director.label)}</h3><p>${esc(director.role)}</p><dl>
-    <dt>Scale</dt><dd>${metres(director.scale)}</dd><dt>Camera</dt><dd>${esc(director.camera)}</dd><dt>Plays</dt><dd>${director.reads.map(id => esc(FACULTIES[id].label)).join(', ')}</dd>
+  const KIND = { stage: 'Stage · always on', action: 'Action · reads the zoom, holds a camera', state: 'State · no zoom, no camera' };
+  const directors = Object.values(DIRECTORS).map(director => `<div class="card ${director.kind === 'action' ? 'fired' : director.kind === 'stage' ? 'always' : 'damp'}"><span class="tag">${KIND[director.kind]}</span> ${pill(director.status)}<h3>${esc(director.label)}</h3><p>${esc(director.role)}</p><dl>
+    ${director.scale ? `<dt>Zoom</dt><dd>${metres(director.scale)}</dd><dt>Camera</dt><dd>${esc(director.camera)}</dd>` : ''}<dt>Plays</dt><dd>${director.reads.map(id => esc(FACULTIES[id].label)).join(', ')}</dd>
     <dt>Asks Jev</dt><dd><ul class="asks">${director.asks.map(ask => `<li>${pill(ask.status)} ${esc(ask.name)}${ask.what ? ` <span class="note">(${esc(ask.what)})</span>` : ''}</li>`).join('')}</ul></dd><dt>Tools</dt><dd>${director.tools.map(esc).join('; ')}</dd></dl></div>`).join('\n');
   return `<p class="note">Written from <code>world-engine/director/specialists.mjs</code> by <code>specialists-doc.mjs</code>: the registry is the design.</p>
 <h2>Block types</h2>
@@ -62,7 +63,7 @@ export function html() {
 ${types}
 </tbody></table></div>
 <h2>Faculties and specialist directors</h2>
-<p>Faculties are the work model reading the text; directors are Jev deciding on pictures. Each director owns one faculty (●) and plays others' claims (○). The stage manager always runs and chooses who leads each beat; the director whose faculties weigh most there leads and holds the camera, and others whose faculties fired co-direct, answering their own questions.</p>
+<p>Faculties are the work model reading the text; directors are Jev deciding. Each director owns one faculty (●) and plays others' claims (○). The scale-and-view faculty goes only to the action directors, whose camera operators frame each beat at the zoom and angle it recommends. The stage manager chooses which action director leads each beat; state directors (character, transport, architect) answer their own questions with no zoom and no camera.</p>
 <div class="scroll"><table class="matrix"><thead><tr><th>Faculty · fired by</th>${ids.map(key => `<th>${esc(DIRECTORS[key].label)}</th>`).join('')}</tr></thead><tbody>
 ${matrix}
 </tbody></table></div>

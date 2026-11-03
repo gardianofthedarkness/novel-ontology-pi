@@ -165,8 +165,8 @@ over 40 m from 31 toward none; scene 26 and scene 3 at their real distances; L6 
 > Basically, what it means is that we can split our directors into specialist... This is a general mini harness design
 > change, we need to have a pre written and derived from code active summary faculty to director group relationship.
 
-The block types gate the readers and also choose who directs. Each specialist asks Jev its own questions on pictures
-framed at its own scale: the **routine director** in a room (formations, who is addressed, how people feel), the
+The block types gate the readers and also choose who directs. Each specialist asks Jev its own questions: the
+**routine director** in a room (formations, who is addressed, and, split out since, a character director for how people feel), the
 **mega-scene director** from far (landmarks, routes, a catastrophe's extent, the crowd's flow), the **combat director**
 exchange by exchange (the kind of attack: hand to hand, a weapon, a ranged power, a beam, a blast, a thrown object; its
 shape: a point, a line, a cone, a sphere, a wave along the ground; the outcome), the **transport specialist** for
@@ -174,6 +174,19 @@ vehicles and weapons (which model, its path on the road, rails or air, who rides
 makes a borrowed building the one the text describes (its look, floors and uses, its rooms). The **stage manager**
 always runs: the set, the cast, the camera, and who leads each beat. A fight alone is the combat director's; a fight
 during a chase the mega-scene director's, the combat director answering the attack questions.
+
+The user, on zoom (2026-11-03):
+
+> An implicit or scale faculty of summarization pass the zoom and view angle recommendation to it's associated directors
+> and the directors camera man. Only directors who records actions need the zoom parameter, other character, weaponry or
+> state management directors doesn't need them.
+
+So the directors are of three kinds. The **stage manager** (always on): the set, the cast, which action director leads
+each beat, where the cuts fall. **Action directors** (routine, mega-scene, combat) record action: only they read the
+**scale-and-view** faculty, and each has a camera operator framing its beats (and Jev's pictures) at the zoom and view
+angle it recommends; one of them always leads. **State directors** (the character director for feelings, intent and
+bonds; the transport specialist; the architect) keep what rides with people and things, with no zoom and no camera,
+asking on the text and on fixed reference pictures; a thing in motion is played by the beat's action director.
 
 The relationship lives in one registry, `world-engine/director/specialists.mjs` (block types, the reading's signals,
 faculties, directors, the gate `firing()`, `lead()`), checked by `specialists.test.mjs` (every type fires or damps,
@@ -201,26 +214,28 @@ _Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; 
 
 | Faculty | Fired by | Writes | Read by | Status |
 |---|---|---|---|---|
-| Scene frame | always (each scene) | the set as a path down the place tree; the scale band; who is on stage; how it follows the scene before; the beats | Stage manager (own) | proposed |
-| Generalist | always (each window) | stated moves (graded); facts, stated and implied; items; talk kinds; breaks | Stage manager, Routine director, Combat director, Transport specialist, Architect | built |
+| Scene frame | always (each scene) | the set as a path down the place tree; who is on stage; how it follows the scene before; the beats | Stage manager (own) | proposed |
+| Scale and view | always (each beat) | the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km); the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial; whose eyes or which landmark it is seen from; how far its moves reach | Routine director, Mega-scene director, Combat director | proposed |
+| Generalist | always (each window) | stated moves (graded); facts, stated and implied; items; talk kinds; breaks | Stage manager, Routine director, Combat director, Character director, Transport specialist, Architect | built |
 | Conversation and blocking | Routine interaction, Mediated exchange | who talks with whom and through what; formations: beside, across a table, a ring, two sides of a door; attention: who looks at whom | Routine director (own) | proposed |
-| Inner state | Interior flow, Routine interaction | each person's emotional state as it changes (a distribution); intent: what they want next | Routine director | proposed |
+| Inner state | Interior flow, Routine interaction | each person's emotional state as it changes (a distribution); intent: what they want next; bonds: who they are to each other | Character director (own) | proposed |
 | Journeys | Pursuit / traversal, a jump in scale | from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration | Mega-scene director (own) | proposed |
 | Choreography | Confrontation, Spectacle / catastrophe | exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide | Mega-scene director, Combat director (own) | proposed |
 | Ambience | Establishing / ambience, crowds named | the crowd as a density of the place: its make-up and flow; weather, light, mood; set dressing | Mega-scene director | proposed |
-| Props and vehicles | vehicles named, weapons named | vehicles: kind, who drives or rides, where they go; weapons: kind, who holds them; things held, thrown, broken | Transport specialist (own) | partial |
+| Props and vehicles | vehicles named, weapons named | vehicles: kind, who drives or rides; weapons: kind, who holds them; things held, thrown, broken | Transport specialist (own) | partial |
 | Set description | Establishing / ambience, buildings named or described | a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them | Architect (own) | proposed |
 
-**Specialist directors** (Jev, on pictures framed at their scale):
+**Specialist directors.** The stage manager always runs; action directors record action, read the scale faculty and hold a camera (one of them leads each beat); state directors keep what rides with people and things, with no zoom and no camera:
 
-| Director | Plays | Scale | Camera | Asks Jev | Status |
-|---|---|---|---|---|---|
-| Stage manager (always) | the set, who is on stage, the camera and who leads each beat | 5–2 km | chooses the shot per beat from the lead director's scale; holds one group until the text cuts | spawnSpotMode (built); sceneGoesOnMode (built); set and scale band on a map of the place tree | partial |
-| Routine director | inside a room or on a street corner: positions, gaze, who talks to whom, how people feel | 2–15 m | medium and close; a room cut away | dialogueKindMode (built); moveSpotMode (built); formation on a room plan (who sits where, facing whom); emotional state as a score (Jev's score primitive); who is addressed, from the faces turned | partial |
-| Mega-scene director | traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing | 100–2 km | wide and aerial; follows a journey whole | moveDirectionMode at the journey's scale (partial); a landmark on a top-down map (lettered towers, bridges, stations); a route among the place graph's routes; the extent of a catastrophe (an area on the map); which way a crowd flows | proposed |
-| Combat director | a fight, exchange by exchange: the kind and shape of each attack, who it hits, what it breaks | 5–60 m | close to medium, following the exchange; wider for a blast | the hit spot and size (red spheres) (built); attack kind: hand to hand, grapple, weapon, ranged power, beam, blast, thrown object, the ground itself; attack shape: point, line or beam, cone, sphere, wave along the ground; outcome: hit, dodged, blocked, cancelled; how far knocked back | partial |
-| Transport specialist | vehicles and weapons: what they are, who drives or holds them, where they go | 10–2 km | follows the vehicle; wide for flight | which model a vehicle or weapon is (the model packs); its path: on the road, the rails, in the air; who rides, drives or holds it | proposed |
-| Architect | a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it | 10–300 m | establishing on the building; cut-aways of floors | terrainHeightMode and terrainPartMode (built); its look among the model packs and themes; floors and uses (the mall below, offices, flats, the rooftop deck); a room's make-up and furniture | partial |
+| Director | Kind | Plays | Zoom | Camera | Asks Jev | Status |
+|---|---|---|---|---|---|---|
+| Stage manager | stage | the set, who is on stage, which action director leads each beat and where the cuts fall | — | — | spawnSpotMode (built); sceneGoesOnMode (built); the set on a map of the place tree | partial |
+| Routine director | action | inside a room or on a street corner: positions, gaze, who talks to whom and from where | 2–15 m | medium and close at the recommended angle; a room cut away | dialogueKindMode (built); moveSpotMode (built); formation on a room plan (who sits where, facing whom); who is addressed, from the faces turned | partial |
+| Mega-scene director | action | traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing | 100–2 km | wide and aerial at the recommended angle; follows a journey whole | moveDirectionMode at the journey's zoom (partial); a landmark on a top-down map (lettered towers, bridges, stations); a route among the place graph's routes; the extent of a catastrophe (an area on the map); which way a crowd flows | proposed |
+| Combat director | action | a fight, exchange by exchange: the kind and shape of each attack, who it hits, what it breaks | 5–60 m | close to medium at the recommended angle, following the exchange; wider for a blast | the hit spot and size (red spheres) (built); attack kind: hand to hand, grapple, weapon, ranged power, beam, blast, thrown object, the ground itself; attack shape: point, line or beam, cone, sphere, wave along the ground; outcome: hit, dodged, blocked, cancelled; how far knocked back | partial |
+| Character director | state | what rides with a person: how they feel, what they want, who they are to each other | — | — | emotional state as a score (Jev's score primitive); intent: what they want next; a bond changing (closer, colder, a first meeting) | proposed |
+| Transport specialist | state | vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat's action director | — | — | which model a vehicle or weapon is (on the model packs' sheets); who rides, drives or holds it; whose it is | proposed |
+| Architect | state | a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it | — | — | terrainHeightMode and terrainPartMode (built); its look among the model packs and themes (on its elevation); floors and uses (the mall below, offices, flats, the rooftop deck); a room's make-up and furniture (on its plan) | partial |
 
 **State and the ontology.** What each director keeps as it plays, and how it flows:
 
@@ -241,10 +256,9 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 |---|---|---|---|---|---|---|
 | Who is on stage | presence | L2, L9 | yes | Scene.charactersPresent + PRESENT_IN relation | applied | built |
 | The set (the scene's place and its path up the tree) | binding | — |  | Scene.locationId + PART_OF relation | applied | built |
-| The scale band | binding | L5 |  | Location.properties.scale | applied | proposed |
 | Facts about where people are (stated or implied: indoors, a floor, near someone) | position | L14 | yes | StateChange.location | applied | partial |
 | Beats and who led them | beat (new) | — |  | action event + PRECEDES relation | held | proposed |
-| The camera | — | — |  | the run only | run | partial |
+| The cuts (where one beat ends and the next begins, and who leads it) | beat (new) | — |  | the run only | run | proposed |
 
 *Routine director*
 
@@ -253,6 +267,12 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 | Positions in the room | position | L1, L10, L11 | yes | StateChange.location + PART_OF relation; today at the building; a room becomes a Location inside it | applied | partial |
 | Who talks with whom, through what | meeting | L6 |  | SPEAKS_TO relation + Scene.turns; speakers are off for now; the channel (face to face, phone, door) a property of the relation | held | partial |
 | Formations and attention | meeting | L6 |  | ADDRESSES relation | held | proposed |
+| Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — |  | the run only | run | proposed |
+
+*Character director*
+
+| State | World log | Laws | Smoothed | Into the ontology | Gate | Status |
+|---|---|---|---|---|---|---|
 | Feelings | feeling (new) | — | yes | StateChange.emotions; additive deltas clamped to [-1, 1] (the ontology's rule); applied once audits show them right | held | proposed |
 | Bonds and first meetings | feeling (new) | — |  | StateChange.relationships + KNOWS relation | held | proposed |
 | Intent | feeling (new) | — |  | StateChange.goalsAdd | held | proposed |
@@ -263,6 +283,7 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 |---|---|---|---|---|---|---|
 | Journeys (routes, stops, manner) | position | L5, L10, L12 | yes | StateChange.location + movement event; each stop a location; the journey an event, held | applied | partial |
 | A catastrophe's extent | damage | L13 |  | Location.properties.damage + conflict event | applied | partial |
+| Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — |  | the run only | run | proposed |
 | Crowds | crowd (new) | — |  | Organization.properties.members + MEMBER_OF relation; a named crowd (the student column) an Organization its people are members of; an unnamed density stays with the run | held | proposed |
 
 *Combat director*
@@ -274,6 +295,7 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 | Injury and condition (hurt, unconscious, bound) | condition (new) | — |  | StateChange.conditionAdd (new field) | held | proposed |
 | Abilities shown | exchange (new) | L12 |  | Character.properties.abilities | held | proposed |
 | What breaks | damage | L13 |  | Location.properties.damage | applied | built |
+| Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — |  | the run only | run | partial |
 
 *Transport specialist*
 
@@ -281,7 +303,7 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 |---|---|---|---|---|---|---|
 | Vehicles and weapons | item (new) | — |  | Item.properties.class; new identities: held, as EM's are | held | proposed |
 | Who holds, drives or rides | possession (new) | L15 |  | StateChange.possessionsAdd + StateChange.possessionsRemove | applied | proposed |
-| Where things are | item (new) | L15 | yes | LOCATED_AT relation | applied | proposed |
+| Where things are | item (new) | L15 | yes | LOCATED_AT relation; where the beat's action director put them, at its zoom | applied | proposed |
 | Ownership | possession (new) | — |  | OWNS relation | held | proposed |
 
 *Architect*
@@ -298,10 +320,10 @@ Into each ontology file:
 | File | From |
 |---|---|
 | `scenes.jsonl` | Stage manager (Who is on stage, The set); Routine director (Who talks with whom, through what) |
-| `relations.jsonl` | Stage manager (Who is on stage, The set, Beats and who led them); Routine director (Positions in the room, Who talks with whom, through what, Formations and attention, Bonds and first meetings); Mega-scene director (Crowds); Combat director (Exchanges); Transport specialist (Where things are, Ownership); Architect (Rooms) |
-| `entities.jsonl` | Stage manager (The scale band); Mega-scene director (A catastrophe's extent, Crowds); Combat director (Abilities shown, What breaks); Transport specialist (Vehicles and weapons); Architect (Which building it is, Floors, uses, look, Floors, uses, look, Changes to it) |
-| `state-changes.jsonl` | Stage manager (Facts about where people are); Routine director (Positions in the room, Feelings, Bonds and first meetings, Intent); Mega-scene director (Journeys); Combat director (Knock-backs and dodges, Injury and condition); Transport specialist (Who holds, drives or rides, Who holds, drives or rides) |
+| `relations.jsonl` | Stage manager (Who is on stage, The set, Beats and who led them); Routine director (Positions in the room, Who talks with whom, through what, Formations and attention); Character director (Bonds and first meetings); Mega-scene director (Crowds); Combat director (Exchanges); Transport specialist (Where things are, Ownership); Architect (Rooms) |
+| `state-changes.jsonl` | Stage manager (Facts about where people are); Routine director (Positions in the room); Character director (Feelings, Bonds and first meetings, Intent); Mega-scene director (Journeys); Combat director (Knock-backs and dodges, Injury and condition); Transport specialist (Who holds, drives or rides, Who holds, drives or rides) |
 | `events.jsonl` | Stage manager (Beats and who led them); Mega-scene director (Journeys, A catastrophe's extent); Combat director (Exchanges) |
+| `entities.jsonl` | Mega-scene director (A catastrophe's extent, Crowds); Combat director (Abilities shown, What breaks); Transport specialist (Vehicles and weapons); Architect (Which building it is, Floors, uses, look, Floors, uses, look, Changes to it) |
 <!-- specialists:end -->
 
 ### Order of work (Track A)

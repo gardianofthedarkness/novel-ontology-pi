@@ -4,7 +4,7 @@ import { DIRECTORS, FACULTIES, damped, firing, lead, registryProblems } from './
 
 test('the registry holds together: every type fires or damps, every faculty is fired and read, every director reads', () => {
   assert.deepEqual(registryProblems(), []);
-  for (const director of Object.values(DIRECTORS)) assert.ok(director.scale[0] < director.scale[1] && director.asks.length);
+  for (const director of Object.values(DIRECTORS)) assert.ok(director.asks.length && (director.kind !== 'action' || director.scale[0] < director.scale[1]));
 });
 
 test('the built Jev questions the registry names are modes in the code', async () => {
@@ -57,4 +57,15 @@ test('what the registry calls built, canon writes today', async () => {
     assert.ok(canon.includes(`'${FILE[base]}'`), `${id} · ${entry.state}: canon writes no ${FILE[base]}`);
     if (base === 'relation') assert.ok(canon.includes(`'${a}'`), `${id} · ${entry.state}: canon writes no ${a}`);
   }
+});
+
+test('only the directors who record action take the zoom: they read the scale faculty and hold a camera; one of them always leads', () => {
+  const action = Object.entries(DIRECTORS).filter(([, director]) => director.kind === 'action').map(([id]) => id);
+  assert.deepEqual(action, ['routine', 'mega', 'combat']);
+  for (const [id, director] of Object.entries(DIRECTORS)) assert.equal(director.reads.includes('scale'), action.includes(id), `${id} and the zoom`);
+  for (const id of ['character', 'transport', 'architect']) assert.equal(DIRECTORS[id].camera, undefined, `${id} holds no camera`);
+  // A routine stretch fires conversation and inner state: the routine director leads, the character director answers its own.
+  const fired = { conversation: [true], feeling: [true], props: [true] };
+  assert.deepEqual(lead(fired, 0), { lead: 'routine', with: ['character', 'transport'] });
+  assert.equal(lead({ props: [true] }, 0).lead, 'routine', 'a state director never leads');
 });

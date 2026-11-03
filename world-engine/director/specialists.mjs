@@ -32,45 +32,58 @@ export const SIGNALS = {
 };
 
 /**
- * The summary faculties: work-model readers of the text. `always`: on for every scene or window; else fired by the
+ * The summary faculties: work-model readers of the text. `always`: on for every scene, beat or window; else fired by the
  * density of `types` (and `signals`) in a span. `writes`: the claims it puts on the scene board.
  */
 export const FACULTIES = {
-  frame: { label: 'Scene frame', always: 'scene', status: 'proposed', writes: ['the set as a path down the place tree', 'the scale band', 'who is on stage', 'how it follows the scene before', 'the beats'] },
+  frame: { label: 'Scene frame', always: 'scene', status: 'proposed', writes: ['the set as a path down the place tree', 'who is on stage', 'how it follows the scene before', 'the beats'] },
+  // The user, 2026-11-03: "an implicit or scale faculty of summarization pass the zoom and view angle recommendation to
+  // it's associated directors and the directors camera man. Only directors who records actions need the zoom parameter."
+  scale: { label: 'Scale and view', always: 'beat', status: 'proposed', writes: ['the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km)', 'the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial', 'whose eyes or which landmark it is seen from', 'how far its moves reach'] },
   generalist: { label: 'Generalist', always: 'window', status: 'built', code: 'world-engine/digest/digest.mjs', writes: ['stated moves (graded)', 'facts, stated and implied', 'items', 'talk kinds', 'breaks'] },
   conversation: { label: 'Conversation and blocking', types: ['routine', 'mediated'], status: 'proposed', writes: ['who talks with whom and through what', 'formations: beside, across a table, a ring, two sides of a door', 'attention: who looks at whom'] },
-  feeling: { label: 'Inner state', types: ['interior', 'routine'], status: 'proposed', writes: ['each person\'s emotional state as it changes (a distribution)', 'intent: what they want next'] },
+  feeling: { label: 'Inner state', types: ['interior', 'routine'], status: 'proposed', writes: ['each person\'s emotional state as it changes (a distribution)', 'intent: what they want next', 'bonds: who they are to each other'] },
   journeys: { label: 'Journeys', types: ['traversal'], signals: ['scaleJump'], status: 'proposed', writes: ['from, via and to as places of the tree', 'the manner (alleys, up a wall, leaps, carried)', 'distance and duration'] },
   choreography: { label: 'Choreography', types: ['confrontation', 'catastrophe'], status: 'proposed', writes: ['exchanges: attacker, target, attack, outcome', 'knock-backs, dodges, throws', 'what breaks and how wide'] },
   ambience: { label: 'Ambience', types: ['establishing'], signals: ['crowds'], status: 'proposed', writes: ['the crowd as a density of the place: its make-up and flow', 'weather, light, mood', 'set dressing'] },
-  props: { label: 'Props and vehicles', types: [], signals: ['vehicles', 'weapons'], status: 'partial', code: 'world-engine/digest/digest.mjs (items)', writes: ['vehicles: kind, who drives or rides, where they go', 'weapons: kind, who holds them', 'things held, thrown, broken'] },
+  props: { label: 'Props and vehicles', types: [], signals: ['vehicles', 'weapons'], status: 'partial', code: 'world-engine/digest/digest.mjs (items)', writes: ['vehicles: kind, who drives or rides', 'weapons: kind, who holds them', 'things held, thrown, broken'] },
   setting: { label: 'Set description', types: ['establishing'], signals: ['buildings'], status: 'proposed', writes: ['a building\'s look, floors and uses (a 70-floor tower: mall, offices, flats)', 'a room\'s make-up (a container bar, a thick-doored cell)', 'changes to them'] },
 };
 
 /**
- * The specialist directors: each asks Jev its own questions on pictures framed at its own scale. `reads`: the faculties
- * whose claims it plays; `scale`: metres across its frame [near, far]; `asks`: its Jev questions (built: a mode in
- * src/v2/context, proposed: to be written); `tools`: the world's means it plays with. The stage manager always runs; the
- * others lead a beat when their faculties fire (lead()).
+ * The specialist directors, of three kinds (the user, 2026-11-03):
+ * - `stage`: the stage manager, always on: the set, who is on stage, who leads each beat, where the cuts fall;
+ * - `action`: directors who record action (where people go, how they fight, how far they travel). Only they read the
+ *   scale faculty: each has a camera operator framing its beats at the zoom and view angle the faculty recommends, and Jev's
+ *   pictures for its questions are framed the same way. One of them leads each beat;
+ * - `state`: directors who keep what rides with people and things, not where they move: a character's feelings, a vehicle
+ *   or weapon, a building. They need no zoom and hold no camera; their questions are asked on the text and on fixed
+ *   reference pictures (a model sheet, a building's elevation and plan). Things in motion are played by the beat's action
+ *   director, at its zoom.
+ * `reads`: the faculties whose claims it plays, its own first; `scale`: an action director's zoom range in metres
+ * [near, far]; `asks`: its Jev questions (built: a mode in src/v2/context, proposed: to be written); `tools`: its means.
  */
 export const DIRECTORS = {
-  stage: { label: 'Stage manager', role: 'the set, who is on stage, the camera and who leads each beat', reads: ['frame', 'generalist'], always: true, scale: [5, 2000], camera: 'chooses the shot per beat from the lead director\'s scale; holds one group until the text cuts', status: 'partial',
-    asks: [{ name: 'spawnSpotMode', status: 'built', what: 'where each person starts in the set' }, { name: 'sceneGoesOnMode', status: 'built', what: 'whether the scene carries straight on' }, { name: 'set and scale band on a map of the place tree', status: 'proposed' }],
-    tools: ['spawning', 'the place tree', 'the smoother'] },
-  routine: { label: 'Routine director', role: 'inside a room or on a street corner: positions, gaze, who talks to whom, how people feel', reads: ['conversation', 'feeling', 'generalist'], scale: [2, 15], camera: 'medium and close; a room cut away', status: 'partial',
-    asks: [{ name: 'dialogueKindMode', status: 'built', what: 'how a talk happens (face to face, group, remote, public)' }, { name: 'moveSpotMode', status: 'built', what: 'a spot near the speaker' }, { name: 'formation on a room plan (who sits where, facing whom)', status: 'proposed' }, { name: 'emotional state as a score (Jev\'s score primitive)', status: 'proposed' }, { name: 'who is addressed, from the faces turned', status: 'proposed' }],
+  stage: { kind: 'stage', label: 'Stage manager', role: 'the set, who is on stage, which action director leads each beat and where the cuts fall', reads: ['frame', 'generalist'], always: true, status: 'partial',
+    asks: [{ name: 'spawnSpotMode', status: 'built', what: 'where each person starts in the set' }, { name: 'sceneGoesOnMode', status: 'built', what: 'whether the scene carries straight on' }, { name: 'the set on a map of the place tree', status: 'proposed' }],
+    tools: ['spawning', 'the place tree', 'the smoother', 'the gate (lead)'] },
+  routine: { kind: 'action', label: 'Routine director', role: 'inside a room or on a street corner: positions, gaze, who talks to whom and from where', reads: ['conversation', 'scale', 'generalist'], scale: [2, 15], camera: 'medium and close at the recommended angle; a room cut away', status: 'partial',
+    asks: [{ name: 'dialogueKindMode', status: 'built', what: 'how a talk happens (face to face, group, remote, public)' }, { name: 'moveSpotMode', status: 'built', what: 'a spot near the speaker' }, { name: 'formation on a room plan (who sits where, facing whom)', status: 'proposed' }, { name: 'who is addressed, from the faces turned', status: 'proposed' }],
     tools: ['rooms and doors of the building skeleton', 'talk rings (L6)'] },
-  mega: { label: 'Mega-scene director', role: 'traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing', reads: ['journeys', 'ambience', 'choreography'], scale: [100, 2000], camera: 'wide and aerial; follows a journey whole', status: 'proposed',
-    asks: [{ name: 'moveDirectionMode at the journey\'s scale', status: 'partial', what: 'the arrows, framed wide' }, { name: 'a landmark on a top-down map (lettered towers, bridges, stations)', status: 'proposed' }, { name: 'a route among the place graph\'s routes', status: 'proposed' }, { name: 'the extent of a catastrophe (an area on the map)', status: 'proposed' }, { name: 'which way a crowd flows', status: 'proposed' }],
+  mega: { kind: 'action', label: 'Mega-scene director', role: 'traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing', reads: ['journeys', 'scale', 'ambience', 'choreography'], scale: [100, 2000], camera: 'wide and aerial at the recommended angle; follows a journey whole', status: 'proposed',
+    asks: [{ name: 'moveDirectionMode at the journey\'s zoom', status: 'partial', what: 'the arrows, framed wide' }, { name: 'a landmark on a top-down map (lettered towers, bridges, stations)', status: 'proposed' }, { name: 'a route among the place graph\'s routes', status: 'proposed' }, { name: 'the extent of a catastrophe (an area on the map)', status: 'proposed' }, { name: 'which way a crowd flows', status: 'proposed' }],
     tools: ['map routes on the place graph', 'the terrain', 'the crowd field', 'percolation damage'] },
-  combat: { label: 'Combat director', role: 'a fight, exchange by exchange: the kind and shape of each attack, who it hits, what it breaks', reads: ['choreography', 'generalist'], scale: [5, 60], camera: 'close to medium, following the exchange; wider for a blast', status: 'partial',
+  combat: { kind: 'action', label: 'Combat director', role: 'a fight, exchange by exchange: the kind and shape of each attack, who it hits, what it breaks', reads: ['choreography', 'scale', 'generalist'], scale: [5, 60], camera: 'close to medium at the recommended angle, following the exchange; wider for a blast', status: 'partial',
     asks: [{ name: 'the hit spot and size (red spheres)', status: 'built', what: 'where a blast lands and how big' }, { name: 'attack kind: hand to hand, grapple, weapon, ranged power, beam, blast, thrown object, the ground itself', status: 'proposed' }, { name: 'attack shape: point, line or beam, cone, sphere, wave along the ground', status: 'proposed' }, { name: 'outcome: hit, dodged, blocked, cancelled; how far knocked back', status: 'proposed' }],
     tools: ['hitSphere and percolation', 'graded moves', 'destruction (L13)'] },
-  transport: { label: 'Transport specialist', role: 'vehicles and weapons: what they are, who drives or holds them, where they go', reads: ['props', 'generalist'], scale: [10, 2000], camera: 'follows the vehicle; wide for flight', status: 'proposed',
-    asks: [{ name: 'which model a vehicle or weapon is (the model packs)', status: 'proposed' }, { name: 'its path: on the road, the rails, in the air', status: 'proposed' }, { name: 'who rides, drives or holds it', status: 'proposed' }],
-    tools: ['model packs (CC0)', 'roads and rails of the terrain', 'things on the page'] },
-  architect: { label: 'Architect', role: 'a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it', reads: ['setting', 'generalist'], scale: [10, 300], camera: 'establishing on the building; cut-aways of floors', status: 'partial',
-    asks: [{ name: 'terrainHeightMode and terrainPartMode', status: 'built', what: 'a building\'s height and what it belongs to' }, { name: 'its look among the model packs and themes', status: 'proposed' }, { name: 'floors and uses (the mall below, offices, flats, the rooftop deck)', status: 'proposed' }, { name: 'a room\'s make-up and furniture', status: 'proposed' }],
+  character: { kind: 'state', label: 'Character director', role: 'what rides with a person: how they feel, what they want, who they are to each other', reads: ['feeling', 'generalist'], status: 'proposed',
+    asks: [{ name: 'emotional state as a score (Jev\'s score primitive)', status: 'proposed' }, { name: 'intent: what they want next', status: 'proposed' }, { name: 'a bond changing (closer, colder, a first meeting)', status: 'proposed' }],
+    tools: ['the ontology\'s state fold (additive deltas)', 'the smoother, later'] },
+  transport: { kind: 'state', label: 'Transport specialist', role: 'vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat\'s action director', reads: ['props', 'generalist'], status: 'proposed',
+    asks: [{ name: 'which model a vehicle or weapon is (on the model packs\' sheets)', status: 'proposed' }, { name: 'who rides, drives or holds it', status: 'proposed' }, { name: 'whose it is', status: 'proposed' }],
+    tools: ['model packs (CC0)', 'things on the page'] },
+  architect: { kind: 'state', label: 'Architect', role: 'a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it', reads: ['setting', 'generalist'], status: 'partial',
+    asks: [{ name: 'terrainHeightMode and terrainPartMode', status: 'built', what: 'a building\'s height and what it belongs to' }, { name: 'its look among the model packs and themes (on its elevation)', status: 'proposed' }, { name: 'floors and uses (the mall below, offices, flats, the rooftop deck)', status: 'proposed' }, { name: 'a room\'s make-up and furniture (on its plan)', status: 'proposed' }],
     tools: ['building skeletons', 'architecture models', 'model packs', 'building EM'] },
 };
 
@@ -127,15 +140,17 @@ export const STATE = {
   stage: [
     { state: 'Who is on stage', log: 'presence', laws: ['L2', 'L9'], smoothed: true, to: 'scene.charactersPresent', also: 'relation.PRESENT_IN', gate: 'applied', status: 'built' },
     { state: 'The set', what: 'the scene\'s place and its path up the tree', log: 'binding', laws: [], to: 'scene.locationId', also: 'relation.PART_OF', gate: 'applied', status: 'built' },
-    { state: 'The scale band', log: 'binding', laws: ['L5'], to: 'entity.Location.scale', gate: 'applied', status: 'proposed' },
     { state: 'Facts about where people are', what: 'stated or implied: indoors, a floor, near someone', log: 'position', laws: ['L14'], smoothed: true, to: 'stateChange.location', gate: 'applied', status: 'partial' },
     { state: 'Beats and who led them', log: 'beat', laws: [], to: 'event.action', also: 'relation.PRECEDES', gate: 'held', status: 'proposed' },
-    { state: 'The camera', log: null, laws: [], to: null, gate: 'run', status: 'partial' },
+    { state: 'The cuts', what: 'where one beat ends and the next begins, and who leads it', log: 'beat', laws: [], to: null, gate: 'run', status: 'proposed' },
   ],
   routine: [
     { state: 'Positions in the room', log: 'position', laws: ['L1', 'L10', 'L11'], smoothed: true, to: 'stateChange.location', also: 'relation.PART_OF', gate: 'applied', status: 'partial', note: 'today at the building; a room becomes a Location inside it' },
     { state: 'Who talks with whom, through what', log: 'meeting', laws: ['L6'], to: 'relation.SPEAKS_TO', also: 'scene.turns', gate: 'held', status: 'partial', note: 'speakers are off for now; the channel (face to face, phone, door) a property of the relation' },
     { state: 'Formations and attention', log: 'meeting', laws: ['L6'], to: 'relation.ADDRESSES', gate: 'held', status: 'proposed' },
+    { state: 'Its camera', what: 'the zoom and view angle the scale faculty recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'proposed' },
+  ],
+  character: [
     { state: 'Feelings', log: 'feeling', laws: [], smoothed: true, to: 'stateChange.emotions', gate: 'held', status: 'proposed', note: 'additive deltas clamped to [-1, 1] (the ontology\'s rule); applied once audits show them right' },
     { state: 'Bonds and first meetings', log: 'feeling', laws: [], to: 'stateChange.relationships', also: 'relation.KNOWS', gate: 'held', status: 'proposed' },
     { state: 'Intent', log: 'feeling', laws: [], to: 'stateChange.goalsAdd', gate: 'held', status: 'proposed' },
@@ -143,6 +158,7 @@ export const STATE = {
   mega: [
     { state: 'Journeys', what: 'routes, stops, manner', log: 'position', laws: ['L5', 'L10', 'L12'], smoothed: true, to: 'stateChange.location', also: 'event.movement', gate: 'applied', status: 'partial', note: 'each stop a location; the journey an event, held' },
     { state: 'A catastrophe\'s extent', log: 'damage', laws: ['L13'], to: 'entity.Location.damage', also: 'event.conflict', gate: 'applied', status: 'partial' },
+    { state: 'Its camera', what: 'the zoom and view angle the scale faculty recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'proposed' },
     { state: 'Crowds', log: 'crowd', laws: [], to: 'entity.Organization.members', also: 'relation.MEMBER_OF', gate: 'held', status: 'proposed', note: 'a named crowd (the student column) an Organization its people are members of; an unnamed density stays with the run' },
   ],
   combat: [
@@ -151,11 +167,12 @@ export const STATE = {
     { state: 'Injury and condition', what: 'hurt, unconscious, bound', log: 'condition', laws: [], to: 'stateChange.conditionAdd', gate: 'held', status: 'proposed', schema: true },
     { state: 'Abilities shown', log: 'exchange', laws: ['L12'], to: 'entity.Character.abilities', gate: 'held', status: 'proposed' },
     { state: 'What breaks', log: 'damage', laws: ['L13'], to: 'entity.Location.damage', gate: 'applied', status: 'built' },
+    { state: 'Its camera', what: 'the zoom and view angle the scale faculty recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'partial' },
   ],
   transport: [
     { state: 'Vehicles and weapons', log: 'item', laws: [], to: 'entity.Item.class', gate: 'held', status: 'proposed', note: 'new identities: held, as EM\'s are' },
     { state: 'Who holds, drives or rides', log: 'possession', laws: ['L15'], to: 'stateChange.possessionsAdd', also: 'stateChange.possessionsRemove', gate: 'applied', status: 'proposed' },
-    { state: 'Where things are', log: 'item', laws: ['L15'], smoothed: true, to: 'relation.LOCATED_AT', gate: 'applied', status: 'proposed' },
+    { state: 'Where things are', log: 'item', laws: ['L15'], smoothed: true, to: 'relation.LOCATED_AT', gate: 'applied', status: 'proposed', note: 'where the beat\'s action director put them, at its zoom' },
     { state: 'Ownership', log: 'possession', laws: [], to: 'relation.OWNS', gate: 'held', status: 'proposed' },
   ],
   architect: [
@@ -181,6 +198,13 @@ export function registryProblems() {
   for (const type of Object.keys(BLOCK_TYPES)) if (!DAMPING.includes(type) && !Object.values(FACULTIES).some(faculty => faculty.types?.includes(type))) out.push(`block type ${type}: fires nothing and damps nothing`);
   for (const [id, director] of Object.entries(DIRECTORS)) for (const faculty of director.reads) if (!FACULTIES[faculty]) out.push(`director ${id}: no faculty ${faculty}`);
   for (const id of Object.keys(DIRECTORS)) if (!STATE[id]?.length) out.push(`director ${id}: no state`);
+  // Only those who record action read the zoom, and hold a camera and a zoom range.
+  for (const [id, director] of Object.entries(DIRECTORS)) {
+    const action = director.kind === 'action';
+    if (action !== director.reads.includes('scale')) out.push(`director ${id}: ${action ? 'records action but does not read' : 'reads'} the scale faculty`);
+    if (action !== !!director.camera || action !== !!director.scale) out.push(`director ${id}: ${action ? 'an action director needs' : 'only action directors have'} a camera and a zoom range`);
+    if (!['stage', 'action', 'state'].includes(director.kind)) out.push(`director ${id}: no kind`);
+  }
   for (const [id, states] of Object.entries(STATE)) for (const entry of states) {
     if (!DIRECTORS[id]) out.push(`state of ${id}: no such director`);
     if (entry.log && !LOG_KINDS[entry.log]) out.push(`${id} · ${entry.state}: no log kind ${entry.log}`);
@@ -218,13 +242,14 @@ export function firing(windows, { kOn = 1.5, kOff = 0.5, minimum = 2 } = {}) {
 export const damped = window => { const top = Object.entries(window.types ?? {}).sort((a, b) => b[1] - a[1])[0]; return !!top && DAMPING.includes(top[0]); };
 
 /**
- * Who leads a window's beat: of the specialists (not the stage manager), the one whose fired faculties weigh most there
- * (its first faculty, its own, weighs 2, the others it reads 1; the always-on ones nothing); with none fired, the routine
- * director. A fight alone is the combat director's; a fight during a chase the mega-scene director's, the combat
- * director co-directing. Co-directors answer their own questions; the lead holds the camera.
+ * Who leads a window's beat: of the action directors, the one whose fired faculties weigh most there (its own faculty
+ * weighs 2, the others it reads 1; the always-on ones nothing); with none fired, the routine director. A fight alone is
+ * the combat director's; a fight during a chase the mega-scene director's, the combat director co-directing. The lead's
+ * camera operator holds the camera; co-directors (action or state) answer their own questions.
  */
 export function lead(fired, n) {
   const weight = id => DIRECTORS[id].reads.reduce((sum, faculty, k) => sum + (!FACULTIES[faculty].always && fired[faculty]?.[n] ? (k === 0 ? 2 : 1) : 0), 0);
-  const ranked = Object.keys(DIRECTORS).filter(id => id !== 'stage').map(id => ({ id, weight: weight(id) })).filter(entry => entry.weight > 0).sort((a, b) => b.weight - a.weight);
-  return { lead: ranked[0]?.id ?? 'routine', with: ranked.slice(1).map(entry => entry.id) };
+  const ranked = Object.keys(DIRECTORS).filter(id => DIRECTORS[id].kind !== 'stage').map(id => ({ id, weight: weight(id), action: DIRECTORS[id].kind === 'action' })).filter(entry => entry.weight > 0).sort((a, b) => b.weight - a.weight);
+  const first = ranked.find(entry => entry.action)?.id ?? 'routine';
+  return { lead: first, with: ranked.filter(entry => entry.id !== first).map(entry => entry.id) };
 }
