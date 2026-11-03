@@ -101,3 +101,67 @@ So about one in five is the story's own arrival; the rest are three things in ou
 reader (a street 4 m wide) make the engine's mistake show more often than real frames would, but not cause it.
 
 **L19 reserved** (the user, 2026-11-03): planned, not used for W10.
+
+## Between strands: the exact logic now, and a double guard (proposal, 2026-11-03)
+
+The user: "tell me the exact logic that keeps between strands, maybe we can do a double guarded stricter physics on
+that".
+
+**What decides where someone comes from, now.**
+1. **Strands** (`src/v2/extraction/strands.ts`, v1's `storyStrands` on the world script, by segment since M14): each
+   container gets a layer and a lane from the evidence of order (a person shared, a flashback, stated times that differ
+   within one top place); `continues` is the container its lane continues.
+2. **Forks** (`src/digger/stage/environment.ts` `forkTimeline`): a container is on the fork of the one its lane
+   continues, else it starts a fork. Each person's **entry** in a container: `from` is the **last container in reading
+   order** where they were in the cast (a flashback has no `from` and does not count as last); `samePlace` when the two
+   share a place id. So `from` may cross forks, and it follows the order of reading, not of story time.
+3. **The director** (`director.mjs` `prior`): a person starts where `from` left them (the end of that container), else
+   their last position on the fork of `from`, else their last on the container's own fork, else nowhere (spawned).
+   Someone the strand carries straight on (same place, from the container this one continues) stays where they stood;
+   anyone else outside the frame comes in (now: walks the route; before: appeared off-page).
+4. **The laws** (`laws.mjs` L1): someone carried in must come from the container their entry names; carried from another
+   (or carried with no `from`) is a violation, recorded, not prevented. L5 checks the time only where the story states a
+   clock (W9: never). L2 (two places at once) has nothing to check when parallel containers are not marked as such.
+5. **The smoother** (`smoother.mjs` `chainsOf`): a person's moments chain along the entries' `from`; a `samePlace` link
+   costs one step, another link a scene change's worth; no chain crosses strands except where an entry does.
+
+**Where it is weak.** `from` is reading order, not story time (a parallel strand read later can hand someone over);
+nothing checks at the hand-over that the body could have made the trip (only L5, and only with a clock); a fallback to
+"their last position on the fork" can bring someone from a stale moment; places are "same" only by equal ids (a room
+and its building differ).
+
+**A double guard (proposed).** A hand-over carries a body only when both guards pass:
+- **The story guard**: the entry's `from` must precede this container in story time (the time tree, not reading order),
+  on the same fork or across a fork link the strands found (a split or a merge); a flashback hands nothing over; no
+  fallback to an older position.
+- **The physics guard**: the way from where `from` left them to this container's frame must fit the time between at
+  their fastest way (L17's speed × the beats' durations, or the clock where stated; L12's ways), and they cannot be in a
+  container that overlaps it in time elsewhere (L2).
+
+Both pass: they are carried (they stay, or walk the route). The story guard fails: they start fresh here, the gap held
+for the review. The physics guard fails: they walk the route anyway and arrive late (partway into the container),
+held for the review and, after W10, for L19 to weigh.
+
+## The fixes and the routes (2026-11-03)
+
+The user: fix the 21 and the 7, with presence that follows physics ("no one disappears or moves suddenly segment after
+segment until new presence or next ground truth"), and the arrivals by a route through loaded blocks.
+
+- **Straight on stays**: someone the strand carries straight on stays wherever they stand, ahead of the scene's spawn box.
+- **Presence by physics** (`segmentPresence`): placed only by the cards' evidence; held at that place, segment after
+  segment, at the same story time, until evidence puts them elsewhere or the time moves on; never by the script alone;
+  a memory segment places nobody now.
+- **Routes**: someone coming from beyond the frame walks the whole way, in legs that each fit one walk graph window,
+  the blocks loaded as they reach them; L5 checks the route where a clock is stated; only a route with no way found ends
+  off-page.
+
+| Unpaid rehearsal, two passes | Before (pass 1 → 2) | After (pass 1 → 2) |
+|---|---|---|
+| Arrivals off-page | 99 → 43 | **20 → 6** |
+| Routes walked (pass 2) | — | 14, 8 reaching (median 184 m, longest 1.2 km) |
+| Actors not there (L9 held) | 41 → 41 | **12 → 12** |
+| Moves | 1,500 → 1,542 | 3,716 → 3,651 (more people stay present, and drift) |
+| Camera jumps | 6 → 7 | 6 → 9 |
+
+The 6 left are routes that found no way (a leg with no walkable ground loaded in reach). Then the hand-overs in story
+time ([Forks-M15](Forks-M15.md) §1) joined scenes 19 and 20.

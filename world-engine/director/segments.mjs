@@ -26,11 +26,13 @@ export function alignCards(cards, segments) {
 }
 
 /**
- * Who is in each segment, by its cards' evidence first (someone acts, speaks or is spoken to there): a person enters a
- * scene at the first segment with evidence of them and stays on in its later segments (one place, one time, L1); someone
- * the script has present with no evidence anywhere in the scene is there from its first segment. Weighting second: a
- * memory segment (its type) is the past, so its evidence places nobody now; each entry keeps the segment's share that is
- * happening now (1 − P(exposition) − P(memory)) for the smoothing to weigh.
+ * Who is in each segment, by physics (the user, 2026-11-03: "no one disappears or moves suddenly segment after segment
+ * until new presence or next ground truth"): a person is placed where the cards first give evidence of them (acting,
+ * speaking or spoken to, by the lines they appear in), and stays at that place, segment after segment, wherever the story
+ * is at that place at the same story time, until evidence puts them somewhere else (they have left) or the story's time
+ * moves on (a new period: they are not held there). Nobody is placed by the world script alone. A memory segment is the
+ * past: its evidence places nobody now. Each entry keeps the segment's share that is now (1 − P(exposition) − P(memory))
+ * for the smoothing to weigh.
  */
 export function segmentPresence({ segments, cards, scriptScenes }) {
   const segmentOf = new Map(segments.flatMap((segment, k) => segment.sentences.map(id => [id, k])));
@@ -40,14 +42,14 @@ export function segmentPresence({ segments, cards, scriptScenes }) {
     if (!(person.how ?? []).some(how => ['acts', 'speaks', 'addressed'].includes(how))) continue;
     for (const id of person.at?.length ? person.at : [card.first]) { const k = segmentOf.get(id); if (k !== undefined && segments[k].type !== 'memory') evidence[k].add(person.id); }
   }
-  const present = segments.map(() => []), byScene = new Map();
-  segments.forEach((segment, k) => (byScene.get(segment.scene) ?? byScene.set(segment.scene, []).get(segment.scene)).push(k));
-  for (const [scene, ks] of byScene) {
-    const script = scriptScenes.get(scene)?.present ?? [], seen = new Set(ks.flatMap(k => [...evidence[k]]));
-    const here = new Set(script.filter(id => !seen.has(id)));
-    for (const k of ks) { for (const id of evidence[k]) here.add(id); present[k] = [...here]; }
-  }
-  return segments.map((segment, k) => ({ present: present[k], evidence: [...evidence[k]], now: Math.max(0, Math.round((1 - (segment.distribution?.exposition ?? 0) - (segment.distribution?.memory ?? 0)) * 1000) / 1000) }));
+  // Where each person was last given evidence, and at what story time; segments in story order (the reading's).
+  const state = new Map();
+  return segments.map((segment, k) => {
+    const own = scriptScenes.get(segment.scene), place = own?.place ?? null, time = own?.at?.node ?? null;
+    for (const id of evidence[k]) state.set(id, { place, time });
+    const present = [...state].filter(([, where]) => where.place === place && where.time === time).map(([id]) => id);
+    return { present, evidence: [...evidence[k]], now: Math.max(0, Math.round((1 - (segment.distribution?.exposition ?? 0) - (segment.distribution?.memory ?? 0)) * 1000) / 1000) };
+  });
 }
 
 /**
@@ -71,11 +73,28 @@ export function segmentWorld({ reading, script, spawn }) {
 }
 
 /**
- * The strands file (stage/world/strands.json's shape, experiments/v2/strands.mjs) of a script: each container's fork,
- * layer, lane, the one it continues, and each person's entry (from which, at the same place). `scriptStrands` is
- * src/v2/extraction/strands.ts's (v1's strands on the script, no model call).
+ * The strands file (stage/world/strands.json's shape) of a segment script, in story time (the user, 2026-11-03: "we need
+ * to make it story objective time order, as strands become forks"). v1's strands (`storyStrands` on the script's
+ * projection, `scriptProjection`) give each container its layer (its place in story time, from the evidence of order:
+ * a person's worldline, a flashback, stated times) and the lane it continues; a container with nobody in it stands alone
+ * (no borrowed cast: nobody is placed without evidence). Then, in story order (layer, then reading order): a container is
+ * on the fork of the one it continues, else starts one; each person's entry comes `from` the last container they were
+ * in **in story time** (a flashback hands nothing over), at the same place or not. Someone new in a strand comes from
+ * nowhere, which is fine.
  */
-export function strandsFile(script, scriptStrands) {
-  const { strands, timeline } = scriptStrands(script);
-  return { version: 1, from: 'v2-script-segments', scenes: script.scenes.map(scene => ({ id: scene.id, parent: scene.parent ?? null, fork: timeline.forkOf.get(scene.id) ?? null, layer: strands.layer.get(scene.id) ?? null, lane: strands.lane.get(scene.id) ?? null, continues: strands.continues?.get(scene.id) ?? null, entries: timeline.handoffs.get(scene.id) ?? [] })), forks: timeline.forks, checks: strands.checks, strands };
+export function strandsFile(script, { scriptProjection, storyStrands }) {
+  const alone = new Set(script.scenes.filter(scene => !scene.present?.length).map(scene => scene.id));
+  const strands = storyStrands(scriptProjection(script), { alone });
+  const index = new Map(script.scenes.map((scene, n) => [scene.id, n])), byId = new Map(script.scenes.map(scene => [scene.id, scene]));
+  const order = [...script.scenes].sort((a, b) => (strands.layer.get(a.id) ?? 0) - (strands.layer.get(b.id) ?? 0) || index.get(a.id) - index.get(b.id));
+  const forkOf = new Map(), last = new Map(), entries = new Map();
+  for (const scene of order) {
+    const previous = strands.continues?.get(scene.id) ?? null;
+    forkOf.set(scene.id, previous && forkOf.has(previous) ? forkOf.get(previous) : scene.id);
+    const flashback = scene.clock === null;
+    entries.set(scene.id, (scene.present ?? []).map(person => { const from = flashback ? null : last.get(person) ?? null; return { person, from, samePlace: !!from && !!scene.place && byId.get(from)?.place === scene.place }; }));
+    if (!flashback) for (const person of scene.present ?? []) last.set(person, scene.id);
+  }
+  const forks = [...new Set(forkOf.values())].map(id => ({ id, scenes: order.filter(scene => forkOf.get(scene.id) === id).map(scene => scene.id) }));
+  return { version: 1, from: 'v2-script-segments', order: 'story', scenes: script.scenes.map(scene => ({ id: scene.id, parent: scene.parent ?? null, fork: forkOf.get(scene.id) ?? null, layer: strands.layer.get(scene.id) ?? null, lane: strands.lane.get(scene.id) ?? null, continues: strands.continues?.get(scene.id) ?? null, entries: entries.get(scene.id) ?? [] })), forks, checks: strands.checks, strands };
 }

@@ -84,7 +84,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   // views, built here; a segment's world data is its scene's; canon gets each scene back whole.
   const worldFile = async name => JSON.parse(await readFile(join(novelDir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
   const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json') });
-  const segStrands = seg ? SG.strandsFile(seg.script, (await load('dist/src/v2/extraction/strands.js')).scriptStrands) : null;
+  const segStrands = seg ? SG.strandsFile(seg.script, { scriptProjection: (await load('dist/src/v2/extraction/strands.js')).scriptProjection, storyStrands: (await load('dist/apps/playground/src/data/storyStrands.js')).storyStrands }) : null;
   if (seg) reading = seg.reading;
   const scriptOf = async () => seg?.script ?? (await worldFile('script.json')) ?? { scenes: [] }, strandsOf = async () => segStrands ?? (await worldFile('strands.json')), spawnOf = async () => seg?.spawn ?? (await worldFile('spawn.json'));
   if (seg) { const dir = join(novelDir, 'stage', 'world', 'segments'); await mkdir(dir, { recursive: true }); const { strands: _, ...file } = segStrands; await Promise.all([writeFile(join(dir, 'script.json'), JSON.stringify(seg.script)), writeFile(join(dir, 'spawn.json'), JSON.stringify(seg.spawn)), writeFile(join(dir, 'strands.json'), JSON.stringify(file, null, 1))]); }
@@ -429,7 +429,10 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // how far outside it they stand is recorded with the frame, and the smoother (S_frame) pulls their track toward it by
         // least change, so the next pass starts them where the least-action history has them.
         const strandHere = strandScene.get(scene.id), straightOn = who => { const entry = strandHere?.entries?.find(item => item.person === who); return !!(entry?.samePlace && entry.from && entry.from === strandHere.continues); };
-        const carriedIn = present.filter(who => was.get(who) && inside(was.get(who)[0]));
+        // Someone the strand carries straight on stays wherever they stand, ahead of the scene's spawn box (the user,
+        // 2026-11-03: 21 of 43 arrivals off-page were people who had drifted out of the box during the scene, then put
+        // back beside the group: nobody moves suddenly segment after segment).
+        const carriedIn = present.filter(who => was.get(who) && (straightOn(who) || inside(was.get(who)[0])));
         // Where each carried-in person starts for the frame: the smoothed start where the smoothing moved them, else where they
         // stood (the user, 2026-11-03: a frame measured round where they stood before the revision was stale by hundreds of m).
         const startOf = who => { const revised = smoothedStart(scene, who); return revised !== null && revised !== undefined ? revised : was.get(who)[0]; };
@@ -472,8 +475,12 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // places may lie nearer than the city has them: L19).
           const a = at(from[0]), b = at(dest), metres = Math.hypot(a[0] - b[0], a[2] - b[2]);
           if (frameMetres && metres <= frameMetres) { positions[who] = from; travels.push({ who, from, dest }); }
+          // From farther (the user, 2026-11-03: keep the distance, by a path through loaded blocks, not a jump): they come
+          // the whole way, walked leg by leg as the city is loaded along it (routeWalk, below); only if no way is found do
+          // they arrive off-page.
           else {
-            positions[who] = [dest, from[1]]; sceneRecord.offPage.push(who);
+            positions[who] = from; travels.push({ who, from, dest, route: true });
+            // L5 on the route: where the story's clock says when they left, the way must fit the time at their fastest way.
             const left = LW.minutesOf(timeOf(lastSceneOf.get(who))), now = LW.minutesOf(timeOf(scene.id));
             if (left !== null && now !== null) { const need = metres / Math.max(...Object.values(LW.SPEED).filter(Number.isFinite)); if ((now - left) * 60 < need) (sceneRecord.laws ??= []).push({ law: 'L5', who, verdict: 'held', why: `${Math.round(metres)} m in ${now - left} min: the places may lie nearer (L19)` }); }
           }
@@ -530,8 +537,32 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         if (travels.length) {
           const meet = at(travels[0].dest), event = { id: `arrive:${scene.id}`, text: `(${travels.map(entry => names.get(entry.who) ?? entry.who).join('、')} come here)`, actors: travels.map(entry => entry.who), camera: { focus: { x: meet[0], z: meet[2], y0: meet[1], w: 6, d: 6, h: 3 }, radius: 30, elevation: 40, yaw: 0 } };
           scene.events.push(event);
+          // A route from afar, in legs that each fit one walk graph window (128 m of a window 384 m wide): each leg's
+          // ground loaded as they reach it, walked on the walk graph, the legs joined into one way.
+          const LEG = 128;
+          const routeWalk = (who, from, dest, near) => {
+            const a = at(from[0]), b = at(dest), legs = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[2] - a[2]) / LEG)), path = [from[0]];
+            let here = from;
+            for (let k = 1; k <= legs; k++) {
+              const t = k / legs, aim = [a[0] + (b[0] - a[0]) * t, a[2] + (b[2] - a[2]) * t];
+              const targets = k === legs ? (near.length ? near : [dest]) : around(aim[0], aim[1], 12).nodes.filter(node => node.type === 1).sort((m, n) => Math.hypot(m.x - aim[0], m.z - aim[1]) - Math.hypot(n.x - aim[0], n.z - aim[1])).slice(0, 8).map(node => node.id);
+              if (!targets.length) continue;
+              const leg = walk(scene, `${scene.id}|${who}|route|${k}`, here, targets, 'walk');
+              if (!leg || leg.length < 2) return { path, legs: k - 1, of: legs, reached: false };
+              path.push(...leg.slice(1)); here = [leg.at(-1), here[1]];
+            }
+            return { path, legs, of: legs, reached: true };
+          };
+          sceneRecord.routes = [];
           for (const entry of travels) {
             const p = at(entry.dest), { nodes } = around(p[0], p[2], 6), near = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= 2.5).map(node => node.id);
+            if (entry.route) {
+              const route = routeWalk(entry.who, entry.from, entry.dest, near), metres = Math.round(route.path.slice(1).reduce((sum, node, k) => { const u = at(route.path[k]), v = at(node); return sum + Math.hypot(v[0] - u[0], v[2] - u[2], v[1] - u[1]); }, 0));
+              sceneRecord.routes.push({ who: entry.who, metres, legs: route.legs, of: route.of, reached: route.reached });
+              if (route.path.length > 1) { E.moves.set(`${scene.id}|${event.id}|${entry.who}`, { person: entry.who, how: metres > 400 ? 'run' : 'walk', path: route.path, ensemble: [] }); positions[entry.who] = [route.path.at(-1), entry.from[1]]; }
+              if (!route.reached) { positions[entry.who] = [entry.dest, entry.from[1]]; sceneRecord.offPage.push(entry.who); }
+              continue;
+            }
             const path = walk(scene, `${scene.id}|${entry.who}|arrive`, entry.from, near.length ? near : [entry.dest], 'walk');
             if (path && path.length > 1) { E.moves.set(`${scene.id}|${event.id}|${entry.who}`, { person: entry.who, how: 'walk', path: [...path], ensemble: path.ensemble ?? [] }); positions[entry.who] = [path.at(-1), entry.from[1]]; }
             else positions[entry.who] = [entry.dest, entry.from[1]];
