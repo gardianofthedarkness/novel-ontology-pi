@@ -45,16 +45,19 @@ const CELL_AREA = 4;
 
 const seeded = seed => { let h = 2166136261; for (const c of String(seed)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296; };
 
-/** Graph distance (m) from `sources` over the nodes, by Dijkstra on the edge lengths. */
+/** Graph distance (m) from `sources` over the nodes, by Dijkstra on the edge lengths (a binary heap: a district's frame
+ * holds tens of thousands of nodes). */
 function distances(nodes, neighbours, sources) {
-  const at = new Map(nodes.map(node => [node.id, node])), out = new Map(), queue = [];
-  for (const id of sources) if (at.has(id)) { out.set(id, 0); queue.push([0, id]); }
+  const at = new Map(nodes.map(node => [node.id, node])), out = new Map(), heap = [];
+  const push = item => { heap.push(item); let n = heap.length - 1; while (n > 0) { const up = (n - 1) >> 1; if (heap[up][0] <= heap[n][0]) break; [heap[up], heap[n]] = [heap[n], heap[up]]; n = up; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let n = 0; for (;;) { const a = 2 * n + 1, b = a + 1; let m = n; if (a < heap.length && heap[a][0] < heap[m][0]) m = a; if (b < heap.length && heap[b][0] < heap[m][0]) m = b; if (m === n) break; [heap[m], heap[n]] = [heap[n], heap[m]]; n = m; } } return top; };
+  const queue = { get length() { return heap.length; } };
+  for (const id of sources) if (at.has(id)) { out.set(id, 0); push([0, id]); }
   while (queue.length) {
-    queue.sort((a, b) => a[0] - b[0]);
-    const [d, id] = queue.shift();
+    const [d, id] = pop();
     if (d > (out.get(id) ?? Infinity)) continue;
     const a = at.get(id);
-    for (const next of neighbours.get(id) ?? []) { const b = at.get(next); if (!b) continue; const e = d + Math.hypot(b.x - a.x, b.z - a.z); if (e < (out.get(next) ?? Infinity)) { out.set(next, e); queue.push([e, next]); } }
+    for (const next of neighbours.get(id) ?? []) { const b = at.get(next); if (!b) continue; const e = d + Math.hypot(b.x - a.x, b.z - a.z); if (e < (out.get(next) ?? Infinity)) { out.set(next, e); push([e, next]); } }
   }
   return out;
 }
@@ -67,7 +70,8 @@ export function crowdField({ nodes, neighbours, size = 'few', state = 'milling',
   const rng = seeded(seed), area = nodes.length * CELL_AREA, people = Math.round((DENSITY[size] ?? 0) * area);
   const count = Math.min(SAMPLES, people), at = new Map(nodes.map(node => [node.id, node]));
   const middle = nodes.length ? { x: nodes.reduce((s, n) => s + n.x, 0) / nodes.length, z: nodes.reduce((s, n) => s + n.z, 0) / nodes.length } : { x: 0, z: 0 };
-  const radius = Math.max(1, ...nodes.map(node => Math.hypot(node.x - middle.x, node.z - middle.z)));
+  let radius = 1;
+  for (const node of nodes) radius = Math.max(radius, Math.hypot(node.x - middle.x, node.z - middle.z));
   // The ways out: the field's rim, the nodes farthest from its middle.
   const rim = nodes.filter(node => Math.hypot(node.x - middle.x, node.z - middle.z) >= radius * 0.85).map(node => node.id);
   const samples = Array.from({ length: count }, (_, k) => ({ id: k, node: nodes[Math.floor(rng() * nodes.length)]?.id, gone: false }));

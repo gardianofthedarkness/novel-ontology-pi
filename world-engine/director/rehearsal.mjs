@@ -13,6 +13,7 @@ import { parseArgs } from 'node:util';
 import { direct, standIn } from './director.mjs';
 import { worldLog } from '../log/world-log.mjs';
 import { REVISION_LIMIT, smoothRun } from '../smoother/smoother.mjs';
+import { smoothBlasts } from '../smoother/blasts.mjs';
 
 /**
  * A work model answering every summarizer request by rule: the scene digest (everyone walking or standing, a few in
@@ -37,7 +38,9 @@ export function ruledWork() {
       if (line.kind === 'action' && a) moves.push({ sentence: line.id, who: a, motion: ['step', 'nearby', 'elsewhere'][k % 3], toward: b ?? null, how: 'walk', basis: 'stated', sure: 0.8 });
       if (k % 17 === 4 && a) facts.push({ sentence: line.id, who: a, kind: 'indoors', basis: 'stated', sure: 0.9 });
     });
-    return reply({ moves, facts, items: [], talk: [], breaks: [], background: [] }, 100, 40);
+    // Now and then an action line breaks something (L18 needs blasts to smooth).
+    const breaks = action.filter((line, k) => k % 9 === 4).map(line => ({ sentence: line.id, what: 'a wall', sure: 0.8 }));
+    return reply({ moves, facts, items: [], talk: [], breaks, background: [] }, 100, 40);
   } };
 }
 
@@ -88,13 +91,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const reading = JSON.parse(await readFile(values.reading, 'utf8')), world = join(resolve(novelDir), 'stage', 'world');
   const strands = JSON.parse(await readFile(join(world, 'strands.json'), 'utf8')), spawn = JSON.parse(await readFile(join(world, 'spawn.json'), 'utf8').catch(() => 'null'));
   const passes = [];
-  let smoothing = null;
+  let smoothing = null, blasts = [];
   for (let pass = 1; pass <= Number(values.passes ?? 1); pass++) {
     const started = Date.now();
-    const { record, data } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, log: () => {} });
+    const { record, data } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), log: () => {} });
     const smoothedNow = smoothedOf({ run: `rehearsal-${pass}`, record, page: data, spawn, strands, reading });
     passes.push({ pass, minutes: Math.round((Date.now() - started) / 6000) / 10, ...measure(record), started: { fromSmoothing: record.revisions.filter(entry => entry.applied).length, held: record.revisions.filter(entry => !entry.applied).length }, smoothing: smoothedNow.report });
     smoothing = smoothedNow.smoothed;
+    // L18: the run's blasts smoothed (when and how big), applied so on the next pass.
+    blasts = smoothBlasts({ page: data, record });
+    passes.at(-1).blasts = { told: blasts.length, earlier: blasts.filter(entry => entry.cardsEarlier > 0).length, resized: blasts.filter(entry => entry.r !== entry.toldR).length, smoothedApplied: record.scenes.flatMap(scene => scene.cards).filter(card => card.hit?.smoothed).length, tunnelled: record.scenes.flatMap(scene => scene.cards).filter(card => card.hit?.struck).length };
   }
   const report = { from: values.from, to: values.to, ...(passes.length === 1 ? passes[0] : { passes }) };
   if (values.out) await writeFile(resolve(values.out), JSON.stringify(report, null, 1));

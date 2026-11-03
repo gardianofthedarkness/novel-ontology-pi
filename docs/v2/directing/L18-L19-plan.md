@@ -116,3 +116,23 @@ the time between containers. Both before W10.
    paid); "broken" and "intact" as summarizer facts later if needed.
 2. **L19's speeds**: walking for everyone until the abilities config exists (a superhuman's journey then pulls places
    too hard), or a draft config from the reading first.
+
+## L18 built, first version (2026-11-03)
+
+- **Tunnelling**: a blast breaks the walkable world too (as earlier damage is applied), and what it broke lies as rubble
+  (`world.ts`, a node type of its own) that joins any walkable neighbour on its floor through what stood.
+- **The blast smoother** (`world-engine/smoother/blasts.mjs`, tested): each blast's card and size from the telling card
+  (as sure as the reading), Jev's whole size answer, and the walks that failed through its sphere before it was told;
+  the next pass applies it at its smoothed card and size and asks nothing again.
+
+| Unpaid rehearsal, the whole volume (the rule-made reader now breaks something now and then) | Pass 1 | Pass 2 |
+|---|---|---|
+| Blasts told and struck | 37 | (applied from the smoothing) 37 |
+| Moved earlier or resized by the smoothing | — | 0 |
+| Moves held as unreachable (L10) | 44 (23 without blasts) | 33 |
+| Camera jumps / arrivals off-page | 6 / 89 | 7 / 43 |
+
+The loop runs end to end; no blast moved, since no rule-made walk failed through one before it was told (the tests
+show the move when one does). L10's holds rose with destruction: a blast also drops what lost its support, and fallen
+parts are not yet walkable where they come to rest. Not yet: fallen parts as rubble where they land; later lines that
+show a thing broken or standing; the blasts joined to the people's clouds in one smoothing.

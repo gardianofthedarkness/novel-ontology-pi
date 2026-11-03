@@ -140,7 +140,7 @@ export async function strandDemo(novelDir, options) {
   // Each place keeps its name and path; the world's lots, things, standing cells and graph are shared by all of them.
   const ownGrids = new Set(chosen.map(scene => scene.placeId));
   const kindOf = placeId => { const own = inputs.architecture?.places[placeId]?.kind, scale = inputs.scale?.places[placeId]?.scale ?? null; return stageKindOf(scale) ?? (['skyscraper', 'office', 'home', 'hospital', 'school', 'station', 'church', 'market', 'castle'].includes(own) ? 'site' : /[街路巷道]$/.test(name(placeId)) ? 'street' : 'district'); };
-  const groups = new Map(), shared = { layout: null, things: new Map(), standing: [], structures: [], units: [], version: 0, built: null };
+  const groups = new Map(), shared = { layout: null, things: new Map(), standing: [], structures: [], units: [], rubble: [], version: 0, built: null };
   const groupOf = own => Object.defineProperties(own, Object.fromEntries(['layout', 'things', 'standing', 'structures', 'units', 'version', 'built'].map(key => [key, { get: () => shared[key], set: value => { shared[key] = value; } }])));
   let world = null, moment = 'start';
   /**
@@ -166,7 +166,7 @@ export async function strandDemo(novelDir, options) {
       dirty.length = 0; shared.built = { version: shared.version };
     }
     const f = focus ?? { x: 0, z: 0 }, cx = Math.round(f.x / 128) * 128, cz = Math.round(f.z / 128) * 128, h = Math.max(192, Math.ceil((half + Math.max(Math.abs(f.x - cx), Math.abs(f.z - cz))) / 64) * 64), key = `${cx}|${cz}|${h}`;
-    if (!windows.has(key)) { const started = performance.now(), box = { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz + h }; windows.set(key, { version: shared.version, box, ...W.worldGraph(world, shared.standing, [...shared.things.values()], box) }); cost.builds++; cost.ms += performance.now() - started; }
+    if (!windows.has(key)) { const started = performance.now(), box = { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz + h }; windows.set(key, { version: shared.version, box, ...W.worldGraph(world, shared.standing, [...shared.things.values()], box, shared.rubble) }); cost.builds++; cost.ms += performance.now() - started; }
     return windows.get(key);
   };
   /**
@@ -391,6 +391,22 @@ export async function strandDemo(novelDir, options) {
    */
   const hitSphere = (scene, event, chosen, strength, seed) => {
     reach(chosen.x, chosen.z, chosen.r + 16);
+    // L18 (tunnelling): the blast on the walkable world too, as earlier damage is applied there (applyEarlier): each of the
+    // world's lots the sphere reaches loses what it breaks, and what it broke lies as rubble the walk crosses.
+    const touched = [];
+    world.lots.forEach((lot, index) => {
+      const gap = Math.hypot(Math.max(0, lot.i0 * 2 - chosen.x, chosen.x - (lot.i0 + lot.nx) * 2), Math.max(0, -chosen.y, chosen.y - lot.floors * 3), Math.max(0, lot.j0 * 2 - chosen.z, chosen.z - (lot.j0 + lot.nz) * 2));
+      if (gap > chosen.r) return;
+      const structure = (shared.structures[index] ??= structureOf(lot)), units = shared.units[index] ?? intact(structure), { broken } = blast(structure, units, chosen, strength);
+      if (!broken.length) return;
+      const hit = units.slice(); for (const unit of broken) hit[unit] = 0;
+      const { standing: after } = settle(structure, hit);
+      shared.units[index] = after; shared.standing[index] = skeletonStanding(structure, after);
+      const rubble = (shared.rubble[index] ??= new Uint8Array(lot.skeleton.cells.length));
+      for (const unit of broken) if (unit < structure.cells && unit < rubble.length) rubble[unit] = 1;
+      touched.push(lotBounds(lot));
+    });
+    if (touched.length) { changed(touched); notes.tunnelled = (notes.tunnelled ?? 0) + touched.length; }
     const group = groups.get(scene.placeId);
     // A lot's structure and what of it stands now (its skeleton's cells as the walk left them, walls and roof as hits left them).
     const unitsOf = index => { const structure = (group.structures[index] ??= structureOf(group.layout.lots[index])), units = group.units[index] ?? intact(structure); for (let cell = 0; cell < structure.cells; cell++) units[cell] = group.standing[index][cell] && structure.kind[cell] ? 1 : 0; return { structure, units }; };

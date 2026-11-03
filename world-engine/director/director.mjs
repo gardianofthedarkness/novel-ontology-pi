@@ -67,7 +67,7 @@ export async function readerView(reading, text) {
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
 }
 
-export async function direct(novelDir, { reading, readingPath = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, digest = true, speakers = true, smoothing = null, log = console.error }) {
+export async function direct(novelDir, { reading, readingPath = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, digest = true, speakers = true, smoothing = null, blasts = [], log = console.error }) {
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -1100,7 +1100,16 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // Destruction (docs/v2/world-engine-redesign.md §3): a card the text says breaks something is asked where it hits (lettered
           // red spheres on the world as played) and how big (spheres of 4, 8, 16 and 32 m from two sides); the blast is applied
           // to the world and played before the next card.
-          if (cardRecord.breaks && calls < budget) {
+          // L18: a blast the last pass's smoothing moved to this card (blasts.mjs), applied here at its smoothed size; at the
+          // card that told it, nothing is asked again.
+          for (const blast of blasts.filter(entry => entry.container === scene.id && entry.atCard === card.id && !entry.applied)) {
+            E.reach(blast.centre.x, blast.centre.z, blast.r + 16);
+            E.hitSphere(scene, { id: event.id }, { ...blast.centre, r: blast.r }, 0.9, `${scene.id}|${event.id}|smoothed-hit`);
+            blast.applied = true;
+            cardRecord.hit = { smoothed: true, told: blast.told, across: blast.r * 2, centre: blast.centre, struck: !!E.hits.get(event.id) };
+          }
+          const smoothedHere = blasts.some(entry => entry.container === scene.id && entry.told === card.id);
+          if (cardRecord.breaks && calls < budget && !smoothedHere) {
             const played = await grow(scene, run, true), at_ = Math.max(0, (played?.end ?? 0) - 0.02), slug = `${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-hit`;
             await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: `${slug}-look`, place: scene.placeId, at: at_, only: [scene.placeId], frame: [1440, 900] })})`);
             const spots = await chrome.evaluate(`window.__stage.impactSpots(${JSON.stringify({ place: scene.placeId })})`) ?? [];
@@ -1119,9 +1128,13 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
                 const near = await shoot(`${slug}-near`, [1440, 900], { place: scene.placeId, at: at_, only: [scene.placeId], focus, radius: 22, spheres: rings }), side = await shoot(`${slug}-side`, [1440, 900], { place: scene.placeId, at: at_, only: [scene.placeId], focus, radius: 22, yaw: Math.PI / 2, elevation: 20, spheres: rings });
                 const [size] = await decide(`${about}\nPictures "near" and "side": where it hits, close up from two sides, four red spheres round the point labelled 1 to 4: ${SIZES.map((size, n) => `${n + 1} is ${size} m across`).join(', ')}.`, [{ key: 'size', primitive: 'choice', instructions: 'Which labelled sphere is the size of what this card breaks?', options: SIZES.map((_, n) => `${n + 1}`) }], { images: { near: near.png, side: side.png } });
                 const r = (SIZES[Number(size?.value) - 1] ?? 8) / 2;
+                // L18: the blast as an observation for the smoothing: its centre, Jev's whole answer on its size, how sure the
+                // reading was that the card breaks something.
+                const sizes = Object.fromEntries(SIZES.map((across, n) => [across, Math.round((size?.distribution?.[`${n + 1}`] ?? (Number(size?.value) === n + 1 ? 1 : 0)) * 1000) / 1000]));
+                const breaksSure = Math.max(0, ...digestIn(dg?.breaks ?? [], card).map(entry => entry.sure ?? 0));
                 E.reach(chosen.x, chosen.z, r + 16);
                 E.hitSphere(scene, { id: event.id }, { x: chosen.x, y: chosen.y, z: chosen.z, r }, 0.9, `${scene.id}|${event.id}|hit`);
-                cardRecord.hit = { pick: chosen.label, on: chosen.from, across: r * 2, struck: !!E.hits.get(event.id) };
+                cardRecord.hit = { pick: chosen.label, on: chosen.from, across: r * 2, struck: !!E.hits.get(event.id), centre: { x: Math.round(chosen.x * 10) / 10, y: Math.round(chosen.y * 10) / 10, z: Math.round(chosen.z * 10) / 10 }, sizes, sure: breaksSure };
               }
             }
           }

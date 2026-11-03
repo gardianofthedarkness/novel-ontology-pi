@@ -304,7 +304,7 @@ export function nodeId(world: World, i: number, j: number, k: number): number {
   return id;
 }
 
-/** What each node is, from the last graph: 0 none, 1 outdoor, 2 circulation, 3 room, 4 roof, 5 underground; its lot; its ground. */
+/** What each node is, from the last graph: 0 none, 1 outdoor, 2 circulation, 3 room, 4 roof, 5 underground, 6 rubble (L18); its lot; its ground. */
 export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Array; ground: Uint8Array }
 
 /**
@@ -312,7 +312,7 @@ export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Arra
  * (in world cells). Every node seen so far keeps its id; one that no longer stands has no edges. With a `box` (metres),
  * only the world inside it is walked: edges stay inside, and nodes outside have none (positions are kept for every id).
  */
-export function worldGraph(world: World, standing: Uint8Array[], things: PlacedThing[] = [], box?: { x0: number; z0: number; x1: number; z1: number }): WorldGraph {
+export function worldGraph(world: World, standing: Uint8Array[], things: PlacedThing[] = [], box?: { x0: number; z0: number; x1: number; z1: number }, rubble: (Uint8Array | undefined)[] = []): WorldGraph {
   const inside = (i: number, j: number) => !box || ((i + 0.5) * SKELETON_CELL >= box.x0 && (i + 0.5) * SKELETON_CELL <= box.x1 && (j + 0.5) * SKELETON_CELL >= box.z0 && (j + 0.5) * SKELETON_CELL <= box.z1);
   const edges: { from: number; to: number; dir: number; cost: number; kind: number }[] = [];
   // Each building's room map, made once per lot (a lot's rooms never change; the test cycle, 2026-11-03: it was made for
@@ -343,6 +343,9 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     const at = localCell(lot, i, j);
     if (!at) return { type: 0, lot: NOT, local: NOT };
     const local = cellIndex(lot.skeleton, at[0], at[1], k);
+    // Rubble (L18, tunnelling: a body crosses matter only where it is destroyed): a cell a blast took, wall or corridor,
+    // is walked over where it lies.
+    if (rubble[index]?.[local]) return { type: 6, lot: index, local };
     if (lot.skeleton.cells[local] !== MASS) return { type: standing[index]?.[local] ? 2 : 0, lot: index, local };
     // A room is walked on its own floor; a room of several floors is open air above it (its upper floors are no floor).
     const room = roomOf(index)[local];
@@ -399,7 +402,9 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       const there = what(i + dx, j + dz, k);
       if (!there.type) continue;
       let ok = false;
-      if (here.type === 1 && there.type === 1) ok = !(dx && dz) || (what(i + dx, j, k).type === 1 && what(i, j + dz, k).type === 1);
+      // Rubble opens its floor every way: to rubble, corridors, rooms and the open ground beside it, through what stood.
+      if (here.type === 6 || there.type === 6) ok = [1, 2, 3, 6].includes(here.type) && [1, 2, 3, 6].includes(there.type) && (!(dx && dz) || (what(i + dx, j, k).type > 0 && what(i, j + dz, k).type > 0));
+      else if (here.type === 1 && there.type === 1) ok = !(dx && dz) || (what(i + dx, j, k).type === 1 && what(i, j + dz, k).type === 1);
       else if (here.type === 5 && there.type === 5) ok = !(dx && dz) || (what(i + dx, j, k).type === 5 && what(i, j + dz, k).type === 5);
       else if (here.type === 4 && there.type === 4) ok = here.lot === there.lot;
       else if (here.lot === there.lot && here.lot >= 0) {
