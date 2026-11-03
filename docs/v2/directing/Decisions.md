@@ -268,3 +268,30 @@ on the city's dark side. Kept: the purpose goes with the cut.
 25. **A standoff argued face to face is typed routine.** Routine is "talk and small acts in one place"; confrontation
     reads as blows and powers. *Your call:* say in confrontation that a standoff carried by talk is one too, or keep
     routine (the conversation faculty) for it and let the combat director come in only with blows.
+
+### Segments against blocks, on labelled sentences (2026-11-03)
+
+Sixty sentences drawn at random (a fixed seed) from the six scenes, each labelled with the nine types from the text by
+the main agent before looking up either method's answer (one labeller; a standoff argued face to face labelled
+confrontation, after the user's "the implicit needs to determine the attitude"). Each method's type for a sentence: the
+smoothed beat holding it (blocks, the gate as it is) or the smoothed stretch holding it (segments).
+
+| Method | Right | 3 | 12 | 21 | 26 | 35 | 40 |
+|---|---|---|---|---|---|---|---|
+| Blocks, smoothed beats (the gate now) | 28/60 (47%) | 4/10 | 7/10 | 7/12 | 3/10 | 0/4 | 7/14 |
+| Blocks, raw | 27/60 (45%) | 2/10 | 7/10 | 8/12 | 6/10 | 0/4 | 4/14 |
+| **Segments, smoothed** (with the purpose) | **35/60 (58%)** | 7/10 | 9/10 | 8/12 | 6/10 | 0/4 | 5/14 |
+| Segments, smoothed (without) | 35/60 (58%) | 6/10 | 8/10 | 8/12 | 7/10 | 1/4 | 5/14 |
+
+On the same sentences, segments were right where blocks were wrong 9 times, the reverse twice (an exact test of the
+eleven gives p ≈ 0.07: better, with only sixty sentences behind it). Both miss in the same places, which no tiling
+fixes:
+- **A flashback typed interior** (scene 35, 0/4 for both): memory is rarely chosen; the type needs the time cue (the
+  past of the story) that story time already reads.
+- **A standoff argued face to face** typed routine or interior (scene 40, six misses for segments): decision 25, the
+  attitude the implicit faculty should read.
+- **An essayistic aside inside a fight** (a magician's misdirection, how a spell was learned) typed by the fight round
+  it rather than exposition.
+
+Decision: segments replace the 12-sentence blocks as the type questions' input (M14), with the cut's purpose kept;
+memory and standoff attitude go to the type question itself (decision 25, and a time cue for memory).
