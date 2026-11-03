@@ -1,5 +1,5 @@
 import { MASS, STAIR, SKELETON_CELL, FLOOR_HEIGHT, cellAt, cellIndex, furnish, generateSkeleton, skeletonStream, type Skeleton, type SkeletonKind } from "./skeleton.js";
-import { EDGE, UP, DOWN, buildGraph, directionOf, launchOf, type MoveGraph } from "./pathIntegral.js";
+import { EDGE, UP, DOWN, buildGraph, buildGraphAt, directionOf, launchOf, type MoveGraph } from "./pathIntegral.js";
 import { ARC_EFFORT, ARC_SPEEDS, GROUND, type BuildingRole, type PlaceLot, type PlacedThing } from "./skeletonPlace.js";
 import { boundsOf, inHall, intervalsOf, pillarAt, type Hall } from "./underground.js";
 
@@ -19,8 +19,12 @@ export const CHUNK = 16;
 /** Floors a skeleton is walked up to; a taller building keeps its full height for its shell. */
 export const WALK_FLOORS = 40;
 const OFF = 32768, NOT = -1;
+/** Each lot's room map, and each world's node places, kept between walk graph builds (worldGraph). */
+const ROOMS = new WeakMap<object, Int32Array>(), POSITIONS = new WeakMap<object, { x: Float64Array; z: Float64Array; y: Float64Array }>();
 export const cellKey = (i: number, j: number) => (i + OFF) * 65536 + (j + OFF);
 const chunkKey = (ci: number, cj: number) => cellKey(ci, cj);
+/** A chunk's ground in metres, from its key (as `world.chunks` holds it). */
+export const chunkBounds = (key: number) => { const ci = Math.floor(key / 65536) - OFF, cj = (key % 65536) - OFF, m = CHUNK * SKELETON_CELL; return { x0: ci * m, x1: (ci + 1) * m, z0: cj * m, z1: (cj + 1) * m }; };
 const nodeKey = (i: number, j: number, k: number) => cellKey(i, j) * 1024 + k + 64;
 
 /**
@@ -311,7 +315,9 @@ export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Arra
 export function worldGraph(world: World, standing: Uint8Array[], things: PlacedThing[] = [], box?: { x0: number; z0: number; x1: number; z1: number }): WorldGraph {
   const inside = (i: number, j: number) => !box || ((i + 0.5) * SKELETON_CELL >= box.x0 && (i + 0.5) * SKELETON_CELL <= box.x1 && (j + 0.5) * SKELETON_CELL >= box.z0 && (j + 0.5) * SKELETON_CELL <= box.z1);
   const edges: { from: number; to: number; dir: number; cost: number; kind: number }[] = [];
-  const roomOf = world.lots.map((lot) => { const map = new Int32Array(lot.skeleton.cells.length).fill(NOT); lot.rooms.forEach((room, r) => { for (let level = room.floor; level <= (room.top ?? room.floor); level++) for (let i = room.i0; i <= room.i1; i++) for (let j = room.j0; j <= room.j1; j++) map[cellIndex(lot.skeleton, i, j, level)] = r; }); return map; });
+  // Each building's room map, made once per lot (a lot's rooms never change; the test cycle, 2026-11-03: it was made for
+  // every lot of the world at every window's build).
+  const roomOf = (index: number) => { const lot = world.lots[index]; let map = ROOMS.get(lot); if (!map) { map = new Int32Array(lot.skeleton.cells.length).fill(NOT); const rooms = map; lot.rooms.forEach((room, r) => { for (let level = room.floor; level <= (room.top ?? room.floor); level++) for (let i = room.i0; i <= room.i1; i++) for (let j = room.j0; j <= room.j1; j++) rooms[cellIndex(lot.skeleton, i, j, level)] = r; }); ROOMS.set(lot, map); } return map; };
   const thingAt = new Map<number, number>();
   things.forEach((thing, index) => { for (let j = thing.j0; j <= thing.j1; j++) for (let i = thing.i0; i <= thing.i1; i++) { const key = cellKey(i, j), there = thingAt.get(key); if (there === undefined || things[there].top < thing.top) thingAt.set(key, index); } });
   const span = CHUNK;
@@ -339,7 +345,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     const local = cellIndex(lot.skeleton, at[0], at[1], k);
     if (lot.skeleton.cells[local] !== MASS) return { type: standing[index]?.[local] ? 2 : 0, lot: index, local };
     // A room is walked on its own floor; a room of several floors is open air above it (its upper floors are no floor).
-    const room = roomOf[index][local];
+    const room = roomOf(index)[local];
     return { type: room >= 0 && lot.rooms[room].floor === k ? 3 : 0, lot: index, local };
   };
   // A building's street doors (the user, 2026-11-02: people chose a building and never got in): its entrance cell of the
@@ -367,7 +373,9 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   // Every cell to walk: the open ground of materialized chunks, and every lot's cells on every floor up to its roof; and
   // under them, the levels below the street.
   const cells: [number, number, number][] = [];
-  for (const [key] of world.chunks) { const ci = Math.floor(key / 65536) - OFF, cj = (key % 65536) - OFF; for (let j = cj * CHUNK; j < (cj + 1) * CHUNK; j++) for (let i = ci * CHUNK; i < (ci + 1) * CHUNK; i++) if (inside(i, j)) {
+  // Only the chunks the box takes in (every loaded chunk was walked, the cells outside the box then dropped).
+  const chunkMetres = CHUNK * SKELETON_CELL, nearBox = (ci: number, cj: number) => !box || ((ci + 1) * chunkMetres >= box.x0 - SKELETON_CELL && ci * chunkMetres <= box.x1 + SKELETON_CELL && (cj + 1) * chunkMetres >= box.z0 - SKELETON_CELL && cj * chunkMetres <= box.z1 + SKELETON_CELL);
+  for (const [key] of world.chunks) { const ci = Math.floor(key / 65536) - OFF, cj = (key % 65536) - OFF; if (!nearBox(ci, cj)) continue; for (let j = cj * CHUNK; j < (cj + 1) * CHUNK; j++) for (let i = ci * CHUNK; i < (ci + 1) * CHUNK; i++) if (inside(i, j)) {
     const index = world.lotAt.get(cellKey(i, j)), under = index === undefined ? null : world.lots[index];
     if (!under) cells.push([i, j, 0]);
     for (const entry of hallsAt(world, i, j)) if (!(under && -entry.k <= basementsOf(under))) cells.push([i, j, entry.k]);
@@ -397,7 +405,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       else if (here.lot === there.lot && here.lot >= 0) {
         // A turned building's inside is walked on its own plan (below), never on the world's neighbours.
         if (world.lots[here.lot].frame) continue;
-        const roomA = here.type === 3 ? roomOf[here.lot][here.local] : NOT, roomB = there.type === 3 ? roomOf[there.lot][there.local] : NOT;
+        const roomA = here.type === 3 ? roomOf(here.lot)[here.local] : NOT, roomB = there.type === 3 ? roomOf(there.lot)[there.local] : NOT;
         ok = inPlan(here.lot, here.local, there.local, roomA, roomB);
       } else if (k === 0) {
         // The street door: its cell of the plan (or one beside it on the ground floor, a turned plan's cells falling
@@ -463,7 +471,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     const middle = (li: number, lj: number) => { const u = (li + 0.5) * SKELETON_CELL - (s.nx * SKELETON_CELL) / 2, v = (lj + 0.5) * SKELETON_CELL - (s.nz * SKELETON_CELL) / 2; return [lot.frame!.x + u * c - v * sn, lot.frame!.z + u * sn + v * c]; };
     const gap = (cell: { i: number; j: number }, [x, z]: number[]) => Math.hypot((cell.i + 0.5) * SKELETON_CELL - x, (cell.j + 0.5) * SKELETON_CELL - z);
     // What a plan cell is on floor k: "c" corridor, "r<n>" room n, null neither (mass, or open air over a tall room).
-    const kindOf = (li: number, lj: number, k: number) => { const a = cellIndex(s, li, lj, k); if (s.cells[a] !== MASS) return standing[index]?.[a] ? "c" : null; const r = roomOf[index][a]; return r >= 0 && lot.rooms[r].floor === k ? `r${r}` : null; };
+    const kindOf = (li: number, lj: number, k: number) => { const a = cellIndex(s, li, lj, k); if (s.cells[a] !== MASS) return standing[index]?.[a] ? "c" : null; const r = roomOf(index)[a]; return r >= 0 && lot.rooms[r].floor === k ? `r${r}` : null; };
     const representativeOf = (li: number, lj: number, k: number) => {
       const at = middle(li, lj), own = held.filter((cell) => cell.li === li && cell.lj === lj), kind = kindOf(li, lj, k);
       // With none of its kind held (a small tower's whole corridor on a floor can fall between world cells), a wall's cell
@@ -482,10 +490,10 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       const representative: ({ i: number; j: number } | null)[] = representatives[k] = [];
       for (let lj = 0; lj < s.nz; lj++) for (let li = 0; li < s.nx; li++) representative[lj * s.nx + li] = representativeOf(li, lj, k);
       for (let lj = 0; lj < s.nz; lj++) for (let li = 0; li < s.nx; li++) {
-        const a = cellIndex(s, li, lj, k), roomA = roomOf[index][a] >= 0 && lot.rooms[roomOf[index][a]].floor === k ? roomOf[index][a] : NOT;
+        const a = cellIndex(s, li, lj, k), roomA = roomOf(index)[a] >= 0 && lot.rooms[roomOf(index)[a]].floor === k ? roomOf(index)[a] : NOT;
         for (const [di, dj] of [[1, 0], [0, 1]]) {
           if (li + di >= s.nx || lj + dj >= s.nz) continue;
-          const b = cellIndex(s, li + di, lj + dj, k), roomB = roomOf[index][b] >= 0 && lot.rooms[roomOf[index][b]].floor === k ? roomOf[index][b] : NOT;
+          const b = cellIndex(s, li + di, lj + dj, k), roomB = roomOf(index)[b] >= 0 && lot.rooms[roomOf(index)[b]].floor === k ? roomOf(index)[b] : NOT;
           if (inPlan(index, a, b, roomA, roomB)) join(representative[lj * s.nx + li], representative[(lj + dj) * s.nx + li + di], k);
         }
       }
@@ -528,15 +536,22 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     add(from, to, 0, 0, 2 + 8 * (levelOf(halls[tank].depth) - k) * FLOOR_HEIGHT, EDGE.climb, UP); add(to, from, 0, 0, 2 + (levelOf(halls[tank].depth) - k) * FLOOR_HEIGHT, EDGE.descend, DOWN);
   });
   // Positions of every node ever seen (those that no longer stand have no edges), and what each is now.
-  const count = world.cells.length / 3, positions: [number, number, number][] = new Array(count), type = new Uint8Array(count), lot = new Int32Array(count).fill(NOT), ground = new Uint8Array(count);
+  const count = world.cells.length / 3, type = new Uint8Array(count), lot = new Int32Array(count).fill(NOT), ground = new Uint8Array(count);
+  // Every node's place, kept with the world and grown as nodes are numbered (a node's place never changes).
+  let at = POSITIONS.get(world);
+  if (!at || at.x.length !== count) {
+    const x = new Float64Array(count), z = new Float64Array(count), y = new Float64Array(count), from = at?.x.length ?? 0;
+    if (at) { x.set(at.x); z.set(at.z); y.set(at.y); }
+    for (let id = from; id < count; id++) { const { i, j, k } = cellOf(world, id); x[id] = (i + 0.5) * SKELETON_CELL; z[id] = (j + 0.5) * SKELETON_CELL; y[id] = k * FLOOR_HEIGHT; }
+    at = { x, z, y }; POSITIONS.set(world, at);
+  }
   for (let id = 0; id < count; id++) {
-    const { i, j, k } = cellOf(world, id);
-    positions[id] = [(i + 0.5) * SKELETON_CELL, (j + 0.5) * SKELETON_CELL, k * FLOOR_HEIGHT];
+    const i = world.cells[id * 3], j = world.cells[id * 3 + 1], k = world.cells[id * 3 + 2];
     if (!inside(i, j)) continue;
     const here = what(i, j, k);
     type[id] = here.type; lot[id] = here.lot; ground[id] = here.type === 1 ? world.ground.get(cellKey(i, j)) ?? GROUND.street : 0;
   }
-  return { graph: buildGraph(positions, edges), type, lot, ground };
+  return { graph: buildGraphAt(at, edges), type, lot, ground };
 }
 
 /**

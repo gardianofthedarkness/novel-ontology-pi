@@ -95,6 +95,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   const template = await readFile(join(repository, 'world-engine', 'view', 'strand-demo.html'), 'utf8');
   const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [] };
+  // Where a run's time goes (the test cycle): the page reloaded in Chrome, the pictures shot, the walk graph built.
+  const timing = { reloads: 0, reloadMs: 0, shots: 0, shotMs: 0, skipped: 0 }, runStarted = performance.now();
+  let engineCost = null;
   // The review (Track B W5, review.mjs): the main agent's answers since the last run become pins under the laws, and the
   // director plays by them: presence, remote actors, talk kinds, arrivals, stays. Back-propagation is Bayesian smoothing
   // (W5b, smoother.mjs): the last run smoothed with every observation it had (the review's pins among them), each scene
@@ -176,8 +179,14 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
 
   let result = null;
   await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', engine: async E => {
+    engineCost = E.cost;
     const { world, W } = E, server = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser({ gpu: true });
     let page = null, lotsShown = -1;
+    // A stand-in answers by rule and never looks (the test cycle, the user, 2026-11-03): it is shot no pictures, and the
+    // page in Chrome is brought up to date only where the play itself reads it (a blast's spots). A box on a top-down map
+    // is still read through the map's frame, which needs no picture.
+    const looks = jev.modelId !== 'stand-in-director';
+    let stale = false;
     // Every scene's line as played so far (its starts and events with their walks), kept in world nodes and made the page's
     // own whenever the page is written: a page loaded later (World · Live's frame, the Player) holds the whole line, every
     // card in it to replay (the user, 2026-11-02: tapping a played sentence replayed nothing once the run was over).
@@ -188,12 +197,17 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
     const thingsOnPage = () => [...things.values()].filter(thing => thing.placed.length).map(thing => ({ id: thing.id, name: thing.name, aliases: [], model: null, theme: null, switched: false, shape: thing.size > 1.5 ? 'box' : 'oval', size: Math.max(0.4, Math.min(6, thing.size)), height: thing.size > 1.5 ? Math.max(1, thing.size * 0.4) : Math.max(0.4, thing.size), placed: thing.placed, struct: null }));
     try {
       // The page as far as the loop has played, loaded again only when the world has grown (or a scene is done).
-      const show = async (force = false) => {
-        if (!force && page && world.lots.length === lotsShown) return page;
-        page = E.assemble(E.runs); lotsShown = world.lots.length;
+      const reload = async () => {
+        const started = performance.now();
         await writeFile(join(work, 'index.html'), inlineStrand(template, withLine(page), { vendor: true }));
         await chrome.evaluate('delete window.__stage').catch(() => {});
         await chrome.open(server.url);
+        stale = false; timing.reloads++; timing.reloadMs += performance.now() - started;
+      };
+      const show = async (force = false) => {
+        if (!force && page && world.lots.length === lotsShown) return page;
+        page = E.assemble(E.runs); lotsShown = world.lots.length;
+        if (looks) await reload(); else stale = true;
         return page;
       };
       // A scene's piece of the line on the page's grid as it stands now.
@@ -241,10 +255,14 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         return path;
       };
       const shoot = async (name, size, options) => {
+        // Not shot for a stand-in; a top-down map's frame as the page gives it (strand-demo.html capture, `topdown`).
+        if (!looks) { timing.skipped++; const top = options.topdown; return { view: top ? { id: name, width: size[0], height: size[1], map: { x: top.x, z: top.z, halfX: top.half * size[0] / size[1], halfZ: top.half, turn: top.turn ?? 0 } } : null, png: null }; }
+        const started = performance.now();
         await chrome.size(...size);
         const view = await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: name, frame: size, people: true, mask: true, ...options })})`);
         const png = await chrome.still('png');
         await writeFile(join(shots, `${name}.png`), Buffer.from(png, 'base64'));
+        timing.shots++; timing.shotMs += performance.now() - started;
         return { view, png };
       };
 
@@ -295,10 +313,12 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       };
       // The page's line grown in place to this moment (strand-demo.html `extend`): the scene's starts and its events so far,
       // each with its moves as walked; the page is loaded again only when the world has grown.
-      const grow = async (scene, run) => {
+      const grow = async (scene, run, reads = false) => {
         await show();
         played.set(scene.id, { scene, run });
         lastPiece = pieceOf({ scene, run });
+        if (!looks && !reads) return null;
+        if (stale) await reload();
         return chrome.evaluate(`window.__stage.extend(${JSON.stringify(lastPiece)})`);
       };
       for (const scene of E.chosen) {
@@ -996,7 +1016,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // red spheres on the world as played) and how big (spheres of 4, 8, 16 and 32 m from two sides); the blast is applied
           // to the world and played before the next card.
           if (cardRecord.breaks && calls < budget) {
-            const played = await grow(scene, run), at_ = Math.max(0, (played?.end ?? 0) - 0.02), slug = `${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-hit`;
+            const played = await grow(scene, run, true), at_ = Math.max(0, (played?.end ?? 0) - 0.02), slug = `${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-hit`;
             await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: `${slug}-look`, place: scene.placeId, at: at_, only: [scene.placeId], frame: [1440, 900] })})`);
             const spots = await chrome.evaluate(`window.__stage.impactSpots(${JSON.stringify({ place: scene.placeId })})`) ?? [];
             const about = `A still of a 3D model of a place in a novel, as the story stands at this card. Blue lattices are the buildings' corridors and orange their stairs; small labelled figures are people.\nThe card: ${event.text}`;
@@ -1091,6 +1111,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
     } finally { await chrome.close(); server.server.close(); }
   } });
   record.finishedAt = new Date().toISOString(); record.calls = calls;
+  record.timing = { seconds: Math.round((performance.now() - runStarted) / 1000), reloads: timing.reloads, reloadSeconds: Math.round(timing.reloadMs / 1000), shots: timing.shots, shotSeconds: Math.round(timing.shotMs / 1000), notShot: timing.skipped, ...(engineCost ? { graphBuilds: engineCost.builds, graphSeconds: Math.round(engineCost.ms / 1000), graphCleared: engineCost.cleared, windowsDropped: engineCost.dropped } : {}) };
   await save();
   // The run's own copies: its record, the laws over it, and the questions Jev was asked in it.
   await copyFile(join(out, 'run.json'), join(runDir, 'run.json')).catch(() => {});

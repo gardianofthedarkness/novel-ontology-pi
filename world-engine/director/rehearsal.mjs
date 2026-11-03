@@ -57,7 +57,7 @@ export function measure(record) {
     beats: record.gate?.beats ?? null, scaled: record.scenes.reduce((n, scene) => n + (scene.scales?.length ?? 0), 0), journeys: record.scenes.reduce((n, scene) => n + (scene.journeys?.length ?? 0), 0),
     exchanges: cards.reduce((n, card) => n + (card.exchanges?.length ?? 0), 0), askedJev: cards.reduce((n, card) => n + (card.exchanges?.filter(entry => entry.by === 'jev').length ?? 0), 0), conditions: cards.reduce((n, card) => n + (card.conditions?.length ?? 0), 0),
     talkKinds: count(cards.map(card => card.talk?.kind).filter(Boolean)), formations: cards.reduce((n, card) => n + (card.formations?.length ?? 0), 0),
-    laws: count(cards.flatMap(card => (card.laws ?? []).map(law => `${law.law} ${law.verdict}`))), calls: record.calls, usage: record.usage,
+    laws: count(cards.flatMap(card => (card.laws ?? []).map(law => `${law.law} ${law.verdict}`))), calls: record.calls, usage: record.usage, timing: record.timing ?? null,
   };
 }
 

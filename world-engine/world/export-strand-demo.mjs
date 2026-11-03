@@ -137,10 +137,25 @@ export async function strandDemo(novelDir, options) {
    * way of their middle), shared by everything asked there until the world changes; a wider one when `half` needs it.
    */
   const windows = new Map();
+  // What the walk graph costs (the user, 2026-11-03: the test cycle first): windows built, their time, and windows dropped
+  // because the world changed (the research handoff's "global rebuild frequency").
+  const cost = { builds: 0, ms: 0, cleared: 0, dropped: 0 };
+  // What each change of the world touched (the research handoff's bounded repair): a window whose box no change since its
+  // build touches stays as it was built, with the walks solved on it; a change with no boxes touches every window.
+  const dirty = [], changed = (boxes = null) => { shared.version++; dirty.push({ version: shared.version, boxes }); };
+  const overlaps = (a, b) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.z0 <= b.z1 && b.z0 <= a.z1;
+  const lotBounds = lot => ({ x0: lot.i0 * 2, x1: (lot.i0 + lot.nx) * 2, z0: lot.j0 * 2, z1: (lot.j0 + lot.nz) * 2 });
   const graphOf = (focus = null, half = 0) => {
-    if (shared.built?.version !== shared.version) { shared.built = { version: shared.version }; windows.clear(); fields.clear(); spotCache.clear(); }
+    if (shared.built?.version !== shared.version) {
+      if (windows.size) cost.cleared++;
+      for (const [key, window] of windows) if (dirty.some(entry => !entry.boxes || entry.boxes.some(box => overlaps(box, window.box)))) { windows.delete(key); cost.dropped++; }
+      const live = new Set([...windows.values()].map(window => window.version));
+      for (const key of [...fields.keys()]) if (!live.has(Number(key.split('|')[0]))) fields.delete(key);
+      for (const [key, entry] of [...spotCache]) if (!live.has(entry.version)) spotCache.delete(key);
+      dirty.length = 0; shared.built = { version: shared.version };
+    }
     const f = focus ?? { x: 0, z: 0 }, cx = Math.round(f.x / 128) * 128, cz = Math.round(f.z / 128) * 128, h = Math.max(192, Math.ceil((half + Math.max(Math.abs(f.x - cx), Math.abs(f.z - cz))) / 64) * 64), key = `${cx}|${cz}|${h}`;
-    if (!windows.has(key)) windows.set(key, { version: shared.version, ...W.worldGraph(world, shared.standing, [...shared.things.values()], { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz + h }) });
+    if (!windows.has(key)) { const started = performance.now(), box = { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz + h }; windows.set(key, { version: shared.version, box, ...W.worldGraph(world, shared.standing, [...shared.things.values()], box) }); cost.builds++; cost.ms += performance.now() - started; }
     return windows.get(key);
   };
   /**
@@ -148,10 +163,12 @@ export async function strandDemo(novelDir, options) {
    * It streams 32 m further than asked, so the next small step rarely needs more.
    */
   const reach = (x, z, radius, at = moment) => {
+    const chunksBefore = world.chunks.size, lotsBefore = world.lots.length;
     if (!W.ensure(world, x, z, radius, at)) return;
     W.ensure(world, x, z, radius + 32, at);
     while (shared.standing.length < world.lots.length) shared.standing.push(world.lots[shared.standing.length].skeleton.cells.map(value => (value ? 1 : 0)));
-    shared.version++;
+    // What came in: the new chunks' ground and the new lots' footprints (a lot may reach past its chunk).
+    changed([...[...world.chunks.keys()].slice(chunksBefore).map(W.chunkBounds), ...world.lots.slice(lotsBefore).map(lotBounds)]);
     applyEarlier();
   };
   const T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 }), kappa = 1, lambda = 8;
@@ -182,7 +199,7 @@ export async function strandDemo(novelDir, options) {
    * someone at the edge of what is explored can be ground just streamed in: that is how a scene drifts.
    */
   const NEAR = 40;
-  const spotsFor = (placeId, focus) => { const group = groups.get(placeId), f = focus ?? group.anchor, key = `${placeId}|${Math.round(f.x / 4)}|${Math.round(f.z / 4)}`, built = graphOf(f); if (!spotCache.has(key)) spotCache.set(key, W.spotsNear(world, built, f.x, f.z, NEAR, group.main())); return spotCache.get(key); };
+  const spotsFor = (placeId, focus) => { const group = groups.get(placeId), f = focus ?? group.anchor, key = `${placeId}|${Math.round(f.x / 4)}|${Math.round(f.z / 4)}`, built = graphOf(f), kept = spotCache.get(key); if (kept?.version !== built.version) spotCache.set(key, { version: built.version, spots: W.spotsNear(world, built, f.x, f.z, NEAR, group.main()) }); return spotCache.get(key).spots; };
   const spotKey = (placeId, spot, focus) => W.worldSpot(spotsFor(placeId, focus), spot);
   const focusOf = at => (at ? W.nodePos(world, at[0]) : undefined);
   // How destructive each event is: its embedding (the causality faculty's sidecar) projected onto the book's own
@@ -345,7 +362,7 @@ export async function strandDemo(novelDir, options) {
       for (const [n, depth] of Object.entries(result.dent)) { const key = W.cellKey(cells[n].i, cells[n].j); world.underDamage.dents.set(key, Math.max(world.underDamage.dents.get(key) ?? 0, depth)); }
       out.push({ hall: hall.id, kind: hall.kind, stopped: result.stopped, pillars: result.pillars.length, lining: result.lining.length, failed: result.failed.length, layers: result.layers, pile: Math.max(0, ...Object.values(result.pile)), dent: Object.keys(result.dent).length });
     });
-    if (out.length) { notes.underground.hits += out.length; shared.version++; }
+    if (out.length) { notes.underground.hits += out.length; changed(); }
     return out;
   };
   /** Where someone under fallen ground gets out to: the nearest open cell of the same hall (null when they are not buried). */
@@ -825,7 +842,7 @@ export async function strandDemo(novelDir, options) {
       for (const [kind, i, j, k] of [...entry.blasted, ...entry.fallen]) { const unit = unitOf.get(`${kind}|${i}|${j}|${k}`); if (unit !== undefined) units[unit] = 0; }
       const standing = skeletonStanding(structure, units);
       for (const cell of [...entry.destroyed, ...entry.fell]) standing[cell] = 0;
-      shared.units[index] = units; shared.standing[index] = standing; shared.version++; notes.earlier.applied++;
+      shared.units[index] = units; shared.standing[index] = standing; changed([lotBounds(lot)]); notes.earlier.applied++;
       earlier.push({ lot: index, strand: entry.strand.id, run: entry.run, scene: entry.scene, label: entry.label, story: entry.story, blasted: entry.blasted, fallen: entry.fallen, destroyed: entry.destroyed, fell: entry.fell });
       return false;
     });
@@ -1398,7 +1415,7 @@ export async function strandDemo(novelDir, options) {
   // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
   // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
   // calls `assemble` for the page as far as it has played.
-  if (options.engine) await options.engine({ world, W, graphOf, reach, solve, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere });
+  if (options.engine) await options.engine({ world, W, graphOf, cost, reach, solve, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere });
   return data;
 }
 

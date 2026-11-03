@@ -39,12 +39,17 @@ export const EDGE = { walk: 0, climb: 1, descend: 2, jump: 3, fall: 4, arc: 5 } 
 export interface MoveGraph { nodes: number; x: Float64Array; z: Float64Array; y: Float64Array; offsets: Int32Array; to: Int32Array; dir: Uint8Array; cost: Float64Array; kind: Uint8Array }
 
 export function buildGraph(positions: [number, number, number][], edges: { from: number; to: number; dir: number; cost: number; kind: number }[]): MoveGraph {
-  const nodes = positions.length, offsets = new Int32Array(nodes + 1);
+  return buildGraphAt({ x: Float64Array.from(positions, (p) => p[0]), z: Float64Array.from(positions, (p) => p[1]), y: Float64Array.from(positions, (p) => p[2]) }, edges);
+}
+
+/** The same, over node places already laid out (shared, never written: the world's, kept between builds). */
+export function buildGraphAt(at: { x: Float64Array; z: Float64Array; y: Float64Array }, edges: { from: number; to: number; dir: number; cost: number; kind: number }[]): MoveGraph {
+  const nodes = at.x.length, offsets = new Int32Array(nodes + 1);
   for (const edge of edges) offsets[edge.from + 1]++;
   for (let n = 0; n < nodes; n++) offsets[n + 1] += offsets[n];
   const fill = offsets.slice(0, nodes), to = new Int32Array(edges.length), dir = new Uint8Array(edges.length), cost = new Float64Array(edges.length), kind = new Uint8Array(edges.length);
   for (const edge of edges) { const at = fill[edge.from]++; to[at] = edge.to; dir[at] = edge.dir; cost[at] = edge.cost; kind[at] = edge.kind; }
-  return { nodes, x: Float64Array.from(positions, (p) => p[0]), z: Float64Array.from(positions, (p) => p[1]), y: Float64Array.from(positions, (p) => p[2]), offsets, to, dir, cost, kind };
+  return { nodes, x: at.x, z: at.z, y: at.y, offsets, to, dir, cost, kind };
 }
 
 const unit = (d: number) => { const [x, z, y] = DIRECTIONS[d], length = Math.hypot(x, z, y); return [x / length, z / length, y / length]; };

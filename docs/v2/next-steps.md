@@ -389,6 +389,31 @@ world itself (destruction, the city's layout) is part of what is smoothed.
    multiplied): 81% with pictures alone, height 6/6; the landmark question asks both turns since.
 6. **Tunnelling and destruction as a smoothed state** (L18), then **the city in back-propagation** (L19): designed, built
    after W10.
+7. **Decision 21 by smoothing** (built 2026-11-03): L1 before L16, the frame a term of the action (S_frame), rehearsals
+   smoothed and replayed (`--passes 2`): off-page arrivals 73 to 13. **Next, after the faster test cycle (the user,
+   2026-11-03):** 35 scene starts stay outside their frame because a moment's cloud is only the 48 spots nearest where it
+   was played; add the frame's own spots to a scene start's cloud.
+8. **A faster test cycle first** (the user, 2026-11-03): a rehearsal's time was the walk graph rebuilt whole (about 55%)
+   and Chrome reloading a growing page for pictures the stand-in never reads (about 32%); Jev (77 s of W9's 39 minutes)
+   and smoothing (under a second a pass) are small. Built, each step checked to play the same run card for card
+   (`~/claude-world-first/rehearsals/compare-runs.mjs`), every run's record now carrying its `timing`:
+   - a stand-in is shot no pictures and Chrome's page is brought up to date only where the play reads it (a blast's
+     spots); a top-down map's frame is computed as the page computes it;
+   - a walk graph window is dropped only when a change of the world touches its box (the research handoff's bounded
+     repair: the new chunks' ground, the new lots' footprints, a lot's earlier damage), not on every change anywhere;
+   - each window's build walks only the chunks its box takes in, each lot's room map is made once, node places are kept.
+
+   | Scenes 1–12, stand-in | Seconds | Graph builds (seconds) | Page reloads (seconds) | Shots (seconds) |
+   |---|---|---|---|---|
+   | Before | 193 | 231 (90) | 29 (76) | 120 (41) |
+   | No pictures for the stand-in | 116 | 231 (74) | 0 | 0 |
+   | Cheaper builds | 103 | 231 (61) | 0 | 0 |
+   | Windows dropped only where touched | **67** | 84 (27) | 0 | 0 |
+
+   The whole volume, one pass: 7.8 minutes against 17.5 for the committed engine on the same copy, and the same run (46
+   scenes, 608 cards, 1,724 moves, no difference; 216 graph builds, 137 seconds). Next for the cycle: the fine
+   grid only over the frame and its reach, the city's streets and doors as a transport graph for the rest (the research
+   handoff §4); it changes the walks, so it is checked by the laws and the camera, not card for card.
 
 ### Order of work (Track A)
 
