@@ -1,5 +1,5 @@
 import type { DecisionQuestion } from "../../ground/connectors/jev.js";
-import { SENTENCE_CHANGE, SENTENCE_KINDS, tilingDocument, type TilingRequest } from "../../digger/autostep/segmentation.js";
+import { BLOCK_TYPES, SENTENCE_CHANGE, SENTENCE_KINDS, tilingDocument, type TilingRequest } from "../../digger/autostep/segmentation.js";
 import type { Sentence } from "../../digger/intake/sectioning.js";
 import { continuationDocument } from "../../digger/timeplace/roles.js";
 import type { Chart } from "../extraction/em.js";
@@ -51,7 +51,7 @@ export interface KindsFocus extends Asked { summary: string; before: Sentence[];
 export const kindsMode: Mode<KindsFocus, null> = {
   name: "sentence-kinds",
   task: (focus) => `${focus.summary} Classify every sentence of the passage (sentences keyed by id, in reading order).`.trim(),
-  definitions: () => ({ kinds: { ...SENTENCE_KINDS }, change: SENTENCE_CHANGE }),
+  definitions: () => ({ kinds: { ...SENTENCE_KINDS }, blocks: { ...BLOCK_TYPES }, change: SENTENCE_CHANGE }),
   sources: [given("before", (focus: KindsFocus) => sentences(focus.before)), given("passage", (focus: KindsFocus) => sentences(focus.asked))],
   cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
 };

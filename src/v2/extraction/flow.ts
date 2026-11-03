@@ -2,7 +2,7 @@ import type { DecisionQuestion, DecisionState } from "../../ground/connectors/je
 import type { Sentence } from "../../digger/intake/sectioning.js";
 import { ask, type Asker, type Manifest } from "../context/engine.js";
 import { kindsMode, tilingSeamMode, tilingWindowMode } from "../context/readingModes.js";
-import { classifySentences, kindCards, tileScenes, type KindCard, type SentenceKind } from "../../digger/autostep/segmentation.js";
+import { classifySentences, kindCards, tileScenes, type BlockAnswer, type KindCard, type SentenceKind } from "../../digger/autostep/segmentation.js";
 import { Chart, mentions, resolveBatch, type EmResult } from "./em.js";
 import { FactLedger, type FactEntry } from "./facts.js";
 import type { Lister } from "./listing.js";
@@ -58,6 +58,8 @@ export interface SceneContext {
 export interface StepLog { step: string; requests: number; ms: number; inputChars: number; questionChars?: number; detail?: Record<string, unknown>; contexts?: Record<string, { requests: number; kept: number; cut: number; chars: number }> }
 export interface FlowResult extends RolesResult {
   /** `was`: the kind the classifier gave, where the action rule changed it (nothing that matters acts); `actor`: the thing that did. */
+  /** The blocks (twelve sentences, moving six at a time) and what each is about, as Jev's whole distribution (M2). */
+  blocks: (BlockAnswer & { block: string })[];
   scenes: FlowScene[]; cards: FlowCard[]; kinds: Record<string, { kind: SentenceKind; turn: number; confidence: number; top?: [string, number][]; distribution?: Record<string, number>; was?: SentenceKind; actor?: string }>;
   chart: Chart; em: { batch: string; results: EmResult[] }[]; contexts: SceneContext[]; steps: StepLog[];
   /** The fact ledger, in reading order: who each fact is about, its time, and its story period. */
@@ -126,7 +128,7 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   })));
   const classified = timed(kindsLog, () => Promise.all(blocks.map(async (block) => {
     const decide = decideFor(kindsLog);
-    return { block, ...(await classifySentences(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, ask: async (window) => (await ask(decide, kindsMode, window, null)).replies })) };
+    return { block, ...(await classifySentences(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, blocks: true, ask: async (window) => (await ask(decide, kindsMode, window, null)).replies })) };
   })));
   const batches = blocks.flatMap((block) => Array.from({ length: Math.ceil(block.sentences.length / LIST_BATCH) }, (_, index) => ({ block, sentences: block.sentences.slice(index * LIST_BATCH, (index + 1) * LIST_BATCH) })));
   const listingStarted = performance.now(), typingDecide = decideFor(typing);
@@ -281,5 +283,5 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   const placesLog = meter("place EM");
   const places = await timed(placesLog, () => placeEm(decideFor(placesLog), { chart, scenes, cards, sentences: all.map(({ sentence }) => sentence), kinds: kindOf, text, facts: facts.facts, time, descriptions: [...placeDescriptions.values()], spatial }));
   const { periodOf: _, ...storyTime } = time;
-  return { scenes, cards, kinds: kindOf, chart, em, contexts, steps, facts: facts.facts, time: storyTime, places, spatial, ...resolved };
+  return { scenes, cards, kinds: kindOf, blocks: kinds.flatMap((entry) => entry.blocks.map((answer) => ({ ...answer, block: entry.block.id }))), chart, em, contexts, steps, facts: facts.facts, time: storyTime, places, spatial, ...resolved };
 }

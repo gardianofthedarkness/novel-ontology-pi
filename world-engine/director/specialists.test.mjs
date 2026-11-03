@@ -98,3 +98,9 @@ test('the mixed index: sentences and blocks, each by its score; an unsure block 
   const sure = firing(windows.map((entry, n) => (n === 4 ? { ...entry, block: { ...entry.block, confidence: 0.95 } } : entry)));
   assert.ok(sure.index.choreography[4] < index.choreography[4], 'a sure calm block pulls the index down');
 });
+
+test('the block types Jev is asked are the registry\'s', async () => {
+  const { BLOCK_TYPES: asked } = await import('../../dist/src/digger/autostep/segmentation.js');
+  const { BLOCK_TYPES } = await import('./specialists.mjs');
+  assert.deepEqual(Object.keys(asked), Object.keys(BLOCK_TYPES));
+});

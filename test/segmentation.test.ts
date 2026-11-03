@@ -128,7 +128,7 @@ test("selectExchanges: one structured request per 100 sentences, and an exchange
   const second = calls.find((call) => sentences[100].id in call.state.passage)!;
   assert.deepEqual(Object.keys(second.state.passage), ids(sentences, 100, 199), "the window's sentences, keyed by id");
   assert.deepEqual(Object.keys(second.state.before!), ids(sentences, 92, 99), "the sentences before it, as context only");
-  assert.equal(second.questions.length, 200);
+  assert.equal(second.questions.length, 200, "two a sentence; block questions only where asked for (the v2 flow)");
   assert.match(second.questions[0].instructions, new RegExp(`passage\\.${sentences[100].id}`));
   assert.deepEqual(units, [ids(sentences, 115, 135)], "narration between the lines stays inside the exchange");
   assert.deepEqual(unitScenes, [[0, 1]], "exchange straddles the scene cut -> two scene links");
@@ -242,4 +242,17 @@ test("classifySentences keeps each sentence's whole distribution beside its top 
   const { kindScores } = await import("../src/v2/extraction/flow.js");
   assert.deepEqual(kindScores(out.distributions[0]).top, [["action", 0.51], ["narration", 0.47], ["spoken", 0.02]]);
   assert.deepEqual(kindScores(undefined), {});
+});
+
+test("blocks: twelve sentences moving six at a time, a short tail joining the last; each block's whole distribution and top three kept", async () => {
+  const { blocksOf, blockQuestions, blockAnswers, BLOCK_TYPES } = await import("../src/digger/autostep/segmentation.js");
+  const sentences = makeSentences(26);
+  assert.deepEqual(blocksOf(sentences).map((block) => [block[0].id, block.length]), [[sentences[0].id, 12], [sentences[6].id, 12], [sentences[12].id, 12], [sentences[14].id, 12]]);
+  assert.equal(blocksOf(sentences.slice(0, 5)).length, 1);
+  const questions = blockQuestions(sentences);
+  assert.deepEqual(questions[0].options, Object.keys(BLOCK_TYPES));
+  const answers = blockAnswers(sentences, [{ key: questions[1].key, value: "confrontation", confidence: 0.62, distribution: { confrontation: 0.62, traversal: 0.3, routine: 0.08 } }]);
+  assert.equal(answers[1].type, "confrontation");
+  assert.deepEqual(answers[1].top, [["confrontation", 0.62], ["traversal", 0.3], ["routine", 0.08]]);
+  assert.equal(answers[0].type, null, "an unanswered block has no type");
 });

@@ -293,6 +293,28 @@ const KIND_LABELS: Record<SentenceKind, string> = {
   environment: "the surroundings: a place, weather, things",
   narration: "looks, feelings, mood, commentary, background",
 };
+/**
+ * Block types (docs/v2/next-steps.md A4–A6, M2; the user, 2026-11-03): what a stretch of about twelve sentences is about,
+ * no longer a dialogue or an action but what the director's faculties listen for. Asked in the kinds pass, one question a
+ * block (12 sentences, moving 6 at a time), its whole distribution kept with its top three and its confidence. The same
+ * nine as world-engine/director/specialists.mjs BLOCK_TYPES.
+ */
+export const BLOCK_TYPES = {
+  routine: "people together: talk and small acts in one place",
+  confrontation: "a fight or standoff: blows, dodges, powers used on someone",
+  traversal: "going somewhere at scale: a chase, an escape, crossing streets, buildings or the city",
+  mediated: "talk through a channel: a phone, a door or wall, a broadcast, a message",
+  interior: "thought, reflection, memory of feelings: someone's inner voice",
+  exposition: "world-building or background with no one acting now",
+  establishing: "where and when: the place, the weather, the crowd, the mood",
+  memory: "a flashback: what happened before this scene's now",
+  catastrophe: "the world itself changing: the ground splits, a flood, a building collapses",
+} as const;
+export type BlockType = keyof typeof BLOCK_TYPES;
+export const BLOCK = 12, BLOCK_STEP = 6;
+/** A block's answer: its sentences, its top type, confidence, top three and whole distribution. */
+export interface BlockAnswer { first: string; last: string; sentences: string[]; type: BlockType | null; confidence: number; top: [string, number][]; distribution: Record<string, number> }
+
 /** The carrier of a sentence: who speaks it, who acts in it, or what it is about. It changes where the people taking part do. */
 const TURN = {
   true: "the people taking part change here: someone new speaks, acts or is spoken to, someone who was taking part has gone, or it turns to another subject or place",
@@ -315,6 +337,7 @@ export function sentenceDocument(task: string, before: Sentence[], asked: Senten
   return {
     task: `${task} Classify every sentence of the passage (sentences keyed by id, in reading order).`.trim(),
     kinds: { ...SENTENCE_KINDS },
+    blocks: { ...BLOCK_TYPES },
     change: SENTENCE_CHANGE,
     ...(before.length ? { before: Object.fromEntries(before.map((sentence) => [sentence.id, sentence.text])) } : {}),
     passage: Object.fromEntries(asked.map((sentence) => [sentence.id, sentence.text])),
@@ -327,15 +350,40 @@ export const sentenceQuestions = (asked: Sentence[]): DecisionQuestion[] => aske
   { key: `dlg_turn:${sentence.id}`, primitive: "noul" as const, instructions: `At passage.${sentence.id}, does the carrier change?`, noulCriteria: TURN },
 ]);
 
+/** A window's blocks: twelve sentences moving six at a time; a shorter tail joins the last full one. */
+export function blocksOf<T extends { id: string }>(asked: T[]): T[][] {
+  if (asked.length <= BLOCK) return asked.length ? [asked] : [];
+  const out: T[][] = [];
+  for (let start = 0; start + BLOCK <= asked.length; start += BLOCK_STEP) out.push(asked.slice(start, start + BLOCK));
+  if ((asked.length - BLOCK) % BLOCK_STEP) out.push(asked.slice(asked.length - BLOCK));
+  return out;
+}
+/** A window's block questions: what each block is about. */
+export const blockQuestions = (asked: Sentence[]): DecisionQuestion[] => blocksOf(asked).map((block) => ({
+  key: `blk_type:${block[0].id}|${block[block.length - 1].id}`, primitive: "choice" as const,
+  instructions: `What is the stretch from passage.${block[0].id} to passage.${block[block.length - 1].id} mostly about? (The block types are defined in blocks.)`,
+  options: Object.keys(BLOCK_TYPES), optionHints: { ...BLOCK_TYPES },
+}));
+/** The blocks Jev answered in a window. */
+export function blockAnswers(asked: Sentence[], answers: DecisionAnswer[]): BlockAnswer[] {
+  const round = (p: number) => Number(p.toFixed(3));
+  return blocksOf(asked).map((block) => {
+    const first = block[0].id, last = block[block.length - 1].id, answer = answers.find((entry) => entry.key === `blk_type:${first}|${last}`);
+    const distribution = Object.fromEntries(Object.entries(answer?.distribution ?? (answer?.value ? { [String(answer.value)]: 1 } : {})).map(([type, p]) => [type, round(Number(p))]));
+    const type = answer?.value && String(answer.value) in BLOCK_TYPES ? (String(answer.value) as BlockType) : null;
+    return { first, last, sentences: block.map((sentence) => sentence.id), type, confidence: round(answer?.confidence ?? 0), top: Object.entries(distribution).sort((a, b) => b[1] - a[1]).slice(0, 3), distribution };
+  });
+}
+
 /** `ask`, where a caller composes the window's document itself (the v2 reading's context engine), else sentenceDocument. */
 export async function classifySentences(
   sentences: Sentence[],
   decide: DecideFn,
-  opts: { stateSummary: string; onBatch?: (through: number, kinds: SentenceKind[], turns: number[]) => Promise<void>; ask?: (window: { summary: string; before: Sentence[]; asked: Sentence[]; questions: DecisionQuestion[] }) => Promise<DecisionAnswer[]> },
-): Promise<{ kinds: SentenceKind[]; confidence: number[]; turns: number[]; distributions: Record<string, number>[] }> {
+  opts: { stateSummary: string; blocks?: boolean; onBatch?: (through: number, kinds: SentenceKind[], turns: number[]) => Promise<void>; ask?: (window: { summary: string; before: Sentence[]; asked: Sentence[]; questions: DecisionQuestion[] }) => Promise<DecisionAnswer[]> },
+): Promise<{ kinds: SentenceKind[]; confidence: number[]; turns: number[]; distributions: Record<string, number>[]; blocks: BlockAnswer[] }> {
   // Each sentence's whole distribution over the kinds is kept beside its top kind (the user, 2026-11-03: the faculties fire on
   // a mixed index of every distribution and score, not only the top answer).
-  const kinds: SentenceKind[] = [], confidence: number[] = [], turns: number[] = [], distributions: Record<string, number>[] = [];
+  const kinds: SentenceKind[] = [], confidence: number[] = [], turns: number[] = [], distributions: Record<string, number>[] = [], blocks: BlockAnswer[] = [];
   const windows = Array.from({ length: Math.ceil(sentences.length / CLASSIFY) }, (_, w) => w * CLASSIFY);
   const done = new Map<number, DecisionAnswer[]>();
   let next = 0, published = 0, publishing = Promise.resolve();
@@ -350,6 +398,7 @@ export async function classifySentences(
         turns.push(Number(turn?.value ?? 0));
         distributions.push(kind?.distribution ?? (kind?.value ? { [String(kind.value)]: 1 } : {}));
       }
+      if (opts.blocks === true) blocks.push(...blockAnswers(sentences.slice(b, b + CLASSIFY), answers));
       published++;
       await opts.onBatch?.(Math.min(sentences.length, b + CLASSIFY) - 1, kinds, turns);
     }
@@ -357,13 +406,13 @@ export async function classifySentences(
   await Promise.all(Array.from({ length: Math.min(WINDOWS_AT_ONCE, windows.length) }, async () => {
     while (next < windows.length) {
       const b = windows[next++], asked = sentences.slice(b, b + CLASSIFY), before = sentences.slice(Math.max(0, b - CONTEXT), b);
-      const questions = sentenceQuestions(asked);
+      const questions = [...sentenceQuestions(asked), ...(opts.blocks === true ? blockQuestions(asked) : [])];
       done.set(b, await (opts.ask ? opts.ask({ summary: opts.stateSummary, before, asked, questions }) : decide(sentenceDocument(opts.stateSummary, before, asked), questions)));
       publishing = publishing.then(publish);
       await publishing;
     }
   }));
-  return { kinds, confidence, turns, distributions };
+  return { kinds, confidence, turns, distributions, blocks };
 }
 
 /** Dialogue exchanges, monologues and fact runs from the sentences' kinds (indices, first and last). */
