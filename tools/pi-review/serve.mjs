@@ -11,7 +11,8 @@ import { bookCatalog } from './book-catalog.mjs';
 import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
-import { addDirectorNote, directorReading, directorNotes, directorReview, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
+import { runReport, reportPage } from './run-report.mjs';
+import { addDirectorNote, directorReading, directorNotes, directorReview, pagePolicy, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -210,6 +211,16 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         const step = await bounded(async () => terrainStep(await resolveWorkspace(volume), mode));
         if (!step) { send(400); return; }
         send(200, JSON.stringify(step), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        return;
+      }
+      if (scopedPath === '/play/report') {
+        // The run report (run-report.mjs): the last director run's changes in words, read only.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const data = await bounded(async () => runReport(await resolveWorkspace(volume)));
+        if (!data) { send(404); return; }
+        const html = reportPage(data);
+        send(200, html, { 'Content-Type': types['.html'], 'Content-Security-Policy': pagePolicy(html), 'Cache-Control': 'no-store' });
         return;
       }
       if (scopedPath === '/play/notes' || scopedPath === '/play/notes.json' || scopedPath === '/play/reading.json' || scopedPath === '/play/review.json') {

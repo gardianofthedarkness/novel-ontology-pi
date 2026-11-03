@@ -607,6 +607,26 @@ for (const [id, person] of Object.entries(data.people)) {
   const name = label(person.name, person.color, 26); name.position.y = 2.5; pawn.add(name);
   pawns.set(id, { pawn, body });
 }
+// The smoother's clouds (docs/v2/world-ontology.md §5a, W5b), sent by World · Live for the card it shows: each person's
+// spots, bigger and brighter as they are likelier, and a dashed line from where they were played to where the smoothed
+// history has them. World metres, placed with the scene like the pawns.
+const clouds = new THREE.Group(); clouds.renderOrder = 2; world.add(clouds);
+const showClouds = (list) => {
+  for (const child of [...clouds.children]) { clouds.remove(child); child.geometry?.dispose(); child.material?.dispose(); }
+  for (const entry of list ?? []) {
+    const tint = new THREE.Color(data.people[entry.who]?.color ?? "#7ce6ff");
+    for (const spot of entry.points ?? []) {
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(0.5 + 1.4 * Math.sqrt(spot.w), 20), new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.12 + 0.6 * spot.w, side: THREE.DoubleSide, depthWrite: false }));
+      disc.rotation.x = -Math.PI / 2; disc.position.set(spot.x, spot.y + 0.06, spot.z); clouds.add(disc);
+    }
+    if (entry.played && entry.map && Math.hypot(entry.map.x - entry.played.x, entry.map.z - entry.played.z, entry.map.y - entry.played.y) > 2) {
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(entry.played.x, entry.played.y + 0.3, entry.played.z), new THREE.Vector3(entry.map.x, entry.map.y + 0.3, entry.map.z)]), new THREE.LineDashedMaterial({ color: tint, dashSize: 0.8, gapSize: 0.5, transparent: true, opacity: 0.9 }));
+      line.computeLineDistances(); clouds.add(line);
+      const mark = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 24), new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false }));
+      mark.rotation.x = -Math.PI / 2; mark.position.set(entry.map.x, entry.map.y + 0.08, entry.map.z); clouds.add(mark);
+    }
+  }
+};
 const debris = new THREE.InstancedMesh(unit, mats.debris, 600); debris.count = 0; debris.frustumCulled = false; world.add(debris);
 /**
  * A hit's fragments, from the skeleton cells it took (every building it reached): each starts where its cell stood,
@@ -1146,6 +1166,7 @@ function frame(now) {
   if (document.activeElement !== $("seek")) $("seek").value = Math.round(time / total * 1000);
 
   const present = new Set(Object.keys(segment.scene.starts)), movers = [];
+  clouds.position.set(-entry.cx, 0, -entry.cz);
   for (const [id, { pawn, body }] of pawns) {
     const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
     const travel = segment.kind === "macro" && segment.travels.find((entry) => entry.migration.person === id);
@@ -1285,6 +1306,7 @@ if (liveMode) {
     if (event.data?.type === "speed") { speed = event.data.speed ?? speed; return; }
     if (event.data?.type === "live") { replaying = null; stopAt = null; playing = true; speed = 2; time = total - 0.001; return; }
     if (event.data?.type === "underground") { xray = !!event.data.on; return; }
+    if (event.data?.type === "clouds") { showClouds(event.data.clouds); return; }
     // A page around the world (the terrain io's step list) picks a place: the same as clicking it here.
     if (event.data?.type === "focus") { focusOn(event.data.id); return; }
     // The world view is done with this frame: its WebGL context is let go now (a phone allows only a few at once), not

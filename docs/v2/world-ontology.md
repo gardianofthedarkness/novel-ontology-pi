@@ -484,6 +484,22 @@ one person surely there whom the script left out (the review sees the rest of th
 written to `stage/world/smoothed/<run>.json`; Why shows each person's cloud and shift per card, the report the totals.
 Not yet: clouds drawn in the 3D view; card moments re-placed (only scene starts are); events (blasts) in the action.
 
+**Built (2026-11-02): W7 completed**, checked in a headless browser on a copy of the live workspace (desktop and phone).
+*Why*, per card, leads with the main agent's answers (question, answer, reason, pinned or waiting), then the laws as the
+card played, its proposals (the same break on several lines once, with how many, names not ids), each person's cloud
+(how sure, how far from where played) and system 2. *The run report* is a page of its own (`play/report`, opened from
+Why's Run report; `tools/pi-review/run-report.mjs`, rendered on the server, no script): a summary in sentences (scenes,
+moves, Jev's questions; the laws' checks and breaks; the review's questions, answers and pins; what the ontology
+gained; what the smoothing moved), then each law in words with what it checked and broke and what it decided as the run
+played, the review scene by scene with every answer and its reason and what waits, what went into the ontology layer by
+layer (each scene's people, place and speakers before and after; where people are; relations in words, such as "scene 6
+comes at least 15 min after scene 5, walking 1214 m"; aliases, a building's lot, damage; strands) with the command that
+takes it back, who says each line, the smoothing's largest moves and who is likely on the stage though the script left
+them out, the world's own check, system 2. *Clouds* (the **Clouds** button, on by default): the card's smoothed clouds
+drawn in the 3D view, each spot a disc as large and bright as it is likely, a dashed line from where someone was played
+to where the smoothed history has them. *The book*: a line whose speaker the world settled is underlined (dotted), one
+the review ruled out struck through, with who and by whom on hover.
+
 **Built (2026-11-02): W0**, a valid world (the user's research handoff, `Text_to_City_Research_Handoff.md`: separate
 interior topology with explicit portals, a generation-time validator, order-independent chunks, failure codes and
 minimal replays; the same as the field's practice: areas joined by portals rather than one grid over everything, and a

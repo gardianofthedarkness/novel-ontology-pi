@@ -284,7 +284,7 @@ async function cliFixture(context) {
   const setup = await fixture(context);
   const tools = join(setup.directory, 'tools/pi-review');
   await mkdir(tools, { recursive: true });
-  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs', 'time-place.mjs', 'book-catalog.mjs', 'review-progress.mjs', 'guard.mjs', 'library-live.mjs', 'album.mjs', 'timeplace-access.mjs', 'universe-time-place.mjs', 'strand-answers.mjs', 'stage-reports.mjs', 'sim-play.mjs', 'sim-live.html', 'sim-world.html', 'calendar-view.mjs']) {
+  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs', 'time-place.mjs', 'book-catalog.mjs', 'review-progress.mjs', 'guard.mjs', 'library-live.mjs', 'album.mjs', 'timeplace-access.mjs', 'universe-time-place.mjs', 'strand-answers.mjs', 'stage-reports.mjs', 'sim-play.mjs', 'run-report.mjs', 'sim-live.html', 'sim-world.html', 'calendar-view.mjs']) {
     await copyFile(fileURLToPath(new URL(filename, import.meta.url)), join(tools, filename));
   }
   const home = join(setup.directory, 'configured-home');
@@ -444,4 +444,11 @@ test('notes on the director\'s cards: added from the reader, listed for both, no
   const review = JSON.parse((await send(viewer, 'play/review.json')).body), card = review.cards['scene_000001|dialogue:b0000_s0001'];
   assert.deepEqual([card.laws[0].verdict, card.review[0].answer], ['held', 'remote']);
   assert.deepEqual(review.report.laws, { 'L6 held': 1 });
+  // The run report (W7): the same in words, a page of its own with no script.
+  const report = await send(viewer, 'play/report');
+  assert.equal(report.status, 200);
+  assert.match(report.body, /Run report/);
+  assert.match(report.body, /Talk needs nearness/);
+  assert.match(report.body, /a phone, b0000_s0001/, 'the main agent\'s answer and reason');
+  assert.doesNotMatch(report.body, /<script/);
 });

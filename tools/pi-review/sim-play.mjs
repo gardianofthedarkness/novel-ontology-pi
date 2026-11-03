@@ -35,7 +35,7 @@ export async function playableRuns(workspace, { newest = false } = {}) {
  * The Content-Security-Policy for a page that admits exactly its own inline scripts, by hash (a JSON data block is never run).
  * `framed`: the page may be framed by this same origin (the live player inside the world view), by nothing else.
  */
-function pagePolicy(html, { framed = false } = {}) {
+export function pagePolicy(html, { framed = false } = {}) {
   const hashes = [...html.matchAll(/<script(?![^>]*type="application\/json")[^>]*>([\s\S]*?)<\/script>/g)].map(match => `'sha256-${createHash('sha256').update(match[1]).digest('base64')}'`);
   return `default-src 'self'; script-src 'self' ${hashes.join(' ')}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; frame-ancestors ${framed ? "'self'" : "'none'"}; base-uri 'none'`;
 }
@@ -182,7 +182,7 @@ export async function directorReview(workspace) {
   const [ledger, pool, answers, canon, pins, smoothed] = await Promise.all([run ? lines('stage', 'world', 'ledger', `${run}.jsonl`) : [], lines('stage', 'world', 'pool.jsonl'), lines('stage', 'world', 'answers.jsonl'), lines('stage', 'world', 'canon.jsonl'), json('stage', 'world', 'pins.json'), run ? json('stage', 'world', 'smoothed', `${run}.json`) : null]);
   // Each card's smoothed moments (W5b): per person, how wide their cloud is and how far the least-action history moves them.
   const cloudsAt = new Map();
-  for (const [who, list] of Object.entries(smoothed?.people ?? {})) for (const moment of list) { const key = `${moment.scene}|${moment.card ?? 'start'}`; (cloudsAt.get(key) ?? cloudsAt.set(key, []).get(key)).push({ who, rank: moment.rank, spread: moment.spread, shift: moment.shift, cloud: moment.cloud.length }); }
+  for (const [who, list] of Object.entries(smoothed?.people ?? {})) for (const moment of list) { const key = `${moment.scene}|${moment.card ?? 'start'}`; (cloudsAt.get(key) ?? cloudsAt.set(key, []).get(key)).push({ who, rank: moment.rank, spread: moment.spread, shift: moment.shift, cloud: moment.cloud.length, points: moment.cloud.map(spot => ({ x: spot.x, y: spot.y, z: spot.z, w: spot.w })), played: { x: moment.played.x, y: moment.played.y, z: moment.played.z }, map: { x: moment.map.x, y: moment.map.y, z: moment.map.z } }); }
   const items = [...new Map(pool.map(item => [item.id, item])).values()], answerOf = new Map(answers.map(answer => [answer.item, answer]));
   const reviewOf = item => ({ kind: item.kind, question: item.question, options: item.options, status: item.status, ...(item.note ? { note: item.note } : {}), ...(answerOf.get(item.id) ? { answer: answerOf.get(item.id).verdict, reason: answerOf.get(item.id).reason, at: answerOf.get(item.id).at } : {}) });
   const cards = {};

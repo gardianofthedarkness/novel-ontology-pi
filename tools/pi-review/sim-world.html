@@ -56,7 +56,7 @@
   .reader .now { padding: 8px 10px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
   .reader .now .meta { color: var(--dim); font-size: 11px; line-height: 1.5; max-height: 6.2em; overflow-y: auto; }
   .reader .ctl { display: flex; flex-wrap: wrap; gap: 6px; }
-  .reader .ctl button { font: inherit; font-size: 12px; color: var(--ink); background: #0f2230; border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px; cursor: pointer; }
+  .reader .ctl button, .reader .ctl a.btn { font: inherit; font-size: 12px; color: var(--ink); background: #0f2230; border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px; cursor: pointer; text-decoration: none; }
   .reader .ctl button[aria-pressed="true"] { border-color: var(--jev); color: var(--jev); }
   .reader .ctl #rgo { border-color: var(--jev); color: var(--bg); background: var(--jev); }
   .reader .book { overflow-y: auto; overscroll-behavior: contain; padding: 6px 12px 40px; font-size: 15px; line-height: 1.85; color: #c9d6de; }
@@ -139,7 +139,7 @@
     .asks { left: auto; width: min(52vw, 620px); height: auto; top: max(8px, env(safe-area-inset-top)); }
     .reader > header #csum { display: none; }
     .reader .keys { padding: 2px 10px 4px; gap: 2px 8px; }
-    .reader .ctl button { padding: 3px 9px; font-size: 11px; }
+    .reader .ctl button, .reader .ctl a.btn { padding: 3px 9px; font-size: 11px; }
     .reader .now { padding: 6px 10px; gap: 4px; }
     .reader .now .meta { max-height: 3.2em; }
     .reader .why { max-height: 34vh; }
@@ -163,11 +163,11 @@
 </section>
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
 <section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
-<section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (➜: someone moved). Tap one to play it here.</span></header><div class="keys" aria-label="Sentence kinds"><span class="k-spoken">dialogue</span><span class="k-action">action</span><span class="k-environment">environment</span><span class="k-thought">thought</span><span class="k-fact">fact</span><span class="k-narration">narration</span><span class="m-person">person</span><span class="m-place">place</span><span class="m-thing">thing</span><span class="m-time">time</span></div><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="rauto" aria-pressed="false">Auto</button><button data-cps="5" aria-pressed="false">Read slow</button><button data-cps="8" aria-pressed="true">normal</button><button data-cps="14" aria-pressed="false">fast</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div><details class="why" id="cwhy"><summary>Why · Jev's questions, the laws, the review and our notes <span id="cnotecount"></span></summary><div id="claws" class="qa"></div><div id="cqa" class="qa"></div><div class="notes"><ol id="cnotes"></ol><textarea id="cnote" rows="2" placeholder="What looks wrong in this card? (where, who, what the text says)"></textarea><div class="ctl"><button id="csend">Add note</button><button id="call">All notes</button><button id="creportgo">Run report</button></div><ol id="callnotes" hidden></ol><div id="creport" class="qa report" hidden></div></div></details></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
+<section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (➜: someone moved). Tap one to play it here.</span></header><div class="keys" aria-label="Sentence kinds"><span class="k-spoken">dialogue</span><span class="k-action">action</span><span class="k-environment">environment</span><span class="k-thought">thought</span><span class="k-fact">fact</span><span class="k-narration">narration</span><span class="m-person">person</span><span class="m-place">place</span><span class="m-thing">thing</span><span class="m-time">time</span></div><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="rauto" aria-pressed="false">Auto</button><button data-cps="5" aria-pressed="false">Read slow</button><button data-cps="8" aria-pressed="true">normal</button><button data-cps="14" aria-pressed="false">fast</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div><details class="why" id="cwhy"><summary>Why · Jev's questions, the laws, the review and our notes <span id="cnotecount"></span></summary><div id="claws" class="qa"></div><div id="cqa" class="qa"></div><div class="notes"><ol id="cnotes"></ol><textarea id="cnote" rows="2" placeholder="What looks wrong in this card? (where, who, what the text says)"></textarea><div class="ctl"><button id="csend">Add note</button><button id="call">All notes</button><a id="creportgo" class="btn" target="_blank" rel="noopener" href="report">Run report</a></div><ol id="callnotes" hidden></ol></div></details></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
 <section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
 <div class="sub" id="sub" hidden aria-live="polite"><b id="subwho"></b><span id="subtx"></span></div>
-<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
+<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
@@ -276,22 +276,16 @@
     const laws = own.laws.map((law) => `<div class="q">${verdictTag(law.verdict)} ${esc(law.law)} · ${esc(valueOf(law.who ?? ""))} <i>${esc(law.why ?? "")}${law.code ? ` (${esc(law.code)})` : ""}</i></div>`).join("");
     const talk = own.talk ? `<div class="q">talk: <span class="a">${esc(own.talk.kind)}</span>${own.talk.pinned ? " <i>(the review)</i>" : typeof own.talk.confidence === "number" ? ` <i>(Jev ${Math.round(own.talk.confidence * 100)}%)</i>` : ""}</div>` : "";
     const second = own.system2.map((entry) => `<div class="q"><i>${esc(entry.asked ?? entry.key)}</i><br>Jev <span class="${(entry.jev?.confidence ?? 1) < 0.5 ? "low" : ""}">${esc(valueOf(entry.jev?.value))} ${typeof entry.jev?.confidence === "number" ? Math.round(entry.jev.confidence * 100) + "%" : ""}</span> · work model <span class="a">${entry.work ? `${esc(valueOf(entry.work.value))} ${Math.round(entry.work.confidence * 100)}%` : "no answer"}</span> · used: <b>${esc(entry.used)}</b></div>`).join("");
-    const proposals = own.proposals.map((entry) => `<div class="q">${verdictTag(entry.state)} ${esc(entry.kind)}${entry.law ? ` ${esc(entry.law)}` : ""} · ${esc(valueOf(entry.subject ?? ""))} <i>${esc(entry.why ?? "")}</i></div>`).join("");
-    const asked = own.review.map((item) => `<div class="q"><i>${esc(item.question)}</i><br>${item.answer ? `${verdictTag(item.status === "applied" ? "pinned" : item.status)} <span class="a">${esc(item.answer)}</span> <i>${esc(item.reason ?? "")}</i>` : `${verdictTag("held")} <i>waiting for the main agent (${esc(item.options.join(" / "))})</i>`}${item.note ? `<br><i>${esc(item.note)}</i>` : ""}</div>`).join("");
-    const clouds = (own.clouds ?? []).map((entry) => `<div class="q">${esc(valueOf(entry.who))}${entry.start ? " <i>(scene start)</i>" : ""} · cloud <span class="a">${entry.spread} m</span> wide · ${entry.shift > 2 ? `<span class="v-pinned">moved ${entry.shift} m</span>` : "where played"} <i>(${esc(entry.rank)})</i></div>`).join("");
-    return [clouds ? `<div class="f"><b>Smoothed · where each may have been, given everything the text says</b>${clouds}</div>` : "", laws || talk ? `<div class="f"><b>The laws · as the card played</b>${talk}${laws}</div>` : "", second ? `<div class="f"><b>System 2 · below 50%, the same question to the work model</b>${second}</div>` : "", proposals ? `<div class="f"><b>Proposals · to the ontology</b>${proposals}</div>` : "", asked ? `<div class="f"><b>The review · the main agent's</b>${asked}</div>` : ""].join("");
-  };
-  const reportHtml = () => {
-    const r = review?.report;
-    if (!r) return "No run report yet.";
-    const rows = (object) => Object.entries(object ?? {}).sort().map(([key, value]) => `<tr><td>${esc(key)}</td><td>${esc(typeof value === "object" ? JSON.stringify(value) : value)}</td></tr>`).join("");
-    return `<div class="f"><b>Run ${esc(r.run ?? "")} · ${esc(r.from ?? "")} – ${esc(r.to ?? "")} · ${esc(r.model ?? "")} · ${r.calls ?? "?"} calls</b>
-      <table><tr><td colspan="2"><b>The laws</b></td></tr>${rows(r.laws)}<tr><td colspan="2"><b>System 2</b></td></tr>${rows(r.system2)}<tr><td colspan="2"><b>Proposals</b></td></tr>${rows(r.proposals)}<tr><td colspan="2"><b>The review</b></td></tr>${rows(r.review)}<tr><td colspan="2"><b>Smoothing · clouds over the run</b></td></tr>${rows(r.smoothing ? { moments: r.smoothing.moments, "moved > 2 m": r.smoothing.revisions, "mean cloud (m)": r.smoothing.meanSpread, "likely on stage, not in the script": r.smoothing.onStage } : {})}<tr><td colspan="2"><b>Speakers · who settled each line</b></td></tr>${rows(r.canon?.speakers)}<tr><td colspan="2"><b>Into canon</b></td></tr>${rows(r.canon?.applied ? { ...Object.fromEntries(Object.entries(r.canon.applied).map(([k, v]) => [`${k} applied`, v])), ...Object.fromEntries(Object.entries(r.canon.held ?? {}).map(([k, v]) => [`${k} held`, v])), ...(r.canon.review ? { "speakers to the review": r.canon.review.held, "audits": r.canon.review.audits } : {}) } : r.canon ?? {})}</table>
-      ${r.revisions.length ? `<b>Scene starts the smoothing moved</b>${r.revisions.map((v) => `<div class="q">${verdictTag(v.applied ? "applied" : "held")} ${esc(valueOf(v.who))} at the start of ${esc(v.scene)} · ${v.metres ?? "?"} m</div>`).join("")}` : ""}
-      ${r.world.length ? `<b>The world's own check</b>${r.world.map((w) => `<div class="q">${verdictTag("held")} ${esc(w.scene)} ${esc(w.code)} ${esc(w.name ?? "")}</div>`).join("")}` : ""}</div>`;
+    // The same break on several lines once, with how many; names, not ids.
+    const grouped = new Map();
+    for (const entry of own.proposals) { const text = `${entry.law ? `${entry.law} ` : ""}${valueOf(entry.why ?? "").replace(/ \(kind not asked yet\)/, "")}`, key = `${entry.state}|${entry.kind}|${text}`; const known = grouped.get(key); if (known) known.n++; else grouped.set(key, { ...entry, text, n: 1 }); }
+    const proposals = [...grouped.values()].map((entry) => `<div class="q">${verdictTag(entry.state)} ${esc(entry.kind === "held" ? "law break" : entry.kind)}${entry.n > 1 ? ` <b>×${entry.n}</b>` : ""} · <i>${esc(entry.text)}</i></div>`).join("");
+    const asked = own.review.map((item) => `<div class="q"><i>${esc(valueOf(item.question))}</i><br>${item.answer ? `${verdictTag(item.status === "applied" ? "pinned" : item.status)} <span class="a">${esc(item.answer)}</span> <i>${esc(item.reason ?? "")}</i>` : `${verdictTag("held")} <i>waiting for the main agent (${esc(item.options.join(" / "))})</i>`}${item.note ? `<br><i>${esc(item.note)}</i>` : ""}</div>`).join("");
+    const clouds = (own.clouds ?? []).map((entry) => `<div class="q">${esc(valueOf(entry.who))}${entry.start ? " <i>(scene start)</i>" : ""} · ${entry.spread < 1 ? "sure" : `within <span class="a">${entry.spread} m</span>`} · ${entry.shift > 2 ? `<span class="v-pinned">${entry.shift} m from where played</span>` : "where played"} <i>(${esc(entry.rank)})</i></div>`).join("");
+    return [asked ? `<div class="f"><b>The review · the main agent's answers</b>${asked}</div>` : "", laws || talk ? `<div class="f"><b>The laws · as the card played</b>${talk}${laws}</div>` : "", proposals ? `<div class="f"><b>Proposals · to the ontology</b>${proposals}</div>` : "", clouds ? `<div class="f"><b>Smoothed · where each may have been, given everything the text says</b>${clouds}</div>` : "", second ? `<div class="f"><b>System 2 · below 50%, the same question to the work model</b>${second}</div>` : ""].join("");
   };
   loadReview();
-  $("creportgo").addEventListener("click", async () => { $("creport").hidden = !$("creport").hidden; if (!$("creport").hidden) { if (!review) await loadReview(); $("creport").innerHTML = reportHtml(); } });
+  $("creportgo").href = `report${query}`;
   const showWhy = async () => {
     const card = cards[cardAt];
     if (!$("cwhy").open) return;
@@ -316,9 +310,13 @@
     if (!reply?.ok) { $("csend").textContent = "Not saved, try again"; return; }
     $("cnote").value = ""; $("csend").textContent = "Add note"; await loadNotes(); showWhy();
   });
+  // The smoother's clouds for the card shown, drawn in the world (strand-demo.html showClouds); off with the Clouds button.
+  let cloudsOn = true;
+  const sendClouds = () => { const card = cards[cardAt], own = card && review?.cards?.[`${card.scene}|${card.card}`]; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "clouds", clouds: cloudsOn ? own?.clouds ?? [] : [] }, origin); };
+  $("clouds").addEventListener("click", () => { cloudsOn = !cloudsOn; $("clouds").setAttribute("aria-pressed", String(cloudsOn)); sendClouds(); });
   const showCard = (n, scroll = true) => {
     cardAt = n; const card = cards[n]; if (!card) return;
-    showWhy();
+    showWhy(); if (review) sendClouds(); else loadReview().then(sendClouds);
     $("cmeta").innerHTML = `Scene ${Number(card.scene.slice(-3))} · card ${n + 1} of ${cards.length} · <span class="kind" style="color: var(--${{ dialogue: "spoken", action: "action" }[card.kind] ?? "narration"})">${esc(card.kind === "pass" ? "narration played" : card.kind)}</span><br>${card.moves.length ? card.moves.map(says).join("<br>") : "nobody asked"}`;
     mark();
     $("replaying").hidden = false; $("replaying").textContent = `▶ playing scene ${Number(card.scene.slice(-3))} · card ${n + 1} of ${cards.length} · ${card.kind === "pass" ? "narration" : card.kind}`;
@@ -555,6 +553,7 @@
     const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment; shownPage = page;
     shown.classList.remove("waiting"); $("empty").hidden = true;
     if (old) setTimeout(() => retire(old), 450);
+    if (cardAt >= 0) setTimeout(sendClouds, 300);
     queue();
   };
   /** Load the newest moment wanted, when none is loading and the last load was long enough ago. */
