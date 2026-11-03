@@ -82,3 +82,22 @@ round the smoothed starts.
 The cloud fix works: the smoothing now closes most of the distance to the frame where it closed almost none. Segments
 have seven times the starts (each a container), so more arrivals and frames to settle in all; the camera holds better.
 Left for W10: the digest is now one request a segment (346), paid in a real run.
+
+## The off-page arrivals, read against the text (2026-11-03)
+
+The user: "for the 44 sudden appears, how many of them are reasonable from the actual text reading, and how many of
+them are mistakes made by our system". The 43 arrivals off-page of the last rehearsal's second pass (by segment, with
+L18), each read in its lines:
+
+| What the text says | Arrivals | Whose mistake |
+|---|---|---|
+| **Reasonable**: someone comes from elsewhere (walks into a bar with the others, drives up with sirens, clings to a tower's wall after leaping, shows up at a fight, is in another room with someone) | 9 | none: they should come, but by a way through the city, not appear |
+| Someone carrying straight on in the same place, thrown out by a scene-level check left in the director (the scene's spawn box: people who drifted out of it during the scene count as from elsewhere at the next segment) and placed beside the group | 21 | the engine (L1 should come first: a straight-on entry stays wherever it stands) |
+| The strand breaks between two segments of one office the attack splits (scenes 19 and 20): everyone in the second has no `from` | 5 | strand extraction |
+| Someone the world script lists in the scene with no card of them acting, speaking or spoken to (a flashback, an interlude, a room they are not in) | 7 | presence: the script-only rule ("present from the scene's first segment") |
+| A line given to the wrong speaker in the reading | 1 | the reading (EM²) |
+
+So about one in five is the story's own arrival; the rest are three things in our system. The frames of a rule-made
+reader (a street 4 m wide) make the engine's mistake show more often than real frames would, but not cause it.
+
+**L19 reserved** (the user, 2026-11-03): planned, not used for W10.
