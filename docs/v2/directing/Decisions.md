@@ -315,3 +315,40 @@ holding it; segments: its segment's, then the forward-backward posterior):
   truth almost nothing (log-loss from about 1.3 to about 2.1). A flashback or a standoff then has no second type left
   for its faculty to fire on. The beats can take the smoothed type; the faculties' mixed index should read a softer
   posterior (the smoothing tempered, or the raw distribution beside it).
+
+## Firing on real faculty reads, scenes 1–13 (2026-11-03)
+
+The user: test with a real faculty run (scenes 1–13), compare the abnormality detection's parameters, and the residual
+flow of typing (faculties read the smoothed stretches; what they find is the next type question's context).
+`experiments/v2/faculty-firing.mjs`: the scenes tiled into 109 stretches (25 Jev requests); every built faculty reader
+run on every stretch (about 330 work-model requests): where a reader finds something at least 0.5 sure is where its
+faculty should have fired (conversation 56 stretches, journeys 13, choreography 8). The firing rule then replayed over a
+grid and scored against that, nothing paid.
+
+| Rule | F1, mean of three | Stretches read | Conversation R / P | Journeys R / P | Choreography R / P |
+|---|---|---|---|---|---|
+| Every faculty everywhere | 0.34 | 100% | 1 / 0.51 | 1 / 0.12 | 1 / 0.07 |
+| **Now**: the index, on at 1.5, off below 0.5, at least 2, a margin of 1, smoothed | 0.33 | 39% | 0.73 / 0.59 | 0.38 / 0.17 | 0.25 / 0.07 |
+| **Best**: the index above the stretches' average (on at 0), no hysteresis, no margin, raw distributions | **0.52** | 32% | 0.71 / 0.89 | 0.77 / 0.32 | 0.75 / 0.19 |
+| The faculty's types holding at least 0.1 (no z-score), raw | 0.52 | 25% | 0.75 / 0.78 | 0.46 / 0.43 | 0.50 / 0.29 |
+
+- The rule as built was tuned for 12-sentence windows: the margin and the minimum run cover whole stretches, and on at
+  1.5 misses three fights in four. On stretches, "above average" is the abnormality.
+- Raw distributions fire better than smoothed (smoothing sharpens away the second type a faculty listens for).
+- Per faculty the best differs (conversation fires best more freely, on at 0, off below −0.5: F1 0.82 reading half the
+  stretches), but with eight fight stretches a per-faculty setting would be fitted to noise.
+
+**The residual flow** (13 Jev requests): each scene's stretches retyped with what the fired faculties found.
+
+| | F1 (same rule) | Recall (conversation, journeys, choreography) | Types right, 60 labelled sentences of scenes 1–13 | Mean probability on the true type |
+|---|---|---|---|---|
+| Before | 0.52 | 0.71, 0.77, 0.75 | 39/60 | 0.58 |
+| After retyping | 0.55 | 0.70, 0.77, 0.75 | 38/60 | 0.59 |
+
+It finds no stretch the first firing missed and does not make the types truer; the precision it adds comes from being
+told what the fired faculties found, which the director can use directly (a fight stretch whose choreographer found no
+blows is not the combat director's) without another type question. On the same sixty sentences the blocks' beats were
+right 30 times and the segments 39.
+
+26. **Firing settings for segments**: the index above average, no hysteresis or margin, on raw distributions; *your
+    call:* adopt (with M14), and use what the faculties find for the lead instead of the residual retype.
