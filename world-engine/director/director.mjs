@@ -78,11 +78,21 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   const text = await loadWorkspaceSentences(novelDir), line = id => ({ id, text: text.get(id)?.text ?? '', kind: reading.kinds?.[id]?.kind ?? null, ...(spoken(id)?.id ? { who: spoken(id).id } : settledSpeakers[id]?.who ? { who: settledSpeakers[id].who, by: settledSpeakers[id].by } : {}), ...(spoken(id) ? { sure: spoken(id).confidence ?? null } : {}) });
   const names = new Map([...reading.chart.entities.map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]), ...(reading.slots ?? []).map(slot => [slot.id, slot.label])]);
   const nameForms = new Map(reading.chart.entities.map(entity => [entity.id, [...new Set([...(entity.proper ?? []), ...(entity.names ?? [])])].filter(form => form.length >= 2)]));
+  // By segment (M14; the user, 2026-11-03: no scene-level processing in the world engine; by segment, aligned to cards,
+  // the page too; a card's evidence first, weighting second; segments.mjs): where the reading has segments, the run plays
+  // them as its containers: the reading's scenes, the world script's, the spawn plan's and the strands are their segment
+  // views, built here; a segment's world data is its scene's; canon gets each scene back whole.
+  const worldFile = async name => JSON.parse(await readFile(join(novelDir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
+  const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json') });
+  const segStrands = seg ? SG.strandsFile(seg.script, (await load('dist/src/v2/extraction/strands.js')).scriptStrands) : null;
+  if (seg) reading = seg.reading;
+  const scriptOf = async () => seg?.script ?? (await worldFile('script.json')) ?? { scenes: [] }, strandsOf = async () => segStrands ?? (await worldFile('strands.json')), spawnOf = async () => seg?.spawn ?? (await worldFile('spawn.json'));
+  if (seg) { const dir = join(novelDir, 'stage', 'world', 'segments'); await mkdir(dir, { recursive: true }); const { strands: _, ...file } = segStrands; await Promise.all([writeFile(join(dir, 'script.json'), JSON.stringify(seg.script)), writeFile(join(dir, 'spawn.json'), JSON.stringify(seg.spawn)), writeFile(join(dir, 'strands.json'), JSON.stringify(file, null, 1))]); }
   const sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
   // The beats (M3, gate.mjs) of a reading with blocks: each sentence's beat, its type and its lead. The camera cuts only
   // at a beat's start (M4).
   // Smoothed per strand (the user, 2026-11-03): each scene's fork from the workspace's strands.
-  const forkOf = new Map((JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null'))?.scenes ?? []).map(entry => [entry.id, entry.fork]));
+  const forkOf = new Map(((await strandsOf())?.scenes ?? []).map(entry => [entry.id, entry.fork]));
   const gate = reading.segments?.length || reading.blocks?.length ? G.gateOf(G.windowsOf(reading), { strandOf: scene => forkOf.get(scene) ?? null }) : null, beatOf = new Map();
   if (gate) { const order = reading.scenes.flatMap(entry => entry.sentences), at_ = new Map(order.map((id, n) => [id, n])); gate.beats.forEach((beat, n) => { for (let k = at_.get(beat.first); k <= at_.get(beat.last); k++) if (!beatOf.has(order[k])) beatOf.set(order[k], { n, type: beat.type, lead: beat.lead }); }); }
   const cardsOf = new Map();
@@ -94,7 +104,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   await writeFile(join(out, 'reading.json'), JSON.stringify(await readerView(reading, new Map([...text].map(([id, entry]) => [id, entry.text])))));
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   const template = await readFile(join(repository, 'world-engine', 'view', 'strand-demo.html'), 'utf8');
-  const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [] };
+  const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [], ...(seg ? { bySegment: true, segments: seg.ids.length } : {}) };
   // Where a run's time goes (the test cycle): the page reloaded in Chrome, the pictures shot, the walk graph built.
   const timing = { reloads: 0, reloadMs: 0, shots: 0, shotMs: 0, skipped: 0 }, runStarted = performance.now();
   let engineCost = null;
@@ -107,17 +117,19 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   if (readingPath) await writeFile(join(out, 'reading-path.json'), JSON.stringify({ path: resolve(readingPath) }));
   const reviewed = await R.applyAnswers(novelDir).catch(error => ({ error: String(error.message ?? error) }));
   const pins = await R.loadPins(novelDir), lastRun = await R.latestRun(novelDir);
+  // The review's pins are by scene: a segment takes its scene's (scene|who and scene|card keys copied to each segment).
+  if (seg) for (const map of [pins.present, pins.remote, pins.kind, pins.arrive, pins.stays, pins.revise].filter(Boolean)) for (const [key, value] of Object.entries(map)) { const [scene, ...rest] = key.split('|'); for (const id of seg.ids.filter(entry => seg.parent.get(entry) === scene)) map[[id, ...rest].join('|')] ??= value; }
   const oldLog = lastRun ? (await readFile(join(novelDir, 'stage', 'world', 'log', `${lastRun}.jsonl`), 'utf8').catch(() => '')).split('\n').filter(Boolean).map(row => JSON.parse(row)) : [];
   const oldPage = lastRun ? JSON.parse(await readFile(join(novelDir, 'stage', 'simulation', 'runs', 'director', `${lastRun}.page.json`), 'utf8').catch(() => 'null')) : null;
   // run.json is the last run's record only if that run is the last one played (a stand-in's run is not on the list).
   const lastRecord = lastRun ? JSON.parse(await readFile(join(out, 'run.json'), 'utf8').catch(() => 'null')) : null;
   const oldRecord = lastRecord && `d${String(lastRecord.startedAt).replace(/\D/g, '').slice(0, 14)}` === lastRun ? lastRecord : null;
-  const strandsNow = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null'));
+  const strandsNow = await strandsOf();
   // A rehearsal may pass a smoothing in (rehearsal.mjs: the run before it smoothed, back-tested a second pass).
   const smoothed = smoothing ?? (oldPage && oldRecord && oldLog.length ? SM.smoothRun({ page: oldPage, log: oldLog, record: oldRecord, reading, strands: strandsNow, pins }) : null);
   // Each scene start the smoothing moved: where the least-action history has them, unless the review kept the history.
   const startsMoved = new Map((smoothed?.revisions ?? []).filter(revision => revision.card === null).map(revision => [`${revision.scene}|${revision.who}`, revision]));
-  const onStage = OC.occupation({ reading, script: JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8').catch(() => '{"scenes":[]}')), strands: strandsNow, pins });
+  const onStage = OC.occupation({ reading, script: await scriptOf(), strands: strandsNow, pins });
   const surelyThere = new Set(onStage.proposals.filter(entry => entry.propose === 'present').map(entry => `${entry.scene}|${entry.who}`));
   record.smoothing = smoothed ? { from: lastRun, moments: Object.values(smoothed.people).reduce((n, list) => n + list.length, 0), revisions: smoothed.revisions.length, starts: startsMoved.size, onStage: onStage.proposals.length } : null;
   record.review = { applied: reviewed, from: lastRun, pins: { present: Object.keys(pins.present).length, remote: Object.keys(pins.remote).length, kind: Object.keys(pins.kind).length, arrive: Object.keys(pins.arrive).length, stays: Object.keys(pins.stays).length, meet: pins.meet.length } };
@@ -162,8 +174,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   // questions; Jev still decides on the pictures. Without a work model, the director plays as before.
   const digested = new Map();
   if (digestMeter) {
-    const ids = reading.scenes.map(scene => scene.id), lineScenes = reading.scenes.slice(ids.indexOf(from), ids.indexOf(to) + 1);
-    const scriptNow = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8').catch(() => '{"scenes":[]}'));
+    // The line from `from` to `to` (scene ids): every container whose scene is in it (by segment, each scene's segments).
+    const ids = reading.scenes.map(scene => scene.parent ?? scene.id), lineScenes = reading.scenes.slice(ids.indexOf(from), ids.lastIndexOf(to) + 1);
+    const scriptNow = await scriptOf();
     const cardOfLine = new Map(reading.cards.flatMap(card => card.sentences.map(id => [id, card.id])));
     const peopleOf = scene => {
       const own = scriptNow.scenes.find(entry => entry.id === scene.id), found = new Set([...(own?.present ?? []), ...[...surelyThere].filter(key => key.startsWith(`${scene.id}|`)).map(key => key.slice(scene.id.length + 1)), ...Object.entries(pins.present).filter(([key, value]) => value && key.startsWith(`${scene.id}|`)).map(([key]) => key.slice(scene.id.length + 1))]);
@@ -191,7 +204,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   }, { record: () => {} });
 
   let result = null;
-  await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', engine: async E => {
+  await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', ...(seg ? { segments: { list: seg.ids.map(id => ({ id, parent: seg.parent.get(id), cast: seg.script.scenes.find(entry => entry.id === id)?.present })), spawn: seg.spawn, strands: segStrands.strands } } : {}), engine: async E => {
     engineCost = E.cost;
     const { world, W } = E, server = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser({ gpu: true });
     let page = null, lotsShown = -1;
@@ -293,8 +306,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         await live.world(noted(moment, focus, lastPiece ? { ...lastPiece, seq: ++seq, ...(focus ? { focus } : {}) } : null), full || whole ? { ...withLine(page), director: payload() } : null);
         if (full) sentGrid = gridKey();
       };
-      const spawn = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'spawn.json'), 'utf8').catch(() => 'null'));
-      const script = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8'));
+      const spawn = await spawnOf();
+      const script = await scriptOf();
       let before = null;
       const where = new Map(), lastSceneOf = new Map();
       const timeOf = id => (id ? reading.time?.scenes?.find(entry => entry.scene === id)?.node ?? null : null);
@@ -302,7 +315,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       // strands): someone comes into a scene from the scene the strands say they come from (stage/world/strands.json
       // `entries`), else from where they last stood in that strand; someone first in this strand is never carried in from
       // another one. Without strands, the one state of before.
-      const strands = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null'));
+      const strands = await strandsOf();
       // A scene start the smoothing moved (W5b): the least-action spot, from the last run's page, as a node of this world.
       const smoothedStart = (scene, who) => {
         const revision = startsMoved.get(`${scene.id}|${who}`);
@@ -417,10 +430,13 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // least change, so the next pass starts them where the least-action history has them.
         const strandHere = strandScene.get(scene.id), straightOn = who => { const entry = strandHere?.entries?.find(item => item.person === who); return !!(entry?.samePlace && entry.from && entry.from === strandHere.continues); };
         const carriedIn = present.filter(who => was.get(who) && inside(was.get(who)[0]));
-        const middle = carriedIn.length ? [0, 1, 2].map(axis => { const values = carriedIn.map(who => at(was.get(who)[0])[axis]).sort((a, b) => a - b); return values[Math.floor(values.length / 2)]; }) : null;
+        // Where each carried-in person starts for the frame: the smoothed start where the smoothing moved them, else where they
+        // stood (the user, 2026-11-03: a frame measured round where they stood before the revision was stale by hundreds of m).
+        const startOf = who => { const revised = smoothedStart(scene, who); return revised !== null && revised !== undefined ? revised : was.get(who)[0]; };
+        const middle = carriedIn.length ? [0, 1, 2].map(axis => { const values = carriedIn.map(who => at(startOf(who))[axis]).sort((a, b) => a - b); return values[Math.floor(values.length / 2)]; }) : null;
         const frameMetres = middle && firstScale ? measure(firstScale.frame, middle) : null;
         if (frameMetres) sceneRecord.frame = { ...firstScale.frame, metres: Math.round(frameMetres), middle: { x: Math.round(middle[0]), y: Math.round(middle[1]), z: Math.round(middle[2]) } };
-        const gap = who => { const p = at(was.get(who)[0]); return Math.hypot(p[0] - middle[0], p[2] - middle[2]); };
+        const gap = who => { const p = at(startOf(who)); return Math.hypot(p[0] - middle[0], p[2] - middle[2]); };
         const here = carriedIn.filter(who => !frameMetres || straightOn(who) || gap(who) <= frameMetres / 2);
         if (frameMetres) { const outside = here.filter(who => gap(who) > frameMetres / 2).map(who => ({ who, metres: Math.round(gap(who) - frameMetres / 2) })); if (outside.length) sceneRecord.frame.outside = outside; }
         if (here.length < carriedIn.length) sceneRecord.gathered = carriedIn.filter(who => !here.includes(who));
@@ -1159,7 +1175,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         const runLog = (await readFile(join(novelDir, 'stage', 'world', 'log', `${id}.jsonl`), 'utf8')).split('\n').filter(Boolean).map(row => JSON.parse(row));
         const smoothedNow = SM.smoothRun({ page: JSON.parse(await readFile(join(folder, 'runs', 'director', `${id}.page.json`), 'utf8')), log: runLog, record, reading, strands: strandsNow, pins });
         await mkdir(join(novelDir, 'stage', 'world', 'smoothed'), { recursive: true });
-        const onNow = OC.occupation({ reading, script: JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8').catch(() => '{"scenes":[]}')), strands: strandsNow, pins });
+        const onNow = OC.occupation({ reading, script: await scriptOf(), strands: strandsNow, pins });
         await writeFile(join(novelDir, 'stage', 'world', 'smoothed', `${id}.json`), JSON.stringify({ version: 1, run: id, ...smoothedNow, onStage: onNow.proposals, on: onNow.on }));
         record.smoothing = { ...(record.smoothing ?? {}), after: { moments: Object.values(smoothedNow.people).reduce((n, list) => n + list.length, 0), revisions: smoothedNow.revisions.length } };
       } catch (error) { record.smoothing = { ...(record.smoothing ?? {}), error: String(error.message ?? error) }; }

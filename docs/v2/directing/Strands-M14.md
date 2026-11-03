@@ -52,3 +52,33 @@ memory segment, the frames' unsettled starts; then a few scenes by eye in World 
 
 1. An exposition or memory segment carries nobody physically (its people are weighed by how much of it is now).
 2. Scenes stay as the page's containers (the Player, World · Live) and time markers for now.
+
+## The user's answers and what was built (2026-11-03)
+
+- Segments are the unit (a card, median one sentence, is too thin to decide on); **a card's evidence first, weighting
+  second**: the sample showed people acting in 17 of 39 exposition or memory segments (one character singing, another asking
+  the clone her number), so presence is by the cards' evidence and only a memory segment (the past) places nobody now;
+  each entry keeps the share that is now for the smoothing.
+- The page plays by segment too, aligned: a card across a segment's boundary (74, 12%) is split there into consecutive
+  cards, each with the people of its own lines (`at`); the segments stay as Jev cut them.
+
+Built (`world-engine/director/segments.mjs`, tested): the segment world at a run's start: the reading's scenes, the
+world script's, the spawn plan's (spawning places a scene's people at its first segment, later ones carry them) and the
+strands (v1's extractor on the segment script: 9 forks, 1,545 entries); written beside the run in
+`stage/world/segments/`, which the world log and the law check read for a run by segment. The engine splits each scene
+into its segments as containers, looking up a segment's world data in its scene; the review's pins by scene apply to
+each of its segments; canon folds the segments back into their scene. Then the smoother cloud fix (a start's cloud
+holds the frame's own spots, those nearest where the person was played, up to half the cloud) and the frame measured
+round the smoothed starts.
+
+| Unpaid rehearsal, two passes | By scene, pass 1 → 2 | By segment, pass 1 → 2 |
+|---|---|---|
+| Containers played (with a cast) | 46 (46) | 346 (301) |
+| Camera jumps over 40 m | 20 → 20 | **12 → 7** |
+| Arrivals off-page | 55 → 13 | 99 → 46 |
+| Starts outside their frame: metres before → after smoothing | 6,517 → 6,270 (4%) | **28,032 → 5,163 (82%)**; 7,338 → 2,201 |
+| Starts still more than 8 m outside after smoothing | 33 → 35 of 65–73 | 142 → 76 of 653–494 |
+
+The cloud fix works: the smoothing now closes most of the distance to the frame where it closed almost none. Segments
+have seven times the starts (each a container), so more arrivals and frames to settle in all; the camera holds better.
+Left for W10: the digest is now one request a segment (346), paid in a real run.

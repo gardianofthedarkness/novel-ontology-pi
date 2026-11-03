@@ -80,17 +80,28 @@ export async function strandDemo(novelDir, options) {
   const { navGrid } = await load('dist/src/v2/world/holoNav.js');
   const inputs = await stageInputs(novelDir), answers = await latestStrandAnswers(novelDir), strands = storyStrands(inputs.data, answers ?? {});
   const staged = new Map(inputs.movementScenes.map(scene => [scene.id, scene])), byIndex = new Map(inputs.data.scenes.map(scene => [scene.id, scene.index]));
-  const all = inputs.data.scenes.map(scene => { const stage = staged.get(scene.id); return { id: scene.id, index: scene.index, placeId: stage?.placeId ?? scene.placeIds[0] ?? null, flashback: scene.flashback, cast: stage?.cast ?? answers?.presence.get(scene.id) ?? scene.characterIds, events: stage?.events }; });
-  const fork = options.fork ? forkTimeline(all, strands).forkOf : null;
+  let all = inputs.data.scenes.map(scene => { const stage = staged.get(scene.id); return { id: scene.id, index: scene.index, placeId: stage?.placeId ?? scene.placeIds[0] ?? null, flashback: scene.flashback, cast: stage?.cast ?? answers?.presence.get(scene.id) ?? scene.characterIds, events: stage?.events }; });
+  // By segment (M14; the user, 2026-11-03: the engine and the page by segment, aligned): each scene's segments are the
+  // containers played, in its place and order (`segments`: { list: [{ id, parent, cast }], spawn, strands }); a segment's
+  // world data (the world script's scene, its label, what is staged) is its scene's (`home`).
+  const bySegment = options.segments ?? null, parentOf = new Map((bySegment?.list ?? []).map(entry => [entry.id, entry.parent])), home = id => parentOf.get(id) ?? id;
+  if (bySegment) {
+    const byParent = new Map();
+    for (const entry of bySegment.list) (byParent.get(entry.parent) ?? byParent.set(entry.parent, []).get(entry.parent)).push(entry);
+    all = all.flatMap(scene => (byParent.get(scene.id) ?? [null]).map((entry, k) => (entry ? { ...scene, id: entry.id, parent: scene.id, index: scene.index + (k + 1) / 1000, cast: entry.cast ?? scene.cast } : scene)));
+    for (const scene of all) byIndex.set(scene.id, scene.index);
+  }
+  const strandsHere = bySegment?.strands ?? strands;
+  const fork = options.fork ? forkTimeline(all, strandsHere).forkOf : null;
   // The director (worldOnly) plays its own cards: a scene with a place and nothing staged for it (volume 1: 36, 38, 39,
   // with no canon events) is still on its line.
-  const lineScenes = all.filter(scene => (options.worldOnly ? scene.placeId : staged.has(scene.id) && scene.events?.length) && byIndex.get(scene.id) >= byIndex.get(options.from) && byIndex.get(scene.id) <= byIndex.get(options.to) && (!fork || fork.get(scene.id) === fork.get(options.fork)));
+  const lineScenes = all.filter(scene => (options.worldOnly ? scene.placeId : staged.has(home(scene.id)) && scene.events?.length) && byIndex.get(home(scene.id)) >= byIndex.get(options.from) && byIndex.get(home(scene.id)) <= byIndex.get(options.to) && (!fork || fork.get(scene.id) === fork.get(options.fork)));
   // `until` (a scene and an event index): the line only as far as that event, for a loop that decides one event at a time.
   const stop = options.until ? byIndex.get(options.until.scene) : Infinity;
   // `worldOnly` (terrain spawning): the world the line's scenes stand in, built and reached, with no event played and no
   // question asked (nobody is born by Jev; the engine's own starts reach each scene's place).
   const chosen = lineScenes.filter(scene => byIndex.get(scene.id) <= stop).map(scene => (options.worldOnly ? { ...scene, events: [] } : scene.id === options.until?.scene ? { ...scene, events: scene.events.slice(0, options.until.event + 1) } : scene));
-  const timeline = forkTimeline(chosen, strands);
+  const timeline = forkTimeline(chosen, strandsHere);
   // World-first (docs/world-first-design.md): the world script's dialogue nodes come in among each scene's events (a live
   // or a group node moves people: who came to whom, or where the group gathers); and Jev is asked at run time, in the
   // scene's composed context, where someone first seen starts (the level, then a box on a map of the place), who came to
@@ -101,12 +112,12 @@ export async function strandDemo(novelDir, options) {
   const terrain = JSON.parse(await readFile(`${novelDir}/stage/terrain.json`, 'utf8').catch(() => 'null'));
   // Spawning positions (world-engine/spawning/spawn.mjs, docs/v2/spawning.md): where each person begins each scene; the
   // player starts them there (its own start spots and grouping where spawning has nothing).
-  const spawned = JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
+  const spawned = bySegment?.spawn ?? JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
   const spawnAt = new Map((spawned?.scenes ?? []).flatMap(scene => scene.starts.filter(start => start.kind === 'person').map(start => [`${scene.id}|${start.who}`, start])));
   // Borrowing and spawning by type (docs/v2/borrow-and-spawn.md): no pools; a spare or shared slot is an area of its level,
   // a named place stands in its slot's area, an unnamed mention in the slot it shares this book (the tree changed in place).
   if (terrain?.mode === 'spawn') (await load('dist/src/v2/terrain/tree.js')).withSlots(inputs, Object.values(terrain.slots ?? {}), terrain.book, Object.fromEntries(Object.entries(terrain.sites ?? {}).filter(([, site]) => site.by === 'tenant' && site.parent).map(([id, site]) => [id, site.parent])));
-  const spawnPlan = JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
+  const spawnPlan = bySegment?.spawn ?? JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
   const anew = sceneId => spawnPlan?.scenes?.[sceneId]?.spawn === 'new';
   let jev = null;
   if (worldScript && !options.worldOnly) {
@@ -116,7 +127,7 @@ export async function strandDemo(novelDir, options) {
     // A live run records every question the engine asks (its exact prompt and pictures) on the live page.
     if (options.watch) jev = options.watch(jev);
     for (const scene of chosen) {
-      const entry = worldScene.get(scene.id);
+      const entry = worldScene.get(home(scene.id));
       if (!entry) continue;
       const own = new Map((scene.events ?? []).map(event => [event.id, event]));
       scene.events = entry.timeline.flatMap(item => item.type === 'event' ? (own.has(item.id) ? [own.get(item.id)] : []) : ['live', 'group'].includes(item.kind) && item.parties.length ? [{ id: item.id, text: item.kind === 'group' ? '（几个人当面交谈）' : '（两人当面交谈）', actors: item.parties, dialogue: item }] : []);
@@ -417,7 +428,7 @@ export async function strandDemo(novelDir, options) {
   const placeOf = new Map(chosen.map(scene => [scene.id, scene.placeId])), tree = new Set(chosen.flatMap(scene => places.get(scene.placeId)?.path ?? [scene.placeId]));
   const migrations = chosen.flatMap(scene => (timeline.handoffs.get(scene.id) ?? []).filter(handoff => handoff.from && !handoff.samePlace).map(handoff => ({ scene: scene.id, person: handoff.person, from: placeOf.get(handoff.from), to: scene.placeId })));
   // The same over the whole book (every staged scene, whatever the strand): what the central build's places sit toward.
-  const book = all.filter(scene => staged.has(scene.id) && scene.events?.length), bookPlace = new Map(book.map(scene => [scene.id, scene.placeId])), bookTimeline = forkTimeline(book, strands);
+  const book = all.filter(scene => staged.has(home(scene.id)) && scene.events?.length), bookPlace = new Map(book.map(scene => [scene.id, scene.placeId])), bookTimeline = forkTimeline(book, strandsHere);
   const bookTrips = book.flatMap(scene => (bookTimeline.handoffs.get(scene.id) ?? []).filter(handoff => handoff.from && !handoff.samePlace).map(handoff => ({ from: bookPlace.get(handoff.from), to: scene.placeId })));
   // The macro view is the canvas of places (src/v2/world/placeCanvas.ts). Before any scene, the central build: every
   // area larger than a building in the ontology's place tree (a city, district or street by Jev's scale, or before Jev has
@@ -1055,7 +1066,7 @@ export async function strandDemo(novelDir, options) {
    * walkable cell of it; outside, the walkable cell nearest the box. Null leaves it to the engine's own start.
    */
   const firstStart = async ({ scene, handoff, carried }) => {
-    const entry = worldScene.get(scene.id), fresh = anew(scene.id) && (entry?.present ?? []).includes(handoff.person);
+    const entry = worldScene.get(home(scene.id)), fresh = anew(scene.id) && (entry?.present ?? []).includes(handoff.person);
     // A scene that starts anew (stage/world/spawn.json) places everyone present afresh; otherwise only someone first seen.
     if (!jev || (!fresh && (carried || !entry?.firstSeen?.includes(handoff.person)))) return null;
     const { anchor } = groups.get(scene.placeId), radius = 48;
@@ -1209,7 +1220,7 @@ export async function strandDemo(novelDir, options) {
   };
   /** Where a live or group node takes people: a live pair apart meets (who came to whom); a group gathers in one box. */
   const meetingOf = async (scene, event, node) => {
-    const context = worldScene.get(scene.id)?.context ?? '', posOf = id => { const entry = where.get(id); return entry?.at && entry.place === scene.placeId ? entry.at : null; };
+    const context = worldScene.get(home(scene.id))?.context ?? '', posOf = id => { const entry = where.get(id); return entry?.at && entry.place === scene.placeId ? entry.at : null; };
     if (node.kind === 'live') {
       const [a, b] = node.parties, pa = posOf(a), pb = posOf(b);
       if (!a || !b || !pa || !pb) return {};
@@ -1385,7 +1396,7 @@ export async function strandDemo(novelDir, options) {
         dropped: [...world.dropped] },
       places: Object.fromEntries([...groups].map(([id, { label, path, scale, kind, anchor }]) => [id, { label, path, scale, kind, world: true, theme: anchor.era, anchor: { x: anchor.x, z: anchor.z, own: anchor.own }, NX, NZ, K, oi, oj, ok, lots: worldLots }])),
       scenes: shown.map(scene => {
-        const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === scene.id)?.label, kind = staged.get(scene.id)?.kind ?? null;
+        const run = runs[scene.id], label = inputs.data.scenes.find(entry => entry.id === home(scene.id))?.label, kind = staged.get(home(scene.id))?.kind ?? null;
         // The spots the movement questions offer for this building, each at a node of the world near a point (the one nearest
         // the middle of the nodes the spot covers): where the live simulation pins them on its pictures. The scene's at its
         // anchor; each event's round where its people stand as it begins.

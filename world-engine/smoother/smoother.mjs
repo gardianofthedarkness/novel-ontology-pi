@@ -94,6 +94,13 @@ function drives(chains) {
 function smoothOne(list, { decode, drive, placeOf }) {
   const clouds = list.map(moment => {
     const nodes = new Set([moment.node, ...moment.draws, ...moment.talk.map(entry => placeOf(entry.with, moment)?.node).filter(node => node != null)]);
+    // At a start with a frame (S_frame), the frame's own spots too, those nearest where they were played first, up to half
+    // the cloud (the cloud fix, the user, 2026-11-03: the frame a few hundred metres off was never among the places the
+    // smoothing may put someone, so the least action could not reach it).
+    if (moment.frame) {
+      const inFrame = moment.spots.map(node => ({ node, at: decode(node) })).filter(spot => Math.hypot(spot.at.x - moment.frame.x, spot.at.z - moment.frame.z) <= moment.frame.r).sort((a, b) => metres(a.at, moment.at) - metres(b.at, moment.at));
+      for (const { node } of inFrame) { if (nodes.size >= CLOUD / 2) break; nodes.add(node); }
+    }
     // The nearest of the scene's spots, up to the cloud's size.
     const near = moment.spots.map(node => ({ node, gap: metres(decode(node), moment.at) })).sort((a, b) => a.gap - b.gap);
     for (const { node } of near) { if (nodes.size >= CLOUD) break; nodes.add(node); }

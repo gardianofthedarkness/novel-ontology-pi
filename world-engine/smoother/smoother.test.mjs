@@ -80,3 +80,15 @@ test('the frame is an observation (S_frame): someone the strand carries straight
   const unframed = smoothRun({ page, log, record: { scenes: record.scenes.map(({ frame, ...rest }) => rest) }, strands });
   assert.ok(unframed.people.a.find(moment => moment.scene === 's2').shift < 0.5, 'without the frame, nothing moves');
 });
+
+test('the cloud fix: someone hundreds of metres from the frame can now be put inside it (its spots are in the cloud)', () => {
+  // s1: a stands at 0; s2 continues s1 in the same place, its frame 10 m wide round b at x = 300.
+  const page = { world, scenes: [
+    { id: 's1', starts: { a: node(0), b: node(300) }, events: [] },
+    { id: 's2', starts: { a: node(0), b: node(300) }, events: [] }] };
+  const record = { scenes: [{ scene: 's1', cards: [] }, { scene: 's2', cards: [], frame: { referent: 'the room', metres: 10, middle: { x: 301, y: 0, z: 1 } } }] };
+  const strands = { scenes: [{ id: 's1', fork: 'f', entries: [{ person: 'a', from: null }, { person: 'b', from: null }] }, { id: 's2', fork: 'f', continues: 's1', entries: [{ person: 'a', from: 's1', samePlace: true }, { person: 'b', from: 's1', samePlace: true }] }] };
+  const start = smoothRun({ page, log: [], record, strands }).people.a.find(moment => moment.scene === 's2');
+  assert.equal(start.frame.played, 295);
+  assert.equal(start.frame.map, 0, `inside the frame now: ${start.frame.map} m outside`);
+});
