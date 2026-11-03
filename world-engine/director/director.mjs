@@ -637,7 +637,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             // b. The spot: rooms, roofs, open ground and people inside the wedge, nearest first.
             const spots = [], groups = new Map();
             for (const node of pool.nodes) {
-              if (!C.inWedge(here, arrow.vector, [node.x, node.y, node.z], 60) || Math.hypot(node.x - here[0], node.y - here[1], node.z - here[2]) < 2.5) return;
+              if (!C.inWedge(here, arrow.vector, [node.x, node.y, node.z], 60) || Math.hypot(node.x - here[0], node.y - here[1], node.z - here[2]) < 2.5) continue;
               const what = said([node.x, node.y, node.z]).replace(/ \(.*\)$/, ''), band = node.type === 1 ? `${what}, about ${Math.max(5, Math.round(Math.hypot(node.x - here[0], node.z - here[2]) / 5) * 5)} m ahead` : what;
               (groups.get(band) ?? groups.set(band, []).get(band)).push(node);
             }
