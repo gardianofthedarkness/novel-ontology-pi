@@ -224,3 +224,27 @@ than not; then each segment typed with the nine block types in one document a sc
 Next, with no length rule: ask for starts as the scene tiler does (Jev detects a boundary better choosing where the
 next stretch begins than voting sentence by sentence), or keep the per-sentence probabilities and type distributions
 and let the strand's forward-backward smoothing absorb islands by their evidence. Both on the same six scenes.
+
+### Tuned (2026-11-03): smoothing wins
+
+| Scene | Raw cuts | Smoothed (from the cache, nothing paid) | Start selection (33 requests) | Beats from blocks |
+|---|---|---|---|---|
+| 3 | 27 | 12 | 11 | 3 |
+| 12 | 36 | 12 | 4 | 4 |
+| 21 | 31 | 9 | 1 | 8 |
+| 26 | 29 | 13 | 1 | 2 |
+| 35 | 3 | 2 | 1 | 1 |
+| 40 | 83 | 22 | 5 | 5 |
+
+- **Smoothed**: each sentence observes its segment's type distribution, and the type changes at a sentence as likely
+  as Jev held a stretch of another kind to begin there (Jev's own cut probability is the transition: no fixed stay, no
+  length). 209 raw pieces become 70 stretches; read against the text they hold: scene 26's leap between towers, the
+  attack through the showroom glass and the attack at the end as their own stretches; scene 40's opening fight, the
+  exposition on how the magic spread, who the councillor is, and the rooftop starting to give way (one sentence,
+  catastrophe, sure at 0.86). Left: a few one-line islands, all where Jev was unsure (0.27–0.6); their weak
+  distributions add little to a faculty's index, so they are kept, not ruled away.
+- **Start selection** fails for this: a change of kind is not crisp as a change of place or time is, and Jev mostly
+  answers none (scene 21, 278 sentences, one stretch; scene 40, one of 255), sure at 0.1–0.4.
+
+For M14: one per-sentence cut request a window and one typing request a scene (about 100 and 46 requests for volume 1),
+then this smoothing along each strand. Paid so far for M14: 53 Jev requests.
