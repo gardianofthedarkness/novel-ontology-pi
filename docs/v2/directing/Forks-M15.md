@@ -19,29 +19,31 @@ allows: worldlines, flashbacks, stated times), then reading order within a layer
 A container is on the fork of the one it continues. A container with nobody in it stands alone (it no longer borrows a
 nearby cast). Someone new in a strand comes from nowhere. (`segments.mjs` `strandsFile`; scenes 19 and 20 now join.)
 
-## 2 · The fork faculty (to build)
+## 2 · Regrouping without a faculty of its own (built, 2026-11-03)
 
-A fork is a group leaving the strand it was on while others stay. Passive strands only notice it afterwards (someone
-turns up elsewhere); the faculty acts at the moment it happens.
+The user: "I don't know if we should actually make it a faculty, I don't know what summarization will do to it, if we
+can we can have one of the existing faculties output the regrouping … They just run."
 
-- **The signal that fires it**: a split the strands find at a container (people of one container next appear in
-  parallel containers at different places), a departure in the text (the summarizer's moves "elsewhere", journeys
-  read), or the next container of a person at another place in story time. One work-model request per firing.
-- **What it reads**: who leaves and who stays, where each group goes (a place of the tree), by what way (L12: walk, run,
-  vehicle, leap, flight), and from which card they leave.
-- **What it does**: each leaving person's route through the loaded blocks (the routes built today) from the card they
-  leave to their next container's place, timed by their way: the route's metres over the way's speed. The new fork's
-  clock starts when they arrive; their next container on that fork begins no earlier.
-- **The double guard** (proposed in [Strands-M14](Strands-M14.md)): the story guard (story-time order, fork links) and
-  the physics guard (the route fits the time; L2: not in two containers at once).
-- In the registry: a faculty `forks` read by the stage manager, its state a `fork` record (who, from, to, way, leave,
-  arrive) into the world log and, through the ledger, the timeline (the ontology's per-strand timeline).
+No new faculty and no new request: a regrouping is already in what is read. The strands, in story time, say where each
+person goes next (their next container); the summarizer's moves ("elsewhere", "gone") and the journeys reader say where
+and from which line. The director reads the strands:
 
-## 3 · Forks are continuous on the map, with their time
+- **Departures**: whoever's next container in story time is at another place leaves at the end of this one, running out
+  of the frame toward that place, while the rest stay (a `leave` event; `departures` in the record).
+- **Arrivals**: at the next container they come the whole way from where they left (the routes).
+- The double guard ([Strands-M14](Strands-M14.md)) can be laid over both later.
 
-A fork's travel is played whole on the map (no jump), its duration the route's metres over the way's speed. The page
-may play it faster, but its story clock moves with it: the time shown is the story's, so a 20-minute walk played in
-5 seconds still shows 20 minutes passing on that fork.
+## 3 · Everyone runs; a virtual subway beyond (built, 2026-11-03)
+
+The user: "Set a virtual subway system: if a character needs to go across a country its time increase isn't linear, but
+a public transport time. We don't need a real transportation system by now."
+
+`laws.mjs` `tripTime(metres)`: running (4 m/s), or a virtual transit, whichever is sooner: run to a station, wait, ride,
+run from the far one. A metro within 60 km (a station every kilometre: 500 m run at each end; a 2-minute wait; about
+32 km/h, stops included), a rapid rail beyond (2 km at each end; 10 minutes' wait; about 150 km/h). No network: the
+ride is a straight hop, so a long trip loads only its two ends. 1 km runs in about 4 minutes; 2 km takes 8 by metro,
+20 km 42, 100 km about an hour by rail, 500 km under 4 hours. L5 checks a route against this time. The page may play it
+faster; the story clock (the replay, §4) keeps its time.
 
 ## 4 · The objective replay (to build)
 
@@ -59,12 +61,24 @@ the Player.
 
 ## Order
 
-1 is built. 2 and 3 together (the faculty, the routes timed by way), then 4. W10 after them, so W10's report and replay
-show the forks.
+1, 2 and 3 are built. 4 next. W10 after it, so W10's report and replay show the forks.
 
 ## Decisions for the user
 
 1. **Which places tabs** to shrink: the places panel of World · Live, the Player's place list, or the main app's places
    view.
-2. **The fork faculty's speeds**: walking or running for everyone until the abilities config exists (L12), or a draft
-   config from the reading first.
+2. ~~The fork faculty's speeds~~ Decided: everyone runs; a virtual subway beyond what running beats.
+
+## Rehearsed (unpaid, one pass, 2026-11-03)
+
+| | Story-order hand-overs | With departures and the subway |
+|---|---|---|
+| Arrivals off-page | 28 | **19** |
+| Arrivals that walked a route (reached) | — | 58 (39) |
+| Departures (ran out of the frame) | — | 35 (21), in 12 containers |
+| Moves held as unreachable (L10) | 26 | **4** |
+| Camera jumps over 40 m | 9 | 16 |
+
+All 58 routes were runs (the longest, 1.3 km, is still sooner on foot than by the virtual metro). The 19 left off-page
+are routes that found no way at some leg. Camera jumps rose with people leaving and coming the whole way: the camera
+follows them out and in; the beat camera should hold its group as they go (to look at in the replay).

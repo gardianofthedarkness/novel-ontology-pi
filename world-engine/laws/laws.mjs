@@ -7,6 +7,28 @@
 export const HUMAN = new Set(['step', 'walk', 'run', 'fall']);
 /** Speeds (m/s) by way, for L5; a way the abilities config gives may say its own. */
 export const SPEED = { step: 1.4, walk: 1.4, run: 4, leap: 6, flight: 15, teleport: Infinity, ride: 12 };
+/**
+ * A virtual public transport (the user, 2026-11-03: "they just run. Set a virtual subway system: if a character needs to
+ * go across a country its time increase isn't linear, but a public transport time. We don't need a real transportation
+ * system by now"): no network, only its timing. A trip is run, or run to a station, wait, ride and run from the far
+ * station, whichever is sooner; the ride is a metro within a city and a fast train beyond. Values are a typical big
+ * city's (a station every kilometre, so half a kilometre's run at each end; a train every four minutes, so two waiting;
+ * a metro's scheduled speed, stops included, about 32 km/h) and a typical intercity rapid rail (a train every twenty
+ * minutes; about 150 km/h); a virtual system, to be replaced by a real one.
+ */
+export const TRANSIT = {
+  metro: { access: 500, wait: 120, speed: 32 / 3.6, upTo: 60000 },
+  rail: { access: 2000, wait: 600, speed: 150 / 3.6 },
+};
+/**
+ * How long a trip of `metres` takes and how (seconds): running (L17, everyone runs), or the virtual transit (access and
+ * egress run, the wait, the ride at its speed), whichever is sooner. Not linear: a long trip costs a ride, not a run.
+ */
+export function tripTime(metres) {
+  const run = metres / SPEED.run, line = metres <= TRANSIT.metro.upTo ? TRANSIT.metro : TRANSIT.rail;
+  const ride = 2 * line.access / SPEED.run + line.wait + Math.max(0, metres - 2 * line.access) / line.speed;
+  return ride < run ? { seconds: Math.round(ride), by: metres <= TRANSIT.metro.upTo ? 'metro' : 'rail', access: line.access } : { seconds: Math.round(run), by: 'run', access: 0 };
+}
 /** Talk distances (m): face to face, and a voice everyone around hears (L6). */
 export const LIVE = 4, EARSHOT = 25;
 /** People who may share a 2 m cell before it is a crowd (L11). */

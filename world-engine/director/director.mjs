@@ -329,6 +329,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         return W.nodeNear(world, E.graphOf({ x: p.x, z: p.z }), p.x, p.z, Math.round(p.y / FLOOR)) ?? null;
       };
       const strandScene = new Map((strands?.scenes ?? []).map(entry => [entry.id, entry]));
+      // Where each person goes next in story time: `${container}|${person}` → the container their next entry is in.
+      const nextOf = new Map((strands?.scenes ?? []).flatMap(entry => (entry.entries ?? []).filter(item => item.from).map(item => [`${item.from}|${item.person}`, { id: entry.id, samePlace: item.samePlace }])));
       const endOf = new Map(), lastIn = new Map();
       const prior = (who, sceneId) => {
         const own = strandScene.get(sceneId);
@@ -482,7 +484,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             positions[who] = from; travels.push({ who, from, dest, route: true });
             // L5 on the route: where the story's clock says when they left, the way must fit the time at their fastest way.
             const left = LW.minutesOf(timeOf(lastSceneOf.get(who))), now = LW.minutesOf(timeOf(scene.id));
-            if (left !== null && now !== null) { const need = metres / Math.max(...Object.values(LW.SPEED).filter(Number.isFinite)); if ((now - left) * 60 < need) (sceneRecord.laws ??= []).push({ law: 'L5', who, verdict: 'held', why: `${Math.round(metres)} m in ${now - left} min: the places may lie nearer (L19)` }); }
+            if (left !== null && now !== null) { const need = LW.tripTime(metres).seconds; if ((now - left) * 60 < need) (sceneRecord.laws ??= []).push({ law: 'L5', who, verdict: 'held', why: `${Math.round(metres)} m in ${now - left} min (${LW.tripTime(metres).by} needs ${Math.round(need / 60)}): the places may lie nearer (L19)` }); }
           }
         }
         for (const key of Object.keys(run.starts)) delete run.starts[key];
@@ -540,26 +542,43 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // A route from afar, in legs that each fit one walk graph window (128 m of a window 384 m wide): each leg's
           // ground loaded as they reach it, walked on the walk graph, the legs joined into one way.
           const LEG = 128;
-          const routeWalk = (who, from, dest, near) => {
-            const a = at(from[0]), b = at(dest), legs = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[2] - a[2]) / LEG)), path = [from[0]];
+          const groundNear = (x, z) => around(x, z, 12).nodes.filter(node => node.type === 1).sort((m, n) => Math.hypot(m.x - x, m.z - z) - Math.hypot(n.x - x, n.z - z)).slice(0, 8).map(node => node.id);
+          // Run from `from` toward point b, leg by leg (each leg's blocks loaded as they reach it), ending on `last`.
+          const runTo = (who, from, b, last, tag) => {
+            const a = at(from[0]), legs = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[2] - a[2]) / LEG)), path = [from[0]];
             let here = from;
             for (let k = 1; k <= legs; k++) {
               const t = k / legs, aim = [a[0] + (b[0] - a[0]) * t, a[2] + (b[2] - a[2]) * t];
-              const targets = k === legs ? (near.length ? near : [dest]) : around(aim[0], aim[1], 12).nodes.filter(node => node.type === 1).sort((m, n) => Math.hypot(m.x - aim[0], m.z - aim[1]) - Math.hypot(n.x - aim[0], n.z - aim[1])).slice(0, 8).map(node => node.id);
+              const targets = k === legs && last?.length ? last : groundNear(aim[0], aim[1]);
               if (!targets.length) continue;
-              const leg = walk(scene, `${scene.id}|${who}|route|${k}`, here, targets, 'walk');
+              const leg = walk(scene, `${scene.id}|${who}|${tag}|${k}`, here, targets, 'run');
               if (!leg || leg.length < 2) return { path, legs: k - 1, of: legs, reached: false };
               path.push(...leg.slice(1)); here = [leg.at(-1), here[1]];
             }
             return { path, legs, of: legs, reached: true };
+          };
+          // The whole way (the user, 2026-11-03: "they just run"; a virtual subway beyond what running beats, laws.mjs
+          // tripTime): run, or run to a virtual station, ride, and run from the far one; the ride a straight hop (no
+          // network), so a trip across the city loads only its two ends.
+          const routeWalk = (who, from, dest, near) => {
+            const a = at(from[0]), b = at(dest), metres = Math.hypot(b[0] - a[0], b[2] - a[2]), trip = LW.tripTime(metres);
+            if (trip.by === 'run') return { ...runTo(who, from, b, near.length ? near : [dest], 'route'), trip };
+            const towards = (p, q, d) => { const l = Math.hypot(q[0] - p[0], q[2] - p[2]) || 1; return [p[0] + (q[0] - p[0]) * d / l, p[1], p[2] + (q[2] - p[2]) * d / l]; };
+            const station = towards(a, b, trip.access), far = towards(b, a, trip.access);
+            const first = runTo(who, from, station, groundNear(station[0], station[2]), 'to-station');
+            if (!first.reached) return { ...first, trip };
+            const alight = groundNear(far[0], far[2]);
+            if (!alight.length) return { ...first, reached: false, trip };
+            const last = runTo(who, [alight[0], from[1]], b, near.length ? near : [dest], 'from-station');
+            return { path: [...first.path, ...last.path], legs: first.legs + last.legs, of: first.of + last.of, reached: last.reached, trip, ride: { from: first.path.at(-1), to: alight[0] } };
           };
           sceneRecord.routes = [];
           for (const entry of travels) {
             const p = at(entry.dest), { nodes } = around(p[0], p[2], 6), near = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= 2.5).map(node => node.id);
             if (entry.route) {
               const route = routeWalk(entry.who, entry.from, entry.dest, near), metres = Math.round(route.path.slice(1).reduce((sum, node, k) => { const u = at(route.path[k]), v = at(node); return sum + Math.hypot(v[0] - u[0], v[2] - u[2], v[1] - u[1]); }, 0));
-              sceneRecord.routes.push({ who: entry.who, metres, legs: route.legs, of: route.of, reached: route.reached });
-              if (route.path.length > 1) { E.moves.set(`${scene.id}|${event.id}|${entry.who}`, { person: entry.who, how: metres > 400 ? 'run' : 'walk', path: route.path, ensemble: [] }); positions[entry.who] = [route.path.at(-1), entry.from[1]]; }
+              sceneRecord.routes.push({ who: entry.who, metres, by: route.trip.by, seconds: route.trip.seconds, legs: route.legs, of: route.of, reached: route.reached });
+              if (route.path.length > 1) { E.moves.set(`${scene.id}|${event.id}|${entry.who}`, { person: entry.who, how: 'run', path: route.path, ensemble: [] }); positions[entry.who] = [route.path.at(-1), entry.from[1]]; }
               if (!route.reached) { positions[entry.who] = [entry.dest, entry.from[1]]; sceneRecord.offPage.push(entry.who); }
               continue;
             }
@@ -1186,6 +1205,27 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           const went = cardRecord.moves.filter(move => move.moved);
           await stream(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${went.length ? ` · ${went.map(move => names.get(move.person) ?? move.person).join(', ')} moved` : ''}`, cardRecord.camera ? { x: cardRecord.camera.focus.x, z: cardRecord.camera.focus.z, r: 24 } : null);
           if (pace && went.length) await new Promise(done => setTimeout(done, pace * 1000));
+        }
+        // Departures (the user, 2026-11-03: a group leaving the strand is a fork; "they just run"): whoever's next container
+        // in story time is at another place leaves now, running out of the frame toward that place, while the rest stay;
+        // their arrival there picks up from where they left. Read from the strands' story order (no faculty of its own).
+        {
+          const leaving = Object.keys(positions).filter(who => !who.startsWith('crowd:') && nextOf.get(`${scene.id}|${who}`) && !nextOf.get(`${scene.id}|${who}`).samePlace);
+          if (leaving.length) {
+            const event = { id: `leave:${scene.id}`, text: `(${leaving.map(who => names.get(who) ?? who).join('、')} leave)`, actors: leaving, camera: null };
+            sceneRecord.departures = [];
+            for (const who of leaving) {
+              const next = nextOf.get(`${scene.id}|${who}`), box = placeBox.get(script.scenes.find(entry => entry.id === next.id)?.place), here = at(positions[who][0]);
+              const toward = box ? [box[0], box[1]] : null, edge = (frameMetres ? frameMetres / 2 : null) ?? measure({ referent: 'the street', of: null, times: 1 }, here) ?? null;
+              if (!toward || !edge) continue;
+              const d = Math.hypot(toward[0] - here[0], toward[1] - here[2]) || 1, out = Math.min(d, edge), aim = [here[0] + (toward[0] - here[0]) * out / d, here[2] + (toward[1] - here[2]) * out / d];
+              const targets = around(aim[0], aim[1], 12).nodes.filter(node => Math.abs(node.y - here[1]) < 1).sort((m, n) => Math.hypot(m.x - aim[0], m.z - aim[1]) - Math.hypot(n.x - aim[0], n.z - aim[1])).slice(0, 8).map(node => node.id);
+              const path = targets.length ? walk(scene, `${scene.id}|${who}|leave`, positions[who], targets, 'run') : null;
+              if (path && path.length > 1) { E.moves.set(`${scene.id}|${event.id}|${who}`, { person: who, how: 'run', path: [...path], ensemble: [] }); positions[who] = [path.at(-1), positions[who][1]]; }
+              sceneRecord.departures.push({ who, to: next.id, ran: !!(path && path.length > 1) });
+            }
+            if (sceneRecord.departures.some(entry => entry.ran)) { scene.events.push(event); run.events.push({ at: { ...positions } }); await grow(scene, run); }
+          }
         }
         // The scene done: the live page written whole (every card so far), so a view loaded now can replay any of them.
         await stream(`scene ${Number(scene.id.slice(-3))} played`, null, true);
