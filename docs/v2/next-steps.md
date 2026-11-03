@@ -362,6 +362,8 @@ M3 and M5; M10–M12 go alongside; M13 last. The architect (floors, uses, looks)
 **Paused for M14 (the user, 2026-11-03):** M9 (the crowd as a field), M10 (state directors, scoped), M11 (into the
 ontology), M12 (records and cost), the smoother's cloud fix (A7 item 7, on hold) and W10 wait while M14's segment tiling
 is tested; the user asked to come back to them after it. Kept from this round: the faster test cycle (A7 item 8).
+M9 is under discussion (the user, 2026-11-03: the crowd enters states instead of being sent somewhere): the research
+note [Crowd-M9](directing/Crowd-M9.md).
 
 What W10 is measured on, against W8 (`d20261103011140`) and W9 (`d20261103060830`):
 
