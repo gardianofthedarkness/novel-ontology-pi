@@ -62,6 +62,14 @@ export const FACULTY_ASKS = {
     shape: { buildings: { place: '<place id> | name', look: 'words', floors: 'a number', uses: { floors: 'from–to', use: USES }, features: '[helipad, sky garden, atrium, elevator shaft, …]' }, rooms: { name: 'words', in: '<place id>', floor: 'a number', makeup: 'words', size: 'm²' } } },
 };
 
+/** The built faculties' own prompts and answer shapes, as digest.mjs sends them (M5–M8), in place of their drafts. */
+export const builtAsks = () => ({
+  scale: { unit: 'one request a beat, as each scene begins', parts: [{ name: null, system: DG.SCALE_SYSTEM, task: 'How wide does this beat play, from what angle and whose view, and how far do its moves go?', given: ['the scene digest (where, summary)', 'the beat\'s type and lead', 'the people with ids', 'the beat\'s lines (up to 40)'], shape: DG.SCALE_SHAPE }] },
+  journeys: { unit: 'one request a span where journeys fires', parts: [{ name: null, system: DG.JOURNEY_SYSTEM, task: 'Trace each journey in this passage.', given: ['the span\'s lines (up to 60)', 'the places the world has placed, with their labels and scales', 'the people with ids', 'the scene digest'], shape: DG.JOURNEY_SHAPE }] },
+  choreography: { unit: 'one request a span where choreography fires', parts: [{ name: null, system: DG.FIGHT_SYSTEM, task: 'List each exchange of this passage in order.', given: ['the span\'s lines (up to 60)', 'the people with ids', 'the scene digest'], shape: DG.FIGHT_SHAPE }] },
+  conversation: { unit: 'one request a span where conversation fires', parts: [{ name: null, system: DG.TALK_SYSTEM, task: 'For this passage: each exchange and its channel, each group\'s formation, who looks at whom.', given: ['the span\'s lines (up to 60)', 'the people with ids', 'where the scene is'], shape: DG.TALK_SHAPE }] },
+});
+
 /** The generalist's own prompts and answer shapes, as digest.mjs sends them. */
 export const generalistAsks = () => ({ unit: 'a scene request, then one request a window of about 30 sentences', parts: [
   { name: 'The scene digest', system: DG.SCENE_SYSTEM, task: 'Summarize this scene for staging.', given: ['the scene\'s sentences, numbered, with their kinds', 'the people with ids', 'the memory from the scene before'], shape: DG.SCENE_SHAPE },

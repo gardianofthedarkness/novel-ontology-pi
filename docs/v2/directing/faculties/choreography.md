@@ -29,27 +29,27 @@ On a score-based mixed index of all of these, each against its own baseline over
 
 ## How it is asked
 
-How often: one request a fired span.
+How often: one request a span where choreography fires.
 
 **System**
 
-> You read a fight in a light novel, exchange by exchange, for those staging it.
+> You read a fight or a catastrophe in a light novel, exchange by exchange, for those staging it in a 3D city: who attacks whom, with what kind of attack, of what shape in space and from how far, what happens to the target, how far anyone is thrown, what breaks, and what state anyone is left in. Reply with JSON only.
 
 **Task**
 
-> For each exchange: who attacks whom, with what kind of attack, of what shape and range, what happens, how far anyone is thrown, what breaks.
+> List each exchange of this passage in order.
 
 **Given**
 
-- the span's lines
-- the fighters and their known abilities
-- the scene frame
+- the span's lines (up to 60)
+- the people with ids
+- the scene digest
 
 **Answers** (JSON; every entry with its sentence)
 
 | Field | Answers |
 |---|---|
-| `exchanges` | **attacker**: &lt;person id&gt;; **target**: &lt;person id&gt; \| &lt;place&gt; \| &lt;thing&gt;; **attack**: `hand to hand` · `grapple or throw` · `blade or blunt weapon` · `firearm` · `ranged power` · `beam or laser` · `area blast` · `thrown object` · `the ground or a building itself` · `an ability that cancels`; **shape**: `point` · `line or beam` · `cone` · `sphere` · `ring` · `wave along the ground` · `rain from above`; **range**: `touch` · `close (under 3 m)` · `near (under 15 m)` · `far (under 100 m)` · `very far`; **outcome**: `hit` · `dodged` · `blocked` · `cancelled` · `missed`; **knockback**: metres; **breaks**: words \| null |
+| `exchanges` | **sentence**: &lt;sentence id&gt;; **attacker**: &lt;person id, or null for the world itself&gt;; **target**: &lt;person id, or null when a place or thing&gt;; **attack**: hand to hand \| grapple or throw \| blade or blunt weapon \| firearm \| ranged power \| beam or laser \| area blast \| thrown object \| the ground or a building itself \| an ability that cancels; **shape**: point \| line or beam \| cone \| sphere \| ring \| wave along the ground \| rain from above; **range**: touch \| close (under 3 m) \| near (under 15 m) \| far (under 100 m) \| very far; **outcome**: hit \| dodged \| blocked \| cancelled \| missed; **knockback**: metres the target is thrown (0 if none); **breaks**: what is destroyed, or null; **condition**: hurt \| badly hurt \| unconscious \| bound \| freed \| recovered \| null: the target's state after it; **sure**: 0..1 |
 
 ## Read by
 

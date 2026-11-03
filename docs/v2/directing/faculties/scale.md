@@ -27,32 +27,33 @@ Always: once each beat.
 
 ## How it is asked
 
-How often: one request a beat.
+How often: one request a beat, as each scene begins.
 
 **System**
 
-> You read one beat of a light novel being staged in a 3D city, and recommend to its camera operator how far out to stand and from where to look.
+> You read one beat of a light novel being staged in a 3D city, and recommend to its camera operator how far out to stand and from where to look. The scale is often only implied: leaping between towers, crossing districts, a fight in one room. Reply with JSON only.
 
 **Task**
 
-> Say how many metres across this beat plays, the angle to see it from, whose eyes or which landmark it is seen from, and how far its moves reach.
+> How wide does this beat play, from what angle and whose view, and how far do its moves go?
 
 **Given**
 
-- the beat's lines
-- the scene frame (the set, who is on stage)
-- which action director leads it
-- the place tree round the set
+- the scene digest (where, summary)
+- the beat's type and lead
+- the people with ids
+- the beat's lines (up to 40)
 
 **Answers** (JSON; every entry with its sentence)
 
 | Field | Answers |
 |---|---|
-| `zoom` | `a room (~15 m)` · `a street (~80 m)` · `a block (~300 m)` · `a district (~1.5 km)` · `the city` |
-| `metres` | a number |
-| `angle` | `eye level` · `over a shoulder` · `high` · `top-down` · `low, looking up` · `aerial` |
-| `from` | &lt;person id&gt; \| &lt;place id&gt; \| none |
-| `reach` | `under 50 m` · `50–300 m` · `300 m – 2 km` · `over 2 km` |
+| `zoom` | room \| street \| block \| district \| city (how wide the beat plays: a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km, the city) |
+| `metres` | a number: metres across the frame |
+| `angle` | eye level \| over a shoulder \| high \| top-down \| low, looking up \| aerial |
+| `from` | &lt;person id&gt; \| &lt;place&gt; \| none: whose eyes or which landmark it is seen from |
+| `reach` | under 50 m \| 50–300 m \| 300 m – 2 km \| over 2 km: how far its moves go |
+| `sure` | 0..1 |
 
 ## Read by
 

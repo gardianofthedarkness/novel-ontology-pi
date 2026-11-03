@@ -29,27 +29,28 @@ On a score-based mixed index of all of these, each against its own baseline over
 
 ## How it is asked
 
-How often: one request a fired span.
+How often: one request a span where journeys fires.
 
 **System**
 
-> You read a passage of a light novel being staged in a 3D city and trace each journey in it across the city's places.
+> You read a passage of a light novel being staged in a 3D city and trace each journey in it across the city's places: who goes, from where, through which places, to where, how. Use the place ids given where a place is one of them; else say the place in words as the text names it (a tower, a bridge, a station). Reply with JSON only.
 
 **Task**
 
-> For each journey: who, from where, through which places, to where, how, how far and how long.
+> Trace each journey in this passage.
 
 **Given**
 
-- the span's lines
-- the place tree round the set, with named buildings, streets, bridges and stations
-- where each person is now
+- the span's lines (up to 60)
+- the places the world has placed, with their labels and scales
+- the people with ids
+- the scene digest
 
 **Answers** (JSON; every entry with its sentence)
 
 | Field | Answers |
 |---|---|
-| `journeys` | **who**: &lt;person id&gt;; **from**: &lt;place id&gt;; **via**: [&lt;place id&gt;]; **to**: &lt;place id&gt; \| words; **manner**: `walk` · `run` · `zigzag through alleys` · `up or along a wall` · `leaps between roofs` · `flight` · `carried` · `a vehicle` · `an underground passage`; **distance**: `under 50 m` · `50–300 m` · `300 m – 2 km` · `over 2 km`; **duration**: words |
+| `journeys` | **sentence**: &lt;sentence id where the journey ends or is told&gt;; **who**: &lt;person id&gt;; **from**: &lt;place id or words&gt;; **via**: `<place id or words>`; **to**: &lt;place id or words&gt;; **manner**: walk \| run \| zigzag through alleys \| up or along a wall \| leaps between roofs \| flight \| carried \| a vehicle \| an underground passage; **distance**: under 50 m \| 50–300 m \| 300 m – 2 km \| over 2 km; **duration**: words; **sure**: 0..1 |
 
 ## Read by
 

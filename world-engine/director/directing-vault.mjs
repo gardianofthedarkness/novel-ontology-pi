@@ -7,7 +7,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BLOCK_TYPES, DAMPING, DIRECTORS, FACULTIES, FLOW, GATES, LAWS, LOG_KINDS, SIGNALS, STATE, registryProblems } from './specialists.mjs';
-import { FACULTY_ASKS, directorQuestions, generalistAsks } from './questions.mjs';
+import { FACULTY_ASKS, builtAsks, directorQuestions, generalistAsks } from './questions.mjs';
 import { firedBy, fires, lands, lawsOf, metres, readers } from './specialists-doc.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), folder = join(repository, 'docs', 'v2', 'directing');
@@ -23,7 +23,7 @@ const shapeTable = shape => ['| Field | Answers |', '|---|---|', ...Object.entri
 const quote = text => safe(text).split('\n').map(line => `> ${line}`).join('\n');
 
 function facultyNote(id) {
-  const faculty = FACULTIES[id], asks = id === 'generalist' ? generalistAsks() : FACULTY_ASKS[id], by = readers(id);
+  const faculty = FACULTIES[id], asks = id === 'generalist' ? generalistAsks() : builtAsks()[id] ?? FACULTY_ASKS[id], by = readers(id);
   const parts = asks.parts ?? [{ name: null, ...asks }];
   return [yaml({ type: 'faculty', id, aliases: [faculty.label], status: faculty.status, fired_by: faculty.always ? [`always: each ${faculty.always}`] : [...(faculty.types ?? []), ...(faculty.signals ?? [])], read_by: by.map(entry => entry.key), tags: ['directing/faculty', `status/${faculty.status}`] }), HEAD, '',
     `# ${faculty.label}`, '', `A summary faculty: the work model reading the text. Status: **${faculty.status}**${faculty.code ? ` (\`${faculty.code}\`)` : ''}. Back to [Directing](../Directing.md).`, '',

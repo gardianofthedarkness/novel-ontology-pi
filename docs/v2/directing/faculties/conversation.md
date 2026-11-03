@@ -29,29 +29,29 @@ On a score-based mixed index of all of these, each against its own baseline over
 
 ## How it is asked
 
-How often: one request a fired span.
+How often: one request a span where conversation fires.
 
 **System**
 
-> You read a passage of a light novel and say who talks with whom, through what, and how they stand.
+> You read a conversation in a light novel for those staging it: who talks with whom and through what (face to face, a phone, a door), how the people stand (beside each other, facing, across a table, in a ring, walking side by side, two sides of a door), and who looks at whom. Reply with JSON only.
 
 **Task**
 
-> For each exchange, its people and channel; for each group, its formation; who looks at whom.
+> For this passage: each exchange and its channel, each group's formation, who looks at whom.
 
 **Given**
 
-- the span's lines, numbered
-- the people present with their ids
-- the scene frame
+- the span's lines (up to 60)
+- the people with ids
+- where the scene is
 
 **Answers** (JSON; every entry with its sentence)
 
 | Field | Answers |
 |---|---|
-| `exchanges` | **who**: &lt;person id&gt;; **with**: [&lt;person id&gt;]; **channel**: `face to face` · `a group together` · `phone` · `video call` · `message` · `through a door or wall` · `loudspeaker or broadcast` · `telepathy` · `a voice from afar` |
-| `formations` | **who**: [&lt;person id&gt;]; **formation**: `beside` · `facing` · `across a table` · `a ring` · `side by side walking` · `behind` · `two sides of a door` · `apart` |
-| `attention` | **who**: &lt;person id&gt;; **looksAt**: &lt;person id&gt; \| &lt;thing&gt; |
+| `exchanges` | **sentence**: &lt;sentence id&gt;; **who**: &lt;person id&gt;; **with**: `<person id>`; **channel**: face to face \| a group together \| phone \| video call \| message \| through a door or wall \| loudspeaker or broadcast \| telepathy \| a voice from afar; **sure**: 0..1 |
+| `formations` | **sentence**: &lt;sentence id where it holds from&gt;; **who**: `<person id>`; **formation**: beside \| facing \| across a table \| a ring \| side by side walking \| behind \| two sides of a door \| apart; **sure**: 0..1 |
+| `attention` | **sentence**: &lt;sentence id&gt;; **who**: &lt;person id&gt;; **looksAt**: &lt;person id&gt; |
 
 ## Read by
 
