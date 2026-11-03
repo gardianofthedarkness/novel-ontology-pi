@@ -196,3 +196,31 @@ total only from 6,789 m outside to 6,515 m), some far (915 m in scene 11, 492 m 
 space, not the action: a moment's cloud is the 48 spots nearest where it was played, so a frame hundreds of metres away is
 not among the places the smoother may put them. The fix is to add the frame's own spots to a scene start's cloud, as a
 talk partner's place is added.
+
+## M14, segment tiling: the first test (2026-11-03)
+
+`experiments/v2/segment-tiling.mjs` on scenes 3, 12, 21, 26, 35 and 40 (1,123 sentences; 20 Jev requests, 1,326
+questions): per sentence, one yes/no "does a stretch of another kind begin here?", a cut where Jev holds it more likely
+than not; then each segment typed with the nine block types in one document a scene.
+
+| Scene | Sentences | Segments | One-sentence segments | Cuts that keep the type | Beats from blocks |
+|---|---|---|---|---|---|
+| 3 | 114 | 27 | 15 | 7 | 3 |
+| 12 | 144 | 36 | 22 | 19 | 4 |
+| 21 | 278 | 31 | 15 | 13 | 8 |
+| 26 | 92 | 29 | 20 | 15 | 2 |
+| 35 | 18 | 3 | 2 | 1 | 1 |
+| 40 | 477 | 83 | 49 | 47 | 5 |
+
+- **Per sentence, Jev over-cuts.** Its cut probabilities sit at 0.5–0.8 (median about 0.6), it marks every one-line
+  shift (a single thought inside a fight, one sound before an attack), and about half its cuts lead into the same type.
+  That is the sentence level, which the sentence kinds already carry.
+- **Merged where neighbours share a type, the stretches read right, and better than the blocks.** Scene 26: the blocks
+  gave traversal then interior and missed the fight; the stretches give who she is (exposition), her thoughts, the leap
+  between towers carrying a girl (traversal), the cars bursting out through the glass (confrontation), a long inner
+  stretch, and the attack at the end (confrontation). Scene 3 opens with a short memory the blocks smeared into routine.
+- **Not right yet:** one-sentence islands and alternations (traversal, confrontation, traversal) inside one stretch.
+
+Next, with no length rule: ask for starts as the scene tiler does (Jev detects a boundary better choosing where the
+next stretch begins than voting sentence by sentence), or keep the per-sentence probabilities and type distributions
+and let the strand's forward-backward smoothing absorb islands by their evidence. Both on the same six scenes.
