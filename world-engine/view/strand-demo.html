@@ -1218,8 +1218,8 @@ function frame(now) {
   } else if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); bubble = null; }
   // Live mode: following is following Jev's focus — the camera and where it looks glide together toward the moment's
   // focus (a whole place away too), and the distance eases toward one that frames it, so each new frame carries on smoothly.
-  if (liveMode && follow && !glide && data.live.focus && !segment.event?.camera) {
-    const f = data.live.focus, ease = 1 - Math.exp(-dt * 1.6), shift = new THREE.Vector3(f.x, 2, f.z).sub(controls.target).multiplyScalar(ease);
+  if (liveMode && follow && !glide && liveFocus() && !segment.event?.camera) {
+    const f = liveFocus(), ease = 1 - Math.exp(-dt * 1.6), shift = new THREE.Vector3(f.x, 2, f.z).sub(controls.target).multiplyScalar(ease);
     controls.target.add(shift); camera.position.add(shift);
     const away = camera.position.clone().sub(controls.target), distance = away.length(), framed = Math.min(Math.max(distance, 40 + 2 * f.r), 160 + 4 * f.r);
     if (Math.abs(framed - distance) > 0.5) camera.position.copy(controls.target).add(away.setLength(distance + (framed - distance) * ease));
@@ -1252,17 +1252,25 @@ function frame(now) {
  * city's shells for the user.
  */
 const LOAD = 112, UNLOAD = 160, INSIDE = 60, INSIDE_UNLOAD = 90, FOCUS_INSIDE = 20;
+/**
+ * Jev's focus counts only while a run streams and nothing is being replayed (the user, 2026-11-03: in World · Live the
+ * camera wandered off and buildings went for no reason): a finished run's last focus is left at the city's middle, and a
+ * card replayed is elsewhere. Otherwise the camera follows the people, and nothing is dropped whole: the page no longer
+ * grows, as the Player's does not.
+ */
+const liveFocus = () => (liveMode && data.live && !data.live.final && !replaying ? data.live.focus ?? null : null);
 let lastCull = 0;
 function cullByInterest(entry, shot = null) {
   if (!entry?.chunks) return;
-  const focus = shot ?? data.live?.focus ?? null, points = [...(focus ? [{ x: focus.x, z: focus.z, r: focus.r ?? 0 }] : []), ...[...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => ({ x: pawn.position.x + entry.cx, z: pawn.position.z + entry.cz, r: 0 }))];
+  // What the camera looks at stays too (a replayed card's place, a building the viewer turned to).
+  const focus = shot ?? liveFocus(), points = [...(focus ? [{ x: focus.x, z: focus.z, r: focus.r ?? 0 }] : []), ...(shot ? [] : [{ x: controls.target.x + entry.cx, z: controls.target.z + entry.cz, r: 0 }]), ...[...pawns.values()].filter(({ pawn }) => pawn.parent).map(({ pawn }) => ({ x: pawn.position.x + entry.cx, z: pawn.position.z + entry.cz, r: 0 }))];
   if (!points.length) return;
   const gap = (x, z, r) => Math.min(...points.map((p) => Math.hypot(p.x - x, p.z - z) - p.r)) - r;
   // In the viewer's view, insides are near the focus's centre, not its whole extent (the user, 2026-11-02: the terrain loop
   // looks at a whole city, and every building it had reached kept its inside once the focus had moved on). Jev's own
   // pictures (`shot`) keep theirs as framed.
   const close = shot ? gap : (x, z, r) => Math.min(...points.map((p) => Math.hypot(p.x - x, p.z - z) - Math.min(p.r, FOCUS_INSIDE))) - r;
-  const whole = liveMode && !data.terrain && !shot;
+  const whole = liveMode && !data.terrain && !shot && !!liveFocus();
   if (whole) for (const chunk of entry.chunks) { const d = gap(chunk.x, chunk.z, 23); chunk.near = chunk.near === false ? d < LOAD : d < UNLOAD; }
   const far = new Set(), deep = new Set();
   data.world.lots.forEach((lot, n) => {
@@ -1442,10 +1450,11 @@ function producerPose(sceneId, cam) {
 }
 /** For checking a replay: where the timeline and the camera stand. */
 window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
-function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null }) {
+function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null, follow: keep = false }) {
   const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.eventIndex === event);
   if (!segment) return;
-  shownPlace = segment.scene.place; follow = false;
+  // After the glide to the card's view, its people are followed if the viewer keeps Follow on (World · Live sends it).
+  shownPlace = segment.scene.place; follow = keep;
   const pose = producerPose(scene, cam);
   // The glide to the producer's viewpoint (a second and a half), then the line plays from the card on.
   glide = pose ? { to: pose, start: segment.start, seconds: 1.5, direct: true } : null;
@@ -1456,11 +1465,11 @@ function replayCard({ scene, event, camera: cam = null, once = false, slow = fal
  * Continue (the reading panel): on from where the world is to the end of the next card where someone moves; the view glides
  * to that card's producer viewpoint as it begins. A long stretch of nothing moving (over eight seconds) is skipped.
  */
-function continueTo({ scene, event, camera: cam = null, speed: pace = 2 }) {
+function continueTo({ scene, event, camera: cam = null, speed: pace = 2, follow: keep = false }) {
   const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.eventIndex === event);
   if (!segment) return;
   if (time > segment.start || segment.start - time > 8) time = Math.max(0, segment.start - 0.6);
-  follow = false; stopAt = segment.end; playing = true; speed = pace; replaying = replaying ?? { scene, event };
+  follow = keep; stopAt = segment.end; playing = true; speed = pace; replaying = replaying ?? { scene, event };
   const pose = producerPose(scene, cam);
   glide = pose ? { to: pose, start: Math.max(time, segment.start - 0.6), seconds: 1.2, direct: true } : null;
 }

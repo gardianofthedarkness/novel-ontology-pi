@@ -373,7 +373,9 @@
     $("replaying").hidden = false; $("replaying").textContent = `▶ playing scene ${Number(card.scene.slice(-3))} · card ${n + 1} of ${cards.length} · ${card.kind === "pass" ? "narration" : card.kind}`;
     if (scroll) $("book").querySelector(`.s[data-id="${card.lines[0]?.id}"]`)?.scrollIntoView({ block: "center" });
   };
-  const send = (message) => { for (const frame of [shown, next]) frame?.contentWindow.postMessage(message, origin); if (camera) camera.follow = false; showFollow(false); };
+  // A replay or Continue keeps Follow as it is (the user, 2026-11-03: in World · Live the camera stayed put while people
+  // walked off, where the Player follows them): the frame glides to the card's view, then follows its people if Follow is on.
+  const send = (message) => { const on = $("follow").getAttribute("aria-pressed") === "true"; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ ...message, follow: on }, origin); };
   const playCard = (n) => { const card = cards[n]; if (!card) return; showCard(n, false); send({ type: "replay", scene: card.scene, event: card.event, camera: card.camera, once: true, speed: rspeed }); };
   // Continue: on from where the world is to the end of the next card (a dialogue plays its lines in bubbles).
   // Auto reads along (the user, 2026-11-02: no sentence of the book skipped, at the reader's own pace): the book sentence by
