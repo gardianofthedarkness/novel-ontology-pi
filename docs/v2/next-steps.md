@@ -75,6 +75,90 @@ pass and the text-only questions (whether someone goes, the talk kind, whether s
 pictures, with the digest in its state. Items are placed with their holders or where they fall (v1's things on the
 page). `--no-digest` plays as before. See [world-ontology.md](world-ontology.md) "One observation, several updates".
 
+### What W9 left (the user, 2026-11-03, watching d20261103060830)
+
+The summarizer run played "way better than all previous runs" (743 moves against W8's 64, 269 Jev calls against 792).
+Three problems remain:
+
+1. **The camera shifts back and forth.** A scene's people end up in groups far apart, and each card's camera frames its
+   own actors. Scene 19: "indoors" (stated) moved 御坂美琴 72 m to the nearest indoor node, a basement under an office,
+   while the cast stayed at the scene's spawn point; scene 40: 食蜂操祈 was carried in from scene 1's roof, 460 m away.
+   31 camera jumps of more than 40 m over the volume. Facts are not tied to the scene's own set; people carried from
+   far are not brought into it; the camera switches groups where the text does not cut.
+2. **The crowd plays as people.** Each walker is an individual with a path; the user: a crowd is "a cloud of particles
+   tied to the place", not characters.
+3. **Scale is capped.** Jev picks a direction on a picture 16 m across, a leap reaches 30 m, spots are offered within
+   100 m. Scene 26 goes from one tower's 44th floor to the next one's 38th, then to a third one's 52nd, across an
+   avenue above a river: hundreds of metres. The user: "the camera man needs to understand the implicit in the scene";
+   the zoom a scene implies is how far and how big its movement is.
+
+### A4. Faculties, fired by block types (proposal, the user and Claude, 2026-11-03)
+
+The user: one reader per concern (actions, two people talking, implicit movement at scale...) fits the measurement
+picture (each faculty an instrument for its own observable at its own resolution), but split out it costs ten times
+the input. Instead:
+
+> When jev is classifying sentence types, it will output the distribution of all types... we record the top candidates
+> and their distribution all. We also provide classification in blocks, where we no longer determine if a block is a
+> dialogue or a action. We derive a new set of types... Then, based on distribution, a corresponding faculty is only
+> activated once it's related types become abnormally dense, signaling it should kick in.
+
+**What volume 1 shows** (the reading's own cache, no new calls):
+
+- All 5,202 sentence-kind answers (`dlg_kind:<id>`) are cached with Jev's full distribution over the six kinds; the
+  reading kept only the top one. 1,216 sentences (23%) have a second kind at 0.3 or more, most often narration and
+  thought (free indirect thought).
+- Over 12-sentence windows (866, step 6), each kind is unusually dense (above its mean + 1.5σ) in only 6–10% of them.
+- Sentence kinds cannot tell what a block is about: action is as dense in the dart games (scene 17) and the shopping
+  walk (8) as in the fights (21, 25–31, 40). The gate needs block types.
+- The kinds pass is 56 Jev requests for the volume; a block-type question per window rides in the same requests.
+
+**Block types** (a window of about 12 sentences, step 6; Jev's distribution kept whole, so a block can be combat 0.5
+and pursuit 0.4):
+
+| Type | In volume 1 | Fires |
+|---|---|---|
+| Routine interaction | the dart bar (13–18), the crosswalk (11–12), walking with Index (8) | conversation and blocking |
+| Confrontation | 21–22, 25–31, 40 | choreography |
+| Pursuit / traversal | the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34) | journeys at scale |
+| Mediated exchange | phone calls (12, 29, 33), through a door (42–43) | conversation by channel (pulls nobody) |
+| Interior flow | 18, 36, the narration and thought stretches | damps the world: no implied moves, no drift, camera close |
+| Exposition | the Board (37), R&C Occultics (39) | nothing staged |
+| Establishing / ambience | the openings of 1, 2, 10, 45; crowds, weather | ambience: the crowd field, set dressing |
+| Memory / flashback | 35 | played outside the present world |
+| Spectacle / catastrophe | the ground splits, floods, collapses (21, 22, 26, 27) | choreography's destruction, at the scene's scale |
+
+**The gate.** A type's density over a span is its expected share (summed from the distributions, not the top answer),
+against the book's baseline (its mean and spread). A faculty turns on above mean + kσ and off below a lower line
+(hysteresis), runs a minimum span with a margin either side; several can be on at once. A hidden Markov model over the
+block types, Jev's distributions as soft observations (as `occupation.mjs` does for presence), smooths them; its change
+points are the beats, where the camera may cut.
+
+**The faculties** (merged from the nine first proposed):
+
+- Always on, once per scene: the **scene frame and camera**: the set as a path down the place tree, the scale band (a
+  room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km), who is on stage, how it follows the scene before; the
+  shot per beat (close, medium, wide, aerial) and the scale of Jev's pictures. Everyone present starts inside the set;
+  facts resolve against it ("indoors" is this building).
+- Always on, slim: the **generalist**, today's summarizer trimmed to stated moves, facts and items (stated moves occur
+  in every kind of block).
+- Fired: **journeys** (pursuit: from, via and to as places of the tree, a manner, a distance, routed on the place graph,
+  Jev confirming on a picture at the journey's scale); **choreography** (confrontation, catastrophe: steps, dodges,
+  impacts, what breaks); **conversation and blocking** (routine interaction, mediated exchange: groups, formations,
+  channels); **ambience** (establishing: the crowd as a density field of the place with its make-up and flow, set
+  dressing).
+- No faculty: interior flow, exposition and memory only damp the world.
+
+**Cost.** About 1.3–1.5× W9's work-model use (some $0.15–0.35 a volume); block types ride in Jev's kinds pass. Jev
+reports its tokens with each answer (`usage.jev.reported`), so runs can price Jev too once its rate is known.
+
+**Order.** 1. Keep the kind distributions in the reading (volume 1's from the cache, free). 2. The block-type question
+in the kinds pass: three scenes first, then volume 1 (about 56 requests). 3. Density, smoothing and the gate, with a
+strip in the Dev panel (the types over the book, the faculties firing) to check against the text before anything plays
+from it. 4. The scene frame and camera. 5. The fired faculties one at a time, each measured on volume 1 (camera jumps
+over 40 m from 31 toward none; scene 26 and scene 3 at their real distances; L6 down from 85). The page:
+[summarizer-faculties.html](summarizer-faculties.html).
+
 ### Order of work (Track A)
 
 1. A1, the card digest, for every action and dialogue card of volume 1: one work-model request per card (cents for the

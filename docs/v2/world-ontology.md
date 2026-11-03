@@ -315,6 +315,11 @@ region terms in the smoother itself (today the implied move is the observation).
 
 ### Routine motion
 
+Next ([next-steps.md](next-steps.md) A4, proposed 2026-11-03): the summarizer as faculties fired by block types, each
+an instrument for its own observable at its own scale, measuring only where Jev's block-type distribution says that
+observable is active.
+
+
 - Graded moves are played by rule (no question); going elsewhere is asked of Jev on the pictures with the digest beside
   the text; a pair going together: the one carried follows, else the first named leads.
 - The scene digest gives each person's routine and the crowd: those strolling or walking go on along the scene's way
