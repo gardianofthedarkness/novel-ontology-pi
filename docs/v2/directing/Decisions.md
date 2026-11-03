@@ -170,3 +170,29 @@ box on a plan, then the exact box and lettered heights from the side).
     landmark question (as now), or test the pair before W10.
 24. **How the turns combine**: a plain product, or each turn weighed by Jev's sureness (equal with 16 cases). *Your
     call:* more cases first, or the plain product.
+
+## Decision 21, answered by smoothing (2026-11-03)
+
+"All our time space physics work on strand basis. If a ground truth came in and physics disagrees, Bayesian smoothing is
+applied to back propagate the sampled likely path … If problems are met, the first thing you think of whether this is
+something the physics didn't cover, or the back propagation least action definition didn't converge."
+
+Read that way, decision 21 was both: L16 was built as a cut outside the action that overrode L1 (the strands' "same place,
+straight on"), and the smoother never saw the frame, nor ran in a rehearsal. Now someone the strands carry straight on
+stays where they stood; the frame is a term of the action (S_frame, [world-ontology §5a](../world-ontology.md)); the
+rehearsal smooths each pass, and a second pass plays from the first one's smoothing (`rehearsal.mjs --passes 2`).
+
+The whole volume, unpaid, two passes (20 minutes each):
+
+| | Second rehearsal | Pass 1 (L1 first) | Pass 2 (from pass 1's smoothing) |
+|---|---|---|---|
+| Arrivals off-page | 73 | 55 | **13** |
+| Carried straight on, outside the frame | — | 19 | 18 |
+| Scene starts the smoothing moves | — | 136 | 118 |
+| Camera jumps over 40 m | 24 | 20 | 20 |
+
+**Not converged yet:** 35 scene starts stay more than 8 m outside their frame after smoothing (the frame term moved the
+total only from 6,789 m outside to 6,515 m), some far (915 m in scene 11, 492 m in scene 39). The cause is the search
+space, not the action: a moment's cloud is the 48 spots nearest where it was played, so a frame hundreds of metres away is
+not among the places the smoother may put them. The fix is to add the frame's own spots to a scene start's cloud, as a
+talk partner's place is added.

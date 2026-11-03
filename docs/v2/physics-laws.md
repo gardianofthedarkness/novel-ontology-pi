@@ -289,10 +289,17 @@ gives, or of the smoothing. Human scale (a body, an arm's reach) is the only uni
 
 | Law | Says | Replaces |
 |---|---|---|
-| **L16 · Presence in the frame** | Someone in a scene stands within its frame: the extent the scale reader names (a room, a street, a block, a landmark's reach) as measured in the world. Outside it, they are elsewhere, and come in by L5/L17 | the 80 m gathering |
+| **L16 · Presence in the frame** | Someone in a scene stands within its frame: the extent the scale reader names (a room, a street, a block, a landmark's reach) as measured in the world. Outside it, they are elsewhere, and come in by L5/L17. **Under L1, and as an observation** (the user, 2026-11-03: the time-space physics is per strand; where a strand's ground truth and a law disagree, smoothing settles it): someone the strands carry straight on in the same place stays where they stood, and the frame is a term of the action (S_frame, [world-ontology.md](world-ontology.md) §5a) that pulls their track toward it by least change | the 80 m gathering |
 | **L17 · Displacement** | Every move covers its way's speed times the time it takes: the story's clock between scenes, or a card's share of its beat's duration (the scale reader says how long a beat lasts). Drift, a stroll, a walk-in are this | 2–4 m drift spans, the 300 m walk-in |
 | **L18 · Tunnelling and destruction as a state** | A body may cross matter only where that matter is destroyed at that time. Destruction is a hidden state of each building part (intact, damaged, gone) with a distribution over time, observed by the text's breaks and by paths that cross it, and smoothed forward and backward like positions: a later line that shows a wall already gone revises when it went, and the path through it | blasts applied once, forward only |
 | **L19 · Elastic terrain** | Where the story's time cannot carry someone between two places at any way their abilities allow (L5, the abilities review), the places themselves are latent: the terrain's specs, configs and vectors may move them nearer, at the cost of their own prior, smoothed with everything else. The city is part of back-propagation | a fixed city that makes the story impossible |
 
 Order: L16 and L17 now (they replace constants the director has); L18 once W10's paths and blasts are recorded as
 smoothable states; L19 after, since moving the city changes every path in it.
+
+**How a disagreement is read** (the user, 2026-11-03). When a law and the strands' ground truth disagree, two questions
+come first, before any new rule: is it something the physics does not cover (a law missing from the action, or built
+as a cut instead of a term), or did the least-action back-propagation not run or not converge? L16 was the first kind:
+built as a cut in the director, it sent 16 people the strands carried straight on off-page in the second rehearsal, and
+the smoother never saw the frame (nor ran at all: a stand-in's run skipped it). It is now a term, and the rehearsal
+smooths each pass and can play a second from the first one's smoothing.

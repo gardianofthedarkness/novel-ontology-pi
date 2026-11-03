@@ -2,12 +2,15 @@
 // research handoff "Trap reconstruction", 2026-11-02): every person a particle whose place at each moment is a cloud,
 // smoothed over a director run with the action we define,
 //
-//   S = S_walk + S_seen + S_talk
+//   S = S_walk + S_seen + S_talk + S_frame
 //
 //   S_walk   moving between moments: metres (a floor as three) over the person's drive and the moments between;
 //   S_seen   where the run had them, as tight as how it came to be (pinned, stated, met, answered, ruled): the history as
 //            played is itself an observation, so least change is this term, as strong as its rank;
 //   S_talk   a line face to face puts its speaker within reach of whom they speak to (public, within earshot).
+//   S_frame  at a scene's start, the frame the reader gave its first beat (L16: the room, the street, measured round the
+//            cast): someone outside it is pulled toward it as the reader's answer is trusted (the user, 2026-11-03: where
+//            the strand's ground truth and a law disagree, smoothing settles it, not a rule).
 //
 // Forward-backward over each moment's cloud in log space gives each moment's posterior (α·β) and the least-action history
 // (Viterbi); talk couples two people's clouds, so it is run twice, each person against the other's smoothed place. A
@@ -49,7 +52,9 @@ export function momentsOf({ page, log, record, reading = null }) {
     for (const event of scene.events) for (const move of event.moves) for (const path of [move.path, ...(move.ensemble ?? [])]) for (const node of path ?? []) spots.add(node);
     spotsOf.set(entry.scene, [...spots]);
     const now = Object.fromEntries(Object.entries(scene.starts).filter(([, node]) => node != null));
-    for (const [who, node] of Object.entries(now)) add(who, { scene: entry.scene, card: null, node, rank: rankOf.get(`${entry.scene}|start|${who}`) ?? 'ruled', draws: [], talk: [] });
+    // The scene's frame (L16), measured round its cast by the director: its middle and half its width.
+    const frame = entry.frame?.middle ? { x: entry.frame.middle.x, z: entry.frame.middle.z, r: entry.frame.metres / 2 } : null;
+    for (const [who, node] of Object.entries(now)) add(who, { scene: entry.scene, card: null, node, rank: rankOf.get(`${entry.scene}|start|${who}`) ?? 'ruled', draws: [], talk: [], ...(frame ? { frame } : {}) });
     const cardOf = new Map(entry.cards.map(card => [card.event, card]));
     scene.events.forEach((event, index) => {
       const card = cardOf.get(index), cardId = card?.card ?? event.id;
@@ -104,7 +109,9 @@ function smoothOne(list, { decode, drive, placeOf }) {
       const over = Math.max(0, metres(spot.at, other.at) - entry.reach), near = over * over / (2 * pull * pull);
       return sum + (entry.known || moment.pinned ? near : -Math.log(LIVE_PRIOR * Math.exp(-near) + (1 - LIVE_PRIOR)));
     }, 0);
-    return -(seen + talk);
+    // Outside the frame, as far as the reader's answer is trusted (S_frame).
+    const over = moment.frame ? Math.max(0, Math.hypot(spot.at.x - moment.frame.x, spot.at.z - moment.frame.z) - moment.frame.r) : 0;
+    return -(seen + talk + over * over / (2 * RANK_SIGMA.answered ** 2));
   }));
   // Between two moments of one scene, or a scene they enter at the same place (the strands' samePlace), one step; into
   // another scene of the strand, the time a scene change allows.
@@ -126,6 +133,7 @@ function smoothOne(list, { decode, drive, placeOf }) {
     const map = clouds[k][path[k]];
     // The observation as it went in (where played, how much it was trusted, whom it was coupled to) beside what came out.
     return { scene: moment.scene, card: moment.card, rank: moment.rank, sigma: RANK_SIGMA[moment.rank] ?? RANK_SIGMA.ruled, talk: moment.talk.map(entry => ({ with: entry.with, reach: entry.reach, known: !!entry.known })), ...(moment.pinned ? { pinned: true } : {}), draws: moment.draws.length,
+      ...(moment.frame ? { frame: { r: moment.frame.r, played: Math.round(Math.max(0, Math.hypot(moment.at.x - moment.frame.x, moment.at.z - moment.frame.z) - moment.frame.r) * 10) / 10, map: Math.round(Math.max(0, Math.hypot(map.at.x - moment.frame.x, map.at.z - moment.frame.z) - moment.frame.r) * 10) / 10 } } : {}),
       played: { node: moment.node, ...moment.at }, map: { node: map.node, ...map.at }, mean, spread: Math.round(spread * 10) / 10, shift: Math.round(metres(map.at, moment.at) * 10) / 10,
       cloud: clouds[k].map((spot, a) => ({ node: spot.node, ...spot.at, w: weights[a] })).sort((a, b) => b.w - a.w).slice(0, KEEP).map(spot => ({ ...spot, w: Math.round(spot.w * 1000) / 1000 })) };
   });

@@ -258,7 +258,7 @@ every way on to the targets) is the backward message of a smoother: a moment's c
 backward one, α·β, the handoff's forward-backward (its §5 and the Gaussian smoother of its §12). **We define the
 action**, and the posterior of a history is e^(−S/T) of it:
 
-S = S_walk + S_seen + S_talk + S_events
+S = S_walk + S_seen + S_talk + S_frame + S_events
 
 - **S_walk**, the walk: the effort of moving between moments (metres, a floor as three), at each person's own
   temperature, their *drive* (the unmeasurable motivation: how far and how fast they go), estimated from how they move.
@@ -268,6 +268,10 @@ S = S_walk + S_seen + S_talk + S_events
   the stronger observations ask.
 - **S_talk**, the couplings: a face-to-face line puts its speaker within reach of whom they speak to; a public one,
   within earshot (iterated between the two clouds).
+- **S_frame**, the scene's frame (L16; the user, 2026-11-03): at a scene's start, the extent the scale reader gave its
+  first beat, measured round the cast; someone outside it is pulled toward it as far as the reader's answer is trusted
+  (σ 8 m, an answer's rank), one-sided (inside costs nothing). Someone the strands carry straight on is played where they
+  stood (L1); their distance outside the frame is the disagreement this term back-propagates along their chain.
 - **S_events**, events at their rates (a blast, an entrance, an exit), the handoff's marked point process; not a penalty
   on a path.
 

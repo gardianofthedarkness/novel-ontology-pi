@@ -63,3 +63,20 @@ test('continuity is by strand: a person\'s moments chain only along the strands\
   assert.ok(apartStrands.people.a[0].shift < 0.5, 'its own strand: s0 untouched by s1');
   assert.deepEqual(oneStrand.chains.a, [['s0', 's1']]);
 });
+
+test('the frame is an observation (S_frame): someone the strand carries straight on, outside the next scene\'s frame, is pulled toward it by least change', () => {
+  // s1: a walks 40 m off; s2 continues s1 in the same place, its frame 10 m wide round b at x = 0.
+  const page = { world, scenes: [
+    { id: 's1', starts: { a: node(0), b: node(0) }, events: [{ id: 'e1', moves: [{ person: 'a', path: walkTo(0, 40) }] }] },
+    { id: 's2', starts: { a: node(40), b: node(0) }, events: [] }] };
+  const record = { scenes: [{ scene: 's1', cards: [{ card: 'action:x', event: 0, kind: 'action' }] }, { scene: 's2', cards: [], frame: { referent: 'the room', metres: 10, middle: { x: 0, y: 0, z: 1 } } }] };
+  const log = [{ kind: 'presence', scene: 's1', who: 'a', rank: 'stated' }, { kind: 'presence', scene: 's1', who: 'b', rank: 'stated' }];
+  const strands = { scenes: [{ id: 's1', fork: 'f', entries: [{ person: 'a', from: null }, { person: 'b', from: null }] }, { id: 's2', fork: 'f', continues: 's1', entries: [{ person: 'a', from: 's1', samePlace: true }, { person: 'b', from: 's1', samePlace: true }] }] };
+  const framed = smoothRun({ page, log, record, strands });
+  const start = framed.people.a.find(moment => moment.scene === 's2' && moment.card === null);
+  assert.equal(start.frame.played, 36, 'played 36 m outside the frame (at the node\'s middle)');
+  assert.ok(start.frame.map < start.frame.played, `pulled toward it: ${start.frame.map} m outside`);
+  assert.ok(framed.people.a.find(moment => moment.card === 'action:x').shift > 0, 'and the walk before it bends too: back-propagated along the strand');
+  const unframed = smoothRun({ page, log, record: { scenes: record.scenes.map(({ frame, ...rest }) => rest) }, strands });
+  assert.ok(unframed.people.a.find(moment => moment.scene === 's2').shift < 0.5, 'without the frame, nothing moves');
+});

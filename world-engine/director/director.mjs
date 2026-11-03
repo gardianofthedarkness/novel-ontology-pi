@@ -67,7 +67,7 @@ export async function readerView(reading, text) {
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
 }
 
-export async function direct(novelDir, { reading, readingPath = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, digest = true, speakers = true, log = console.error }) {
+export async function direct(novelDir, { reading, readingPath = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, digest = true, speakers = true, smoothing = null, log = console.error }) {
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -110,7 +110,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   const lastRecord = lastRun ? JSON.parse(await readFile(join(out, 'run.json'), 'utf8').catch(() => 'null')) : null;
   const oldRecord = lastRecord && `d${String(lastRecord.startedAt).replace(/\D/g, '').slice(0, 14)}` === lastRun ? lastRecord : null;
   const strandsNow = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'strands.json'), 'utf8').catch(() => 'null'));
-  const smoothed = oldPage && oldRecord && oldLog.length ? SM.smoothRun({ page: oldPage, log: oldLog, record: oldRecord, reading, strands: strandsNow, pins }) : null;
+  // A rehearsal may pass a smoothing in (rehearsal.mjs: the run before it smoothed, back-tested a second pass).
+  const smoothed = smoothing ?? (oldPage && oldRecord && oldLog.length ? SM.smoothRun({ page: oldPage, log: oldLog, record: oldRecord, reading, strands: strandsNow, pins }) : null);
   // Each scene start the smoothing moved: where the least-action history has them, unless the review kept the history.
   const startsMoved = new Map((smoothed?.revisions ?? []).filter(revision => revision.card === null).map(revision => [`${revision.scene}|${revision.who}`, revision]));
   const onStage = OC.occupation({ reading, script: JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8').catch(() => '{"scenes":[]}')), strands: strandsNow, pins });
@@ -376,11 +377,19 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // Presence in the frame (L16; M4, then the user, 2026-11-03: no hard-coded distance): someone carried in stands in the
         // scene only within its frame, the referent its first beat takes in, measured round the cast's middle (volume 1,
         // scene 40: someone carried in from scene 1's roof, 460 m away, is not in it). Outside it, they come from elsewhere.
+        // Except whom the strand carries straight on (L1 first; the user, 2026-11-03: the time-space physics is per strand, and
+        // where the strand's ground truth and a law disagree, smoothing settles it): someone the strands have in the same
+        // place, from the scene this one continues, stays where they stood. The frame is the reader's answer, an observation:
+        // how far outside it they stand is recorded with the frame, and the smoother (S_frame) pulls their track toward it by
+        // least change, so the next pass starts them where the least-action history has them.
+        const strandHere = strandScene.get(scene.id), straightOn = who => { const entry = strandHere?.entries?.find(item => item.person === who); return !!(entry?.samePlace && entry.from && entry.from === strandHere.continues); };
         const carriedIn = present.filter(who => was.get(who) && inside(was.get(who)[0]));
         const middle = carriedIn.length ? [0, 1, 2].map(axis => { const values = carriedIn.map(who => at(was.get(who)[0])[axis]).sort((a, b) => a - b); return values[Math.floor(values.length / 2)]; }) : null;
         const frameMetres = middle && firstScale ? measure(firstScale.frame, middle) : null;
-        if (frameMetres) sceneRecord.frame = { ...firstScale.frame, metres: Math.round(frameMetres) };
-        const here = carriedIn.filter(who => { if (!frameMetres) return true; const p = at(was.get(who)[0]); return Math.hypot(p[0] - middle[0], p[2] - middle[2]) <= frameMetres / 2; });
+        if (frameMetres) sceneRecord.frame = { ...firstScale.frame, metres: Math.round(frameMetres), middle: { x: Math.round(middle[0]), y: Math.round(middle[1]), z: Math.round(middle[2]) } };
+        const gap = who => { const p = at(was.get(who)[0]); return Math.hypot(p[0] - middle[0], p[2] - middle[2]); };
+        const here = carriedIn.filter(who => !frameMetres || straightOn(who) || gap(who) <= frameMetres / 2);
+        if (frameMetres) { const outside = here.filter(who => gap(who) > frameMetres / 2).map(who => ({ who, metres: Math.round(gap(who) - frameMetres / 2) })); if (outside.length) sceneRecord.frame.outside = outside; }
         if (here.length < carriedIn.length) sceneRecord.gathered = carriedIn.filter(who => !here.includes(who));
         let anchor = null;
         if (here.length) {
