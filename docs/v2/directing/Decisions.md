@@ -157,3 +157,16 @@ background's drift halved (now speed times the beat's time), 22 talks recognized
 22. **L5 rarely has a clock to check against**: volume 1's scenes mostly state "late night", not a time, so the walk-in
     travel check never fired. *Your call:* read story time's periods as spans (late night: 22:00–04:00) so L5 and L19
     have something to work with.
+
+## v1's two turns (2026-11-03)
+
+"You should be able to find the two turn height locking design in v1. Quantum applied to boxes." Found
+(`two-view-things.mjs`: find by a choice, lock from a second turn at right angles) and tested ([Pick test](Pick-test.md),
+16 more requests): the side view locks height (1/6 on the map, 6/6 with it), two turns 81% with pictures alone. The
+landmark question now asks both turns and multiplies their distributions. The director's boxes already had it (a rough
+box on a plan, then the exact box and lettered heights from the side).
+
+23. **Words and two turns together are untested.** Words alone 94%, two turns alone 81%. *Your call:* keep both on the
+    landmark question (as now), or test the pair before W10.
+24. **How the turns combine**: a plain product, or each turn weighed by Jev's sureness (equal with 16 cases). *Your
+    call:* more cases first, or the plain product.

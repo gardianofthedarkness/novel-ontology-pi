@@ -49,7 +49,7 @@ Asked in `src/v2/context/directorModes.ts`, mode `moveDirectionMode` (run here o
 
 Asked in `world-engine/director/director.mjs (megaMove, M6)`.
 
-**Picture**: top-down map at the journey's reach, north up, the mover at its middle, the twelve tallest buildings within reach lettered on red spheres.
+**Picture**: turn 1: a top-down map at the journey's reach, north up, the mover at its middle, the twelve tallest buildings within reach lettered on red spheres; turn 2 (v1's height lock): the same letters from the side at two turns, almost level, a pole as a ruler; the answer is the product of the two turns' distributions.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|

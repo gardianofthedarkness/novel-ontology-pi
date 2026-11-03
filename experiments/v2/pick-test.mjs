@@ -5,7 +5,12 @@
 //   plain      the map, its buildings lettered on red spheres, you marked;
 //   vectors    the same, with an arrow drawn from you to each building;
 //   semantic   the same plain map, each letter described in words (floors, how far, which way on the map);
-//   thumbnails the same plain map, and a small close-up picture of each building.
+//   thumbnails the same plain map, and a small close-up picture of each building;
+//   two turns  v1's two-turn lock (two-view-things.mjs, docs/stage-simulation-design.md; the user, 2026-11-03: "the two
+//              turn height locking design in v1. Quantum applied to boxes"): turn 1 the plain map (a measurement of
+//              where), turn 2 the same lettered buildings from the side at two turns (a measurement of how high), and
+//              the answer the product of the two turns' whole distributions, each turn collapsing what the other cannot
+//              see; "side view" is turn 2 alone.
 // Paid: one Jev request a case and way. Cached (stage/pick-test/cache in the workspace given), so a rerun is free.
 //   JEV_MODEL=jev-1.14.0 node experiments/v2/pick-test.mjs <copy of novel-dir> --scenes scene_000001,scene_000026 [--out report.json]
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -14,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
-const CELL = 2, FLOOR = 3, CANDIDATES = 6, WAYS = ['plain', 'vectors', 'semantic', 'thumbnails'];
+const CELL = 2, FLOOR = 3, CANDIDATES = 6, WAYS = ['plain', 'vectors', 'semantic', 'thumbnails'], TWO = ['side view', 'two turns', 'two turns, by sureness'];
 
 /** The right answer of each question over candidates [{ letter, p: [x, y, z], floors, d }] seen from `here`. */
 export function answers(here, candidates) {
@@ -72,6 +77,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           const vectors = await shoot(`${slug}-vectors`, [1024, 1024], { ...base, arrows: candidates.map(entry => ({ at: [here[0], 1, here[2]], vector: [entry.p[0] - here[0], 0, entry.p[2] - here[2]], letter: entry.letter, color: '#ffd36e', length: entry.d * 0.92 })) });
           const thumbs = {};
           for (const entry of candidates) { const lot = world.lots[entry.index], size = Math.max(lot.nx, lot.nz) * CELL; thumbs[`building_${entry.letter}`] = await shoot(`${slug}-thumb-${entry.letter}`, [384, 288], { place: scene.placeId, only: [scene.placeId], at: 0, focus: { x: entry.p[0], z: entry.p[2], y0: 0, w: size, d: size, h: entry.floors * FLOOR }, radius: Math.max(size, entry.floors * FLOOR) * 0.8, elevation: 30, mask: false, spheres: [{ x: entry.p[0], y: entry.floors * FLOOR + 3, z: entry.p[2], r: Math.max(2, size / 6), label: entry.letter, labelScale: Math.max(1, Math.max(size, entry.floors * FLOOR) / 40) }] }); }
+          // Turn 2's pictures: the candidates and you from two turns (−45° and +45°, as v1's), almost level.
+          const mid = [0, 2].map(axis => [here, ...candidates.map(entry => entry.p)].reduce((sum, p) => sum + p[axis], 0) / (candidates.length + 1)), spread = Math.max(...[here, ...candidates.map(entry => entry.p)].map(p => Math.hypot(p[0] - mid[0], p[2] - mid[1]))), tallest = Math.max(...candidates.map(entry => entry.floors)) * FLOOR;
+          // The marks scale with how far back the camera stands (a 590 m spire puts it far), so every letter reads.
+          const sideRadius = Math.max(spread * 1.25, tallest * 0.7), mark = sideRadius / 40;
+          const roofs = [...candidates.map(entry => ({ x: entry.p[0], y: entry.floors * FLOOR + mark, z: entry.p[2], r: mark, label: entry.letter, labelScale: mark / 1.2 })), { x: here[0], y: mark, z: here[2], r: mark * 0.8, label: 'You', labelScale: mark / 1.2, outline: true }];
+          const sides = {};
+          for (const [name, yaw] of [['side_a', -45], ['side_b', 45]]) sides[name] = await shoot(`${slug}-${name}`, [1440, 900], { place: scene.placeId, only: [scene.placeId], at: 0, focus: { x: mid[0], z: mid[1], y0: 0, w: 2 * spread, d: 2 * spread, h: tallest }, radius: sideRadius, yaw: yaw * Math.PI / 180, elevation: 12, mask: false, spheres: roofs, poles: [{ x: here[0], z: here[2] }] });
           const about = `A top-down map of part of a city, north up, ${Math.round(half * 2)} m across. You are at the white sphere marked You at its middle. Lettered red spheres mark ${candidates.length} buildings.`;
           for (const [question, right] of Object.entries(truth)) {
             if (!right) continue;
@@ -83,12 +95,25 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
               results.push({ scene: scene.id, spot: k, question, way, right, picked: reply?.value ?? null, confidence: reply?.confidence ?? null, correct: reply?.value === right });
               console.error(`${slug} ${question} ${way}: ${reply?.value} (right ${right})`);
             }
+            // Two turns: the plain map's answer (asked above, from the cache) times the side view's, over the letters.
+            const letters = candidates.map(entry => entry.letter), question_ = { key: 'pick', primitive: 'choice', instructions: QUESTIONS[question], options: letters };
+            const [first] = await jev.decide(about, [question_], { images: { map: plain } });
+            const [second] = await jev.decide(`The same ${candidates.length} buildings seen from the side, from two turns (pictures side_a and side_b), looking almost level so their heights stand side by side; each lettered on a red sphere over its roof, you marked by the white sphere marked You, a white pole beside you marked at 10, 20, 40 and 60 m.`, [question_], { images: sides });
+            const share = (answer, letter) => answer?.distribution?.[letter] ?? (answer?.value === letter ? answer.confidence ?? 0.5 : (1 - (answer?.confidence ?? 0.5)) / (letters.length - 1));
+            const joint = letters.map(letter => [letter, Math.max(1e-3, share(first, letter)) * Math.max(1e-3, share(second, letter))]), total = joint.reduce((sum, [, p]) => sum + p, 0), best = joint.sort((a, b) => b[1] - a[1])[0];
+            results.push({ scene: scene.id, spot: k, question, way: 'side view', right, picked: second?.value ?? null, confidence: second?.confidence ?? null, correct: second?.value === right });
+            results.push({ scene: scene.id, spot: k, question, way: 'two turns', right, picked: best[0], confidence: Math.round(best[1] / total * 100) / 100, correct: best[0] === right });
+            // By sureness: each turn's distribution raised to Jev's confidence in it, so a turn that cannot see the answer
+            // (the side view, for where things lie on the ground) weighs less than one that can.
+            const tempered = letters.map(letter => [letter, Math.pow(Math.max(1e-3, share(first, letter)), first?.confidence ?? 0.5) * Math.pow(Math.max(1e-3, share(second, letter)), second?.confidence ?? 0.5)]), sum = tempered.reduce((acc, [, p]) => acc + p, 0), top = tempered.sort((a, b) => b[1] - a[1])[0];
+            results.push({ scene: scene.id, spot: k, question, way: 'two turns, by sureness', right, picked: top[0], confidence: Math.round(top[1] / sum * 100) / 100, correct: top[0] === right });
+            console.error(`${slug} ${question} side: ${second?.value}, two turns: ${best[0]} (right ${right})`);
           }
         }
       }
     } finally { await chrome.close(); server.server.close(); }
   } });
-  const table = Object.fromEntries(WAYS.map(way => { const of = results.filter(entry => entry.way === way); return [way, { cases: of.length, correct: of.filter(entry => entry.correct).length, accuracy: of.length ? Math.round(100 * of.filter(entry => entry.correct).length / of.length) : null, byQuestion: Object.fromEntries(Object.keys(QUESTIONS).map(question => { const q = of.filter(entry => entry.question === question); return [question, `${q.filter(entry => entry.correct).length}/${q.length}`]; })) }]; }));
+  const table = Object.fromEntries([...WAYS, ...TWO].map(way => { const of = results.filter(entry => entry.way === way); return [way, { cases: of.length, correct: of.filter(entry => entry.correct).length, accuracy: of.length ? Math.round(100 * of.filter(entry => entry.correct).length / of.length) : null, byQuestion: Object.fromEntries(Object.keys(QUESTIONS).map(question => { const q = of.filter(entry => entry.question === question); return [question, `${q.filter(entry => entry.correct).length}/${q.length}`]; })) }]; }));
   const report = { model: live.modelId, paid: usage.requests, table, results };
   if (values.out) await writeFile(resolve(values.out), JSON.stringify(report, null, 1));
   console.log(JSON.stringify({ paid: usage.requests, table }, null, 1));

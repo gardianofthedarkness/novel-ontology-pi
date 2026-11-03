@@ -385,7 +385,8 @@ world itself (destruction, the city's layout) is part of what is smoothed.
    speed times story time (L17).
 5. **A controlled test of Jev's picking**: on cases with a known answer, does Jev pick more precisely with vectors drawn
    in the picture, with semantic descriptions, or with small thumbnail references. **Run 2026-11-03** (64 Jev requests,
-   `experiments/v2/pick-test.mjs`, [Pick test](directing/Pick-test.md)): words 94%, vectors 63%, plain 56%, thumbnails 50%.
+   `experiments/v2/pick-test.mjs`, [Pick test](directing/Pick-test.md)): words 94%, vectors 63%, plain 56%, thumbnails 50%. Then v1's two-turn height lock (map, then side view; distributions
+   multiplied): 81% with pictures alone, height 6/6; the landmark question asks both turns since.
 6. **Tunnelling and destruction as a smoothed state** (L18), then **the city in back-propagation** (L19): designed, built
    after W10.
 
