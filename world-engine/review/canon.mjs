@@ -37,7 +37,7 @@ const foldById = rows => { const byId = new Map(); for (const row of rows) byId.
  * `record` (stage/director/run.json), `ledger` (the run's), `pins`, `scenes` and `events` (canon's, folded), `script`,
  * `strands`, `reading` (the v2 reading: roles for speakers).
  */
-export function canonOf({ run, record, ledger, pins, scenes, events, script, strands, reading, settled = [], entities = new Map(), world: placed = null, relations = [] }) {
+export function canonOf({ run, record, ledger, pins, scenes, events, script, strands, reading, settled = [], entities = new Map(), world: placed = null, relations = [], speakers = true }) {
   const out = [], world = { run };
   const settledOf = new Map(settled.map(entry => [entry.line, entry]));
   // A scene's place in canon: its own if named, else the nearest named one up the script's place tree.
@@ -55,7 +55,8 @@ export function canonOf({ run, record, ledger, pins, scenes, events, script, str
     const present = Object.keys(played.starts).filter(id => id.startsWith('char_')).sort();
     // Speakers as settled (speakers.mjs): the review's, the reading's or the world's; unknown where held. A line the run did
     // not play keeps the reading's sure speaker.
-    const turns = canon.sentenceIds.filter(id => reading.roles?.[id]?.kind === 'spoken').map(id => {
+    // A run without speakers keeps the turns canon has (the review's and the world's settled speakers stay).
+    const turns = !speakers ? canon.turns ?? [] : canon.sentenceIds.filter(id => reading.roles?.[id]?.kind === 'spoken').map(id => {
       const settledLine = settledOf.get(id), who = settledLine ? (settledLine.gate === 'applied' ? settledLine.who : null) : reading.roles[id].who?.id ?? null;
       const to = settledLine?.to ?? reading.roles[id].to?.id ?? null;
       return { speakerId: who && /^char_/.test(who) ? who : null, addresseeId: to && /^char_/.test(to) && played.starts[to] ? to : null, sentenceIds: [id], ...(settledLine ? { by: settledLine.by } : {}) };
@@ -184,7 +185,7 @@ export function speakerEntries(run, settled, start = 0) {
 export const routeOf = (pins, kind) => { const audit = pins.audits?.[kind]; return audit && audit.right + audit.wrong >= AUDIT_MIN && audit.wrong / (audit.right + audit.wrong) > AUDIT_LIMIT ? 'review' : null; };
 
 /** Run `run`'s canon records written (what passed its gate), each logged with what it replaced. Returns counts. */
-export async function toCanon(novelDir, { run, reading }) {
+export async function toCanon(novelDir, { run, reading, speakers = true }) {
   const ontology = join(novelDir, 'ontology');
   const [record, ledger, pins, scenes, events, script, strands] = await Promise.all([
     readJson(join(novelDir, 'stage', 'director', 'run.json')), readJsonl(join(novelDir, 'stage', 'world', 'ledger', `${run}.jsonl`)), readJson(join(novelDir, 'stage', 'world', 'pins.json'), {}),
@@ -193,14 +194,15 @@ export async function toCanon(novelDir, { run, reading }) {
   // Who says each line, settled by the world from where everyone stood when it was said (the run's page).
   const page = await readJson(join(novelDir, 'stage', 'simulation', 'runs', 'director', `${run}.page.json`));
   const peopleOf = new Map((reading.cards ?? []).map(card => [card.id, card.people ?? []]));
-  const settled = page ? settleSpeakers({ cards: playedLine({ record, page, reading }).cards, reading, pins, peopleOf: id => peopleOf.get(id) ?? [], route: routeOf(pins, 'speaker') }) : [];
+  // Without speakers (the user, 2026-11-03: a run on actions and items only), no line's speaker is settled or held.
+  const settled = page && speakers ? settleSpeakers({ cards: playedLine({ record, page, reading }).cards, reading, pins, peopleOf: id => peopleOf.get(id) ?? [], route: routeOf(pins, 'speaker') }) : [];
   const entities = foldById(await readJsonl(join(ontology, 'entities.jsonl'))), relations = await readJsonl(join(ontology, 'relations.jsonl'));
   const spawn = await readJson(join(novelDir, 'stage', 'world', 'spawn.json'));
   const placed = page ? worldPlaces({ page, spawn, script, record, arrivals: playedLine({ record, page, reading }).arrivals }) : null;
-  const records = canonOf({ run, record, ledger, pins: { notSpeaker: {}, ...pins }, scenes, events, script, strands, reading, settled, entities, world: placed, relations });
+  const records = canonOf({ run, record, ledger, pins: { notSpeaker: {}, ...pins }, scenes, events, script, strands, reading, settled, entities, world: placed, relations, speakers });
   // The speakers the director shows (its bubbles) and the review's share: settled ones in stage/world/speakers.json, held
   // ones and audits into the run's ledger.
-  await writeFile(join(novelDir, 'stage', 'world', 'speakers.json'), JSON.stringify({ version: 1, run, lines: Object.fromEntries(settled.filter(entry => entry.gate === 'applied' && entry.by !== 'reading').map(entry => [entry.line, { who: entry.who, by: entry.by }])) }), { mode: 0o644 });
+  if (speakers) await writeFile(join(novelDir, 'stage', 'world', 'speakers.json'), JSON.stringify({ version: 1, run, lines: Object.fromEntries(settled.filter(entry => entry.gate === 'applied' && entry.by !== 'reading').map(entry => [entry.line, { who: entry.who, by: entry.by }])) }), { mode: 0o644 });
   const ledgerFile = join(novelDir, 'stage', 'world', 'ledger', `${run}.jsonl`), already = new Set(ledger.filter(row => row.kind === 'speaker' || row.kind === 'audit').map(row => row.subject));
   const review = speakerEntries(run, settled.filter(entry => !already.has(entry.line)), ledger.filter(row => String(row.id).includes(':s')).length);
   // What canon could not take on its own (a building in two lots, a room on two floors, a container against canon's, a

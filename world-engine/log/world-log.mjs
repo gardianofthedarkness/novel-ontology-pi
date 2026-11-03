@@ -35,7 +35,7 @@ export function worldLog({ run, record, page, spawn, strands }) {
     if (spawned?.target) add({ kind: 'binding', strand, scene: scene.id, place: spawned.target.place ?? scene.place, target: spawned.target.kind, box: spawned.target.box, rank: 'ruled', source: 'spawn' });
     // Who is present at its start, and where, and why.
     for (const [who, node] of Object.entries(scene.starts)) {
-      if (node == null) continue;
+      if (node == null || who.startsWith('extra:')) continue;
       const at = point(decode(node)), before = last.get(who);
       let fields;
       if (sceneRecord.revised?.includes(who)) { const revision = record.revisions?.find(entry => entry.applied && entry.who === who && entry.scene === scene.id); fields = { how: 'revised', rank: 'ruled', source: 'smoothed', from: before?.id ?? null, ...(revision ? { metres: revision.metres } : {}) }; }
@@ -49,11 +49,13 @@ export function worldLog({ run, record, page, spawn, strands }) {
     const cardOf = new Map(sceneRecord.cards.map(card => [card.event, card]));
     scene.events.forEach((event, index) => {
       const card = cardOf.get(index), moves = card?.moves ?? [];
-      for (const move of event.moves) {
+      for (const move of event.moves.filter(entry => !entry.person.startsWith('extra:'))) {
         const said = moves.find(entry => entry.person === move.person && entry.moved), why = String(said?.why ?? '');
         const talk = why.startsWith('spoken to by '), together = why.startsWith('with ');
         const tie = talk || together ? Object.keys(scene.starts).find(id => page.people?.[id]?.name === why.replace(/^(spoken to by|with) /, '')) ?? null : null;
-        const fields = said?.pinned ? { rank: 'pinned', source: talk ? 'met (the review)' : 'the review' } : event.id.startsWith('arrive') ? { rank: 'ruled', source: 'walked in' } : talk ? { rank: 'ruled', source: 'talk' } : together ? { rank: 'answered', source: 'with' } : { rank: 'answered', source: 'answer', way: said?.direction ?? null };
+        // The summarizer's moves (graded, implied by a fact, the background's routine) carry their own source.
+        const fields = said?.pinned ? { rank: 'pinned', source: talk ? 'met (the review)' : 'the review' } : event.id.startsWith('arrive') ? { rank: 'ruled', source: 'walked in' } : talk ? { rank: 'ruled', source: 'talk' } : together ? { rank: 'answered', source: 'with' }
+          : why.startsWith('implied') ? { rank: 'answered', source: 'implied' } : why.startsWith('background') ? { rank: 'ruled', source: 'background' } : why.startsWith('digest') ? { rank: 'answered', source: 'digest', way: said?.direction ?? null } : { rank: 'answered', source: 'answer', way: said?.direction ?? null };
         last.set(move.person, add({ kind: 'position', strand, scene: scene.id, place: scene.place, card: card?.card ?? event.id, who: move.person, at: point(decode(move.path.at(-1))), how: move.how, metres: round(metresOf(move.path, decode)), from: last.get(move.person)?.id ?? null, ...(tie ? { ties: [tie] } : {}), ...fields }));
       }
       // An arrival the review pinned (no walk, they get there): where they are now, at the rank of the pin.

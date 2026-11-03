@@ -118,7 +118,7 @@ export async function latestRun(novelDir) {
  * Run `run`'s held items into the pool, one batch per scene in order of reach, at most `budget` new batches. Items the
  * pool has (asked before, answered or not) are not asked again. Returns the batches made and what was left.
  */
-export async function holdForReview(novelDir, { run = null, budget = 12, size = 10, name = null } = {}) {
+export async function holdForReview(novelDir, { run = null, budget = 12, size = 10, name = null, skip = [] } = {}) {
   const { loadPool, writePool, makeBatch } = await load('dist/src/cli/commands/extract/worldCommands.js');
   run ??= await latestRun(novelDir);
   if (!run) throw new Error('No director run to review: run the director first.');
@@ -131,9 +131,10 @@ export async function holdForReview(novelDir, { run = null, budget = 12, size = 
   const slots = readingPath ? (await readJson(readingPath, {}))?.slots ?? [] : [];
   const { identityProposals } = await import('./identity.mjs');
   const identities = identityProposals({ log, slots, strands }).map(({ a, b, why }) => ({ id: itemId(`identity|${[a, b].sort().join('|')}`), status: 'open', attempts: 0, at: new Date().toISOString(), kind: 'identity', scene: null, card: null, law: null, cards: [], lines: [], subjects: [a, b], names: [names(a), names(b)], question: `Are ${names(a)} (${a}) and ${names(b)} (${b}) the same person? The world never has them together: ${why.replace(/(char|slot)_[\d_]+/g, id => `${names(id)}`)}.`, options: ['same', 'different'], evidence: [why] }));
-  const fresh = [...heldItems({ ledger, notes, name: names }), ...identities].filter(item => !known.has(item.id));
+  // Kinds left out of this review (`skip`: a run without speakers leaves who says a line for later) stay in the pool, unasked.
+  const fresh = [...heldItems({ ledger, notes, name: names }), ...identities].filter(item => !known.has(item.id) && !skip.includes(item.kind));
   await writePool(novelDir, fresh);
-  const open = (await loadPool(novelDir)).filter(item => item.status === 'open');
+  const open = (await loadPool(novelDir)).filter(item => item.status === 'open' && !skip.includes(item.kind));
   const bundles = bundlesOf(open, { log, strands, budget });
   const batches = [];
   // A scene's bundle is one batch, or a few of at most `size` (v1 sent 8): an agent answers a batch in one sitting.

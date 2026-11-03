@@ -6,6 +6,10 @@
 // only drawing a box stays Jev's. Whichever answer is used goes to the law engine next (W2 logs, W4 decides).
 
 export const SYSTEM2_BELOW = 0.5;
+// Motion is kept (the user, 2026-11-03: routine and subtle movement lost): where Jev saw someone move or act and the work
+// model saw nothing, Jev's answer stands (W8: the work model took motion away 77 times on the pass, added it 28).
+const STILL = { show: 'none', moves: 'stays' };
+export const losesMotion = (key, jev, work) => { const tail = key.split('|').at(-1), still = STILL[tail]; return !!still && String(work) === still && String(jev) !== still; };
 const ANSWERABLE = new Set(['choice', 'noul', 'score']);
 
 const SYSTEM = [
@@ -53,10 +57,12 @@ export function withSystem2(jev, work, { below = SYSTEM2_BELOW, note = () => {} 
     const unsure = questions.filter(question => ANSWERABLE.has(question.primitive) && of(question.key) && (of(question.key).confidence ?? 1) < below);
     if (!unsure.length) return answers;
     const second = await workAnswers(work, state, unsure, options.images ?? {}).catch(() => []);
+    const kept = new Set();
     for (const question of unsure) {
       const first = of(question.key), other = second.find(answer => answer.key === question.key);
-      note({ key: question.key, asked: question.instructions, jev: { value: first.value, confidence: first.confidence ?? null }, work: other ? { value: other.value, confidence: other.confidence } : null, used: other ? 'work' : 'jev' });
+      if (other && losesMotion(question.key, first.value, other.value)) kept.add(question.key);
+      note({ key: question.key, asked: question.instructions, jev: { value: first.value, confidence: first.confidence ?? null }, work: other ? { value: other.value, confidence: other.confidence } : null, used: other && !kept.has(question.key) ? 'work' : 'jev', ...(kept.has(question.key) ? { kept: 'motion' } : {}) });
     }
-    return answers.map(answer => second.find(entry => entry.key === answer.key) ?? answer);
+    return answers.map(answer => (kept.has(answer.key) ? answer : second.find(entry => entry.key === answer.key) ?? answer));
   };
 }

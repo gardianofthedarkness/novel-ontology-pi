@@ -21,6 +21,8 @@ export interface MoveFocus {
   now: Record<string, string>;
   /** What each picture shows. */
   pictures: Record<string, string>;
+  /** The summarizer's reading of the scene and of this person's moves in the card (Track A), when there is one. */
+  digest?: Record<string, string>;
 }
 export interface DirectionFocus extends MoveFocus {
   /** Each arrow: its letter, and what it points at (the first thing it meets). */
@@ -40,6 +42,7 @@ const text = <F extends MoveFocus>(): Source<F, unknown>[] => [
   // The scene's other lines: ranked as given (nearest the card first), cut first when over budget.
   { name: "scene", key: "scene", quota: 40, ranked: true, collect: (focus) => focus.lines.map((line, n): Item => ({ id: line.id, score: 1 - n / 1000, fields: line.text })) },
   fixed<F>("now", (focus) => focus.now),
+  fixed<F>("digest", (focus) => focus.digest ?? {}),
   fixed<F>("pictures", (focus) => focus.pictures),
 ];
 const lead = (focus: MoveFocus) => `In scene ${Number(focus.scene.id.slice(-3)) || focus.scene.id} (${focus.scene.place}${focus.scene.when ? `, ${focus.scene.when}` : ""}), the card's lines (card) are being played. ${focus.mover.name} is the person asked about.`;

@@ -39,7 +39,8 @@ export function momentsOf({ page, log, record, reading = null }) {
   const out = new Map(), spotsOf = new Map(), readCard = new Map((reading?.cards ?? []).map(card => [card.id, card]));
   // Whom a line is said to: the reading's (its answer even when unsure), else whom its card says is addressed.
   const toOf = (line, cardId) => { const role = reading?.roles?.[line.id]; return role?.to?.id ?? (role?.to?.answer && role.to.answer !== 'none' ? role.to.answer : null) ?? readCard.get(cardId)?.people?.find(person => person.how.includes('addressed') && person.id !== line.who)?.id ?? null; };
-  const add = (who, moment) => (out.get(who) ?? out.set(who, []).get(who)).push(moment);
+  // The crowd's walkers (the director's extras) are scenery, never observations.
+  const add = (who, moment) => { if (!String(who).startsWith('extra:')) (out.get(who) ?? out.set(who, []).get(who)).push(moment); };
   for (const entry of record.scenes) {
     const scene = pageScene.get(entry.scene);
     if (!scene) continue;
