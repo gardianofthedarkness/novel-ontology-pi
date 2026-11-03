@@ -450,9 +450,14 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         };
         const nodeAt = id => { const p = at(id), found = around(p[0], p[2], 3).nodes.find(node => node.id === id); return describe(found ?? { id, x: p[0], y: p[1], z: p[2], type: 0, lot: -1 }); };
         let factsUpTo = -1, itemsUpTo = -1;
-        // What people carry as the scene begins (the scene digest).
-        for (const person of dg?.digest.people ?? []) for (const name of person.holding) {
-          if (!positions[person.who]) continue;
+        // What people carry as the scene begins (the scene digest). A thing someone here held before is drawn with them only
+        // if the scene says they still carry it (else it was left behind); someone elsewhere keeps what they hold.
+        const personNames = [...names.values()].filter(name => typeof name === 'string');
+        const carried = new Map((dg?.digest.people ?? []).map(person => [person.who, person.holding.filter(name => DG.isThing(name, personNames))]));
+        for (const thing of things.values()) if (dg && thing.holder && positions[thing.holder] && !(carried.get(thing.holder) ?? []).some(name => name.includes(thing.name) || thing.name.includes(name))) { thing.holder = null; thing.at = null; }
+        for (const [who, holding] of carried) for (const name of holding) {
+          if (!positions[who]) continue;
+          const person = { who };
           const id = `item:${name}`, thing = things.get(id) ?? things.set(id, { id, name, size: 0.5, holder: null, at: null, broken: false, placed: [], events: [] }).get(id);
           thing.holder = person.who; thing.at = null; thing.events.push({ scene: scene.id, card: null, event: 'held', who: person.who });
         }
@@ -533,7 +538,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // where they fell), broken. Each thing held by someone present is placed with them after every card they move.
           const carry = () => {
             const end = lastLine(card);
-            for (const entry of dg.items.filter(item => { const n = sentenceAt.get(item.sentence) ?? -1; return n > itemsUpTo && n <= end; })) {
+            for (const entry of dg.items.filter(item => { const n = sentenceAt.get(item.sentence) ?? -1; return n > itemsUpTo && n <= end && DG.isThing(item.item, personNames); })) {
               const id = `item:${entry.item}`, thing = things.get(id) ?? things.set(id, { id, name: entry.item, size: entry.size, holder: null, at: null, broken: false, placed: [], events: [] }).get(id);
               const holderAt = () => (thing.holder && positions[thing.holder] ? at(positions[thing.holder][0]) : null);
               if (['appears', 'held', 'picked-up', 'used'].includes(entry.event)) {

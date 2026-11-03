@@ -40,7 +40,7 @@ const SCENE_SHAPE = {
   where: 'where the scene plays: indoors or outdoors, the kind of place',
   continues: 'how it follows the scene before: carries straight on | later the same day | another day | elsewhere at the same time | a flashback',
   background: { doing: 'what the background is doing: one of ' + ACTIVITIES.join('|') + ', or none', crowd: 'none | few | many: people not named who are on stage', crowdDoing: 'what the crowd does, one of ' + ACTIVITIES.join('|') },
-  people: [{ who: '<person id>', doing: 'their routine through the scene when not acting: one of ' + ACTIVITIES.join('|'), start: 'where they are at the start (words)', end: 'where they are at the end (words)', holding: ['things they carry'] }],
+  people: [{ who: '<person id>', doing: 'their routine through the scene when not acting: one of ' + ACTIVITIES.join('|'), start: 'where they are at the start (words)', end: 'where they are at the end (words)', holding: ['objects they carry: short names in Chinese as the text calls them; not body parts, clothes worn, or people'] }],
   memory: 'what the next scene needs to know: who is where, with whom, heading where, carrying what, hurt or not, what is going on (under 80 words)',
 };
 const WINDOW_SHAPE = {
@@ -51,6 +51,11 @@ const WINDOW_SHAPE = {
   breaks: [{ sentence: '<sentence id>', what: 'what is destroyed', sure: '0..1' }],
   background: [{ sentence: '<sentence id>', who: '<person id, or crowd>', doing: ACTIVITIES.join('|') }],
 };
+
+// Not things: body parts (the digest named hands and fingertips as items).
+const BODY = /^(左|右|双)?(手|手指|指尖|手掌|手臂|胳膊|脚|腿|头|脸|眼睛|嘴|身体|肩膀|腰|拳头?)$/;
+/** Whether an item's name is a thing someone can carry: not a body part, not a person (`people`: their names), named in Chinese. */
+export const isThing = (name, people = []) => !!name && !BODY.test(name) && !/[A-Za-z]/.test(name) && !people.includes(name);
 
 const parsed = text => { try { return JSON.parse(String(text).replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { return null; } };
 const sure = value => Math.max(0, Math.min(1, Number(value) || 0));

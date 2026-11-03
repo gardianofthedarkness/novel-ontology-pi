@@ -54,3 +54,8 @@ test('system 2 keeps motion: the work model may not take a move away', () => {
   assert.equal(losesMotion('moves', 'stays', 'goes'), false);
   assert.equal(losesMotion('direction', 'A', 'stays'), false);
 });
+
+test('things are objects: not body parts, people, or names in English', async () => {
+  const { isThing } = await import('./digest.mjs');
+  assert.deepEqual(['手机', '右手', '指尖', '幼女', '幼女的书包', 'a phone', '幼女 in a car', '伞'].map(name => isThing(name, ['幼女', '御坂美琴'])), [true, false, false, false, true, false, false, true]);
+});
