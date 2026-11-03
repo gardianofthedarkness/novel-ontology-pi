@@ -5,6 +5,14 @@ tags: ["directing", "decisions"]
 ---
 # Decisions needed
 
+**Where things stand (2026-11-03).** M1–M8 are built, each tried with the stand-in Jev and a work model answering by
+rule; the whole volume rehearsed unpaid end to end (`world-engine/director/rehearsal.mjs`, 25 minutes): every scene
+played with a cast, no move into a basement, 96 beats scaled, 38 journeys, fights exchange by exchange; camera bounces
+(out over 40 m and back within three cards) 5, against W9's 12. Paid so far for M2: 56 Jev requests (block types).
+What only a paid run can show: whether Jev, given the wider pictures and the readers' claims, chooses well (8, 14).
+The tests: 52 world-engine tests and 790 of 792 TypeScript tests pass (the two: an existing `/var` against
+`/private/var` path check, and the faculty flow, fixed since).
+
 What building M2–M8 turned up that is yours to decide. Each says what was found, what was done for now, and the choice.
 Newest last. Back to [Directing](Directing.md).
 
@@ -74,3 +82,12 @@ Newest last. Back to [Directing](Directing.md).
     a small paid run of scenes 11–17 first (the crosswalk, the phone call, the dart bar).
 15. **Formations are placed by rule round the group's middle**, not asked of Jev (the proposed room-plan question is not
     built). *Your call:* enough for W10, or build the formation question on a room plan for the dart bar's kind of scene.
+
+## From the rehearsal (2026-11-03)
+
+16. **Six camera jumps happen within a beat with no long move:** someone far joins the group on screen (a talk pulls
+    the addressee 150 m to the speaker in scene 3; a stated "indoors" fact moves someone). *Your call:* frame only the
+    beat's first group until its members arrive, or keep framing everyone taking part.
+17. **The background's routine moves most:** 1,317 of 2,194 moves in the rehearsal are routine drift (the rule-made
+    digest has everyone walking or standing). The real digest decides who walks, so W10 will differ; it is the knob for
+    how busy scenes look. *Your call:* keep the drift spans (strolling 2–4 m, walking 3–6 m a card), or calm them.
