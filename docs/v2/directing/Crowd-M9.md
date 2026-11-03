@@ -52,12 +52,40 @@ cloud tied to the place.
   a crowd is mentioned: one work-model request a fired stretch, for the crowd's size, state, focus and hazard, each
   with how sure. Jev is not needed for it.
 
+## The field acts on the characters (the user, 2026-11-03)
+
+> Crowd should be fields. They have pronounced states in different situations, but the reason why we want them into
+> field is because they could have potential influence back on our characters such as slower moving speed.
+
+Decided: a field (decision 2 below). Its point is the coupling, both ways, through quantities the engine already has:
+
+- **Speed through a crowd** (the fundamental diagram): walking speed falls with the local density ρ, from free walking
+  at an empty street to a standstill at a crush. Weidmann's diagram, fitted to 25 studies, uses a free speed of 1.34 m/s,
+  a maximum density of 5.4 people a square metre and a constant of 1.913 (the Kladek form, commonly
+  v(ρ) = v_free · (1 − exp(−1.913 (1/ρ − 1/5.4))); to check against the source before it is built)
+  ([parameters](https://arxiv.org/pdf/0901.0170); [the Kladek form](https://arxiv.org/pdf/1512.01426)); there is no
+  single accepted diagram for pedestrians ([ETH 2019](https://strc.ch/2018/Bosina_Weidmann.pdf)). Where it enters:
+  - the path integral: a walk edge costs its metres over v(ρ) at its time, so a character goes round a thick crowd when
+    a way round is cheaper, through it when not;
+  - L17 (displacement): reach in a beat is v(ρ) times the beat's time, so a chase through a festival street covers less;
+  - the smoother's S_walk: the effort between moments counts the crowd, so a slow stretch is not read as a teleport.
+  A character's own ways keep their speed where the crowd cannot slow them (a leap over it, a flight, a vehicle on a
+  road the crowd keeps off).
+- **The characters act on the crowd**: a character is a moving obstacle the field parts around (a car, someone
+  running through); a hazard the play makes (a blast, an area attack, a catastrophe) starts alarm that spreads and
+  fades; a fight is a focus a crowd gathers round at a distance, until it becomes a hazard.
+- **More couplings to weigh later**: earshot (L6) shrinks in a noisy crowd; a crowd hides a person from a pursuer or a
+  camera; a dense crowd takes the open ground that spots and landmarks offer.
+
+A proposed law, beside §9's: **L20 · Crowd drag**: a body's speed on foot through a crowd field is the field's speed at
+its density; displacement, reach and walk costs read it; a way the crowd cannot hold (air, a cleared road) is exempt.
+
 ## Decisions for the user
 
 1. **The states**: start with the five above (milling, flowing, gathering, alarmed, gone), or another list (the
    typologies' expressive or aggressive crowds, a queue, a parade).
-2. **Field or particles**: a continuum field on the walk grid (Treuille) with a few hundred figures sampled from it
-   (cheap, no identities), or particles under the social force (Helbing) throughout.
+2. ~~Field or particles~~ **Decided: a field** (the user, 2026-11-03), so it can act back on the characters (above);
+   the figures drawn are samples of it.
 3. **Named crowds**: a crowd the story names (a school's parade, a gang) as its own field and state, held as an
    Organization in the ontology, or plain background.
 4. **Deeper research**: a research handoff for the math (the potential fields per state, alarm's spread and decay,
