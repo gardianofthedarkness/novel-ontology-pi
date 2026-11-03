@@ -328,6 +328,43 @@ Into each ontology file:
 | `entities.jsonl` | Mega-scene director (A catastrophe's extent, Crowds); Combat director (Abilities shown, What breaks); Transport specialist (Vehicles and weapons); Architect (Which building it is, Floors, uses, look, Floors, uses, look, Changes to it) |
 <!-- specialists:end -->
 
+### A6. Milestones to the next whole-volume run, W10 (agreed 2026-11-03)
+
+The user: "I agree and I think we are ready to start implementing. Give a clear list of milestones to achieve before
+the next whole volume test." Each milestone ends in something measured on volume 1; unpaid trials (stand-in Jev, a fake
+work model) come before anything paid. Speakers stay off for W10, as in W9.
+
+| # | Milestone | Done when | Paid |
+|---|---|---|---|
+| M1 | **The reading keeps its distributions**: every sentence kind's full distribution in the reading, from the cache | all 5,202 in `data.json`; the extraction flow keeps them from now on | no |
+| M2 | **Block types in Jev's kinds pass**: one question a 12-sentence window (step 6), the nine types, kept whole | three scenes tried first; then volume 1 (about 56 requests); the dart bar reads routine, 21 confrontation, 26 traversal, 42 mediated, 35 memory | small |
+| M3 | **The gate and the beats**: `firing()` and `lead()` over volume 1, the smoothing over block types, beats at its change points; the strip in the Dev panel | each faculty fires on 10–35% of the volume; the leads of five scenes checked by the user on the strip | no |
+| M4 | **The stage manager and the scene frame**: the set as a path, everyone present inside it (the far ones walk in or are placed), facts resolved in the set, the camera held on one group until the text cuts; scenes 36, 38, 39 played (no canon events today) and 15, 20, 41, 43 explained (spawning places nobody) | camera jumps over 40 m from 31 to 5 or fewer; no implied move into a basement or another building without a stated fact; 46 of 46 scenes accounted for | trial |
+| M5 | **Scale and view, and the camera operators**: zoom and angle per beat to the action directors; Jev's pictures, reach and spots sized by the zoom (the 16 m picture, 30 m leap and 100 m spot caps lifted); World · Live following the recommendation | scene 26's tower-to-tower leaps and scene 1's rooftop escape played at their real distances | trial |
+| M6 | **Mega-scene director and journeys**: routes and landmarks on the place graph; the landmark and route questions | scene 3's chase reaches the subway through the alleys; 26 and 34 traversals; L5 and L10 clean on them | trial |
+| M7 | **Combat director and choreography**: attack kind, shape, outcome, knock-back; the `exchange` record; conditions held | every exchange of 21, 25–31, 40 recorded with its kind and shape; knock-backs played; L13 clean | trial |
+| M8 | **Routine director and conversation**: formations, channels (a phone or a door pulls nobody) | L6 below W8's 48 (W9 85); the calls of 12, 29, 33 and the door of 42–43 pull no one | trial |
+| M9 | **Ambience: the crowd as a field**: a particle cloud of the place drawn on the page, its density and flow by beat; named crowds as Organizations (held); the `extra:` walkers gone | no crowd in the people list; crowds visible in 1, 2, 10, 45, still or fleeing as the text says | no |
+| M10 | **State directors**: the character director (feelings, intent, bonds, held); transport (items as cleaned since W9, vehicles and weapons, possessions under L15) | items in W10 without body parts or people, none carried past a scene that drops them; feelings held for the review, not applied | trial |
+| M11 | **Into the ontology**: the new log kinds, the ledger's proposals, canon's gates for the new targets, the new held kinds in the review and in Pi's CLI and skill | a stand-in run writes every new kind; each undoes; Pi can answer each held kind | no |
+| M12 | **Records and cost**: Jev's reported tokens and the work model's usage per faculty and director in the run record and report; firing coverage in the report; the vault notes regenerated and pulled | the W10 report prices itself | no |
+| M13 | **Dress rehearsal, then W10**: the whole volume with the stand-in and the fake work model; the page on iPad; every test; then the paid run against W8 and W9 | the table below filled | W10 |
+
+Order: M1 → M2 → M3 gate the fired faculties. M4 and M5 rest on always-on faculties and can start beside M2. M6–M9 need
+M3 and M5; M10–M12 go alongside; M13 last. The architect (floors, uses, looks) can follow W10.
+
+What W10 is measured on, against W8 (`d20261103011140`) and W9 (`d20261103060830`):
+
+| Measure | W8 | W9 | W10 target |
+|---|---|---|---|
+| Moves played | 64 | 743 | as many, at their real scale |
+| Camera jumps over 40 m | — | 31 | 5 or fewer |
+| L6 talk breaks | 48 | 85 | under 48 |
+| L10 unreachable | 19 | 11 | under 11 |
+| Scenes played | 39 of 46 | 39 of 46 | 46 accounted for |
+| Jev calls | 792 | 269 | under 400 |
+| Crowd | — | 93 walkers | a field, no walkers |
+
 ### Order of work (Track A)
 
 1. A1, the card digest, for every action and dialogue card of volume 1: one work-model request per card (cents for the
