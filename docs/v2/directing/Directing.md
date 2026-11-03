@@ -18,7 +18,7 @@ The director as readers and specialists (docs/v2/next-steps.md A4–A5). Faculti
 | [Generalist](faculties/generalist.md) | always (each window) | [Stage manager](directors/stage.md), [Routine director](directors/routine.md), [Combat director](directors/combat.md), [Character director](directors/character.md), [Transport specialist](directors/transport.md), [Architect](directors/architect.md) | built |
 | [Conversation and blocking](faculties/conversation.md) | Routine interaction, Mediated exchange, spoken sentences | [Routine director](directors/routine.md) | proposed |
 | [Inner state](faculties/feeling.md) | Interior flow, Routine interaction, thought sentences | [Character director](directors/character.md) | proposed |
-| [Journeys](faculties/journeys.md) | Pursuit / traversal, action sentences, a jump in scale | [Mega-scene director](directors/mega.md) | proposed |
+| [Journeys](faculties/journeys.md) | Pursuit / traversal, action sentences, a jump in scale | [Mega-scene director](directors/mega.md) | built |
 | [Choreography](faculties/choreography.md) | Confrontation, Spectacle / catastrophe, action sentences | [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | proposed |
 | [Ambience](faculties/ambience.md) | Establishing / ambience, environment sentences, crowds named | [Mega-scene director](directors/mega.md) | proposed |
 | [Props and vehicles](faculties/props.md) | action sentences, vehicles named, weapons named | [Transport specialist](directors/transport.md) | partial |
@@ -30,7 +30,7 @@ The director as readers and specialists (docs/v2/next-steps.md A4–A5). Faculti
 |---|---|---|---|---|
 | [Stage manager](directors/stage.md) | stage | — | [Scene frame](faculties/frame.md), [Generalist](faculties/generalist.md) | partial |
 | [Routine director](directors/routine.md) | action | 2–15 m | [Conversation and blocking](faculties/conversation.md), [Scale and view](faculties/scale.md), [Generalist](faculties/generalist.md) | partial |
-| [Mega-scene director](directors/mega.md) | action | 100–2 km | [Journeys](faculties/journeys.md), [Scale and view](faculties/scale.md), [Ambience](faculties/ambience.md), [Choreography](faculties/choreography.md) | proposed |
+| [Mega-scene director](directors/mega.md) | action | 100–2 km | [Journeys](faculties/journeys.md), [Scale and view](faculties/scale.md), [Ambience](faculties/ambience.md), [Choreography](faculties/choreography.md) | partial |
 | [Combat director](directors/combat.md) | action | 5–60 m | [Choreography](faculties/choreography.md), [Scale and view](faculties/scale.md), [Generalist](faculties/generalist.md) | partial |
 | [Character director](directors/character.md) | state | — | [Inner state](faculties/feeling.md), [Generalist](faculties/generalist.md) | proposed |
 | [Transport specialist](directors/transport.md) | state | — | [Props and vehicles](faculties/props.md), [Generalist](faculties/generalist.md) | proposed |

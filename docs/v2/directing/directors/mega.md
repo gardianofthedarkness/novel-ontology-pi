@@ -3,16 +3,16 @@ type: "director"
 id: "mega"
 aliases: ["Mega-scene director"]
 kind: "action"
-status: "proposed"
+status: "partial"
 zoom: "100–2 km"
 reads: ["journeys", "scale", "ambience", "choreography"]
-tags: ["directing/director", "kind/action", "status/proposed"]
+tags: ["directing/director", "kind/action", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
 # Mega-scene director
 
-Traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing. An **action** director; status **proposed**. Back to [Directing](../Directing.md).
+Traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing. An **action** director; status **partial**. Back to [Directing](../Directing.md).
 
 ## Zoom and camera
 
@@ -45,13 +45,15 @@ Asked in `src/v2/context/directorModes.ts`, mode `moveDirectionMode` (run here o
 | `how` | choice | How do they go (a step, a walk, a run, a leap, a flight)? | `step`: a step or two<br>`walk`: walking<br>`run`: running<br>`leap`: a jump or leap, a climb<br>`flight`: flying, carried through the air by a power |
 | `line` | choice | Which line says where they go (or that they stay)? | `<a line of the card>`<br>`<a line near it>` |
 
-### landmark · proposed
+### landmark · built
 
-**Picture**: top-down map at the beat's zoom, landmarks lettered, the mover marked.
+Asked in `world-engine/director/director.mjs (megaMove, M6)`.
+
+**Picture**: top-down map at the journey's reach, north up, the mover at its middle, the twelve tallest buildings within reach lettered on red spheres.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|
-| `landmark` | choice | Which lettered landmark does &lt;the mover&gt; reach next? | `A`: &lt;a tower, bridge, station: its name, floors, distance&gt;<br>`B`<br>`…`<br>`none` |
+| `landmark` | choice | Which lettered landmark does &lt;the mover&gt; reach? | `A`: &lt;a building: its name, floors, distance&gt;<br>`B`<br>`…`<br>`none`: none of these |
 
 ### route · proposed
 

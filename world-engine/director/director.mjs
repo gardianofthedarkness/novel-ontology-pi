@@ -481,6 +481,23 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           sceneRecord.scales = scales;
         }
         const ELEVATION = { 'eye level': 12, 'over a shoulder': 20, high: 45, 'top-down': 80, 'low, looking up': 6, aerial: 60 };
+        // Journeys (M6): where the journeys faculty fires in this scene (gate.mjs), its spans read for journeys at scale,
+        // given the places the world has placed (each with its box).
+        const placeBox = new Map((spawn?.scenes ?? []).filter(entry => entry.target?.box).map(entry => [entry.place, entry.target.box]));
+        const journeyOf = new Map();
+        if (gate && digestMeter) {
+          const spans = [];
+          for (const window of gate.windows.filter(entry => entry.scene === scene.id && entry.fired.includes('journeys'))) {
+            const a = order_.indexOf(window.first), b = order_.indexOf(window.last), ids = order_.slice(Math.max(0, a), b < 0 ? order_.length : b + 1), last = spans.at(-1);
+            if (last && ids.some(id => last.includes(id))) last.push(...ids.filter(id => !last.includes(id))); else spans.push(ids);
+          }
+          if (spans.length) {
+            const places = [...placeBox.keys()].map(id => ({ id, label: script.places?.[id]?.label ?? names.get(id) ?? id, scale: script.places?.[id]?.scale ?? null }));
+            const journeys = await DG.journeysOf(digestMeter, { scene, spans: spans.map(span => span.slice(0, 60)), line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id })), places, digest: dg?.digest ?? null });
+            for (const journey of journeys) journeyOf.set(`${journey.sentence}|${journey.who}`, journey);
+            sceneRecord.journeys = journeys;
+          }
+        }
         // What people carry as the scene begins (the scene digest). A thing someone here held before is drawn with them only
         // if the scene says they still carry it (else it was left behind); someone elsewhere keeps what they hold.
         const personNames = [...names.values()].filter(name => typeof name === 'string');
@@ -728,6 +745,43 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             Object.assign(cardRecord.moves.at(-1), moveRecord);
             await save();
           };
+          // The mega-scene director (M6): a journey's destination found in the world (a placed place's box, a building
+          // its name labels, else a landmark Jev picks on a map at the beat's zoom), and walked, run or leapt to (its roof
+          // for leaps, flight, a wall).
+          const megaMove = async (person, journey, far) => {
+            const roofward = ['leaps between roofs', 'up or along a wall', 'flight'].includes(journey.manner), here = at(positions[person][0]);
+            const lotCentre = index => { const lot = world.lots[index]; return [(lot.i0 + lot.nx / 2) * CELL, (lot.floors ?? 1) * FLOOR, (lot.j0 + lot.nz / 2) * CELL]; };
+            const box = placeBox.get(journey.to) ?? null;
+            let lot = box ? null : world.lots.findIndex(entry => entry.label && journey.to && (journey.to.includes(entry.label) || entry.label.includes(journey.to)));
+            let landmark = null;
+            if (!box && lot < 0 && calls < budget) {
+              const reach = Math.min(600, DG.REACHES[journey.distance] ?? 300);
+              const candidates = world.lots.map((entry, index) => ({ index, p: lotCentre(index), floors: entry.height ?? entry.floors ?? 1 })).filter(entry => { const d = Math.hypot(entry.p[0] - here[0], entry.p[2] - here[2]); return d > 15 && d <= reach; }).sort((a, b) => b.floors - a.floors).slice(0, 12).map((entry, n) => ({ ...entry, letter: String.fromCharCode(65 + n) }));
+              if (candidates.length) {
+                const played = await grow(scene, run), half = Math.max(40, ...candidates.map(entry => Math.hypot(entry.p[0] - here[0], entry.p[2] - here[2]))) + 20;
+                const map = await shoot(`${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-${person}-landmark`, [1024, 1024], { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], mover: person, topdown: { x: here[0], z: here[2], half }, spheres: candidates.map(entry => ({ x: entry.p[0], y: entry.p[1] + 4, z: entry.p[2], r: Math.max(4, half / 30), label: entry.letter, labelScale: Math.max(1, half / 40) })) });
+                const [pick] = await decide(`A top-down map of a city in a novel, north up, ${Math.round(half * 2)} m across; ${names.get(person) ?? person} at its middle. ${names.get(person) ?? person} goes to ${journey.to} (${journey.manner}, ${journey.distance}). Lettered red spheres mark the buildings within reach, tallest first.`,
+                  [{ key: 'landmark', primitive: 'choice', instructions: `Which lettered landmark does ${names.get(person) ?? person} reach?`, options: [...candidates.map(entry => entry.letter), 'none'], optionHints: Object.fromEntries([...candidates.map(entry => [entry.letter, `${entry.letter}: ${lotName(entry.index)}, ${entry.floors} floors, ${Math.round(Math.hypot(entry.p[0] - here[0], entry.p[2] - here[2]))} m away`]), ['none', 'none of these']]) }], { images: { map: map.png } });
+                const chosen = candidates.find(entry => entry.letter === pick?.value);
+                landmark = { pick: pick?.value ?? null, confidence: pick?.confidence ?? null };
+                if (chosen) lot = chosen.index;
+              }
+            }
+            if (!box && (lot === null || lot < 0)) return false;
+            const centre = box ? [box[0], 0, box[1]] : lotCentre(lot), radius = box ? Math.max(box[2], box[3]) / 2 : Math.max(world.lots[lot].nx, world.lots[lot].nz) * CELL / 2 + 6;
+            const { nodes } = around(centre[0], centre[2], radius + 4);
+            const fits = node => (box ? true : node.lot === lot || Math.hypot(node.x - centre[0], node.z - centre[2]) <= radius);
+            const wanted = nodes.filter(node => fits(node) && (roofward ? node.type === FA.TYPE.roof : node.type === FA.TYPE.outdoor));
+            const targets = (wanted.length ? wanted : nodes.filter(fits)).sort((a, b) => Math.hypot(a.x - here[0], a.z - here[2]) - Math.hypot(b.x - here[0], b.z - here[2])).slice(0, 40).map(node => node.id);
+            const how = roofward || journey.manner === 'run' || journey.manner === 'zigzag through alleys' ? 'run' : 'walk';
+            let path = targets.length ? walk(scene, `${scene.id}|${card.id}|${person}|journey`, positions[person], targets, how) : null, airborne = false;
+            // A leap, flight or climb the walk graph has no way for (no air edges: tower to tower, scene 26) goes straight
+            // through the air to the nearest target, recorded as such (L12 checks the ability).
+            if (!path && roofward && targets.length) { path = [positions[person][0], targets[0]]; airborne = true; }
+            moveTo(person, path, how, `journey: to ${box ? (script.places?.[journey.to]?.label ?? journey.to) : lotName(lot)} (${journey.manner})`);
+            Object.assign(cardRecord.moves.at(-1), { direction: 'elsewhere', line: far.sentence, digest: moveWords(far), journey: { to: journey.to, manner: journey.manner, distance: journey.distance, ...(landmark ? { landmark } : {}) }, ...(airborne ? { airborne: true, how: journey.manner === 'flight' ? 'flight' : 'leap' } : {}) });
+            return true;
+          };
           const followers = [];
           const digestMove = async person => {
             const all = digestIn(dg.moves, card).filter(entry => entry.motion !== 'still' && entry.sure >= MOVE_SURE), mine = all.filter(entry => entry.who === person);
@@ -737,6 +791,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             const theirs = far?.with ? all.find(entry => entry.who === far.with && entry.motion === 'elsewhere') : null;
             const follows = far?.with && far.with !== person && positions[far.with] && (theirs?.with !== person || (far.how === 'carried' ? true : theirs.how === 'carried' ? false : all.indexOf(far) > all.indexOf(theirs)));
             if (follows) { followers.push({ person, leader: far.with, entry: far }); return; }
+            const journey = far ? card.sentences.map(id => journeyOf.get(`${id}|${person}`)).find(Boolean) : null;
+            if (far && journey && await megaMove(person, journey, far)) return;
             if (far) { if (calls < budget) await jevMove(person, far); else cardRecord.moves.push({ person, why: 'budget spent' }); return; }
             for (const entry of mine.slice(0, 3)) {
               const target = gradedTarget(person, entry);

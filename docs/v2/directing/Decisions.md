@@ -47,3 +47,12 @@ Newest last. Back to [Directing](Directing.md).
    in a paid run. *Your call:* a small paid run of scenes 1 and 26 before W10 (about 40–80 Jev calls), or wait for W10.
 9. **The scale reader is one request a beat** (96 beats in volume 1, cheap on the work model), asked as each scene
    begins, so a run waits a few seconds a scene. *Your call:* fine, or fold it into the scene digest's request.
+
+## From M6: journeys (2026-11-03)
+
+10. **Leaps and flights go straight through the air** where the walk graph has no way (it has no air edges; tower to
+    tower in scene 26 is none). The move is marked airborne, and L12 checks the person has the ability. *Your call:*
+    a straight glide is enough for now, or build arcs in the air (a sky graph) before W10.
+11. **The landmark map offers the twelve tallest buildings within the journey's reach.** A low destination (a
+    station entrance, a bridge) can only be picked as "none", which falls back to the arrows. *Your call:* keep the
+    tallest, or mix in named places and street features (bridges, stations) once the place tree has them in the world.

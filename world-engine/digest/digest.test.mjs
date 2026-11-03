@@ -68,3 +68,9 @@ test('scale and view: a beat\'s zoom and metres agree, its angle and reach from 
   assert.deepEqual(out.map(entry => [entry.n, entry.zoom, entry.metres]), [[4, 'block', 250], [5, 'street', 80]]);
   assert.equal(out[1].failed, true);
 });
+
+test('journeys: known people and lines only, a destination required, the manner from its list', async () => {
+  const { checkJourneys } = await import('./digest.mjs');
+  const out = checkJourneys({ journeys: [{ sentence: 's1', who: 'a', to: 'loc_000012', manner: 'leaps between roofs', distance: '300 m – 2 km', sure: 0.9 }, { sentence: 's1', who: 'z', to: 'x' }, { sentence: 's9', who: 'a', to: 'x' }, { sentence: 's1', who: 'a' }, { sentence: 's1', who: 'a', to: 'the bridge', manner: 'teleport' }] }, { people: ['a'], sentences: ['s1'] });
+  assert.deepEqual(out.map(entry => [entry.to, entry.manner, entry.distance]), [['loc_000012', 'leaps between roofs', '300 m – 2 km'], ['the bridge', 'walk', '50–300 m']]);
+});

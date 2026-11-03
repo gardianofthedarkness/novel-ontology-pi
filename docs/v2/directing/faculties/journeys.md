@@ -2,16 +2,16 @@
 type: "faculty"
 id: "journeys"
 aliases: ["Journeys"]
-status: "proposed"
+status: "built"
 fired_by: ["traversal", "scaleJump"]
 read_by: ["mega"]
-tags: ["directing/faculty", "status/proposed"]
+tags: ["directing/faculty", "status/built"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
 # Journeys
 
-A summary faculty: the work model reading the text. Status: **proposed**. Back to [Directing](../Directing.md).
+A summary faculty: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs journeysOf (M6)`). Back to [Directing](../Directing.md).
 
 ## What it writes
 

@@ -214,3 +214,34 @@ export async function scaleBeats(work, { scene, beats, line, kind, people, diges
   await Promise.all(Array.from({ length: Math.min(parallel, beats.length) }, async () => { while (next < beats.length) await one(next++); }));
   return out;
 }
+
+// ── Journeys (M6): read where the journeys faculty fires (gate.mjs), one request a span ─────────────────────────────
+export const MANNERS = ['walk', 'run', 'zigzag through alleys', 'up or along a wall', 'leaps between roofs', 'flight', 'carried', 'a vehicle', 'an underground passage'];
+export const JOURNEY_SYSTEM = 'You read a passage of a light novel being staged in a 3D city and trace each journey in it across the city\'s places: who goes, from where, through which places, to where, how. Use the place ids given where a place is one of them; else say the place in words as the text names it (a tower, a bridge, a station). Reply with JSON only.';
+export const JOURNEY_SHAPE = { journeys: [{ sentence: '<sentence id where the journey ends or is told>', who: '<person id>', from: '<place id or words>', via: ['<place id or words>'], to: '<place id or words>', manner: MANNERS.join(' | '), distance: Object.keys(REACHES).join(' | '), duration: 'words', sure: '0..1' }] };
+
+/** A span's journeys, checked: known people and sentences, a manner from the list. */
+export function checkJourneys(reply, { people, sentences }) {
+  const known = new Set(people), lines = new Set(sentences);
+  return (reply?.journeys ?? []).flatMap(entry => {
+    const who = String(entry?.who ?? ''), sentence = String(entry?.sentence ?? '');
+    if (!known.has(who) || !lines.has(sentence) || !entry?.to) return [];
+    return [{ sentence, who, from: entry.from ? String(entry.from).slice(0, 60) : null, via: (Array.isArray(entry.via) ? entry.via : []).map(place => String(place).slice(0, 60)).slice(0, 6), to: String(entry.to).slice(0, 60), manner: oneOf(entry.manner, MANNERS, 'walk'), distance: oneOf(entry.distance, Object.keys(REACHES), '50–300 m'), duration: entry.duration ? String(entry.duration).slice(0, 40) : null, sure: sure(entry.sure) }];
+  });
+}
+
+/** The journeys in each span (`spans`: [[sentence ids]]) of a scene; `places` [{ id, label, scale }] round its place. */
+export async function journeysOf(work, { scene, spans, line, kind, people, places = [], digest = null, parallel = 4 }) {
+  const ids = people.map(person => person.id), out = [];
+  let next = 0;
+  const one = async span => {
+    const reply = await work.generate({ system: JOURNEY_SYSTEM, maxTokens: 1500, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+      task: 'Trace each journey in this passage. Reply in this JSON shape; an empty list where nobody goes anywhere.', shape: JOURNEY_SHAPE,
+      scene: { id: scene.id, where: digest?.where ?? null, summary: digest?.summary ?? null }, places, people: people.map(person => ({ id: person.id, name: person.name })),
+      passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
+    }) }).then(parsed).catch(() => null);
+    out.push(...checkJourneys(reply, { people: ids, sentences: span }));
+  };
+  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
+  return out;
+}
