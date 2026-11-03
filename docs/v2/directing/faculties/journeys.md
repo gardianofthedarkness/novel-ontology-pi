@@ -21,9 +21,10 @@ A summary faculty: the work model reading the text. Status: **proposed**. Back t
 
 ## When it fires
 
-When these grow unusually dense in a span (the gate: density against the book's baseline, on at μ + 1.5σ, off below μ + 0.5σ):
+On a score-based mixed index of all of these, each against its own baseline over the book and weighted by the window's scores (Jev's confidence in the block, in its sentences): on at 1.5, off below 0.5 (`firing()` in specialists.mjs).
 
 - block type **Pursuit / traversal**: going somewhere at scale: chases, escapes, crossing the city (volume 1: the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34))
+- sentence kind **action**: its share in the window's sentences, weighted by each one's confidence
 - signal **a jump in scale**: the scene frame: a scale band wider than the scene's own
 
 ## How it is asked

@@ -21,8 +21,9 @@ A summary faculty: the work model reading the text. Status: **partial** (`world-
 
 ## When it fires
 
-When these grow unusually dense in a span (the gate: density against the book's baseline, on at μ + 1.5σ, off below μ + 0.5σ):
+On a score-based mixed index of all of these, each against its own baseline over the book and weighted by the window's scores (Jev's confidence in the block, in its sentences): on at 1.5, off below 0.5 (`firing()` in specialists.mjs).
 
+- sentence kind **action**: its share in the window's sentences, weighted by each one's confidence
 - signal **vehicles named**: the reading's vehicle slots and things (23 vehicle slots in volume 1)
 - signal **weapons named**: the reading's weapon slots (27 in volume 1)
 

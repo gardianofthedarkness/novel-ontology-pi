@@ -16,13 +16,13 @@ The director as readers and specialists (docs/v2/next-steps.md A4–A5). Faculti
 | [Scene frame](faculties/frame.md) | always (each scene) | [Stage manager](directors/stage.md) | proposed |
 | [Scale and view](faculties/scale.md) | always (each beat) | [Routine director](directors/routine.md), [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | proposed |
 | [Generalist](faculties/generalist.md) | always (each window) | [Stage manager](directors/stage.md), [Routine director](directors/routine.md), [Combat director](directors/combat.md), [Character director](directors/character.md), [Transport specialist](directors/transport.md), [Architect](directors/architect.md) | built |
-| [Conversation and blocking](faculties/conversation.md) | Routine interaction, Mediated exchange | [Routine director](directors/routine.md) | proposed |
-| [Inner state](faculties/feeling.md) | Interior flow, Routine interaction | [Character director](directors/character.md) | proposed |
-| [Journeys](faculties/journeys.md) | Pursuit / traversal, a jump in scale | [Mega-scene director](directors/mega.md) | proposed |
-| [Choreography](faculties/choreography.md) | Confrontation, Spectacle / catastrophe | [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | proposed |
-| [Ambience](faculties/ambience.md) | Establishing / ambience, crowds named | [Mega-scene director](directors/mega.md) | proposed |
-| [Props and vehicles](faculties/props.md) | vehicles named, weapons named | [Transport specialist](directors/transport.md) | partial |
-| [Set description](faculties/setting.md) | Establishing / ambience, buildings named or described | [Architect](directors/architect.md) | proposed |
+| [Conversation and blocking](faculties/conversation.md) | Routine interaction, Mediated exchange, spoken sentences | [Routine director](directors/routine.md) | proposed |
+| [Inner state](faculties/feeling.md) | Interior flow, Routine interaction, thought sentences | [Character director](directors/character.md) | proposed |
+| [Journeys](faculties/journeys.md) | Pursuit / traversal, action sentences, a jump in scale | [Mega-scene director](directors/mega.md) | proposed |
+| [Choreography](faculties/choreography.md) | Confrontation, Spectacle / catastrophe, action sentences | [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | proposed |
+| [Ambience](faculties/ambience.md) | Establishing / ambience, environment sentences, crowds named | [Mega-scene director](directors/mega.md) | proposed |
+| [Props and vehicles](faculties/props.md) | action sentences, vehicles named, weapons named | [Transport specialist](directors/transport.md) | partial |
+| [Set description](faculties/setting.md) | Establishing / ambience, environment sentences, fact sentences, buildings named or described | [Architect](directors/architect.md) | proposed |
 
 ## Directors
 

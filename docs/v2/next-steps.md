@@ -128,8 +128,13 @@ and pursuit 0.4):
 | Memory / flashback | 35 | played outside the present world |
 | Spectacle / catastrophe | the ground splits, floods, collapses (21, 22, 26, 27) | choreography's destruction, at the scene's scale |
 
-**The gate.** A type's density over a span is its expected share (summed from the distributions, not the top answer),
-against the book's baseline (its mean and spread). A faculty turns on above mean + kσ and off below a lower line
+**The gate** (amended by the user, 2026-11-03: "we keep top distributions and scores for blocks and sentences, and we use
+them all for faculty triggering calculates on a score based mixed index"). For both blocks and sentences the top
+candidates, the whole distribution and Jev's scores (confidence; a sentence's turn) are kept. A faculty fires on a
+mixed index: its block types' share, its sentence kinds' share (each sentence weighted by its confidence) and its
+signals, each a z-score against its baseline over the book, mixed by weight × the window's score for it, so an unsure
+block leans on its sentences (`firing()`, `MIX`). Before this amendment: a type's density over a span is its expected
+share (summed from the distributions, not the top answer), against the book's baseline (its mean and spread). A faculty turns on above mean + kσ and off below a lower line
 (hysteresis), runs a minimum span with a margin either side; several can be on at once. A hidden Markov model over the
 block types, Jev's distributions as soft observations (as `occupation.mjs` does for presence), smooths them; its change
 points are the beats, where the camera may cut.
@@ -219,13 +224,13 @@ _Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; 
 | Scene frame | always (each scene) | the set as a path down the place tree; who is on stage; how it follows the scene before; the beats | Stage manager (own) | proposed |
 | Scale and view | always (each beat) | the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km); the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial; whose eyes or which landmark it is seen from; how far its moves reach | Routine director, Mega-scene director, Combat director | proposed |
 | Generalist | always (each window) | stated moves (graded); facts, stated and implied; items; talk kinds; breaks | Stage manager, Routine director, Combat director, Character director, Transport specialist, Architect | built |
-| Conversation and blocking | Routine interaction, Mediated exchange | who talks with whom and through what; formations: beside, across a table, a ring, two sides of a door; attention: who looks at whom | Routine director (own) | proposed |
-| Inner state | Interior flow, Routine interaction | each person's emotional state as it changes (a distribution); intent: what they want next; bonds: who they are to each other | Character director (own) | proposed |
-| Journeys | Pursuit / traversal, a jump in scale | from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration | Mega-scene director (own) | proposed |
-| Choreography | Confrontation, Spectacle / catastrophe | exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide | Mega-scene director, Combat director (own) | proposed |
-| Ambience | Establishing / ambience, crowds named | the crowd as a density of the place: its make-up and flow; weather, light, mood; set dressing | Mega-scene director | proposed |
-| Props and vehicles | vehicles named, weapons named | vehicles: kind, who drives or rides; weapons: kind, who holds them; things held, thrown, broken | Transport specialist (own) | partial |
-| Set description | Establishing / ambience, buildings named or described | a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them | Architect (own) | proposed |
+| Conversation and blocking | Routine interaction, Mediated exchange, spoken sentences | who talks with whom and through what; formations: beside, across a table, a ring, two sides of a door; attention: who looks at whom | Routine director (own) | proposed |
+| Inner state | Interior flow, Routine interaction, thought sentences | each person's emotional state as it changes (a distribution); intent: what they want next; bonds: who they are to each other | Character director (own) | proposed |
+| Journeys | Pursuit / traversal, action sentences, a jump in scale | from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration | Mega-scene director (own) | proposed |
+| Choreography | Confrontation, Spectacle / catastrophe, action sentences | exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide | Mega-scene director, Combat director (own) | proposed |
+| Ambience | Establishing / ambience, environment sentences, crowds named | the crowd as a density of the place: its make-up and flow; weather, light, mood; set dressing | Mega-scene director | proposed |
+| Props and vehicles | action sentences, vehicles named, weapons named | vehicles: kind, who drives or rides; weapons: kind, who holds them; things held, thrown, broken | Transport specialist (own) | partial |
+| Set description | Establishing / ambience, environment sentences, fact sentences, buildings named or described | a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them | Architect (own) | proposed |
 
 **Specialist directors.** The stage manager always runs; action directors record action, read the scale faculty and hold a camera (one of them leads each beat); state directors keep what rides with people and things, with no zoom and no camera:
 
@@ -336,9 +341,9 @@ work model) come before anything paid. Speakers stay off for W10, as in W9.
 
 | # | Milestone | Done when | Paid |
 |---|---|---|---|
-| M1 | **The reading keeps its distributions**: every sentence kind's full distribution in the reading, from the cache | all 5,202 in `data.json`; the extraction flow keeps them from now on | no |
-| M2 | **Block types in Jev's kinds pass**: one question a 12-sentence window (step 6), the nine types, kept whole | three scenes tried first; then volume 1 (about 56 requests); the dart bar reads routine, 21 confrontation, 26 traversal, 42 mediated, 35 memory | small |
-| M3 | **The gate and the beats**: `firing()` and `lead()` over volume 1, the smoothing over block types, beats at its change points; the strip in the Dev panel | each faculty fires on 10–35% of the volume; the leads of five scenes checked by the user on the strip | no |
+| M1 | **The reading keeps its distributions and scores**: every sentence's top kinds, full distribution and scores (confidence, turn) in the reading, from the cache | all 5,202 in `data.json`; the extraction flow keeps them from now on | no |
+| M2 | **Block types in Jev's kinds pass**: one question a 12-sentence window (step 6), the nine types; each block's top types, full distribution and confidence kept | three scenes tried first; then volume 1 (about 56 requests); the dart bar reads routine, 21 confrontation, 26 traversal, 42 mediated, 35 memory | small |
+| M3 | **The gate and the beats**: the mixed index over blocks, sentences and signals (`firing()`) and `lead()` over volume 1, the smoothing over block types, beats at its change points; the strip in the Dev panel with each faculty's index | each faculty fires on 10–35% of the volume; the leads of five scenes checked by the user on the strip | no |
 | M4 | **The stage manager and the scene frame**: the set as a path, everyone present inside it (the far ones walk in or are placed), facts resolved in the set, the camera held on one group until the text cuts; scenes 36, 38, 39 played (no canon events today) and 15, 20, 41, 43 explained (spawning places nobody) | camera jumps over 40 m from 31 to 5 or fewer; no implied move into a basement or another building without a stated fact; 46 of 46 scenes accounted for | trial |
 | M5 | **Scale and view, and the camera operators**: zoom and angle per beat to the action directors; Jev's pictures, reach and spots sized by the zoom (the 16 m picture, 30 m leap and 100 m spot caps lifted); World · Live following the recommendation | scene 26's tower-to-tower leaps and scene 1's rooftop escape played at their real distances | trial |
 | M6 | **Mega-scene director and journeys**: routes and landmarks on the place graph; the landmark and route questions | scene 3's chase reaches the subway through the alleys; 26 and 34 traversals; L5 and L10 clean on them | trial |

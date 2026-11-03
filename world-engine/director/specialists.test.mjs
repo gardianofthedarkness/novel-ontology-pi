@@ -13,15 +13,16 @@ test('the built Jev questions the registry names are modes in the code', async (
 });
 
 test('the gate: a dense stretch fires its faculty with hysteresis and a margin; a fight leads to the combat director, a fight in a chase to the mega-scene one', () => {
-  const quiet = { types: { routine: 0.1, confrontation: 0.1, traversal: 0.1 } };
-  const windows = [quiet, quiet, { types: { confrontation: 0.4 } }, { types: { confrontation: 0.18 } }, { types: { confrontation: 0.4, traversal: 0.4 } }, quiet, quiet, quiet, quiet];
+  const block = (distribution, confidence = 0.9) => ({ block: { distribution, confidence } });
+  const quiet = block({ routine: 0.1, confrontation: 0.1, traversal: 0.1 });
+  const windows = [quiet, quiet, block({ confrontation: 0.4 }), block({ confrontation: 0.18 }), block({ confrontation: 0.4, traversal: 0.4 }), quiet, quiet, quiet, quiet];
   const fired = firing(windows);
   assert.deepEqual(fired.choreography, [false, true, true, true, true, true, false, false, false], 'on at 2, held through the dip at 3 (the minimum span), off at 5, a window of margin each side');
   assert.equal(fired.generalist.every(Boolean), true);
   assert.equal(lead(fired, 2).lead, 'combat');
   assert.deepEqual(lead(fired, 4), { lead: 'mega', with: ['combat'] });
   assert.equal(lead(fired, 8).lead, 'routine');
-  assert.equal(damped({ types: { interior: 0.6, routine: 0.3 } }), true);
+  assert.equal(damped(block({ interior: 0.6, routine: 0.3 })), true);
   assert.equal(Object.keys(FACULTIES).length >= 8, true);
 });
 
@@ -83,4 +84,17 @@ test('a page per faculty and per director: each faculty says how it is asked, ea
   const { spawnSync } = await import('node:child_process');
   const run = spawnSync(process.execPath, [new URL('./directing-vault.mjs', import.meta.url).pathname, '--check'], { encoding: 'utf8' });
   assert.equal(run.status, 0, `run node world-engine/director/directing-vault.mjs: ${run.stdout}${run.stderr}`);
+});
+
+test('the mixed index: sentences and blocks, each by its score; an unsure block leans on its sentences', () => {
+  const sentence = (action, confidence = 0.9) => ({ distribution: { action, narration: 1 - action }, confidence });
+  const window = (blockShare, blockSure, actionShare) => ({ block: { distribution: { confrontation: blockShare, routine: 1 - blockShare }, confidence: blockSure }, sentences: Array.from({ length: 12 }, () => sentence(actionShare)) });
+  const calm = window(0.1, 0.9, 0.1);
+  // Window 4: Jev unsure of the block (0.2), which looks calm, but its sentences are action through and through.
+  const windows = [calm, calm, calm, calm, window(0.05, 0.2, 0.9), calm, calm, calm, calm, calm];
+  const { index, choreography } = firing(windows);
+  assert.ok(index.choreography[4] >= 1.5 && choreography[4], `the sentences carry it: ${index.choreography[4]}`);
+  // The same block, sure of itself (0.95), outweighs the sentences less: its own calm counts.
+  const sure = firing(windows.map((entry, n) => (n === 4 ? { ...entry, block: { ...entry.block, confidence: 0.95 } } : entry)));
+  assert.ok(sure.index.choreography[4] < index.choreography[4], 'a sure calm block pulls the index down');
 });

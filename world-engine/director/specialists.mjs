@@ -21,6 +21,8 @@ export const BLOCK_TYPES = {
 };
 /** Types that fire no reader: they hold the world still (no implied moves, no drift; the camera close; a memory apart). */
 export const DAMPING = ['interior', 'exposition', 'memory'];
+/** Sentence kinds (the reading's kinds pass), each sentence's distribution over them kept whole with its top and score. */
+export const SENTENCE_KINDS = ['spoken', 'thought', 'fact', 'action', 'environment', 'narration'];
 
 /** The reading's own signals, counted per window, that can fire a faculty beside the block types. */
 export const SIGNALS = {
@@ -32,8 +34,9 @@ export const SIGNALS = {
 };
 
 /**
- * The summary faculties: work-model readers of the text. `always`: on for every scene, beat or window; else fired by the
- * density of `types` (and `signals`) in a span. `writes`: the claims it puts on the scene board.
+ * The summary faculties: work-model readers of the text. `always`: on for every scene, beat or window; else fired by a
+ * mixed index of its block `types`, its sentence `kinds` and its `signals` (firing()). `writes`: the claims it puts on the
+ * scene board.
  */
 export const FACULTIES = {
   frame: { label: 'Scene frame', always: 'scene', status: 'proposed', writes: ['the set as a path down the place tree', 'who is on stage', 'how it follows the scene before', 'the beats'] },
@@ -41,13 +44,13 @@ export const FACULTIES = {
   // it's associated directors and the directors camera man. Only directors who records actions need the zoom parameter."
   scale: { label: 'Scale and view', always: 'beat', status: 'proposed', writes: ['the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km)', 'the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial', 'whose eyes or which landmark it is seen from', 'how far its moves reach'] },
   generalist: { label: 'Generalist', always: 'window', status: 'built', code: 'world-engine/digest/digest.mjs', writes: ['stated moves (graded)', 'facts, stated and implied', 'items', 'talk kinds', 'breaks'] },
-  conversation: { label: 'Conversation and blocking', types: ['routine', 'mediated'], status: 'proposed', writes: ['who talks with whom and through what', 'formations: beside, across a table, a ring, two sides of a door', 'attention: who looks at whom'] },
-  feeling: { label: 'Inner state', types: ['interior', 'routine'], status: 'proposed', writes: ['each person\'s emotional state as it changes (a distribution)', 'intent: what they want next', 'bonds: who they are to each other'] },
-  journeys: { label: 'Journeys', types: ['traversal'], signals: ['scaleJump'], status: 'proposed', writes: ['from, via and to as places of the tree', 'the manner (alleys, up a wall, leaps, carried)', 'distance and duration'] },
-  choreography: { label: 'Choreography', types: ['confrontation', 'catastrophe'], status: 'proposed', writes: ['exchanges: attacker, target, attack, outcome', 'knock-backs, dodges, throws', 'what breaks and how wide'] },
-  ambience: { label: 'Ambience', types: ['establishing'], signals: ['crowds'], status: 'proposed', writes: ['the crowd as a density of the place: its make-up and flow', 'weather, light, mood', 'set dressing'] },
-  props: { label: 'Props and vehicles', types: [], signals: ['vehicles', 'weapons'], status: 'partial', code: 'world-engine/digest/digest.mjs (items)', writes: ['vehicles: kind, who drives or rides', 'weapons: kind, who holds them', 'things held, thrown, broken'] },
-  setting: { label: 'Set description', types: ['establishing'], signals: ['buildings'], status: 'proposed', writes: ['a building\'s look, floors and uses (a 70-floor tower: mall, offices, flats)', 'a room\'s make-up (a container bar, a thick-doored cell)', 'changes to them'] },
+  conversation: { label: 'Conversation and blocking', types: ['routine', 'mediated'], kinds: ['spoken'], status: 'proposed', writes: ['who talks with whom and through what', 'formations: beside, across a table, a ring, two sides of a door', 'attention: who looks at whom'] },
+  feeling: { label: 'Inner state', types: ['interior', 'routine'], kinds: ['thought'], status: 'proposed', writes: ['each person\'s emotional state as it changes (a distribution)', 'intent: what they want next', 'bonds: who they are to each other'] },
+  journeys: { label: 'Journeys', types: ['traversal'], kinds: ['action'], signals: ['scaleJump'], status: 'proposed', writes: ['from, via and to as places of the tree', 'the manner (alleys, up a wall, leaps, carried)', 'distance and duration'] },
+  choreography: { label: 'Choreography', types: ['confrontation', 'catastrophe'], kinds: ['action'], status: 'proposed', writes: ['exchanges: attacker, target, attack, outcome', 'knock-backs, dodges, throws', 'what breaks and how wide'] },
+  ambience: { label: 'Ambience', types: ['establishing'], kinds: ['environment'], signals: ['crowds'], status: 'proposed', writes: ['the crowd as a density of the place: its make-up and flow', 'weather, light, mood', 'set dressing'] },
+  props: { label: 'Props and vehicles', types: [], kinds: ['action'], signals: ['vehicles', 'weapons'], status: 'partial', code: 'world-engine/digest/digest.mjs (items)', writes: ['vehicles: kind, who drives or rides', 'weapons: kind, who holds them', 'things held, thrown, broken'] },
+  setting: { label: 'Set description', types: ['establishing'], kinds: ['environment', 'fact'], signals: ['buildings'], status: 'proposed', writes: ['a building\'s look, floors and uses (a 70-floor tower: mall, offices, flats)', 'a room\'s make-up (a container bar, a thick-doored cell)', 'changes to them'] },
 };
 
 /**
@@ -192,6 +195,7 @@ export function registryProblems() {
   for (const [id, faculty] of Object.entries(FACULTIES)) {
     for (const type of faculty.types ?? []) if (!BLOCK_TYPES[type]) out.push(`faculty ${id}: no block type ${type}`);
     for (const signal of faculty.signals ?? []) if (!SIGNALS[signal]) out.push(`faculty ${id}: no signal ${signal}`);
+    for (const kind of faculty.kinds ?? []) if (!SENTENCE_KINDS.includes(kind)) out.push(`faculty ${id}: no sentence kind ${kind}`);
     if (!faculty.always && !(faculty.types?.length || faculty.signals?.length)) out.push(`faculty ${id}: nothing fires it`);
     if (!Object.values(DIRECTORS).some(director => director.reads.includes(id))) out.push(`faculty ${id}: no director reads it`);
   }
@@ -216,30 +220,54 @@ export function registryProblems() {
   return out;
 }
 
+/** How much each part of the evidence weighs in a faculty's mixed index, before each window's own scores scale it. */
+export const MIX = { block: 1, sentence: 0.6, signal: 0.6 };
+
 /**
- * The gate (A4): which faculties fire over the book's windows in reading order (`windows`: [{ types: { type: p },
- * signals: { signal: count } }]). A faculty's density in a window is the summed share of its types, plus each of its
- * signals as a share of that signal's most in any window; its baseline is that density's mean and spread over the book.
- * It turns on at mu + kOn·sd, off below mu + kOff·sd, stays on at least `minimum` windows, and reads a margin of one window
- * either side. Returns { faculty: boolean[] }.
+ * The gate (A4; the user, 2026-11-03: "we keep top distributions and scores for blocks and sentences, and we use them all
+ * for faculty triggering calculates on a score based mixed index"). `windows` in reading order, each
+ *   { block: { distribution: { type: p }, confidence }, sentences: [{ distribution: { kind: p }, confidence }], signals: { signal: count } }
+ * (a window's top candidates are kept beside, for the record; the index reads the whole distributions). For a faculty, in
+ * each window, three parts:
+ *   block    = Σ over its types   P(type | block)
+ *   sentence = Σ over its kinds   P(kind | sentence), averaged over the window's sentences weighted by their confidence
+ *   signal   = Σ over its signals count ÷ the most in any window
+ * each made a z-score against its own mean and spread over the book, and mixed by weight × the window's score for it (the
+ * block's confidence, the sentences' mean confidence, 1 for signals):
+ *   index = Σ aᵢ·zᵢ ÷ √Σ aᵢ²
+ * so an unsure block leans on its sentences and the reverse. It turns on at kOn, off below kOff, stays on at least
+ * `minimum` windows, and reads a margin of one window either side. Returns { faculty: boolean[] } and, as `index`, each
+ * faculty's index per window.
  */
 export function firing(windows, { kOn = 1.5, kOff = 0.5, minimum = 2 } = {}) {
   const most = Object.fromEntries(Object.keys(SIGNALS).map(signal => [signal, Math.max(0, ...windows.map(window => window.signals?.[signal] ?? 0))]));
-  const out = {};
+  const stats = values => { const mu = values.reduce((sum, value) => sum + value, 0) / (values.length || 1), sd = Math.sqrt(values.reduce((sum, value) => sum + (value - mu) ** 2, 0) / (values.length || 1)); return value => (sd ? (value - mu) / sd : 0); };
+  const out = { index: {} };
   for (const [id, faculty] of Object.entries(FACULTIES)) {
     if (faculty.always) { out[id] = windows.map(() => true); continue; }
-    const density = windows.map(window => (faculty.types ?? []).reduce((sum, type) => sum + (window.types?.[type] ?? 0), 0) + (faculty.signals ?? []).reduce((sum, signal) => sum + (most[signal] ? (window.signals?.[signal] ?? 0) / most[signal] : 0), 0));
-    const mu = density.reduce((sum, value) => sum + value, 0) / (density.length || 1), sd = Math.sqrt(density.reduce((sum, value) => sum + (value - mu) ** 2, 0) / (density.length || 1)) || 1;
+    const parts = windows.map(window => {
+      const sentences = window.sentences ?? [], trust = sentences.reduce((sum, sentence) => sum + (sentence.confidence ?? 1), 0);
+      return {
+        block: (faculty.types ?? []).reduce((sum, type) => sum + (window.block?.distribution?.[type] ?? 0), 0),
+        sentence: trust ? sentences.reduce((sum, sentence) => sum + (sentence.confidence ?? 1) * (faculty.kinds ?? []).reduce((share, kind) => share + (sentence.distribution?.[kind] ?? 0), 0), 0) / trust : 0,
+        signal: (faculty.signals ?? []).reduce((sum, signal) => sum + (most[signal] ? (window.signals?.[signal] ?? 0) / most[signal] : 0), 0),
+        scores: { block: window.block ? window.block.confidence ?? 1 : 0, sentence: sentences.length ? trust / sentences.length : 0, signal: 1 },
+      };
+    });
+    const used = ['block', 'sentence', 'signal'].filter(part => (part === 'block' ? faculty.types : part === 'sentence' ? faculty.kinds : faculty.signals)?.length);
+    const z = Object.fromEntries(used.map(part => [part, stats(parts.map(entry => entry[part]))]));
+    const index = parts.map(entry => { let top = 0, under = 0; for (const part of used) { const a = MIX[part] * entry.scores[part]; top += a * z[part](entry[part]); under += a * a; } return under ? top / Math.sqrt(under) : 0; });
     const on = new Array(windows.length).fill(false);
     let state = false, since = 0;
-    density.forEach((value, n) => { const z = (value - mu) / sd; if (!state && z >= kOn) { state = true; since = n; } else if (state && z < kOff && n - since >= minimum) state = false; on[n] = state; });
+    index.forEach((value, n) => { if (!state && value >= kOn) { state = true; since = n; } else if (state && value < kOff && n - since >= minimum) state = false; on[n] = state; });
     out[id] = on.map((value, n) => value || !!on[n - 1] || !!on[n + 1]);
+    out.index[id] = index;
   }
   return out;
 }
 
 /** Whether a window is damped: a damping type is its largest share. */
-export const damped = window => { const top = Object.entries(window.types ?? {}).sort((a, b) => b[1] - a[1])[0]; return !!top && DAMPING.includes(top[0]); };
+export const damped = window => { const top = Object.entries(window.block?.distribution ?? {}).sort((a, b) => b[1] - a[1])[0]; return !!top && DAMPING.includes(top[0]); };
 
 /**
  * Who leads a window's beat: of the action directors, the one whose fired faculties weigh most there (its own faculty

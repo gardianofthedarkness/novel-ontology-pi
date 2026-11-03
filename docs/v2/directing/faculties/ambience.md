@@ -21,9 +21,10 @@ A summary faculty: the work model reading the text. Status: **proposed**. Back t
 
 ## When it fires
 
-When these grow unusually dense in a span (the gate: density against the book's baseline, on at μ + 1.5σ, off below μ + 0.5σ):
+On a score-based mixed index of all of these, each against its own baseline over the book and weighted by the window's scores (Jev's confidence in the block, in its sentences): on at 1.5, off below 0.5 (`firing()` in specialists.mjs).
 
 - block type **Establishing / ambience**: where and when: the place, weather, crowds, mood (volume 1: the openings of 1, 2, 10, 45)
+- sentence kind **environment**: its share in the window's sentences, weighted by each one's confidence
 - signal **crowds named**: the reading's crowd slots (134 in volume 1)
 
 ## How it is asked

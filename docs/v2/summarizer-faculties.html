@@ -197,13 +197,13 @@ table.state small, table small { color: var(--muted); }
 <tr><th scope="row">Scene frame<br><small>always (each scene)</small></th><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
 <tr><th scope="row">Scale and view<br><small>always (each beat)</small></th><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"><span title="reads">○</span></td><td class="cell"><span title="reads">○</span></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
 <tr><th scope="row">Generalist<br><small>always (each window)</small></th><td class="cell"><span title="reads">○</span></td><td class="cell"><span title="reads">○</span></td><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"><span title="reads">○</span></td><td class="cell"><span title="reads">○</span></td><td class="cell"><span title="reads">○</span></td></tr>
-<tr><th scope="row">Conversation and blocking<br><small>Routine interaction, Mediated exchange</small></th><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
-<tr><th scope="row">Inner state<br><small>Interior flow, Routine interaction</small></th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td></tr>
-<tr><th scope="row">Journeys<br><small>Pursuit / traversal, a jump in scale</small></th><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
-<tr><th scope="row">Choreography<br><small>Confrontation, Spectacle / catastrophe</small></th><td class="cell"></td><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
-<tr><th scope="row">Ambience<br><small>Establishing / ambience, crowds named</small></th><td class="cell"></td><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
-<tr><th scope="row">Props and vehicles<br><small>vehicles named, weapons named</small></th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td></tr>
-<tr><th scope="row">Set description<br><small>Establishing / ambience, buildings named or described</small></th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td></tr>
+<tr><th scope="row">Conversation and blocking<br><small>Routine interaction, Mediated exchange, spoken sentences</small></th><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Inner state<br><small>Interior flow, Routine interaction, thought sentences</small></th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Journeys<br><small>Pursuit / traversal, action sentences, a jump in scale</small></th><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Choreography<br><small>Confrontation, Spectacle / catastrophe, action sentences</small></th><td class="cell"></td><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Ambience<br><small>Establishing / ambience, environment sentences, crowds named</small></th><td class="cell"></td><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Props and vehicles<br><small>action sentences, vehicles named, weapons named</small></th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td></tr>
+<tr><th scope="row">Set description<br><small>Establishing / ambience, environment sentences, fact sentences, buildings named or described</small></th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td></tr>
 </tbody></table></div>
 <h3>The faculties</h3>
 <div class="grid">
@@ -214,19 +214,19 @@ table.state small, table small { color: var(--muted); }
 <div class="card always"><span class="tag">Always on · each window</span> <span class="pill always">built</span><h3>Generalist</h3><dl>
     <dt>Fired by</dt><dd>always (each window)</dd><dt>Writes</dt><dd>stated moves (graded); facts, stated and implied; items; talk kinds; breaks</dd><dt>Read by</dt><dd>Stage manager, Routine director, Combat director, Character director, Transport specialist, Architect</dd><dt>Code</dt><dd><code>world-engine/digest/digest.mjs</code></dd></dl></div>
 <div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Conversation and blocking</h3><dl>
-    <dt>Fired by</dt><dd>Routine interaction, Mediated exchange</dd><dt>Writes</dt><dd>who talks with whom and through what; formations: beside, across a table, a ring, two sides of a door; attention: who looks at whom</dd><dt>Read by</dt><dd>Routine director</dd></dl></div>
+    <dt>Fired by</dt><dd>Routine interaction, Mediated exchange, spoken sentences</dd><dt>Writes</dt><dd>who talks with whom and through what; formations: beside, across a table, a ring, two sides of a door; attention: who looks at whom</dd><dt>Read by</dt><dd>Routine director</dd></dl></div>
 <div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Inner state</h3><dl>
-    <dt>Fired by</dt><dd>Interior flow, Routine interaction</dd><dt>Writes</dt><dd>each person's emotional state as it changes (a distribution); intent: what they want next; bonds: who they are to each other</dd><dt>Read by</dt><dd>Character director</dd></dl></div>
+    <dt>Fired by</dt><dd>Interior flow, Routine interaction, thought sentences</dd><dt>Writes</dt><dd>each person's emotional state as it changes (a distribution); intent: what they want next; bonds: who they are to each other</dd><dt>Read by</dt><dd>Character director</dd></dl></div>
 <div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Journeys</h3><dl>
-    <dt>Fired by</dt><dd>Pursuit / traversal, a jump in scale</dd><dt>Writes</dt><dd>from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration</dd><dt>Read by</dt><dd>Mega-scene director</dd></dl></div>
+    <dt>Fired by</dt><dd>Pursuit / traversal, action sentences, a jump in scale</dd><dt>Writes</dt><dd>from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration</dd><dt>Read by</dt><dd>Mega-scene director</dd></dl></div>
 <div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Choreography</h3><dl>
-    <dt>Fired by</dt><dd>Confrontation, Spectacle / catastrophe</dd><dt>Writes</dt><dd>exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide</dd><dt>Read by</dt><dd>Mega-scene director, Combat director</dd></dl></div>
+    <dt>Fired by</dt><dd>Confrontation, Spectacle / catastrophe, action sentences</dd><dt>Writes</dt><dd>exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide</dd><dt>Read by</dt><dd>Mega-scene director, Combat director</dd></dl></div>
 <div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Ambience</h3><dl>
-    <dt>Fired by</dt><dd>Establishing / ambience, crowds named</dd><dt>Writes</dt><dd>the crowd as a density of the place: its make-up and flow; weather, light, mood; set dressing</dd><dt>Read by</dt><dd>Mega-scene director</dd></dl></div>
+    <dt>Fired by</dt><dd>Establishing / ambience, environment sentences, crowds named</dd><dt>Writes</dt><dd>the crowd as a density of the place: its make-up and flow; weather, light, mood; set dressing</dd><dt>Read by</dt><dd>Mega-scene director</dd></dl></div>
 <div class="card fired"><span class="tag">Fired</span> <span class="pill damp">partial</span><h3>Props and vehicles</h3><dl>
-    <dt>Fired by</dt><dd>vehicles named, weapons named</dd><dt>Writes</dt><dd>vehicles: kind, who drives or rides; weapons: kind, who holds them; things held, thrown, broken</dd><dt>Read by</dt><dd>Transport specialist</dd><dt>Code</dt><dd><code>world-engine/digest/digest.mjs (items)</code></dd></dl></div>
+    <dt>Fired by</dt><dd>action sentences, vehicles named, weapons named</dd><dt>Writes</dt><dd>vehicles: kind, who drives or rides; weapons: kind, who holds them; things held, thrown, broken</dd><dt>Read by</dt><dd>Transport specialist</dd><dt>Code</dt><dd><code>world-engine/digest/digest.mjs (items)</code></dd></dl></div>
 <div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Set description</h3><dl>
-    <dt>Fired by</dt><dd>Establishing / ambience, buildings named or described</dd><dt>Writes</dt><dd>a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them</dd><dt>Read by</dt><dd>Architect</dd></dl></div>
+    <dt>Fired by</dt><dd>Establishing / ambience, environment sentences, fact sentences, buildings named or described</dd><dt>Writes</dt><dd>a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them</dd><dt>Read by</dt><dd>Architect</dd></dl></div>
 </div>
 <h3>The directors</h3>
 <div class="grid">
@@ -319,13 +319,17 @@ table.state small, table small { color: var(--muted); }
 
 <h2>Firing conditions</h2>
 <p>A faculty fires on the expected density of its types, read from the distributions rather than the top answer, against the book's own baseline.</p>
-<div class="formula">density(f, block) = Σ over f's types  P(type | block)  +  Σ over f's signals  count ÷ the most in any block
-baseline(f)       = mean μ and spread σ of density(f) over the book
-f fires    on   when  density ≥ μ + k_on · σ      (k_on ≈ 1.5)
-           off  when  it falls below μ + k_off · σ (k_off ≈ 0.5)
-           and stays on at least two blocks (12 sentences), reading a block of margin either side
-lead(beat) = the director whose fired faculties weigh most (its own 2, others it reads 1); the rest co-direct</div>
+<div class="formula">for a faculty f in a block window w (both the block's and each sentence's top candidates, distribution and scores kept):
+  block(w)    = Σ over f's types   P(type | w)
+  sentence(w) = Σ over f's kinds   P(kind | s), averaged over w's sentences s weighted by their confidence
+  signal(w)   = Σ over f's signals count ÷ the most in any window
+  zᵢ          = each part against its own mean and spread over the book
+  index(w)    = Σ aᵢ·zᵢ ÷ √Σ aᵢ²,   aᵢ = weight (block 1, sentence 0.6, signal 0.6) × w's score for it
+                (the block's confidence, its sentences' mean confidence, 1)
+f fires on at index ≥ 1.5, off below 0.5, on for at least two blocks, a block of margin either side
+lead(beat) = the action director whose fired faculties weigh most (its own 2, others 1); the rest co-direct</div>
 <ul>
+  <li><b>A mixed index, by its scores:</b> blocks and sentences both keep their top candidates, whole distributions and Jev's scores; a block Jev is unsure of leans on its sentences, and a sure one outweighs them.</li>
   <li><b>Hysteresis:</b> the off line sits below the on line, so a faculty doesn't flicker on a single line.</li>
   <li><b>Co-firing:</b> several faculties may be on at once (a fight during a chase fires choreography and journeys).</li>
   <li><b>Smoothing:</b> a hidden Markov model over the block types, with Jev's distributions as soft observations, as <code>occupation.mjs</code> does for presence. Its change points are the beats, where the camera may cut.</li>

@@ -11,7 +11,7 @@ import { BLOCK_TYPES, DAMPING, DIRECTORS, FACULTIES, FLOW, GATES, LAWS, LOG_KIND
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const START = '<!-- specialists:start -->', END = '<!-- specialists:end -->';
 export const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-export const firedBy = faculty => faculty.always ? `always (each ${faculty.always})` : [...(faculty.types ?? []).map(type => BLOCK_TYPES[type].label), ...(faculty.signals ?? []).map(signal => SIGNALS[signal].label)].join(', ');
+export const firedBy = faculty => faculty.always ? `always (each ${faculty.always})` : [...(faculty.types ?? []).map(type => BLOCK_TYPES[type].label), ...(faculty.kinds ?? []).map(kind => `${kind} sentences`), ...(faculty.signals ?? []).map(signal => SIGNALS[signal].label)].join(', ');
 export const readers = id => Object.entries(DIRECTORS).filter(([, director]) => director.reads.includes(id)).map(([key, director]) => ({ key, label: director.label, own: director.reads[0] === id }));
 export const fires = type => Object.entries(FACULTIES).filter(([, faculty]) => faculty.types?.includes(type)).map(([, faculty]) => faculty.label);
 export const metres = ([near, far]) => `${near}–${far >= 1000 ? `${far / 1000} km` : `${far} m`}`;
