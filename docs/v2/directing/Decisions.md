@@ -352,3 +352,20 @@ right 30 times and the segments 39.
 
 26. **Firing settings for segments**: the index above average, no hysteresis or margin, on raw distributions; *your
     call:* adopt (with M14), and use what the faculties find for the lead instead of the residual retype.
+
+### Co-firing, benchmarked (2026-11-03)
+
+The grid above scored each faculty on its own, which lets several fire on one stretch but never checks that the right
+ones fire together. On the same 109 stretches, 17 need two or more faculties (talk on the move 10, talk in a fight 5,
+all three 2):
+
+| Rule | Of the 17: all fired / some | Stretches fired by 2+ faculties (of them, all needed) | The fired set exactly right |
+|---|---|---|---|
+| Now (smoothed) | 2 / 13 | 32 (3) | 33/109 |
+| Best (raw, above average) | 6 / 11 | 31 (5) | 60/109 |
+| Best after the residual retype | 5 / 12 | 26 (5) | 65/109 |
+
+Co-firing is weak under every rule: where two faculties are needed usually only one fires, and most co-firing is
+spurious. Each faculty's index leans on the stretch's one type distribution, which a mixed stretch splits; the
+sentence kinds (spoken lines for conversation, action lines for journeys and fights) do not depend on the stretch's
+type and should carry more weight for co-firing (MIX, a free grid on the same data).
