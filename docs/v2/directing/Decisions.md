@@ -29,3 +29,13 @@ Newest last. Back to [Directing](Directing.md).
    scene 42: mediated → routine. The full list: [Gate](Gate.md).
 5. **The strip is its own page for now**, not yet in World · Live's Dev panel. *Your call:* move it into the Dev panel
    now, or after W10.
+
+## From M4: the stage manager (2026-11-03)
+
+6. **Four scenes are slivers of the tiling**: 15 (four sentences), 20 (one), 41 (one), 43 (two), nobody named in them.
+   *Done for now:* a sliver that carries on keeps the scene before's cast where they stand. *Your call:* keep that, or
+   have the reading's tiling merge slivers into their neighbours (a reading change; volume 1 would need its tiling
+   redone).
+7. **The cast gathers within 80 m of its middle.** Anyone carried in from further walks in (to 300 m) or is placed.
+   In scene 40 the rooftop fight spreads its cast about 180 m, so scene 41 moved six of them back together. *Your
+   call:* 80 m, or tie it to the scene's scale band once M5's scale faculty gives one.

@@ -2,16 +2,16 @@
 type: "faculty"
 id: "frame"
 aliases: ["Scene frame"]
-status: "proposed"
+status: "partial"
 fired_by: ["always: each scene"]
 read_by: ["stage"]
-tags: ["directing/faculty", "status/proposed"]
+tags: ["directing/faculty", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
 # Scene frame
 
-A summary faculty: the work model reading the text. Status: **proposed**. Back to [Directing](../Directing.md).
+A summary faculty: the work model reading the text. Status: **partial** (`world-engine/director/director.mjs (M4: the cast from the scene digest, gathered in the set; beats from gate.mjs)`). Back to [Directing](../Directing.md).
 
 ## What it writes
 

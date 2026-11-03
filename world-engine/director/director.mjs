@@ -27,12 +27,14 @@ const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
-const DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs');
+const DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
 // The digest's moves played: at least this sure (below it, motion read into a spoken line or a thought).
 const MOVE_SURE = 0.5;
+// A scene's cast stands within this of its middle; anyone carried in from further walks in or is placed (M4).
+const GATHER = 80;
 const seeded = text => { let h = 2166136261; for (const c of text) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } let s = h >>> 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 const round = value => Math.round(value * 10) / 10;
 
@@ -76,6 +78,10 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   const names = new Map([...reading.chart.entities.map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]), ...(reading.slots ?? []).map(slot => [slot.id, slot.label])]);
   const nameForms = new Map(reading.chart.entities.map(entity => [entity.id, [...new Set([...(entity.proper ?? []), ...(entity.names ?? [])])].filter(form => form.length >= 2)]));
   const sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
+  // The beats (M3, gate.mjs) of a reading with blocks: each sentence's beat, its type and its lead. The camera cuts only
+  // at a beat's start (M4).
+  const gate = reading.blocks?.length ? G.gateOf(G.windowsOf(reading)) : null, beatOf = new Map();
+  if (gate) { const order = reading.scenes.flatMap(entry => entry.sentences), at_ = new Map(order.map((id, n) => [id, n])); gate.beats.forEach((beat, n) => { for (let k = at_.get(beat.first); k <= at_.get(beat.last); k++) if (!beatOf.has(order[k])) beatOf.set(order[k], { n, type: beat.type, lead: beat.lead }); }); }
   const cardsOf = new Map();
   for (const card of reading.cards) { const id = sceneOf.get(card.first); if (id && ['action', 'dialogue'].includes(card.kind)) (cardsOf.get(id) ?? cardsOf.set(id, []).get(id)).push(card); }
   const out = join(novelDir, 'stage', 'director'), shots = join(out, 'shots'), work = join(out, 'page');
@@ -134,6 +140,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   // What each model used (the user, 2026-11-03: track the cost): the work model's requests and tokens, for system 2 and for
   // the summarizer apart; Jev's calls.
   const workMeter = workModel ? DG.metered(workModel) : null, digestMeter = workModel && digest ? DG.metered(workModel) : null;
+  record.gate = gate ? { beats: gate.beats.length, coverage: gate.coverage } : null;
   record.usage = { system2: workMeter?.usage ?? null, digest: digestMeter?.usage ?? null, workModel: workModel?.modelId ?? null };
   const asked = withSystem2((state, questions, options) => retried(() => jev.decide(state, questions, options), log), workMeter, { note: entry => { if (asking) (asking.system2 ??= []).push(entry); } });
   // The summarizer (Track A, digest.mjs; the user, 2026-11-03): every scene of the line read by the work model ahead of the
@@ -298,6 +305,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // carries on from where they are; seen for the first time, they start at spawning's start (spawning happens once);
         // standing outside the scene's place, they travel to their start in it (walked; beyond 300 m they arrive off-page).
         const own = script.scenes.find(entry => entry.id === scene.id), spawned = spawn?.scenes?.find(entry => entry.id === scene.id);
+        const dg = digested.has(scene.id) ? await digested.get(scene.id) : null;
         const startNode = who => {
           const start = spawned?.starts.find(entry => entry.who === who);
           if (!start) return run.starts[who]?.[0] ?? null;
@@ -316,12 +324,24 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // Someone new starts a few metres from the anchor; someone from elsewhere walks to it (off-page beyond 300 m).
         // Presence as the script has it, with the review's pins over it (someone answered present or not, W5).
         const pinnedIn = [...Object.entries(pins.present).filter(([key, value]) => value && key.startsWith(`${scene.id}|`)).map(([key]) => key.slice(scene.id.length + 1)), ...[...surelyThere].filter(key => key.startsWith(`${scene.id}|`)).map(key => key.slice(scene.id.length + 1))];
-        const present = [...new Set([...(own?.present ?? Object.keys(run.starts).filter(id => run.starts[id])), ...pinnedIn])].filter(who => pins.present[`${scene.id}|${who}`] !== false);
+        let present = [...new Set([...(own?.present ?? Object.keys(run.starts).filter(id => run.starts[id])), ...pinnedIn])].filter(who => pins.present[`${scene.id}|${who}`] !== false);
+        // The stage manager (M4): a scene the script has nobody in (volume 1: 15, 20, 41, 43) takes its cast from the scene
+        // digest, everyone it has on stage and not gone.
+        if (!present.length && dg?.digest.people?.length) { present = dg.digest.people.filter(entry => entry.doing !== 'gone').map(entry => entry.who).filter(who => pins.present[`${scene.id}|${who}`] !== false); sceneRecord.castFrom = 'digest'; }
+        // A sliver the tiling left (volume 1: 15, 20, 41, 43, one to four sentences, nobody named) that carries straight on
+        // keeps the scene before's cast where they stand.
+        if (!present.length && before && (reads.sentences.length <= 4 || /straight on/.test(dg?.digest.continues ?? ''))) { present = Object.keys(before.positions); sceneRecord.castFrom = 'the scene before'; }
         if (pinnedIn.length || present.length < (own?.present?.length ?? present.length)) sceneRecord.pinned = { present: pinnedIn, absent: (own?.present ?? []).filter(who => !present.includes(who)) };
         for (const who of present) if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
-        const was = new Map(present.map(who => [who, prior(who, scene.id)]));
+        const was = new Map(present.map(who => [who, prior(who, scene.id) ?? (sceneRecord.castFrom === 'the scene before' ? before.positions[who] ?? null : null)]));
         sceneRecord.laws = present.filter(who => where.get(who) && !was.get(who)).map(who => ({ law: 'L1', who, verdict: 'amend', why: 'first in this strand: not carried in from another strand' }));
-        const here = present.filter(who => was.get(who) && inside(was.get(who)[0]));
+        // Everyone present gathers in the set (M4; the user, 2026-11-03: the camera shifting back and forth): someone carried
+        // in from far from the others (volume 1, scene 40: from scene 1's roof, 460 m away) is not "here" but walks in or
+        // is placed, as someone from elsewhere.
+        const carriedIn = present.filter(who => was.get(who) && inside(was.get(who)[0]));
+        const middle = carriedIn.length ? [0, 2].map(axis => { const values = carriedIn.map(who => at(was.get(who)[0])[axis]).sort((a, b) => a - b); return values[Math.floor(values.length / 2)]; }) : null;
+        const here = carriedIn.filter(who => { const p = at(was.get(who)[0]); return Math.hypot(p[0] - middle[0], p[2] - middle[1]) <= GATHER; });
+        if (here.length < carriedIn.length) sceneRecord.gathered = carriedIn.filter(who => !here.includes(who));
         let anchor = null;
         if (here.length) {
           const points = here.map(who => at(was.get(who)[0])), mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length);
@@ -363,7 +383,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // as actions of those they name, in reading order.
         // With the summarizer's digest of the scene, its moves stand in for the pass: a sentence outside the played cards that
         // moves someone present is played as their action card.
-        const dg = digested.has(scene.id) ? await digested.get(scene.id) : null, covered = new Set(dg?.covered ?? []);
+        const covered = new Set(dg?.covered ?? []);
         let moving;
         if (dg) {
           sceneRecord.digest = { ...dg.digest, windows: dg.windows, failed: dg.failed, found: { moves: dg.moves.length, facts: dg.facts.length, items: dg.items.length, talk: dg.talk.length, breaks: dg.breaks.length, background: dg.background.length } };
@@ -449,7 +469,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           return { ...node, edge, door, stairs, street: node.type === FA.TYPE.outdoor && [1, 3].includes(node.ground || 1) };
         };
         const nodeAt = id => { const p = at(id), found = around(p[0], p[2], 3).nodes.find(node => node.id === id); return describe(found ?? { id, x: p[0], y: p[1], z: p[2], type: 0, lot: -1 }); };
-        let factsUpTo = -1, itemsUpTo = -1;
+        let factsUpTo = -1, itemsUpTo = -1, cameraBeat = null, cameraGroup = new Set();
         // What people carry as the scene begins (the scene digest). A thing someone here held before is drawn with them only
         // if the scene says they still carry it (else it was left behind); someone elsewhere keeps what they hold.
         const personNames = [...names.values()].filter(name => typeof name === 'string');
@@ -492,9 +512,13 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
               (cardRecord.facts ??= []).push(...own.map(fact => ({ ...fact, holds: FA.holds(fact, here, positionOf) })));
               const binding = own.filter(FA.binding), failing = binding.filter(fact => FA.holds(fact, here, positionOf) === false);
               if (!failing.length) continue;
-              const wide = failing.some(fact => ['indoors', 'outdoors', 'roof', 'underground', 'floor', 'vehicle'].includes(fact.kind)), pool = [...around(here.x, here.z, wide ? 60 : 24).nodes];
-              for (const fact of failing) { const p = fact.kind === 'near' ? positionOf(fact.value) : null; if (p) pool.push(...around(p[0], p[2], 6).nodes); }
-              const best = FA.bestFor(binding, here, pool.map(describe), positionOf), words = failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; ');
+              // Facts resolve in the set (M4): the spot is looked for inside the scene's building or area first, further
+              // only for a stated fact.
+              const wide = failing.some(fact => ['indoors', 'outdoors', 'roof', 'underground', 'floor', 'vehicle'].includes(fact.kind)), nearby = [...around(here.x, here.z, wide ? 60 : 24).nodes];
+              for (const fact of failing) { const p = fact.kind === 'near' ? positionOf(fact.value) : null; if (p) nearby.push(...around(p[0], p[2], 6).nodes); }
+              const words = failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; ');
+              let best = FA.bestFor(binding, here, nearby.filter(node => inside(node.id)).map(describe), positionOf);
+              if (!best && failing.some(fact => fact.basis === 'stated')) { best = FA.bestFor(binding, here, nearby.map(describe), positionOf); if (best) (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: 'amend', why: `outside the set: ${words}` }); }
               if (!best) { (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: failing.some(fact => fact.basis === 'stated') ? 'held' : 'weighed', why: `no spot near agrees: ${words}` }); continue; }
               moveTo(who, walk(scene, `${scene.id}|${card.id}|${who}|implied`, positions[who], [best.id], 'walk'), 'walk', `implied: ${words}`, { quiet: true });
               const last = cardRecord.moves.at(-1);
@@ -755,7 +779,14 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           }
           run.events.push({ at: Object.fromEntries(Object.entries(positions).map(([who, value]) => [who, value])) });
           // A card no one was asked about: the producer's camera on the people of the card, as they stood when it began.
-          if (!cardRecord.camera) { const points = event.actors.filter(who => positions[who]).map(who => at(positions[who][0])); if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 }; } }
+          // The camera holds one group for a beat (M4; the user, 2026-11-03: the camera shifting back and forth): everyone
+          // who has acted, spoken or moved in the beat so far, framed together; a new beat starts a new group.
+          const beat = beatOf.get(card.first) ?? null, key = beat?.n ?? `card:${card.id}`;
+          if (beat) cardRecord.beat = beat;
+          if (key !== cameraBeat) { cameraBeat = key; cameraGroup = new Set(); }
+          for (const who of [...event.actors, ...cardRecord.moves.filter(move => move.moved && !String(move.why ?? '').startsWith('background')).map(move => move.person)]) if (positions[who]) cameraGroup.add(who);
+          { const points = [...cameraGroup].filter(who => positions[who]).map(who => at(positions[who][0]));
+            if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length), spread = Math.max(0, ...points.map(p => Math.hypot(p[0] - mid[0], p[2] - mid[2]))); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(16, spread * 1.2 + 6), elevation: 35, yaw: 0 }; } }
           // The producer's camera rides with the card's event: the player and World · Live follow it card by card.
           event.camera = cardRecord.camera ?? null;
           // Streamed: the line as far as this card, played on in World · Live; a moment to watch a move before the next question.

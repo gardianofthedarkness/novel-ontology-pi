@@ -82,7 +82,9 @@ export async function strandDemo(novelDir, options) {
   const staged = new Map(inputs.movementScenes.map(scene => [scene.id, scene])), byIndex = new Map(inputs.data.scenes.map(scene => [scene.id, scene.index]));
   const all = inputs.data.scenes.map(scene => { const stage = staged.get(scene.id); return { id: scene.id, index: scene.index, placeId: stage?.placeId ?? scene.placeIds[0] ?? null, flashback: scene.flashback, cast: stage?.cast ?? answers?.presence.get(scene.id) ?? scene.characterIds, events: stage?.events }; });
   const fork = options.fork ? forkTimeline(all, strands).forkOf : null;
-  const lineScenes = all.filter(scene => staged.has(scene.id) && scene.events?.length && byIndex.get(scene.id) >= byIndex.get(options.from) && byIndex.get(scene.id) <= byIndex.get(options.to) && (!fork || fork.get(scene.id) === fork.get(options.fork)));
+  // The director (worldOnly) plays its own cards: a scene with a place and nothing staged for it (volume 1: 36, 38, 39,
+  // with no canon events) is still on its line.
+  const lineScenes = all.filter(scene => (options.worldOnly ? scene.placeId : staged.has(scene.id) && scene.events?.length) && byIndex.get(scene.id) >= byIndex.get(options.from) && byIndex.get(scene.id) <= byIndex.get(options.to) && (!fork || fork.get(scene.id) === fork.get(options.fork)));
   // `until` (a scene and an event index): the line only as far as that event, for a loop that decides one event at a time.
   const stop = options.until ? byIndex.get(options.until.scene) : Infinity;
   // `worldOnly` (terrain spawning): the world the line's scenes stand in, built and reached, with no event played and no

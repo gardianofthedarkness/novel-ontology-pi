@@ -18,7 +18,9 @@ export const binding = fact => (fact.basis === 'stated' ? fact.sure >= 0.5 : fac
 export function holds(fact, node, positionOf = () => null) {
   const k = Math.round(node.y / FLOOR);
   switch (fact.kind) {
-    case 'indoors': return [TYPE.circulation, TYPE.room, TYPE.underground].includes(node.type);
+    // Indoors is a building's rooms and corridors; underground only when a fact says underground (M4: "indoors" moved
+    // someone 72 m into a basement in W9's scene 19).
+    case 'indoors': return [TYPE.circulation, TYPE.room].includes(node.type);
     case 'outdoors': return node.type === TYPE.outdoor || node.type === TYPE.roof;
     case 'roof': return node.type === TYPE.roof;
     case 'underground': return node.type === TYPE.underground || node.y < -1;

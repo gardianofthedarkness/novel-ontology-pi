@@ -39,7 +39,7 @@ export const SIGNALS = {
  * scene board.
  */
 export const FACULTIES = {
-  frame: { label: 'Scene frame', always: 'scene', status: 'proposed', writes: ['the set as a path down the place tree', 'who is on stage', 'how it follows the scene before', 'the beats'] },
+  frame: { label: 'Scene frame', always: 'scene', status: 'partial', code: 'world-engine/director/director.mjs (M4: the cast from the scene digest, gathered in the set; beats from gate.mjs)', writes: ['the set as a path down the place tree', 'who is on stage', 'how it follows the scene before', 'the beats'] },
   // The user, 2026-11-03: "an implicit or scale faculty of summarization pass the zoom and view angle recommendation to
   // it's associated directors and the directors camera man. Only directors who records actions need the zoom parameter."
   scale: { label: 'Scale and view', always: 'beat', status: 'proposed', writes: ['the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km)', 'the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial', 'whose eyes or which landmark it is seen from', 'how far its moves reach'] },
