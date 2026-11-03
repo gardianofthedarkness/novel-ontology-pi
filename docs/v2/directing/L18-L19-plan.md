@@ -56,49 +56,63 @@ has taken by then.
 through standing matter (none), scenes 21 and 27 (the ground splitting, the rooftop) by eye. Cost: nothing paid; the
 digest's new fact kinds are paid only in a real run.
 
-## L19 · Elastic terrain: the city in back-propagation
+## L19 · The city floats: places as relative truth (the user, 2026-11-03)
 
-**The state.** Each terrain site (a place's position in its parent) becomes latent, its prior the spawned position with
-the terrain's own energy (`energyOf`: rings, pairs, pressure, squeeze) as the cost of moving it, so the city's shape
-holds unless the story needs otherwise.
+> A place's source of truth is relative source of truth. For example we are sure people are in a building, and this
+> building is sure to stay in a district, but any other tree in between is floating. Think of all manifolds as floating
+> on top of the city. Now, based on all ground truth confirmed in the past, we have a certainty of every tree
+> relationship in places. The more firm it is, the harder for the two places to be apart. And this certainty comes from
+> time tracks of characters over the past. The bigger the area, the harder to move either.
 
-**The observations.** L5's failures: a person who must be at place B a story-time t after being at place A, too far at
-the fastest way their abilities allow. Each is a soft term: the distance beyond what speed × time covers, at a cost.
+And: most arrivals off-page should be resolved by this terrain smoothing.
 
-**Who explains a failure, cheapest first** (the user's "review of ability groups suggest low energy level of
-supporting such move"): a way the person has (L12: a leap, a flight, a vehicle; the abilities config, still empty);
-a time read wrongly (the time tree); only then the places nearer (L19). The review (Pi) is asked where abilities are
-the question.
+**The bodies.** Every place of the tree (a district, a street, a block, a building, a room) is a manifold floating over
+the city, its middle x_P free to move; its mass is its area, so the bigger it is, the harder it moves. Nothing has an
+absolute position as truth; the city's frame is held by its largest masses.
 
-**How it is solved.** The sites' positions minimise the terrain energy plus the travel terms (the zoom engine's sweeps
-already minimise E over a grid with a strict decrease, so it ends), moving only the sites the failures involve and
-their neighbours. The world is spawned again from the moved sites (`stage/terrain.json` versioned, the old kept in the
-world's history), and the director replays from its caches (nothing asked again where nothing changed).
+**The bonds: how sure each tree relation is.** A child place C in its parent P is a spring that keeps C inside P's
+extent, costing k_CP · (how far C pokes out of P)². Its stiffness k_CP is the certainty of the relation, grown from
+ground truth over time: every confirmed position of a character (pinned, stated, met; the world log's ranks) in C at a
+moment the strand has them in P adds to it, from the place tree's own confidence as the prior, so
+k_CP = 1 − Π (1 − w_e) over those confirmations e, each w_e its rank's weight. A building the text keeps putting in a
+district is held there firmly; a street between them that no one confirms floats.
+
+**The tracks: what characters' journeys say about distances.** Two places a strand passes between (a person in A, then
+in B) can be no farther apart than the way allows in the time between: speed (L12's ways; walking by default) times
+the time (the story's clock where it states one; else the beats' durations the scale reader gives, L17). Beyond that a
+track costs k_AB · (excess)², its stiffness again the confirmations' certainty. An arrival off-page is exactly such a
+track that the city cannot hold now; it pulls A and B together, the lighter one moving more.
+
+**Least change.** Every place costs its mass times how far it moves from where the city has it (the history of the
+city changes least), and siblings keep apart as the terrain's own energy has them (rings, pairs, pressure: no overlap).
+
+**How it is solved.** The energy (bonds + tracks + mass × displacement + the terrain's) is relaxed: a few sweeps of the
+places' positions, each lowering it (as the zoom engine's sweeps do), heavy places barely moving, floating ones taking
+up the slack. Its input is the last pass's smoothed history (every track and confirmation of the strands so far); its
+output moves the sites in `stage/terrain.json` (a version kept), the world is spawned again where sites moved, and the
+next pass plays on the new city. So the city is part of back-propagation: each pass's ground truth firms its bonds.
 
 **Steps.**
-1. Decision 22 first: story time's periods as spans (late night 22:00–04:00), so L5 has times to check.
-2. L12's abilities config (the main agent's): who leaps, flies, drives; otherwise every superhuman journey looks
-   impossible.
-3. L5's failures collected per strand, each with the distance, the time and the explanations tried.
-4. The site solver (`world-engine/terrain/elastic.mjs`): the terrain energy plus the travel terms, the sites moved, J in
-   metres of city.
-5. Respawn and replay; the laws again.
+1. The bond certainties from the world log (confirmed positions per place, by rank) and the place tree's confidence.
+2. The tracks from the strands (consecutive containers of a person at different places) with their time (clock, else
+   beats' durations) and way (L12; walking until the abilities config exists).
+3. The relaxation (`world-engine/terrain/float.mjs`, pure: places, masses, bonds, tracks in; moves out, J in metres
+   weighted by area).
+4. Sites moved in the terrain, the world respawned, the next pass replayed from the caches.
 
-**Checked by.** L5 failures before and after (each explained by an ability, a time or a moved site), the metres the
-city moved, no overlapping lots, the terrain page by eye. Cost: nothing paid for the solver; a respawn is the engine's
-own work.
+**Checked by.** Off-page arrivals before and after (most should go), the tracks still beyond reach (each named), the
+metres the city moved weighted by area, no overlapping lots, the terrain page by eye.
 
 ## Order and size
 
-L18 first: it is local (a blast and the walks near it) and its evidence is already in the runs. L19 after: it needs
-decision 22 and the abilities config before it has anything to act on, and moving the city changes every path in it.
-L18 is about the size of the smoother (W5b); L19 about the size of terrain spawning's site placement.
+L18 first (approved by the user): it is local (a blast and the walks near it) and its evidence is already in the runs.
+L19 after: its evidence is the strands' tracks and the world log's confirmations, already in the runs; decision 22
+(clock spans) and the abilities config sharpen its tracks but are not needed to begin, since the beats' durations give
+the time between containers. Both before W10.
 
 ## Decisions for the user
 
-1. **L18's later evidence**: add "broken" and "intact" as fact kinds of the summarizer (paid in a real run), or begin
-   with the cards and paths only.
-2. **L19's prerequisites**: decide decision 22 (periods as spans) and give the abilities config (or let Pi draft it from
-   the reading for the review), before L19 is built.
-3. **Before W10 or after**: L18 before W10 (its evidence comes from runs we have); L19 after decision 22 and the
-   abilities config, possibly after W10.
+1. **L18's later evidence**: begin with the cards, Jev's size answers and the walks that failed near a blast (nothing
+   paid); "broken" and "intact" as summarizer facts later if needed.
+2. **L19's speeds**: walking for everyone until the abilities config exists (a superhuman's journey then pulls places
+   too hard), or a draft config from the reading first.
