@@ -144,3 +144,16 @@ landmark question now says which way each building lies on the map, beside its f
     on a map (arrows, spots, landmarks) its options in words too, or test the arrows and spots the same way first.
 20. **Jev's confidence separates right from wrong** (0.83 against 0.33 with words). *Your call:* hold a pick under a
     confidence line for system 2 or the review, as with the text questions.
+
+## The second rehearsal (2026-11-03)
+
+After 1, 2, 7 and 8 were built: every scene played with a cast, camera bounces 1 (the first rehearsal 5, W9 12), the
+background's drift halved (now speed times the beat's time), 22 talks recognized as remote.
+
+21. **Presence in the frame moves many off-page.** With frames of a room or a street (what the rule-made reader gave),
+    73 people arrived off-page rather than being carried in. The real reader will frame wider where the text does, but
+    L16 makes the frame decide who is in a scene. *Your call:* keep L16 as is, or let someone carried in stay when the
+    strands say the scene carries straight on, whatever the frame.
+22. **L5 rarely has a clock to check against**: volume 1's scenes mostly state "late night", not a time, so the walk-in
+    travel check never fired. *Your call:* read story time's periods as spans (late night: 22:00–04:00) so L5 and L19
+    have something to work with.
