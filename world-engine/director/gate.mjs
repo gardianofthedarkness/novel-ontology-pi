@@ -7,7 +7,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { BLOCK_TYPES, DIRECTORS, FACULTIES, firing, lead } from './specialists.mjs';
+import { BLOCK_TYPES, DIRECTORS, FACULTIES, FIRING, firing, lead } from './specialists.mjs';
 import { beatsOf, smooth } from './beats.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -20,9 +20,11 @@ export function windowsOf(reading) {
   const mentions = (list, test) => list.filter(test).map(entry => new Set(entry.sentences ?? [entry.sentence]));
   const signal = { vehicles: mentions(reading.references ?? [], entry => entry.type === 'vehicle'), weapons: mentions(reading.references ?? [], entry => entry.type === 'weapon'), crowds: mentions(reading.references ?? [], entry => entry.type === 'crowd'),
     buildings: [...mentions(reading.places?.references ?? [], () => true), ...mentions(reading.spatial ?? [], () => true)] };
-  return [...(reading.blocks ?? [])].sort((a, b) => position.get(a.first) - position.get(b.first)).map(block => {
+  // The reading's segments (M14: stretches Jev cut where the kind of action changes) where it has them, else its blocks.
+  const unit = reading.segments?.length ? 'segment' : 'block';
+  return [...(unit === 'segment' ? reading.segments : reading.blocks ?? [])].sort((a, b) => position.get(a.first) - position.get(b.first)).map(block => {
     const tally = new Map(); for (const id of block.sentences) tally.set(sceneOf.get(id), (tally.get(sceneOf.get(id)) ?? 0) + 1);
-    return { first: block.first, last: block.last, scene: [...tally].sort((a, b) => b[1] - a[1])[0][0], block: { distribution: block.distribution, confidence: block.confidence, type: block.type },
+    return { unit, first: block.first, last: block.last, scene: [...tally].sort((a, b) => b[1] - a[1])[0][0], block: { distribution: block.distribution, confidence: block.confidence, type: block.type, ...(unit === 'segment' ? { change: block.change } : {}) },
       sentences: block.sentences.map(id => ({ distribution: reading.kinds?.[id]?.distribution ?? { [reading.kinds?.[id]?.kind ?? 'narration']: 1 }, confidence: reading.kinds?.[id]?.confidence ?? 0.5 })),
       signals: Object.fromEntries(Object.entries(signal).map(([name, sets]) => [name, sets.filter(set => block.sentences.some(id => set.has(id))).length])) };
   });
@@ -37,7 +39,10 @@ export function gateOf(windows, { strandOf = () => 'the book' } = {}) {
   const smoothed = new Array(windows.length);
   for (const indexes of byStrand.values()) smooth(indexes.map(n => windows[n].block), { cuts: indexes.map((n, k) => k > 0 && windows[n].scene !== windows[indexes[k - 1]].scene) }).forEach((entry, k) => { smoothed[indexes[k]] = entry; });
   windows = windows.map((window, n) => ({ ...window, block: { ...smoothed[n], asked: { type: window.block.type, distribution: window.block.distribution, confidence: window.block.confidence } } }));
-  const fired = firing(windows), types = windows.map(window => window.block.type), scenes = windows.map(window => window.scene);
+  // Segments fire on their distributions as asked, the beats read the smoothed ones (the user, 2026-11-03: smoothing
+  // sharpens away the second type a faculty listens for; tested on real faculty reads). Blocks as before.
+  const unit = windows[0]?.unit ?? 'block';
+  const fired = firing(unit === 'segment' ? windows.map(window => ({ ...window, block: { ...window.block.asked } })) : windows, FIRING[unit]), types = windows.map(window => window.block.type), scenes = windows.map(window => window.scene);
   const leads = windows.map((window, n) => lead(fired, n, window.block.type));
   const beats = beatsOf(types, scenes).map(beat => {
     const span = leads.slice(beat.from, beat.to + 1), count = new Map();
@@ -49,7 +54,7 @@ export function gateOf(windows, { strandOf = () => 'the book' } = {}) {
   });
   const faculties = Object.keys(FACULTIES).filter(id => !FACULTIES[id].always);
   return {
-    windows: windows.map((window, n) => ({ first: window.first, last: window.last, scene: window.scene, strand: strandOf(window.scene) ?? 'the book', type: window.block.type, confidence: window.block.confidence, asked: window.block.asked.type, beat: types[n], lead: leads[n].lead, with: leads[n].with,
+    windows: windows.map((window, n) => ({ unit: window.unit, first: window.first, last: window.last, scene: window.scene, strand: strandOf(window.scene) ?? 'the book', type: window.block.type, confidence: window.block.confidence, asked: window.block.asked.type, beat: types[n], lead: leads[n].lead, with: leads[n].with,
       fired: faculties.filter(id => fired[id][n]), index: Object.fromEntries(faculties.map(id => [id, round(fired.index[id][n])])), signals: window.signals })),
     beats,
     coverage: Object.fromEntries(faculties.map(id => [id, round(fired[id].filter(Boolean).length / (windows.length || 1))])),

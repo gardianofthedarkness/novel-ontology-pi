@@ -42,7 +42,8 @@ export function smooth(blocks, { stay = STAY, cuts = [] } = {}) {
   const n = blocks.length, T = TYPES.length;
   if (!n) return [];
   const emit = block => TYPES.map(type => { const sure = block.confidence ?? 1; return Math.max(FLOOR, sure * (block.distribution?.[type] ?? 0) + (1 - sure) / T); });
-  const keep = k => (cuts[k] ? STAY_AT_CUT : stay), trans = (k, s, t) => (s === t ? keep(k) : (1 - keep(k)) / (T - 1));
+  // A segment says itself how likely its type changes where it begins (`change`: Jev's cut probability, M14).
+  const keep = k => (blocks[k]?.change !== undefined && blocks[k]?.change !== null ? 1 - blocks[k].change : cuts[k] ? STAY_AT_CUT : stay), trans = (k, s, t) => (s === t ? keep(k) : (1 - keep(k)) / (T - 1));
   const step = (from, t, k) => from.reduce((sum, p, s) => sum + p * trans(k, s, t), 0);
   const normal = row => { const total = row.reduce((a, b) => a + b, 0) || 1; return row.map(p => p / total); };
   const forward = [], backward = new Array(n);

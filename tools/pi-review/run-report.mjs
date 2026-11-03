@@ -30,6 +30,26 @@ export async function runReport(workspace) {
   return { run, review, laws: laws?.run === run ? laws.laws : null, writes: writes.map(entry => ({ ...entry, current: now[entry.file]?.get(entry.id) ?? null })), names: reading?.names ?? {}, items: items.map(item => ({ ...item, answer: answerOf.get(item.id) ?? null })), record, smoothed };
 }
 
+/**
+ * Faculties and cost (M12): each stretch of the gate, which faculties fired there and whether each found anything; the
+ * leads the findings changed; each model's requests and tokens by part, and the price where the workspace has rates.
+ */
+export function facultiesBody(record) {
+  const stretches = record.stretches ?? [], usage = record.usage ?? {}, cost = record.cost ?? null;
+  if (!stretches.length && !usage.jev) return '<p>This run kept no faculty records (before M12).</p>';
+  const ids = [...new Set(stretches.flatMap(entry => entry.fired ?? []))].sort();
+  const rows = ids.map(id => { const fired = stretches.filter(entry => entry.fired.includes(id)), read = fired.filter(entry => entry.found?.[id] !== undefined), found = read.filter(entry => entry.found[id] > 0);
+    return `<tr><td>${esc(id)}</td><td>${fired.length} of ${stretches.length}</td><td>${read.length ? `${found.length} of ${read.length}` : '—'}</td></tr>`; }).join('');
+  const leads = (record.scenes ?? []).flatMap(scene => scene.leads ?? []), changed = leads.filter(entry => entry.lead !== entry.gate);
+  const meter = (name, entry) => entry ? `<tr><td>${esc(name)}</td><td>${entry.requests ?? 0}${entry.cached ? ` (${entry.cached} cached)` : ''}</td><td>${entry.prompt ?? entry.input ?? 0} in, ${entry.completion ?? entry.output ?? 0} out</td><td>${cost?.byPart?.[name] ?? '—'}</td></tr>` : '';
+  const parts = [meter('jev', usage.jev), meter('digest', usage.digest), meter('system2', usage.system2), ...Object.entries(usage.faculties ?? {}).map(([id, entry]) => meter(id, entry))].join('');
+  return `<p>Fired is where the gate's index stood above its average; found is where the faculty, having read the stretch, found something (only fired stretches are read).</p>
+  <div class="wide"><table><tr><th>faculty</th><th>fired</th><th>found, of those read</th></tr>${rows}</table></div>
+  <p>The findings changed ${changed.length} of ${leads.length} beats' leads${changed.length ? ` (${Object.entries(changed.reduce((sum, entry) => ({ ...sum, [`${entry.gate} → ${entry.lead}`]: (sum[`${entry.gate} → ${entry.lead}`] ?? 0) + 1 }), {})).map(([key, n]) => `${esc(key)} ${n}`).join(', ')})` : ''}.</p>
+  <div class="wide"><table><tr><th>part</th><th>requests</th><th>tokens</th><th>price${cost?.currency ? ` (${esc(cost.currency)})` : ''}</th></tr>${parts}</table></div>
+  <p>${cost?.total !== undefined ? `The run cost ${cost.total} ${esc(cost.currency)} in all.` : 'Unpriced: no stage/director/prices.json in the workspace (rates per million tokens for jev and the work model).'}</p>`;
+}
+
 /** The report as a page. */
 export function reportPage(data) {
   const name = id => { const entry = data.names[id]; return entry ? `${esc(entry[0])} <small>${esc(id)}</small>` : esc(id); };
@@ -98,5 +118,6 @@ export function reportPage(data) {
   ${section('The smoothing', data.smoothed ? `<p>${r.smoothing?.moments ?? 0} moments smoothed; clouds ${r.smoothing?.meanSpread ?? '?'} m across on average; ${data.smoothed.revisions.length} moved more than 2 m.</p><ol>${smoothedMoves.slice(0, 12).map(move => `<li>${name(move.who)} in ${esc(move.scene)}${move.card ? `, ${esc(move.card)}` : ' (start)'}: ${Math.round(move.shift)} m (${esc(move.rank)})</li>`).join('')}</ol>${(data.smoothed.onStage ?? []).length ? `<h3>Likely on the stage, though the script left them out</h3><ul>${data.smoothed.onStage.map(entry => `<li>${name(entry.who)} in ${esc(entry.scene)}: ${Math.round(entry.p * 100)}%</li>`).join('')}</ul>` : ''}` : '<p>Not smoothed yet.</p>')}
   ${section("The world's own check", r.world.length ? `<ul>${r.world.map(issue => `<li>${esc(issue.scene)}: ${esc(issue.code)} ${esc(issue.name ?? '')}</li>`).join('')}</ul>` : '<p>Every building whole in each scene\'s world can be entered, every room reached.</p>')}
   ${section('System 2', `<p>Below 50%, Jev's question went to the work model ${r.system2.ran} times; its answer was used ${r.system2.used} times.</p>`)}
+  ${section('Faculties and cost', facultiesBody(record))}
   </main></body></html>`;
 }

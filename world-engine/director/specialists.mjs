@@ -239,10 +239,16 @@ export const MIX = { block: 1, sentence: 0.6, signal: 0.6 };
  * block's confidence, the sentences' mean confidence, 1 for signals):
  *   index = Σ aᵢ·zᵢ ÷ √Σ aᵢ²
  * so an unsure block leans on its sentences and the reverse. It turns on at kOn, off below kOff, stays on at least
- * `minimum` windows, and reads a margin of one window either side. Returns { faculty: boolean[] } and, as `index`, each
+ * `minimum` windows, and reads a margin of `margin` windows either side. Returns { faculty: boolean[] } and, as `index`, each
  * faculty's index per window.
  */
-export function firing(windows, { kOn = 1.5, kOff = 0.5, minimum = 2 } = {}) {
+/**
+ * The firing settings by window (the user, 2026-11-03, tested on real faculty reads of scenes 1–13,
+ * experiments/v2/faculty-firing.mjs): on 12-sentence blocks, on at 1.5, off below 0.5, at least 2, a margin of 1; on
+ * segments (M14), above the stretches' average with no hysteresis or margin (F1 0.52 against 0.33).
+ */
+export const FIRING = { block: { kOn: 1.5, kOff: 0.5, minimum: 2, margin: 1 }, segment: { kOn: 0, kOff: 0, minimum: 0, margin: 0 } };
+export function firing(windows, { kOn = 1.5, kOff = 0.5, minimum = 2, margin = 1 } = {}) {
   const most = Object.fromEntries(Object.keys(SIGNALS).map(signal => [signal, Math.max(0, ...windows.map(window => window.signals?.[signal] ?? 0))]));
   const stats = values => { const mu = values.reduce((sum, value) => sum + value, 0) / (values.length || 1), sd = Math.sqrt(values.reduce((sum, value) => sum + (value - mu) ** 2, 0) / (values.length || 1)); return value => (sd ? (value - mu) / sd : 0); };
   const out = { index: {} };
@@ -263,7 +269,7 @@ export function firing(windows, { kOn = 1.5, kOff = 0.5, minimum = 2 } = {}) {
     const on = new Array(windows.length).fill(false);
     let state = false, since = 0;
     index.forEach((value, n) => { if (!state && value >= kOn) { state = true; since = n; } else if (state && value < kOff && n - since >= minimum) state = false; on[n] = state; });
-    out[id] = on.map((value, n) => value || !!on[n - 1] || !!on[n + 1]);
+    out[id] = on.map((_, n) => on.slice(Math.max(0, n - margin), n + margin + 1).some(Boolean));
     out.index[id] = index;
   }
   return out;

@@ -383,3 +383,6 @@ and the share of the needed that fired; and spurious co-firing (fired by two or 
 Weighting the sentence kinds over the stretch's type helps co-firing a little (all needed fired in 10 of 17 against
 6); spurious co-firing stays high under every weight (most stretches fired by two have one that finds nothing). Small
 numbers (17 multi stretches); not adopted yet.
+
+**Adopted (the user, 2026-11-03: "let's do wire in and M12"):** decision 26 as proposed; segments are the gate's input;
+the faculties' findings steer each beat's lead; M9 waits for its details to be discussed.

@@ -66,7 +66,7 @@ export function segmentsOf(ids, cut) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { scenes: { type: 'string' }, mode: { type: 'string' }, purpose: { type: 'string' }, out: { type: 'string' } } });
+  const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { scenes: { type: 'string' }, mode: { type: 'string' }, purpose: { type: 'string' }, write: { type: 'boolean' }, out: { type: 'string' } } });
   const mode = values.mode ?? 'cuts', purpose = values.purpose !== 'no';
   if (!novelDir || !readingPath || !values.scenes) { console.error('usage: node experiments/v2/segment-tiling.mjs <novel-dir> <reading>/v2/data.json --scenes a,b [--out file]'); process.exit(2); }
   const S = await load('dist/src/digger/autostep/segmentation.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
@@ -122,9 +122,26 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const runs = mode === 'smoothed' ? smoothedRuns(ids, cut, observed) : null;
     // Each sentence's type distribution as asked (its segment's) and, smoothed, as the forward-backward has it.
     const distributions = Object.fromEntries(ids.map(id => [id, { asked: observed[id]?.distribution ?? {}, ...(runs ? { smoothed: runs.posterior[id] } : {}) }]));
-    out.push({ scene: sceneId, sentences: ids.length, mode, distributions, segments: (runs ?? segments).map(({ sentences, distribution, ...rest }) => rest), beats, cutsAbove: { half: Object.values(cut).filter(p => p > 0.5).length, near: Object.values(cut).filter(p => p > 0.3 && p <= 0.5).length } });
+    out.push({ scene: sceneId, sentences: ids.length, mode, distributions, cut, segments: (runs ?? segments).map(({ sentences, distribution, ...rest }) => rest), beats, cutsAbove: { half: Object.values(cut).filter(p => p > 0.5).length, near: Object.values(cut).filter(p => p > 0.3 && p <= 0.5).length } });
     console.error(`${sceneId}: ${ids.length} sentences, ${(runs ?? segments).length} segments (beats from blocks: ${beats.length})`);
   }
   await writeFile(resolve(values.out ?? 'segments-trial.json'), JSON.stringify({ model: live.modelId, usage, scenes: out }, null, 1));
+  // --write (M14, smoothed only): the stretches into the reading as `segments`, the gate's windows from now on: each with
+  // its sentences, its smoothed type and confidence, its distribution as asked (the mean of its sentences', what firing
+  // reads), smoothed (what the beats read), and `change`: Jev's probability that a stretch of another kind begins at its
+  // first sentence (the smoothing's transition; null at a scene's start). The reading's former self kept beside it.
+  if (values.write && mode === 'smoothed') {
+    const mean = list => { const sum = {}; for (const dist of list) for (const [type, p] of Object.entries(dist ?? {})) sum[type] = (sum[type] ?? 0) + p / list.length; return Object.fromEntries(Object.entries(sum).map(([type, p]) => [type, Math.round(p * 1000) / 1000])); };
+    const segmentsOut = out.flatMap(scene => scene.segments.map(run => {
+      const ids = order.slice(position.get(run.first), position.get(run.last) + 1);
+      return { scene: scene.scene, first: run.first, last: run.last, sentences: ids, type: run.type, confidence: run.confidence, distribution: mean(ids.map(id => scene.distributions[id].asked)), smoothed: mean(ids.map(id => scene.distributions[id].smoothed)), change: run.first === ids[0] && scene.cut[run.first] !== undefined ? scene.cut[run.first] : null };
+    }));
+    const { copyFile } = await import('node:fs/promises');
+    const all = values.scenes.split(',').length === reading.scenes.length;
+    const backup = readingPath.replace(/\.json$/, '.before-segments.json');
+    if (!(await readFile(backup).then(() => true, () => false))) await copyFile(readingPath, backup);
+    await writeFile(readingPath, JSON.stringify({ ...reading, segments: all ? segmentsOut : [...(reading.segments ?? []).filter(entry => !values.scenes.split(',').includes(entry.scene)), ...segmentsOut].sort((a, b) => position.get(a.first) - position.get(b.first)) }));
+    console.error(`wrote ${segmentsOut.length} segments into the reading`);
+  }
   console.log(JSON.stringify({ model: live.modelId, usage, scenes: out.map(scene => ({ scene: scene.scene, sentences: scene.sentences, segments: scene.segments.length, beats: scene.beats.length })) }));
 }
