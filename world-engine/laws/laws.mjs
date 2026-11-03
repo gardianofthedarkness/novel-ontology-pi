@@ -90,7 +90,8 @@ export function talk({ played, speakers }) {
     checked++;
     const here = card.positions;
     if (!here[said.who]) { out.push(violation('L6', `${card.scene} · ${line.id}`, `speaker ${said.who} is not present`, { who: said.who, sure: said.sure })); continue; }
-    if (said.to && here[said.to]) {
+    // A talk the card knows to be remote (a phone, a door, a message: M8) needs no nearness; public, earshot.
+    if (said.to && here[said.to] && card.talk !== 'remote') {
       const gap = distance(here[said.who], here[said.to]), floors = Math.abs(here[said.who].y - here[said.to].y);
       if (gap > EARSHOT || floors > 1) out.push(violation('L6', `${card.scene} · ${line.id}`, `${said.who} speaks to ${said.to} from ${Math.round(gap)} m${floors > 1 ? `, ${Math.round(floors / 3)} floors apart` : ''}: remote, or someone is misplaced (kind not asked yet)`, { who: said.who, to: said.to, metres: Math.round(gap), needsKind: true }));
     }

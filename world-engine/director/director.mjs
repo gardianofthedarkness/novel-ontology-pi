@@ -514,6 +514,17 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             sceneRecord.exchanges = exchanges.length;
           }
         }
+        // Conversation and blocking (M8): the channels, formations and attention of this scene's talk.
+        const channelAt = new Map(), formationAt = new Map(), inFormation = new Set();
+        if (gate && digestMeter) {
+          const spans = firedSpans('conversation');
+          if (spans.length) {
+            const talk = await DG.talkOf(digestMeter, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null });
+            for (const entry of talk.exchanges) (channelAt.get(entry.sentence) ?? channelAt.set(entry.sentence, []).get(entry.sentence)).push(entry);
+            for (const entry of talk.formations) (formationAt.get(entry.sentence) ?? formationAt.set(entry.sentence, []).get(entry.sentence)).push(entry);
+            sceneRecord.talk = { exchanges: talk.exchanges.length, formations: talk.formations.length, attention: talk.attention.length };
+          }
+        }
         // What people carry as the scene begins (the scene digest). A thing someone here held before is drawn with them only
         // if the scene says they still carry it (else it was left behind); someone elsewhere keeps what they hold.
         const personNames = [...names.values()].filter(name => typeof name === 'string');
@@ -590,7 +601,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             };
             for (const who of Object.keys(positions)) {
               const doing = routine(who);
-              if (touched.has(who) || !SPAN[doing] || (doing === 'working' && index % 3)) continue;
+              const talking = card.people.some(person => person.id === who && person.how.some(how => how === 'speaks' || how === 'addressed'));
+              if (touched.has(who) || talking || inFormation.has(who) || !SPAN[doing] || (doing === 'working' && index % 3)) continue;
               const path = onward(who, positions[who], doing, doing === 'strolling' ? 40 : 0);
               if (path) moveTo(who, path, doing === 'running' ? 'run' : 'walk', `background: ${doing}`, { quiet: true });
             }
@@ -647,7 +659,10 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             let kind = 'live';
             const pinnedKind = pins.kind[card.id] ?? card.sentences.map(id => pins.kind[`line:${id}`]).find(Boolean);
             const digestKind = read(card) ? digestIn(dg.talk, card)[0]?.kind ?? null : null;
+            // The conversation reader's channel first (M8): a phone, a door, a message is remote; a loudspeaker public.
+            const channel = card.sentences.flatMap(id => channelAt.get(id) ?? []).sort((a, b) => b.sure - a.sure)[0] ?? null;
             if (pinnedKind) { kind = pinnedKind; cardRecord.talk = { kind, pinned: true }; }
+            else if (channel) { kind = DG.CHANNELS[channel.channel]; cardRecord.talk = { kind, by: 'conversation', channel: channel.channel }; }
             else if (digestKind) { kind = digestKind; cardRecord.talk = { kind, by: 'digest' }; }
             else if (apart.length && calls < budget) {
               const others = Object.keys(positions).filter(id => id !== speaker).map(id => ({ name: names.get(id) ?? id, ...gap(id) }));
@@ -836,6 +851,32 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
               }
             }
           };
+          // The routine director's blocking (M8): a group the text gives a formation stands in it, round where its people
+          // are now; those in a formation, and those talking in the card, keep their places against the background's drift.
+          const block = async () => {
+            for (const formation of card.sentences.flatMap(id => formationAt.get(id) ?? [])) {
+              const members = formation.who.filter(who => positions[who]);
+              for (const who of members) inFormation.add(who);
+              (cardRecord.formations ??= []).push({ who: members, formation: formation.formation, line: formation.sentence });
+              if (members.length < 2 || ['two sides of a door', 'apart'].includes(formation.formation)) continue;
+              const points = members.map(who => at(positions[who][0])), c = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length), way = wayOf(members[0], true), ahead = [Math.cos(way), Math.sin(way)], side = [-ahead[1], ahead[0]];
+              const slot = (who, k) => {
+                const n = members.length, f = formation.formation;
+                if (f === 'a ring') { const r = Math.max(1.2, n * 0.4), angle = (2 * Math.PI * k) / n; return [c[0] + Math.cos(angle) * r, c[2] + Math.sin(angle) * r]; }
+                if (f === 'behind') return [c[0] - ahead[0] * 1.2 * k, c[2] - ahead[1] * 1.2 * k];
+                const gap = f === 'across a table' ? 1.2 : f === 'facing' ? 0.9 : 0.5, axis = f === 'facing' || f === 'across a table' ? ahead : side;
+                return [c[0] + axis[0] * gap * (2 * k - (n - 1)), c[2] + axis[1] * gap * (2 * k - (n - 1))];
+              };
+              members.forEach((who, k) => {
+                const target = slot(who, k), here = at(positions[who][0]);
+                if (Math.hypot(here[0] - target[0], here[2] - target[1]) <= 1.2) return;
+                const pool = near([target[0], c[1], target[1]], 0, 2.5);
+                if (!pool.length) return;
+                const best = pool.reduce((a, b) => (Math.hypot(b.x - target[0], b.z - target[1]) < Math.hypot(a.x - target[0], a.z - target[1]) ? b : a));
+                moveTo(who, walk(scene, `${scene.id}|${card.id}|${who}|${formation.formation}`, positions[who], [best.id], 'walk'), 'walk', `blocking: ${formation.formation}`, { quiet: true });
+              });
+            }
+          };
           const followers = [];
           const digestMove = async person => {
             const all = digestIn(dg.moves, card).filter(entry => entry.motion !== 'still' && entry.sure >= MOVE_SURE), mine = all.filter(entry => entry.who === person);
@@ -872,6 +913,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // disagrees with a binding fact moves to the nearest spot that agrees (an implied move); a stated fact no spot near
           // agrees with is recorded under L14. Then the background's routine, the crowd, and the things people carry.
           await fight();
+          await block();
           if (dg) { factsDue(); drift(); carry(); }
           if (read(card) && digestIn(dg.breaks, card).some(entry => entry.sure >= 0.7)) { cardRecord.breaks = true; cardRecord.breaksSaid = digestIn(dg.breaks, card).map(entry => entry.what); }
           // Destruction (docs/v2/world-engine-redesign.md §3): a card the text says breaks something is asked where it hits (lettered

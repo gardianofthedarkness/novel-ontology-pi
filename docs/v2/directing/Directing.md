@@ -16,7 +16,7 @@ The director as readers and specialists (docs/v2/next-steps.md A4–A5). Faculti
 | [Scene frame](faculties/frame.md) | always (each scene) | [Stage manager](directors/stage.md) | partial |
 | [Scale and view](faculties/scale.md) | always (each beat) | [Routine director](directors/routine.md), [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | built |
 | [Generalist](faculties/generalist.md) | always (each window) | [Stage manager](directors/stage.md), [Routine director](directors/routine.md), [Combat director](directors/combat.md), [Character director](directors/character.md), [Transport specialist](directors/transport.md), [Architect](directors/architect.md) | built |
-| [Conversation and blocking](faculties/conversation.md) | Routine interaction, Mediated exchange, spoken sentences | [Routine director](directors/routine.md) | proposed |
+| [Conversation and blocking](faculties/conversation.md) | Routine interaction, Mediated exchange, spoken sentences | [Routine director](directors/routine.md) | built |
 | [Inner state](faculties/feeling.md) | Interior flow, Routine interaction, thought sentences | [Character director](directors/character.md) | proposed |
 | [Journeys](faculties/journeys.md) | Pursuit / traversal, action sentences, a jump in scale | [Mega-scene director](directors/mega.md) | built |
 | [Choreography](faculties/choreography.md) | Confrontation, Spectacle / catastrophe, action sentences | [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | built |

@@ -88,6 +88,6 @@ What it keeps as it plays, and where that lands (the flow and the gates: [Direct
 | State | World log | Laws | Into the ontology | Gate | Status |
 |---|---|---|---|---|---|
 | Positions in the room | `position`, smoothed | L1 continuity by strand; L10 reachable; L11 bodies | StateChange.location + PART_OF relation; today at the building; a room becomes a Location inside it | applied | partial |
-| Who talks with whom, through what | `meeting` | L6 talk needs nearness | SPEAKS_TO relation + Scene.turns; speakers are off for now; the channel (face to face, phone, door) a property of the relation | held | partial |
-| Formations and attention | `meeting` | L6 talk needs nearness | ADDRESSES relation | held | proposed |
+| Who talks with whom, through what (the channel sets the card's talk kind (M8); L6 respects a remote one) | `meeting` | L6 talk needs nearness | SPEAKS_TO relation + Scene.turns; speakers are off for now; the channel (face to face, phone, door) a property of the relation | held | partial |
+| Formations and attention | `meeting` | L6 talk needs nearness | ADDRESSES relation; formations played by rule (M8); attention read, not yet drawn | held | partial |
 | Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — | the run only | run | proposed |

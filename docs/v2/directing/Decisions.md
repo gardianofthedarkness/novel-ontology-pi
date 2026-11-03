@@ -65,3 +65,12 @@ Newest last. Back to [Directing](Directing.md).
 13. **Conditions are recorded and held**, not written: a fight's "hurt", "unconscious", "bound" go into the world log
     and the ledger as held proposals, for the review; canon writes them to `conditionsAdd` in M11. *Your call:* hold
     them all, or let canon apply the sure ones (0.8 and over) without review.
+
+## From M8: the routine director (2026-11-03)
+
+14. **L6 can only be counted on a real run.** The talk law reads the run's page, which a stand-in run does not write.
+    W9's 85 came mostly from the background's drift carrying people out of earshot mid-talk; those talking or in a
+    formation now hold their places, and a talk known to be remote no longer breaks it. *Your call:* count it in W10, or
+    a small paid run of scenes 11–17 first (the crosswalk, the phone call, the dart bar).
+15. **Formations are placed by rule round the group's middle**, not asked of Jev (the proposed room-plan question is not
+    built). *Your call:* enough for W10, or build the formation question on a room plan for the dart bar's kind of scene.

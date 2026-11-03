@@ -281,3 +281,35 @@ export async function exchangesOf(work, { scene, spans, line, kind, people, dige
   await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
   return out;
 }
+
+// ── Conversation and blocking (M8): read where the conversation faculty fires, one request a span ─────────────────────
+export const CHANNELS = { 'face to face': 'live', 'a group together': 'group', phone: 'remote', 'video call': 'remote', message: 'remote', 'through a door or wall': 'remote', 'loudspeaker or broadcast': 'public', telepathy: 'remote', 'a voice from afar': 'remote' };
+export const FORMATIONS = ['beside', 'facing', 'across a table', 'a ring', 'side by side walking', 'behind', 'two sides of a door', 'apart'];
+export const TALK_SYSTEM = 'You read a conversation in a light novel for those staging it: who talks with whom and through what (face to face, a phone, a door), how the people stand (beside each other, facing, across a table, in a ring, walking side by side, two sides of a door), and who looks at whom. Reply with JSON only.';
+export const TALK_SHAPE = { exchanges: [{ sentence: '<sentence id>', who: '<person id>', with: ['<person id>'], channel: Object.keys(CHANNELS).join(' | '), sure: '0..1' }], formations: [{ sentence: '<sentence id where it holds from>', who: ['<person id>'], formation: FORMATIONS.join(' | '), sure: '0..1' }], attention: [{ sentence: '<sentence id>', who: '<person id>', looksAt: '<person id>' }] };
+
+/** A span's talk, checked. */
+export function checkTalk(reply, { people, sentences }) {
+  const known = new Set(people), lines = new Set(sentences), person = id => (known.has(String(id)) ? String(id) : null);
+  const exchanges = (reply?.exchanges ?? []).flatMap(entry => { const who = person(entry?.who), sentence = String(entry?.sentence ?? ''), channel = oneOf(entry?.channel, Object.keys(CHANNELS)); return who && lines.has(sentence) && channel ? [{ sentence, who, with: (Array.isArray(entry.with) ? entry.with : []).map(person).filter(Boolean), channel, sure: sure(entry.sure) }] : []; });
+  const formations = (reply?.formations ?? []).flatMap(entry => { const who = (Array.isArray(entry?.who) ? entry.who : []).map(person).filter(Boolean), sentence = String(entry?.sentence ?? ''), formation = oneOf(entry?.formation, FORMATIONS); return who.length >= 2 && lines.has(sentence) && formation ? [{ sentence, who: [...new Set(who)], formation, sure: sure(entry.sure) }] : []; });
+  const attention = (reply?.attention ?? []).flatMap(entry => { const who = person(entry?.who), at = person(entry?.looksAt), sentence = String(entry?.sentence ?? ''); return who && at && who !== at && lines.has(sentence) ? [{ sentence, who, looksAt: at }] : []; });
+  return { exchanges, formations, attention };
+}
+
+/** The talk in each span of a scene where conversation fires. */
+export async function talkOf(work, { scene, spans, line, kind, people, digest = null, parallel = 4 }) {
+  const ids = people.map(person => person.id), out = { exchanges: [], formations: [], attention: [] };
+  let next = 0;
+  const one = async span => {
+    const reply = await work.generate({ system: TALK_SYSTEM, maxTokens: 2000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+      task: 'For this passage: each exchange and its channel, each group\'s formation, who looks at whom. Reply in this JSON shape.', shape: TALK_SHAPE,
+      scene: { id: scene.id, where: digest?.where ?? null }, people: people.map(person => ({ id: person.id, name: person.name })),
+      passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
+    }) }).then(parsed).catch(() => null);
+    const checked = checkTalk(reply, { people: ids, sentences: span });
+    for (const key of Object.keys(out)) out[key].push(...checked[key]);
+  };
+  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
+  return out;
+}

@@ -80,3 +80,12 @@ test('exchanges: a person on one side at least, known lines, values from their l
   const out = checkExchanges({ exchanges: [{ sentence: 's1', attacker: 'a', target: 'b', attack: 'beam or laser', shape: 'line or beam', range: 'far (under 100 m)', outcome: 'hit', knockback: 400, condition: 'unconscious', sure: 0.7 }, { sentence: 's1', attacker: 'x', target: 'y' }, { sentence: 's1', attacker: null, target: 'b', attack: 'the ground or a building itself', outcome: 'dodged' }] }, { people: ['a', 'b'], sentences: ['s1'] });
   assert.deepEqual(out.map(entry => [entry.attacker, entry.attack, entry.knockback, entry.condition]), [['a', 'beam or laser', 60, 'unconscious'], [null, 'the ground or a building itself', 0, null]]);
 });
+
+test('talk: channels and formations from their lists, a formation of two or more known people', async () => {
+  const { checkTalk, CHANNELS } = await import('./digest.mjs');
+  const out = checkTalk({ exchanges: [{ sentence: 's1', who: 'a', with: ['b', 'z'], channel: 'phone', sure: 0.9 }, { sentence: 's1', who: 'a', channel: 'carrier pigeon' }], formations: [{ sentence: 's1', who: ['a', 'b', 'a'], formation: 'facing' }, { sentence: 's1', who: ['a'], formation: 'a ring' }], attention: [{ sentence: 's1', who: 'a', looksAt: 'a' }, { sentence: 's1', who: 'b', looksAt: 'a' }] }, { people: ['a', 'b'], sentences: ['s1'] });
+  assert.deepEqual(out.exchanges.map(entry => [entry.channel, entry.with]), [['phone', ['b']]]);
+  assert.equal(CHANNELS[out.exchanges[0].channel], 'remote');
+  assert.deepEqual(out.formations.map(entry => [entry.who, entry.formation]), [[['a', 'b'], 'facing']]);
+  assert.deepEqual(out.attention, [{ sentence: 's1', who: 'b', looksAt: 'a' }]);
+});

@@ -44,7 +44,7 @@ export const FACULTIES = {
   // it's associated directors and the directors camera man. Only directors who records actions need the zoom parameter."
   scale: { label: 'Scale and view', always: 'beat', status: 'built', code: 'world-engine/digest/digest.mjs scaleBeats (M5); the director sizes the action directors\' pictures, reach and camera by it', writes: ['the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km)', 'the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial', 'whose eyes or which landmark it is seen from', 'how far its moves reach'] },
   generalist: { label: 'Generalist', always: 'window', status: 'built', code: 'world-engine/digest/digest.mjs', writes: ['stated moves (graded)', 'facts, stated and implied', 'items', 'talk kinds', 'breaks'] },
-  conversation: { label: 'Conversation and blocking', types: ['routine', 'mediated'], kinds: ['spoken'], status: 'proposed', writes: ['who talks with whom and through what', 'formations: beside, across a table, a ring, two sides of a door', 'attention: who looks at whom'] },
+  conversation: { label: 'Conversation and blocking', types: ['routine', 'mediated'], kinds: ['spoken'], status: 'built', code: 'world-engine/digest/digest.mjs talkOf (M8)', writes: ['who talks with whom and through what', 'formations: beside, across a table, a ring, two sides of a door', 'attention: who looks at whom'] },
   feeling: { label: 'Inner state', types: ['interior', 'routine'], kinds: ['thought'], status: 'proposed', writes: ['each person\'s emotional state as it changes (a distribution)', 'intent: what they want next', 'bonds: who they are to each other'] },
   journeys: { label: 'Journeys', types: ['traversal'], kinds: ['action'], signals: ['scaleJump'], status: 'built', code: 'world-engine/digest/digest.mjs journeysOf (M6)', writes: ['from, via and to as places of the tree', 'the manner (alleys, up a wall, leaps, carried)', 'distance and duration'] },
   choreography: { label: 'Choreography', types: ['confrontation', 'catastrophe'], kinds: ['action'], status: 'built', code: 'world-engine/digest/digest.mjs exchangesOf (M7)', writes: ['exchanges: attacker, target, attack, outcome', 'knock-backs, dodges, throws', 'what breaks and how wide'] },
@@ -149,8 +149,8 @@ export const STATE = {
   ],
   routine: [
     { state: 'Positions in the room', log: 'position', laws: ['L1', 'L10', 'L11'], smoothed: true, to: 'stateChange.location', also: 'relation.PART_OF', gate: 'applied', status: 'partial', note: 'today at the building; a room becomes a Location inside it' },
-    { state: 'Who talks with whom, through what', log: 'meeting', laws: ['L6'], to: 'relation.SPEAKS_TO', also: 'scene.turns', gate: 'held', status: 'partial', note: 'speakers are off for now; the channel (face to face, phone, door) a property of the relation' },
-    { state: 'Formations and attention', log: 'meeting', laws: ['L6'], to: 'relation.ADDRESSES', gate: 'held', status: 'proposed' },
+    { state: 'Who talks with whom, through what', log: 'meeting', laws: ['L6'], to: 'relation.SPEAKS_TO', also: 'scene.turns', gate: 'held', status: 'partial', what: 'the channel sets the card\'s talk kind (M8); L6 respects a remote one', note: 'speakers are off for now; the channel (face to face, phone, door) a property of the relation' },
+    { state: 'Formations and attention', log: 'meeting', laws: ['L6'], to: 'relation.ADDRESSES', gate: 'held', status: 'partial', note: 'formations played by rule (M8); attention read, not yet drawn' },
     { state: 'Its camera', what: 'the zoom and view angle the scale faculty recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'proposed' },
   ],
   character: [
