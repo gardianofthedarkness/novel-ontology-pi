@@ -114,7 +114,8 @@ export function reachable({ played }) {
   const out = [];
   let checked = 0;
   for (const card of played.cards) for (const move of card.moves) {
-    if (!move.direction || move.direction === 'stays' || String(move.direction).startsWith('with:')) continue;
+    // Not a move asked of the walk: staying, still by the digest, following, a quiet move (the background, a graded step), already there.
+    if (!move.direction || ['stays', 'still'].includes(move.direction) || String(move.direction).startsWith('with:') || move.quiet || move.by === 'digest' && !move.moved || /^already/.test(move.why ?? '')) continue;
     checked++;
     if (!move.moved) out.push(violation('L10', `${card.scene} · ${card.card} · ${move.person}`, `${move.how ?? 'move'} to ${move.spot ?? move.height ?? 'a box'}: ${move.why ?? 'no walk there'}`, { who: move.person, how: move.how }));
   }

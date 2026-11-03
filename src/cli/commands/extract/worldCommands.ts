@@ -28,7 +28,8 @@ export interface PoolItem {
   question: string;
   options: string[];
   evidence: string[];
-  status: "open" | "batched" | "answered" | "applied" | "failed";
+  /** withdrawn: raised by a law since fixed, never asked. */
+  status: "open" | "batched" | "answered" | "applied" | "failed" | "withdrawn";
   batch?: string | null;
   attempts: number;
   note?: string;
@@ -98,7 +99,7 @@ export async function worldBatch(novelDir: string, batchId: string): Promise<Rec
   return {
     batch: batch.id,
     how: `Check each item against the original text (novel reading <book> card|scene|line <id>, novel world log <book> --scene <id>, novel source grep <book> <regex>, novel source similar <book> <text>, novel source epub <book> --grep <regex>, novel query <book> 'MATCH …'), then answer it: novel world answer <book> ${batch.id} <item> <one of its options> --reason "<why, citing sentence ids>". The world applies the answers under its laws; one that breaks a law comes back in a later batch.`,
-    items: batch.items.map((id) => items.find((item) => item.id === id)).filter(Boolean).map((item) => ({ item: item!.id, kind: item!.kind, scene: item!.scene, ...(item!.card ? { card: item!.card } : {}), ...(item!.law ? { law: item!.law } : {}), ...(item!.cards?.length ? { cards: item!.cards } : {}), ...(item!.lines?.length ? { lines: item!.lines } : {}), subjects: item!.subjects, names: item!.names, question: item!.question, options: item!.options, evidence: item!.evidence, ...(item!.note ? { note: item!.note } : {}), answered: answers.find((answer) => answer.batch === batch.id && answer.item === item!.id)?.verdict ?? null })),
+    items: batch.items.map((id) => items.find((item) => item.id === id)).filter((item) => item && item.status !== "withdrawn").map((item) => ({ item: item!.id, kind: item!.kind, scene: item!.scene, ...(item!.card ? { card: item!.card } : {}), ...(item!.law ? { law: item!.law } : {}), ...(item!.cards?.length ? { cards: item!.cards } : {}), ...(item!.lines?.length ? { lines: item!.lines } : {}), subjects: item!.subjects, names: item!.names, question: item!.question, options: item!.options, evidence: item!.evidence, ...(item!.note ? { note: item!.note } : {}), answered: answers.find((answer) => answer.batch === batch.id && answer.item === item!.id)?.verdict ?? null })),
   };
 }
 
