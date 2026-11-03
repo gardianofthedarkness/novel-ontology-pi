@@ -27,7 +27,7 @@ test('presence by physics: placed by evidence, held at the place until seen else
 });
 
 test('the world by segment: containers with their scene as parent, the scene\'s place and time', () => {
-  const reading = { scenes: [{ id: 's1', sentences: segments.flatMap(segment => segment.sentences) }], segments, cards: [], time: { scenes: [{ scene: 's1', node: 't:1' }] } };
+  const reading = { scenes: [{ id: 's1', sentences: segments.flatMap(segment => segment.sentences) }], segments, cards: [{ id: 'action:a1', kind: 'action', first: 'a1', sentences: ['a1'], people: [{ id: 'p', how: ['acts'], at: ['a1'] }] }], time: { scenes: [{ scene: 's1', node: 't:1' }] } };
   const script = { places: {}, scenes: [{ id: 's1', place: 'loc', present: ['p'], at: { node: 't:1' }, timeline: [] }] };
   const world = segmentWorld({ reading, script, spawn: { scenes: [{ id: 's1', spawn: 'new', starts: [{ who: 'p', scene: 's1' }] }] } });
   assert.deepEqual(world.ids, ['s1~1', 's1~2', 's1~3']);

@@ -453,6 +453,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           const by = who => spawned?.starts.find(entry => entry.who === who)?.by;
           const first = present.find(who => ['spatial', 'part'].includes(by(who))) ?? present[0];
           anchor = first ? startNode(first) : null;
+          // No one with a start here (a segment whose people the spawn plan did not place): the scene's own place, the
+          // middle of its spawn box, on the open ground there.
+          if ((anchor === null || anchor === undefined) && present.length && spawned?.target?.box) { const [x, z] = spawned.target.box; E.reach(x, z, 24); anchor = W.nodeNear(world, E.graphOf({ x, z }), x, z, 0) ?? null; }
         }
         // A spot an arm's length to a body or two from the anchor on its level, the same for the same person each time.
         const beside = (who, spread = [BODY, 2.5 * BODY]) => {

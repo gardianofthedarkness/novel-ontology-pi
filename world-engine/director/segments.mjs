@@ -66,9 +66,16 @@ export function segmentWorld({ reading, script, spawn }) {
   const readingScenes = segments.map((segment, n) => { const scene = reading.scenes[sceneIndex.get(segment.scene)]; return { ...scene, id: ids[n], parent: segment.scene, sentences: segment.sentences, type: segment.type }; });
   const time = reading.time ? { ...reading.time, scenes: ids.map(id => { const entry = reading.time.scenes?.find(item => item.scene === parent.get(id)); return entry ? { ...entry, scene: id } : null; }).filter(Boolean) } : reading.time;
   const scriptOut = script ? { ...script, scenes: ids.map((id, n) => { const own = scriptScenes.get(parent.get(id)); if (!own) return null; const people = new Set(presence[n].present); return { ...own, id, parent: own.id, present: presence[n].present, evidence: presence[n].evidence, now: presence[n].now, timeline: (own.timeline ?? []).filter(event => (event.actors ?? []).some(actor => people.has(actor))) }; }).filter(Boolean) } : script;
-  // Spawning places a scene's people once: at its first segment; later segments carry them on (anew only at the first).
-  const spawnOf = new Map((spawn?.scenes ?? []).map(scene => [scene.id, scene]));
-  const spawnOut = spawn ? { ...spawn, scenes: ids.map(id => { const own = spawnOf.get(parent.get(id)); if (!own) return null; const first = id.endsWith('~1'); return first ? { ...own, id, parent: own.id, starts: (own.starts ?? []).map(start => ({ ...start, scene: id })) } : { ...own, id, parent: own.id, spawn: own.spawn === 'new' ? 'carry' : own.spawn, starts: [] }; }).filter(Boolean) } : spawn;
+  // Spawning places a scene's people once each: a person's start goes with the segment where they first appear in the
+  // scene (the scene's first segment may be narration with nobody in it); anew only at the scene's first segment.
+  const spawnOf = new Map((spawn?.scenes ?? []).map(scene => [scene.id, scene])), seen = new Map();
+  const spawnOut = spawn ? { ...spawn, scenes: ids.map((id, n) => {
+    const own = spawnOf.get(parent.get(id)); if (!own) return null;
+    const placed = seen.get(own.id) ?? seen.set(own.id, new Set()).get(own.id), here = presence[n].present.filter(who => !placed.has(who));
+    for (const who of here) placed.add(who);
+    const starts = (own.starts ?? []).filter(start => here.includes(start.who)).map(start => ({ ...start, scene: id }));
+    return { ...own, id, parent: own.id, ...(id.endsWith('~1') ? {} : { spawn: own.spawn === 'new' ? 'carry' : own.spawn }), starts };
+  }).filter(Boolean) } : spawn;
   return { segments, ids, parent, reading: { ...reading, scenes: readingScenes, cards, time, bySegment: true }, script: scriptOut, spawn: spawnOut };
 }
 
