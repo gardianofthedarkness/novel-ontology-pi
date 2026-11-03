@@ -37,6 +37,18 @@
      parts of composite buildings under their hosts; a row tapped shows that building in the world. */
   .blist { position: fixed; z-index: 6; right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 44px); width: min(440px, calc(100vw - 24px)); display: grid; grid-template-rows: auto 1fr; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
   .blist[hidden] { display: none; }
+  /* Developer mode: on the left, beside Read; raw observations against the smoothing, and every record of the card. */
+  .blist.dev { left: max(12px, env(safe-area-inset-left)); right: auto; width: min(460px, calc(100vw - 24px)); }
+  .devbody { overflow-y: auto; overscroll-behavior: contain; padding: 8px 10px 14px; font-size: 12px; line-height: 1.5; display: grid; gap: 10px; align-content: start; }
+  .devbody .modes { display: flex; gap: 6px; flex-wrap: wrap; }
+  .devbody .modes button, .devbody .files a { font: inherit; font-size: 12px; color: var(--ink); background: #0f2230; border: 1px solid var(--line); border-radius: 99px; padding: 4px 10px; cursor: pointer; text-decoration: none; }
+  .devbody .modes button[aria-pressed="true"] { border-color: var(--jev); color: var(--jev); }
+  .devbody .files { display: flex; gap: 6px; flex-wrap: wrap; }
+  .devbody table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; } .devbody td, .devbody th { border-bottom: 1px solid var(--line); padding: 2px 4px; text-align: left; vertical-align: top; } .devbody th { color: var(--dim); font-weight: 600; }
+  .devbody .who { color: var(--accent); font-weight: 600; margin-top: 4px; } .devbody .raw { color: #ffb27a; } .devbody .sm { color: #7ce6ff; } .devbody .now td { background: #17384d; }
+  .devbody details { border-top: 1px solid var(--line); padding-top: 4px; } .devbody summary { cursor: pointer; color: var(--dim); }
+  .devbody pre { margin: 4px 0 0; max-height: 34vh; overflow: auto; background: #071019; border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; -webkit-user-select: text; user-select: text; }
+  .devbody .copy { float: right; font-size: 11px; background: none; border: 1px solid var(--line); color: var(--dim); border-radius: 4px; cursor: pointer; }
   .blist header { display: grid; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
   .blist header b { color: var(--accent); font-size: 12px; letter-spacing: .04em; }
   .blist header span { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -164,10 +176,11 @@
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
 <section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
 <section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (➜: someone moved). Tap one to play it here.</span></header><div class="keys" aria-label="Sentence kinds"><span class="k-spoken">dialogue</span><span class="k-action">action</span><span class="k-environment">environment</span><span class="k-thought">thought</span><span class="k-fact">fact</span><span class="k-narration">narration</span><span class="m-person">person</span><span class="m-place">place</span><span class="m-thing">thing</span><span class="m-time">time</span></div><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="rauto" aria-pressed="false">Auto</button><button data-cps="5" aria-pressed="false">Read slow</button><button data-cps="8" aria-pressed="true">normal</button><button data-cps="14" aria-pressed="false">fast</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div><details class="why" id="cwhy"><summary>Why · Jev's questions, the laws, the review and our notes <span id="cnotecount"></span></summary><div id="claws" class="qa"></div><div id="cqa" class="qa"></div><div class="notes"><ol id="cnotes"></ol><textarea id="cnote" rows="2" placeholder="What looks wrong in this card? (where, who, what the text says)"></textarea><div class="ctl"><button id="csend">Add note</button><button id="call">All notes</button><a id="creportgo" class="btn" target="_blank" rel="noopener" href="report">Run report</a></div><ol id="callnotes" hidden></ol></div></details></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
+<section class="blist dev" id="dlist" hidden aria-label="Developer mode"><header><b>Dev · what the data were and what was smoothed</b><span id="dsum">Pick a played sentence in Read: its card's records show here.</span></header><div class="devbody" id="dbody"></div></section>
 <section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
 <div class="sub" id="sub" hidden aria-live="polite"><b id="subwho"></b><span id="subtx"></span></div>
-<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
+<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
@@ -205,7 +218,7 @@
       return li;
     }));
   };
-  $("copen").addEventListener("click", () => { const on = $("copen").getAttribute("aria-pressed") !== "true"; fold("copen", "clist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); fold("sopen", "slist", false); } });
+  $("copen").addEventListener("click", () => { const on = $("copen").getAttribute("aria-pressed") !== "true"; fold("copen", "clist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); fold("sopen", "slist", false); if (innerWidth < 960 && $("dopen").getAttribute("aria-pressed") === "true") fold("dopen", "dlist", false); } });
   // Reading (world-engine/director/director.mjs's cards in live.json's world notes; the text from api/book-text, a block at a
   // time as the reader scrolls): every sentence as written; those of a card played are underlined (green where someone moved)
   // and tapped play it in this world, the camera free; Continue plays on to the next move and stops there.
@@ -310,6 +323,43 @@
     if (!reply?.ok) { $("csend").textContent = "Not saved, try again"; return; }
     $("cnote").value = ""; $("csend").textContent = "Add note"; await loadNotes(); showWhy();
   });
+  // Developer mode (the user, 2026-11-02, after the handoff's blinking observations): the card's records (play/dev.json),
+  // each person's raw observations in the scene beside their smoothed history, drawn in the world (strand-demo.html
+  // showDev: Raw, Smoothed or Both), and the run's files.
+  let devOn = false, devMode = "both", devData = null;
+  const fmt = (p) => (p ? `${Math.round(p.x)}, ${Math.round(p.z)}${p.y ? ` · f${Math.round(p.y / 3) + 1}` : ""}` : "—");
+  const sendDev = () => {
+    const card = cards[cardAt], people = devOn && devData ? Object.entries(devData.smoothing?.people ?? {}).map(([who, list]) => ({ who, moments: list.map((m) => ({ x: m.played.x, y: m.played.y, z: m.played.z, sigma: m.sigma, rank: m.rank, current: !!card && m.card === card.card })), smooth: list.map((m) => ({ x: m.map.x, y: m.map.y, z: m.map.z })) })) : [];
+    for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "dev", mode: devMode, people }, origin);
+  };
+  const json = (title, value) => { if (value === null || value === undefined || (Array.isArray(value) && !value.length)) return ""; const text = JSON.stringify(value, null, 1); return `<details><summary>${esc(title)} <small>${Array.isArray(value) ? value.length : ""}</small><button class="copy" data-copy="${esc(title)}">Copy</button></summary><pre>${esc(text)}</pre></details>`; };
+  const renderDev = () => {
+    const card = cards[cardAt], d = devData;
+    if (!card) { $("dsum").textContent = "Pick a played sentence in Read: its card's records show here."; $("dbody").innerHTML = ""; return; }
+    $("dsum").textContent = `${card.scene} · ${card.card} · run ${d?.run ?? "…"}`;
+    if (!d) { $("dbody").innerHTML = "<div>Reading the records…</div>"; return; }
+    const people = Object.entries(d.smoothing?.people ?? {});
+    const tables = people.map(([who, list]) => `<div class="who">${esc(valueOf(who))} <small>drive ${d.smoothing.drive?.[who] ?? "—"} · on stage ${d.smoothing.on?.[who] !== undefined ? Math.round(d.smoothing.on[who] * 100) + "%" : "—"}</small></div><table><tr><th>moment</th><th class="raw">raw (σ)</th><th class="sm">smoothed</th><th>moved</th><th>cloud</th><th>talk</th></tr>${list.map((m) => `<tr class="${m.card === card.card ? "now" : ""}"><td>${esc(m.card ? m.card.replace(/^(\w+):b\d+_s/, "$1 ") : "start")}</td><td class="raw">${fmt(m.played)} <small>${esc(m.rank)} ±${m.sigma ?? "?"} m</small></td><td class="sm">${fmt(m.map)}</td><td>${m.shift} m</td><td>${m.spread < 1 ? "sure" : m.spread + " m"}</td><td>${(m.talk ?? []).map((t) => `${esc(valueOf(t.with))} ≤${t.reach} m${t.known ? "" : "?"}`).join(", ") || ""}</td></tr>`).join("")}</table>`).join("");
+    const sep = query ? "&" : "?", files = (d.files ?? []).map((name) => `<a target="_blank" rel="noopener" href="dev/file${query}${sep}name=${encodeURIComponent(name)}">${esc(name)}</a>`).join("");
+    $("dbody").innerHTML = `<div class="modes" role="group" aria-label="What the world shows">${["raw", "smoothed", "both"].map((mode) => `<button data-devmode="${mode}" aria-pressed="${devMode === mode}">${mode === "raw" ? "Raw (blinks)" : mode === "smoothed" ? "Smoothed" : "Both"}</button>`).join("")}</div>
+      <div><small>Raw: where the run had each person at each moment the text was read (a flash at its moment; its ring as wide as it is trusted). Smoothed: the history of least action given all of them, and its cloud.</small></div>
+      ${tables || "<div>No one smoothed in this scene.</div>"}
+      ${json("This card, as the run played it", d.cardRecord)}${json("Its scene (starts, who came how, laws, the world's check)", d.sceneRecord)}${json("World log · this scene", d.worldLog)}${json("Ledger · this scene", d.ledger)}${json("The review · this scene", d.review)}${json("Into canon · this scene", d.canon)}${json("Notes", d.notes)}${json("Smoothing · this scene (full)", d.smoothing)}
+      <div class="files"><b style="width:100%">The run's files</b>${files}</div>`;
+  };
+  const loadDev = async () => {
+    const card = cards[cardAt]; devData = null; renderDev();
+    if (!card) return;
+    const sep = query ? "&" : "?", want = `${card.scene}|${card.card}`;
+    const data = await fetch(`dev.json${query}${sep}scene=${encodeURIComponent(card.scene)}&card=${encodeURIComponent(card.card)}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const now = cards[cardAt]; if (!now || `${now.scene}|${now.card}` !== want) return;
+    devData = data ?? { run: null, files: [] }; renderDev(); sendDev();
+  };
+  $("dbody").addEventListener("click", (event) => {
+    const mode = event.target.closest("[data-devmode]"); if (mode) { devMode = mode.dataset.devmode; renderDev(); sendDev(); return; }
+    const copy = event.target.closest(".copy"); if (copy) { event.preventDefault(); const text = copy.closest("details").querySelector("pre").textContent; navigator.clipboard?.writeText(text).then(() => { copy.textContent = "Copied"; }, () => { copy.textContent = "Select the text"; }); }
+  });
+  $("dopen").addEventListener("click", () => { devOn = !devOn; fold("dopen", "dlist", devOn); if (devOn && innerWidth < 960) fold("copen", "clist", false); if (devOn) loadDev(); else sendDev(); });
   // The smoother's clouds for the card shown, drawn in the world (strand-demo.html showClouds); off with the Clouds button.
   let cloudsOn = true;
   const sendClouds = () => { const card = cards[cardAt], own = card && review?.cards?.[`${card.scene}|${card.card}`]; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "clouds", clouds: cloudsOn ? own?.clouds ?? [] : [] }, origin); };
@@ -317,6 +367,7 @@
   const showCard = (n, scroll = true) => {
     cardAt = n; const card = cards[n]; if (!card) return;
     showWhy(); if (review) sendClouds(); else loadReview().then(sendClouds);
+    if (devOn) loadDev();
     $("cmeta").innerHTML = `Scene ${Number(card.scene.slice(-3))} · card ${n + 1} of ${cards.length} · <span class="kind" style="color: var(--${{ dialogue: "spoken", action: "action" }[card.kind] ?? "narration"})">${esc(card.kind === "pass" ? "narration played" : card.kind)}</span><br>${card.moves.length ? card.moves.map(says).join("<br>") : "nobody asked"}`;
     mark();
     $("replaying").hidden = false; $("replaying").textContent = `▶ playing scene ${Number(card.scene.slice(-3))} · card ${n + 1} of ${cards.length} · ${card.kind === "pass" ? "narration" : card.kind}`;
@@ -553,7 +604,7 @@
     const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment; shownPage = page;
     shown.classList.remove("waiting"); $("empty").hidden = true;
     if (old) setTimeout(() => retire(old), 450);
-    if (cardAt >= 0) setTimeout(sendClouds, 300);
+    if (cardAt >= 0) setTimeout(() => { sendClouds(); sendDev(); }, 300);
     queue();
   };
   /** Load the newest moment wanted, when none is loading and the last load was long enough ago. */

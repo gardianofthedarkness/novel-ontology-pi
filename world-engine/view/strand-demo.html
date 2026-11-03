@@ -627,6 +627,30 @@ const showClouds = (list) => {
     }
   }
 };
+// Developer mode (World · Live's Dev; the research handoff's blinking observations against the reconstruction): each
+// person's raw observations in the scene, where the run had them each moment the text was read, a flash at the moment
+// shown (blinking, as a readout flashes) with a ring as wide as it is trusted and faint ghosts at the scene's other
+// moments; and the smoothed history, a line through each moment's least-action spot. Raw, Smoothed or Both.
+const devGroup = new THREE.Group(); devGroup.renderOrder = 3; world.add(devGroup);
+let devMode = null, devBlinks = [];
+const showDev = (mode, people) => {
+  for (const child of [...devGroup.children]) { devGroup.remove(child); child.traverse((part) => { part.geometry?.dispose(); part.material?.dispose(); }); }
+  devBlinks = []; devMode = people?.length ? mode : null;
+  for (const entry of people ?? []) {
+    const tint = new THREE.Color(data.people[entry.who]?.color ?? "#ffb27a");
+    if (devMode !== "smoothed") for (const m of entry.moments) {
+      const flash = new THREE.Group(); flash.position.set(m.x, m.y, m.z);
+      const star = new THREE.Mesh(new THREE.OctahedronGeometry(m.current ? 0.55 : 0.32), new THREE.MeshBasicMaterial({ color: "#ffb27a", transparent: true, opacity: m.current ? 1 : 0.35, depthTest: false })); star.position.y = 1.4; flash.add(star);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(Math.max(0.3, m.sigma - 0.25), m.sigma, 40), new THREE.MeshBasicMaterial({ color: "#ffb27a", transparent: true, opacity: m.current ? 0.8 : 0.18, side: THREE.DoubleSide, depthWrite: false, depthTest: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.1; flash.add(ring);
+      devGroup.add(flash); if (m.current) devBlinks.push(flash);
+    }
+    if (devMode !== "raw" && entry.smooth.length) {
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(entry.smooth.map((p) => new THREE.Vector3(p.x, p.y + 0.5, p.z))), new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.95, depthTest: false }));
+      devGroup.add(line);
+      for (const p of entry.smooth) { const dot = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: tint, depthTest: false })); dot.position.set(p.x, p.y + 0.5, p.z); devGroup.add(dot); }
+    }
+  }
+};
 const debris = new THREE.InstancedMesh(unit, mats.debris, 600); debris.count = 0; debris.frustumCulled = false; world.add(debris);
 /**
  * A hit's fragments, from the skeleton cells it took (every building it reached): each starts where its cell stood,
@@ -1166,7 +1190,11 @@ function frame(now) {
   if (document.activeElement !== $("seek")) $("seek").value = Math.round(time / total * 1000);
 
   const present = new Set(Object.keys(segment.scene.starts)), movers = [];
-  clouds.position.set(-entry.cx, 0, -entry.cz);
+  clouds.position.set(-entry.cx, 0, -entry.cz); devGroup.position.copy(clouds.position);
+  // In Raw, only the observations: no clouds; the moment shown blinks like a readout.
+  clouds.visible = devMode !== "raw";
+  const blink = 0.25 + 0.75 * Math.abs(Math.sin(performance.now() / 260));
+  for (const flash of devBlinks) for (const part of flash.children) part.material.opacity = part.geometry.type === "RingGeometry" ? 0.25 + 0.55 * blink : blink;
   for (const [id, { pawn, body }] of pawns) {
     const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
     const travel = segment.kind === "macro" && segment.travels.find((entry) => entry.migration.person === id);
@@ -1307,6 +1335,7 @@ if (liveMode) {
     if (event.data?.type === "live") { replaying = null; stopAt = null; playing = true; speed = 2; time = total - 0.001; return; }
     if (event.data?.type === "underground") { xray = !!event.data.on; return; }
     if (event.data?.type === "clouds") { showClouds(event.data.clouds); return; }
+    if (event.data?.type === "dev") { showDev(event.data.mode, event.data.people); return; }
     // A page around the world (the terrain io's step list) picks a place: the same as clicking it here.
     if (event.data?.type === "focus") { focusOn(event.data.id); return; }
     // The world view is done with this frame: its WebGL context is let go now (a phone allows only a few at once), not

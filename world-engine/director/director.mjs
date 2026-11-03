@@ -10,7 +10,7 @@
 //     [--budget 60] [--stand-in] [--live] [--pace 6]
 // --pace: seconds the live view is given to play each move before the next question (6 with --live).
 // --stand-in answers every question by rule (no model call), for trying the loop; without it Jev is asked (paid).
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -105,6 +105,16 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   record.review = { applied: reviewed, from: lastRun, pins: { present: Object.keys(pins.present).length, remote: Object.keys(pins.remote).length, kind: Object.keys(pins.kind).length, arrive: Object.keys(pins.arrive).length, stays: Object.keys(pins.stays).length, meet: pins.meet.length } };
   record.revisions = [];
   const save = () => writeFile(join(out, 'run.json'), JSON.stringify(record, null, 1));
+  // Every run keeps its own records (the user, 2026-11-02: as much record as possible), in stage/director/runs/<run>/:
+  // the pins it began with, its log line by line as it plays, and at its end its record, the laws over it and Jev's
+  // questions and answers asked in it. Its page, world log, ledger and smoothing are kept by run beside them already.
+  const runId = `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`, runDir = join(out, 'runs', runId);
+  await mkdir(runDir, { recursive: true });
+  await writeFile(join(runDir, 'pins.json'), JSON.stringify(pins, null, 1));
+  const framesFile = join(novelDir, 'stage', 'simulation', 'live', 'frames.jsonl'), framesBefore = (await readFile(framesFile, 'utf8').catch(() => '')).split('\n').filter(Boolean).length;
+  const say = log;
+  log = (...args) => { say(...args); appendFile(join(runDir, 'run.log'), `${new Date().toISOString()} ${args.map(arg => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' ')}\n`).catch(() => {}); };
+  log(`run ${runId}: ${from} – ${to}, model ${jev.modelId}${workModel ? `, system 2 ${workModel.modelId ?? 'on'}` : ', system 2 off'}${agent ? ', review sent to the main agent' : ''}`);
   let calls = 0;
   /**
    * What the player shows of the run (strand-demo.html's card list): every card played, in order, with its own lines as
@@ -546,7 +556,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         const runLog = (await readFile(join(novelDir, 'stage', 'world', 'log', `${id}.jsonl`), 'utf8')).split('\n').filter(Boolean).map(row => JSON.parse(row));
         const smoothedNow = SM.smoothRun({ page: JSON.parse(await readFile(join(folder, 'runs', 'director', `${id}.page.json`), 'utf8')), log: runLog, record, reading, strands: strandsNow, pins });
         await mkdir(join(novelDir, 'stage', 'world', 'smoothed'), { recursive: true });
-        await writeFile(join(novelDir, 'stage', 'world', 'smoothed', `${id}.json`), JSON.stringify({ version: 1, run: id, ...smoothedNow, onStage: onStage.proposals }));
+        const onNow = OC.occupation({ reading, script: JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8').catch(() => '{"scenes":[]}')), strands: strandsNow, pins });
+        await writeFile(join(novelDir, 'stage', 'world', 'smoothed', `${id}.json`), JSON.stringify({ version: 1, run: id, ...smoothedNow, onStage: onNow.proposals, on: onNow.on }));
         record.smoothing = { ...(record.smoothing ?? {}), after: { moments: Object.values(smoothedNow.people).reduce((n, list) => n + list.length, 0), revisions: smoothedNow.revisions.length } };
       } catch (error) { record.smoothing = { ...(record.smoothing ?? {}), error: String(error.message ?? error) }; }
       // What the run settled into canon (W6, canon.mjs), each by its gate, undoable; the graph rebuilt from the bundle. First,
@@ -567,6 +578,15 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   } });
   record.finishedAt = new Date().toISOString(); record.calls = calls;
   await save();
+  // The run's own copies: its record, the laws over it, and the questions Jev was asked in it.
+  await copyFile(join(out, 'run.json'), join(runDir, 'run.json')).catch(() => {});
+  const lawsNow = JSON.parse(await readFile(join(out, 'laws.json'), 'utf8').catch(() => 'null'));
+  if (lawsNow?.run === runId) await writeFile(join(runDir, 'laws.json'), JSON.stringify(lawsNow, null, 1));
+  const framesNow = (await readFile(framesFile, 'utf8').catch(() => '')).split('\n').filter(Boolean);
+  if (framesNow.length > framesBefore) await writeFile(join(runDir, 'frames.jsonl'), framesNow.slice(framesBefore).join('\n') + '\n');
+  await writeFile(join(runDir, 'index.json'), JSON.stringify({ version: 1, run: runId, from, to, model: jev.modelId, startedAt: record.startedAt, finishedAt: record.finishedAt, calls,
+    files: { record: 'run.json', laws: 'laws.json', log: 'run.log', pins: 'pins.json', frames: 'frames.jsonl', page: `../../../simulation/runs/director/${runId}.page.json`, worldLog: `../../../world/log/${runId}.jsonl`, ledger: `../../../world/ledger/${runId}.jsonl`, smoothed: `../../../world/smoothed/${runId}.json`, canon: '../../../world/canon.jsonl', pool: '../../../world/pool.jsonl', answers: '../../../world/answers.jsonl' } }, null, 1));
+  log(`run ${runId} done: ${calls} calls; its records in stage/director/runs/${runId}/`);
   return { record, ...result };
 }
 

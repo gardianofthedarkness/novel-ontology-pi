@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { repo } from './config.mjs';
@@ -211,4 +211,51 @@ export async function directorReview(workspace) {
     smoothing: smoothed ? { moments: Object.values(smoothed.people).reduce((n, list) => n + list.length, 0), revisions: smoothed.revisions.length, meanSpread: (() => { const all = Object.values(smoothed.people).flat(); return all.length ? Math.round(all.reduce((sum, moment) => sum + moment.spread, 0) / all.length * 10) / 10 : null; })(), onStage: (smoothed.onStage ?? []).length, started: record.smoothing ?? null } : null,
   };
   return { version: 1, run, cards, report, speakers };
+}
+
+/**
+ * Developer mode (the user, 2026-11-02: like the blinking-observation figure of the research handoff, what is smoothed
+ * beside what the data were, and as much record as possible): everything recorded about one card of the last director
+ * run. Its record and its scene's (starts, who was carried or spawned, the laws, the world's own check), the world log's
+ * and the ledger's rows for the scene, the review's items and answers, each person's smoothed moments in the scene (where
+ * played, how trusted, the couplings, the cloud, the least-action spot), how likely each is on the stage, what canon
+ * took from the scene, the notes on the card, and the run's archived files. Read only.
+ */
+const RUN_FILES = { record: 'run.json', laws: 'laws.json', log: 'run.log', pins: 'pins.json', frames: 'frames.jsonl' };
+export async function directorDev(workspace, { scene, card }) {
+  const dir = resolve(workspace), json = (...path) => readFile(resolve(dir, ...path), 'utf8').then(JSON.parse, () => null);
+  const lines = (...path) => readFile(resolve(dir, ...path), 'utf8').then(text => text.split('\n').filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } }), () => []);
+  const index = await json('stage', 'simulation', 'index.json'), run = index?.strands?.director?.accepted ?? null;
+  const record = (run ? await json('stage', 'director', 'runs', run, 'run.json') : null) ?? await json('stage', 'director', 'run.json');
+  if (!record || !scene) return null;
+  const sceneRecord = record.scenes.find(entry => entry.scene === scene) ?? null, cardRecord = sceneRecord?.cards.find(entry => entry.card === card) ?? null;
+  const [log, ledger, pool, answers, smoothed, canon, notes, archive] = await Promise.all([run ? lines('stage', 'world', 'log', `${run}.jsonl`) : [], run ? lines('stage', 'world', 'ledger', `${run}.jsonl`) : [], lines('stage', 'world', 'pool.jsonl'), lines('stage', 'world', 'answers.jsonl'), run ? json('stage', 'world', 'smoothed', `${run}.json`) : null, lines('stage', 'world', 'canon.jsonl'), directorNotes(dir), run ? json('stage', 'director', 'runs', run, 'index.json') : null]);
+  const inScene = row => row.scene === scene || row.value?.scene === scene || String(row.value?.what ?? '').startsWith(`${scene} `) || (row.value?.scenes ?? []).includes(scene);
+  const answerOf = new Map(answers.map(answer => [answer.item, answer]));
+  const people = Object.fromEntries(Object.entries(smoothed?.people ?? {}).map(([who, list]) => [who, (list ?? []).filter(moment => moment?.scene === scene)]).filter(([, list]) => list.length));
+  const { cards: _cards, ...sceneOnly } = sceneRecord ?? {};
+  return {
+    version: 1, run, scene, card,
+    cardRecord, sceneRecord: sceneRecord ? sceneOnly : null,
+    worldLog: log.filter(row => row.scene === scene), ledger: ledger.filter(inScene),
+    review: [...new Map(pool.map(item => [item.id, item])).values()].filter(item => item.scene === scene).map(item => ({ ...item, answer: answerOf.get(item.id) ?? null })),
+    smoothing: smoothed ? { people, drive: Object.fromEntries(Object.keys(people).map(who => [who, smoothed.drive?.[who] ?? null])), on: Object.fromEntries(Object.entries(smoothed.on ?? {}).filter(([, byScene]) => scene in byScene).map(([who, byScene]) => [who, byScene[scene]])), chains: Object.fromEntries(Object.keys(people).map(who => [who, smoothed.chains?.[who] ?? null])) } : null,
+    canon: canon.filter(entry => entry.run === run && !entry.undo && (entry.id === scene || String(entry.id).includes(scene) || String(entry.why ?? '').includes(scene))),
+    notes: notes.filter(note => note.scene === scene && (!card || note.card === card)),
+    // The run's files that are there (a run from before runs kept their own has none of its own).
+    files: archive ? (await Promise.all(Object.entries({ ...RUN_FILES, ...archive.files }).map(async ([name, relative]) => ((await stat(resolve(dir, 'stage', 'director', 'runs', run, relative)).catch(() => null)) ? name : null)))).filter(Boolean) : [],
+  };
+}
+
+/** One of the last run's records as kept (developer mode's Run files): its name in the run's index, or null. */
+export async function directorFile(workspace, name) {
+  const dir = resolve(workspace), index = JSON.parse(await readFile(resolve(dir, 'stage', 'simulation', 'index.json'), 'utf8').catch(() => 'null')), run = index?.strands?.director?.accepted;
+  if (!run || !/^[a-zA-Z]{1,20}$/.test(name)) return null;
+  const runDir = resolve(dir, 'stage', 'director', 'runs', run), archive = JSON.parse(await readFile(resolve(runDir, 'index.json'), 'utf8').catch(() => 'null'));
+  const relative = archive?.files?.[name] ?? RUN_FILES[name];
+  if (!relative) return null;
+  const path = resolve(runDir, relative);
+  if (!path.startsWith(resolve(dir, 'stage') + '/')) return null;
+  const body = await readFile(path).catch(() => null);
+  return body ? { body, type: path.endsWith('.log') ? 'text/plain; charset=utf-8' : path.endsWith('.jsonl') ? 'application/x-ndjson; charset=utf-8' : 'application/json; charset=utf-8', name: `${run}-${relative.split('/').pop()}` } : null;
 }

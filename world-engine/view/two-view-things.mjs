@@ -86,6 +86,10 @@ export async function browser({ gpu = false } = {}) {
     still: async (format = 'png') => (await send('Page.captureScreenshot', { format, ...(format === 'jpeg' ? { quality: 88 } : {}), clip: { x: 0, y: 0, width: frame[0], height: frame[1], scale: 1 } }, sessionId)).data,
     /** Stills of another frame from now on (the page's stage is sized to it by its own capture). */
     size: async (width, height) => { frame = [width, height]; await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId); },
+    /** A touch device for checking pages (an iPad's Safari): its size, touch, and the user agent it sends. */
+    device: async ({ width, height, mobile = true, userAgent = null }) => { frame = [width, height]; await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile }, sessionId); await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }, sessionId); if (userAgent) await send('Emulation.setUserAgentOverride', { userAgent, platform: 'iPad' }, sessionId); await send('Page.addScriptToEvaluateOnNewDocument', { source: "window.__errors = []; addEventListener('error', (e) => __errors.push(String(e.message))); addEventListener('unhandledrejection', (e) => __errors.push('rejection: ' + String(e.reason)));" }, sessionId); },
+    /** Console errors and uncaught exceptions on the page since the last call (for checking pages). */
+    errors: async () => evaluate('(window.__errors ?? []).splice(0)'),
     // Chrome writes its profile until it exits; a leftover temporary profile is no reason to lose a run.
     close: async () => { process.off('exit', orphaned); process.off('SIGINT', signalled); process.off('SIGTERM', signalled); socket.close(); const exited = new Promise(done => chrome.once('exit', done)); chrome.kill(); await Promise.race([exited, new Promise(done => setTimeout(done, 3000))]); await rm(profile, { recursive: true, force: true }).catch(() => {}); },
   };

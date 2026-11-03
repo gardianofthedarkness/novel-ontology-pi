@@ -123,7 +123,9 @@ function smoothOne(list, { decode, drive, placeOf }) {
     const mean = clouds[k].reduce((sum, spot, a) => ({ x: sum.x + weights[a] * spot.at.x, y: sum.y + weights[a] * spot.at.y, z: sum.z + weights[a] * spot.at.z }), { x: 0, y: 0, z: 0 });
     const spread = Math.sqrt(clouds[k].reduce((sum, spot, a) => sum + weights[a] * metres(spot.at, mean) ** 2, 0));
     const map = clouds[k][path[k]];
-    return { scene: moment.scene, card: moment.card, rank: moment.rank, played: { node: moment.node, ...moment.at }, map: { node: map.node, ...map.at }, mean, spread: Math.round(spread * 10) / 10, shift: Math.round(metres(map.at, moment.at) * 10) / 10,
+    // The observation as it went in (where played, how much it was trusted, whom it was coupled to) beside what came out.
+    return { scene: moment.scene, card: moment.card, rank: moment.rank, sigma: RANK_SIGMA[moment.rank] ?? RANK_SIGMA.ruled, talk: moment.talk.map(entry => ({ with: entry.with, reach: entry.reach, known: !!entry.known })), ...(moment.pinned ? { pinned: true } : {}), draws: moment.draws.length,
+      played: { node: moment.node, ...moment.at }, map: { node: map.node, ...map.at }, mean, spread: Math.round(spread * 10) / 10, shift: Math.round(metres(map.at, moment.at) * 10) / 10,
       cloud: clouds[k].map((spot, a) => ({ node: spot.node, ...spot.at, w: weights[a] })).sort((a, b) => b.w - a.w).slice(0, KEEP).map(spot => ({ ...spot, w: Math.round(spot.w * 1000) / 1000 })) };
   });
 }

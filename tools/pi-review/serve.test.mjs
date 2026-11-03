@@ -451,4 +451,10 @@ test('notes on the director\'s cards: added from the reader, listed for both, no
   assert.match(report.body, /Talk needs nearness/);
   assert.match(report.body, /a phone, b0000_s0001/, 'the main agent\'s answer and reason');
   assert.doesNotMatch(report.body, /<script/);
+  // Developer mode: every record of one card; a bad scene refused; no run accepted yet, no run files.
+  const dev = JSON.parse((await send(viewer, 'play/dev.json?scene=scene_000001&card=dialogue%3Ab0000_s0001')).body);
+  assert.deepEqual([dev.cardRecord.laws[0].law, dev.review[0].answer.verdict], ['L6', 'remote']);
+  assert.equal((await send(viewer, 'play/dev.json?scene=../x&card=y')).status, 400);
+  assert.equal((await send(viewer, 'play/dev/file?name=record')).status, 404);
+  assert.equal((await send(viewer, 'play/dev/file?name=..%2F..%2Fsecret')).status, 404);
 });

@@ -500,6 +500,23 @@ drawn in the 3D view, each spot a disc as large and bright as it is likely, a da
 to where the smoothed history has them. *The book*: a line whose speaker the world settled is underlined (dotted), one
 the review ruled out struck through, with who and by whom on hover.
 
+**Built (2026-11-02): developer mode and the run's records** (the user: like the handoff's blinking observations,
+what is smoothed beside what the data were, and as much record as possible; on iPad too). World · Live's **Dev** panel
+(on the left, beside Read) shows for the card being read: each person in the scene, moment by moment, the raw
+observation (where the run had them, its rank and σ), the smoothed spot, how far apart, the cloud's width, the talk
+couplings, their drive and how likely they are on the stage; then every record of the card and its scene as JSON (the
+card as played, the scene's starts and laws and world check, the world log's and the ledger's rows, the review's items
+and answers, what canon took, the notes, the full smoothing), each with Copy; and the run's own files. In the 3D view,
+**Raw (blinks)** shows only the observations, the moment shown flashing like a readout with a ring as wide as it is
+trusted and faint ghosts at the scene's other moments; **Smoothed**, the least-action history through the moments and
+the cloud; **Both**. Data from `play/dev.json` and `play/dev/file` (read only). Every run now keeps its own records in
+`stage/director/runs/<run>/` (the pins it began with, its log line by line, its record, the laws over it, Jev's
+questions and answers in it, and an index pointing at its page, world log, ledger, smoothing, canon, pool and
+answers); the smoothing keeps each moment's observation, σ, couplings and draws, and who is likely on the stage per
+scene. Checked headless on desktop and on iPad sizes with Safari's user agent and touch (landscape 1180×820, portrait
+820×1180, mini 744×1133): World · Live, Dev, the report and the player with no console errors and no sideways scroll;
+the pages use nothing newer than Safari 15.4.
+
 **Built (2026-11-02): W0**, a valid world (the user's research handoff, `Text_to_City_Research_Handoff.md`: separate
 interior topology with explicit portals, a generation-time validator, order-independent chunks, failure codes and
 minimal replays; the same as the field's practice: areas joined by portals rather than one grid over everything, and a

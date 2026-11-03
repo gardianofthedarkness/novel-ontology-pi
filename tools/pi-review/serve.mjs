@@ -12,7 +12,7 @@ import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
 import { runReport, reportPage } from './run-report.mjs';
-import { addDirectorNote, directorReading, directorNotes, directorReview, pagePolicy, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
+import { addDirectorNote, directorDev, directorFile, directorReading, directorNotes, directorReview, pagePolicy, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -211,6 +211,23 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         const step = await bounded(async () => terrainStep(await resolveWorkspace(volume), mode));
         if (!step) { send(400); return; }
         send(200, JSON.stringify(step), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        return;
+      }
+      if (scopedPath === '/play/dev.json' || scopedPath === '/play/dev/file') {
+        // Developer mode (sim-play.mjs directorDev, directorFile): one card's records, or one of the run's files, read only.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        if (scopedPath === '/play/dev.json') {
+          const scene = url.searchParams.get('scene') ?? '', card = url.searchParams.get('card') ?? '';
+          if (!/^[\w-]{1,60}$/.test(scene) || card.length > 120) { send(400); return; }
+          const view = await bounded(async () => directorDev(await resolveWorkspace(volume), { scene, card }));
+          if (!view) { send(404); return; }
+          send(200, JSON.stringify(view), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          return;
+        }
+        const file = await bounded(async () => directorFile(await resolveWorkspace(volume), url.searchParams.get('name') ?? ''));
+        if (!file) { send(404); return; }
+        send(200, file.body, { 'Content-Type': file.type, 'Cache-Control': 'no-store', 'Content-Disposition': `inline; filename="${file.name}"` });
         return;
       }
       if (scopedPath === '/play/report') {
