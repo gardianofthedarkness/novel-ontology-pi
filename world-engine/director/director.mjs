@@ -196,12 +196,14 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         await writeFile(join(runDir, 'digest.json'), JSON.stringify({ version: 1, model: workModel.modelId, scenes: kept }));
       } }).catch(error => { log(`digest stopped: ${error.message ?? error}`); for (const done of waiting.values()) done(null); });
   }
+  // Jev's usage as its provider names it: input_tokens / prompt_tokens / inputTokens / promptTokens (and the output's).
+  const tokensOf = (use, side) => Number((side === 'input' ? [use?.input_tokens, use?.prompt_tokens, use?.inputTokens, use?.promptTokens] : [use?.output_tokens, use?.completion_tokens, use?.outputTokens, use?.completionTokens]).find(value => value !== undefined && value !== null) ?? 0);
   const decide = Object.assign(async (state, questions, options) => {
     calls++;
     const kind = String(questions?.[0]?.key ?? 'other').split(/[:|]/)[0], before = jev.usage?.length ?? 0, entry = (jevUse.by[kind] ??= { requests: 0, input: 0, output: 0 });
     try { return await asked(state, questions, options); } finally {
       jevUse.requests++; entry.requests++;
-      for (const use of (jev.usage ?? []).slice(before)) { const input = Number(use?.input_tokens ?? 0), output = Number(use?.output_tokens ?? 0); jevUse.input += input; jevUse.output += output; entry.input += input; entry.output += output; }
+      for (const use of (jev.usage ?? []).slice(before)) { const input = tokensOf(use, 'input'), output = tokensOf(use, 'output'); jevUse.shape ??= Object.keys(use ?? {}).join(','); jevUse.input += input; jevUse.output += output; entry.input += input; entry.output += output; }
     }
   }, { record: () => {} });
 
@@ -383,9 +385,11 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // The stage manager (M4): a scene the script has nobody in (volume 1: 15, 20, 41, 43) takes its cast from the scene
         // digest, everyone it has on stage and not gone.
         if (!present.length && dg?.digest.people?.length) { present = dg.digest.people.filter(entry => entry.doing !== 'gone').map(entry => entry.who).filter(who => pins.present[`${scene.id}|${who}`] !== false); sceneRecord.castFrom = 'digest'; }
-        // A sliver the tiling left (volume 1: 15, 20, 41, 43, one to four sentences, nobody named) that carries straight on
-        // keeps the scene before's cast where they stand.
-        if (!present.length && before && (reads.sentences.length <= 4 || /straight on/.test(dg?.digest.continues ?? ''))) { present = Object.keys(before.positions); sceneRecord.castFrom = 'the scene before'; }
+        // A sliver the scene tiling left (volume 1: 15, 20, 41, 43, one to four sentences, nobody named) that carries straight
+        // on keeps the scene before's cast where they stand. Not by segment: a segment's presence is already physics
+        // (segmentPresence holds people until new presence or the next ground truth), and an empty one stands alone (the
+        // pilot: an establishing shot opening scene 2 took scene 1's cast, L1's six breaks).
+        if (!present.length && before && !seg && (reads.sentences.length <= 4 || /straight on/.test(dg?.digest.continues ?? ''))) { present = Object.keys(before.positions); sceneRecord.castFrom = 'the scene before'; }
         if (pinnedIn.length || present.length < (own?.present?.length ?? present.length)) sceneRecord.pinned = { present: pinnedIn, absent: (own?.present ?? []).filter(who => !present.includes(who)) };
         for (const who of present) if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
         // A referent measured in the world (referential distance, L16; the user, 2026-11-03): a person's height, the room or
@@ -1284,6 +1288,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       }
     } finally { await chrome.close(); server.server.close(); }
   } });
+  // Only the stretches this run played: the gate reads the whole volume, the run plays its range (the pilot's 109 of 346).
+  { const played = new Set(record.scenes.map(entry => entry.scene)); record.stretches = record.stretches.filter(stretch => played.has(stretch.scene)); }
   record.finishedAt = new Date().toISOString(); record.calls = calls;
   // The run priced (M12), by the rates per million tokens in stage/director/prices.json ({ jev: { input, output }, work:
   // { input, output }, currency }) where the workspace has them: Jev's tokens as reported, each meter's tokens less the
@@ -1314,7 +1320,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let jev = standIn();
   if (!values['stand-in']) {
     const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
-    jev = cachedDecisions(jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), join(resolve(novelDir), 'stage', 'director', 'cache'));
+    // The cache hides the client's `usage` (what Jev reports of each request): carried on, so the run meters Jev's tokens.
+    const client = jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL });
+    jev = Object.assign(cachedDecisions(client, join(resolve(novelDir), 'stage', 'director', 'cache')), { usage: client.usage });
   }
   // System 2's work model (WORK_LLM_*), cached as Jev is; without one, system 2 is off and says so.
   let workModel = null;
@@ -1324,7 +1332,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } else if (!values['stand-in']) console.error('system 2 off: no work model configured (WORK_LLM_API_KEY)');
   let live = null;
   if (values.live && values['stand-in']) { console.error('a stand-in run does not write the live view (its answers are made by rule)'); process.exit(2); }
-  if (values.live) { const { createLive } = await import('../live/sim-jev.mjs'); live = await createLive(resolve(novelDir), { command: 'sim direct', lines: [{ id: 'director', title: 'The director: cards played forward' }], model: jev.modelId }); jev = live.watch(jev); }
+  if (values.live) { const { createLive } = await import('../live/sim-jev.mjs'); live = await createLive(resolve(novelDir), { command: 'sim direct', lines: [{ id: 'director', title: 'The director: cards played forward' }], model: jev.modelId }); jev = Object.assign(live.watch(jev), { usage: jev.usage }); }
   try {
     // --agent <host state dir>: the main agent's console (Pi, through the host's queue) the held batches are sent to.
     const agentLinks = values.agent ? JSON.parse(await readFile(join(resolve(values.agent), 'links.json'), 'utf8').catch(() => '{}')) : null;

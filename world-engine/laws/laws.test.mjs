@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { abilitiesHeld, actorsThere, continuity, minutesOf, reachable, talk, travelTime, twoPlaces, waysOf } from './laws.mjs';
+import { abilitiesHeld, actorsThere, bodies, continuity, minutesOf, reachable, talk, travelTime, twoPlaces, waysOf } from './laws.mjs';
 
 const at = (x, z, y = 0) => ({ x, z, y });
 
@@ -54,4 +54,13 @@ test('reachable and abilities: a chosen move that never walked; a leap only by s
   const able = { people: { a: { ways: { leap: { height: 15 } } } } };
   assert.ok(waysOf(able, 'a').has('leap'));
   assert.equal(abilitiesHeld({ played, abilities: able }).violations[0].engine, true, 'a leap the person has, still walked by the engine until W4');
+});
+
+test('L11 counts people on a cell, not the crowd field\'s samples', () => {
+  const startAt = { a: at(1, 1), b: at(1.5, 1), c: at(0.5, 1.5), d: at(1, 0.5) };
+  for (let n = 0; n < 6; n++) startAt[`crowd:1~1:${n}`] = at(1, 1);
+  const played = (people) => ({ cards: [], scenes: [{ id: 's1', startAt: people }] });
+  assert.equal(bodies({ played: played(startAt) }).violations.length, 1, 'four people on one 2 m cell (more than PER_CELL)');
+  const three = Object.fromEntries(Object.entries(startAt).filter(([who]) => who !== 'd'));
+  assert.equal(bodies({ played: played(three) }).violations.length, 0, 'three people with six crowd samples stacked there: the samples do not count');
 });

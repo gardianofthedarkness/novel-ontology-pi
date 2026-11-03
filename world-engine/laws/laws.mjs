@@ -145,7 +145,8 @@ export function reachable({ played }) {
   return { law: 'L10', checked, violations: out };
 }
 
-/** L11 · Bodies: a floor that is in its building; no more than a few people on one 2 m cell at a scene's start. */
+/** L11 · Bodies: a floor that is in its building; no more than a few people on one 2 m cell at a scene's start. The crowd's
+ * samples are a field's density (L20, Fruin's levels), not bodies, so they are not counted here. */
 export function bodies({ played }) {
   const out = [];
   let checked = 0;
@@ -157,7 +158,7 @@ export function bodies({ played }) {
   }
   for (const scene of played.scenes) {
     const cells = new Map();
-    for (const [who, p] of Object.entries(scene.startAt)) { const key = `${Math.floor(p.x / 2)}|${Math.floor(p.z / 2)}|${Math.round(p.y / 3)}`; (cells.get(key) ?? cells.set(key, []).get(key)).push(who); }
+    for (const [who, p] of Object.entries(scene.startAt)) { if (String(who).startsWith('crowd:')) continue; const key = `${Math.floor(p.x / 2)}|${Math.floor(p.z / 2)}|${Math.round(p.y / 3)}`; (cells.get(key) ?? cells.set(key, []).get(key)).push(who); }
     checked++;
     for (const [key, people] of cells) if (people.length > PER_CELL) out.push(violation('L11', `${scene.id} · ${key}`, `${people.length} people on one 2 m cell at the scene's start`, { people }));
   }

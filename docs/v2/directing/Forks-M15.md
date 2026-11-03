@@ -82,3 +82,37 @@ the Player.
 All 58 routes were runs (the longest, 1.3 km, is still sooner on foot than by the virtual metro). The 19 left off-page
 are routes that found no way at some leg. Camera jumps rose with people leaving and coming the whole way: the camera
 follows them out and in; the beat camera should hold its group as they go (to look at in the replay).
+
+## Pilot (paid, scenes 1–13, 2026-11-03)
+
+The user: "Yes let's pilot first." Run d20261103230048 on the live host (World · Live, the questions log started fresh),
+real Jev and the work model, 26.7 minutes, 59 Jev calls.
+
+| Played | |
+|---|---|
+| Containers (segments) / with a cast | 109 / 109 |
+| Cards / moves | 166 / 291 |
+| Camera jumps over 40 m / arrivals off-page | 5 / 6 |
+| Routes walked (reached) / departures (ran) | 15 (9) / 12 (8) |
+| Containers with a crowd field | 51 |
+| Canon | 13 scenes, 53 state changes, 3 timelines; 37 held for review |
+
+| Law | Checked | Broken | Read |
+|---|---|---|---|
+| L1 continuity | 800 | 6 | All one cause: an empty establishing segment opening scene 2 borrowed scene 1's cast (the old scene-sliver rule, `reads.sentences ≤ 4`, now firing on every short segment). Off by segment: an empty segment stands alone. |
+| L6 talk | 258 | 13 | Two people talking from 3 m, five floors apart: a start's floor (to look at; spawning's height, not the talk). |
+| L10 reachable | 68 | 7 | Journeys to a box with no way in (held). |
+| L11 bodies | 112 | 34 | All 34 the crowd field's samples stacked on a cell; none with more than three people. The samples are a density (L20), not bodies: L11 no longer counts them. |
+
+Also fixed from the pilot: Jev's tokens were metered as 0 (the decision cache hid the client's `usage`; carried
+through now, and read under any of the provider's names); the record kept all 346 stretches of the gate, now only the
+109 the run played.
+
+| Faculty (played stretches) | Fired | Found something |
+|---|---|---|
+| conversation | 45 | 44 (377 channels and formations) |
+| journeys | 31 | 13 (27 journeys) |
+| choreography | 22 | 3 (6 exchanges) |
+| ambience, setting, feeling, props | 32, 36, 62, 35 | not counted yet |
+
+Timing: 1602 s, of which graph builds 168 s (128 builds), Chrome reloads 118 s, pictures 75 s; the rest is the models.
