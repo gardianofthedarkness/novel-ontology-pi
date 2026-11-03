@@ -6,6 +6,7 @@ import type {
 } from "../src/ground/connectors/jev.js";
 import { sectionBlock, type Sentence } from "../src/digger/intake/sectioning.js";
 import {
+  classifySentences,
   selectExchanges,
   selectExchangeSpans,
   spansOfKinds,
@@ -228,4 +229,17 @@ test("windows run at once; spans publish in reading order, settled, with monoton
   assert.deepEqual(snapshots[0].spans, [[10, 20]], "an exchange still open at the window's end waits");
   assert.deepEqual(result.spans, [[10, 20], [95, 104], [170, 188]], "an exchange across two windows is one");
   assert.deepEqual(snapshots.at(-1)!.spans, result.spans);
+});
+
+test("classifySentences keeps each sentence's whole distribution beside its top kind; the reading keeps its top three", async () => {
+  const sentences = makeSentences(3);
+  const decide: DecideFn = async (_state, questions) => questions.map((q): DecisionAnswer => q.key.startsWith("dlg_kind:")
+    ? { key: q.key, value: "action", confidence: 0.41, distribution: { action: 0.51, narration: 0.47, spoken: 0.02 } }
+    : { key: q.key, value: 0.2, confidence: 0.8 });
+  const out = await classifySentences(sentences, decide, { stateSummary: "test" });
+  assert.deepEqual(out.kinds, ["action", "action", "action"]);
+  assert.deepEqual(out.distributions[0], { action: 0.51, narration: 0.47, spoken: 0.02 });
+  const { kindScores } = await import("../src/v2/extraction/flow.js");
+  assert.deepEqual(kindScores(out.distributions[0]).top, [["action", 0.51], ["narration", 0.47], ["spoken", 0.02]]);
+  assert.deepEqual(kindScores(undefined), {});
 });

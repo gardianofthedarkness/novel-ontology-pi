@@ -34,6 +34,14 @@ import { settledCategory, usualType } from "../rules/typing.js";
  *   card's people are then the ones it names, and the ones its lines and descriptions point at;
  * - the facts (facts.ts) are the source of truth throughout: EM and EM² are given the latest facts about their candidates.
  */
+/** A distribution kept whole (rounded) with its top three candidates (the user, 2026-11-03: top distributions and scores kept for sentences and blocks). */
+export function kindScores(distribution: Record<string, number> | undefined): { top?: [string, number][]; distribution?: Record<string, number> } {
+  const entries = Object.entries(distribution ?? {}).filter(([, p]) => Number.isFinite(p));
+  if (!entries.length) return {};
+  const round = (p: number) => Number(p.toFixed(3));
+  return { top: entries.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([kind, p]) => [kind, round(p)]), distribution: Object.fromEntries(entries.map(([kind, p]) => [kind, round(p)])) };
+}
+
 export interface FlowBlock { id: string; chapter: number; sentences: Sentence[] }
 /** A card's person (or slot, or a thing or place that acts): how it is there (named, speaks, acts, addressed, described) and in which of its sentences. */
 export interface CardPerson { id: string; how: ("named" | "speaks" | "acts" | "addressed" | "described")[]; at: string[] }
@@ -50,7 +58,7 @@ export interface SceneContext {
 export interface StepLog { step: string; requests: number; ms: number; inputChars: number; questionChars?: number; detail?: Record<string, unknown>; contexts?: Record<string, { requests: number; kept: number; cut: number; chars: number }> }
 export interface FlowResult extends RolesResult {
   /** `was`: the kind the classifier gave, where the action rule changed it (nothing that matters acts); `actor`: the thing that did. */
-  scenes: FlowScene[]; cards: FlowCard[]; kinds: Record<string, { kind: SentenceKind; turn: number; confidence: number; was?: SentenceKind; actor?: string }>;
+  scenes: FlowScene[]; cards: FlowCard[]; kinds: Record<string, { kind: SentenceKind; turn: number; confidence: number; top?: [string, number][]; distribution?: Record<string, number>; was?: SentenceKind; actor?: string }>;
   chart: Chart; em: { batch: string; results: EmResult[] }[]; contexts: SceneContext[]; steps: StepLog[];
   /** The fact ledger, in reading order: who each fact is about, its time, and its story period. */
   facts: FactEntry[];
@@ -145,7 +153,7 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   // Scenes and cards.
   const scenes: FlowScene[] = tiles.flatMap(({ block, spans }) => spans.map((ids) => ({ id: "", index: 0, block: block.id, chapter: block.chapter, sentences: ids }))).map((scene, index) => ({ ...scene, id: `scene_${String(index + 1).padStart(6, "0")}`, index }));
   const kindOf: FlowResult["kinds"] = {};
-  for (const { block, kinds: list, turns, confidence } of kinds) block.sentences.forEach((sentence, index) => { kindOf[sentence.id] = { kind: list[index], turn: Number(turns[index].toFixed(3)), confidence: Number(confidence[index].toFixed(3)) }; });
+  for (const { block, kinds: list, turns, confidence, distributions } of kinds) block.sentences.forEach((sentence, index) => { kindOf[sentence.id] = { kind: list[index], turn: Number(turns[index].toFixed(3)), confidence: Number(confidence[index].toFixed(3)), ...kindScores(distributions[index]) }; });
   const cut = (): FlowCard[] => blocks.flatMap((block) => {
     const ids = block.sentences.map((sentence) => sentence.id);
     return kindCards(ids, ids.map((id) => kindOf[id].kind), ids.map((id) => kindOf[id].turn)).map((card) => ({ ...card, block: block.id, sentences: ids.slice(ids.indexOf(card.first), ids.indexOf(card.last) + 1), entities: [], people: [] }));

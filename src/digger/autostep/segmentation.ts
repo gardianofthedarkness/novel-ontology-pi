@@ -332,8 +332,10 @@ export async function classifySentences(
   sentences: Sentence[],
   decide: DecideFn,
   opts: { stateSummary: string; onBatch?: (through: number, kinds: SentenceKind[], turns: number[]) => Promise<void>; ask?: (window: { summary: string; before: Sentence[]; asked: Sentence[]; questions: DecisionQuestion[] }) => Promise<DecisionAnswer[]> },
-): Promise<{ kinds: SentenceKind[]; confidence: number[]; turns: number[] }> {
-  const kinds: SentenceKind[] = [], confidence: number[] = [], turns: number[] = [];
+): Promise<{ kinds: SentenceKind[]; confidence: number[]; turns: number[]; distributions: Record<string, number>[] }> {
+  // Each sentence's whole distribution over the kinds is kept beside its top kind (the user, 2026-11-03: the faculties fire on
+  // a mixed index of every distribution and score, not only the top answer).
+  const kinds: SentenceKind[] = [], confidence: number[] = [], turns: number[] = [], distributions: Record<string, number>[] = [];
   const windows = Array.from({ length: Math.ceil(sentences.length / CLASSIFY) }, (_, w) => w * CLASSIFY);
   const done = new Map<number, DecisionAnswer[]>();
   let next = 0, published = 0, publishing = Promise.resolve();
@@ -346,6 +348,7 @@ export async function classifySentences(
         kinds.push((kind?.value && kind.value in SENTENCE_KINDS ? kind.value : "narration") as SentenceKind);
         confidence.push(kind?.confidence ?? 0);
         turns.push(Number(turn?.value ?? 0));
+        distributions.push(kind?.distribution ?? (kind?.value ? { [String(kind.value)]: 1 } : {}));
       }
       published++;
       await opts.onBatch?.(Math.min(sentences.length, b + CLASSIFY) - 1, kinds, turns);
@@ -360,7 +363,7 @@ export async function classifySentences(
       await publishing;
     }
   }));
-  return { kinds, confidence, turns };
+  return { kinds, confidence, turns, distributions };
 }
 
 /** Dialogue exchanges, monologues and fact runs from the sentences' kinds (indices, first and last). */
