@@ -2,22 +2,22 @@
 type: "faculty"
 id: "ambience"
 aliases: ["Ambience"]
-status: "proposed"
+status: "built"
 fired_by: ["establishing", "crowds"]
 read_by: ["mega"]
-tags: ["directing/faculty", "status/proposed"]
+tags: ["directing/faculty", "status/built"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
 # Ambience
 
-A summary faculty: the work model reading the text. Status: **proposed**. Back to [Directing](../Directing.md).
+A summary faculty: the work model reading the text. Status: **built**. Back to [Directing](../Directing.md).
 
 ## What it writes
 
-- the crowd as a density of the place: its make-up and flow
-- weather, light, mood
-- set dressing
+- the crowd as a field of the place (M9, world-engine/crowd/field.mjs): its size and state (milling, flowing, gathering, alarmed, gone), its focus; hazards from the fight; drag on the characters (L20)
+- weather, light, mood (not yet)
+- set dressing (not yet)
 
 ## When it fires
 
@@ -29,30 +29,27 @@ On a score-based mixed index of all of these, each against its own baseline over
 
 ## How it is asked
 
-How often: one request a fired span.
+How often: one request a span where ambience fires (where the scene has a crowd).
 
 **System**
 
-> You read the setting of a scene of a light novel and describe its crowd and atmosphere for the stage.
+> You read a passage of a light novel being staged in a 3D city, for the crowd of the place: the people not named who fill it. Say how many there are and what state the crowd is in as the passage goes on, each time it changes: milling (strolling, shopping, standing about), flowing (going somewhere, commuting, passing through), gathering (watching or drawn to something or someone), alarmed (scared, fleeing, scattering), gone (the place emptied). Name what a gathering crowd watches, and what alarms an alarmed one, by the person it centres on where there is one. Say how sure you are of each. Reply in JSON only.
 
 **Task**
 
-> The crowd (how many, who, how it moves, whether it is a named group), the weather, the light, the mood.
+> The crowd of this passage's place, each time it changes.
 
 **Given**
 
-- the span's lines
-- the reading's crowd slots in the scene
-- the set
+- the span's lines (sixty a request)
+- the people with ids
+- the scene digest (where, background)
 
 **Answers** (JSON; every entry with its sentence)
 
 | Field | Answers |
 |---|---|
-| `crowd` | **present**: `none` · `few` · `many` · `packed`; **makeup**: [couples, shoppers, students, workers, security, onlookers, …]; **flow**: `still` · `milling` · `along the street` · `a queue` · `marching as one body` · `fleeing` · `gathering`; **named**: &lt;crowd slot id&gt; \| null |
-| `weather` | words |
-| `light` | words |
-| `mood` | words |
+| `crowd` | **sentence**: &lt;sentence id where this holds from&gt;; **size**: none \| few \| some \| many \| packed; **state**: milling \| flowing \| gathering \| alarmed \| gone; **focus**: &lt;person id the crowd watches or flees, or null&gt;; **sure**: 0..1 |
 
 ## Read by
 

@@ -35,7 +35,7 @@ export function worldLog({ run, record, page, spawn, strands }) {
     if (spawned?.target) add({ kind: 'binding', strand, scene: scene.id, place: spawned.target.place ?? scene.place, target: spawned.target.kind, box: spawned.target.box, rank: 'ruled', source: 'spawn' });
     // Who is present at its start, and where, and why.
     for (const [who, node] of Object.entries(scene.starts)) {
-      if (node == null || who.startsWith('extra:')) continue;
+      if (node == null || /^(extra|crowd):/.test(who)) continue;
       const at = point(decode(node)), before = last.get(who);
       let fields;
       if (sceneRecord.revised?.includes(who)) { const revision = record.revisions?.find(entry => entry.applied && entry.who === who && entry.scene === scene.id); fields = { how: 'revised', rank: 'ruled', source: 'smoothed', from: before?.id ?? null, ...(revision ? { metres: revision.metres } : {}) }; }
@@ -49,7 +49,7 @@ export function worldLog({ run, record, page, spawn, strands }) {
     const cardOf = new Map(sceneRecord.cards.map(card => [card.event, card]));
     scene.events.forEach((event, index) => {
       const card = cardOf.get(index), moves = card?.moves ?? [];
-      for (const move of event.moves.filter(entry => !entry.person.startsWith('extra:'))) {
+      for (const move of event.moves.filter(entry => !/^(extra|crowd):/.test(entry.person))) {
         const said = moves.find(entry => entry.person === move.person && entry.moved), why = String(said?.why ?? '');
         const talk = why.startsWith('spoken to by '), together = why.startsWith('with ');
         const tie = talk || together ? Object.keys(scene.starts).find(id => page.people?.[id]?.name === why.replace(/^(spoken to by|with) /, '')) ?? null : null;

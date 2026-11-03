@@ -90,3 +90,25 @@ its density; displacement, reach and walk costs read it; a way the crowd cannot 
    Organization in the ontology, or plain background.
 4. **Deeper research**: a research handoff for the math (the potential fields per state, alarm's spread and decay,
    the density-speed relation and its parameters), as with the percolation and trap reconstruction handouts.
+
+## Built (2026-11-03)
+
+The user: "they look good to me for now. Let's keep it this way, implement it, and move on."
+
+- **`world-engine/crowd/field.mjs`**: a crowd field over the open ground of a scene's frame (else the street, measured)
+  round its anchor. People from the size at Fruin's levels of service (few 0.2, some 0.6, many 1.5, packed 3 a square
+  metre), carried by at most 48 samples (a drawing budget). The five states move it under one law: each sample walks
+  the walk graph down its state's potential (milling none, flowing and gone toward the rim, gathering to a ring round the
+  focus, Hall's public distance widened so the crowd stands at Fruin's crowded density, alarmed away from the hazard),
+  as far as the speed at its density allows (Weidmann). A hazard's alarm spreads at L17's running speed. `dragAt` is
+  L20: the share of free speed a point's density leaves.
+- **The ambience reader** (`digest.mjs` `crowdOf`): one work-model request a span where ambience fires, for the crowd's
+  size, state and focus each time it changes, with how sure.
+- **The director**: where the scene digest has a crowd or ambience fires, the field replaces the old walkers
+  (`crowd:` samples, no colour, no name, never in the laws, the log, the smoother or canon); each card takes the state
+  the text last gave, a focus where it watches or flees someone present, and hazards where the card's fight strikes an
+  area or breaks something; the field steps on the card's time; characters' drift and reach on foot are slowed by L20.
+- **The page**: samples drawn as small plain figures; no halo, name chip or trail.
+
+Not yet: walk costs in the path integral (L20 for routing round a crowd), named crowds, a crowd's size changing within a
+scene, weather and light.

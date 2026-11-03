@@ -51,7 +51,7 @@ export const FACULTIES = {
   feeling: { label: 'Inner state', types: ['interior', 'routine'], kinds: ['thought'], status: 'proposed', writes: ['each person\'s emotional state as it changes (a distribution)', 'intent: what they want next', 'bonds: who they are to each other'] },
   journeys: { label: 'Journeys', types: ['traversal'], kinds: ['action'], signals: ['scaleJump'], status: 'built', code: 'world-engine/digest/digest.mjs journeysOf (M6)', writes: ['from, via and to as places of the tree', 'the manner (alleys, up a wall, leaps, carried)', 'distance and duration'] },
   choreography: { label: 'Choreography', types: ['confrontation', 'catastrophe'], kinds: ['action'], status: 'built', code: 'world-engine/digest/digest.mjs exchangesOf (M7)', writes: ['exchanges: attacker, target, attack, outcome', 'knock-backs, dodges, throws', 'what breaks and how wide'] },
-  ambience: { label: 'Ambience', types: ['establishing'], kinds: ['environment'], signals: ['crowds'], status: 'proposed', writes: ['the crowd as a density of the place: its make-up and flow', 'weather, light, mood', 'set dressing'] },
+  ambience: { label: 'Ambience', types: ['establishing'], kinds: ['environment'], signals: ['crowds'], status: 'built', writes: ['the crowd as a field of the place (M9, world-engine/crowd/field.mjs): its size and state (milling, flowing, gathering, alarmed, gone), its focus; hazards from the fight; drag on the characters (L20)', 'weather, light, mood (not yet)', 'set dressing (not yet)'] },
   props: { label: 'Props and vehicles', types: [], kinds: ['action'], signals: ['vehicles', 'weapons'], status: 'partial', code: 'world-engine/digest/digest.mjs (items)', writes: ['vehicles: kind, who drives or rides', 'weapons: kind, who holds them', 'things held, thrown, broken'] },
   setting: { label: 'Set description', types: ['establishing'], kinds: ['environment', 'fact'], signals: ['buildings'], status: 'proposed', writes: ['a building\'s look, floors and uses (a 70-floor tower: mall, offices, flats)', 'a room\'s make-up (a container bar, a thick-doored cell)', 'changes to them'] },
 };
@@ -134,6 +134,7 @@ export const LOG_KINDS = {
 export const LAWS = {
   L1: 'continuity by strand', L2: 'two places at once', L5: 'travel time', L6: 'talk needs nearness', L9: 'actors are there', L10: 'reachable',
   L11: 'bodies', L12: 'abilities', L13: 'destruction', L14: 'stated facts hold (recorded as it plays)', L15: 'a thing in one place or one hand at a time (proposed)',
+  L16: 'presence in the frame', L17: 'displacement', L20: 'crowd drag (on foot through a crowd field, the speed its density leaves)',
 };
 
 /**

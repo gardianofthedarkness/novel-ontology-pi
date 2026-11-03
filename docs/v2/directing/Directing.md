@@ -20,7 +20,7 @@ The director as readers and specialists (docs/v2/next-steps.md A4–A5). Faculti
 | [Inner state](faculties/feeling.md) | Interior flow, Routine interaction, thought sentences | [Character director](directors/character.md) | proposed |
 | [Journeys](faculties/journeys.md) | Pursuit / traversal, action sentences, a jump in scale | [Mega-scene director](directors/mega.md) | built |
 | [Choreography](faculties/choreography.md) | Confrontation, Spectacle / catastrophe, action sentences | [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | built |
-| [Ambience](faculties/ambience.md) | Establishing / ambience, environment sentences, crowds named | [Mega-scene director](directors/mega.md) | proposed |
+| [Ambience](faculties/ambience.md) | Establishing / ambience, environment sentences, crowds named | [Mega-scene director](directors/mega.md) | built |
 | [Props and vehicles](faculties/props.md) | action sentences, vehicles named, weapons named | [Transport specialist](directors/transport.md) | partial |
 | [Set description](faculties/setting.md) | Establishing / ambience, environment sentences, fact sentences, buildings named or described | [Architect](directors/architect.md) | proposed |
 

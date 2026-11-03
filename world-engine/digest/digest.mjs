@@ -253,6 +253,39 @@ export async function journeysOf(work, { scene, spans, line, kind, people, place
   return out;
 }
 
+// ── Ambience (M9): the crowd of a place, read where the ambience faculty fires, one request a span ─────────────────────
+// The crowd is a field of the place (world-engine/crowd/field.mjs); the director gives it a state, never destinations.
+export const CROWD_SIZES = ['none', 'few', 'some', 'many', 'packed'];
+export const CROWD_STATES = ['milling', 'flowing', 'gathering', 'alarmed', 'gone'];
+export const CROWD_SYSTEM = 'You read a passage of a light novel being staged in a 3D city, for the crowd of the place: the people not named who fill it. Say how many there are and what state the crowd is in as the passage goes on, each time it changes: milling (strolling, shopping, standing about), flowing (going somewhere, commuting, passing through), gathering (watching or drawn to something or someone), alarmed (scared, fleeing, scattering), gone (the place emptied). Name what a gathering crowd watches, and what alarms an alarmed one, by the person it centres on where there is one. Say how sure you are of each. Reply in JSON only.';
+export const CROWD_SHAPE = { crowd: [{ sentence: '<sentence id where this holds from>', size: CROWD_SIZES.join(' | '), state: CROWD_STATES.join(' | '), focus: '<person id the crowd watches or flees, or null>', sure: '0..1' }] };
+
+/** A span's crowd, checked: its lines, sizes and states from their lists, a known person as focus or none. */
+export function checkCrowd(reply, { people, sentences }) {
+  const known = new Set(people), lines = new Set(sentences);
+  return (reply?.crowd ?? []).flatMap(entry => {
+    const sentence = String(entry?.sentence ?? ''), state = oneOf(entry?.state, CROWD_STATES), size = oneOf(entry?.size, CROWD_SIZES);
+    if (!lines.has(sentence) || !state || !size) return [];
+    return [{ sentence, size, state, focus: entry?.focus && known.has(String(entry.focus)) ? String(entry.focus) : null, sure: sure(entry?.sure) }];
+  });
+}
+
+/** The crowd in each span of a scene where ambience fires. */
+export async function crowdOf(work, { scene, spans, line, kind, people, digest = null, parallel = 4 }) {
+  const ids = people.map(person => person.id), out = [];
+  let next = 0;
+  const one = async span => {
+    const reply = await work.generate({ system: CROWD_SYSTEM, maxTokens: 800, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+      task: 'The crowd of this passage\'s place, each time it changes. Reply in this JSON shape; an empty list where there is no crowd.', shape: CROWD_SHAPE,
+      scene: { id: scene.id, where: digest?.where ?? null, background: digest?.background ?? null }, people: people.map(person => ({ id: person.id, name: person.name })),
+      passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
+    }) }).then(parsed).catch(() => null);
+    out.push(...checkCrowd(reply, { people: ids, sentences: span }));
+  };
+  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
+  return out;
+}
+
 // ── Choreography (M7): read where the choreography faculty fires (fights, catastrophes), one request a span ───────────
 export const ATTACKS = ['hand to hand', 'grapple or throw', 'blade or blunt weapon', 'firearm', 'ranged power', 'beam or laser', 'area blast', 'thrown object', 'the ground or a building itself', 'an ability that cancels'];
 export const SHAPES = ['point', 'line or beam', 'cone', 'sphere', 'ring', 'wave along the ground', 'rain from above'];

@@ -228,7 +228,7 @@ _Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; 
 | Inner state | Interior flow, Routine interaction, thought sentences | each person's emotional state as it changes (a distribution); intent: what they want next; bonds: who they are to each other | Character director (own) | proposed |
 | Journeys | Pursuit / traversal, action sentences, a jump in scale | from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration | Mega-scene director (own) | built |
 | Choreography | Confrontation, Spectacle / catastrophe, action sentences | exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide | Mega-scene director, Combat director (own) | built |
-| Ambience | Establishing / ambience, environment sentences, crowds named | the crowd as a density of the place: its make-up and flow; weather, light, mood; set dressing | Mega-scene director | proposed |
+| Ambience | Establishing / ambience, environment sentences, crowds named | the crowd as a field of the place (M9, world-engine/crowd/field.mjs): its size and state (milling, flowing, gathering, alarmed, gone), its focus; hazards from the fight; drag on the characters (L20); weather, light, mood (not yet); set dressing (not yet) | Mega-scene director | built |
 | Props and vehicles | action sentences, vehicles named, weapons named | vehicles: kind, who drives or rides; weapons: kind, who holds them; things held, thrown, broken | Transport specialist (own) | partial |
 | Set description | Establishing / ambience, environment sentences, fact sentences, buildings named or described | a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them | Architect (own) | proposed |
 
@@ -362,8 +362,8 @@ M3 and M5; M10–M12 go alongside; M13 last. The architect (floors, uses, looks)
 **Paused for M14 (the user, 2026-11-03):** M9 (the crowd as a field), M10 (state directors, scoped), M11 (into the
 ontology), M12 (records and cost), the smoother's cloud fix (A7 item 7, on hold) and W10 wait while M14's segment tiling
 is tested; the user asked to come back to them after it. Kept from this round: the faster test cycle (A7 item 8).
-M9 is under discussion (the user, 2026-11-03: the crowd enters states instead of being sent somewhere): the research
-note [Crowd-M9](directing/Crowd-M9.md).
+M9 built (the user, 2026-11-03: the crowd a field that enters states and acts back on the characters): the research
+note and what is built in [Crowd-M9](directing/Crowd-M9.md).
 
 What W10 is measured on, against W8 (`d20261103011140`) and W9 (`d20261103060830`):
 

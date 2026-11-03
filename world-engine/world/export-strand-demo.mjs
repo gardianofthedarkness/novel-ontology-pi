@@ -1299,7 +1299,8 @@ export async function strandDemo(novelDir, options) {
     const [uptoScene, uptoEvent] = upto ? upto.split('|') : [];
     const shown = !upto ? chosen : chosen.filter(scene => byIndex.get(scene.id) <= byIndex.get(uptoScene) && runs[scene.id]).map(scene => (scene.id === uptoScene ? { ...scene, events: scene.events.slice(0, uptoEvent === 'start' ? 0 : Number(uptoEvent) + 1) } : scene));
     notes.solves = fields.size;
-    const people = [...new Set(chosen.flatMap(scene => scene.cast))], color = new Map(people.map((id, index) => [id, PALETTE[index % PALETTE.length]]));
+    // The crowd's samples (M9, `crowd:` ids) are drawn as the field, not as people: no colour of the palette, no name.
+    const people = [...new Set(chosen.flatMap(scene => scene.cast))], color = new Map(people.filter(id => !id.startsWith('crowd:')).map((id, index) => [id, PALETTE[index % PALETTE.length]]));
     const clean = text => (text ?? '').split('（原文：')[0].trim();
     // Things the scenes put in their places (novel stage objects): a named building takes a generic lot and lights up when first
     // mentioned; anything else stands in the box where Jev's two views agree (placeThings above).
@@ -1376,7 +1377,7 @@ export async function strandDemo(novelDir, options) {
       title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
       migrations: migrations.map(migration => { const route = routes.get(`${migration.scene}|${migration.person}`); return { ...migration, route: route ? { ...route, exit: route.exit?.map(dense) ?? null, entry: route.entry?.map(dense) ?? null } : null }; }),
       macro, terrainShapes, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id), uses: source.buildings.map(b => b.use ?? UM.useOf(b) ?? null), owners: source.buildings.map(b => b.patch ?? null) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
-      people: Object.fromEntries(people.map(id => [id, { name: name(id), color: color.get(id) }])),
+      people: Object.fromEntries(people.map(id => [id, id.startsWith('crowd:') ? { name: '', color: '#9aa3ad', crowd: true } : { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
       world: { NX, NZ, K, oi, oj, ok, lots: worldLots, shells: worldShells, loose: looseNow(worn), earlier, underground: undergroundView(),
         ruins: pending.filter(entry => entry.story < Math.max(...chosen.map(scene => byIndex.get(scene.id)))).map(entry => ({ building: entry.building, strand: entry.strand.id, scene: entry.scene, label: entry.label, story: entry.story })), chunks: [...world.chunks].map(([key, born]) => { const { ci, cj } = W.chunkOf(key); return [ci, cj, born, W.chunkGround(world, key)]; }), clutter: [...world.clutter].flatMap(key => [Math.floor(key / 65536) - 32768, key % 65536 - 32768]),

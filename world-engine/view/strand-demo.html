@@ -601,6 +601,8 @@ function drawSkeletons(id, entry, count, settling = null) {
 // People: a glowing pawn and a name each; a shadow when off the ground.
 const pawns = new Map();
 for (const [id, person] of Object.entries(data.people)) {
+  // The crowd (M9): its field's samples as small plain figures, no halo, no name: a crowd, not people.
+  if (person.crowd) { const pawn = new THREE.Group(), body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.75, 3, 8), new THREE.MeshStandardMaterial({ color: new THREE.Color(person.color), transparent: true, opacity: 0.8 })); body.position.y = 0.6; pawn.add(body); pawns.set(id, { pawn, body }); continue; }
   const tint = new THREE.Color(person.color), pawn = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.95, 4, 12), new THREE.MeshStandardMaterial({ color: tint, emissive: tint, emissiveIntensity: 0.7, transparent: true })); body.position.y = 0.82; pawn.add(body);
   const halo = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.8, 24), new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 0.05; pawn.add(halo);
@@ -1076,6 +1078,7 @@ function showPaths(segment, entry) {
   for (const line of pathLines) world.remove(line.object);
   pathLines = [];
   for (const move of segment.moves) {
+    if (data.people[move.person]?.crowd) continue;
     const tint = new THREE.Color(data.people[move.person].color), points = (nodes) => nodes.flatMap((node, k) => {
       const p = at(segment.place, node), out = [], arc = k && move.how !== "direct" ? flight(at(segment.place, nodes[k - 1]), p) : null;
       if (arc) for (let n = 1; n < 12; n++) { const q = along(at(segment.place, nodes[k - 1]), p, arc, n / 12); out.push(q.x - entry.cx, q.y + 0.35, q.z - entry.cz); }
@@ -1172,7 +1175,7 @@ function frame(now) {
     $("crumb").textContent = place.path.join(" › ") + ` · ${place.scale && place.scale !== place.kind ? `${place.scale}, built as a ` : ""}${place.kind} of ${place.lots.length} buildings`;
     $("scene").textContent = `Scene ${segment.index + 1} of ${data.scenes.length}` + (segment.scene.label ? ` · ${segment.scene.label}` : "");
     const status = { stays: "stays on", arrives: "arrives", enters: "enters" };
-    $("people").replaceChildren(...Object.entries(segment.scene.from).map(([person, from]) => { const chip = document.createElement("span"); chip.style.setProperty("--c", data.people[person].color); chip.textContent = `${data.people[person].name} · ${status[from]}`; return chip; }));
+    $("people").replaceChildren(...Object.entries(segment.scene.from).filter(([person]) => !data.people[person]?.crowd).map(([person, from]) => { const chip = document.createElement("span"); chip.style.setProperty("--c", data.people[person].color); chip.textContent = `${data.people[person].name} · ${status[from]}`; return chip; }));
   }
   // The damage box (Jev's box, back-projected) shows while the blast plays; traces appear as people move between places.
   // The impact Jev chose shows as its sphere; a stand-in hit as its box.

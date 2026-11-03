@@ -27,7 +27,7 @@ const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
-const DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
+const CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
@@ -148,7 +148,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   // the summarizer apart; Jev's calls.
   const workMeter = workModel ? DG.metered(workModel) : null, digestMeter = workModel && digest ? DG.metered(workModel) : null;
   // Each faculty its own meter (M12: the run prices itself by faculty and director).
-  const meters = digestMeter ? Object.fromEntries(['scale', 'journeys', 'choreography', 'conversation'].map(id => [id, DG.metered(workModel)])) : {};
+  const meters = digestMeter ? Object.fromEntries(['scale', 'journeys', 'choreography', 'conversation', 'ambience'].map(id => [id, DG.metered(workModel)])) : {};
   record.gate = gate ? { unit: gate.windows[0]?.unit ?? null, windows: gate.windows.length, beats: gate.beats.length, coverage: gate.coverage } : null;
   // Jev's requests and the tokens it reports, by what was asked (the first question's key, its kind).
   const jevUse = { requests: 0, input: 0, output: 0, by: {} };
@@ -490,17 +490,24 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         const read = card => !!dg && card.sentences.every(id => covered.has(id));
         const digestMovers = card => digestIn(dg?.moves ?? [], card).filter(entry => entry.motion !== 'still' && entry.sure >= MOVE_SURE && positions[entry.who]).map(entry => entry.who);
         const cards = [...(cardsOf.get(scene.id) ?? []), ...moving].filter(card => card.people.some(person => positions[person.id] && person.how.some(how => PRESENT.has(how))) || digestMovers(card).length).sort((a, b) => (position.get(a.first) ?? 0) - (position.get(b.first) ?? 0));
-        // The crowd (the scene digest: few or many people not named on stage): walkers round the anchor, scenery only (never
-        // in the laws, the log or canon), drifting as the crowd does.
+        // The crowd (M9; the user, 2026-11-03: a field of the place with states, acting back on the characters): where the
+        // scene digest has people not named on stage, or the ambience faculty fires in the scene, a field over the open
+        // ground of the scene's frame round the anchor (else the street, measured), sized by the digest; drawn by its
+        // samples (`crowd:` ids: scenery, never in the laws, the log, the smoother or canon). Its state is set card by card.
         const extras = new Map();
-        if (dg && dg.digest.background.crowd !== 'none' && anchor !== null && anchor !== undefined) {
-          const p = at(anchor), { nodes } = around(p[0], p[2], 22), kind = nodes.find(node => node.id === anchor)?.type;
-          const open = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && (kind === undefined || node.type === kind) && Math.hypot(node.x - p[0], node.z - p[2]) >= 5);
-          for (let n = 0; n < (dg.digest.background.crowd === 'many' ? 6 : 3) && open.length; n++) {
-            const id = `extra:${scene.id.slice(-3)}:${n + 1}`, node = open[Math.floor(seeded(id)() * open.length)].id;
-            extras.set(id, [node, 0]); run.starts[id] = [node, 0]; if (E.names) E.names[id] = '路人';
+        let crowd = null;
+        const ambience = (gate?.windows ?? []).some(window => window.scene === scene.id && window.fired.includes('ambience'));
+        if (dg && (dg.digest.background.crowd !== 'none' || ambience) && anchor !== null && anchor !== undefined) {
+          const p = at(anchor), radius = frameMetres ? frameMetres / 2 : measure({ referent: 'the street', of: null, times: 1 }, p) ?? null;
+          const { nodes, built } = radius ? around(p[0], p[2], radius) : { nodes: [] };
+          const open = nodes.filter(node => node.type === 1 && Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= radius), ids = new Set(open.map(node => node.id));
+          const neighbours = new Map(open.map(node => { const out = []; for (let e = built.graph.offsets[node.id]; e < built.graph.offsets[node.id + 1]; e++) if (ids.has(built.graph.to[e])) out.push(built.graph.to[e]); return [node.id, out]; }));
+          const state = { strolling: 'milling', standing: 'milling', walking: 'flowing', running: 'alarmed' }[dg.digest.background.crowdDoing] ?? 'milling';
+          if (open.length) {
+            crowd = CF.crowdField({ nodes: open, neighbours, size: dg.digest.background.crowd === 'none' ? 'few' : dg.digest.background.crowd, state, seed: scene.id });
+            for (const sample of crowd.samples) { const id = `crowd:${scene.id.slice(-3)}:${sample.id + 1}`; extras.set(id, sample); run.starts[id] = [sample.node, 0]; if (E.names) E.names[id] = ''; }
+            sceneRecord.crowd = { ...crowd.summary(), radius: Math.round(radius), nodes: open.length };
           }
-          sceneRecord.extras = { count: extras.size, doing: dg.digest.background.crowdDoing };
         }
         scene.events = []; run.events = []; scene.cast = [...new Set([...(scene.cast ?? []), ...Object.keys(positions), ...extras.keys()])];
         // Those coming from elsewhere walk in first (an event of their own, before the scene's cards).
@@ -608,6 +615,29 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             sceneRecord.talk = { exchanges: talk.exchanges.length, formations: talk.formations.length, attention: talk.attention.length };
           }
         }
+        // Ambience (M9): the crowd's size, state and focus as the text has them, read where the ambience faculty fires.
+        const crowdAt = [];
+        if (gate && digestMeter && crowd) {
+          const spans = firedSpans('ambience');
+          if (spans.length) { crowdAt.push(...(await DG.crowdOf(meters.ambience, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null })).filter(entry => entry.sure >= MOVE_SURE)); sceneRecord.crowdRead = crowdAt.map(entry => ({ sentence: entry.sentence, size: entry.size, state: entry.state, focus: entry.focus })); }
+        }
+        // A card's crowd: the state the text last gave it (a focus where it watches or flees someone present), and a hazard
+        // where the card's fight strikes an area or breaks something (alarm spreads from there, L17's run).
+        const AREA = new Set(['area blast', 'ranged power', 'beam or laser', 'firearm', 'the ground or a building itself']);
+        const crowdCard = card => {
+          if (!crowd) return;
+          const end = Math.max(...card.sentences.map(id => sentenceAt.get(id) ?? -1)), told = crowdAt.filter(entry => (sentenceAt.get(entry.sentence) ?? Infinity) <= end).at(-1);
+          if (told) {
+            const p = told.focus && positions[told.focus] ? at(positions[told.focus][0]) : null;
+            crowd.set(told.state, p ? { x: p[0], z: p[2] } : null);
+            if (told.state === 'alarmed' && p && !crowd.hazards.some(hazard => hazard.by === told.sentence)) { crowd.hazard(p[0], p[2]); crowd.hazards.at(-1).by = told.sentence; }
+          }
+          for (const id of card.sentences) for (const exchange of exchangesAt.get(id) ?? []) {
+            if (!AREA.has(exchange.attack) && !exchange.breaks) continue;
+            const who = exchange.target ?? exchange.attacker, p = who && positions[who] ? at(positions[who][0]) : null;
+            if (p && !crowd.hazards.some(hazard => hazard.by === `${id}|${who}`)) { crowd.hazard(p[0], p[2]); crowd.hazards.at(-1).by = `${id}|${who}`; }
+          }
+        };
         // Who leads each beat, by what its faculties found (the user, 2026-11-03: the faculties' findings steer the lead
         // directly, not a second type question; experiments/v2/faculty-firing.mjs): blows read in a beat make it the combat
         // director's, journeys the mega-scene director's, both the mega-scene director's with combat co-directing; a beat
@@ -654,7 +684,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           const scale = scaleOf.get(beatOf.get(card.first)?.n) ?? null, centre = (() => { const points = card.people.filter(person => positions[person.id]).map(person => at(positions[person.id][0])); return points.length ? [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length) : anchorAt; })();
           const frameHere = scale ? measure(scale.frame, centre) : null, cardSeconds = scale?.duration ? scale.duration / (cardsInBeat.get(beatOf.get(card.first)?.n) || 1) : null;
           const frameRadius = Math.min(400, Math.max(10 * BODY, (frameHere ?? 20 * BODY) / 2)), speedOf = how => LW.SPEED[how] ?? LW.SPEED.walk;
-          const reachOf = how => (scale ? Math.max(speedOf(how) * (cardSeconds ?? 0), measure(scale.reach, centre) ?? 0) || (C.REACH[how] ?? C.REACH.walk) : C.REACH[how] ?? C.REACH.walk);
+          // L20: a reach on foot shrinks by the crowd's drag at the card's people.
+          const drag = how => (crowd && centre && ['walk', 'run', 'step'].includes(how) ? crowd.dragAt(centre[0], centre[2]) : 1);
+          const reachOf = how => drag(how) * (scale ? Math.max(speedOf(how) * (cardSeconds ?? 0), measure(scale.reach, centre) ?? 0) || (C.REACH[how] ?? C.REACH.walk) : C.REACH[how] ?? C.REACH.walk);
           if (scale) cardRecord.scale = { frame: scale.frame, metres: frameHere ? Math.round(frameHere) : null, angle: scale.angle, reach: scale.reach, seconds: cardSeconds ? Math.round(cardSeconds * 10) / 10 : null };
           asking = cardRecord;
           await live?.phase(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`);
@@ -710,7 +742,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             const end = lastLine(card), touched = new Set(cardRecord.moves.filter(move => move.moved).map(move => move.person)), bound = frameMetres ? frameMetres / 2 : null;
             const routine = who => dg.background.filter(entry => entry.who === who && (sentenceAt.get(entry.sentence) ?? 0) <= end).at(-1)?.doing ?? (who === 'crowd' ? dg.digest.background.crowdDoing : dg.digest.people.find(entry => entry.who === who)?.doing ?? null);
             const onward = (who, from, doing, wander) => {
-              const metres = PACE[doing] * cardSeconds, here = at(from[0]);
+              // L20, crowd drag: on foot through the crowd field, a share of the pace its density leaves.
+              const here = at(from[0]), metres = PACE[doing] * cardSeconds * (crowd && !who.startsWith('crowd:') ? crowd.dragAt(here[0], here[2]) : 1);
               if (metres < BODY / 2) return null;
               if (wander && anchorAt && Math.hypot(here[0] - anchorAt[0], here[2] - anchorAt[2]) > wander) turn.set(who, Math.atan2(anchorAt[2] - here[2], anchorAt[0] - here[0]));
               const angle = wayOf(who, !who.startsWith('extra:')), aim = [here[0] + Math.cos(angle) * metres, here[2] + Math.sin(angle) * metres];
@@ -726,16 +759,12 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
               const path = onward(who, positions[who], doing, doing === 'strolling' ? bound : null);
               if (path) moveTo(who, path, doing === 'running' ? 'run' : 'walk', `background: ${doing}`, { quiet: true });
             }
-            const crowd = routine('crowd');
-            if (!PACE[crowd]) return;
+            // The crowd field moves on the card's time in its state (set below, before the drift); its samples' paths drawn.
+            if (!crowd) return;
+            const paths = crowd.step(cardSeconds);
             let moved = 0;
-            for (const [id, value] of extras) {
-              const path = onward(id, value, crowd, bound);
-              if (!path) continue;
-              E.moves.set(`${scene.id}|${card.id}|${id}`, { person: id, how: crowd === 'running' ? 'run' : 'walk', path: [...path], ensemble: [] });
-              extras.set(id, [path.at(-1), 0]); moved++;
-            }
-            if (moved) cardRecord.crowd = { doing: crowd, moved };
+            [...extras.keys()].forEach((id, k) => { const path = paths[k]; if (!path) return; E.moves.set(`${scene.id}|${card.id}|${id}`, { person: id, how: crowd.state === 'alarmed' ? 'run' : 'walk', path: [...path], ensemble: [] }); moved++; });
+            cardRecord.crowd = { ...crowd.summary(), moved };
           };
           // The things in the card's lines: held, picked up, used (with whoever holds them), given, put down or thrown (left
           // where they fell), broken. Each thing held by someone present is placed with them after every card they move.
@@ -1050,7 +1079,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // agrees with is recorded under L14. Then the background's routine, the crowd, and the things people carry.
           await fight();
           await block();
-          if (dg) { factsDue(); drift(); carry(); }
+          if (dg) { factsDue(); crowdCard(card); drift(); carry(); }
           if (read(card) && digestIn(dg.breaks, card).some(entry => entry.sure >= 0.7)) { cardRecord.breaks = true; cardRecord.breaksSaid = digestIn(dg.breaks, card).map(entry => entry.what); }
           // Destruction (docs/v2/world-engine-redesign.md §3): a card the text says breaks something is asked where it hits (lettered
           // red spheres on the world as played) and how big (spheres of 4, 8, 16 and 32 m from two sides); the blast is applied
