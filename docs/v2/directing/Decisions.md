@@ -369,3 +369,17 @@ Co-firing is weak under every rule: where two faculties are needed usually only 
 spurious. Each faculty's index leans on the stretch's one type distribution, which a mixed stretch splits; the
 sentence kinds (spoken lines for conversation, action lines for journeys and fights) do not depend on the stretch's
 type and should carry more weight for co-firing (MIX, a free grid on the same data).
+
+**Co-firing measured as sets** (per stretch, the fired set against the needed set): set Jaccard |fired ∩ needed| ÷
+|fired ∪ needed| (both empty counts 1), averaged; the set exactly right; on stretches needing two or more, all fired
+and the share of the needed that fired; and spurious co-firing (fired by two or more with one finding nothing).
+
+| Rule | Set Jaccard | Exactly right | Multi: all fired | Multi: share fired | Co-fired (spurious) |
+|---|---|---|---|---|---|
+| Now (smoothed) | 0.39 | 33/109 | 2/17 | 0.51 | 32 (29) |
+| Index above average, raw (MIX block 1, sentence 0.6) | 0.65 | 60/109 | 6/17 | 0.69 | 31 (26) |
+| Same, MIX block 0.5, sentence 3 | 0.68 | 65/109 | 10/17 | 0.74 | 33 (29) |
+
+Weighting the sentence kinds over the stretch's type helps co-firing a little (all needed fired in 10 of 17 against
+6); spurious co-firing stays high under every weight (most stretches fired by two have one that finds nothing). Small
+numbers (17 multi stretches); not adopted yet.
