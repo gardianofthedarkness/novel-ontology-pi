@@ -87,14 +87,19 @@ select { background: var(--bg); color: var(--ink); border: 1px solid var(--line)
 ol.steps { padding-left: 1.2em; }
 ol.steps li { margin: .5em 0; }
 .note { color: var(--muted); font-size: .9rem; }
+.matrix th[scope=row] { text-transform: none; letter-spacing: 0; font-size: .9rem; color: var(--ink); background: var(--surface); }
+.matrix th[scope=row] small { color: var(--muted); font-weight: 400; }
+.matrix td.cell { text-align: center; color: var(--accent); font-size: 1.1rem; }
+ul.asks { margin: 0; padding-left: 0; list-style: none; }
+ul.asks li { margin: 2px 0; }
 </style>
 </head>
 <body>
 <main>
 <header>
   <h1>Summarizer Faculties</h1>
-  <p class="lead">A plan for the director's readers as measuring instruments: a cheap coarse reading of every block says which observables are active where, and each fine faculty measures only there.</p>
-  <div class="chips"><span class="chip plan">Proposal</span><span class="chip">Track A · A4</span><span class="chip">3 Nov 2026</span><span class="chip">Volume 1 measured</span></div>
+  <p class="lead">A plan for the director's readers and directors as measuring instruments: a cheap coarse reading of every block says which observables are active where, and only there do the fine faculties read and the specialist directors ask.</p>
+  <div class="chips"><span class="chip plan">Proposal</span><span class="chip">Track A · A4–A5</span><span class="chip">3 Nov 2026</span><span class="chip">Volume 1 measured</span></div>
 </header>
 
 <h2>Why</h2>
@@ -109,24 +114,35 @@ ol.steps li { margin: .5em 0; }
 <h2>The idea</h2>
 <p>One pass of Jev already reads every sentence. It gives each sentence a kind, and with this plan each block (about 12 sentences) a type, both as full distributions. The gate turns those distributions into firing spans. Faculties read only their spans and write claims, each with its line and how sure it is, to a scene board the director and smoother read.</p>
 <div class="panel flow" aria-label="The pipeline">
-<svg viewBox="0 0 980 250" role="img">
+<svg viewBox="0 0 980 300" role="img">
   <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
   <g font-size="13" fill="var(--ink)">
-    <rect x="8" y="80" width="130" height="80" rx="10" fill="var(--sunk)" stroke="var(--line)"/><text x="73" y="114" text-anchor="middle">The book</text><text x="73" y="134" text-anchor="middle" fill="var(--muted)" font-size="12">5,202 sentences</text>
-    <rect x="178" y="60" width="180" height="120" rx="10" fill="var(--surface)" stroke="var(--accent)"/><text x="268" y="88" text-anchor="middle" font-weight="600">Jev's kinds pass</text><text x="268" y="112" text-anchor="middle" fill="var(--muted)" font-size="12">sentence kinds, whole</text><text x="268" y="130" text-anchor="middle" fill="var(--muted)" font-size="12">+ block types, whole</text><text x="268" y="156" text-anchor="middle" fill="var(--accent)" font-size="12">≈56 requests a volume</text>
-    <rect x="398" y="60" width="170" height="120" rx="10" fill="var(--surface)" stroke="var(--line)"/><text x="483" y="88" text-anchor="middle" font-weight="600">Density + HMM</text><text x="483" y="112" text-anchor="middle" fill="var(--muted)" font-size="12">expected share per type</text><text x="483" y="130" text-anchor="middle" fill="var(--muted)" font-size="12">smoothed over the story</text><text x="483" y="156" text-anchor="middle" fill="var(--muted)" font-size="12">change points = beats</text>
-    <rect x="608" y="60" width="120" height="120" rx="10" fill="var(--surface)" stroke="var(--line)"/><text x="668" y="100" text-anchor="middle" font-weight="600">The gate</text><text x="668" y="124" text-anchor="middle" fill="var(--muted)" font-size="12">on above μ+kσ</text><text x="668" y="142" text-anchor="middle" fill="var(--muted)" font-size="12">off below a lower line</text>
-    <rect x="768" y="8" width="204" height="44" rx="8" fill="var(--always-bg)"/><text x="870" y="35" text-anchor="middle" fill="var(--always)">Scene frame + camera</text>
-    <rect x="768" y="60" width="204" height="44" rx="8" fill="var(--always-bg)"/><text x="870" y="87" text-anchor="middle" fill="var(--always)">Generalist (slim)</text>
-    <rect x="768" y="112" width="204" height="44" rx="8" fill="var(--fired-bg)"/><text x="870" y="133" text-anchor="middle" fill="var(--fired)">Journeys · Choreography</text><text x="870" y="149" text-anchor="middle" fill="var(--fired)" font-size="12">Conversation · Ambience</text>
-    <rect x="768" y="164" width="204" height="44" rx="8" fill="var(--damp-bg)"/><text x="870" y="191" text-anchor="middle" fill="var(--damp)">Damping (no reader)</text>
-    <text x="870" y="236" text-anchor="middle" fill="var(--muted)" font-size="12">→ the scene board → director, smoother, camera</text>
+    <rect x="6" y="110" width="104" height="70" rx="10" fill="var(--sunk)" stroke="var(--line)"/><text x="58" y="140" text-anchor="middle">The book</text><text x="58" y="160" text-anchor="middle" fill="var(--muted)" font-size="12">5,202 lines</text>
+    <rect x="140" y="95" width="150" height="100" rx="10" fill="var(--surface)" stroke="var(--accent)"/><text x="215" y="122" text-anchor="middle" font-weight="600">Jev's kinds pass</text><text x="215" y="144" text-anchor="middle" fill="var(--muted)" font-size="12">sentence kinds</text><text x="215" y="162" text-anchor="middle" fill="var(--muted)" font-size="12">+ block types</text><text x="215" y="182" text-anchor="middle" fill="var(--accent)" font-size="12">all as distributions</text>
+    <rect x="320" y="95" width="120" height="100" rx="10" fill="var(--surface)" stroke="var(--line)"/><text x="380" y="130" text-anchor="middle" font-weight="600">The gate</text><text x="380" y="152" text-anchor="middle" fill="var(--muted)" font-size="12">density, baseline</text><text x="380" y="170" text-anchor="middle" fill="var(--muted)" font-size="12">hysteresis, beats</text>
+    <rect x="470" y="40" width="190" height="230" rx="12" fill="var(--surface)" stroke="var(--line)"/><text x="565" y="64" text-anchor="middle" font-weight="600">Faculties</text><text x="565" y="82" text-anchor="middle" fill="var(--muted)" font-size="12">the work model reads text</text>
+    <text x="565" y="110" text-anchor="middle" fill="var(--always)" font-size="12">Scene frame · Generalist</text>
+    <text x="565" y="136" text-anchor="middle" fill="var(--fired)" font-size="12">Conversation · Inner state</text>
+    <text x="565" y="162" text-anchor="middle" fill="var(--fired)" font-size="12">Journeys · Choreography</text>
+    <text x="565" y="188" text-anchor="middle" fill="var(--fired)" font-size="12">Ambience · Props</text>
+    <text x="565" y="214" text-anchor="middle" fill="var(--fired)" font-size="12">Set description</text>
+    <text x="565" y="252" text-anchor="middle" fill="var(--muted)" font-size="12">→ claims on the scene board</text>
+    <rect x="690" y="40" width="284" height="230" rx="12" fill="var(--surface)" stroke="var(--accent)"/><text x="832" y="64" text-anchor="middle" font-weight="600">Specialist directors</text><text x="832" y="82" text-anchor="middle" fill="var(--muted)" font-size="12">Jev decides on pictures at their scale</text>
+    <rect x="704" y="96" width="256" height="26" rx="6" fill="var(--always-bg)"/><text x="832" y="114" text-anchor="middle" fill="var(--always)" font-size="12">Stage manager · set, cast, camera, lead</text>
+    <rect x="704" y="128" width="125" height="26" rx="6" fill="var(--fired-bg)"/><text x="766" y="146" text-anchor="middle" fill="var(--fired)" font-size="12">Routine 2–15 m</text>
+    <rect x="835" y="128" width="125" height="26" rx="6" fill="var(--fired-bg)"/><text x="897" y="146" text-anchor="middle" fill="var(--fired)" font-size="12">Combat 5–60 m</text>
+    <rect x="704" y="160" width="125" height="26" rx="6" fill="var(--fired-bg)"/><text x="766" y="178" text-anchor="middle" fill="var(--fired)" font-size="12">Mega-scene to 2 km</text>
+    <rect x="835" y="160" width="125" height="26" rx="6" fill="var(--fired-bg)"/><text x="897" y="178" text-anchor="middle" fill="var(--fired)" font-size="12">Transport</text>
+    <rect x="704" y="192" width="256" height="26" rx="6" fill="var(--fired-bg)"/><text x="832" y="210" text-anchor="middle" fill="var(--fired)" font-size="12">Architect · the borrowed building made</text>
+    <text x="832" y="252" text-anchor="middle" fill="var(--muted)" font-size="12">→ the world, the smoother, the camera</text>
+    <text x="606" y="18" text-anchor="middle" fill="var(--muted)" font-size="11">the gate also chooses which director leads each beat</text>
   </g>
   <g stroke="var(--muted)" stroke-width="1.5" fill="none" marker-end="url(#ar)">
-    <path d="M138 120 H176"/><path d="M358 120 H396"/><path d="M568 120 H606"/>
-    <path d="M728 110 C748 110 748 30 766 30"/><path d="M728 116 C750 116 750 82 766 82"/><path d="M728 124 C750 124 750 134 766 134"/><path d="M728 130 C748 130 748 186 766 186"/>
+    <path d="M110 145 H138"/><path d="M290 145 H318"/><path d="M440 145 H468"/><path d="M660 155 H688"/>
+    <path d="M380 95 C380 26 760 26 800 38" stroke-dasharray="4 4"/>
   </g>
 </svg>
+
 </div>
 
 <h2>What volume 1 already shows</h2>
@@ -144,69 +160,96 @@ ol.steps li { margin: .5em 0; }
   <div class="legend" id="stripLegend"></div>
 </div>
 
+<h2>Specialist directors</h2>
+<div class="quote">Jev can be asked for different questions based on what the input director sees… we can split our directors into specialist… This is a general mini harness design change, we need to have a pre written and derived from code active summary faculty to director group relationship.<cite>The user, 3 Nov 2026</cite></div>
+<p>The block types do more than gate the readers: they decide which director is on set. A routine director works inside a room at 2–15 m, asking Jev about formations, who is addressed and how people feel. A mega-scene director works from far away, asking about landmarks, routes and the extent of a catastrophe. A combat director asks the kind and shape of each attack. A transport specialist handles vehicles and weapons, and an architect turns a borrowed building into the one the text describes. One registry in code (<code>world-engine/director/specialists.mjs</code>) holds the whole relationship, and the sections below are written from it.</p>
+<!-- specialists:start -->
+<p class="note">Written from <code>world-engine/director/specialists.mjs</code> by <code>specialists-doc.mjs</code>: the registry is the design.</p>
 <h2>Block types</h2>
-<p>A block is a window of about 12 sentences, moving 6 at a time. Jev answers its type with a distribution that is kept whole, so a block can be 0.5 confrontation and 0.4 pursuit, and both faculties fire. The types come from what volume 1 contains.</p>
-<div class="scroll">
-<table>
-  <thead><tr><th>Type</th><th>What it is</th><th>In volume 1</th><th>Fires</th></tr></thead>
-  <tbody>
-    <tr><td>Routine interaction</td><td>People together: talk and small acts</td><td>the dart bar (13–18), the crosswalk (11–12), walking with Index (8)</td><td><span class="pill fired">Conversation and blocking</span></td></tr>
-    <tr><td>Confrontation</td><td>A fight or standoff: blows, dodges, powers used on someone</td><td>21–22, 25–31, 40</td><td><span class="pill fired">Choreography</span></td></tr>
-    <tr><td>Pursuit / traversal</td><td>Going somewhere at scale: chases, escapes, crossing the city</td><td>the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34)</td><td><span class="pill fired">Journeys</span></td></tr>
-    <tr><td>Mediated exchange</td><td>Talk through a channel: a phone, a door, a broadcast, a message</td><td>phone calls (12, 29, 33), through a door (42–43)</td><td><span class="pill fired">Conversation by channel</span></td></tr>
-    <tr><td>Interior flow</td><td>Thought, reflection, free indirect thought</td><td>18, 36, the long narration and thought stretches</td><td><span class="pill damp">Damps the world</span></td></tr>
-    <tr><td>Exposition</td><td>World-building and background with no one acting</td><td>the Board (37), R&amp;C Occultics (39)</td><td><span class="pill damp">Nothing staged</span></td></tr>
-    <tr><td>Establishing / ambience</td><td>Where and when: the place, weather, crowds, mood</td><td>the openings of 1, 2, 10, 45</td><td><span class="pill fired">Ambience</span></td></tr>
-    <tr><td>Memory / flashback</td><td>Something that happened before this scene's now</td><td>35</td><td><span class="pill damp">Outside the present world</span></td></tr>
-    <tr><td>Spectacle / catastrophe</td><td>The world itself changing: ground splits, floods, collapses</td><td>21, 22, 26, 27</td><td><span class="pill fired">Choreography's destruction</span></td></tr>
-  </tbody>
-</table>
-</div>
-
-<h2>The faculties</h2>
+<p>A block is a window of about 12 sentences, moving 6 at a time. Jev answers its type with a distribution kept whole, so a block can be 0.5 confrontation and 0.4 pursuit, and both faculties fire.</p>
+<div class="scroll"><table><thead><tr><th>Type</th><th>What it is</th><th>In volume 1</th><th>Fires</th></tr></thead><tbody>
+<tr><td>Routine interaction</td><td>people together: talk and small acts</td><td>the dart bar (13–18), the crosswalk (11–12), walking with Index (8)</td><td><span class="pill fired">Conversation and blocking</span> <span class="pill fired">Inner state</span></td></tr>
+<tr><td>Confrontation</td><td>a fight or standoff: blows, dodges, powers used on someone</td><td>21–22, 25–31, 40</td><td><span class="pill fired">Choreography</span></td></tr>
+<tr><td>Pursuit / traversal</td><td>going somewhere at scale: chases, escapes, crossing the city</td><td>the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34)</td><td><span class="pill fired">Journeys</span></td></tr>
+<tr><td>Mediated exchange</td><td>talk through a channel: a phone, a door, a broadcast, a message</td><td>phone calls (12, 29, 33), through a door (42–43)</td><td><span class="pill fired">Conversation and blocking</span></td></tr>
+<tr><td>Interior flow</td><td>thought, reflection, free indirect thought</td><td>18, 36, the long narration and thought stretches</td><td><span class="pill damp">damps the world</span> <span class="pill fired">Inner state</span></td></tr>
+<tr><td>Exposition</td><td>world-building and background with no one acting</td><td>the Board (37), R&amp;C Occultics (39)</td><td><span class="pill damp">damps the world</span></td></tr>
+<tr><td>Establishing / ambience</td><td>where and when: the place, weather, crowds, mood</td><td>the openings of 1, 2, 10, 45</td><td><span class="pill fired">Ambience</span> <span class="pill fired">Set description</span></td></tr>
+<tr><td>Memory / flashback</td><td>what happened before this scene's now</td><td>35</td><td><span class="pill damp">damps the world</span></td></tr>
+<tr><td>Spectacle / catastrophe</td><td>the world itself changing: ground splits, floods, collapses</td><td>21, 22, 26, 27</td><td><span class="pill fired">Choreography</span></td></tr>
+</tbody></table></div>
+<h2>Faculties and specialist directors</h2>
+<p>Faculties are the work model reading the text; directors are Jev deciding on pictures. Each director owns one faculty (●) and plays others' claims (○). The stage manager always runs and chooses who leads each beat; the director whose faculties weigh most there leads and holds the camera, and others whose faculties fired co-direct, answering their own questions.</p>
+<div class="scroll"><table class="matrix"><thead><tr><th>Faculty · fired by</th><th>Stage manager</th><th>Routine director</th><th>Mega-scene director</th><th>Combat director</th><th>Transport specialist</th><th>Architect</th></tr></thead><tbody>
+<tr><th scope="row">Scene frame<br><small>always (each scene)</small></th><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Generalist<br><small>always (each window)</small></th><td class="cell"><span title="reads">○</span></td><td class="cell"><span title="reads">○</span></td><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"><span title="reads">○</span></td><td class="cell"><span title="reads">○</span></td></tr>
+<tr><th scope="row">Conversation and blocking<br><small>Routine interaction, Mediated exchange</small></th><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Inner state<br><small>Interior flow, Routine interaction</small></th><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Journeys<br><small>Pursuit / traversal, a jump in scale</small></th><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Choreography<br><small>Confrontation, Spectacle / catastrophe</small></th><td class="cell"></td><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Ambience<br><small>Establishing / ambience, crowds named</small></th><td class="cell"></td><td class="cell"></td><td class="cell"><span title="reads">○</span></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+<tr><th scope="row">Props and vehicles<br><small>vehicles named, weapons named</small></th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td><td class="cell"></td></tr>
+<tr><th scope="row">Set description<br><small>Establishing / ambience, buildings named or described</small></th><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><b title="its own">●</b></td></tr>
+</tbody></table></div>
+<h3>The faculties</h3>
 <div class="grid">
-  <div class="card always"><span class="tag">Always on · once per scene</span><h3>Scene frame and camera</h3><dl>
-    <dt>Reads</dt><dd>the scene whole, the memory from the scene before</dd>
-    <dt>Writes</dt><dd>the set as a path down the place tree; the scale band (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km); who is on stage; how it follows the last scene; per beat, the shot (close, medium, wide, aerial) and the scale of Jev's pictures</dd>
-    <dt>Fixes</dt><dd>everyone present starts inside the set; facts resolve against it ("indoors" is this building); the camera holds one group until the text cuts; Jev's 16 m ceiling</dd></dl></div>
-  <div class="card always"><span class="tag">Always on · slim</span><h3>Generalist</h3><dl>
-    <dt>Reads</dt><dd>every window, as today's summarizer</dd>
-    <dt>Writes</dt><dd>stated moves, facts and items only</dd>
-    <dt>Why kept</dt><dd>a stated move ("ran into the alley") can sit in any kind of block; a purely gated design would miss the ones in routine text</dd></dl></div>
-  <div class="card fired"><span class="tag">Fired by pursuit</span><h3>Journeys</h3><dl>
-    <dt>Reads</dt><dd>the firing span, the scene frame, the place tree round it</dd>
-    <dt>Writes</dt><dd>from, via and to as places (this tower's 44th floor, the next tower's 38th, the bridge, the next station); a manner (zigzag through alleys, up a wall, magnetic leaps, carried); a distance and duration</dd>
-    <dt>Resolved by</dt><dd>routes on the place graph; Jev confirms on a picture framed at the journey's scale, with lettered landmarks</dd></dl></div>
-  <div class="card fired"><span class="tag">Fired by confrontation, catastrophe</span><h3>Choreography</h3><dl>
-    <dt>Reads</dt><dd>the firing span, who is fighting whom, the frame</dd>
-    <dt>Writes</dt><dd>exchanges as steps: closing in, dodging, knocked back, thrown, carried off; impacts and what breaks, at the scene's scale</dd>
-    <dt>Resolved by</dt><dd>graded moves by rule; destruction asked of Jev on pictures as today</dd></dl></div>
-  <div class="card fired"><span class="tag">Fired by routine, mediated</span><h3>Conversation and blocking</h3><dl>
-    <dt>Reads</dt><dd>the firing span with its spoken lines</dd>
-    <dt>Writes</dt><dd>who talks with whom and through what (face to face, a group, a phone, a door, a loudspeaker); formations (beside, across a table, a ring of three, two sides of a door)</dd>
-    <dt>Resolved by</dt><dd>relative rules, so a group stays a group; a remote talk pulls nobody. Speaker attribution stays a separate step, off for now.</dd></dl></div>
-  <div class="card fired"><span class="tag">Fired by establishing</span><h3>Ambience</h3><dl>
-    <dt>Reads</dt><dd>the firing span, the reading's crowd slots</dd>
-    <dt>Writes</dt><dd>the crowd as a density over the set's streets and plazas: its make-up (couples, shoppers, a 200-student column), its flow (milling, along the street, marching, fleeing, gathering), how it changes at beats; set dressing</dd>
-    <dt>Drawn as</dt><dd>a particle cloud tied to the place, staying with it across scenes, parting round runners, emptying from a blast; named crowds are labelled patches, not walkers</dd></dl></div>
-  <div class="card damp"><span class="tag">No reader</span><h3>Damping</h3><dl>
-    <dt>From</dt><dd>interior flow, exposition, memory</dd>
-    <dt>Does</dt><dd>no implied moves and no drift; the camera holds close on the thinker; a flashback is played outside the present world</dd></dl></div>
+<div class="card always"><span class="tag">Always on · each scene</span> <span class="pill fired">proposed</span><h3>Scene frame</h3><dl>
+    <dt>Fired by</dt><dd>always (each scene)</dd><dt>Writes</dt><dd>the set as a path down the place tree; the scale band; who is on stage; how it follows the scene before; the beats</dd><dt>Read by</dt><dd>Stage manager</dd></dl></div>
+<div class="card always"><span class="tag">Always on · each window</span> <span class="pill always">built</span><h3>Generalist</h3><dl>
+    <dt>Fired by</dt><dd>always (each window)</dd><dt>Writes</dt><dd>stated moves (graded); facts, stated and implied; items; talk kinds; breaks</dd><dt>Read by</dt><dd>Stage manager, Routine director, Combat director, Transport specialist, Architect</dd><dt>Code</dt><dd><code>world-engine/digest/digest.mjs</code></dd></dl></div>
+<div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Conversation and blocking</h3><dl>
+    <dt>Fired by</dt><dd>Routine interaction, Mediated exchange</dd><dt>Writes</dt><dd>who talks with whom and through what; formations: beside, across a table, a ring, two sides of a door; attention: who looks at whom</dd><dt>Read by</dt><dd>Routine director</dd></dl></div>
+<div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Inner state</h3><dl>
+    <dt>Fired by</dt><dd>Interior flow, Routine interaction</dd><dt>Writes</dt><dd>each person's emotional state as it changes (a distribution); intent: what they want next</dd><dt>Read by</dt><dd>Routine director</dd></dl></div>
+<div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Journeys</h3><dl>
+    <dt>Fired by</dt><dd>Pursuit / traversal, a jump in scale</dd><dt>Writes</dt><dd>from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration</dd><dt>Read by</dt><dd>Mega-scene director</dd></dl></div>
+<div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Choreography</h3><dl>
+    <dt>Fired by</dt><dd>Confrontation, Spectacle / catastrophe</dd><dt>Writes</dt><dd>exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide</dd><dt>Read by</dt><dd>Mega-scene director, Combat director</dd></dl></div>
+<div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Ambience</h3><dl>
+    <dt>Fired by</dt><dd>Establishing / ambience, crowds named</dd><dt>Writes</dt><dd>the crowd as a density of the place: its make-up and flow; weather, light, mood; set dressing</dd><dt>Read by</dt><dd>Mega-scene director</dd></dl></div>
+<div class="card fired"><span class="tag">Fired</span> <span class="pill damp">partial</span><h3>Props and vehicles</h3><dl>
+    <dt>Fired by</dt><dd>vehicles named, weapons named</dd><dt>Writes</dt><dd>vehicles: kind, who drives or rides, where they go; weapons: kind, who holds them; things held, thrown, broken</dd><dt>Read by</dt><dd>Transport specialist</dd><dt>Code</dt><dd><code>world-engine/digest/digest.mjs (items)</code></dd></dl></div>
+<div class="card fired"><span class="tag">Fired</span> <span class="pill fired">proposed</span><h3>Set description</h3><dl>
+    <dt>Fired by</dt><dd>Establishing / ambience, buildings named or described</dd><dt>Writes</dt><dd>a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them</dd><dt>Read by</dt><dd>Architect</dd></dl></div>
 </div>
+<h3>The directors</h3>
+<div class="grid">
+<div class="card always"><span class="tag">Always on</span> <span class="pill damp">partial</span><h3>Stage manager</h3><p>the set, who is on stage, the camera and who leads each beat</p><dl>
+    <dt>Scale</dt><dd>5–2 km</dd><dt>Camera</dt><dd>chooses the shot per beat from the lead director's scale; holds one group until the text cuts</dd><dt>Plays</dt><dd>Scene frame, Generalist</dd>
+    <dt>Asks Jev</dt><dd><ul class="asks"><li><span class="pill always">built</span> spawnSpotMode <span class="note">(where each person starts in the set)</span></li><li><span class="pill always">built</span> sceneGoesOnMode <span class="note">(whether the scene carries straight on)</span></li><li><span class="pill fired">proposed</span> set and scale band on a map of the place tree</li></ul></dd><dt>Tools</dt><dd>spawning; the place tree; the smoother</dd></dl></div>
+<div class="card fired"><span class="tag">Leads when its faculties fire</span> <span class="pill damp">partial</span><h3>Routine director</h3><p>inside a room or on a street corner: positions, gaze, who talks to whom, how people feel</p><dl>
+    <dt>Scale</dt><dd>2–15 m</dd><dt>Camera</dt><dd>medium and close; a room cut away</dd><dt>Plays</dt><dd>Conversation and blocking, Inner state, Generalist</dd>
+    <dt>Asks Jev</dt><dd><ul class="asks"><li><span class="pill always">built</span> dialogueKindMode <span class="note">(how a talk happens (face to face, group, remote, public))</span></li><li><span class="pill always">built</span> moveSpotMode <span class="note">(a spot near the speaker)</span></li><li><span class="pill fired">proposed</span> formation on a room plan (who sits where, facing whom)</li><li><span class="pill fired">proposed</span> emotional state as a score (Jev's score primitive)</li><li><span class="pill fired">proposed</span> who is addressed, from the faces turned</li></ul></dd><dt>Tools</dt><dd>rooms and doors of the building skeleton; talk rings (L6)</dd></dl></div>
+<div class="card fired"><span class="tag">Leads when its faculties fire</span> <span class="pill fired">proposed</span><h3>Mega-scene director</h3><p>traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing</p><dl>
+    <dt>Scale</dt><dd>100–2 km</dd><dt>Camera</dt><dd>wide and aerial; follows a journey whole</dd><dt>Plays</dt><dd>Journeys, Ambience, Choreography</dd>
+    <dt>Asks Jev</dt><dd><ul class="asks"><li><span class="pill damp">partial</span> moveDirectionMode at the journey's scale <span class="note">(the arrows, framed wide)</span></li><li><span class="pill fired">proposed</span> a landmark on a top-down map (lettered towers, bridges, stations)</li><li><span class="pill fired">proposed</span> a route among the place graph's routes</li><li><span class="pill fired">proposed</span> the extent of a catastrophe (an area on the map)</li><li><span class="pill fired">proposed</span> which way a crowd flows</li></ul></dd><dt>Tools</dt><dd>map routes on the place graph; the terrain; the crowd field; percolation damage</dd></dl></div>
+<div class="card fired"><span class="tag">Leads when its faculties fire</span> <span class="pill damp">partial</span><h3>Combat director</h3><p>a fight, exchange by exchange: the kind and shape of each attack, who it hits, what it breaks</p><dl>
+    <dt>Scale</dt><dd>5–60 m</dd><dt>Camera</dt><dd>close to medium, following the exchange; wider for a blast</dd><dt>Plays</dt><dd>Choreography, Generalist</dd>
+    <dt>Asks Jev</dt><dd><ul class="asks"><li><span class="pill always">built</span> the hit spot and size (red spheres) <span class="note">(where a blast lands and how big)</span></li><li><span class="pill fired">proposed</span> attack kind: hand to hand, grapple, weapon, ranged power, beam, blast, thrown object, the ground itself</li><li><span class="pill fired">proposed</span> attack shape: point, line or beam, cone, sphere, wave along the ground</li><li><span class="pill fired">proposed</span> outcome: hit, dodged, blocked, cancelled; how far knocked back</li></ul></dd><dt>Tools</dt><dd>hitSphere and percolation; graded moves; destruction (L13)</dd></dl></div>
+<div class="card fired"><span class="tag">Leads when its faculties fire</span> <span class="pill fired">proposed</span><h3>Transport specialist</h3><p>vehicles and weapons: what they are, who drives or holds them, where they go</p><dl>
+    <dt>Scale</dt><dd>10–2 km</dd><dt>Camera</dt><dd>follows the vehicle; wide for flight</dd><dt>Plays</dt><dd>Props and vehicles, Generalist</dd>
+    <dt>Asks Jev</dt><dd><ul class="asks"><li><span class="pill fired">proposed</span> which model a vehicle or weapon is (the model packs)</li><li><span class="pill fired">proposed</span> its path: on the road, the rails, in the air</li><li><span class="pill fired">proposed</span> who rides, drives or holds it</li></ul></dd><dt>Tools</dt><dd>model packs (CC0); roads and rails of the terrain; things on the page</dd></dl></div>
+<div class="card fired"><span class="tag">Leads when its faculties fire</span> <span class="pill damp">partial</span><h3>Architect</h3><p>a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it</p><dl>
+    <dt>Scale</dt><dd>10–300 m</dd><dt>Camera</dt><dd>establishing on the building; cut-aways of floors</dd><dt>Plays</dt><dd>Set description, Generalist</dd>
+    <dt>Asks Jev</dt><dd><ul class="asks"><li><span class="pill always">built</span> terrainHeightMode and terrainPartMode <span class="note">(a building's height and what it belongs to)</span></li><li><span class="pill fired">proposed</span> its look among the model packs and themes</li><li><span class="pill fired">proposed</span> floors and uses (the mall below, offices, flats, the rooftop deck)</li><li><span class="pill fired">proposed</span> a room's make-up and furniture</li></ul></dd><dt>Tools</dt><dd>building skeletons; architecture models; model packs; building EM</dd></dl></div>
+</div>
+<!-- specialists:end -->
 
 <h2>Firing conditions</h2>
 <p>A faculty fires on the expected density of its types, read from the distributions rather than the top answer, against the book's own baseline.</p>
-<div class="formula">density(t, span)  = Σ over blocks in span of  P(type = t | block)  ÷  blocks in span
-baseline(t)       = mean μₜ and spread σₜ of density(t) over the book
-fires(f)  on  when  Σ over t ∈ types(f)  density(t)  ≥  μ + k_on · σ     (k_on ≈ 1.5)
-          off when  it falls below  μ + k_off · σ                         (k_off ≈ 0.5)
-          and stays on at least one span (12 sentences), with a margin of 6 either side</div>
+<div class="formula">density(f, block) = Σ over f's types  P(type | block)  +  Σ over f's signals  count ÷ the most in any block
+baseline(f)       = mean μ and spread σ of density(f) over the book
+f fires    on   when  density ≥ μ + k_on · σ      (k_on ≈ 1.5)
+           off  when  it falls below μ + k_off · σ (k_off ≈ 0.5)
+           and stays on at least two blocks (12 sentences), reading a block of margin either side
+lead(beat) = the director whose fired faculties weigh most (its own 2, others it reads 1); the rest co-direct</div>
 <ul>
   <li><b>Hysteresis:</b> the off line sits below the on line, so a faculty doesn't flicker on a single line.</li>
   <li><b>Co-firing:</b> several faculties may be on at once (a fight during a chase fires choreography and journeys).</li>
   <li><b>Smoothing:</b> a hidden Markov model over the block types, with Jev's distributions as soft observations, as <code>occupation.mjs</code> does for presence. Its change points are the beats, where the camera may cut.</li>
   <li><b>Damping wins over drift:</b> while interior flow, exposition or memory is dense, no implied move or background drift plays.</li>
-  <li><b>Extra triggers from the reading:</b> crowd slots in a scene can fire ambience, and spatial mentions or a scale jump in the scene frame can fire journeys.</li>
+  <li><b>Signals from the reading:</b> named vehicles and weapons fire props (and so the transport specialist), named or described buildings fire the set description (the architect), crowd slots fire ambience, and a jump in the scene frame's scale fires journeys.</li>
+  <li><b>Who leads:</b> a fight alone is the combat director's; a fight during a chase is the mega-scene director's, with the combat director answering the attack questions; with nothing fired, the routine director leads.</li>
 </ul>
 <h3>Gate preview</h3>
 <p class="note">Today's six sentence kinds stand in for the block types until Jev answers those. Choose a kind and the two lines to see where it would fire and how much of the volume a faculty would read.</p>
@@ -247,6 +290,7 @@ fires(f)  on  when  Σ over t ∈ types(f)  density(t)  ≥  μ + k_on · σ    
   <li>Whether the nine block types are the right set, or need adding to or merging.</li>
   <li>The starting lines for the gate (k_on 1.5, k_off 0.5), to tune on the Dev strip.</li>
   <li>Keeping a slim always-on generalist beside the gated faculties.</li>
+  <li>The six directors, and who leads a mixed beat (the weights in <code>lead()</code>).</li>
 </ul>
 <p class="note">See also <a href="next-steps.md">next-steps.md</a> (A4) and <a href="world-ontology.md">world-ontology.md</a>.</p>
 </main>

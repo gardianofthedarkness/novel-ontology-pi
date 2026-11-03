@@ -159,6 +159,70 @@ from it. 4. The scene frame and camera. 5. The fired faculties one at a time, ea
 over 40 m from 31 toward none; scene 26 and scene 3 at their real distances; L6 down from 85). The page:
 [summarizer-faculties.html](summarizer-faculties.html).
 
+### A5. Specialist directors (the user, 2026-11-03)
+
+> The part that is the most exciting is jev can be asked for different questions based on what the input director sees.
+> Basically, what it means is that we can split our directors into specialist... This is a general mini harness design
+> change, we need to have a pre written and derived from code active summary faculty to director group relationship.
+
+The block types gate the readers and also choose who directs. Each specialist asks Jev its own questions on pictures
+framed at its own scale: the **routine director** in a room (formations, who is addressed, how people feel), the
+**mega-scene director** from far (landmarks, routes, a catastrophe's extent, the crowd's flow), the **combat director**
+exchange by exchange (the kind of attack: hand to hand, a weapon, a ranged power, a beam, a blast, a thrown object; its
+shape: a point, a line, a cone, a sphere, a wave along the ground; the outcome), the **transport specialist** for
+vehicles and weapons (which model, its path on the road, rails or air, who rides or holds it) and the **architect**, who
+makes a borrowed building the one the text describes (its look, floors and uses, its rooms). The **stage manager**
+always runs: the set, the cast, the camera, and who leads each beat. A fight alone is the combat director's; a fight
+during a chase the mega-scene director's, the combat director answering the attack questions.
+
+The relationship lives in one registry, `world-engine/director/specialists.mjs` (block types, the reading's signals,
+faculties, directors, the gate `firing()`, `lead()`), checked by `specialists.test.mjs` (every type fires or damps,
+every faculty is fired and read, the built questions are modes in the code). The tables below and the plan page are
+written from it by `node world-engine/director/specialists-doc.mjs`; change the registry, not them.
+
+<!-- specialists:start -->
+_Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; change the registry, not this._
+
+**Block types** (Jev, in the kinds pass, as one distribution a window):
+
+| Type | What it is | In volume 1 | Fires |
+|---|---|---|---|
+| Routine interaction | people together: talk and small acts | the dart bar (13–18), the crosswalk (11–12), walking with Index (8) | Conversation and blocking, Inner state |
+| Confrontation | a fight or standoff: blows, dodges, powers used on someone | 21–22, 25–31, 40 | Choreography |
+| Pursuit / traversal | going somewhere at scale: chases, escapes, crossing the city | the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34) | Journeys |
+| Mediated exchange | talk through a channel: a phone, a door, a broadcast, a message | phone calls (12, 29, 33), through a door (42–43) | Conversation and blocking |
+| Interior flow | thought, reflection, free indirect thought | 18, 36, the long narration and thought stretches | damps the world, Inner state |
+| Exposition | world-building and background with no one acting | the Board (37), R&C Occultics (39) | damps the world |
+| Establishing / ambience | where and when: the place, weather, crowds, mood | the openings of 1, 2, 10, 45 | Ambience, Set description |
+| Memory / flashback | what happened before this scene's now | 35 | damps the world |
+| Spectacle / catastrophe | the world itself changing: ground splits, floods, collapses | 21, 22, 26, 27 | Choreography |
+
+**Summary faculties** (the work model reads the text) and the directors that play them (own: the director's first faculty):
+
+| Faculty | Fired by | Writes | Read by | Status |
+|---|---|---|---|---|
+| Scene frame | always (each scene) | the set as a path down the place tree; the scale band; who is on stage; how it follows the scene before; the beats | Stage manager (own) | proposed |
+| Generalist | always (each window) | stated moves (graded); facts, stated and implied; items; talk kinds; breaks | Stage manager, Routine director, Combat director, Transport specialist, Architect | built |
+| Conversation and blocking | Routine interaction, Mediated exchange | who talks with whom and through what; formations: beside, across a table, a ring, two sides of a door; attention: who looks at whom | Routine director (own) | proposed |
+| Inner state | Interior flow, Routine interaction | each person's emotional state as it changes (a distribution); intent: what they want next | Routine director | proposed |
+| Journeys | Pursuit / traversal, a jump in scale | from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration | Mega-scene director (own) | proposed |
+| Choreography | Confrontation, Spectacle / catastrophe | exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide | Mega-scene director, Combat director (own) | proposed |
+| Ambience | Establishing / ambience, crowds named | the crowd as a density of the place: its make-up and flow; weather, light, mood; set dressing | Mega-scene director | proposed |
+| Props and vehicles | vehicles named, weapons named | vehicles: kind, who drives or rides, where they go; weapons: kind, who holds them; things held, thrown, broken | Transport specialist (own) | partial |
+| Set description | Establishing / ambience, buildings named or described | a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them | Architect (own) | proposed |
+
+**Specialist directors** (Jev, on pictures framed at their scale):
+
+| Director | Plays | Scale | Camera | Asks Jev | Status |
+|---|---|---|---|---|---|
+| Stage manager (always) | the set, who is on stage, the camera and who leads each beat | 5–2 km | chooses the shot per beat from the lead director's scale; holds one group until the text cuts | spawnSpotMode (built); sceneGoesOnMode (built); set and scale band on a map of the place tree | partial |
+| Routine director | inside a room or on a street corner: positions, gaze, who talks to whom, how people feel | 2–15 m | medium and close; a room cut away | dialogueKindMode (built); moveSpotMode (built); formation on a room plan (who sits where, facing whom); emotional state as a score (Jev's score primitive); who is addressed, from the faces turned | partial |
+| Mega-scene director | traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing | 100–2 km | wide and aerial; follows a journey whole | moveDirectionMode at the journey's scale (partial); a landmark on a top-down map (lettered towers, bridges, stations); a route among the place graph's routes; the extent of a catastrophe (an area on the map); which way a crowd flows | proposed |
+| Combat director | a fight, exchange by exchange: the kind and shape of each attack, who it hits, what it breaks | 5–60 m | close to medium, following the exchange; wider for a blast | the hit spot and size (red spheres) (built); attack kind: hand to hand, grapple, weapon, ranged power, beam, blast, thrown object, the ground itself; attack shape: point, line or beam, cone, sphere, wave along the ground; outcome: hit, dodged, blocked, cancelled; how far knocked back | partial |
+| Transport specialist | vehicles and weapons: what they are, who drives or holds them, where they go | 10–2 km | follows the vehicle; wide for flight | which model a vehicle or weapon is (the model packs); its path: on the road, the rails, in the air; who rides, drives or holds it | proposed |
+| Architect | a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it | 10–300 m | establishing on the building; cut-aways of floors | terrainHeightMode and terrainPartMode (built); its look among the model packs and themes; floors and uses (the mall below, offices, flats, the rooftop deck); a room's make-up and furniture | partial |
+<!-- specialists:end -->
+
 ### Order of work (Track A)
 
 1. A1, the card digest, for every action and dialogue card of volume 1: one work-model request per card (cents for the
