@@ -88,6 +88,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   if (seg) reading = seg.reading;
   const scriptOf = async () => seg?.script ?? (await worldFile('script.json')) ?? { scenes: [] }, strandsOf = async () => segStrands ?? (await worldFile('strands.json')), spawnOf = async () => seg?.spawn ?? (await worldFile('spawn.json'));
   if (seg) { const dir = join(novelDir, 'stage', 'world', 'segments'); await mkdir(dir, { recursive: true }); const { strands: _, ...file } = segStrands; await Promise.all([writeFile(join(dir, 'script.json'), JSON.stringify(seg.script)), writeFile(join(dir, 'spawn.json'), JSON.stringify(seg.spawn)), writeFile(join(dir, 'strands.json'), JSON.stringify(file, null, 1))]); }
+  // A container's name in the live view: its scene's number, and by segment its part (scene_000001~2 is 1·2).
+  const sceneLabel = id => { const [scene, part] = String(id).split('~'); return part ? `${Number(scene.slice(-3))}·${part}` : Number(scene.slice(-3)); };
   const sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
   // The beats (M3, gate.mjs) of a reading with blocks: each sentence's beat, its type and its lead. The camera cuts only
   // at a beat's start (M4).
@@ -592,10 +594,10 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           run.events.push({ at: { ...positions } });
           sceneRecord.arrivals = travels.map(entry => entry.who);
         }
-        await live?.phase(`scene ${Number(scene.id.slice(-3))}: ${cards.length} cards`);
+        await live?.phase(`scene ${sceneLabel(scene.id)}: ${cards.length} cards`);
         await show(true);
         await grow(scene, run);
-        await stream(`scene ${Number(scene.id.slice(-3))} begins${sceneRecord.arrivals?.length ? ` · ${sceneRecord.arrivals.map(who => names.get(who) ?? who).join(', ')} come in` : ''}`);
+        await stream(`scene ${sceneLabel(scene.id)} begins${sceneRecord.arrivals?.length ? ` · ${sceneRecord.arrivals.map(who => names.get(who) ?? who).join(', ')} come in` : ''}`);
         if (pace && sceneRecord.arrivals?.length) await new Promise(done => setTimeout(done, pace * 1000));
         const placeName = names.get(scene.placeId) ?? scene.placeId, when = reading.time?.scenes?.find(entry => entry.scene === scene.id)?.when ?? null;
         // The digest's helpers for this scene (digest.mjs, facts.mjs): a card's last line, a move in words, the walkable
@@ -758,7 +760,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           const reachOf = how => drag(how) * (scale ? Math.max(speedOf(how) * (cardSeconds ?? 0), measure(scale.reach, centre) ?? 0) || (C.REACH[how] ?? C.REACH.walk) : C.REACH[how] ?? C.REACH.walk);
           if (scale) cardRecord.scale = { frame: scale.frame, metres: frameHere ? Math.round(frameHere) : null, angle: scale.angle, reach: scale.reach, seconds: cardSeconds ? Math.round(cardSeconds * 10) / 10 : null };
           asking = cardRecord;
-          await live?.phase(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`);
+          await live?.phase(`scene ${sceneLabel(scene.id)} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`);
           sceneRecord.cards.push(cardRecord);
           const event = { id: card.id, text: card.sentences.map(id => text.get(id)?.text ?? '').join('').slice(0, 120), actors: card.people.filter(person => positions[person.id] && person.how.some(how => PRESENT.has(how))).map(person => person.id) };
           scene.events.push(event);
@@ -1206,7 +1208,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // Streamed: the line as far as this card, played on in World · Live; a moment to watch a move before the next question.
           await grow(scene, run);
           const went = cardRecord.moves.filter(move => move.moved);
-          await stream(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${went.length ? ` · ${went.map(move => names.get(move.person) ?? move.person).join(', ')} moved` : ''}`, cardRecord.camera ? { x: cardRecord.camera.focus.x, z: cardRecord.camera.focus.z, r: 24 } : null);
+          await stream(`scene ${sceneLabel(scene.id)} · card ${cards.indexOf(card) + 1}/${cards.length}${went.length ? ` · ${went.map(move => names.get(move.person) ?? move.person).join(', ')} moved` : ''}`, cardRecord.camera ? { x: cardRecord.camera.focus.x, z: cardRecord.camera.focus.z, r: 24 } : null);
           if (pace && went.length) await new Promise(done => setTimeout(done, pace * 1000));
         }
         // Departures (the user, 2026-11-03: a group leaving the strand is a fork; "they just run"): whoever's next container
@@ -1231,7 +1233,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           }
         }
         // The scene done: the live page written whole (every card so far), so a view loaded now can replay any of them.
-        await stream(`scene ${Number(scene.id.slice(-3))} played`, null, true);
+        await stream(`scene ${sceneLabel(scene.id)} played`, null, true);
         before = { scene, reads, positions: { ...positions } };
         for (const [who, value] of Object.entries(positions)) { where.set(who, value); lastSceneOf.set(who, scene.id); }
         endOf.set(scene.id, { ...positions });
