@@ -31,7 +31,7 @@ How often: one request a beat, as each scene begins.
 
 **System**
 
-> You read one beat of a light novel being staged in a 3D city, and recommend to its camera operator how far out to stand and from where to look. The scale is often only implied: leaping between towers, crossing districts, a fight in one room. Reply with JSON only.
+> You read one beat of a light novel being staged in a 3D city, and recommend to its camera operator how much of the world the beat takes in and from where to look, and how far its moves go, each said by what it spans (a room, the street, a building, the block, as far as a landmark), never in metres. The scale is often only implied: leaping between towers, crossing districts, a fight in one room. Reply with JSON only.
 
 **Task**
 
@@ -48,11 +48,11 @@ How often: one request a beat, as each scene begins.
 
 | Field | Answers |
 |---|---|
-| `zoom` | room \| street \| block \| district \| city (how wide the beat plays: a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km, the city) |
-| `metres` | a number: metres across the frame |
+| `frame` | **referent**: a person \| the room \| the building \| the street \| the block \| a landmark \| the district \| the city; **of**: which one, in words as the text names it (a landmark), or null; **times**: how many of it (0.5, 1, 2, 3…) |
 | `angle` | eye level \| over a shoulder \| high \| top-down \| low, looking up \| aerial |
 | `from` | &lt;person id&gt; \| &lt;place&gt; \| none: whose eyes or which landmark it is seen from |
-| `reach` | under 50 m \| 50–300 m \| 300 m – 2 km \| over 2 km: how far its moves go |
+| `reach` | **referent**: a person \| the room \| the building \| the street \| the block \| a landmark \| the district \| the city: how far one move goes; **of**: which one, in words as the text names it (a landmark), or null; **times**: how many of it (0.5, 1, 2, 3…) |
+| `duration` | a few seconds \| about a minute \| several minutes \| an hour or more: how long the beat lasts in the story |
 | `sure` | 0..1 |
 
 ## Read by

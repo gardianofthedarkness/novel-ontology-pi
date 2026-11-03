@@ -50,7 +50,7 @@ How often: one request a span where journeys fires.
 
 | Field | Answers |
 |---|---|
-| `journeys` | **sentence**: &lt;sentence id where the journey ends or is told&gt;; **who**: &lt;person id&gt;; **from**: &lt;place id or words&gt;; **via**: `<place id or words>`; **to**: &lt;place id or words&gt;; **manner**: walk \| run \| zigzag through alleys \| up or along a wall \| leaps between roofs \| flight \| carried \| a vehicle \| an underground passage; **distance**: under 50 m \| 50–300 m \| 300 m – 2 km \| over 2 km; **duration**: words; **sure**: 0..1 |
+| `journeys` | **sentence**: &lt;sentence id where the journey ends or is told&gt;; **who**: &lt;person id&gt;; **from**: &lt;place id or words&gt;; **via**: `<place id or words>`; **to**: &lt;place id or words&gt;; **manner**: walk \| run \| zigzag through alleys \| up or along a wall \| leaps between roofs \| flight \| carried \| a vehicle \| an underground passage; **distance**: **referent**: a person \| the room \| the building \| the street \| the block \| a landmark \| the district \| the city: how far, said by what it spans; **of**: which one, in words as the text names it (a landmark), or null; **times**: how many of it (0.5, 1, 2, 3…); **duration**: words; **sure**: 0..1 |
 
 ## Read by
 

@@ -27,14 +27,15 @@ const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
-const DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs');
+const DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
 // The digest's moves played: at least this sure (below it, motion read into a spoken line or a thought).
 const MOVE_SURE = 0.5;
-// A scene's cast stands within this of its middle; anyone carried in from further walks in or is placed (M4).
-const GATHER = 80;
+// Human scale, the one unit kept (physics-laws.md §9): a person's height. Every other distance is a referent measured in
+// the world or a speed times the story's time.
+const BODY = 1.7;
 const seeded = text => { let h = 2166136261; for (const c of text) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } let s = h >>> 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 const round = value => Math.round(value * 10) / 10;
 
@@ -263,7 +264,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       const spawn = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'spawn.json'), 'utf8').catch(() => 'null'));
       const script = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8'));
       let before = null;
-      const where = new Map();
+      const where = new Map(), lastSceneOf = new Map();
+      const timeOf = id => (id ? reading.time?.scenes?.find(entry => entry.scene === id)?.node ?? null : null);
       // Continuity per strand (L1, docs/v2/physics-laws.md; the user, 2026-11-02: it holds to a strand's end and never across
       // strands): someone comes into a scene from the scene the strands say they come from (stage/world/strands.json
       // `entries`), else from where they last stood in that strand; someone first in this strand is never carried in from
@@ -318,7 +320,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         const inside = node => {
           const box = spawned?.target?.box; if (!box || spawned.target.kind === 'area') return true;
           const [x, , z] = at(node), [cx, cz, w, d, angle] = box, dx = x - cx, dz = z - cz, u = dx * Math.cos(angle) + dz * Math.sin(angle), v = -dx * Math.sin(angle) + dz * Math.cos(angle);
-          return Math.abs(u) <= w / 2 + 8 && Math.abs(v) <= d / 2 + 8;
+          return Math.abs(u) <= w / 2 + 5 * BODY && Math.abs(v) <= d / 2 + 5 * BODY;
         };
         // A scene's people start together (the user, 2026-11-02: two people of one conversation spawned a kilometre apart, and
         // a scene going on from the last played far from it): the anchor is where those already here stand (the one nearest
@@ -335,14 +337,50 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         if (!present.length && before && (reads.sentences.length <= 4 || /straight on/.test(dg?.digest.continues ?? ''))) { present = Object.keys(before.positions); sceneRecord.castFrom = 'the scene before'; }
         if (pinnedIn.length || present.length < (own?.present?.length ?? present.length)) sceneRecord.pinned = { present: pinnedIn, absent: (own?.present ?? []).filter(who => !present.includes(who)) };
         for (const who of present) if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
+        // A referent measured in the world (referential distance, L16; the user, 2026-11-03): a person's height, the room or
+        // the building round a point, the street's width there, the block (the scene's place where it is one, else the reach
+        // of the buildings round), a landmark's distance, the district's or the city's extent; times how many of it.
+        const placeBox = new Map((spawn?.scenes ?? []).filter(entry => entry.target?.box).map(entry => [entry.place, entry.target.box]));
+        const lotCentreAt = index => { const lot = world.lots[index]; return [(lot.i0 + lot.nx / 2) * CELL, (lot.floors ?? 1) * FLOOR, (lot.j0 + lot.nz / 2) * CELL]; };
+        const nearestLots = (p, count) => world.lots.map((_, index) => ({ index, d: Math.hypot(lotCentreAt(index)[0] - p[0], lotCentreAt(index)[2] - p[2]) })).sort((a, b) => a.d - b.d).slice(0, count);
+        const measure = (ref, p) => {
+          if (!ref || !p) return null;
+          const index = lotOf(p[0], p[2]), lot = index !== undefined ? world.lots[index] : world.lots[nearestLots(p, 1)[0]?.index], times = ref.times ?? 1;
+          const across = entry => Math.max(entry.nx, entry.nz) * CELL;
+          let metres = null;
+          if (ref.referent === 'a person') metres = BODY;
+          else if (ref.referent === 'the room') { const k = Math.round(p[1] / FLOOR), i = Math.floor(p[0] / CELL) - (lot?.i0 ?? 0), j = Math.floor(p[2] / CELL) - (lot?.j0 ?? 0), room = lot?.rooms?.find(box => box.floor <= k && k <= (box.top ?? box.floor) && i >= box.i0 && i <= box.i1 && j >= box.j0 && j <= box.j1) ?? lot?.rooms?.[0]; metres = room ? (Math.max(room.i1 - room.i0, room.j1 - room.j0) + 1) * CELL : lot ? across(lot) / 3 : null; }
+          else if (ref.referent === 'the building') metres = lot ? across(lot) : null;
+          else if (ref.referent === 'the street') { const steps = [[1, 0], [1, 1], [0, 1], [-1, 1]].map(([dx, dz]) => { const run = sign => { for (let n = 1; n < 400; n++) if (lotOf(p[0] + sign * dx * n * CELL, p[2] + sign * dz * n * CELL) !== undefined) return n * CELL * Math.hypot(dx, dz); return null; }; const a = run(1), b = run(-1); return a !== null && b !== null ? a + b : null; }).filter(value => value !== null); metres = steps.length ? Math.min(...steps) : null; }
+          else if (ref.referent === 'the block') { const box = placeBox.get(scene.placeId); metres = box && ['street', 'block'].includes(script.places?.[scene.placeId]?.scale) ? Math.max(box[2], box[3]) : 2 * (nearestLots(p, 8).at(-1)?.d ?? 0) || null; }
+          else if (ref.referent === 'a landmark') { const named = ref.of ? world.lots.findIndex(entry => entry.label && (ref.of.includes(entry.label) || entry.label.includes(ref.of))) : -1; metres = named >= 0 ? 2 * Math.hypot(lotCentreAt(named)[0] - p[0], lotCentreAt(named)[2] - p[2]) : null; }
+          else if (ref.referent === 'the district') { const box = placeBox.get(scene.placeId) ?? spawned?.target?.box; metres = box ? Math.max(box[2], box[3]) : null; }
+          else if (ref.referent === 'the city') { const bounds = W.worldBounds(world); metres = Math.max(bounds.i1 - bounds.i0, bounds.j1 - bounds.j0) * CELL; }
+          // A referent the world cannot measure there (no building round, no landmark by that name) falls to the next wider one.
+          if (metres === null) { const wider = DG.REFERENTS[DG.REFERENTS.indexOf(ref.referent) + 1]; return wider ? measure({ ...ref, referent: wider, times: 1 }, p) : null; }
+          return metres * times;
+        };
+        // Scale and view (M5, referential since): each beat of the scene given its frame, reach, angle and duration by the
+        // work model; only the action directors' questions and their camera operator read them.
+        const sceneBeats = gate && digestMeter ? gate.beats.map((beat, n) => ({ ...beat, n })).filter(beat => beat.scene === scene.id) : [];
+        const order_ = reads.sentences, scaleOf = new Map();
+        if (sceneBeats.length) {
+          const span = beat => { const a = order_.indexOf(beat.first), b = order_.indexOf(beat.last); return order_.slice(Math.max(0, a), (b < 0 ? order_.length : b + 1)).slice(0, 40); };
+          const scales = await DG.scaleBeats(digestMeter, { scene, beats: sceneBeats.map(beat => ({ ...beat, sentences: span(beat) })), line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: present.map(id => ({ id, name: names.get(id) ?? id })), digest: dg?.digest ?? null });
+          for (const entry of scales) scaleOf.set(entry.n, entry);
+          sceneRecord.scales = scales;
+        }
+        const firstScale = sceneBeats.length ? scaleOf.get(sceneBeats[0].n) ?? null : null;
         const was = new Map(present.map(who => [who, prior(who, scene.id) ?? (sceneRecord.castFrom === 'the scene before' ? before.positions[who] ?? null : null)]));
         sceneRecord.laws = present.filter(who => where.get(who) && !was.get(who)).map(who => ({ law: 'L1', who, verdict: 'amend', why: 'first in this strand: not carried in from another strand' }));
-        // Everyone present gathers in the set (M4; the user, 2026-11-03: the camera shifting back and forth): someone carried
-        // in from far from the others (volume 1, scene 40: from scene 1's roof, 460 m away) is not "here" but walks in or
-        // is placed, as someone from elsewhere.
+        // Presence in the frame (L16; M4, then the user, 2026-11-03: no hard-coded distance): someone carried in stands in the
+        // scene only within its frame, the referent its first beat takes in, measured round the cast's middle (volume 1,
+        // scene 40: someone carried in from scene 1's roof, 460 m away, is not in it). Outside it, they come from elsewhere.
         const carriedIn = present.filter(who => was.get(who) && inside(was.get(who)[0]));
-        const middle = carriedIn.length ? [0, 2].map(axis => { const values = carriedIn.map(who => at(was.get(who)[0])[axis]).sort((a, b) => a - b); return values[Math.floor(values.length / 2)]; }) : null;
-        const here = carriedIn.filter(who => { const p = at(was.get(who)[0]); return Math.hypot(p[0] - middle[0], p[2] - middle[1]) <= GATHER; });
+        const middle = carriedIn.length ? [0, 1, 2].map(axis => { const values = carriedIn.map(who => at(was.get(who)[0])[axis]).sort((a, b) => a - b); return values[Math.floor(values.length / 2)]; }) : null;
+        const frameMetres = middle && firstScale ? measure(firstScale.frame, middle) : null;
+        if (frameMetres) sceneRecord.frame = { ...firstScale.frame, metres: Math.round(frameMetres) };
+        const here = carriedIn.filter(who => { if (!frameMetres) return true; const p = at(was.get(who)[0]); return Math.hypot(p[0] - middle[0], p[2] - middle[2]) <= frameMetres / 2; });
         if (here.length < carriedIn.length) sceneRecord.gathered = carriedIn.filter(who => !here.includes(who));
         let anchor = null;
         if (here.length) {
@@ -353,8 +391,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           const first = present.find(who => ['spatial', 'part'].includes(by(who))) ?? present[0];
           anchor = first ? startNode(first) : null;
         }
-        // A spot a few metres from the anchor on its level, the same for the same person each time.
-        const beside = (who, spread = [1.5, 4]) => {
+        // A spot an arm's length to a body or two from the anchor on its level, the same for the same person each time.
+        const beside = (who, spread = [BODY, 2.5 * BODY]) => {
           if (anchor === null || anchor === undefined) return null;
           const p = at(anchor), { nodes } = around(p[0], p[2], spread[1] + 2), ring = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) >= spread[0] && Math.hypot(node.x - p[0], node.z - p[2]) <= spread[1]);
           return ring.length ? ring[Math.floor(seeded(`${scene.id}|${who}|beside`)() * ring.length)].id : anchor;
@@ -371,9 +409,16 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           const dest = beside(who);
           if (dest === null || dest === undefined) { if (from) positions[who] = from; continue; }
           if (!from) { positions[who] = [dest, 0]; sceneRecord.spawned.push(who); continue; }
-          const a = at(from[0]), b = at(dest);
-          if (Math.hypot(a[0] - b[0], a[2] - b[2]) <= 300) { positions[who] = from; travels.push({ who, from, dest }); }
-          else { positions[who] = [dest, from[1]]; sceneRecord.offPage.push(who); }
+          // Coming in (L5, L17): within the frame they walk in on screen; from further, they arrive off-page, and where the
+          // story's clock says when they left, the distance must fit the time at their fastest way, else L5 is held (the
+          // places may lie nearer than the city has them: L19).
+          const a = at(from[0]), b = at(dest), metres = Math.hypot(a[0] - b[0], a[2] - b[2]);
+          if (frameMetres && metres <= frameMetres) { positions[who] = from; travels.push({ who, from, dest }); }
+          else {
+            positions[who] = [dest, from[1]]; sceneRecord.offPage.push(who);
+            const left = LW.minutesOf(timeOf(lastSceneOf.get(who))), now = LW.minutesOf(timeOf(scene.id));
+            if (left !== null && now !== null) { const need = metres / Math.max(...Object.values(LW.SPEED).filter(Number.isFinite)); if ((now - left) * 60 < need) (sceneRecord.laws ??= []).push({ law: 'L5', who, verdict: 'held', why: `${Math.round(metres)} m in ${now - left} min: the places may lie nearer (L19)` }); }
+          }
         }
         for (const key of Object.keys(run.starts)) delete run.starts[key];
         Object.assign(run.starts, positions);
@@ -446,13 +491,14 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         const wayOf = (who, shared = true) => { if (!turn.has(who)) turn.set(who, shared ? sceneWay + (seeded(`${scene.id}|${who}|way`)() - 0.5) * 0.5 : seeded(`${scene.id}|${who}|way`)() * 2 * Math.PI); return turn.get(who); };
         // A graded move's spot: a step (to 2.5 m) or nearby (to 10 m) on their level; toward or with someone, to 1.5 m of
         // them; away from someone, as far from them as the span allows; else on along their way.
-        const gradedTarget = (who, entry) => {
-          const here = at(positions[who][0]), [lo, hi] = entry.motion === 'step' ? [0.8, 2.5] : [2.5, 10];
+        // A step is about a body's length; nearby is within the beat's frame (`within`, measured), never a fixed number.
+        const gradedTarget = (who, entry, within = null) => {
+          const here = at(positions[who][0]), [lo, hi] = entry.motion === 'step' ? [BODY / 2, 1.5 * BODY] : [1.5 * BODY, Math.max(3 * BODY, (within ?? 12 * BODY) / 2)];
           const other = entry.toward ?? entry.with, there = other && other !== who && positions[other] ? at(positions[other][0]) : null, away = entry.away && entry.away !== who && positions[entry.away] ? at(positions[entry.away][0]) : null;
-          const pool = near(here, there ? 0.8 : lo, hi);
+          const pool = near(here, there ? BODY / 2 : lo, hi);
           if (!pool.length) return null;
           const angle = wayOf(who, false), mid = (lo + hi) / 2, aim = [here[0] + Math.cos(angle) * mid, here[2] + Math.sin(angle) * mid];
-          const cost = there ? node => Math.abs(Math.hypot(node.x - there[0], node.z - there[2]) - 1.5) : away ? node => -Math.hypot(node.x - away[0], node.z - away[2]) : node => Math.hypot(node.x - aim[0], node.z - aim[1]);
+          const cost = there ? node => Math.abs(Math.hypot(node.x - there[0], node.z - there[2]) - BODY) : away ? node => -Math.hypot(node.x - away[0], node.z - away[2]) : node => Math.hypot(node.x - aim[0], node.z - aim[1]);
           const best = pool.reduce((a, b) => (cost(b) < cost(a) ? b : a));
           turn.set(who, Math.atan2(best.z - here[2], best.x - here[0]));
           return best.id;
@@ -472,20 +518,12 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         };
         const nodeAt = id => { const p = at(id), found = around(p[0], p[2], 3).nodes.find(node => node.id === id); return describe(found ?? { id, x: p[0], y: p[1], z: p[2], type: 0, lot: -1 }); };
         let factsUpTo = -1, itemsUpTo = -1, cameraBeat = null, cameraGroup = new Set();
-        // Scale and view (M5): each beat of the scene given its zoom, angle and reach by the work model; only the action
-        // directors' questions and their camera operator read them.
-        const sceneBeats = gate && digestMeter ? gate.beats.map((beat, n) => ({ ...beat, n })).filter(beat => beat.scene === scene.id) : [];
-        const order_ = reads.sentences, scaleOf = new Map();
-        if (sceneBeats.length) {
-          const span = beat => { const a = order_.indexOf(beat.first), b = order_.indexOf(beat.last); return order_.slice(Math.max(0, a), (b < 0 ? order_.length : b + 1)).slice(0, 40); };
-          const scales = await DG.scaleBeats(digestMeter, { scene, beats: sceneBeats.map(beat => ({ ...beat, sentences: span(beat) })), line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id })), digest: dg?.digest ?? null });
-          for (const entry of scales) scaleOf.set(entry.n, entry);
-          sceneRecord.scales = scales;
-        }
+        // How many cards each beat plays (a card's share of its beat's time, L17).
+        const cardsInBeat = new Map();
+        for (const entry of cards) { const n = beatOf.get(entry.first)?.n; if (n !== undefined) cardsInBeat.set(n, (cardsInBeat.get(n) ?? 0) + 1); }
         const ELEVATION = { 'eye level': 12, 'over a shoulder': 20, high: 45, 'top-down': 80, 'low, looking up': 6, aerial: 60 };
         // Journeys (M6): where the journeys faculty fires in this scene (gate.mjs), its spans read for journeys at scale,
         // given the places the world has placed (each with its box).
-        const placeBox = new Map((spawn?.scenes ?? []).filter(entry => entry.target?.box).map(entry => [entry.place, entry.target.box]));
         const journeyOf = new Map();
         // The spans of this scene where a faculty fires (gate.mjs): overlapping blocks joined, at most 60 lines each.
         const firedSpans = faculty => {
@@ -541,8 +579,14 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         for (const card of cards) {
           const cardRecord = { card: card.id, kind: card.kind, ...(card.pass ? { pass: true } : {}), event: scene.events.length, lines: card.sentences.map(line), moves: [] };
           // The beat's scale (M5): Jev's pictures and the moves' reach sized by its zoom (a street's 32 m without one).
-          const scale = scaleOf.get(beatOf.get(card.first)?.n) ?? null, frameRadius = Math.min(400, Math.max(16, (scale?.metres ?? 32) / 2)), reachOf = how => Math.max(C.REACH[how] ?? C.REACH.walk, Math.min(600, DG.REACHES[scale?.reach] ?? 0));
-          if (scale) cardRecord.scale = { zoom: scale.zoom, metres: scale.metres, angle: scale.angle, reach: scale.reach };
+          // The beat's scale (M5, referential and timed since, L16/L17): its frame measured round the card's people, a card's
+          // share of the beat's time; Jev's pictures framed at the frame, a move's reach its way's speed times that time (or
+          // the reach the reader names, measured, if further). Without a scale, the camera's own defaults.
+          const scale = scaleOf.get(beatOf.get(card.first)?.n) ?? null, centre = (() => { const points = card.people.filter(person => positions[person.id]).map(person => at(positions[person.id][0])); return points.length ? [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length) : anchorAt; })();
+          const frameHere = scale ? measure(scale.frame, centre) : null, cardSeconds = scale?.duration ? scale.duration / (cardsInBeat.get(beatOf.get(card.first)?.n) || 1) : null;
+          const frameRadius = Math.min(400, Math.max(10 * BODY, (frameHere ?? 20 * BODY) / 2)), speedOf = how => LW.SPEED[how] ?? LW.SPEED.walk;
+          const reachOf = how => (scale ? Math.max(speedOf(how) * (cardSeconds ?? 0), measure(scale.reach, centre) ?? 0) || (C.REACH[how] ?? C.REACH.walk) : C.REACH[how] ?? C.REACH.walk);
+          if (scale) cardRecord.scale = { frame: scale.frame, metres: frameHere ? Math.round(frameHere) : null, angle: scale.angle, reach: scale.reach, seconds: cardSeconds ? Math.round(cardSeconds * 10) / 10 : null };
           asking = cardRecord;
           await live?.phase(`scene ${Number(scene.id.slice(-3))} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`);
           sceneRecord.cards.push(cardRecord);
@@ -574,8 +618,8 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
               if (!failing.length) continue;
               // Facts resolve in the set (M4): the spot is looked for inside the scene's building or area first, further
               // only for a stated fact.
-              const wide = failing.some(fact => ['indoors', 'outdoors', 'roof', 'underground', 'floor', 'vehicle'].includes(fact.kind)), nearby = [...around(here.x, here.z, wide ? 60 : 24).nodes];
-              for (const fact of failing) { const p = fact.kind === 'near' ? positionOf(fact.value) : null; if (p) nearby.push(...around(p[0], p[2], 6).nodes); }
+              const wide = failing.some(fact => ['indoors', 'outdoors', 'roof', 'underground', 'floor', 'vehicle'].includes(fact.kind)), nearby = [...around(here.x, here.z, Math.max(5 * BODY, (frameHere ?? frameMetres ?? 24 * BODY) / (wide ? 2 : 4))).nodes];
+              for (const fact of failing) { const p = fact.kind === 'near' ? positionOf(fact.value) : null; if (p) nearby.push(...around(p[0], p[2], 3 * BODY).nodes); }
               const words = failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; ');
               let best = FA.bestFor(binding, here, nearby.filter(node => inside(node.id)).map(describe), positionOf);
               if (!best && failing.some(fact => fact.basis === 'stated')) { best = FA.bestFor(binding, here, nearby.map(describe), positionOf); if (best) (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: 'amend', why: `outside the set: ${words}` }); }
@@ -588,15 +632,20 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // The background's routine for those the card did not move (the latest the digest says, else the scene's): those
           // strolling or walking go on along the scene's way (strollers turn back beyond 40 m), those fighting shift a step or
           // two, those working a step every third card; the crowd moves every other card.
-          const SPAN = { strolling: [2, 4], walking: [3, 6], running: [6, 10], fighting: [0.8, 2], working: [0.8, 2] };
+          // The background's routine (L17: displacement is speed times time): those strolling, walking or running go on along
+          // the scene's way as far as their pace covers in the card's share of its beat; strollers and the crowd turn back at
+          // the scene's frame. A beat with no duration said moves nobody in the background.
+          const PACE = { strolling: LW.SPEED.walk * 0.7, walking: LW.SPEED.walk, running: LW.SPEED.run };
           const drift = () => {
-            const end = lastLine(card), index = cards.indexOf(card), touched = new Set(cardRecord.moves.filter(move => move.moved).map(move => move.person));
+            if (!cardSeconds) return;
+            const end = lastLine(card), touched = new Set(cardRecord.moves.filter(move => move.moved).map(move => move.person)), bound = frameMetres ? frameMetres / 2 : null;
             const routine = who => dg.background.filter(entry => entry.who === who && (sentenceAt.get(entry.sentence) ?? 0) <= end).at(-1)?.doing ?? (who === 'crowd' ? dg.digest.background.crowdDoing : dg.digest.people.find(entry => entry.who === who)?.doing ?? null);
             const onward = (who, from, doing, wander) => {
-              const span = SPAN[doing], here = at(from[0]);
+              const metres = PACE[doing] * cardSeconds, here = at(from[0]);
+              if (metres < BODY / 2) return null;
               if (wander && anchorAt && Math.hypot(here[0] - anchorAt[0], here[2] - anchorAt[2]) > wander) turn.set(who, Math.atan2(anchorAt[2] - here[2], anchorAt[0] - here[0]));
-              const angle = doing === 'fighting' ? seeded(`${card.id}|${who}|spar`)() * 2 * Math.PI : wayOf(who, !who.startsWith('extra:')), mid = (span[0] + span[1]) / 2, aim = [here[0] + Math.cos(angle) * mid, here[2] + Math.sin(angle) * mid];
-              const pool = near(here, span[0], span[1]);
+              const angle = wayOf(who, !who.startsWith('extra:')), aim = [here[0] + Math.cos(angle) * metres, here[2] + Math.sin(angle) * metres];
+              const pool = near(here, metres * 0.6, metres * 1.4);
               const path = pool.length ? walk(scene, `${scene.id}|${card.id}|${who}|${doing}`, from, [pool.reduce((a, b) => (Math.hypot(b.x - aim[0], b.z - aim[1]) < Math.hypot(a.x - aim[0], a.z - aim[1]) ? b : a)).id], doing === 'running' ? 'run' : 'walk') : null;
               if (!path || path.length < 2) { turn.set(who, angle + Math.PI / 2); return null; }
               return path;
@@ -604,15 +653,15 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             for (const who of Object.keys(positions)) {
               const doing = routine(who);
               const talking = card.people.some(person => person.id === who && person.how.some(how => how === 'speaks' || how === 'addressed'));
-              if (touched.has(who) || talking || inFormation.has(who) || !SPAN[doing] || (doing === 'working' && index % 3)) continue;
-              const path = onward(who, positions[who], doing, doing === 'strolling' ? 40 : 0);
+              if (touched.has(who) || talking || inFormation.has(who) || !PACE[doing]) continue;
+              const path = onward(who, positions[who], doing, doing === 'strolling' ? bound : null);
               if (path) moveTo(who, path, doing === 'running' ? 'run' : 'walk', `background: ${doing}`, { quiet: true });
             }
             const crowd = routine('crowd');
-            if (!SPAN[crowd] || index % 2) return;
+            if (!PACE[crowd]) return;
             let moved = 0;
             for (const [id, value] of extras) {
-              const path = onward(id, value, crowd, 30);
+              const path = onward(id, value, crowd, bound);
               if (!path) continue;
               E.moves.set(`${scene.id}|${card.id}|${id}`, { person: id, how: crowd === 'running' ? 'run' : 'walk', path: [...path], ensemble: [] });
               extras.set(id, [path.at(-1), 0]); moved++;
@@ -788,12 +837,12 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             let lot = box ? null : world.lots.findIndex(entry => entry.label && journey.to && (journey.to.includes(entry.label) || entry.label.includes(journey.to)));
             let landmark = null;
             if (!box && lot < 0 && calls < budget) {
-              const reach = Math.min(600, DG.REACHES[journey.distance] ?? 300);
+              const reach = Math.min(2000, measure(journey.distance, here) ?? frameRadius * 2);
               const candidates = world.lots.map((entry, index) => ({ index, p: lotCentre(index), floors: entry.height ?? entry.floors ?? 1 })).filter(entry => { const d = Math.hypot(entry.p[0] - here[0], entry.p[2] - here[2]); return d > 15 && d <= reach; }).sort((a, b) => b.floors - a.floors).slice(0, 12).map((entry, n) => ({ ...entry, letter: String.fromCharCode(65 + n) }));
               if (candidates.length) {
                 const played = await grow(scene, run), half = Math.max(40, ...candidates.map(entry => Math.hypot(entry.p[0] - here[0], entry.p[2] - here[2]))) + 20;
                 const map = await shoot(`${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-${person}-landmark`, [1024, 1024], { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], mover: person, topdown: { x: here[0], z: here[2], half }, spheres: candidates.map(entry => ({ x: entry.p[0], y: entry.p[1] + 4, z: entry.p[2], r: Math.max(4, half / 30), label: entry.letter, labelScale: Math.max(1, half / 40) })) });
-                const [pick] = await decide(`A top-down map of a city in a novel, north up, ${Math.round(half * 2)} m across; ${names.get(person) ?? person} at its middle. ${names.get(person) ?? person} goes to ${journey.to} (${journey.manner}, ${journey.distance}). Lettered red spheres mark the buildings within reach, tallest first.`,
+                const [pick] = await decide(`A top-down map of a city in a novel, north up, ${Math.round(half * 2)} m across; ${names.get(person) ?? person} at its middle. ${names.get(person) ?? person} goes to ${journey.to} (${journey.manner}, ${journey.distance.times} × ${journey.distance.referent}${journey.distance.of ? ` (${journey.distance.of})` : ''}). Lettered red spheres mark the buildings within reach, tallest first.`,
                   [{ key: 'landmark', primitive: 'choice', instructions: `Which lettered landmark does ${names.get(person) ?? person} reach?`, options: [...candidates.map(entry => entry.letter), 'none'], optionHints: Object.fromEntries([...candidates.map(entry => [entry.letter, `${entry.letter}: ${lotName(entry.index)}, ${entry.floors} floors, ${Math.round(Math.hypot(entry.p[0] - here[0], entry.p[2] - here[2]))} m away`]), ['none', 'none of these']]) }], { images: { map: map.png } });
                 const chosen = candidates.find(entry => entry.letter === pick?.value);
                 landmark = { pick: pick?.value ?? null, confidence: pick?.confidence ?? null };
@@ -844,9 +893,10 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
                 const ring = near(t, 0.8, 2).map(node => node.id);
                 if (ring.length) moveTo(exchange.attacker, walk(scene, `${scene.id}|${card.id}|${exchange.attacker}|closes|${exchange.sentence}`, positions[exchange.attacker], ring, 'run'), 'run', `fight: closes in on ${names.get(exchange.target) ?? exchange.target}`, { quiet: true });
               }
-              if (t && entry.outcome === 'hit' && exchange.knockback >= 1) {
-                const target = away(a ?? [t[0] - 1, t[1], t[2]], at(positions[exchange.target][0]), exchange.knockback);
-                if (target !== null) moveTo(exchange.target, walk(scene, `${scene.id}|${card.id}|${exchange.target}|thrown|${exchange.sentence}`, positions[exchange.target], [target], 'run'), 'run', `fight: thrown ${Math.round(exchange.knockback)} m by ${a ? names.get(exchange.attacker) ?? exchange.attacker : 'the blow'} (${entry.attack})`, { quiet: true });
+              const thrown = exchange.knockback ? measure(exchange.knockback, t) : 0;
+              if (t && entry.outcome === 'hit' && thrown >= BODY / 2) {
+                const target = away(a ?? [t[0] - 1, t[1], t[2]], at(positions[exchange.target][0]), thrown);
+                if (target !== null) moveTo(exchange.target, walk(scene, `${scene.id}|${card.id}|${exchange.target}|thrown|${exchange.sentence}`, positions[exchange.target], [target], 'run'), 'run', `fight: thrown ${Math.round(thrown)} m by ${a ? names.get(exchange.attacker) ?? exchange.attacker : 'the blow'} (${entry.attack})`, { quiet: true });
               } else if (t && entry.outcome === 'dodged') {
                 const p = at(positions[exchange.target][0]), side = a ? [-(p[2] - a[2]), p[0] - a[0]] : [1, 0], d = Math.hypot(...side) || 1, aim = [p[0] + side[0] / d * 2, p[2] + side[1] / d * 2], pool = near(p, 1, 3);
                 if (pool.length) moveTo(exchange.target, walk(scene, `${scene.id}|${card.id}|${exchange.target}|dodges|${exchange.sentence}`, positions[exchange.target], [pool.reduce((x, y) => (Math.hypot(y.x - aim[0], y.z - aim[1]) < Math.hypot(x.x - aim[0], x.z - aim[1]) ? y : x)).id], 'run'), 'run', `fight: dodges ${a ? names.get(exchange.attacker) ?? exchange.attacker : ''}`.trim(), { quiet: true });
@@ -892,7 +942,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             if (far && journey && await megaMove(person, journey, far)) return;
             if (far) { if (calls < budget) await jevMove(person, far); else cardRecord.moves.push({ person, why: 'budget spent' }); return; }
             for (const entry of mine.slice(0, 3)) {
-              const target = gradedTarget(person, entry);
+              const target = gradedTarget(person, entry, frameHere);
               if (target === null) { cardRecord.moves.push({ person, direction: entry.motion, moved: false, why: 'digest: no spot to step to', by: 'digest' }); continue; }
               moveTo(person, walk(scene, `${scene.id}|${card.id}|${person}|${entry.sentence}|${entry.motion}`, positions[person], [target], entry.how === 'run' ? 'run' : 'walk'), entry.how, `digest: ${moveWords(entry)}`, { quiet: true });
               Object.assign(cardRecord.moves.at(-1), { direction: entry.motion, line: entry.sentence, by: 'digest' });
@@ -955,7 +1005,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           if (key !== cameraBeat) { cameraBeat = key; cameraGroup = new Set(); }
           for (const who of [...event.actors, ...cardRecord.moves.filter(move => move.moved && !String(move.why ?? '').startsWith('background')).map(move => move.person)]) if (positions[who]) cameraGroup.add(who);
           { const points = [...cameraGroup].filter(who => positions[who]).map(who => at(positions[who][0]));
-            if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length), spread = Math.max(0, ...points.map(p => Math.hypot(p[0] - mid[0], p[2] - mid[2]))); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(16, spread * 1.2 + 6, scale ? Math.min(400, scale.metres / 2) : 0), elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35, yaw: 0 }; } }
+            if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length), spread = Math.max(0, ...points.map(p => Math.hypot(p[0] - mid[0], p[2] - mid[2]))); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(10 * BODY, spread * 1.2 + 4 * BODY, frameHere ? Math.min(400, frameHere / 2) : 0), elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35, yaw: 0 }; } }
           // The producer's camera rides with the card's event: the player and World · Live follow it card by card.
           event.camera = cardRecord.camera ?? null;
           // Streamed: the line as far as this card, played on in World · Live; a moment to watch a move before the next question.
@@ -967,7 +1017,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // The scene done: the live page written whole (every card so far), so a view loaded now can replay any of them.
         await stream(`scene ${Number(scene.id.slice(-3))} played`, null, true);
         before = { scene, reads, positions: { ...positions } };
-        for (const [who, value] of Object.entries(positions)) where.set(who, value);
+        for (const [who, value] of Object.entries(positions)) { where.set(who, value); lastSceneOf.set(who, scene.id); }
         endOf.set(scene.id, { ...positions });
         const fork = strandScene.get(scene.id)?.fork;
         if (fork) { const inStrand = lastIn.get(fork) ?? lastIn.set(fork, new Map()).get(fork); for (const [who, value] of Object.entries(positions)) inStrand.set(who, value); }

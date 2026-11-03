@@ -182,22 +182,29 @@ export async function digestScenes(work, { scenes, line, kind, peopleOf, placeOf
 
 // ── Scale and view (M5; the user, 2026-11-03: "an implicit or scale faculty of summarization pass the zoom and view angle
 // recommendation to it's associated directors and the directors camera man") ─────────────────────────────────────────
-export const ZOOMS = { room: 15, street: 80, block: 300, district: 1500, city: 5000 };
+// Referential distance (the user, 2026-11-03: "proportional or referential semantic distance description dynamically
+// adjusted might work better" than metres in semantic space): the reader names a referent and how many of it; the director
+// measures that referent in the world (director.mjs `measure`). A beat's duration gives its moves their time (L17).
+export const REFERENTS = ['a person', 'the room', 'the building', 'the street', 'the block', 'a landmark', 'the district', 'the city'];
+export const DURATIONS = { 'a few seconds': 5, 'about a minute': 60, 'several minutes': 300, 'an hour or more': 3600 };
 export const ANGLES = ['eye level', 'over a shoulder', 'high', 'top-down', 'low, looking up', 'aerial'];
-export const REACHES = { 'under 50 m': 50, '50–300 m': 300, '300 m – 2 km': 2000, 'over 2 km': 5000 };
-export const SCALE_SYSTEM = 'You read one beat of a light novel being staged in a 3D city, and recommend to its camera operator how far out to stand and from where to look. The scale is often only implied: leaping between towers, crossing districts, a fight in one room. Reply with JSON only.';
-export const SCALE_SHAPE = { zoom: Object.keys(ZOOMS).join(' | ') + ' (how wide the beat plays: a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km, the city)', metres: 'a number: metres across the frame', angle: ANGLES.join(' | '), from: '<person id> | <place> | none: whose eyes or which landmark it is seen from', reach: Object.keys(REACHES).join(' | ') + ': how far its moves go', sure: '0..1' };
+const REFERENT_SHAPE = { referent: REFERENTS.join(' | '), of: 'which one, in words as the text names it (a landmark), or null', times: 'how many of it (0.5, 1, 2, 3…)' };
+export const SCALE_SYSTEM = 'You read one beat of a light novel being staged in a 3D city, and recommend to its camera operator how much of the world the beat takes in and from where to look, and how far its moves go, each said by what it spans (a room, the street, a building, the block, as far as a landmark), never in metres. The scale is often only implied: leaping between towers, crossing districts, a fight in one room. Reply with JSON only.';
+export const SCALE_SHAPE = { frame: REFERENT_SHAPE, angle: ANGLES.join(' | '), from: '<person id> | <place> | none: whose eyes or which landmark it is seen from', reach: { ...REFERENT_SHAPE, referent: REFERENTS.join(' | ') + ': how far one move goes' }, duration: Object.keys(DURATIONS).join(' | ') + ': how long the beat lasts in the story', sure: '0..1' };
 
-/** A beat's scale, checked: zoom and metres agree (metres within the zoom's band), angle, reach. */
+/** A referent, checked: one of the list, its multiple bounded. */
+export function checkReferent(value, fallback = 'the street') {
+  return { referent: oneOf(value?.referent, REFERENTS, fallback), of: value?.of ? String(value.of).slice(0, 40) : null, times: Math.max(0.25, Math.min(20, Number(value?.times) || 1)) };
+}
+/** A beat's scale, checked: the frame and reach as referents, the angle, the duration in seconds. */
 export function checkScale(reply) {
-  const zoom = oneOf(reply?.zoom, Object.keys(ZOOMS), 'street'), band = ZOOMS[zoom];
-  const metres = Math.max(band / 3, Math.min(band * 2, Number(reply?.metres) || band));
-  return { zoom, metres: Math.round(metres), angle: oneOf(reply?.angle, ANGLES, 'high'), from: reply?.from ? String(reply.from).slice(0, 60) : null, reach: oneOf(reply?.reach, Object.keys(REACHES), 'under 50 m'), sure: sure(reply?.sure) };
+  const duration = oneOf(reply?.duration, Object.keys(DURATIONS), null);
+  return { frame: checkReferent(reply?.frame), angle: oneOf(reply?.angle, ANGLES, 'high'), from: reply?.from ? String(reply.from).slice(0, 60) : null, reach: checkReferent(reply?.reach, 'the room'), duration: duration ? DURATIONS[duration] : null, durationSaid: duration, sure: sure(reply?.sure) };
 }
 
 /**
  * Each beat of a scene given its scale: `beats` [{ n, type, lead, sentences }]; one request a beat, `parallel` at once.
- * A failed request leaves the beat at a street's scale, marked unsure.
+ * A failed request leaves the beat framed as the street, marked unsure.
  */
 export async function scaleBeats(work, { scene, beats, line, kind, people, digest = null, parallel = 4 }) {
   const out = new Array(beats.length);
@@ -205,7 +212,7 @@ export async function scaleBeats(work, { scene, beats, line, kind, people, diges
   const one = async n => {
     const beat = beats[n];
     const reply = await work.generate({ system: SCALE_SYSTEM, maxTokens: 300, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
-      task: 'How wide does this beat play, from what angle and whose view, and how far do its moves go? Reply in this JSON shape.', shape: SCALE_SHAPE,
+      task: 'What does this beat take in (a referent and how many of it), from what angle and whose view, how far do its moves go (a referent), and how long does it last? Reply in this JSON shape.', shape: SCALE_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null, summary: digest?.summary ?? null }, beat: { type: beat.type, lead: beat.lead }, people: people.map(person => ({ id: person.id, name: person.name })),
       lines: beat.sentences.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
     }) }).then(parsed).catch(() => null);
@@ -218,7 +225,7 @@ export async function scaleBeats(work, { scene, beats, line, kind, people, diges
 // ── Journeys (M6): read where the journeys faculty fires (gate.mjs), one request a span ─────────────────────────────
 export const MANNERS = ['walk', 'run', 'zigzag through alleys', 'up or along a wall', 'leaps between roofs', 'flight', 'carried', 'a vehicle', 'an underground passage'];
 export const JOURNEY_SYSTEM = 'You read a passage of a light novel being staged in a 3D city and trace each journey in it across the city\'s places: who goes, from where, through which places, to where, how. Use the place ids given where a place is one of them; else say the place in words as the text names it (a tower, a bridge, a station). Reply with JSON only.';
-export const JOURNEY_SHAPE = { journeys: [{ sentence: '<sentence id where the journey ends or is told>', who: '<person id>', from: '<place id or words>', via: ['<place id or words>'], to: '<place id or words>', manner: MANNERS.join(' | '), distance: Object.keys(REACHES).join(' | '), duration: 'words', sure: '0..1' }] };
+export const JOURNEY_SHAPE = { journeys: [{ sentence: '<sentence id where the journey ends or is told>', who: '<person id>', from: '<place id or words>', via: ['<place id or words>'], to: '<place id or words>', manner: MANNERS.join(' | '), distance: { ...REFERENT_SHAPE, referent: REFERENTS.join(' | ') + ': how far, said by what it spans' }, duration: 'words', sure: '0..1' }] };
 
 /** A span's journeys, checked: known people and sentences, a manner from the list. */
 export function checkJourneys(reply, { people, sentences }) {
@@ -226,7 +233,7 @@ export function checkJourneys(reply, { people, sentences }) {
   return (reply?.journeys ?? []).flatMap(entry => {
     const who = String(entry?.who ?? ''), sentence = String(entry?.sentence ?? '');
     if (!known.has(who) || !lines.has(sentence) || !entry?.to) return [];
-    return [{ sentence, who, from: entry.from ? String(entry.from).slice(0, 60) : null, via: (Array.isArray(entry.via) ? entry.via : []).map(place => String(place).slice(0, 60)).slice(0, 6), to: String(entry.to).slice(0, 60), manner: oneOf(entry.manner, MANNERS, 'walk'), distance: oneOf(entry.distance, Object.keys(REACHES), '50–300 m'), duration: entry.duration ? String(entry.duration).slice(0, 40) : null, sure: sure(entry.sure) }];
+    return [{ sentence, who, from: entry.from ? String(entry.from).slice(0, 60) : null, via: (Array.isArray(entry.via) ? entry.via : []).map(place => String(place).slice(0, 60)).slice(0, 6), to: String(entry.to).slice(0, 60), manner: oneOf(entry.manner, MANNERS, 'walk'), distance: checkReferent(entry.distance, 'the block'), duration: entry.duration ? String(entry.duration).slice(0, 40) : null, sure: sure(entry.sure) }];
   });
 }
 
@@ -253,7 +260,7 @@ export const RANGES = ['touch', 'close (under 3 m)', 'near (under 15 m)', 'far (
 export const OUTCOMES = ['hit', 'dodged', 'blocked', 'cancelled', 'missed'];
 export const CONDITIONS = ['hurt', 'badly hurt', 'unconscious', 'bound', 'freed', 'recovered'];
 export const FIGHT_SYSTEM = 'You read a fight or a catastrophe in a light novel, exchange by exchange, for those staging it in a 3D city: who attacks whom, with what kind of attack, of what shape in space and from how far, what happens to the target, how far anyone is thrown, what breaks, and what state anyone is left in. Reply with JSON only.';
-export const FIGHT_SHAPE = { exchanges: [{ sentence: '<sentence id>', attacker: '<person id, or null for the world itself>', target: '<person id, or null when a place or thing>', attack: ATTACKS.join(' | '), shape: SHAPES.join(' | '), range: RANGES.join(' | '), outcome: OUTCOMES.join(' | '), knockback: 'metres the target is thrown (0 if none)', breaks: 'what is destroyed, or null', condition: CONDITIONS.join(' | ') + ' | null: the target\'s state after it', sure: '0..1' }] };
+export const FIGHT_SHAPE = { exchanges: [{ sentence: '<sentence id>', attacker: '<person id, or null for the world itself>', target: '<person id, or null when a place or thing>', attack: ATTACKS.join(' | '), shape: SHAPES.join(' | '), range: RANGES.join(' | '), outcome: OUTCOMES.join(' | '), knockback: { ...REFERENT_SHAPE, referent: REFERENTS.join(' | ') + ': how far the target is thrown, said by what it spans (a person: body lengths), or null' }, breaks: 'what is destroyed, or null', condition: CONDITIONS.join(' | ') + ' | null: the target\'s state after it', sure: '0..1' }] };
 
 /** A span's exchanges, checked: known people (or none), lines, values from their lists. */
 export function checkExchanges(reply, { people, sentences }) {
@@ -262,7 +269,7 @@ export function checkExchanges(reply, { people, sentences }) {
     const sentence = String(entry?.sentence ?? ''), attacker = person(entry?.attacker), target = person(entry?.target);
     if (!lines.has(sentence) || (!attacker && !target)) return [];
     return [{ sentence, attacker, target, attack: oneOf(entry.attack, ATTACKS, 'hand to hand'), shape: oneOf(entry.shape, SHAPES, 'point'), range: oneOf(entry.range, RANGES, 'close (under 3 m)'), outcome: oneOf(entry.outcome, OUTCOMES, 'hit'),
-      knockback: Math.max(0, Math.min(60, Number(entry.knockback) || 0)), breaks: entry.breaks ? String(entry.breaks).slice(0, 80) : null, condition: oneOf(entry.condition, CONDITIONS, null), sure: sure(entry.sure) }];
+      knockback: entry.knockback && typeof entry.knockback === 'object' ? checkReferent(entry.knockback, 'a person') : null, breaks: entry.breaks ? String(entry.breaks).slice(0, 80) : null, condition: oneOf(entry.condition, CONDITIONS, null), sure: sure(entry.sure) }];
   });
 }
 

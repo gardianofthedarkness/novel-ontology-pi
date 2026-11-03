@@ -60,25 +60,27 @@ test('things are objects: not body parts, people, or names in English', async ()
   assert.deepEqual(['手机', '右手', '指尖', '幼女', '幼女的书包', 'a phone', '幼女 in a car', '伞'].map(name => isThing(name, ['幼女', '御坂美琴'])), [true, false, false, false, true, false, false, true]);
 });
 
-test('scale and view: a beat\'s zoom and metres agree, its angle and reach from their lists; a failed beat a street, unsure', async () => {
+test('scale and view, referential: a frame and a reach said by what they span, never metres; a duration in seconds; a failed beat the street, unsure', async () => {
   const { checkScale, scaleBeats } = await import('./digest.mjs');
-  assert.deepEqual(checkScale({ zoom: 'district', metres: 20, angle: 'aerial', reach: '300 m – 2 km', sure: 0.8 }), { zoom: 'district', metres: 500, angle: 'aerial', from: null, reach: '300 m – 2 km', sure: 0.8 });
-  const work = { generate: async ({ prompt }) => { const { beat } = JSON.parse(prompt); if (beat.type === 'catastrophe') throw new Error('down'); return JSON.stringify({ zoom: beat.type === 'traversal' ? 'block' : 'room', metres: 250, angle: 'high', reach: '50–300 m' }); } };
+  assert.deepEqual(checkScale({ frame: { referent: 'a landmark', of: '高塔', times: 2 }, angle: 'aerial', reach: { referent: 'the building', times: 40 }, duration: 'a few seconds', sure: 0.8 }),
+    { frame: { referent: 'a landmark', of: '高塔', times: 2 }, angle: 'aerial', from: null, reach: { referent: 'the building', of: null, times: 20 }, duration: 5, durationSaid: 'a few seconds', sure: 0.8 });
+  assert.equal(checkScale({ frame: { referent: '300 m' } }).frame.referent, 'the street', 'metres are not a referent');
+  const work = { generate: async ({ prompt }) => { const { beat } = JSON.parse(prompt); if (beat.type === 'catastrophe') throw new Error('down'); return JSON.stringify({ frame: { referent: beat.type === 'traversal' ? 'the block' : 'the room', times: 1 }, angle: 'high', reach: { referent: 'the street', times: 1 }, duration: 'about a minute' }); } };
   const out = await scaleBeats(work, { scene: { id: 's' }, beats: [{ n: 4, type: 'traversal', lead: 'mega', sentences: ['x'] }, { n: 5, type: 'catastrophe', lead: 'combat', sentences: ['y'] }], line: () => '', kind: () => null, people: [] });
-  assert.deepEqual(out.map(entry => [entry.n, entry.zoom, entry.metres]), [[4, 'block', 250], [5, 'street', 80]]);
+  assert.deepEqual(out.map(entry => [entry.n, entry.frame.referent, entry.duration]), [[4, 'the block', 60], [5, 'the street', null]]);
   assert.equal(out[1].failed, true);
 });
 
 test('journeys: known people and lines only, a destination required, the manner from its list', async () => {
   const { checkJourneys } = await import('./digest.mjs');
-  const out = checkJourneys({ journeys: [{ sentence: 's1', who: 'a', to: 'loc_000012', manner: 'leaps between roofs', distance: '300 m – 2 km', sure: 0.9 }, { sentence: 's1', who: 'z', to: 'x' }, { sentence: 's9', who: 'a', to: 'x' }, { sentence: 's1', who: 'a' }, { sentence: 's1', who: 'a', to: 'the bridge', manner: 'teleport' }] }, { people: ['a'], sentences: ['s1'] });
-  assert.deepEqual(out.map(entry => [entry.to, entry.manner, entry.distance]), [['loc_000012', 'leaps between roofs', '300 m – 2 km'], ['the bridge', 'walk', '50–300 m']]);
+  const out = checkJourneys({ journeys: [{ sentence: 's1', who: 'a', to: 'loc_000012', manner: 'leaps between roofs', distance: { referent: 'the district', times: 1 }, sure: 0.9 }, { sentence: 's1', who: 'z', to: 'x' }, { sentence: 's9', who: 'a', to: 'x' }, { sentence: 's1', who: 'a' }, { sentence: 's1', who: 'a', to: 'the bridge', manner: 'teleport' }] }, { people: ['a'], sentences: ['s1'] });
+  assert.deepEqual(out.map(entry => [entry.to, entry.manner, entry.distance.referent]), [['loc_000012', 'leaps between roofs', 'the district'], ['the bridge', 'walk', 'the block']]);
 });
 
-test('exchanges: a person on one side at least, known lines, values from their lists, the knock-back bounded', async () => {
+test('exchanges: a person on one side at least, known lines, values from their lists, the knock-back a referent', async () => {
   const { checkExchanges } = await import('./digest.mjs');
-  const out = checkExchanges({ exchanges: [{ sentence: 's1', attacker: 'a', target: 'b', attack: 'beam or laser', shape: 'line or beam', range: 'far (under 100 m)', outcome: 'hit', knockback: 400, condition: 'unconscious', sure: 0.7 }, { sentence: 's1', attacker: 'x', target: 'y' }, { sentence: 's1', attacker: null, target: 'b', attack: 'the ground or a building itself', outcome: 'dodged' }] }, { people: ['a', 'b'], sentences: ['s1'] });
-  assert.deepEqual(out.map(entry => [entry.attacker, entry.attack, entry.knockback, entry.condition]), [['a', 'beam or laser', 60, 'unconscious'], [null, 'the ground or a building itself', 0, null]]);
+  const out = checkExchanges({ exchanges: [{ sentence: 's1', attacker: 'a', target: 'b', attack: 'beam or laser', shape: 'line or beam', range: 'far (under 100 m)', outcome: 'hit', knockback: { referent: 'a person', times: 40 }, condition: 'unconscious', sure: 0.7 }, { sentence: 's1', attacker: 'x', target: 'y' }, { sentence: 's1', attacker: null, target: 'b', attack: 'the ground or a building itself', outcome: 'dodged' }] }, { people: ['a', 'b'], sentences: ['s1'] });
+  assert.deepEqual(out.map(entry => [entry.attacker, entry.attack, entry.knockback, entry.condition]), [['a', 'beam or laser', { referent: 'a person', of: null, times: 20 }, 'unconscious'], [null, 'the ground or a building itself', null, null]]);
 });
 
 test('talk: channels and formations from their lists, a formation of two or more known people', async () => {

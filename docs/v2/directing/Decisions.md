@@ -115,3 +115,21 @@ Newest last. Back to [Directing](Directing.md).
   impossible and review of ability groups suggest low energy level of supporting such move." Proposed as L19 (designed).
 
 Not answered yet: 3, 4, 5, 6, 9, 12–15, 17.
+
+## From your answers, built (2026-11-03)
+
+- **1 and 2, built**: no hold-still switch; block types smoothed forward-backward per strand, a type changing more easily
+  at a scene's cut (volume 1: 211 of 831 blocks change their top type; 109 beats; conversation now 34%, inside the aim).
+  A beat's lead also weighs its smoothed type (a confrontation is the combat director's).
+- **7 and 8, built**: the scale reader answers in referents (the room, the street, the block, a landmark, body lengths)
+  and a beat's duration; the director measures them in the world (rehearsal, scenes 1–3: the street 16 and 40 m wide
+  where it played, rooms 6–20 m). The cast gathers within the measured frame (L16); someone from outside it arrives
+  off-page, and where both scenes state their time L5 is held when the distance cannot fit (pointing to L19). A card's
+  reach is its way's speed times its share of the beat's time, drift the same (L17); a step is about a body's length,
+  nearby within the frame, a fight's throw said in body lengths or a referent and measured. The only unit kept is a
+  person's height (1.7 m).
+
+18. **Distances still fixed**, and whether each should go: the talk law's live 4 m and public 25 m (L6; the conversation
+    reader's channel and the room or street could replace them), the 400 m ceiling on a picture and on the spots looked
+    for (what the world streams in at once, an engineering limit), and the camera's own reaches when a beat has no
+    scale. *Your call:* which to make referential next.
