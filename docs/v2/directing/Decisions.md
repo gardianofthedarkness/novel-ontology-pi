@@ -248,3 +248,23 @@ and let the strand's forward-backward smoothing absorb islands by their evidence
 
 For M14: one per-sentence cut request a window and one typing request a scene (about 100 and 46 requests for volume 1),
 then this smoothing along each strand. Paid so far for M14: 53 Jev requests.
+
+### The cut told what the stretches are for (2026-11-03)
+
+The user: Jev "might need to know what will be the types of following questions being asked to have motivation of
+tiling the right way". The first cut had the nine kinds in its document but not why; now the document says each stretch
+is typed next with exactly one kind, a different specialist taking over for each, and to cut only where the specialist
+would change (`PURPOSE`; 20 more requests).
+
+| Six scenes | Pieces | One-sentence | Cuts into the same type | After smoothing |
+|---|---|---|---|---|
+| First cut | 209 | 123 | 102 | 70 |
+| With the purpose | 169 | 81 | 78 | 73 |
+
+Scene 26 reads cleaner (9 stretches: clinging to the wall and the leap between towers one traversal of 18). Scene 40
+reads finer and right: its long middle alternates the face-to-face argument with the councillor and the boy's thoughts
+on the city's dark side. Kept: the purpose goes with the cut.
+
+25. **A standoff argued face to face is typed routine.** Routine is "talk and small acts in one place"; confrontation
+    reads as blows and powers. *Your call:* say in confrontation that a standoff carried by talk is one too, or keep
+    routine (the conversation faculty) for it and let the combat director come in only with blows.

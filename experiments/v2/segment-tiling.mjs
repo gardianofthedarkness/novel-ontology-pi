@@ -15,7 +15,7 @@
 //                   there: a one-line island survives only where its type's evidence outweighs the stretch round it.
 // Compared with the beats the 12-sentence blocks give (the reading's gate.json). Cached as the reading's own decisions
 // are. Paid: Jev requests only.
-//   node experiments/v2/segment-tiling.mjs <novel-dir> <reading>/v2/data.json --scenes scene_000021,scene_000040 [--mode cuts|starts|smoothed] [--out file]
+//   node experiments/v2/segment-tiling.mjs <novel-dir> <reading>/v2/data.json --scenes scene_000021,scene_000040 [--mode cuts|starts|smoothed] [--purpose no] [--out file]
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -24,6 +24,12 @@ import { parseArgs } from 'node:util';
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
 /** Jev's request window (the kinds pass's): sentences asked a request, and those before shown as context. */
 const REQUEST = 100, CONTEXT = 8;
+/**
+ * What the stretches are for, told to Jev with the cut (the user, 2026-11-03: it needs to know what the following
+ * questions will ask to tile the right way): each stretch is typed next with one of the nine kinds, and each kind wakes
+ * its own specialist. `--purpose no` asks as the first test did.
+ */
+export const PURPOSE = 'This scene will be cut into stretches, and each stretch then typed with exactly one of the kinds in stretches: a different specialist of a film crew takes over for each kind (a fight choreographer, a chase unit, someone for inner voices, for phone calls, for scenery). Mark a new stretch only where the kind in stretches would change and a different specialist would take over; not where a speaker, a sentence, a blow or a moment changes within the same kind.';
 
 export const CUT = {
   true: 'what the passage is doing changes kind here: talk turns into a fight, a fight into a chase or an escape, action into someone\'s inner thought, the present into a memory, background narration into people acting, a scene-setting description into events, or back',
@@ -59,8 +65,8 @@ export function segmentsOf(ids, cut) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { scenes: { type: 'string' }, mode: { type: 'string' }, out: { type: 'string' } } });
-  const mode = values.mode ?? 'cuts';
+  const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { scenes: { type: 'string' }, mode: { type: 'string' }, purpose: { type: 'string' }, out: { type: 'string' } } });
+  const mode = values.mode ?? 'cuts', purpose = values.purpose !== 'no';
   if (!novelDir || !readingPath || !values.scenes) { console.error('usage: node experiments/v2/segment-tiling.mjs <novel-dir> <reading>/v2/data.json --scenes a,b [--out file]'); process.exit(2); }
   const S = await load('dist/src/digger/autostep/segmentation.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
   const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
@@ -94,9 +100,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     // 1. The cut, every sentence after the scene's first.
     for (let from = 0; mode !== 'starts' && from < ids.length; from += REQUEST) {
       const asked = ids.slice(from, from + REQUEST), start = position.get(asked[0]), before = order.slice(Math.max(0, start - CONTEXT), start);
-      const state = { task: 'A scene of a novel, sentence by sentence. Mark where a stretch of another kind begins (the kinds of stretch are defined in stretches).', stretches: { ...S.BLOCK_TYPES },
+      const state = { task: purpose ? `A scene of a novel, sentence by sentence. ${PURPOSE}` : 'A scene of a novel, sentence by sentence. Mark where a stretch of another kind begins (the kinds of stretch are defined in stretches).', stretches: { ...S.BLOCK_TYPES },
         ...(before.length ? { before: Object.fromEntries(before.map(id => [id, said(id)])) } : {}), passage: Object.fromEntries(asked.map(id => [id, said(id)])) };
-      const questions = asked.filter(id => id !== ids[0]).map(id => ({ key: `seg_cut:${id}`, primitive: 'noul', instructions: `Does a stretch of another kind begin at passage.${id}?`, noulCriteria: CUT }));
+      const questions = asked.filter(id => id !== ids[0]).map(id => ({ key: `seg_cut:${id}`, primitive: 'noul', instructions: purpose ? `Does a stretch of another kind (one of stretches, a different specialist) begin at passage.${id}?` : `Does a stretch of another kind begin at passage.${id}?`, noulCriteria: CUT }));
       if (!questions.length) continue;
       for (const answer of await jev.decide(state, questions)) cut[answer.key.slice('seg_cut:'.length)] = Math.round(Number(answer.value) * 1000) / 1000;
     }
