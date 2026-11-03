@@ -66,6 +66,15 @@ given to the card and scene digests, and shown in the UI next to the card it was
 sentences it rests on. The design page: Director Memory (its system 2 section is superseded by
 [world-ontology.md](world-ontology.md) §5).
 
+### Built (2026-11-03)
+
+A1–A3 are in `world-engine/digest/digest.mjs`, run by the director ahead of the play: the scene digest (summary, where,
+how it follows, the background, each person's routine, start, end and holdings, the memory for the next scene), then the
+windows (moves, facts, items, talk, breaks, background), the memory carried scene to scene. The digest replaces the
+pass and the text-only questions (whether someone goes, the talk kind, whether something breaks); Jev decides on the
+pictures, with the digest in its state. Items are placed with their holders or where they fall (v1's things on the
+page). `--no-digest` plays as before. See [world-ontology.md](world-ontology.md) "One observation, several updates".
+
 ### Order of work (Track A)
 
 1. A1, the card digest, for every action and dialogue card of volume 1: one work-model request per card (cents for the

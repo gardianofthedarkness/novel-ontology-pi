@@ -290,6 +290,38 @@ spots, where those with them stood), forward-backward over the clouds in log spa
 kept; occupation per scene alongside. The director starts each scene where the smoothed history has them (a revision
 above the limit still goes to the review), and Why shows each person's cloud and how far the smoothing moved them.
 
+### One observation, several updates: state facts (the user, 2026-11-03)
+
+> Everytime we observe, we actually get multiple state updates, some are subtle and sure, some are confirmed. There are
+> many times where characters carried actions but they have implication that they have moved into a building as they
+> have roofs on top of them.
+
+A sentence is an instrument with several outcomes, each measuring a different part of the state. The summarizer
+(Track A, `world-engine/digest/digest.mjs`) reads every window of about 30 sentences and gives, per sentence:
+
+- **moves**, graded: a step (to 2 m), nearby (to 10 m), elsewhere; toward, away from or with someone; stated or implied,
+  how sure;
+- **facts** about where someone is: indoors, outdoors, a floor, a roof, underground, near or apart from someone, by a
+  window, a door, the street, stairs, a wall, a roof's edge, in a vehicle; stated or implied, how sure;
+- **items** held, picked up, used, given, put down, thrown, broken; **talk** kinds; **breaks**; the **background**'s
+  doing (standing, strolling, walking, fighting...).
+
+Each fact is a region on the walk graph (`world-engine/digest/facts.mjs`: node types, a building's outer wall, an
+entrance, stairs, the street, others' positions). After each card the director checks everyone's binding facts (stated
+and at least 50% sure, or implied and at least 65%): a spot that disagrees moves them to the nearest spot that agrees
+(an implied move, logged with source `implied`); where none agrees within reach, **L14** records it (held if stated,
+weighed if implied). Backward smoothing then places the move before the line that reveals it. Not yet: the facts as
+region terms in the smoother itself (today the implied move is the observation).
+
+### Routine motion
+
+- Graded moves are played by rule (no question); going elsewhere is asked of Jev on the pictures with the digest beside
+  the text; a pair going together: the one carried follows, else the first named leads.
+- The scene digest gives each person's routine and the crowd: those strolling or walking go on along the scene's way
+  (a group keeps together; strollers turn back beyond 40 m), those fighting shift a step or two each card; a crowd of
+  three or six walkers (`extra:` ids) is scenery, never in the laws, the log, the smoothing or canon.
+- System 2 may not take motion away: where Jev saw a move or an act and the work model none, Jev's stands.
+
 ## 6. The world back into the ontology
 
 | Proposal from the world | When | Example |
