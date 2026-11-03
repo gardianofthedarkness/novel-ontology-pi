@@ -2,16 +2,16 @@
 type: "faculty"
 id: "choreography"
 aliases: ["Choreography"]
-status: "proposed"
+status: "built"
 fired_by: ["confrontation", "catastrophe"]
 read_by: ["mega", "combat"]
-tags: ["directing/faculty", "status/proposed"]
+tags: ["directing/faculty", "status/built"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
 # Choreography
 
-A summary faculty: the work model reading the text. Status: **proposed**. Back to [Directing](../Directing.md).
+A summary faculty: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs exchangesOf (M7)`). Back to [Directing](../Directing.md).
 
 ## What it writes
 

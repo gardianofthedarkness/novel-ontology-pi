@@ -245,3 +245,39 @@ export async function journeysOf(work, { scene, spans, line, kind, people, place
   await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
   return out;
 }
+
+// ── Choreography (M7): read where the choreography faculty fires (fights, catastrophes), one request a span ───────────
+export const ATTACKS = ['hand to hand', 'grapple or throw', 'blade or blunt weapon', 'firearm', 'ranged power', 'beam or laser', 'area blast', 'thrown object', 'the ground or a building itself', 'an ability that cancels'];
+export const SHAPES = ['point', 'line or beam', 'cone', 'sphere', 'ring', 'wave along the ground', 'rain from above'];
+export const RANGES = ['touch', 'close (under 3 m)', 'near (under 15 m)', 'far (under 100 m)', 'very far'];
+export const OUTCOMES = ['hit', 'dodged', 'blocked', 'cancelled', 'missed'];
+export const CONDITIONS = ['hurt', 'badly hurt', 'unconscious', 'bound', 'freed', 'recovered'];
+export const FIGHT_SYSTEM = 'You read a fight or a catastrophe in a light novel, exchange by exchange, for those staging it in a 3D city: who attacks whom, with what kind of attack, of what shape in space and from how far, what happens to the target, how far anyone is thrown, what breaks, and what state anyone is left in. Reply with JSON only.';
+export const FIGHT_SHAPE = { exchanges: [{ sentence: '<sentence id>', attacker: '<person id, or null for the world itself>', target: '<person id, or null when a place or thing>', attack: ATTACKS.join(' | '), shape: SHAPES.join(' | '), range: RANGES.join(' | '), outcome: OUTCOMES.join(' | '), knockback: 'metres the target is thrown (0 if none)', breaks: 'what is destroyed, or null', condition: CONDITIONS.join(' | ') + ' | null: the target\'s state after it', sure: '0..1' }] };
+
+/** A span's exchanges, checked: known people (or none), lines, values from their lists. */
+export function checkExchanges(reply, { people, sentences }) {
+  const known = new Set(people), lines = new Set(sentences), person = id => (id && known.has(String(id)) ? String(id) : null);
+  return (reply?.exchanges ?? []).flatMap(entry => {
+    const sentence = String(entry?.sentence ?? ''), attacker = person(entry?.attacker), target = person(entry?.target);
+    if (!lines.has(sentence) || (!attacker && !target)) return [];
+    return [{ sentence, attacker, target, attack: oneOf(entry.attack, ATTACKS, 'hand to hand'), shape: oneOf(entry.shape, SHAPES, 'point'), range: oneOf(entry.range, RANGES, 'close (under 3 m)'), outcome: oneOf(entry.outcome, OUTCOMES, 'hit'),
+      knockback: Math.max(0, Math.min(60, Number(entry.knockback) || 0)), breaks: entry.breaks ? String(entry.breaks).slice(0, 80) : null, condition: oneOf(entry.condition, CONDITIONS, null), sure: sure(entry.sure) }];
+  });
+}
+
+/** The exchanges in each span of a scene where choreography fires. */
+export async function exchangesOf(work, { scene, spans, line, kind, people, digest = null, parallel = 4 }) {
+  const ids = people.map(person => person.id), out = [];
+  let next = 0;
+  const one = async span => {
+    const reply = await work.generate({ system: FIGHT_SYSTEM, maxTokens: 2000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+      task: 'List each exchange of this passage in order. Reply in this JSON shape; an empty list where nobody attacks.', shape: FIGHT_SHAPE,
+      scene: { id: scene.id, where: digest?.where ?? null, summary: digest?.summary ?? null }, people: people.map(person => ({ id: person.id, name: person.name })),
+      passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
+    }) }).then(parsed).catch(() => null);
+    out.push(...checkExchanges(reply, { people: ids, sentences: span }));
+  };
+  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
+  return out;
+}

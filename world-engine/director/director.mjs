@@ -485,17 +485,33 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // given the places the world has placed (each with its box).
         const placeBox = new Map((spawn?.scenes ?? []).filter(entry => entry.target?.box).map(entry => [entry.place, entry.target.box]));
         const journeyOf = new Map();
-        if (gate && digestMeter) {
+        // The spans of this scene where a faculty fires (gate.mjs): overlapping blocks joined, at most 60 lines each.
+        const firedSpans = faculty => {
           const spans = [];
-          for (const window of gate.windows.filter(entry => entry.scene === scene.id && entry.fired.includes('journeys'))) {
+          for (const window of (gate?.windows ?? []).filter(entry => entry.scene === scene.id && entry.fired.includes(faculty))) {
             const a = order_.indexOf(window.first), b = order_.indexOf(window.last), ids = order_.slice(Math.max(0, a), b < 0 ? order_.length : b + 1), last = spans.at(-1);
             if (last && ids.some(id => last.includes(id))) last.push(...ids.filter(id => !last.includes(id))); else spans.push(ids);
           }
+          return spans.map(span => span.slice(0, 60));
+        };
+        const people_ = () => Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id }));
+        if (gate && digestMeter) {
+          const spans = firedSpans('journeys');
           if (spans.length) {
             const places = [...placeBox.keys()].map(id => ({ id, label: script.places?.[id]?.label ?? names.get(id) ?? id, scale: script.places?.[id]?.scale ?? null }));
-            const journeys = await DG.journeysOf(digestMeter, { scene, spans: spans.map(span => span.slice(0, 60)), line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id })), places, digest: dg?.digest ?? null });
+            const journeys = await DG.journeysOf(digestMeter, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id })), places, digest: dg?.digest ?? null });
             for (const journey of journeys) journeyOf.set(`${journey.sentence}|${journey.who}`, journey);
             sceneRecord.journeys = journeys;
+          }
+        }
+        // Choreography (M7): the exchanges of this scene's fights and catastrophes, by the sentence each is told in.
+        const exchangesAt = new Map();
+        if (gate && digestMeter) {
+          const spans = firedSpans('choreography');
+          if (spans.length) {
+            const exchanges = await DG.exchangesOf(digestMeter, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null });
+            for (const exchange of exchanges) (exchangesAt.get(exchange.sentence) ?? exchangesAt.set(exchange.sentence, []).get(exchange.sentence)).push(exchange);
+            sceneRecord.exchanges = exchanges.length;
           }
         }
         // What people carry as the scene begins (the scene digest). A thing someone here held before is drawn with them only
@@ -782,6 +798,44 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             Object.assign(cardRecord.moves.at(-1), { direction: 'elsewhere', line: far.sentence, digest: moveWords(far), journey: { to: journey.to, manner: journey.manner, distance: journey.distance, ...(landmark ? { landmark } : {}) }, ...(airborne ? { airborne: true, how: journey.manner === 'flight' ? 'flight' : 'leap' } : {}) });
             return true;
           };
+          // The combat director (M7): each exchange of the card's lines played. Where the reader is unsure, Jev is asked its
+          // kind, shape and outcome on a picture of the two at the beat's zoom. A close attacker closes in; a hit throws
+          // the target as far as told, away from the attacker; a dodge steps aside; what breaks goes to the destruction
+          // questions; the target's state is recorded (conditions, for the ontology's state).
+          const fight = async () => {
+            const exchanges = card.sentences.flatMap(id => exchangesAt.get(id) ?? []);
+            for (const exchange of exchanges) {
+              const entry = { ...exchange, by: 'reader' };
+              const a = exchange.attacker && positions[exchange.attacker] ? at(positions[exchange.attacker][0]) : null, t = exchange.target && positions[exchange.target] ? at(positions[exchange.target][0]) : null;
+              if (exchange.sure < 0.6 && calls < budget && (a || t)) {
+                const mid = a && t ? [(a[0] + t[0]) / 2, (a[1] + t[1]) / 2, (a[2] + t[2]) / 2] : a ?? t, played = await grow(scene, run);
+                const shot = await shoot(`${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-${exchange.sentence}-fight`, [1440, 900], { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: frameRadius, elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35 });
+                const who = id => (id ? names.get(id) ?? id : 'the world itself');
+                const replies = await decide(`A still of a fight in a novel, staged in 3D (${who(exchange.attacker)} against ${who(exchange.target)}). The line: ${text.get(exchange.sentence)?.text ?? ''}`, [
+                  { key: 'attack', primitive: 'choice', instructions: 'What kind of attack is this exchange?', options: DG.ATTACKS },
+                  { key: 'shape', primitive: 'choice', instructions: 'What shape does it take in space?', options: DG.SHAPES },
+                  { key: 'outcome', primitive: 'choice', instructions: 'What happens to the target?', options: DG.OUTCOMES },
+                ], { images: { fight: shot.png } });
+                for (const reply of replies) if (['attack', 'shape', 'outcome'].includes(reply.key) && reply.value) entry[reply.key] = String(reply.value);
+                entry.by = 'jev';
+              }
+              (cardRecord.exchanges ??= []).push(entry);
+              if (exchange.breaks && exchange.sure >= 0.7) { cardRecord.breaks = true; (cardRecord.breaksSaid ??= []).push(exchange.breaks); }
+              if (exchange.condition && exchange.target) (cardRecord.conditions ??= []).push({ who: exchange.target, condition: exchange.condition, line: exchange.sentence });
+              const away = (from, to, metres) => { const d = Math.hypot(to[0] - from[0], to[2] - from[2]) || 1, aim = [to[0] + (to[0] - from[0]) / d * metres, to[2] + (to[2] - from[2]) / d * metres]; const pool = near(to, Math.max(0.8, metres * 0.5), metres * 1.5 + 2); return pool.length ? pool.reduce((x, y) => (Math.hypot(y.x - aim[0], y.z - aim[1]) < Math.hypot(x.x - aim[0], x.z - aim[1]) ? y : x)).id : null; };
+              if (a && t && /^(touch|close)/.test(entry.range) && Math.hypot(a[0] - t[0], a[2] - t[2]) > 3) {
+                const ring = near(t, 0.8, 2).map(node => node.id);
+                if (ring.length) moveTo(exchange.attacker, walk(scene, `${scene.id}|${card.id}|${exchange.attacker}|closes|${exchange.sentence}`, positions[exchange.attacker], ring, 'run'), 'run', `fight: closes in on ${names.get(exchange.target) ?? exchange.target}`, { quiet: true });
+              }
+              if (t && entry.outcome === 'hit' && exchange.knockback >= 1) {
+                const target = away(a ?? [t[0] - 1, t[1], t[2]], at(positions[exchange.target][0]), exchange.knockback);
+                if (target !== null) moveTo(exchange.target, walk(scene, `${scene.id}|${card.id}|${exchange.target}|thrown|${exchange.sentence}`, positions[exchange.target], [target], 'run'), 'run', `fight: thrown ${Math.round(exchange.knockback)} m by ${a ? names.get(exchange.attacker) ?? exchange.attacker : 'the blow'} (${entry.attack})`, { quiet: true });
+              } else if (t && entry.outcome === 'dodged') {
+                const p = at(positions[exchange.target][0]), side = a ? [-(p[2] - a[2]), p[0] - a[0]] : [1, 0], d = Math.hypot(...side) || 1, aim = [p[0] + side[0] / d * 2, p[2] + side[1] / d * 2], pool = near(p, 1, 3);
+                if (pool.length) moveTo(exchange.target, walk(scene, `${scene.id}|${card.id}|${exchange.target}|dodges|${exchange.sentence}`, positions[exchange.target], [pool.reduce((x, y) => (Math.hypot(y.x - aim[0], y.z - aim[1]) < Math.hypot(x.x - aim[0], x.z - aim[1]) ? y : x)).id], 'run'), 'run', `fight: dodges ${a ? names.get(exchange.attacker) ?? exchange.attacker : ''}`.trim(), { quiet: true });
+              }
+            }
+          };
           const followers = [];
           const digestMove = async person => {
             const all = digestIn(dg.moves, card).filter(entry => entry.motion !== 'still' && entry.sure >= MOVE_SURE), mine = all.filter(entry => entry.who === person);
@@ -817,6 +871,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // What the text says or implies about where people are (the digest's facts up to this card): someone whose spot
           // disagrees with a binding fact moves to the nearest spot that agrees (an implied move); a stated fact no spot near
           // agrees with is recorded under L14. Then the background's routine, the crowd, and the things people carry.
+          await fight();
           if (dg) { factsDue(); drift(); carry(); }
           if (read(card) && digestIn(dg.breaks, card).some(entry => entry.sure >= 0.7)) { cardRecord.breaks = true; cardRecord.breaksSaid = digestIn(dg.breaks, card).map(entry => entry.what); }
           // Destruction (docs/v2/world-engine-redesign.md §3): a card the text says breaks something is asked where it hits (lettered

@@ -96,9 +96,9 @@ export const DIRECTOR_QUESTIONS = {
   combat: [
     { code: 'world-engine/director/director.mjs (destruction)', key: 'where', status: 'built', primitive: 'choice', instructions: 'Which lettered red sphere in picture "where" is where this card breaks something? Answer none if it breaks nothing.', options: ['A', 'B', '…', 'none'], hints: { A: '<a spot on a building>', none: 'it breaks nothing' }, picture: 'the place at this moment, red spheres where it might break' },
     { code: 'world-engine/director/director.mjs (destruction)', key: 'size', status: 'built', primitive: 'choice', instructions: 'Which labelled sphere is the size of what this card breaks?', options: ['1', '2', '3', '4'], hints: { 1: '4 m across', 2: '8 m', 3: '16 m', 4: '32 m' }, picture: 'where it hits, close up from two sides, four spheres round the point' },
-    { key: 'attack', status: 'proposed', primitive: 'choice', instructions: 'What kind of attack is this exchange?', options: ATTACKS, picture: 'the fighters at the beat\'s zoom and angle' },
-    { key: 'shape', status: 'proposed', primitive: 'choice', instructions: 'What shape does it take in space?', options: SHAPES, picture: 'the same, with the attacker and target marked' },
-    { key: 'outcome', status: 'proposed', primitive: 'choice', instructions: 'What happens to the target?', options: OUTCOMES },
+    { code: 'world-engine/director/director.mjs (fight, M7)', key: 'attack', status: 'built', primitive: 'choice', instructions: 'What kind of attack is this exchange?', options: ATTACKS, picture: 'the two fighters at the beat\'s zoom and angle; asked only where the choreography reader is under 0.6 sure' },
+    { code: 'world-engine/director/director.mjs (fight, M7)', key: 'shape', status: 'built', primitive: 'choice', instructions: 'What shape does it take in space?', options: SHAPES, picture: 'the same picture, in the same request' },
+    { code: 'world-engine/director/director.mjs (fight, M7)', key: 'outcome', status: 'built', primitive: 'choice', instructions: 'What happens to the target?', options: OUTCOMES, picture: 'the same picture, in the same request' },
     { key: 'knockback', status: 'proposed', primitive: 'score', instructions: 'How far is the target thrown?', options: ['0 m', '1 m', '3 m', '10 m', '30 m'] },
   ],
   character: [

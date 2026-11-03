@@ -56,3 +56,12 @@ Newest last. Back to [Directing](Directing.md).
 11. **The landmark map offers the twelve tallest buildings within the journey's reach.** A low destination (a
     station entrance, a bridge) can only be picked as "none", which falls back to the arrows. *Your call:* keep the
     tallest, or mix in named places and street features (bridges, stations) once the place tree has them in the world.
+
+## From M7: the combat director (2026-11-03)
+
+12. **Jev is asked about an exchange only where the reader is under 0.6 sure** (its kind, shape and outcome on one
+    picture). *Your call:* that line, or ask Jev on every exchange of a fight (more calls, Jev deciding on the picture
+    every time).
+13. **Conditions are recorded and held**, not written: a fight's "hurt", "unconscious", "bound" go into the world log
+    and the ledger as held proposals, for the review; canon writes them to `conditionsAdd` in M11. *Your call:* hold
+    them all, or let canon apply the sure ones (0.8 and over) without review.

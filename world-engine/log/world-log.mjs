@@ -62,6 +62,10 @@ export function worldLog({ run, record, page, spawn, strands }) {
       for (const move of moves.filter(entry => entry.arrived && entry.at)) last.set(move.person, add({ kind: 'position', strand, scene: scene.id, place: scene.place, card: card.card, who: move.person, at: point(move.at), how: 'arrived', metres: 0, from: last.get(move.person)?.id ?? null, rank: 'pinned', source: 'the review' }));
       const gathered = moves.filter(move => String(move.why ?? '').startsWith('spoken to by '));
       if (card?.kind === 'dialogue' && gathered.length) add({ kind: 'meeting', strand, scene: scene.id, card: card.card, parties: [...new Set(gathered.map(move => move.person))], rank: 'ruled', source: 'talk gathers' });
+      // The combat director's exchanges and the states they leave (M7): attacker and target, never `who` (the smoother
+      // reads `who` as a position's rank).
+      for (const exchange of card?.exchanges ?? []) add({ kind: 'exchange', strand, scene: scene.id, card: card.card, attacker: exchange.attacker, target: exchange.target, attack: exchange.attack, shape: exchange.shape, range: exchange.range, outcome: exchange.outcome, knockback: exchange.knockback, line: exchange.sentence, rank: exchange.by === 'jev' ? 'answered' : 'ruled', source: exchange.by === 'jev' ? 'jev' : 'choreography' });
+      for (const entry of card?.conditions ?? []) add({ kind: 'condition', strand, scene: scene.id, card: card.card, subject: entry.who, condition: entry.condition, line: entry.line, rank: 'ruled', source: 'choreography' });
       if (event.hit) add({ kind: 'damage', strand, scene: scene.id, card: card?.card ?? event.id, lot: event.hit.lot ?? null, sphere: event.hit.sphere ?? null, strength: event.hit.strength ?? null, rank: 'answered', source: 'blast' });
     });
   }
@@ -84,6 +88,8 @@ export function proposalsOf({ run, log, laws, eventOf, record = null }) {
   }
   // Each strand as a timeline of the ontology.
   for (const strand of [...new Set(log.map(record => record.strand).filter(Boolean))]) add({ kind: 'timeline', subject: strand, value: { id: `tl_strand_${strand}`, scenes: [...new Set(log.filter(record => record.strand === strand).map(record => record.scene))] }, evidence: [] });
+  // The states fights leave (M7): held for the review before they reach the ontology's conditions.
+  for (const entry of log.filter(record => record.kind === 'condition')) add({ kind: 'condition', state: 'held', subject: entry.subject, value: { scene: entry.scene, card: entry.card, condition: entry.condition, line: entry.line }, evidence: [entry.id] });
   // Damage the world took.
   for (const entry of log.filter(record => record.kind === 'damage')) add({ kind: 'damage', subject: entry.lot, value: { scene: entry.scene, card: entry.card, strength: entry.strength }, evidence: [entry.id] });
   // What the laws decided as the run played (W4): each held move, speaker or actor, and each amended entry, with why.

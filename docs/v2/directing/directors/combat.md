@@ -46,23 +46,31 @@ Asked in `world-engine/director/director.mjs (destruction)`.
 |---|---|---|---|
 | `size` | choice | Which labelled sphere is the size of what this card breaks? | `1`: 4 m across<br>`2`: 8 m<br>`3`: 16 m<br>`4`: 32 m |
 
-### attack · proposed
+### attack · built
 
-**Picture**: the fighters at the beat's zoom and angle.
+Asked in `world-engine/director/director.mjs (fight, M7)`.
+
+**Picture**: the two fighters at the beat's zoom and angle; asked only where the choreography reader is under 0.6 sure.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|
 | `attack` | choice | What kind of attack is this exchange? | `hand to hand`<br>`grapple or throw`<br>`blade or blunt weapon`<br>`firearm`<br>`ranged power`<br>`beam or laser`<br>`area blast`<br>`thrown object`<br>`the ground or a building itself`<br>`an ability that cancels` |
 
-### shape · proposed
+### shape · built
 
-**Picture**: the same, with the attacker and target marked.
+Asked in `world-engine/director/director.mjs (fight, M7)`.
+
+**Picture**: the same picture, in the same request.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|
 | `shape` | choice | What shape does it take in space? | `point`<br>`line or beam`<br>`cone`<br>`sphere`<br>`ring`<br>`wave along the ground`<br>`rain from above` |
 
-### outcome · proposed
+### outcome · built
+
+Asked in `world-engine/director/director.mjs (fight, M7)`.
+
+**Picture**: the same picture, in the same request.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|
@@ -86,9 +94,9 @@ What it keeps as it plays, and where that lands (the flow and the gates: [Direct
 
 | State | World log | Laws | Into the ontology | Gate | Status |
 |---|---|---|---|---|---|
-| Exchanges (attacker, target, kind and shape of the attack, outcome) | `exchange` (new) | L12 abilities; L13 destruction | PARTICIPATES_IN relation + conflict event; the attack's kind, shape and outcome properties of each participant's relation to the event; CAUSES from it to what it broke | held | proposed |
+| Exchanges (attacker, target, kind and shape of the attack, outcome) | `exchange` | L12 abilities; L13 destruction | PARTICIPATES_IN relation + conflict event; the attack's kind, shape and outcome properties of each participant's relation to the event; CAUSES from it to what it broke | held | partial |
 | Knock-backs and dodges | `position`, smoothed | L1 continuity by strand; L10 reachable | StateChange.location | applied | partial |
-| Injury and condition (hurt, unconscious, bound) | `condition` (new) | — | StateChange.conditionsAdd + StateChange.conditionsRemove; the field added 2026-11-03 (set add/remove, as possessions) | held | proposed |
-| Abilities shown | `exchange` (new) | L12 abilities | Character.properties.abilities | held | proposed |
+| Injury and condition (hurt, unconscious, bound) | `condition` | — | StateChange.conditionsAdd + StateChange.conditionsRemove; the field added 2026-11-03 (set add/remove, as possessions) | held | partial |
+| Abilities shown | `exchange` | L12 abilities | Character.properties.abilities | held | proposed |
 | What breaks | `damage` | L13 destruction | Location.properties.damage | applied | built |
 | Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — | the run only | run | partial |
