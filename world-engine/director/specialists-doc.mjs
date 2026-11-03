@@ -6,7 +6,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BLOCK_TYPES, DAMPING, DIRECTORS, FACULTIES, SIGNALS, registryProblems } from './specialists.mjs';
+import { BLOCK_TYPES, DAMPING, DIRECTORS, FACULTIES, FLOW, GATES, LAWS, LOG_KINDS, SIGNALS, STATE, registryProblems, target } from './specialists.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const START = '<!-- specialists:start -->', END = '<!-- specialists:end -->';
@@ -15,6 +15,14 @@ const firedBy = faculty => faculty.always ? `always (each ${faculty.always})` : 
 const readers = id => Object.entries(DIRECTORS).filter(([, director]) => director.reads.includes(id)).map(([key, director]) => ({ key, label: director.label, own: director.reads[0] === id }));
 const fires = type => Object.entries(FACULTIES).filter(([, faculty]) => faculty.types?.includes(type)).map(([, faculty]) => faculty.label);
 const metres = ([near, far]) => `${near}–${far >= 1000 ? `${far / 1000} km` : `${far} m`}`;
+// A target in words: the record and its field, relation or event type.
+const RECORD = { scene: 'Scene', stateChange: 'StateChange', relation: 'Relation', event: 'Event', entity: 'Entity', timeline: 'Timeline' };
+const FILE = { scene: 'scenes', stateChange: 'state-changes', relation: 'relations', event: 'events', entity: 'entities', timeline: 'timelines' };
+const where = to => { const t = target(to); if (!t) return 'the run only'; return t.base === 'entity' ? `${t.a}.properties.${t.b}` : t.base === 'relation' ? `${t.a} relation` : t.base === 'event' ? `${t.a} event` : `${RECORD[t.base]}.${t.a}`; };
+const lands = entry => [entry.to, entry.also].filter(Boolean).map(where).join(' + ') || 'the run only';
+const lawsOf = entry => entry.laws.length ? entry.laws.join(', ') : '—';
+/** Each ontology file, and which directors' state reaches it. */
+const intoFiles = () => { const out = new Map(); for (const [id, states] of Object.entries(STATE)) for (const entry of states) for (const to of [entry.to, entry.also].filter(Boolean)) { const file = FILE[target(to).base]; (out.get(file) ?? out.set(file, new Map()).get(file)).set(id, [...(out.get(file).get(id) ?? []), entry.state]); } return out; };
 
 /** The markdown for next-steps.md. */
 export function markdown() {
@@ -25,6 +33,14 @@ export function markdown() {
   for (const [id, faculty] of Object.entries(FACULTIES)) lines.push(`| ${faculty.label} | ${firedBy(faculty)} | ${faculty.writes.join('; ')} | ${readers(id).map(entry => `${entry.label}${entry.own ? ' (own)' : ''}`).join(', ')} | ${faculty.status} |`);
   lines.push('', '**Specialist directors** (Jev, on pictures framed at their scale):', '', '| Director | Plays | Scale | Camera | Asks Jev | Status |', '|---|---|---|---|---|---|');
   for (const director of Object.values(DIRECTORS)) lines.push(`| ${director.label}${director.always ? ' (always)' : ''} | ${director.role} | ${metres(director.scale)} | ${director.camera} | ${director.asks.map(ask => `${ask.name}${ask.status === 'built' ? ' (built)' : ask.status === 'partial' ? ' (partial)' : ''}`).join('; ')} | ${director.status} |`);
+  lines.push('', '**State and the ontology.** What each director keeps as it plays, and how it flows:', '', ...FLOW.map((step, n) => `${n + 1}. **${step.step}**: ${step.what} (\`${step.code}\`)`), '', 'Gates: ' + Object.entries(GATES).map(([gate, what]) => `**${gate}**, ${what}`).join('; ') + '.', '');
+  for (const [id, states] of Object.entries(STATE)) {
+    lines.push(`*${DIRECTORS[id].label}*`, '', '| State | World log | Laws | Smoothed | Into the ontology | Gate | Status |', '|---|---|---|---|---|---|---|');
+    for (const entry of states) lines.push(`| ${entry.state}${entry.what ? ` (${entry.what})` : ''} | ${entry.log ?? '—'}${entry.log && !LOG_KINDS[entry.log].built ? ' (new)' : ''} | ${lawsOf(entry)} | ${entry.smoothed ? 'yes' : ''} | ${lands(entry)}${entry.schema ? ' (new field)' : ''}${entry.note ? `; ${entry.note}` : ''} | ${entry.gate} | ${entry.status} |`);
+    lines.push('');
+  }
+  lines.push('Into each ontology file:', '', '| File | From |', '|---|---|');
+  for (const [file, by] of intoFiles()) lines.push(`| \`${file}.jsonl\` | ${[...by].map(([id, states]) => `${DIRECTORS[id].label} (${states.join(', ')})`).join('; ')} |`);
   return lines.join('\n');
 }
 
@@ -57,7 +73,19 @@ ${faculties}
 <h3>The directors</h3>
 <div class="grid">
 ${directors}
-</div>`;
+</div>
+<h2>State and the ontology</h2>
+<p>Each director keeps a state as it plays. None of it is written into the ontology directly: it goes through the world log, the laws, the smoother and the ledger, and a gate decides whether canon writes it, the review sees it first, or it stays with the run.</p>
+<ol class="flow-steps">${FLOW.map(step => `<li><b>${esc(step.step)}</b><span>${esc(step.what)}</span><code>${esc(step.code)}</code></li>`).join('')}</ol>
+<div class="gates">${Object.entries(GATES).map(([gate, what]) => `<div class="gate-${gate}"><b>${gate}</b> ${esc(what)}</div>`).join('')}</div>
+${Object.entries(STATE).map(([id, states]) => `<h3>${esc(DIRECTORS[id].label)}</h3>
+<div class="scroll"><table class="state"><thead><tr><th>State</th><th>World log</th><th>Laws</th><th>Into the ontology</th><th>Gate</th><th>Status</th></tr></thead><tbody>
+${states.map(entry => `<tr><td>${esc(entry.state)}${entry.what ? `<br><small>${esc(entry.what)}</small>` : ''}</td><td>${entry.log ? `<code>${esc(entry.log)}</code>${LOG_KINDS[entry.log].built ? '' : ' <small>new</small>'}` : '—'}${entry.smoothed ? '<br><small>smoothed</small>' : ''}</td><td>${entry.laws.map(law => `<span title="${esc(LAWS[law])}">${law}</span>`).join(', ') || '—'}</td><td>${esc(lands(entry))}${entry.schema ? ' <small>(new field)</small>' : ''}${entry.note ? `<br><small>${esc(entry.note)}</small>` : ''}</td><td><span class="pill ${entry.gate === 'applied' ? 'always' : entry.gate === 'held' ? 'damp' : ''}">${entry.gate}</span></td><td>${pill(entry.status)}</td></tr>`).join('\n')}
+</tbody></table></div>`).join('\n')}
+<h3>Into each ontology file</h3>
+<div class="scroll"><table><thead><tr><th>File</th><th>From</th></tr></thead><tbody>
+${[...intoFiles()].map(([file, by]) => `<tr><td><code>${file}.jsonl</code></td><td>${[...by].map(([id, states]) => `<b>${esc(DIRECTORS[id].label)}</b>: ${states.map(esc).join(', ')}`).join('<br>')}</td></tr>`).join('\n')}
+</tbody></table></div>`;
 }
 
 const between = (text, inner) => { const a = text.indexOf(START), b = text.indexOf(END); if (a < 0 || b < a) throw new Error('no specialists markers'); return `${text.slice(0, a + START.length)}\n${inner}\n${text.slice(b)}`; };

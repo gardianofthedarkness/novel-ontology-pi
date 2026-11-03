@@ -92,6 +92,15 @@ ol.steps li { margin: .5em 0; }
 .matrix td.cell { text-align: center; color: var(--accent); font-size: 1.1rem; }
 ul.asks { margin: 0; padding-left: 0; list-style: none; }
 ul.asks li { margin: 2px 0; }
+ol.flow-steps { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); counter-reset: step; }
+ol.flow-steps li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 4px; min-width: 0; counter-increment: step; }
+ol.flow-steps li b::before { content: counter(step) ". "; color: var(--accent); }
+ol.flow-steps li span { font-size: .9rem; }
+ol.flow-steps li code { font-size: .74rem; justify-self: start; }
+.gates { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin: 10px 0 6px; font-size: .9rem; }
+.gates div { border-radius: 8px; padding: 8px 12px; background: var(--sunk); }
+.gates .gate-applied { background: var(--always-bg); } .gates .gate-held { background: var(--damp-bg); }
+table.state small, table small { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -233,6 +242,64 @@ ul.asks li { margin: 2px 0; }
     <dt>Scale</dt><dd>10–300 m</dd><dt>Camera</dt><dd>establishing on the building; cut-aways of floors</dd><dt>Plays</dt><dd>Set description, Generalist</dd>
     <dt>Asks Jev</dt><dd><ul class="asks"><li><span class="pill always">built</span> terrainHeightMode and terrainPartMode <span class="note">(a building's height and what it belongs to)</span></li><li><span class="pill fired">proposed</span> its look among the model packs and themes</li><li><span class="pill fired">proposed</span> floors and uses (the mall below, offices, flats, the rooftop deck)</li><li><span class="pill fired">proposed</span> a room's make-up and furniture</li></ul></dd><dt>Tools</dt><dd>building skeletons; architecture models; model packs; building EM</dd></dl></div>
 </div>
+<h2>State and the ontology</h2>
+<p>Each director keeps a state as it plays. None of it is written into the ontology directly: it goes through the world log, the laws, the smoother and the ledger, and a gate decides whether canon writes it, the review sees it first, or it stays with the run.</p>
+<ol class="flow-steps"><li><b>play</b><span>the director changes its state card by card (positions, exchanges, feelings, holdings, buildings)</span><code>world-engine/director/director.mjs</code></li><li><b>world log</b><span>each change a record, append-only, with its rank (pinned, stated, met, answered, ruled) and source</span><code>world-engine/log/world-log.mjs</code></li><li><b>laws</b><span>checked as it plays (held, amended) and over the whole run afterwards</span><code>world-engine/laws/laws.mjs</code></li><li><b>smoother</b><span>positions and presence back-propagated: the least-action history and its clouds (later: feelings, as additive states)</span><code>world-engine/smoother/</code></li><li><b>ledger</b><span>the run's proposals to the ontology, each with its evidence and the laws' verdicts</span><code>world-engine/log/write-log.mjs</code></li><li><b>gate</b><span>applied by canon where a law checks it, held for the review (Pi) otherwise; some state stays with the run</span><code>world-engine/review/canon.mjs, review.mjs</code></li><li><b>canon</b><span>written into ontology/*.jsonl (last write wins by id), every write logged in canon.jsonl and undoable; the graph rebuilt</span><code>world-engine/review/canon.mjs</code></li><li><b>next run</b><span>the review's answers become pins; canon, pins and the smoothing are where the next run starts from</span><code>world-engine/review/review.mjs</code></li></ol>
+<div class="gates"><div class="gate-applied"><b>applied</b> written by canon without review: a law checks it and nothing broke</div><div class="gate-held"><b>held</b> held for the review first; written once answered (some move to applied once audits show they are right)</div><div class="gate-run"><b>run</b> kept with the run only (its records, the page); never in the ontology</div></div>
+<h3>Stage manager</h3>
+<div class="scroll"><table class="state"><thead><tr><th>State</th><th>World log</th><th>Laws</th><th>Into the ontology</th><th>Gate</th><th>Status</th></tr></thead><tbody>
+<tr><td>Who is on stage</td><td><code>presence</code><br><small>smoothed</small></td><td><span title="two places at once">L2</span>, <span title="actors are there">L9</span></td><td>Scene.charactersPresent + PRESENT_IN relation</td><td><span class="pill always">applied</span></td><td><span class="pill always">built</span></td></tr>
+<tr><td>The set<br><small>the scene's place and its path up the tree</small></td><td><code>binding</code></td><td>—</td><td>Scene.locationId + PART_OF relation</td><td><span class="pill always">applied</span></td><td><span class="pill always">built</span></td></tr>
+<tr><td>The scale band</td><td><code>binding</code></td><td><span title="travel time">L5</span></td><td>Location.properties.scale</td><td><span class="pill always">applied</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>Facts about where people are<br><small>stated or implied: indoors, a floor, near someone</small></td><td><code>position</code><br><small>smoothed</small></td><td><span title="stated facts hold (recorded as it plays)">L14</span></td><td>StateChange.location</td><td><span class="pill always">applied</span></td><td><span class="pill damp">partial</span></td></tr>
+<tr><td>Beats and who led them</td><td><code>beat</code> <small>new</small></td><td>—</td><td>action event + PRECEDES relation</td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>The camera</td><td>—</td><td>—</td><td>the run only</td><td><span class="pill ">run</span></td><td><span class="pill damp">partial</span></td></tr>
+</tbody></table></div>
+<h3>Routine director</h3>
+<div class="scroll"><table class="state"><thead><tr><th>State</th><th>World log</th><th>Laws</th><th>Into the ontology</th><th>Gate</th><th>Status</th></tr></thead><tbody>
+<tr><td>Positions in the room</td><td><code>position</code><br><small>smoothed</small></td><td><span title="continuity by strand">L1</span>, <span title="reachable">L10</span>, <span title="bodies">L11</span></td><td>StateChange.location + PART_OF relation<br><small>today at the building; a room becomes a Location inside it</small></td><td><span class="pill always">applied</span></td><td><span class="pill damp">partial</span></td></tr>
+<tr><td>Who talks with whom, through what</td><td><code>meeting</code></td><td><span title="talk needs nearness">L6</span></td><td>SPEAKS_TO relation + Scene.turns<br><small>speakers are off for now; the channel (face to face, phone, door) a property of the relation</small></td><td><span class="pill damp">held</span></td><td><span class="pill damp">partial</span></td></tr>
+<tr><td>Formations and attention</td><td><code>meeting</code></td><td><span title="talk needs nearness">L6</span></td><td>ADDRESSES relation</td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>Feelings</td><td><code>feeling</code> <small>new</small><br><small>smoothed</small></td><td>—</td><td>StateChange.emotions<br><small>additive deltas clamped to [-1, 1] (the ontology's rule); applied once audits show them right</small></td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>Bonds and first meetings</td><td><code>feeling</code> <small>new</small></td><td>—</td><td>StateChange.relationships + KNOWS relation</td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>Intent</td><td><code>feeling</code> <small>new</small></td><td>—</td><td>StateChange.goalsAdd</td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+</tbody></table></div>
+<h3>Mega-scene director</h3>
+<div class="scroll"><table class="state"><thead><tr><th>State</th><th>World log</th><th>Laws</th><th>Into the ontology</th><th>Gate</th><th>Status</th></tr></thead><tbody>
+<tr><td>Journeys<br><small>routes, stops, manner</small></td><td><code>position</code><br><small>smoothed</small></td><td><span title="travel time">L5</span>, <span title="reachable">L10</span>, <span title="abilities">L12</span></td><td>StateChange.location + movement event<br><small>each stop a location; the journey an event, held</small></td><td><span class="pill always">applied</span></td><td><span class="pill damp">partial</span></td></tr>
+<tr><td>A catastrophe's extent</td><td><code>damage</code></td><td><span title="destruction">L13</span></td><td>Location.properties.damage + conflict event</td><td><span class="pill always">applied</span></td><td><span class="pill damp">partial</span></td></tr>
+<tr><td>Crowds</td><td><code>crowd</code> <small>new</small></td><td>—</td><td>Organization.properties.members + MEMBER_OF relation<br><small>a named crowd (the student column) an Organization its people are members of; an unnamed density stays with the run</small></td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+</tbody></table></div>
+<h3>Combat director</h3>
+<div class="scroll"><table class="state"><thead><tr><th>State</th><th>World log</th><th>Laws</th><th>Into the ontology</th><th>Gate</th><th>Status</th></tr></thead><tbody>
+<tr><td>Exchanges<br><small>attacker, target, kind and shape of the attack, outcome</small></td><td><code>exchange</code> <small>new</small></td><td><span title="abilities">L12</span>, <span title="destruction">L13</span></td><td>PARTICIPATES_IN relation + conflict event<br><small>the attack's kind, shape and outcome properties of each participant's relation to the event; CAUSES from it to what it broke</small></td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>Knock-backs and dodges</td><td><code>position</code><br><small>smoothed</small></td><td><span title="continuity by strand">L1</span>, <span title="reachable">L10</span></td><td>StateChange.location</td><td><span class="pill always">applied</span></td><td><span class="pill damp">partial</span></td></tr>
+<tr><td>Injury and condition<br><small>hurt, unconscious, bound</small></td><td><code>condition</code> <small>new</small></td><td>—</td><td>StateChange.conditionAdd <small>(new field)</small></td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>Abilities shown</td><td><code>exchange</code> <small>new</small></td><td><span title="abilities">L12</span></td><td>Character.properties.abilities</td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>What breaks</td><td><code>damage</code></td><td><span title="destruction">L13</span></td><td>Location.properties.damage</td><td><span class="pill always">applied</span></td><td><span class="pill always">built</span></td></tr>
+</tbody></table></div>
+<h3>Transport specialist</h3>
+<div class="scroll"><table class="state"><thead><tr><th>State</th><th>World log</th><th>Laws</th><th>Into the ontology</th><th>Gate</th><th>Status</th></tr></thead><tbody>
+<tr><td>Vehicles and weapons</td><td><code>item</code> <small>new</small></td><td>—</td><td>Item.properties.class<br><small>new identities: held, as EM's are</small></td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>Who holds, drives or rides</td><td><code>possession</code> <small>new</small></td><td><span title="a thing in one place or one hand at a time (proposed)">L15</span></td><td>StateChange.possessionsAdd + StateChange.possessionsRemove</td><td><span class="pill always">applied</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>Where things are</td><td><code>item</code> <small>new</small><br><small>smoothed</small></td><td><span title="a thing in one place or one hand at a time (proposed)">L15</span></td><td>LOCATED_AT relation</td><td><span class="pill always">applied</span></td><td><span class="pill fired">proposed</span></td></tr>
+<tr><td>Ownership</td><td><code>possession</code> <small>new</small></td><td>—</td><td>OWNS relation</td><td><span class="pill damp">held</span></td><td><span class="pill fired">proposed</span></td></tr>
+</tbody></table></div>
+<h3>Architect</h3>
+<div class="scroll"><table class="state"><thead><tr><th>State</th><th>World log</th><th>Laws</th><th>Into the ontology</th><th>Gate</th><th>Status</th></tr></thead><tbody>
+<tr><td>Which building it is</td><td><code>binding</code></td><td>—</td><td>Location.properties.world<br><small>W6: building identity from the lot each scene played in; unsure ones held</small></td><td><span class="pill damp">held</span></td><td><span class="pill always">built</span></td></tr>
+<tr><td>Floors, uses, look</td><td><code>building</code> <small>new</small></td><td><span title="bodies">L11</span></td><td>Location.properties.floors + Location.properties.uses<br><small>a room's floor is in canon (W6); uses and look proposed</small></td><td><span class="pill damp">held</span></td><td><span class="pill damp">partial</span></td></tr>
+<tr><td>Rooms</td><td><code>building</code> <small>new</small></td><td><span title="bodies">L11</span></td><td>PART_OF relation<br><small>container and split held items (W6)</small></td><td><span class="pill damp">held</span></td><td><span class="pill damp">partial</span></td></tr>
+<tr><td>Changes to it</td><td><code>damage</code></td><td><span title="destruction">L13</span></td><td>Location.properties.damage</td><td><span class="pill always">applied</span></td><td><span class="pill always">built</span></td></tr>
+</tbody></table></div>
+<h3>Into each ontology file</h3>
+<div class="scroll"><table><thead><tr><th>File</th><th>From</th></tr></thead><tbody>
+<tr><td><code>scenes.jsonl</code></td><td><b>Stage manager</b>: Who is on stage, The set<br><b>Routine director</b>: Who talks with whom, through what</td></tr>
+<tr><td><code>relations.jsonl</code></td><td><b>Stage manager</b>: Who is on stage, The set, Beats and who led them<br><b>Routine director</b>: Positions in the room, Who talks with whom, through what, Formations and attention, Bonds and first meetings<br><b>Mega-scene director</b>: Crowds<br><b>Combat director</b>: Exchanges<br><b>Transport specialist</b>: Where things are, Ownership<br><b>Architect</b>: Rooms</td></tr>
+<tr><td><code>entities.jsonl</code></td><td><b>Stage manager</b>: The scale band<br><b>Mega-scene director</b>: A catastrophe's extent, Crowds<br><b>Combat director</b>: Abilities shown, What breaks<br><b>Transport specialist</b>: Vehicles and weapons<br><b>Architect</b>: Which building it is, Floors, uses, look, Floors, uses, look, Changes to it</td></tr>
+<tr><td><code>state-changes.jsonl</code></td><td><b>Stage manager</b>: Facts about where people are<br><b>Routine director</b>: Positions in the room, Feelings, Bonds and first meetings, Intent<br><b>Mega-scene director</b>: Journeys<br><b>Combat director</b>: Knock-backs and dodges, Injury and condition<br><b>Transport specialist</b>: Who holds, drives or rides, Who holds, drives or rides</td></tr>
+<tr><td><code>events.jsonl</code></td><td><b>Stage manager</b>: Beats and who led them<br><b>Mega-scene director</b>: Journeys, A catastrophe's extent<br><b>Combat director</b>: Exchanges</td></tr>
+</tbody></table></div>
 <!-- specialists:end -->
 
 <h2>Firing conditions</h2>

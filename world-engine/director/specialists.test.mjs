@@ -30,3 +30,31 @@ test('the docs are as the registry writes them', async () => {
   const run = spawnSync(process.execPath, [new URL('./specialists-doc.mjs', import.meta.url).pathname, '--check'], { encoding: 'utf8' });
   assert.equal(run.status, 0, `run node world-engine/director/specialists-doc.mjs: ${run.stdout}${run.stderr}`);
 });
+
+test('every state lands on something the ontology has (src/ground/ontology/types.ts), or says it needs a new field', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { STATE, target } = await import('./specialists.mjs');
+  const types = await readFile(new URL('../../src/ground/ontology/types.ts', import.meta.url), 'utf8');
+  const union = name => [...(types.match(new RegExp(`export type ${name} =([\\s\\S]*?");`))?.[1] ?? '').matchAll(/"([A-Za-z_]+)"/g)].map(m => m[1]);
+  const fields = name => [...(types.match(new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '').matchAll(/^\s+([a-zA-Z]+)\??:/gm)].map(m => m[1]);
+  const has = { scene: fields('Scene'), stateChange: fields('StateChange'), relation: union('RelationType'), event: union('EventType'), entity: union('EntityKind') };
+  assert.ok(has.relation.includes('PART_OF') && has.stateChange.includes('emotions'), 'the types were read');
+  for (const [id, states] of Object.entries(STATE)) for (const entry of states) for (const to of [entry.to, entry.also].filter(Boolean)) {
+    const { base, a } = target(to);
+    if (base === 'timeline') continue;
+    assert.ok(has[base], `${id} · ${entry.state}: ${base} is not an ontology record`);
+    assert.ok(has[base].includes(a) || entry.schema, `${id} · ${entry.state}: ${to} is not in types.ts (mark schema: true for a new field)`);
+  }
+});
+
+test('what the registry calls built, canon writes today', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { STATE, target } = await import('./specialists.mjs');
+  const canon = await readFile(new URL('../review/canon.mjs', import.meta.url), 'utf8');
+  const FILE = { scene: 'scenes.jsonl', stateChange: 'state-changes.jsonl', relation: 'relations.jsonl', entity: 'entities.jsonl', event: 'events.jsonl' };
+  for (const [id, states] of Object.entries(STATE)) for (const entry of states.filter(item => item.status === 'built' && item.to)) {
+    const { base, a } = target(entry.to);
+    assert.ok(canon.includes(`'${FILE[base]}'`), `${id} · ${entry.state}: canon writes no ${FILE[base]}`);
+    if (base === 'relation') assert.ok(canon.includes(`'${a}'`), `${id} · ${entry.state}: canon writes no ${a}`);
+  }
+});

@@ -329,6 +329,11 @@ observable is active.
 
 ## 6. The world back into the ontology
 
+What each specialist director keeps (positions, feelings, exchanges, holdings, buildings) and the path each takes into
+`ontology/*.jsonl` (world log, laws, smoother, ledger, gate, canon) is one registry, `world-engine/director/specialists.mjs`
+(`STATE`, `FLOW`, `GATES`), tested against `src/ground/ontology/types.ts` and against what canon writes today; the tables
+are in [next-steps.md](next-steps.md) A5.
+
 | Proposal from the world | When | Example |
 |---|---|---|
 | Speaker of a line | a dialogue card is played | only one person within earshot of the listener could have said it; EM² said "no one" |
