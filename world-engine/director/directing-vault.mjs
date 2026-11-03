@@ -54,7 +54,7 @@ function directorNote(id, questions) {
 
 function index() {
   return [yaml({ type: 'dashboard', aliases: ['Directing'], tags: ['directing'] }), HEAD, '',
-    '# Directing', '', 'The director as readers and specialists (docs/v2/next-steps.md A4–A5). Faculties read the text (the work model); directors decide (Jev). Every note here is written from the code: `world-engine/director/specialists.mjs` and `questions.mjs`. The visual plan with volume 1\'s density strip and gate preview: [summarizer-faculties.html](../summarizer-faculties.html). The gate over volume 1 (M3): [Gate](Gate.md) and its strip [gate-volume-1.html](gate-volume-1.html). What needs the user\'s decision: [Decisions needed](Decisions.md).', '',
+    '# Directing', '', 'The director as readers and specialists (docs/v2/next-steps.md A4–A5). Faculties read the text (the work model); directors decide (Jev). Every note here is written from the code: `world-engine/director/specialists.mjs` and `questions.mjs`. The visual plan with volume 1\'s density strip and gate preview: [summarizer-faculties.html](../summarizer-faculties.html). The gate over volume 1 (M3): [Gate](Gate.md) and its strip [gate-volume-1.html](gate-volume-1.html). What needs the user\'s decision: [Decisions needed](Decisions.md). How Jev picks on a map, tested: [Pick test](Pick-test.md).', '',
     '## Faculties', '', '| Faculty | Fired by | Read by | Status |', '|---|---|---|---|',
     ...Object.keys(FACULTIES).map(id => `| ${facultyLink(id, 'root')} | ${cell(firedBy(FACULTIES[id]))} | ${readers(id).map(entry => directorLink(entry.key, 'root')).join(', ')} | ${FACULTIES[id].status} |`), '',
     '## Directors', '', '| Director | Kind | Zoom | Plays | Status |', '|---|---|---|---|---|',

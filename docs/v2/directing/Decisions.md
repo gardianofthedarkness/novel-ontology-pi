@@ -133,3 +133,14 @@ Not answered yet: 3, 4, 5, 6, 9, 12–15, 17.
     reader's channel and the room or street could replace them), the 400 m ceiling on a picture and on the spots looked
     for (what the world streams in at once, an engineering limit), and the camera's own reaches when a beat has no
     scale. *Your call:* which to make referential next.
+
+## The pick test (2026-11-03)
+
+11, answered by a test ([Pick test](Pick-test.md), 64 Jev requests): words (floors, distance, which way on the map)
+94%, vectors 63%, the plain map 56%, thumbnails 50%. Height cannot be read from a top-down map; words carry it. The
+landmark question now says which way each building lies on the map, beside its floors and distance.
+
+19. **Words beat pictures for attributes, and pictures alone are weak at height.** *Your call:* give every Jev question
+    on a map (arrows, spots, landmarks) its options in words too, or test the arrows and spots the same way first.
+20. **Jev's confidence separates right from wrong** (0.83 against 0.33 with words). *Your call:* hold a pick under a
+    confidence line for system 2 or the review, as with the text questions.

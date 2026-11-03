@@ -830,6 +830,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // The mega-scene director (M6): a journey's destination found in the world (a placed place's box, a building
           // its name labels, else a landmark Jev picks on a map at the beat's zoom), and walked, run or leapt to (its roof
           // for leaps, flight, a wall).
+          // Which way a point lies on a north-up map (the picking test, 2026-11-03: Jev picked right 94% of the time with each
+          // building described in words, floors, distance and this, against 56% on the map alone).
+          const mapSide = (from, p) => { const dx = p[0] - from[0], dz = p[2] - from[2], v = Math.abs(dz) > Math.abs(dx) / 2.4 ? (dz < 0 ? 'upper' : 'lower') : '', h = Math.abs(dx) > Math.abs(dz) / 2.4 ? (dx > 0 ? 'right' : 'left') : ''; return [v, h].filter(Boolean).join(' ') || 'middle'; };
           const megaMove = async (person, journey, far) => {
             const roofward = ['leaps between roofs', 'up or along a wall', 'flight'].includes(journey.manner), here = at(positions[person][0]);
             const lotCentre = index => { const lot = world.lots[index]; return [(lot.i0 + lot.nx / 2) * CELL, (lot.floors ?? 1) * FLOOR, (lot.j0 + lot.nz / 2) * CELL]; };
@@ -843,7 +846,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
                 const played = await grow(scene, run), half = Math.max(40, ...candidates.map(entry => Math.hypot(entry.p[0] - here[0], entry.p[2] - here[2]))) + 20;
                 const map = await shoot(`${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-${person}-landmark`, [1024, 1024], { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], mover: person, topdown: { x: here[0], z: here[2], half }, spheres: candidates.map(entry => ({ x: entry.p[0], y: entry.p[1] + 4, z: entry.p[2], r: Math.max(4, half / 30), label: entry.letter, labelScale: Math.max(1, half / 40) })) });
                 const [pick] = await decide(`A top-down map of a city in a novel, north up, ${Math.round(half * 2)} m across; ${names.get(person) ?? person} at its middle. ${names.get(person) ?? person} goes to ${journey.to} (${journey.manner}, ${journey.distance.times} × ${journey.distance.referent}${journey.distance.of ? ` (${journey.distance.of})` : ''}). Lettered red spheres mark the buildings within reach, tallest first.`,
-                  [{ key: 'landmark', primitive: 'choice', instructions: `Which lettered landmark does ${names.get(person) ?? person} reach?`, options: [...candidates.map(entry => entry.letter), 'none'], optionHints: Object.fromEntries([...candidates.map(entry => [entry.letter, `${entry.letter}: ${lotName(entry.index)}, ${entry.floors} floors, ${Math.round(Math.hypot(entry.p[0] - here[0], entry.p[2] - here[2]))} m away`]), ['none', 'none of these']]) }], { images: { map: map.png } });
+                  [{ key: 'landmark', primitive: 'choice', instructions: `Which lettered landmark does ${names.get(person) ?? person} reach?`, options: [...candidates.map(entry => entry.letter), 'none'], optionHints: Object.fromEntries([...candidates.map(entry => [entry.letter, `${entry.letter}: ${lotName(entry.index)}, ${entry.floors} floors, ${Math.round(Math.hypot(entry.p[0] - here[0], entry.p[2] - here[2]))} m away, toward the ${mapSide(here, entry.p)} of the map`]), ['none', 'none of these']]) }], { images: { map: map.png } });
                 const chosen = candidates.find(entry => entry.letter === pick?.value);
                 landmark = { pick: pick?.value ?? null, confidence: pick?.confidence ?? null };
                 if (chosen) lot = chosen.index;

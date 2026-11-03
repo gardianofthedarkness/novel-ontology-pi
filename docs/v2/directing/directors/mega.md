@@ -53,7 +53,7 @@ Asked in `world-engine/director/director.mjs (megaMove, M6)`.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|
-| `landmark` | choice | Which lettered landmark does &lt;the mover&gt; reach? | `A`: &lt;a building: its name, floors, distance&gt;<br>`B`<br>`…`<br>`none`: none of these |
+| `landmark` | choice | Which lettered landmark does &lt;the mover&gt; reach? | `A`: &lt;a building: its name, floors, distance, which way on the map&gt;<br>`B`<br>`…`<br>`none`: none of these |
 
 ### route · proposed
 

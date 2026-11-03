@@ -384,7 +384,8 @@ world itself (destruction, the city's layout) is part of what is smoothed.
 4. **Distances from physics** ([physics-laws.md](physics-laws.md) §9): presence in the frame (L16), displacement as
    speed times story time (L17).
 5. **A controlled test of Jev's picking**: on cases with a known answer, does Jev pick more precisely with vectors drawn
-   in the picture, with semantic descriptions, or with small thumbnail references.
+   in the picture, with semantic descriptions, or with small thumbnail references. **Run 2026-11-03** (64 Jev requests,
+   `experiments/v2/pick-test.mjs`, [Pick test](directing/Pick-test.md)): words 94%, vectors 63%, plain 56%, thumbnails 50%.
 6. **Tunnelling and destruction as a smoothed state** (L18), then **the city in back-propagation** (L19): designed, built
    after W10.
 
