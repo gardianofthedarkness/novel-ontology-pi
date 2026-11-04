@@ -97,3 +97,9 @@ The director and the rehearsal read `faculties.json` when it is there and ask th
 
 Order for a fresh run: reading → segments (the tiler's own) → workspace and strands → **faculties** → terrain → starts →
 the run.
+
+**Made for W10 (2026-11-04, from e55eb87, nothing cached):** `v2-vol1-w10b/v2/faculties.json`, 107 units in 17 minutes,
+663 work-model requests (1.32M prompt and 0.23M completion tokens). The Generalist on every unit (375 moves, 330 facts,
+276 items, 1,589 talk, 55 breaks; 4 windows failed), Scale on 107 beats, Journeys on 36 units (81 journeys, 3 to a
+place id, the rest said in words), Choreography on 38 (83 exchanges), Conversation on 48 (1,023 channels, 137
+formations), Ambience on 42 (78 crowd reads).
