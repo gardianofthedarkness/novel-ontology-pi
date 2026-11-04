@@ -173,3 +173,21 @@ journeys on 79 units, choreography on 103, conversation on 119, ambience on 84. 
   20 for the generalist, 16 for the others one after another. With a stand-in answering after the same delay each time,
   80 units took 66 seconds against 229. The file is the same (each faculty's answers now kept in span order, so a
   rerun is identical).
+
+**Held is not on stage (8e9d69f; the user, 2026-11-04: "fix them").** 68 units had nobody started: spawning read the world
+script's raw `present` (only who speaks, acts or is addressed in the unit itself). The director's own cast, presence by
+physics, had the opposite fault: 225 of the 286 units are placed at the whole city and story time has four moments, so
+everyone once seen was held in every later unit (a median cast of 15, up to 32; the 107-unit build the same, 14 and 31),
+and the faculties were offered those casts. A unit's cast is now who is in view: given evidence there, named or described
+there while held, or given evidence there within the last 30 lines. Everyone held stays where they were (`held`); the
+director acts only on the cast, so nobody is moved or removed. Spawning starts the cast the director plays. Casts: a
+median of 4, at most 11; units with nobody started: 4 (before anyone has acted).
+
+Faculties asked again on these casts, with the parallel step: **11 minutes** (670 s) against 36, 1,340 requests (1.80M
+prompt, 0.30M completion tokens), none failed. Generalist 360 moves, 343 facts, 263 items, 1,613 talk, 55 breaks; journeys
+88 on 79 units, 34 to a place; choreography 90 exchanges on 103 units; conversation 1,038 channels on 119; ambience 78 on 84.
+
+Every faculty reads the original text where it fires (numbered lines with their kinds) and part of its unit's summary:
+the windows the whole summary and the memory carried from the units before; scale and journeys the summary and where;
+choreography the summary and where; conversation where alone; ambience where and the background crowd. None of the five
+has the memory, nor what the generalist's windows found.
