@@ -45,7 +45,7 @@ ride is a straight hop, so a long trip loads only its two ends. 1 km runs in abo
 20 km 42, 100 km about an hour by rail, 500 km under 4 hours. L5 checks a route against this time. The page may play it
 faster; the story clock (the replay, §4) keeps its time.
 
-## 4 · The objective replay (built, 2026-11-04)
+## 4 · The objective replay (to build)
 
 A replay of the whole world, not one strand's camera:
 
@@ -59,30 +59,14 @@ A replay of the whole world, not one strand's camera:
 Built on the run's page and world log (positions by moment, strands, forks); a page of its own beside World · Live and
 the Player.
 
-**Built (2026-11-04; the user: "build the objective timeline view mode in the design").** `play/replay` on the host,
-a button on World · Live's bar (`tools/pi-review/sim-replay.html`, data from `sim-replay.mjs` at `play/replay.json`):
-
-- **The whole world from above**: every building the run loaded, the book's named buildings outlined and named where
-  there is room (the terrain's building sites), north up; drag, wheel or two fingers to move and zoom, Fit for all of it.
-- **Story time as the axis**: every unit's start and every card in story order (the strands' layers, then reading
-  order), a slider, play and pause, ½× to 8×; within a moment each way is walked from start to end.
-- **The strands' paths, rough** (a point every 4 m and at the turns), each in its strand's colour; crowds left out (a
-  field, not people).
-- **Names to pick** in the People tab or by tapping a dot: the picked people bright with their whole way (still to come
-  dashed), everyone else faint; the Strands tab lights one strand's people.
-- **The places tab shrunk**: districts and streets only while it is open, drawn dashed; the **Buildings** tab keeps the
-  book's building list (tap one to fly there). On a phone the panel starts folded.
-
-It replays the book's newest kept run, so it shows W10 once W10 runs. Checked in headless Chrome on the first-quarter
-rehearsal (26 units, 38 people, 196 moments; desktop and phone, no page errors).
-
 ## Order
 
-1, 2, 3 and 4 are built. W10 next, so W10's report and replay show the forks.
+1, 2 and 3 are built. 4 next. W10 after it, so W10's report and replay show the forks.
 
 ## Decisions for the user
 
-1. ~~Which places tabs to shrink~~ Done in the replay itself: its Places tab is folded by default, its Buildings tab kept.
+1. **Which places tabs** to shrink: the places panel of World · Live, the Player's place list, or the main app's places
+   view.
 2. ~~The fork faculty's speeds~~ Decided: everyone runs; a virtual subway beyond what running beats.
 
 ## Rehearsed (unpaid, one pass, 2026-11-03)
