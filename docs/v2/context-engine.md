@@ -249,3 +249,42 @@ gate below was the first design and is kept only as the record of it.
 - Strands for the live view: from the cards and EM² as each scene passes the gate (cheap, may split a strand that a later
   scene joins), or the v1 strand questions where a borrowed cast links scenes?
 - Embeddings for retrieval: which model, and does the index live beside the Ladybug store?
+
+## 12. The cut bag: pre-film casts' notes routed to runtime casts (2026-11-04)
+
+The user, 2026-11-04: "This is what context engine should now do. It decides which pre film casts notes are provided to
+which runtime casts." There are no faculties any more: every job is a cast. The **pre-film casts** work from the text
+and the terrain before anything is filmed (the screenwriter, the script supervisor, the storyboard artist, blocking, the
+action director, dialogue coverage, background action, the art); the **runtime casts** film, cut by cut (the layout
+artist, the photographer, the key animator, the animation director and the episode director checking, the production
+desk). Physics is no cast: the path integral (the in-betweens), the smoothing along strands, the laws and presence held
+by inertia execute what the casts decide and push back through the laws.
+
+`src/v2/context/cutBag.ts`, as a studio's cut bag carried desk to desk:
+
+- **The bag.** `notesOfUnit` puts every pre-film cast's notes on a unit in one list, each note with who wrote it, its
+  kind, the line it rests on, who it is about, stated or implied and how sure: the script supervisor's summary, states
+  (how each starts and ends the unit), facts (indoors, a floor, a roof, near or apart, by a window…), moves, items, talk
+  and background; blocking's reach and journeys; the action director's blows; dialogue coverage's channels and
+  formations; background action's crowd; the screenwriter's sequence heading; the storyboard artist's shots.
+- **The routing table** (`ROUTES`): for each runtime task, from which cast, which kinds, where the note's line may stand
+  (in the card, in the cut, in the unit up to the lines being made, anywhere in the unit), about whom (the mover, the
+  cut's cast, anyone), how sure at least, how many. The layout artist gets where the cast is said or implied to be,
+  their states, formations, the heading and the crowd; the photographer the shot, the heading, who fights or talks to
+  whom in the cut and the reach; the key animator the mover's own moves, facts, items, journeys, blows and formations
+  and the unit's summary; the episode director's layout check and the animation director's key check the script
+  supervisor's sure facts on the cast (and the channels).
+- **Ranked and recorded.** `route` ranks a task's notes (sure, stated before implied, nearest the lines being made, about
+  the mover first); `notesSource` makes them a source of the engine, so the key animator's Jev questions carry them under
+  `notes` (cut after the scene's lines when over budget) and the manifest records every note kept and cut. The rule
+  tasks record the notes they were given with their versions (`workflow.json`).
+- **Implicit information** is the script supervisor's: everything it notes is stated or implied, with how sure. The
+  layout check holds the layout to the sure ones and retakes it to the nearest spot that agrees (only where one exists);
+  the key check records the ones the keys broke. Where the text says nothing, physics holds: people stay where they are
+  and things stay with whoever holds them; physics never invents an implied fact.
+
+First quarter, stand-in rehearsal (59f7c9c against e677904): 145 of 146 cuts given notes (about 4 each to the layout
+artist and to the photographer); the laws as before (L6 2, L9 1, L10 1), L14 weighed gone, jumps 9 → 7, 236 moves
+(222). The layout check found 35 places where the layout broke a sure note; most had no spot near that agreed (a window
+no spot had), which wasted retakes, so since 51afd5b a fault no cast can fix passes at once (rehearsed again: the same
+laws and moves, 27 such faults, 28 cuts retaken and 7 passed with faults; the key check found 9 notes the keys broke).
