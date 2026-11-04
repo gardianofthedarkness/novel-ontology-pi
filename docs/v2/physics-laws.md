@@ -141,6 +141,14 @@ telepathy: the parties may be apart; the remote party is not present here), **pu
 
 **Open:** the kind is asked of whom: Jev per card, or decided by rule where the text says (a phone, a letter)?
 
+**One floor (the user, 2026-11-04: "room level conversation stay at one floor").** A face-to-face conversation stands
+on one floor. Who speaks to whom is the reading's, line by line (as the check reads it), with those the card marks
+speaking or addressed. The floor is its anchor's: the one of them a fact of the text placed in this container (the
+surest), else its surest speaker. It is settled after the card's own moves, where people end up, and its people are
+held to its last line against the background's drift. Found in the paid pilot: a speaker went up to a roof after her
+listener had been brought near on the floor below, and the background then ran the listener off mid-conversation.
+Unpaid rehearsal of scenes 1–13: 17 breaks before, 0 after.
+
 ### L9 · Actors are there
 
 **Rule.** An action's actors are present where it happens. An actor with no position today is skipped silently; under
@@ -151,6 +159,25 @@ the law it is a **presence proposal** (the script missed them) or the card is fl
 **Rule.** A target is lawful only if the walk reaches it under the mover's ways (L12), within L5's time. A target no
 walk reaches is amended to the nearest reachable spot in the same direction (or the same building, the same floor),
 or rejected with why: off the walk where they stand, no door, no stair to that floor, outside the world streamed in.
+
+**Why walks fail (the paid pilot's seven, 2026-11-04;** `world-engine/director/why-walk.mjs` **rebuilds the walk graph
+where each failed and draws it floor by floor, with a 3D still of the building).** None was a building without a door
+or stair. They fall in four kinds:
+
+| Kind | Holds | What happened |
+|---|---|---|
+| Already there | 3 | The start is itself one of the targets (open ground round the building they run to). The same line's journey is played at two overlapping cards (the dialogue card and the action card inside it); the second finds them there, and a path of one cell counts as not moved. |
+| A thing or a crowd walked as a person | 3 (one also already there) | The reading's slots include a weapon (a thrown dart, "flying" to a dartboard) and a crowd ("a frightening crowd" running into the street). The engine plays every slot as a body. |
+| Beyond the walk's window | 2 | The walk graph is the 384 m square round where the person stands; the journey's place was 1.5 km away (the stairs down in this scene read as the underpass of a later scene, which spawning put at the city's edge, as open ground with no underground). The city has a way; the window could not see it. |
+
+What would answer each, for the user to decide: a journey already at its target is "already there", and a line's
+journey plays once per container; slots that are things go to the items (a throw), crowds to the crowd field; a
+journey beyond the window walks in legs as arrivals do (and rides the virtual transit by `tripTime`), while L19's
+floating places would pull a place the strand keeps reaching this way toward it.
+
+Also from this: the engine numbers nodes as first asked for, so a run's node ids hold only within it. A failed walk now
+keeps where it was in metres (`replay.at`), and the L18 blast smoother reads those (it had read ids through the page's
+grid, which does not match them).
 
 ### L11 · Bodies
 

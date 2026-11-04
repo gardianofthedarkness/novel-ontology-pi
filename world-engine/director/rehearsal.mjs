@@ -14,6 +14,9 @@ import { direct, standIn } from './director.mjs';
 import { worldLog } from '../log/world-log.mjs';
 import { REVISION_LIMIT, smoothRun } from '../smoother/smoother.mjs';
 import { smoothBlasts } from '../smoother/blasts.mjs';
+import { checkAll } from '../laws/laws.mjs';
+import { playedLine, speakersOf } from '../laws/check-run.mjs';
+import { segmentWorld } from './segments.mjs';
 
 /**
  * A work model answering every summarizer request by rule: the scene digest (everyone walking or standing, a few in
@@ -96,7 +99,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const started = Date.now();
     const { record, data } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), log: () => {} });
     const smoothedNow = smoothedOf({ run: `rehearsal-${pass}`, record, page: data, spawn, strands, reading });
+    // The laws as check-run reads them (L1–L20 on the line as played), from this pass's page and segment files.
+    const segFolder = record.bySegment ? join(world, 'segments') : world, segScript = JSON.parse(await readFile(join(segFolder, 'script.json'), 'utf8')), segStrands = JSON.parse(await readFile(join(segFolder, 'strands.json'), 'utf8'));
+    const lawReading = record.bySegment ? segmentWorld({ reading, script: segScript, spawn: null })?.reading ?? reading : reading;
+    const lawsNow = checkAll({ played: playedLine({ record, page: data, reading: lawReading }), strands: segStrands, script: segScript, speakers: speakersOf(lawReading), abilities: { version: 1, people: {} } });
     passes.push({ pass, minutes: Math.round((Date.now() - started) / 6000) / 10, ...measure(record), started: { fromSmoothing: record.revisions.filter(entry => entry.applied).length, held: record.revisions.filter(entry => !entry.applied).length }, smoothing: smoothedNow.report });
+    passes.at(-1).broken = Object.fromEntries(lawsNow.map(law => [law.law, law.violations.length]));
+    passes.at(-1).brokenExamples = Object.fromEntries(lawsNow.filter(law => law.violations.length).map(law => [law.law, law.violations.slice(0, 20)]));
     smoothing = smoothedNow.smoothed;
     // L18: the run's blasts smoothed (when and how big), applied so on the next pass.
     blasts = smoothBlasts({ page: data, record });

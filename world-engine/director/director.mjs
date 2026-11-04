@@ -274,7 +274,10 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       // A walk that fails says so with a code (W0: NO_TARGET, OFF_WALK, NO_PATH) and the least that replays it: the seed's
       // key, where they stood, the first targets and how they went (with the scene's place, enough to solve it again).
       const walk = (scene, key, from, targets, how) => {
-        walk.failed = null; walk.code = null; walk.replay = { key, from: from[0], targets: targets.slice(0, 8), how };
+        // The engine numbers nodes as first asked for, so the ids hold only within this run: the replay also keeps where
+        // they stood and the first target in metres (why-walk.mjs and the L18 blast smoother read those after the run).
+        const metres = id => { const p = W.nodePos(world, id); return { x: p.x, y: p.y, z: p.z }; };
+        walk.failed = null; walk.code = null; walk.replay = { key, from: from[0], targets: targets.slice(0, 8), how, at: { from: metres(from[0]), ...(targets.length ? { to: metres(targets[0]) } : {}) } };
         if (!targets.length) { walk.failed = 'no place to stand there'; walk.code = 'NO_TARGET'; return null; }
         const field = E.solve(scene.placeId, key, targets, how, from[0]), built = E.graphOf(W.nodePos(world, from[0]));
         const path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
@@ -680,7 +683,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           }
         }
         // Conversation and blocking (M8): the channels, formations and attention of this scene's talk.
-        const channelAt = new Map(), formationAt = new Map(), inFormation = new Set();
+        const channelAt = new Map(), formationAt = new Map(), inFormation = new Set(), talkingUntil = new Map();
         if (gate && digestMeter) {
           const spans = firedSpans('conversation');
           if (spans.length) {
@@ -829,7 +832,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             };
             for (const who of Object.keys(positions)) {
               const doing = routine(who);
-              const talking = card.people.some(person => person.id === who && person.how.some(how => how === 'speaks' || how === 'addressed'));
+              const talking = card.people.some(person => person.id === who && person.how.some(how => how === 'speaks' || how === 'addressed')) || (talkingUntil.get(who) ?? -1) >= (sentenceAt.get(card.sentences[0]) ?? Infinity);
               if (touched.has(who) || talking || inFormation.has(who) || !PACE[doing]) continue;
               const path = onward(who, positions[who], doing, doing === 'strolling' ? bound : null);
               if (path) moveTo(who, path, doing === 'running' ? 'run' : 'walk', `background: ${doing}`, { quiet: true });
@@ -872,14 +875,24 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // Actors are there (L9): someone the card says acts or speaks, with no place in the scene, is held (a presence the
           // script may have missed), never played.
           for (const person of card.people.filter(entry => !positions[entry.id] && entry.how.some(how => how === 'acts' || how === 'speaks'))) (cardRecord.laws ??= []).push(pins.remote[`${scene.id}|${person.id}`] ? { law: 'L9', who: person.id, verdict: 'ok', why: 'remote (pinned by the review)' } : { law: 'L9', who: person.id, verdict: 'held', why: 'acts or speaks, but is not present' });
-          if (card.kind === 'dialogue') {
-            // Talk needs nearness, by its kind (L6; the user, 2026-11-02: the kind asked of Jev): where someone spoken to stands
-            // apart from the first speaker, Jev says what kind of talk it is. Face to face (live, group), they come within
-            // speaking distance (2–4 m) on the speaker's floor; remote, everyone stays where they are; public, those within
-            // earshot (25 m, the same floor) hear it where they stand, and anyone beyond is held.
-            const speaker = card.people.find(person => positions[person.id] && person.how.includes('speaks'))?.id;
-            const gap = id => { const a = at(positions[speaker][0]), b = at(positions[id][0]); return { metres: Math.hypot(a[0] - b[0], a[2] - b[2]), floors: Math.round(Math.abs(a[1] - b[1]) / FLOOR) }; };
-            const apart = speaker ? card.people.filter(entry => entry.id !== speaker && positions[entry.id] && entry.how.includes('addressed')).map(entry => entry.id).filter(id => gap(id).metres > 5 || gap(id).floors > 0) : [];
+          // Talk needs nearness, by its kind (L6; the user, 2026-11-02: the kind asked of Jev; 2026-11-04: "room level
+          // conversation stay at one floor"). Who speaks to whom is the reading's, line by line (as L6 reads it), with those the
+          // card marks speaking or addressed. The conversation stands on one floor: its anchor's, the one of them a fact of the
+          // text placed this container (the surest), else its surest speaker. It is settled after the card's own moves, where
+          // they end up (the pilot: a speaker went up to the roof after her listener was brought near on the floor below), and
+          // its people are held to its last line against the background's drift. Face to face (live, group), everyone in it
+          // comes within speaking distance (2–4 m) on the anchor's floor; remote, everyone stays where they are; public, those
+          // within earshot (25 m, the same floor) hear it where they stand, and anyone beyond is held.
+          const talkNear = async () => {
+            if (card.kind !== 'dialogue') return;
+            const roles = card.sentences.map(id => reading.roles?.[id]).filter(role => role?.kind === 'spoken' && role.who?.id && positions[role.who.id]);
+            const members = [...new Set([...roles.flatMap(role => [role.who.id, ...(role.to?.id && positions[role.to.id] ? [role.to.id] : [])]), ...card.people.filter(person => positions[person.id] && person.how.some(how => how === 'speaks' || how === 'addressed')).map(person => person.id)])];
+            if (members.length < 2) return;
+            const speaks = who => Math.max(0, ...roles.filter(role => role.who.id === who).map(role => role.who.confidence ?? 0.5), card.people.some(person => person.id === who && person.how.includes('speaks')) ? 0.5 : 0);
+            const placedBy = who => { const move = [...sceneRecord.cards.flatMap(entry => entry === cardRecord ? [] : entry.moves ?? []), ...cardRecord.moves].filter(entry => entry.person === who && entry.moved).at(-1); const sure = /^implied:.*?(\d{1,3})%\)/.exec(String(move?.why ?? '')); return sure ? Number(sure[1]) / 100 : 0; };
+            const anchor = members.reduce((a, b) => (placedBy(b) > placedBy(a) || (placedBy(b) === placedBy(a) && speaks(b) > speaks(a)) ? b : a));
+            const gap = id => { const a = at(positions[anchor][0]), b = at(positions[id][0]); return { metres: Math.hypot(a[0] - b[0], a[2] - b[2]), floors: Math.round(Math.abs(a[1] - b[1]) / FLOOR) }; };
+            const apart = members.filter(id => id !== anchor && (gap(id).metres > 5 || gap(id).floors > 0));
             let kind = 'live';
             const pinnedKind = pins.kind[card.id] ?? card.sentences.map(id => pins.kind[`line:${id}`]).find(Boolean);
             const digestKind = read(card) ? digestIn(dg.talk, card)[0]?.kind ?? null : null;
@@ -889,19 +902,21 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             else if (channel) { kind = DG.CHANNELS[channel.channel]; cardRecord.talk = { kind, by: 'conversation', channel: channel.channel }; }
             else if (digestKind) { kind = digestKind; cardRecord.talk = { kind, by: 'digest' }; }
             else if (apart.length && calls < budget) {
-              const others = Object.keys(positions).filter(id => id !== speaker).map(id => ({ name: names.get(id) ?? id, ...gap(id) }));
-              const { replies } = await ask(decide, M.dialogueKindMode, { scene: { id: scene.id, place: placeName }, lines: card.sentences.map(line), speaker: names.get(speaker) ?? speaker, people: others }, null);
+              const others = Object.keys(positions).filter(id => id !== anchor).map(id => ({ name: names.get(id) ?? id, ...gap(id) }));
+              const { replies } = await ask(decide, M.dialogueKindMode, { scene: { id: scene.id, place: placeName }, lines: card.sentences.map(line), speaker: names.get(anchor) ?? anchor, people: others }, null);
               const said = replies.find(reply => reply.key === 'kind');
               kind = String(said?.value ?? 'live'); cardRecord.talk = { kind, confidence: said?.confidence ?? null };
             }
+            if (cardRecord.talk) cardRecord.talk.anchor = anchor;
+            if (kind !== 'remote') { const last = sentenceAt.get(card.sentences.at(-1)) ?? 0; for (const who of members) talkingUntil.set(who, Math.max(talkingUntil.get(who) ?? -1, last)); }
             for (const id of apart) {
               if (kind === 'remote') { (cardRecord.laws ??= []).push({ law: 'L6', who: id, verdict: 'ok', why: 'remote: stays where they are' }); continue; }
               if (kind === 'public') { const { metres, floors } = gap(id); (cardRecord.laws ??= []).push(metres <= 25 && !floors ? { law: 'L6', who: id, verdict: 'ok', why: 'public: within earshot' } : { law: 'L6', who: id, verdict: 'held', why: `public, but ${Math.round(metres)} m away${floors ? `, ${floors} floors apart` : ''}: out of earshot` }); continue; }
-              const a = at(positions[speaker][0]), { nodes } = around(a[0], a[2], 8), ring = nodes.filter(node => Math.abs(node.y - a[1]) < 1 && Math.hypot(node.x - a[0], node.z - a[2]) >= 2 && Math.hypot(node.x - a[0], node.z - a[2]) <= 4).map(node => node.id);
-              moveTo(id, walk(scene, `${scene.id}|${card.id}|${id}|talk`, positions[id], ring, 'walk'), 'walk', `spoken to by ${names.get(speaker)}`);
-              if (pins.meet.some(meet => meet.scene === scene.id && [meet.who, meet.to].includes(id) && [meet.who, meet.to].includes(speaker))) cardRecord.moves.at(-1).pinned = true;
+              const a = at(positions[anchor][0]), { nodes } = around(a[0], a[2], 8), ring = nodes.filter(node => Math.abs(node.y - a[1]) < 1 && Math.hypot(node.x - a[0], node.z - a[2]) >= 2 && Math.hypot(node.x - a[0], node.z - a[2]) <= 4).map(node => node.id);
+              moveTo(id, walk(scene, `${scene.id}|${card.id}|${id}|talk`, positions[id], ring, 'walk'), 'walk', `spoken to by ${names.get(anchor) ?? anchor}`);
+              if (pins.meet.some(meet => meet.scene === scene.id && [meet.who, meet.to].includes(id) && [meet.who, meet.to].includes(anchor))) cardRecord.moves.at(-1).pinned = true;
             }
-          }
+          };
           // Each person the card moves. Where the digest read the card, its moves: a step or a move nearby played by rule
           // (toward, away from or with someone, else on along their way), going elsewhere asked of Jev on the pictures,
           // following someone after they have gone. Elsewhere, Jev's text question first, as before.
@@ -1154,7 +1169,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           // agrees with is recorded under L14. Then the background's routine, the crowd, and the things people carry.
           await fight();
           await block();
-          if (dg) { factsDue(); crowdCard(card); drift(); carry(); }
+          if (dg) factsDue();
+          await talkNear();
+          if (dg) { crowdCard(card); drift(); carry(); }
           if (read(card) && digestIn(dg.breaks, card).some(entry => entry.sure >= 0.7)) { cardRecord.breaks = true; cardRecord.breaksSaid = digestIn(dg.breaks, card).map(entry => entry.what); }
           // Destruction (docs/v2/world-engine-redesign.md §3): a card the text says breaks something is asked where it hits (lettered
           // red spheres on the world as played) and how big (spheres of 4, 8, 16 and 32 m from two sides); the blast is applied

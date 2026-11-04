@@ -31,10 +31,12 @@ export function smoothBlasts({ page, record }) {
       const sizes = Object.entries(hit.sizes ?? { [hit.across]: 1 }).map(([across, p]) => ({ r: Number(across) / 2, p: Math.max(1e-3, p) }));
       const sure = Math.min(0.99, Math.max(0.5, hit.sure || 0.5)), before = told;
       // Failed walks on earlier cards of the container, each its card and how near its line passes the blast.
-      const failed = decode ? cards.slice(0, told).flatMap((other, k) => (other.moves ?? []).filter(move => !move.moved && ['NO_PATH', 'OFF_WALK'].includes(move.code) && move.replay?.from !== undefined && move.replay?.targets?.length).map(move => {
-        const from = decode(move.replay.from), to = decode(move.replay.targets[0]);
+      // Where the walk was, in metres as the run kept it (replay.at); the engine's node ids hold only within its run, so a
+      // replay without them (runs before 2026-11-04) is read through the page's grid only as a fallback.
+      const failed = cards.slice(0, told).flatMap((other, k) => (other.moves ?? []).filter(move => !move.moved && ['NO_PATH', 'OFF_WALK'].includes(move.code) && (move.replay?.at?.to || (decode && move.replay?.from !== undefined && move.replay?.targets?.length))).map(move => {
+        const from = move.replay.at?.from ?? decode(move.replay.from), to = move.replay.at?.to ?? decode(move.replay.targets[0]);
         return { card: k, gap: toSegment(hit.centre, from, to), ratio: 1 / (1 - sureOf(move)) };
-      })) : [];
+      }));
       // The posterior over (card, size), in logs.
       const scores = [];
       for (let t = 0; t <= told; t++) for (const size of sizes) {

@@ -22,3 +22,14 @@ test('walks that failed through its sphere before it was told move it earlier, a
   assert.ok(blast.earlier > 0.5);
   assert.equal(blast.evidence, 2);
 });
+
+test('a failed walk is read where the run kept it in metres (replay.at), not through node ids, which hold only within a run', () => {
+  // The engine's ids are numbered as first asked for: here they point nowhere near the blast, and the metres are what count.
+  const failed = { person: 'p', moved: false, code: 'NO_PATH', why: 'digest: nearby toward q (walk, stated, 90%)', replay: { from: 7, targets: [9], at: { from: { x: 90, y: 0, z: 1 }, to: { x: 110, y: 0, z: 1 } } } };
+  const record = { scenes: [{ scene: 's1', cards: [{ card: 'action:c1', moves: [failed] }, { card: 'action:c2', moves: [] }, told({ 4: 0.1, 8: 0.6, 16: 0.25, 32: 0.05 })] }] };
+  const [blast] = smoothBlasts({ page: { world }, record });
+  assert.equal(blast.evidence, 1);
+  assert.equal(blast.atCard, 'action:c1');
+  const none = smoothBlasts({ page: null, record });
+  assert.equal(none[0].evidence, 1, 'no page needed when the run kept metres');
+});
