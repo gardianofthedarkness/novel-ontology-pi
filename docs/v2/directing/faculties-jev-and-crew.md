@@ -167,6 +167,24 @@ next run, never the one in progress. **Strands order the nodes**: a cut waits fo
 with no one in common run side by side. The **production desk** (the host, the run manager) schedules the ready tasks,
 keeps the Jev budget, counts retakes per cut and per role, and draws the timeline.
 
+**Built** (world-engine/director/workflow.mjs, wired into director.mjs; each run writes `runs/<run>/workflow.json`, its
+summary in run.json's `workflow`). Every storyboard cut is a node; at its first card the layout (the cast as they stand)
+and the photographer's frame (centred on the cast, as wide as the shot size, never cutting anyone off) are published and
+the layout check runs: two on one cell step apart (L11), a shot size that cannot hold its cast tightens on the card's
+lead; each fault retaken automatically, at most twice. The key animator's pictures are the frame (a still camera's: a
+pan, track, crane or handheld camera follows), its arrows say which way leaves the frame, and its spots are the ones in
+the frame plus one "leaves the frame toward …"; a "none" goes on to the map along the arrow as before. After the
+in-betweens the reframe holds, follows (a camera that moves), lets someone exit frame, or splits the cut where the one
+who left acts or speaks again in it (a storyboard retake, `cut_…~2`). The camera is the frame's. The key check (L6, L10)
+and the rush check (every law the card holds) record their faults but cannot retake yet, so faults pass with faults.
+Still to do: key retakes (the keys asked again with the failed law, positions rolled back), cuts of different waves
+played side by side, and the debugger's timeline of tasks.
+
+First quarter, stand-in rehearsal (e677904 against 909265b): laws unchanged (L6 2, L9 1, L10 1), jumps 11 → 9, 222
+moves (212); 146 cuts in 90 waves (cuts in one wave share no one), 12 layout retakes (8 two on one cell, 6 tightened
+shots), all passed; reframes 139 held, 21 exits frame, 6 followed, 5 new cuts; 1 key check and 5 rush checks passed with
+faults (L14 3, L6 2, L9 1).
+
 Sources: [Mynavi, anime workflow](https://news.mynavi.jp/article/20170405-actf2017_03/2);
 [MHLW, animation production](https://www.mhlw.go.jp/content/11901000/001152417.pdf);
 [ShotGrid, pipeline steps](https://help.autodesk.com/cloudhelp/ENU/SG-Producer/files/pr-scheduling-tasks/SG_Producer_pr_scheduling_tasks_pr_tasks_pipeline_steps_html.html);
