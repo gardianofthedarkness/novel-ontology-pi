@@ -31,6 +31,28 @@ export function firedSpans(gate, scene, faculty) {
 }
 
 /**
+ * The place a journey names in words, when one offered fits: its id as given, a label the same as the words, or a label
+ * within the words or the words within it (two characters at least); a place near the unit first, then the longest label.
+ * Null when none fits (the words stay, the engine finds a landmark).
+ */
+export function placeOfWords(words, places) {
+  const said = String(words ?? '').trim();
+  if (!said) return null;
+  if (places.some(place => place.id === said)) return said;
+  const fits = places.filter(place => place.label && place.label.length >= 2 && (place.label === said || said.includes(place.label) || (said.length >= 2 && place.label.includes(said))));
+  fits.sort((a, b) => (b.label === said) - (a.label === said) || (b.near ? 1 : 0) - (a.near ? 1 : 0) || b.label.length - a.label.length);
+  return fits[0]?.id ?? null;
+}
+
+/** A journey with its places as ids where the words fit one offered (placeOfWords); the words kept as `said`. */
+export function placedJourney(journey, places) {
+  const id = words => placeOfWords(words, places) ?? words, said = {};
+  for (const key of ['from', 'to']) if (journey[key] && id(journey[key]) !== journey[key]) said[key] = journey[key];
+  const via = (journey.via ?? []).map(id);
+  return { ...journey, from: journey.from ? id(journey.from) : journey.from, to: id(journey.to), via, ...(Object.keys(said).length ? { said } : {}) };
+}
+
+/**
  * Every faculty over a reading. `text`: sentence id → its text; `work`: a work model (cached by the caller); `strandsOf`:
  * (script) → the strands file (segments.mjs strandsFile with the TypeScript pieces bound); `pins`: the review's presence
  * pins ({ "unit|who": true | false }); `from`/`to`: unit ids to read (all when absent). Returns { units, usage }.
@@ -57,7 +79,25 @@ export async function readFaculties({ reading: given, script, text, work, strand
   const bornAt = new Map(), born = (place, r) => { for (let id = place, guard = 0; id && guard < 12; id = script.places?.[id]?.parent ?? null, guard++) if (!(bornAt.get(id) <= r)) bornAt.set(id, r); };
   for (const entry of world.script.scenes) if (entry.place) born(entry.place, rank.get(entry.id));
   const nominated = id => !String(id).startsWith('unnamed:') && !script.places?.[id]?.unnamed;
-  const placesAt = scene => Object.entries(script.places ?? {}).filter(([id]) => nominated(id) || (bornAt.get(id) ?? Infinity) <= rank.get(scene.id)).map(([id, place]) => ({ id, label: place.label ?? names.get(id) ?? id, scale: place.scale ?? null }));
+  // Near a unit, offered first and marked: its own place, the places of the units either side, each with its parent, its
+  // siblings and its children in the tree (W10b: 14 of 81 journeys said in words a place the tree has, near where they were).
+  const parentOf = id => script.places?.[id]?.parent ?? null, childrenOf = new Map();
+  for (const [id, place] of Object.entries(script.places ?? {})) if (place.parent) (childrenOf.get(place.parent) ?? childrenOf.set(place.parent, []).get(place.parent)).push(id);
+  const nearOf = scene => {
+    const at = index.get(scene.id), near = new Set();
+    for (const id of [ids[at - 1], scene.id, ids[at + 1]].map(unit => unit && own.get(unit)?.place).filter(Boolean)) {
+      near.add(id); const parent = parentOf(id);
+      if (parent) { near.add(parent); for (const sibling of childrenOf.get(parent) ?? []) near.add(sibling); }
+      for (const child of childrenOf.get(id) ?? []) near.add(child);
+    }
+    return near;
+  };
+  const placesAt = scene => {
+    const near = nearOf(scene);
+    return Object.entries(script.places ?? {}).filter(([id]) => nominated(id) || (bornAt.get(id) ?? Infinity) <= rank.get(scene.id))
+      .map(([id, place]) => ({ id, label: place.label ?? names.get(id) ?? id, scale: place.scale ?? null, ...(near.has(id) ? { near: true } : {}) }))
+      .sort((a, b) => (b.near ? 1 : 0) - (a.near ? 1 : 0));
+  };
 
   const meters = Object.fromEntries(['generalist', 'scale', 'journeys', 'choreography', 'conversation', 'ambience'].map(id => [id, DG.metered(work)]));
   const units = {}, chosen = scenes.slice(first, last + 1);
@@ -78,7 +118,7 @@ export async function readFaculties({ reading: given, script, text, work, strand
     }
     const fired = faculty => firedSpans(gate, scene, faculty);
     const journeys = fired('journeys'), choreography = fired('choreography'), conversation = fired('conversation'), ambience = fired('ambience');
-    if (journeys.length) unit.journeys = await DG.journeysOf(meters.journeys, { ...base, spans: journeys, places: placesAt(scene) });
+    if (journeys.length) { const places = placesAt(scene); unit.journeys = (await DG.journeysOf(meters.journeys, { ...base, spans: journeys, places })).map(journey => placedJourney(journey, places)); }
     if (choreography.length) unit.choreography = await DG.exchangesOf(meters.choreography, { ...base, spans: choreography });
     if (conversation.length) unit.conversation = await DG.talkOf(meters.conversation, { ...base, spans: conversation });
     if (ambience.length) unit.ambience = await DG.crowdOf(meters.ambience, { ...base, spans: ambience });

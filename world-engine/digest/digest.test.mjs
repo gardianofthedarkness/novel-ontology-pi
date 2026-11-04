@@ -33,7 +33,19 @@ test('a scene digested: the scene first, then its windows with it; a failed wind
   const result = await digestScene(work, { scene: { id: 'x', sentences }, line: id => `line ${id}`, kind: () => 'narration', people: [{ id: 'a', name: 'A' }] });
   assert.equal(asked[0], 'scene'); assert.equal(result.digest.people[0].doing, 'strolling');
   assert.equal(result.moves.length, 30); assert.deepEqual(result.failed, ['window 2']); assert.equal(result.covered.length, 30);
-  assert.equal(work.usage.requests, 3); assert.equal(work.usage.failed, 1); assert.equal(work.usage.prompt, 30, "the failed request used nothing");
+  assert.equal(work.usage.requests, 4, 'the failed window asked again once'); assert.equal(work.usage.failed, 2); assert.equal(work.usage.prompt, 30, "the failed requests used nothing");
+});
+
+test('an unreadable reply is asked again once with more room, and the second answer kept', async () => {
+  const { ask } = await import('./digest.mjs');
+  const rooms = [];
+  const work = { async generate({ maxTokens }) { rooms.push(maxTokens); return rooms.length === 1 ? '{"summary": "cut off' : '{"summary": "whole"}'; } };
+  assert.deepEqual(await ask(work, { maxTokens: 1600, prompt: '' }), { summary: 'whole' });
+  assert.deepEqual(rooms, [1600, 2400]);
+  rooms.length = 0;
+  const never = { async generate({ maxTokens }) { rooms.push(maxTokens); throw new Error('down'); } };
+  assert.equal(await ask(never, { maxTokens: 300, prompt: '' }), null);
+  assert.deepEqual(rooms, [300, 450], 'once again, not more');
 });
 
 test('facts are regions: indoors, a floor, near someone, by a window; the best spot fits more and is near', () => {

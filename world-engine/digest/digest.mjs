@@ -58,6 +58,15 @@ const BODY = /^(左|右|双)?(手|手指|指尖|手掌|手臂|胳膊|脚|腿|头
 export const isThing = (name, people = []) => !!name && !BODY.test(name) && !/[A-Za-z]/.test(name) && !people.includes(name);
 
 const parsed = text => { try { return JSON.parse(String(text).replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { return null; } };
+/**
+ * One request for a JSON answer, asked again once with half as much room again when the reply is unreadable or the request
+ * fails (W10b: 4 of 663 summaries came back empty, from units of 16 to 63 sentences, so not their length). Null when both
+ * fail. The first ask is the same request as before, so a cache keeps its answers.
+ */
+export async function ask(work, request) {
+  const once = room => work.generate(room === request.maxTokens ? request : { ...request, maxTokens: room }).then(parsed).catch(() => null);
+  return (await once(request.maxTokens)) ?? once(Math.round((request.maxTokens ?? 1000) * 1.5));
+}
 const sure = value => Math.max(0, Math.min(1, Number(value) || 0));
 const oneOf = (value, list, fallback = null) => (list.includes(String(value)) ? String(value) : fallback);
 
@@ -139,10 +148,10 @@ export async function digestScene(work, { scene, line, kind, people, place = '',
   const ids = people.map(person => person.id), cast = people.map(person => ({ id: person.id, name: person.name }));
   const numbered = list => list.map(id => ({ id, kind: kind(id) ?? null, text: line(id) }));
   const failed = [];
-  const sceneReply = await work.generate({ system: SCENE_SYSTEM, maxTokens: 1600, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+  const sceneReply = await ask(work, { system: SCENE_SYSTEM, maxTokens: 1600, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
     task: 'Summarize this scene for staging. Reply in this JSON shape.', shape: SCENE_SHAPE,
     scene: { id: scene.id, place, when }, before: memory ?? 'nothing yet: the first scene', people: cast, sentences: numbered(scene.sentences),
-  }) }).then(parsed).catch(() => null);
+  }) });
   if (!sceneReply) failed.push('scene');
   const digest = checkScene(sceneReply, { people: ids });
   const windows = windowsOf(scene.sentences, cardOf);
@@ -151,11 +160,11 @@ export async function digestScene(work, { scene, line, kind, people, place = '',
   const one = async n => {
     const own = windows[n], first = scene.sentences.indexOf(own[0]), last = first + own.length;
     const before = scene.sentences.slice(Math.max(0, first - CONTEXT), first), after = scene.sentences.slice(last, last + CONTEXT);
-    const reply = await work.generate({ system: WINDOW_SYSTEM, maxTokens: 3000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+    const reply = await ask(work, { system: WINDOW_SYSTEM, maxTokens: 3000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'For each sentence of the passage (not the context), list what it does. A sentence may give several entries, or none. Reply in this JSON shape; empty lists where nothing applies.', shape: WINDOW_SHAPE,
       scene: { id: scene.id, place, when, summary: digest.summary, where: digest.where, background: digest.background, people: digest.people },
       before: memory ?? null, people: cast, context: { before: numbered(before), after: numbered(after) }, passage: numbered(own),
-    }) }).then(parsed).catch(() => null);
+    }) });
     if (!reply) failed.push(`window ${n + 1}`);
     results[n] = checkWindow(reply, { people: ids, sentences: own });
   };
@@ -211,11 +220,11 @@ export async function scaleBeats(work, { scene, beats, line, kind, people, diges
   let next = 0;
   const one = async n => {
     const beat = beats[n];
-    const reply = await work.generate({ system: SCALE_SYSTEM, maxTokens: 300, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+    const reply = await ask(work, { system: SCALE_SYSTEM, maxTokens: 300, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'What does this beat take in (a referent and how many of it), from what angle and whose view, how far do its moves go (a referent), and how long does it last? Reply in this JSON shape.', shape: SCALE_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null, summary: digest?.summary ?? null }, beat: { type: beat.type, lead: beat.lead }, people: people.map(person => ({ id: person.id, name: person.name })),
       lines: beat.sentences.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
-    }) }).then(parsed).catch(() => null);
+    }) });
     out[n] = { n: beat.n, ...(reply ? checkScale(reply) : { ...checkScale(null), sure: 0, failed: true }) };
   };
   await Promise.all(Array.from({ length: Math.min(parallel, beats.length) }, async () => { while (next < beats.length) await one(next++); }));
@@ -242,11 +251,11 @@ export async function journeysOf(work, { scene, spans, line, kind, people, place
   const ids = people.map(person => person.id), out = [];
   let next = 0;
   const one = async span => {
-    const reply = await work.generate({ system: JOURNEY_SYSTEM, maxTokens: 1500, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+    const reply = await ask(work, { system: JOURNEY_SYSTEM, maxTokens: 1500, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'Trace each journey in this passage. Reply in this JSON shape; an empty list where nobody goes anywhere.', shape: JOURNEY_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null, summary: digest?.summary ?? null }, places, people: people.map(person => ({ id: person.id, name: person.name })),
       passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
-    }) }).then(parsed).catch(() => null);
+    }) });
     out.push(...checkJourneys(reply, { people: ids, sentences: span }));
   };
   await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
@@ -275,11 +284,11 @@ export async function crowdOf(work, { scene, spans, line, kind, people, digest =
   const ids = people.map(person => person.id), out = [];
   let next = 0;
   const one = async span => {
-    const reply = await work.generate({ system: CROWD_SYSTEM, maxTokens: 800, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+    const reply = await ask(work, { system: CROWD_SYSTEM, maxTokens: 800, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'The crowd of this passage\'s place, each time it changes. Reply in this JSON shape; an empty list where there is no crowd.', shape: CROWD_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null, background: digest?.background ?? null }, people: people.map(person => ({ id: person.id, name: person.name })),
       passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
-    }) }).then(parsed).catch(() => null);
+    }) });
     out.push(...checkCrowd(reply, { people: ids, sentences: span }));
   };
   await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
@@ -311,11 +320,11 @@ export async function exchangesOf(work, { scene, spans, line, kind, people, dige
   const ids = people.map(person => person.id), out = [];
   let next = 0;
   const one = async span => {
-    const reply = await work.generate({ system: FIGHT_SYSTEM, maxTokens: 2000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+    const reply = await ask(work, { system: FIGHT_SYSTEM, maxTokens: 2000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'List each exchange of this passage in order. Reply in this JSON shape; an empty list where nobody attacks.', shape: FIGHT_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null, summary: digest?.summary ?? null }, people: people.map(person => ({ id: person.id, name: person.name })),
       passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
-    }) }).then(parsed).catch(() => null);
+    }) });
     out.push(...checkExchanges(reply, { people: ids, sentences: span }));
   };
   await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
@@ -342,11 +351,11 @@ export async function talkOf(work, { scene, spans, line, kind, people, digest = 
   const ids = people.map(person => person.id), out = { exchanges: [], formations: [], attention: [] };
   let next = 0;
   const one = async span => {
-    const reply = await work.generate({ system: TALK_SYSTEM, maxTokens: 2000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
+    const reply = await ask(work, { system: TALK_SYSTEM, maxTokens: 2000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'For this passage: each exchange and its channel, each group\'s formation, who looks at whom. Reply in this JSON shape.', shape: TALK_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null }, people: people.map(person => ({ id: person.id, name: person.name })),
       passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
-    }) }).then(parsed).catch(() => null);
+    }) });
     const checked = checkTalk(reply, { people: ids, sentences: span });
     for (const key of Object.keys(out)) out[key].push(...checked[key]);
   };

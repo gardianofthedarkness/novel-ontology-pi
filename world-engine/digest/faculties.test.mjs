@@ -12,3 +12,16 @@ test('a faculty reads where the gate fires it: overlapping windows joined, sixty
   assert.deepEqual(firedSpans(gate, scene, 'conversation').map(span => span.length), [12]);
   assert.deepEqual(firedSpans(gate, scene, 'choreography'), []);
 });
+
+test('a journey said in words takes the place offered that fits, near ones first', async () => {
+  const { placeOfWords, placedJourney } = await import('./faculties.mjs');
+  const places = [{ id: 'loc_a', label: '小巷' }, { id: 'loc_b', label: '小巷', near: true }, { id: 'loc_c', label: '车站' }, { id: 'loc_d', label: '北区' }];
+  assert.equal(placeOfWords('loc_c', places), 'loc_c');
+  assert.equal(placeOfWords('小巷', places), 'loc_b');
+  assert.equal(placeOfWords('两栋楼之间的小巷', places), 'loc_b');
+  assert.equal(placeOfWords('前方', places), null);
+  assert.equal(placeOfWords('', places), null);
+  const placed = placedJourney({ who: 'p', from: '车站前', to: '前方', via: ['小巷'] }, places);
+  assert.deepEqual([placed.from, placed.to, placed.via], ['loc_c', '前方', ['loc_b']]);
+  assert.deepEqual(placed.said, { from: '车站前' });
+});
