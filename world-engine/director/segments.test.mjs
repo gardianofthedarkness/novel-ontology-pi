@@ -36,15 +36,3 @@ test('the world by segment: containers with their scene as parent, the scene\'s 
   assert.deepEqual(world.spawn.scenes.map(scene => [scene.spawn, scene.starts.length]), [['new', 1], ['carry', 0], ['carry', 0]]);
   assert.equal(sceneOfContainer('s1~2'), 's1');
 });
-
-test('one tiling: every scene a stretch, so each container is its scene, and presence still carries by physics', () => {
-  const stretch = (id, sentences, type = 'routine') => ({ scene: id, first: sentences[0], last: sentences.at(-1), sentences, type, distribution: { [type]: 1 } });
-  const segments = [stretch('s1', ['a1', 'a2']), stretch('s2', ['a3'], 'confrontation'), stretch('s3', ['b1'])];
-  const reading = { scenes: segments.map(segment => ({ id: segment.scene, sentences: segment.sentences })), segments, cards: [{ id: 'action:a1', kind: 'action', first: 'a1', sentences: ['a1'], people: [{ id: 'p', how: ['acts'], at: ['a1'] }] }], time: { scenes: segments.map(segment => ({ scene: segment.scene, node: 't:1' })) } };
-  // s2 continues s1 (another kind, the same place and time); s3 is elsewhere.
-  const script = { places: {}, scenes: [{ id: 's1', place: 'bar', present: ['p'], at: { node: 't:1' }, timeline: [] }, { id: 's2', place: 'bar', present: [], at: { node: 't:1' }, timeline: [] }, { id: 's3', place: 'street', present: [], at: { node: 't:1' }, timeline: [] }] };
-  const world = segmentWorld({ reading, script, spawn: { scenes: segments.map(segment => ({ id: segment.scene, spawn: 'new', starts: segment.scene === 's1' ? [{ who: 'p', scene: 's1' }] : [] })) } });
-  assert.deepEqual(world.ids, ['s1', 's2', 's3'], 'no scene~part: a scene is one stretch');
-  assert.deepEqual(world.script.scenes.map(scene => scene.present), [['p'], ['p'], []], 'p held in the bar through the fight, not carried to the street');
-  assert.deepEqual(world.spawn.scenes.map(scene => scene.spawn), ['new', 'new', 'new'], 'each stretch is the first of its scene');
-});

@@ -18,9 +18,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 
-/** The reading's one tiling (stretches.ts): every scene is one stretch, so its segments are its scenes, each with its kind (the gate's windows, the director's containers). */
-export const segmentsOf = scenes => scenes.map(scene => ({ scene: scene.id, first: scene.sentences[0], last: scene.sentences.at(-1), sentences: scene.sentences, type: scene.type ?? null, confidence: scene.confidence ?? 0, distribution: scene.distribution ?? {}, smoothed: scene.smoothed ?? {}, change: scene.change ?? null, start: scene.start ?? null, ...(scene.continues ? { continues: scene.continues } : {}) }));
-
 export async function read(novelDir, outDir, { blocks: range = null, lister: listerKind = 'model', lexicon = null, decisions = null, work = null } = {}) {
   const { loadBlocks, worldBase } = await load('dist/src/v2/extraction/base.js');
   const { readFlow } = await load('dist/src/v2/extraction/flow.js');
@@ -128,7 +125,7 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     write(v2, 'spatial.yaml', yamlDocument(result.spatial ?? [])),
     ...((live.usage ?? []).length ? [write(v2, 'jev-usage.json', JSON.stringify(live.usage))] : []),
     // The same data as JSON, for tools (compare.mjs, inspect.mjs, the world loop).
-    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, blocks: result.blocks, segments: segmentsOf(result.scenes), chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time, places: result.places, spatial: result.spatial })),
+    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, blocks: result.blocks, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time, places: result.places, spatial: result.spatial })),
     write(baseDir, 'scenes.json', JSON.stringify(base.scenes)),
     write(baseDir, 'roster.json', JSON.stringify(base.roster, null, 1)),
     write(baseDir, 'facts.json', JSON.stringify(base.facts)),

@@ -61,10 +61,7 @@ export function segmentWorld({ reading, script, spawn }) {
   const segments = reading.segments, cards = alignCards(reading.cards, segments), scriptScenes = new Map((script?.scenes ?? []).map(scene => [scene.id, scene]));
   const presence = segmentPresence({ segments, cards, scriptScenes });
   const sceneIndex = new Map(reading.scenes.map((scene, n) => [scene.id, n])), k = new Map(), ids = [];
-  // A scene that is one segment (the reading's one tiling, 2026-11-04: every scene is a stretch) keeps its own id.
-  const parts = new Map(); for (const segment of segments) parts.set(segment.scene, (parts.get(segment.scene) ?? 0) + 1);
-  segments.forEach(segment => { const n = k.get(segment.scene) ?? 0; k.set(segment.scene, n + 1); ids.push(parts.get(segment.scene) === 1 ? segment.scene : segmentId(segment.scene, n)); });
-  const firstOfScene = new Set(segments.map((segment, n) => (n === 0 || segments[n - 1].scene !== segment.scene ? ids[n] : null)).filter(Boolean));
+  segments.forEach(segment => { const n = k.get(segment.scene) ?? 0; k.set(segment.scene, n + 1); ids.push(segmentId(segment.scene, n)); });
   const parent = new Map(ids.map((id, n) => [id, segments[n].scene]));
   const readingScenes = segments.map((segment, n) => { const scene = reading.scenes[sceneIndex.get(segment.scene)]; return { ...scene, id: ids[n], parent: segment.scene, sentences: segment.sentences, type: segment.type }; });
   const time = reading.time ? { ...reading.time, scenes: ids.map(id => { const entry = reading.time.scenes?.find(item => item.scene === parent.get(id)); return entry ? { ...entry, scene: id } : null; }).filter(Boolean) } : reading.time;
@@ -77,7 +74,7 @@ export function segmentWorld({ reading, script, spawn }) {
     const placed = seen.get(own.id) ?? seen.set(own.id, new Set()).get(own.id), here = presence[n].present.filter(who => !placed.has(who));
     for (const who of here) placed.add(who);
     const starts = (own.starts ?? []).filter(start => here.includes(start.who)).map(start => ({ ...start, scene: id }));
-    return { ...own, id, parent: own.id, ...(firstOfScene.has(id) ? {} : { spawn: own.spawn === 'new' ? 'carry' : own.spawn }), starts };
+    return { ...own, id, parent: own.id, ...(id.endsWith('~1') ? {} : { spawn: own.spawn === 'new' ? 'carry' : own.spawn }), starts };
   }).filter(Boolean) } : spawn;
   return { segments, ids, parent, reading: { ...reading, scenes: readingScenes, cards, time, bySegment: true }, script: scriptOut, spawn: spawnOut };
 }

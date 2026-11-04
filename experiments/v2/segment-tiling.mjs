@@ -1,5 +1,3 @@
-// Replaced in the reading (2026-11-04): the flow's one tiling (src/v2/extraction/stretches.ts) cuts the book once into
-// stretches, which are its scenes; this script is M14's experiment, kept for its record and for older readings.
 // M14's test (the user, 2026-11-03): scenes tiled further where the kind of action changes, as often as Jev judges the
 // text needs and no more: no fixed block size, no "split in two". Two structured calls:
 //   1. the cut: for every sentence of a scene, one yes/no question in the scene's request windows (Jev's request size,

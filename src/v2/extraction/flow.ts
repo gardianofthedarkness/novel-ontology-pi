@@ -1,9 +1,8 @@
 import type { DecisionQuestion, DecisionState } from "../../ground/connectors/jev.js";
 import type { Sentence } from "../../digger/intake/sectioning.js";
 import { ask, type Asker, type Manifest } from "../context/engine.js";
-import { kindsMode } from "../context/readingModes.js";
-import { tileStretches, type Stretch } from "./stretches.js";
-import { classifySentences, kindCards, type BlockAnswer, type KindCard, type SentenceKind } from "../../digger/autostep/segmentation.js";
+import { kindsMode, tilingSeamMode, tilingWindowMode } from "../context/readingModes.js";
+import { classifySentences, kindCards, tileScenes, type BlockAnswer, type KindCard, type SentenceKind } from "../../digger/autostep/segmentation.js";
 import { Chart, mentions, resolveBatch, type EmResult } from "./em.js";
 import { FactLedger, type FactEntry } from "./facts.js";
 import type { Lister } from "./listing.js";
@@ -47,8 +46,7 @@ export interface FlowBlock { id: string; chapter: number; sentences: Sentence[] 
 /** A card's person (or slot, or a thing or place that acts): how it is there (named, speaks, acts, addressed, described) and in which of its sentences. */
 export interface CardPerson { id: string; how: ("named" | "speaks" | "acts" | "addressed" | "described")[]; at: string[] }
 export interface FlowCard extends KindCard { block: string; sentences: string[]; entities: { id: string; at: string[] }[]; people: CardPerson[] }
-/** A scene of the reading: one stretch (stretches.ts), with its kind and how it began; `continues` the one before it when it began of another kind. */
-export interface FlowScene extends Partial<Omit<Stretch, "sentences">> { id: string; index: number; block: string; chapter: number; sentences: string[]; continues?: string }
+export interface FlowScene { id: string; index: number; block: string; chapter: number; sentences: string[] }
 export interface SceneContext {
   scene: string;
   cards: string[];
@@ -122,13 +120,15 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   const pos = (id: string) => position.get(id) ?? -1, text = (id: string) => textOf.get(id) ?? "";
 
   // 1–3 at once.
-  const tiling = meter("tiling"), kindsLog = meter("sentence kinds"), listing = meter("listing (work model)"), typing = meter("typing");
-  // One tiling (stretches.ts; the user, 2026-11-04: no scene and segment as two levels): the book cut once into stretches,
-  // each typed; a stretch is what every later step calls a scene.
-  const tiled = timed(tiling, () => Promise.all(blocks.map(async (block) => ({ block, stretches: await tileStretches(block.sentences, decideFor(tiling)) }))));
+  const tiling = meter("scene tiling"), kindsLog = meter("sentence kinds"), listing = meter("listing (work model)"), typing = meter("typing");
+  // The tiling's requests stay as they were (its answers come from the cache, so a comparison of readings keeps its scenes).
+  const tiled = timed(tiling, () => Promise.all(blocks.map(async (block) => {
+    const decide = decideFor(tiling, false);
+    return { block, ...(await tileScenes(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, gates: { accept: 0.85, reask: 0.55 }, ask: async (request) => (await (request.kind === "seam" ? ask(decide, tilingSeamMode, request, null) : ask(decide, tilingWindowMode, request, null))).replies })) };
+  })));
   const classified = timed(kindsLog, () => Promise.all(blocks.map(async (block) => {
     const decide = decideFor(kindsLog);
-    return { block, ...(await classifySentences(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, ask: async (window) => (await ask(decide, kindsMode, window, null)).replies })) };
+    return { block, ...(await classifySentences(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, blocks: true, ask: async (window) => (await ask(decide, kindsMode, window, null)).replies })) };
   })));
   const batches = blocks.flatMap((block) => Array.from({ length: Math.ceil(block.sentences.length / LIST_BATCH) }, (_, index) => ({ block, sentences: block.sentences.slice(index * LIST_BATCH, (index + 1) * LIST_BATCH) })));
   const listingStarted = performance.now(), typingDecide = decideFor(typing);
@@ -153,9 +153,7 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   const [tiles, kinds] = await Promise.all([tiled, classified, listed]);
 
   // Scenes and cards.
-  // A stretch that began of another kind continues the one before it (the same place, time and point of view).
-  const scenes: FlowScene[] = tiles.flatMap(({ block, stretches }) => stretches.map((stretch) => ({ id: "", index: 0, block: block.id, chapter: block.chapter, ...stretch }))).map((scene, index) => ({ ...scene, id: `scene_${String(index + 1).padStart(6, "0")}`, index }));
-  scenes.forEach((scene, index) => { if (scene.start === "kind" && index) scene.continues = scenes[index - 1].id; });
+  const scenes: FlowScene[] = tiles.flatMap(({ block, spans }) => spans.map((ids) => ({ id: "", index: 0, block: block.id, chapter: block.chapter, sentences: ids }))).map((scene, index) => ({ ...scene, id: `scene_${String(index + 1).padStart(6, "0")}`, index }));
   const kindOf: FlowResult["kinds"] = {};
   for (const { block, kinds: list, turns, confidence, distributions } of kinds) block.sentences.forEach((sentence, index) => { kindOf[sentence.id] = { kind: list[index], turn: Number(turns[index].toFixed(3)), confidence: Number(confidence[index].toFixed(3)), ...kindScores(distributions[index]) }; });
   const cut = (): FlowCard[] => blocks.flatMap((block) => {
