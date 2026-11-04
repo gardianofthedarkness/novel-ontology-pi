@@ -288,16 +288,16 @@ export function checkJourneys(reply, { people, sentences }) {
 export async function journeysOf(work, { scene, spans, line, kind, people, places = [], digest = null, parallel = 4 }) {
   const ids = people.map(person => person.id), out = [];
   let next = 0;
-  const one = async span => {
+  const one = async (span, n) => {
     const reply = await ask(work, { system: JOURNEY_SYSTEM, maxTokens: 1500, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'Trace each journey in this passage. Reply in this JSON shape; an empty list where nobody goes anywhere.', shape: JOURNEY_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null, summary: digest?.summary ?? null }, places, people: people.map(person => ({ id: person.id, name: person.name })),
       passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
     }) });
-    out.push(...checkJourneys(reply, { people: ids, sentences: span }));
+    out[n] = checkJourneys(reply, { people: ids, sentences: span });
   };
-  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
-  return out;
+  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) { const n = next++; await one(spans[n], n); } }));
+  return out.flat();
 }
 
 // ── Ambience (M9): the crowd of a place, read where the ambience faculty fires, one request a span ─────────────────────
@@ -321,16 +321,16 @@ export function checkCrowd(reply, { people, sentences }) {
 export async function crowdOf(work, { scene, spans, line, kind, people, digest = null, parallel = 4 }) {
   const ids = people.map(person => person.id), out = [];
   let next = 0;
-  const one = async span => {
+  const one = async (span, n) => {
     const reply = await ask(work, { system: CROWD_SYSTEM, maxTokens: 800, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'The crowd of this passage\'s place, each time it changes. Reply in this JSON shape; an empty list where there is no crowd.', shape: CROWD_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null, background: digest?.background ?? null }, people: people.map(person => ({ id: person.id, name: person.name })),
       passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
     }) });
-    out.push(...checkCrowd(reply, { people: ids, sentences: span }));
+    out[n] = checkCrowd(reply, { people: ids, sentences: span });
   };
-  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
-  return out;
+  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) { const n = next++; await one(spans[n], n); } }));
+  return out.flat();
 }
 
 // ── Choreography (M7): read where the choreography faculty fires (fights, catastrophes), one request a span ───────────
@@ -357,16 +357,16 @@ export function checkExchanges(reply, { people, sentences }) {
 export async function exchangesOf(work, { scene, spans, line, kind, people, digest = null, parallel = 4 }) {
   const ids = people.map(person => person.id), out = [];
   let next = 0;
-  const one = async span => {
+  const one = async (span, n) => {
     const reply = await ask(work, { system: FIGHT_SYSTEM, maxTokens: 2000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'List each exchange of this passage in order. Reply in this JSON shape; an empty list where nobody attacks.', shape: FIGHT_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null, summary: digest?.summary ?? null }, people: people.map(person => ({ id: person.id, name: person.name })),
       passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
     }) });
-    out.push(...checkExchanges(reply, { people: ids, sentences: span }));
+    out[n] = checkExchanges(reply, { people: ids, sentences: span });
   };
-  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
-  return out;
+  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) { const n = next++; await one(spans[n], n); } }));
+  return out.flat();
 }
 
 // ── Conversation and blocking (M8): read where the conversation faculty fires, one request a span ─────────────────────
@@ -386,17 +386,18 @@ export function checkTalk(reply, { people, sentences }) {
 
 /** The talk in each span of a scene where conversation fires. */
 export async function talkOf(work, { scene, spans, line, kind, people, digest = null, parallel = 4 }) {
-  const ids = people.map(person => person.id), out = { exchanges: [], formations: [], attention: [] };
+  const ids = people.map(person => person.id), out = { exchanges: [], formations: [], attention: [] }, parts = [];
   let next = 0;
-  const one = async span => {
+  const one = async (span, n) => {
     const reply = await ask(work, { system: TALK_SYSTEM, maxTokens: 2000, jsonSchema: { type: 'object' }, prompt: JSON.stringify({
       task: 'For this passage: each exchange and its channel, each group\'s formation, who looks at whom. Reply in this JSON shape.', shape: TALK_SHAPE,
       scene: { id: scene.id, where: digest?.where ?? null }, people: people.map(person => ({ id: person.id, name: person.name })),
       passage: span.map(id => ({ id, kind: kind(id) ?? null, text: line(id) })),
     }) });
     const checked = checkTalk(reply, { people: ids, sentences: span });
-    for (const key of Object.keys(out)) out[key].push(...checked[key]);
+    parts[n] = checked;
   };
-  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) await one(spans[next++]); }));
+  await Promise.all(Array.from({ length: Math.min(parallel, spans.length) }, async () => { while (next < spans.length) { const n = next++; await one(spans[n], n); } }));
+  for (const checked of parts) for (const key of Object.keys(out)) out[key].push(...(checked?.[key] ?? []));
   return out;
 }
