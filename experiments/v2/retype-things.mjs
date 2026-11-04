@@ -21,14 +21,15 @@ if (!novelDir || !readingPath) { console.error('usage: node experiments/v2/retyp
 const reading = JSON.parse(await readFile(resolve(readingPath), 'utf8'));
 const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { typeNames, CATEGORY_OF } = await load('dist/src/v2/extraction/typing.js');
 const text = await loadWorkspaceSentences(resolve(novelDir));
-const segmentOf = new Map(); (reading.segments ?? []).forEach((segment, n) => { for (const id of segment.sentences) segmentOf.set(id, n); });
+// The reading's scenes are its segments (one unit, 2026-11-04).
+const segmentOf = new Map(); reading.scenes.forEach((segment, n) => { for (const id of segment.sentences) segmentOf.set(id, n); });
 const things = reading.slots.filter(slot => slot.kind === 'weapon' || slot.kind === 'vehicle');
 // By the segment of each slot's first description; its names that stand in that segment.
 const asks = new Map();
 for (const slot of things) {
   const n = segmentOf.get(slot.sentences[0]);
   if (n === undefined) continue;
-  const segment = reading.segments[n], batch = segment.sentences.map(id => ({ id, text: text.get(id)?.text ?? '' }));
+  const segment = reading.scenes[n], batch = segment.sentences.map(id => ({ id, text: text.get(id)?.text ?? '' }));
   const names = [...new Set([slot.label, ...slot.names])].filter(name => batch.some(sentence => sentence.text.includes(name)));
   if (!names.length) continue;
   const entry = asks.get(n) ?? asks.set(n, { segment: n, batch, names: [], slots: [] }).get(n);

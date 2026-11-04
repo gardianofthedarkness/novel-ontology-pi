@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alignCards, scenesAsSegments, segmentPresence, segmentWorld, sceneOfContainer } from './segments.mjs';
+import { alignCards, scenesAsSegments, segmentPresence, segmentWorld } from './segments.mjs';
 
 const segments = [
   { scene: 's1', first: 'a1', last: 'a3', sentences: ['a1', 'a2', 'a3'], type: 'routine', distribution: { routine: 1 } },
@@ -24,17 +24,6 @@ test('presence by physics: placed by evidence, held at the place until seen else
   assert.deepEqual(present, ['p', 'p,q', 'q', 'p', 'p', '']);
   // s: in the script only, never placed; q: left the bar for the street; p: still at the bar when the story returns; r: a
   // memory's actor, the past; s4: a later period, nobody held.
-});
-
-test('the world by segment: containers with their scene as parent, the scene\'s place and time', () => {
-  const reading = { scenes: [{ id: 's1', sentences: segments.flatMap(segment => segment.sentences) }], segments, cards: [{ id: 'action:a1', kind: 'action', first: 'a1', sentences: ['a1'], people: [{ id: 'p', how: ['acts'], at: ['a1'] }] }], time: { scenes: [{ scene: 's1', node: 't:1' }] } };
-  const script = { places: {}, scenes: [{ id: 's1', place: 'loc', present: ['p'], at: { node: 't:1' }, timeline: [] }] };
-  const world = segmentWorld({ reading, script, spawn: { scenes: [{ id: 's1', spawn: 'new', starts: [{ who: 'p', scene: 's1' }] }] } });
-  assert.deepEqual(world.ids, ['s1~1', 's1~2', 's1~3']);
-  assert.deepEqual(world.script.scenes.map(scene => [scene.place, scene.parent]), [['loc', 's1'], ['loc', 's1'], ['loc', 's1']]);
-  assert.deepEqual(world.reading.time.scenes.map(entry => entry.scene), ['s1~1', 's1~2', 's1~3']);
-  assert.deepEqual(world.spawn.scenes.map(scene => [scene.spawn, scene.starts.length]), [['new', 1], ['carry', 0], ['carry', 0]]);
-  assert.equal(sceneOfContainer('s1~2'), 's1');
 });
 
 test('each scene a segment (a reading whose tiler cut segments): its own id, its kind from the blocks over its sentences, presence by physics', () => {

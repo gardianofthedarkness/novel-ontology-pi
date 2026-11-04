@@ -78,24 +78,25 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   const text = await loadWorkspaceSentences(novelDir), line = id => ({ id, text: text.get(id)?.text ?? '', kind: reading.kinds?.[id]?.kind ?? null, ...(spoken(id)?.id ? { who: spoken(id).id } : settledSpeakers[id]?.who ? { who: settledSpeakers[id].who, by: settledSpeakers[id].by } : {}), ...(spoken(id) ? { sure: spoken(id).confidence ?? null } : {}) });
   const names = new Map([...reading.chart.entities.map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]), ...(reading.slots ?? []).map(slot => [slot.id, slot.label])]);
   const nameForms = new Map(reading.chart.entities.map(entity => [entity.id, [...new Set([...(entity.proper ?? []), ...(entity.names ?? [])])].filter(form => form.length >= 2)]));
-  // By segment (M14; the user, 2026-11-03: no scene-level processing in the world engine; by segment, aligned to cards,
-  // the page too; a card's evidence first, weighting second; segments.mjs): where the reading has segments, the run plays
-  // them as its containers: the reading's scenes, the world script's, the spawn plan's and the strands are their segment
-  // views, built here; a segment's world data is its scene's; canon gets each scene back whole.
+  // One unit (the user, 2026-11-04: the reading's tiler cuts segments, and the split between scenes and segments is gone;
+  // segments.mjs): each of the reading's scenes is one segment and one container, under its own id. The reading's, the
+  // world script's, the spawn plan's and the strands' views by physics are built here and played (kept beside the world
+  // files in stage/world/segments for the log, the laws and the rehearsal).
   const worldFile = async name => JSON.parse(await readFile(join(novelDir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
   const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json') });
-  const segStrands = seg ? SG.strandsFile(seg.script, { scriptProjection: (await load('dist/src/v2/extraction/strands.js')).scriptProjection, storyStrands: (await load('dist/apps/playground/src/data/storyStrands.js')).storyStrands }) : null;
-  if (seg) reading = seg.reading;
-  const scriptOf = async () => seg?.script ?? (await worldFile('script.json')) ?? { scenes: [] }, strandsOf = async () => segStrands ?? (await worldFile('strands.json')), spawnOf = async () => seg?.spawn ?? (await worldFile('spawn.json'));
-  if (seg) { const dir = join(novelDir, 'stage', 'world', 'segments'); await mkdir(dir, { recursive: true }); const { strands: _, ...file } = segStrands; await Promise.all([writeFile(join(dir, 'script.json'), JSON.stringify(seg.script)), writeFile(join(dir, 'spawn.json'), JSON.stringify(seg.spawn)), writeFile(join(dir, 'strands.json'), JSON.stringify(file, null, 1))]); }
-  // A container's name in the live view: its scene's number, and by segment its part (scene_000001~2 is 1·2).
-  const sceneLabel = id => { const [scene, part] = String(id).split('~'); return part ? `${Number(scene.slice(-3))}·${part}` : Number(scene.slice(-3)); };
+  if (!seg) throw new Error('the reading has no scenes to play');
+  const segStrands = SG.strandsFile(seg.script, { scriptProjection: (await load('dist/src/v2/extraction/strands.js')).scriptProjection, storyStrands: (await load('dist/apps/playground/src/data/storyStrands.js')).storyStrands });
+  reading = seg.reading;
+  const scriptOf = async () => seg.script ?? { scenes: [] }, strandsOf = async () => segStrands, spawnOf = async () => seg.spawn;
+  { const dir = join(novelDir, 'stage', 'world', 'segments'); await mkdir(dir, { recursive: true }); const { strands: _, ...file } = segStrands; await Promise.all([writeFile(join(dir, 'script.json'), JSON.stringify(seg.script)), writeFile(join(dir, 'spawn.json'), JSON.stringify(seg.spawn)), writeFile(join(dir, 'strands.json'), JSON.stringify(file, null, 1))]); }
+  // A container's name in the live view: its number.
+  const sceneLabel = id => Number(String(id).slice(-6));
   const sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
   // The beats (M3, gate.mjs) of a reading with blocks: each sentence's beat, its type and its lead. The camera cuts only
   // at a beat's start (M4).
   // Smoothed per strand (the user, 2026-11-03): each scene's fork from the workspace's strands.
   const forkOf = new Map(((await strandsOf())?.scenes ?? []).map(entry => [entry.id, entry.fork]));
-  const gate = reading.segments?.length || reading.blocks?.length ? G.gateOf(G.windowsOf(reading), { strandOf: scene => forkOf.get(scene) ?? null }) : null, beatOf = new Map();
+  const gate = G.gateOf(G.windowsOf(reading), { strandOf: scene => forkOf.get(scene) ?? null }), beatOf = new Map();
   if (gate) { const order = reading.scenes.flatMap(entry => entry.sentences), at_ = new Map(order.map((id, n) => [id, n])); gate.beats.forEach((beat, n) => { for (let k = at_.get(beat.first); k <= at_.get(beat.last); k++) if (!beatOf.has(order[k])) beatOf.set(order[k], { n, type: beat.type, lead: beat.lead }); }); }
   const cardsOf = new Map();
   for (const card of reading.cards) { const id = sceneOf.get(card.first); if (id && ['action', 'dialogue'].includes(card.kind)) (cardsOf.get(id) ?? cardsOf.set(id, []).get(id)).push(card); }
@@ -106,7 +107,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   await writeFile(join(out, 'reading.json'), JSON.stringify(await readerView(reading, new Map([...text].map(([id, entry]) => [id, entry.text])))));
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }
   const template = await readFile(join(repository, 'world-engine', 'view', 'strand-demo.html'), 'utf8');
-  const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [], ...(seg ? { bySegment: true, segments: seg.ids.length } : {}) };
+  const record = { version: 1, model: jev.modelId, from, to, startedAt: new Date().toISOString(), scenes: [], units: seg.ids.length };
   // Where a run's time goes (the test cycle): the page reloaded in Chrome, the pictures shot, the walk graph built.
   const timing = { reloads: 0, reloadMs: 0, shots: 0, shotMs: 0, skipped: 0 }, runStarted = performance.now();
   let engineCost = null;
@@ -119,8 +120,6 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   if (readingPath) await writeFile(join(out, 'reading-path.json'), JSON.stringify({ path: resolve(readingPath) }));
   const reviewed = await R.applyAnswers(novelDir).catch(error => ({ error: String(error.message ?? error) }));
   const pins = await R.loadPins(novelDir), lastRun = await R.latestRun(novelDir);
-  // The review's pins are by scene: a segment takes its scene's (scene|who and scene|card keys copied to each segment).
-  if (seg) for (const map of [pins.present, pins.remote, pins.kind, pins.arrive, pins.stays, pins.revise].filter(Boolean)) for (const [key, value] of Object.entries(map)) { const [scene, ...rest] = key.split('|'); for (const id of seg.ids.filter(entry => seg.parent.get(entry) === scene)) map[[id, ...rest].join('|')] ??= value; }
   const oldLog = lastRun ? (await readFile(join(novelDir, 'stage', 'world', 'log', `${lastRun}.jsonl`), 'utf8').catch(() => '')).split('\n').filter(Boolean).map(row => JSON.parse(row)) : [];
   const oldPage = lastRun ? JSON.parse(await readFile(join(novelDir, 'stage', 'simulation', 'runs', 'director', `${lastRun}.page.json`), 'utf8').catch(() => 'null')) : null;
   // run.json is the last run's record only if that run is the last one played (a stand-in's run is not on the list).
@@ -208,7 +207,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   }, { record: () => {} });
 
   let result = null;
-  await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', ...(seg ? { segments: { list: seg.ids.map(id => ({ id, parent: seg.parent.get(id), cast: seg.script.scenes.find(entry => entry.id === id)?.present })), spawn: seg.spawn, strands: segStrands.strands } } : {}), engine: async E => {
+  await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', played: { cast: Object.fromEntries(seg.script.scenes.map(entry => [entry.id, entry.present])), spawn: seg.spawn, strands: segStrands.strands }, engine: async E => {
     engineCost = E.cost;
     const { world, W } = E, server = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser({ gpu: true });
     let page = null, lotsShown = -1;
@@ -406,11 +405,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // The stage manager (M4): a scene the script has nobody in (volume 1: 15, 20, 41, 43) takes its cast from the scene
         // digest, everyone it has on stage and not gone.
         if (!present.length && dg?.digest.people?.length) { present = dg.digest.people.filter(entry => entry.doing !== 'gone').map(entry => entry.who).filter(who => pins.present[`${scene.id}|${who}`] !== false); sceneRecord.castFrom = 'digest'; }
-        // A sliver the scene tiling left (volume 1: 15, 20, 41, 43, one to four sentences, nobody named) that carries straight
-        // on keeps the scene before's cast where they stand. Not by segment: a segment's presence is already physics
-        // (segmentPresence holds people until new presence or the next ground truth), and an empty one stands alone (the
-        // pilot: an establishing shot opening scene 2 took scene 1's cast, L1's six breaks).
-        if (!present.length && before && !seg && (reads.sentences.length <= 4 || /straight on/.test(dg?.digest.continues ?? ''))) { present = Object.keys(before.positions); sceneRecord.castFrom = 'the scene before'; }
+        // (A unit with nobody in it stands alone: its presence is physics, segmentPresence; it borrows no cast from the one before.)
         if (pinnedIn.length || present.length < (own?.present?.length ?? present.length)) sceneRecord.pinned = { present: pinnedIn, absent: (own?.present ?? []).filter(who => !present.includes(who)) };
         for (const who of present) if (E.names && !E.names[who]) E.names[who] = names.get(who) ?? who;
         // A referent measured in the world (referential distance, L16; the user, 2026-11-03): a person's height, the room or
@@ -451,7 +446,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           sceneRecord.scales = scales;
         }
         const firstScale = sceneBeats.length ? scaleOf.get(sceneBeats[0].n) ?? null : null;
-        const was = new Map(present.map(who => [who, prior(who, scene.id) ?? (sceneRecord.castFrom === 'the scene before' ? before.positions[who] ?? null : null)]));
+        const was = new Map(present.map(who => [who, prior(who, scene.id) ?? null]));
         sceneRecord.laws = present.filter(who => where.get(who) && !was.get(who)).map(who => ({ law: 'L1', who, verdict: 'amend', why: 'first in this strand: not carried in from another strand' }));
         // Presence in the frame (L16; M4, then the user, 2026-11-03: no hard-coded distance): someone carried in stands in the
         // scene only within its frame, the referent its first beat takes in, measured round the cast's middle (volume 1,

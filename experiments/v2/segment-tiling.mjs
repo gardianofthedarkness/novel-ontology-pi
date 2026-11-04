@@ -1,3 +1,5 @@
+// Replaced (2026-11-04): the reading's tiler cuts segments itself (its wording), and the world engine plays the reading's
+// scenes as its one unit; this second cut is M14's experiment, kept for its record.
 // M14's test (the user, 2026-11-03): scenes tiled further where the kind of action changes, as often as Jev judges the
 // text needs and no more: no fixed block size, no "split in two". Two structured calls:
 //   1. the cut: for every sentence of a scene, one yes/no question in the scene's request windows (Jev's request size,

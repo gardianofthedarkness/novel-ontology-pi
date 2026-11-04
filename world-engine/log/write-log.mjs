@@ -17,8 +17,8 @@ const jsonl = rows => rows.map(row => JSON.stringify(row)).join('\n') + (rows.le
 /** Writes run `run`'s world log, laws and ledger; returns their counts. `reading`: the reading's data.json, parsed. */
 export async function writeWorldLog(novelDir, { run, reading }) {
   const dir = resolve(novelDir), read = (...path) => readFile(join(dir, ...path), 'utf8').then(JSON.parse);
-  // A run by segment (M14) reads the segment views it played from (stage/world/segments/), written as it began.
-  const record = await read('stage', 'director', 'run.json'), world = record.bySegment ? ['stage', 'world', 'segments'] : ['stage', 'world'];
+  // The views the run played from (stage/world/segments/, written as it began: presence by physics), else the world files.
+  const record = await read('stage', 'director', 'run.json'), world = await read('stage', 'world', 'segments', 'script.json').then(() => ['stage', 'world', 'segments'], () => ['stage', 'world']);
   const [page, spawn, strands, script] = await Promise.all([read('stage', 'simulation', 'runs', 'director', `${run}.page.json`), read(...world, 'spawn.json').catch(() => null), read(...world, 'strands.json'), read(...world, 'script.json')]);
   const events = (await readFile(join(dir, 'ontology', 'events.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map(line => JSON.parse(line));
   const eventBySentence = new Map(events.flatMap(event => (event.evidence?.sentenceIds ?? []).map(id => [id, event.id])));

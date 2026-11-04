@@ -46,10 +46,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!novelDir || !values.reading) { console.error('usage: node world-engine/laws/check-run.mjs <novel-dir> --reading <data.json> [--run <id>]'); process.exit(2); }
   const dir = resolve(novelDir), read = async (...path) => JSON.parse(await readFile(join(dir, ...path), 'utf8'));
   const index = await read('stage', 'simulation', 'index.json'), id = values.run ?? index.strands.director.accepted;
-  const record = await read('stage', 'director', 'run.json'), world = record.bySegment ? ['stage', 'world', 'segments'] : ['stage', 'world'];
+  const record = await read('stage', 'director', 'run.json'), world = await read('stage', 'world', 'segments', 'script.json').then(() => ['stage', 'world', 'segments'], () => ['stage', 'world']);
   const [page, strands, script, whole] = await Promise.all([read('stage', 'simulation', 'runs', 'director', `${id}.page.json`), read(...world, 'strands.json'), read(...world, 'script.json'), readFile(resolve(values.reading), 'utf8').then(JSON.parse)]);
-  // A run by segment (M14) played the reading's segment view (segments.mjs), built the same way here.
-  const reading = record.bySegment ? (await import('../director/segments.mjs')).segmentWorld({ reading: whole, script, spawn: null })?.reading ?? whole : whole;
+  // The run played the reading by unit (segments.mjs), built the same way here.
+  const reading = (await import('../director/segments.mjs')).segmentWorld({ reading: whole, script, spawn: null })?.reading ?? whole;
   const abilities = await readFile(join(dir, '..', '..', 'universe', 'abilities.json'), 'utf8').then(JSON.parse, () => ({ version: 1, people: {} }));
   const played = playedLine({ record, page, reading });
   const laws = checkAll({ played, strands, script, speakers: speakersOf(reading), abilities });

@@ -39,13 +39,7 @@ const foldById = rows => { const byId = new Map(); for (const row of rows) byId.
  */
 export function canonOf({ run, record, ledger, pins, scenes, events, script, strands, reading, settled = [], entities = new Map(), world: placed = null, relations = [], speakers = true }) {
   const out = [], world = { run };
-  // A run by segment (M14): canon is the novel's, by scene, so each scene's segments fold back into it (presence the
-  // union of their starts, the cards in order; segment ids are the scene's with ~n).
-  if (record.bySegment) {
-    const merged = [];
-    for (const played of record.scenes) { const id = String(played.scene).split('~')[0], last = merged.at(-1); if (last?.scene === id) { last.starts = { ...(played.starts ?? {}), ...last.starts }; last.cards.push(...(played.cards ?? [])); } else merged.push({ ...played, scene: id, starts: { ...(played.starts ?? {}) }, cards: [...(played.cards ?? [])] }); }
-    record = { ...record, scenes: merged };
-  }
+  // One unit (2026-11-04): the run's containers are the reading's scenes, so canon is by them as played.
   const settledOf = new Map(settled.map(entry => [entry.line, entry]));
   // A scene's place in canon: its own if named, else the nearest named one up the script's place tree.
   const named = id => { for (let at = id, n = 0; at && n < 12; at = script.places?.[at]?.parent, n++) if (/^loc_/.test(at)) return at; return null; };

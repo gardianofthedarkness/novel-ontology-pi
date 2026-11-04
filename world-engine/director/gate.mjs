@@ -20,7 +20,7 @@ export function windowsOf(reading) {
   const mentions = (list, test) => list.filter(test).map(entry => new Set(entry.sentences ?? [entry.sentence]));
   const signal = { vehicles: mentions(reading.references ?? [], entry => entry.type === 'vehicle'), weapons: mentions(reading.references ?? [], entry => entry.type === 'weapon'), crowds: mentions(reading.references ?? [], entry => entry.type === 'crowd'),
     buildings: [...mentions(reading.places?.references ?? [], () => true), ...mentions(reading.spatial ?? [], () => true)] };
-  // The reading's segments (M14: stretches Jev cut where the kind of action changes) where it has them, else its blocks.
+  // The reading's units (segments.mjs: each scene one segment, typed from its blocks) where it has them, else its blocks.
   const unit = reading.segments?.length ? 'segment' : 'block';
   return [...(unit === 'segment' ? reading.segments : reading.blocks ?? [])].sort((a, b) => position.get(a.first) - position.get(b.first)).map(block => {
     const tally = new Map(); for (const id of block.sentences) tally.set(sceneOf.get(id), (tally.get(sceneOf.get(id)) ?? 0) + 1);

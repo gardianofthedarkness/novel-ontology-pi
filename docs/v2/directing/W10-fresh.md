@@ -52,3 +52,11 @@ is played with each scene as its own segment under its own id (`segments.mjs` `s
 kind from the block answers over its own sentences, so the gate fires per segment; presence by physics, no borrowed cast
 and the rest of the segment path apply. Rehearsed on the first quarter with the reading from before segments (scenes
 1–13): 13 containers, all cast, none borrowed, the gate by segment, L6 1 and L10 1 broken.
+
+**One unit downstream (the user, 2026-11-04: "examine all the places involving segment versus scene split in our
+downstream codes, unify them").** The world engine has one unit, the reading's scene (a segment, as the tiler now cuts):
+`segments.mjs` builds the played views by unit (cards aligned, presence by physics, starts for those present, kinds
+from the blocks for the gate); the director plays them under their own ids (no `scene~part`, no parent map, no pins
+copied to parts, no borrowed cast); the world builder takes them as `played` (cast, spawn, strands); the log, the laws
+and the rehearsal read the played views; canon is by the units as played. A reading with M14's second cut plays its
+scenes. Rehearsed on the first quarter: 13 containers, all cast, none borrowed, the gate by unit, L6 1 and L10 1.

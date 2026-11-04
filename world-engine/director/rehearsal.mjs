@@ -100,8 +100,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const { record, data } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), log: () => {} });
     const smoothedNow = smoothedOf({ run: `rehearsal-${pass}`, record, page: data, spawn, strands, reading });
     // The laws as check-run reads them (L1–L20 on the line as played), from this pass's page and segment files.
-    const segFolder = record.bySegment ? join(world, 'segments') : world, segScript = JSON.parse(await readFile(join(segFolder, 'script.json'), 'utf8')), segStrands = JSON.parse(await readFile(join(segFolder, 'strands.json'), 'utf8'));
-    const lawReading = record.bySegment ? segmentWorld({ reading, script: segScript, spawn: null })?.reading ?? reading : reading;
+    const segFolder = join(world, 'segments'), segScript = JSON.parse(await readFile(join(segFolder, 'script.json'), 'utf8')), segStrands = JSON.parse(await readFile(join(segFolder, 'strands.json'), 'utf8'));
+    const lawReading = segmentWorld({ reading, script: segScript, spawn: null })?.reading ?? reading;
     const lawsNow = checkAll({ played: playedLine({ record, page: data, reading: lawReading }), strands: segStrands, script: segScript, speakers: speakersOf(lawReading), abilities: { version: 1, people: {} } });
     passes.push({ pass, minutes: Math.round((Date.now() - started) / 6000) / 10, ...measure(record), started: { fromSmoothing: record.revisions.filter(entry => entry.applied).length, held: record.revisions.filter(entry => !entry.applied).length }, smoothing: smoothedNow.report });
     passes.at(-1).broken = Object.fromEntries(lawsNow.map(law => [law.law, law.violations.length]));

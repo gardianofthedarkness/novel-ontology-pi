@@ -42,10 +42,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let reading = JSON.parse(await readFile(resolve(values.reading), 'utf8'));
   const worldFile = async name => JSON.parse(await readFile(join(dir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
   const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json') });
-  const segStrands = seg ? SG.strandsFile(seg.script, { scriptProjection: (await load('dist/src/v2/extraction/strands.js')).scriptProjection, storyStrands: (await load('dist/apps/playground/src/data/storyStrands.js')).storyStrands }) : null;
+  const segStrands = SG.strandsFile(seg.script, { scriptProjection: (await load('dist/src/v2/extraction/strands.js')).scriptProjection, storyStrands: (await load('dist/apps/playground/src/data/storyStrands.js')).storyStrands });
   const held = heldMoves(record);
-  if (!seg) reading = reading;
-  const scenesOf = held.map(entry => entry.container.split('~')[0]).sort();
+  const scenesOf = held.map(entry => entry.container).sort();
   // The page's nodes are its grid's dense cells; the engine's are numbered as first asked for (W.nodeId), so a run's
   // record (its replays) cannot be read back offline: positions come from the page, the engine's ids from the cells.
   const g = page.world, decode = node => { const i = node % g.NX - g.oi, j = Math.floor(node / g.NX) % g.NZ - g.oj, k = Math.floor(node / (g.NX * g.NZ)) - g.ok; return { i, j, k, x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, y: k * FLOOR }; };
@@ -61,16 +60,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   };
   const slotOf = new Map((reading.slots ?? []).map(slot => [slot.id, slot]));
   const findings = [];
-  await strandDemo(dir, { from: scenesOf[0], to: scenesOf.at(-1), worldOnly: true, plain: true, title: 'Why walk', ...(seg ? { segments: { list: seg.ids.map(id => ({ id, parent: seg.parent.get(id), cast: seg.script.scenes.find(entry => entry.id === id)?.present })), spawn: seg.spawn, strands: segStrands.strands } } : {}), engine: async E => {
+  await strandDemo(dir, { from: scenesOf[0], to: scenesOf.at(-1), worldOnly: true, plain: true, title: 'Why walk', played: { cast: Object.fromEntries(seg.script.scenes.map(entry => [entry.id, entry.present])), spawn: seg.spawn, strands: segStrands.strands }, engine: async E => {
     const { world, W } = E;
     const nodeAt = (i, j, k) => W.nodeId(world, i, j, k), cellOfId = id => { const c = W.cellOf(world, id); return { ...c, x: (c.i + 0.5) * CELL, z: (c.j + 0.5) * CELL, y: c.k * FLOOR }; };
     const typeOf = (built, id) => (id < built.type.length ? built.type[id] : 0), edgesOf = (built, id) => (id < built.type.length ? built.graph.offsets[id + 1] - built.graph.offsets[id] : 0);
-    const placeBox = new Map((seg?.spawn ?? await worldFile('spawn.json'))?.scenes?.filter(entry => entry.target?.box).map(entry => [entry.place, entry.target.box]) ?? []);
+    const placeBox = new Map(seg.spawn?.scenes?.filter(entry => entry.target?.box).map(entry => [entry.place, entry.target.box]) ?? []);
     const lotName = index => { const lot = world.lots[index]; return lot ? lot.label ?? `the ${lot.role ?? 'building'} (${lot.height ?? lot.floors} floors)` : null; };
     let n = 0;
     for (const entry of held) {
       n++;
-      const name = `${String(n).padStart(2, '0')}-${entry.container.replace('scene_', '').replace('~', '-')}-${entry.who}`;
+      const name = `${String(n).padStart(2, '0')}-${entry.container.replace('scene_', '')}-${entry.who}`;
       const slot = slotOf.get(entry.who), what = slot ? { slot: slot.label, kind: slot.kind } : null;
       const dense = standing(entry.container, entry.card, entry.who, entry.before);
       if (dense === null || dense === undefined) { findings.push({ name, ...entry, what, finding: 'no start found on the page' }); continue; }

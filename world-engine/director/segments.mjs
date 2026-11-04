@@ -1,14 +1,9 @@
-// Strands, not scenes (M14; the user, 2026-11-03: "all of our design should revolve around strands, there should be no
-// scene level processing in world engine … the minimum unit of processing is cards and blocks of sentence"; then: by
-// segment, aligned to cards, the page too; a card's evidence first, weighting second). The world engine plays segments:
-// the stretches Jev cut where the kind of action changes (the reading's `segments`), each its own container on the page,
-// in its scene's place and time. Scenes stay as the novel's (canon's) and as the parent each segment's world data is
-// looked up in. Pure: the reading, the world script and the spawn plan in; their segment views out.
-
-/** A segment's id: its scene's and its place in the scene (scene_000040~3). */
-export const segmentId = (scene, k) => `${scene}~${k + 1}`;
-/** The scene a container belongs to (a segment's parent, a scene its own). */
-export const sceneOfContainer = id => String(id).split('~')[0];
+// One unit (the user, 2026-11-04: "examine all the places involving segment versus scene split in our downstream codes,
+// unify them"). The reading's tiler cuts segments, and those are the only unit: what the code still calls a scene is a
+// segment, and the world engine plays each one as its own container under its own id, in its own place and time. Before,
+// the reading had scenes and, beside them, segments cut a second time (M14), played as scene~part with the scene as their
+// parent; that split is gone. Kept from it: the cards aligned to the units, presence by physics, and the gate reading each
+// unit's kind. Pure: the reading, the world script and the spawn plan in; the views the director plays out.
 
 /**
  * The cards aligned to the segments (the user, 2026-11-03: "aligned"): a card that runs across a segment's boundary (a
@@ -71,35 +66,20 @@ export function scenesAsSegments(reading) {
 }
 
 /**
- * The world as segments: the reading's scenes, the world script's scenes and the spawn plan's, one entry a segment (its
- * scene's place, time and chapter; its own people), in story order. `parent` maps each segment back to its scene. A
- * reading without segments plays each scene as its own segment, under its own id.
+ * The world by unit: the reading's scenes (each one segment), typed from the block answers over their sentences (the gate's
+ * windows), the cards aligned to them, who is in each by physics (the world script's view), and the spawn plan's starts
+ * for those present. A reading made with segments cut a second time (M14) plays its scenes; its segments are not read.
  */
 export function segmentWorld({ reading: given, script, spawn }) {
   if (!given?.scenes?.length) return null;
-  const reading = given.segments?.length ? given : { ...given, segments: scenesAsSegments(given) };
-  const segments = reading.segments, cards = alignCards(reading.cards, segments), scriptScenes = new Map((script?.scenes ?? []).map(scene => [scene.id, scene]));
-  const presence = segmentPresence({ segments, cards, scriptScenes });
-  const sceneIndex = new Map(reading.scenes.map((scene, n) => [scene.id, n])), k = new Map(), ids = [];
-  // A scene that is one segment keeps its own id (no scene~part).
-  const parts = new Map(); for (const segment of segments) parts.set(segment.scene, (parts.get(segment.scene) ?? 0) + 1);
-  segments.forEach(segment => { const n = k.get(segment.scene) ?? 0; k.set(segment.scene, n + 1); ids.push(parts.get(segment.scene) === 1 ? segment.scene : segmentId(segment.scene, n)); });
-  const firstOfScene = new Set(segments.map((segment, n) => (n === 0 || segments[n - 1].scene !== segment.scene ? ids[n] : null)).filter(Boolean));
-  const parent = new Map(ids.map((id, n) => [id, segments[n].scene]));
-  const readingScenes = segments.map((segment, n) => { const scene = reading.scenes[sceneIndex.get(segment.scene)]; return { ...scene, id: ids[n], parent: segment.scene, sentences: segment.sentences, type: segment.type }; });
-  const time = reading.time ? { ...reading.time, scenes: ids.map(id => { const entry = reading.time.scenes?.find(item => item.scene === parent.get(id)); return entry ? { ...entry, scene: id } : null; }).filter(Boolean) } : reading.time;
-  const scriptOut = script ? { ...script, scenes: ids.map((id, n) => { const own = scriptScenes.get(parent.get(id)); if (!own) return null; const people = new Set(presence[n].present); return { ...own, id, parent: own.id, present: presence[n].present, evidence: presence[n].evidence, now: presence[n].now, timeline: (own.timeline ?? []).filter(event => (event.actors ?? []).some(actor => people.has(actor))) }; }).filter(Boolean) } : script;
-  // Spawning places a scene's people once each: a person's start goes with the segment where they first appear in the
-  // scene (the scene's first segment may be narration with nobody in it); anew only at the scene's first segment.
-  const spawnOf = new Map((spawn?.scenes ?? []).map(scene => [scene.id, scene])), seen = new Map();
-  const spawnOut = spawn ? { ...spawn, scenes: ids.map((id, n) => {
-    const own = spawnOf.get(parent.get(id)); if (!own) return null;
-    const placed = seen.get(own.id) ?? seen.set(own.id, new Set()).get(own.id), here = presence[n].present.filter(who => !placed.has(who));
-    for (const who of here) placed.add(who);
-    const starts = (own.starts ?? []).filter(start => here.includes(start.who)).map(start => ({ ...start, scene: id }));
-    return { ...own, id, parent: own.id, ...(firstOfScene.has(id) ? {} : { spawn: own.spawn === 'new' ? 'carry' : own.spawn }), starts };
-  }).filter(Boolean) } : spawn;
-  return { segments, ids, parent, reading: { ...reading, scenes: readingScenes, cards, time, bySegment: true }, script: scriptOut, spawn: spawnOut };
+  const segments = scenesAsSegments(given), cards = alignCards(given.cards, segments), scriptScenes = new Map((script?.scenes ?? []).map(scene => [scene.id, scene]));
+  const presence = segmentPresence({ segments, cards, scriptScenes }), ids = segments.map(segment => segment.scene);
+  const reading = { ...given, segments, scenes: given.scenes.map((scene, n) => ({ ...scene, type: segments[n].type })), cards };
+  const scriptOut = script ? { ...script, scenes: ids.map((id, n) => { const own = scriptScenes.get(id); if (!own) return null; const people = new Set(presence[n].present); return { ...own, present: presence[n].present, evidence: presence[n].evidence, now: presence[n].now, timeline: (own.timeline ?? []).filter(event => (event.actors ?? []).some(actor => people.has(actor))) }; }).filter(Boolean) } : script;
+  // The spawn plan's starts for those present by physics (someone held from before is carried, not started again).
+  const spawnOf = new Map((spawn?.scenes ?? []).map(scene => [scene.id, scene]));
+  const spawnOut = spawn ? { ...spawn, scenes: ids.map((id, n) => { const own = spawnOf.get(id); if (!own) return null; const here = new Set(presence[n].present); return { ...own, starts: (own.starts ?? []).filter(start => start.kind === 'thing' || here.has(start.who)) }; }).filter(Boolean) } : spawn;
+  return { segments, ids, reading, script: scriptOut, spawn: spawnOut };
 }
 
 /**
