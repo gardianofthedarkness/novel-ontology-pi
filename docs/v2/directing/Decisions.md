@@ -413,7 +413,9 @@ thrown dart, flames, a current, a blast and handcuffs. Now (`typing.ts`, `listin
 is a thing only where, in the passage it stands in, it has a dedicated name of its own, probably plays an important
 role, or changes the scene by what it does; the fire, lightning or blast of an ability is the ability's; anything only
 used in routine there (darts at a board, a kitchen knife at cooking, traffic passing by, a bus taken home) is routine,
-never extracted. The same kind of thing can matter in one passage and be routine in another. It takes effect when a
+never extracted. The same kind of thing can matter in one passage and be routine in another. And (the user, the same day): "only things with physical matter count": fire, lightning, a current, light, wind or a
+blast is no thing (an ability's is the ability, a concept); the fresh reading for W10 (`v2-vol1-w10`) was made before this
+rule, and still types a lightning strike, a current and a gun of current as weapons. It takes effect when a
 reading is made again; on a reading already made, `experiments/v2/retype-things.mjs` asks the typing step again for each
 unnamed weapon and vehicle in the segment where it is first described (volume 1: 50 slots, 36 segments, one paid
 request each) and can write the reading without the routine ones.

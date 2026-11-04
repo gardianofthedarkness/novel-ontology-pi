@@ -16,7 +16,7 @@ export const LISTING_SYSTEM = [
   "List every string, exactly as the passage writes it, that names or refers to:",
   "- a person: a name, a surname, a nickname, or a title or description used for one person (e.g. \"the boy with spiky hair\");",
   "- a crowd or a group of people who are there (e.g. \"the officers\", \"the crowd\", \"the students\");",
-  "- a weapon, a vehicle (also a mech) or an item, only where it matters in the passage: it has a dedicated name of its own, it probably plays an important role, or what it does changes the scene; not things only used in routine (a phone, a bag, food, a door, darts thrown at a board, a kitchen knife at cooking, traffic passing by, a machine at its routine work);",
+  "- a weapon, a vehicle (also a mech) or an item with physical matter of its own (not fire, lightning, a current, light, wind or a blast), only where it matters in the passage: it has a dedicated name of its own, it probably plays an important role, or what it does changes the scene; not things only used in routine (a phone, a bag, food, a door, darts thrown at a board, a kitchen knife at cooking, traffic passing by, a machine at its routine work);",
   "- a place, a building or a room;",
   "- a concept the story names: an ability, a power, a technique or a spell, a network, a project or a plan;",
   "- a time: a date, a day, an hour, a part of the day, \"the next morning\".",

@@ -17,16 +17,17 @@ import { isLocative, isPartOrFloor } from "../rules/typing.js";
  * weapons; 2026-11-04, a dart thrown at a board was read as a weapon and walked as a person: "only weapons, vehicles or
  * items that in that segment look like they probably play an important role, have a dedicated name, or have impact on
  * the scene because of their functionality will be extracted. Routine things used will not." Each is judged in the
- * passage it stands in: the same kind of thing may matter in one passage and be routine in another). A spatial word (on the ground, underground, on the roof, in the corridor) is no place at all but where
+ * passage it stands in: the same kind of thing may matter in one passage and be routine in another; and "only things
+ * with physical matter count": fire, lightning, a current, light, wind or a blast is no thing). A spatial word (on the ground, underground, on the roof, in the corridor) is no place at all but where
  * someone or something is: no category, kept as evidence of who is where (src/v2/spatial.ts).
  */
 export const ENTITY_TYPES = {
   person: "a person, or a being who acts like one: by name, surname, nickname, title or a description used for them",
   crowd: "a crowd or a group of people who are there and act together: officers, a crowd, the students, a gang (an organisation as such is none)",
-  object: "an item that matters in this passage: it has a dedicated name of its own (天空之眼), it probably plays an important role here, or what it does changes the scene (a device that opens the way, a letter that turns the plot)",
+  object: "a physical item, with matter of its own, that matters in this passage: it has a dedicated name of its own (天空之眼), it probably plays an important role here, or what it does changes the scene (a device that opens the way, a letter that turns the plot)",
   routine: "a routine thing: an everyday thing (a phone, a bag, food, clothes, furniture, a door, a wall or a pillar, a tree or a plant, a machine at its routine work), and any item, weapon or vehicle that in this passage is only used in routine: no name of its own, no important part in what happens, nothing it does changes the scene (darts thrown at a board in a bar, a kitchen knife at cooking, traffic passing by, a bus taken home)",
-  weapon: "a weapon that matters in this passage: it has a dedicated name of its own, it probably plays an important role here, or what it does changes the scene (a gun drawn on someone, a blade in a fight, a bomb that goes off); the fire, lightning or blast an ability makes is the ability's (a concept), not a weapon",
-  vehicle: "a vehicle or a mech (a car, a train, a ship, an aircraft carrier) that matters in this passage: it has a dedicated name of its own, it probably plays an important role here (people chase, flee or fight in it), or what it does changes the scene (a crash, a carrier blocking the sky)",
+  weapon: "a physical weapon, with matter of its own (held, fired, thrown or struck with), that matters in this passage: it has a dedicated name of its own, it probably plays an important role here, or what it does changes the scene (a gun drawn on someone, a blade in a fight, a bomb that goes off); fire, lightning, a current, light, wind or a blast has no matter of its own: an ability's is the ability (a concept), any other is no thing",
+  vehicle: "a physical vehicle or mech (a car, a train, a ship, an aircraft carrier) that matters in this passage: it has a dedicated name of its own, it probably plays an important role here (people chase, flee or fight in it), or what it does changes the scene (a crash, a carrier blocking the sky)",
   region: "a region: a country, a state or a province, a wide natural area (a forest, a desert, an ocean), bigger than a city",
   city: "a city or a town",
   district: "a part of a city: a ward, a school district, a downtown, a neighbourhood",
@@ -34,7 +35,7 @@ export const ENTITY_TYPES = {
   building: "a building or a structure: a school, a dormitory, a shop, a station, a tower",
   room: "a room inside a building: a classroom, an office, a ward, a hall, a karaoke box",
   spatial: "no place of its own but where someone or something is, against what is around: on the ground (the asphalt, the earth), underground, on the street or the road (街上, 马路上), on a roof, in a corridor, at an exit, on the stairs, on a wall, in the air, beside or under something",
-  concept: "a concept the story names: an ability, a power, a technique or a spell, a network or a system, a project or a plan (幻想杀手, 御坂网络); something someone has, uses or runs, not a thing in the hand",
+  concept: "a concept the story names: an ability (with what it makes that has no matter: its fire, lightning, current or blast), a power, a technique or a spell, a network or a system, a project or a plan (幻想杀手, 御坂网络); something someone has, uses or runs, not a thing in the hand",
   time: "a time: a date, a day, an hour, a part of the day, a season",
   none: "none of these: an organisation as such, an ordinary word",
 } as const;
@@ -45,7 +46,7 @@ export const CATEGORY_OF: Record<EntityType, Category | null> = { person: "perso
 /** The scale of places, smallest first (a place's scale is its type); a parent is larger than what it holds. */
 export { PLACE_SCALES } from "../rules/places.js";
 const TYPE_LABELS: Record<keyof typeof ENTITY_TYPES, string> = {
-  person: "a person", crowd: "a crowd or a group of people", object: "an item that matters here (named, important, or changing the scene)", routine: "a routine thing, or one only used in routine here", weapon: "a weapon that matters here", vehicle: "a vehicle or a mech that matters here",
+  person: "a person", crowd: "a crowd or a group of people", object: "a physical item that matters here (named, important, or changing the scene)", routine: "a routine thing, or one only used in routine here", weapon: "a physical weapon that matters here", vehicle: "a physical vehicle or mech that matters here",
   region: "a region, bigger than a city", city: "a city or a town", district: "a part of a city", street: "a street or an open place in a district", building: "a building", room: "a room inside a building",
   spatial: "where someone is (on the ground, underground, on a roof): no place", concept: "an ability, a network or a plan (a concept)", time: "a time", none: "none of these",
 };
