@@ -26,6 +26,17 @@ test('presence by physics: placed by evidence, held at the place until seen else
   // memory's actor, the past; s4: a later period, nobody held.
 });
 
+test('held is not on stage: out of view after the hold unless named again, still held where they were', () => {
+  const at = (scene, ids) => ({ scene, first: ids[0], last: ids.at(-1), sentences: ids, type: 'routine', distribution: { routine: 1 } });
+  const lines = prefix => Array.from({ length: 10 }, (_, n) => `${prefix}${n}`);
+  const segs = [at('s1', lines('a')), at('s1', lines('b')), at('s1', lines('c')), at('s1', lines('d')), at('s1', lines('e'))];
+  const cards = [{ id: 'action:a0', kind: 'action', first: 'a0', sentences: ['a0'], people: [{ id: 'p', how: ['acts'], at: ['a0'] }, { id: 'q', how: ['acts'], at: ['a0'] }] },
+    { id: 'narration:d5', kind: 'narration', first: 'd5', sentences: ['d5'], people: [{ id: 'q', how: ['named'], at: ['d5'] }] }];
+  const out = segmentPresence({ segments: segs, cards, scriptScenes: new Map([['s1', { place: 'bar', at: { node: 't1' } }]]), hold: 25 });
+  assert.deepEqual(out.map(entry => entry.present.sort().join(',')), ['p,q', 'p,q', 'p,q', 'q', 'q'], 'p out of view 30 lines on; q named at d5, in view again');
+  assert.deepEqual(out.map(entry => entry.held.sort().join(',')), ['p,q', 'p,q', 'p,q', 'p,q', 'p,q'], 'both still held at the bar');
+});
+
 test('each scene a segment (a reading whose tiler cut segments): its own id, its kind from the blocks over its sentences, presence by physics', () => {
   const block = (sentences, distribution) => ({ first: sentences[0], last: sentences.at(-1), sentences, distribution, confidence: 0.8, type: Object.keys(distribution)[0] });
   const reading = {

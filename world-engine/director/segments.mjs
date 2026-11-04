@@ -28,22 +28,38 @@ export function alignCards(cards, segments) {
  * moves on (a new period: they are not held there). Nobody is placed by the world script alone. A memory segment is the
  * past: its evidence places nobody now. Each entry keeps the segment's share that is now (1 − P(exposition) − P(memory))
  * for the smoothing to weigh.
+ *
+ * Held is not on stage (W10c, 2026-11-04): with most units placed at the whole city and four moments of story time, everyone
+ * once seen was held in every later unit (a median cast of 15, up to 32). `present` is who is in view: given evidence in
+ * the segment, named or described in it while held there, or given evidence there within the last `hold` lines (30: a
+ * median cast of 4, at most 11). `held` keeps everyone held there; they stay where they were, never moved or removed.
  */
-export function segmentPresence({ segments, cards, scriptScenes }) {
+export const HOLD = 30;
+export function segmentPresence({ segments, cards, scriptScenes, hold = HOLD }) {
   const segmentOf = new Map(segments.flatMap((segment, k) => segment.sentences.map(id => [id, k])));
-  const evidence = segments.map(() => new Set());
-  // Evidence by the lines a person appears in (`at`), else by the card's first line.
+  const position = new Map(segments.flatMap(segment => segment.sentences).map((id, n) => [id, n]));
+  const evidence = segments.map(() => new Map()), seen = segments.map(() => new Map());
+  // Evidence by the lines a person appears in (`at`), else by the card's first line: acting, speaking or spoken to places
+  // them; named or described keeps someone already there in view.
   for (const card of cards ?? []) for (const person of card.people ?? []) {
-    if (!(person.how ?? []).some(how => ['acts', 'speaks', 'addressed'].includes(how))) continue;
-    for (const id of person.at?.length ? person.at : [card.first]) { const k = segmentOf.get(id); if (k !== undefined && segments[k].type !== 'memory') evidence[k].add(person.id); }
+    const acts = (person.how ?? []).some(how => ['acts', 'speaks', 'addressed'].includes(how));
+    for (const id of person.at?.length ? person.at : [card.first]) {
+      const k = segmentOf.get(id); if (k === undefined) continue;
+      const into = acts && segments[k].type !== 'memory' ? evidence[k] : seen[k];
+      into.set(person.id, Math.max(into.get(person.id) ?? -1, position.get(id)));
+    }
   }
-  // Where each person was last given evidence, and at what story time; segments in story order (the reading's).
+  // Where each person was last given evidence, at what story time and line; segments in story order (the reading's).
   const state = new Map();
   return segments.map((segment, k) => {
-    const own = scriptScenes.get(segment.scene), place = own?.place ?? null, time = own?.at?.node ?? null;
-    for (const id of evidence[k]) state.set(id, { place, time });
-    const present = [...state].filter(([, where]) => where.place === place && where.time === time).map(([id]) => id);
-    return { present, evidence: [...evidence[k]], now: Math.max(0, Math.round((1 - (segment.distribution?.exposition ?? 0) - (segment.distribution?.memory ?? 0)) * 1000) / 1000) };
+    const own = scriptScenes.get(segment.scene), place = own?.place ?? null, time = own?.at?.node ?? null, start = position.get(segment.first);
+    const there = ([, where]) => where.place === place && where.time === time;
+    const held = [...state].filter(there).map(([id]) => id);
+    // In view: given evidence here, named here while there, or seen there within the last `hold` lines.
+    const inView = new Set([...evidence[k].keys(), ...[...seen[k].keys()].filter(id => state.has(id) && there([id, state.get(id)])), ...[...state].filter(entry => there(entry) && start - entry[1].at <= hold).map(([id]) => id)]);
+    for (const [id, at] of evidence[k]) state.set(id, { place, time, at });
+    for (const [id, at] of seen[k]) { const where = state.get(id); if (where && there([id, where])) where.at = Math.max(where.at, at); }
+    return { present: [...inView], held: [...new Set([...held, ...evidence[k].keys()])], evidence: [...evidence[k].keys()], now: Math.max(0, Math.round((1 - (segment.distribution?.exposition ?? 0) - (segment.distribution?.memory ?? 0)) * 1000) / 1000) };
   });
 }
 

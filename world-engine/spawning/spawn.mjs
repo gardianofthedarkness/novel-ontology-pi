@@ -3,7 +3,9 @@
 // stage/world/script.json, stage/world/strands.json (experiments/v2/strands.mjs), stage/terrain.json and
 // stage/simulation/live/page.json; writes stage/world/spawn.json.
 //   npm run build && node world-engine/spawning/spawn.mjs <novel-dir> [--reading <reading>/v2/data.json]
-// --reading: a script from before scenes kept their things takes them from the reading (its cards and chart).
+// --reading: who is in each unit as the director plays it (segments.mjs segmentWorld: presence by physics, the cards'
+// evidence carried while a person stays at the same place and story time), and a script from before scenes kept their
+// things takes them from the reading (its cards and chart). Without it, the script's own `present`.
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,11 +15,15 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'),
 const P = await load('dist/src/v2/spawning/positions.js'), { sceneThings } = await load('dist/src/v2/extraction/script.js');
 const { compose } = await load('dist/src/v2/context/engine.js'), { spawnSpotMode, spawnLines } = await load('dist/src/v2/context/spawnModes.js'), CP = await load('dist/src/v2/terrain/composite.js');
 const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
+const SG = await import('../director/segments.mjs');
 
 /** The scenes' starts on a book: its script, strands, terrain and built page; `reading`: the reading's data, for things. */
 export async function spawnBook(novelDir, { reading = null } = {}) {
   const read = async file => JSON.parse(await readFile(join(novelDir, 'stage', ...file), 'utf8'));
   const script = await read(['world', 'script.json']), strands = await read(['world', 'strands.json']), terrain = await read(['terrain.json']), page = await read(['simulation', 'live', 'page.json']);
+  // The cast the director plays, not the script's raw `present` (only who speaks, acts or is addressed in the unit itself):
+  // W10c, 68 of 286 units had nobody started, short inner thought and scene-setting whose people were there all along.
+  if (reading) { const view = SG.segmentWorld({ reading, script, spawn: null }); if (view?.script?.scenes?.length === script.scenes.length) script.scenes = view.script.scenes; }
   if (reading && script.scenes.every(scene => !scene.things)) {
     const category = new Map(reading.chart.entities.map(entity => [entity.id, entity.category])), sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
     const cardsOf = new Map();
