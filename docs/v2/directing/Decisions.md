@@ -386,3 +386,35 @@ numbers (17 multi stretches); not adopted yet.
 
 **Adopted (the user, 2026-11-03: "let's do wire in and M12"):** decision 26 as proposed; segments are the gate's input;
 the faculties' findings steer each beat's lead; M9 waits for its details to be discussed.
+
+## Places in story time, and what the reading extracts (2026-11-04)
+
+From the L10 replays of the paid pilot ([physics-laws.md](../physics-laws.md), L10).
+
+**Which places a container may name.** The user: "why there's no positive time direction order of buildings?" and "the
+list should be composed of places that have happened plus a list of nominated places the city itself carries cross
+volumes." The journeys reader had been offered every place of the volume's spawn plan at once, so a stair down in
+scene 3 (whose own place is the whole city) was matched to the underpass of scene 21. Now a container is offered:
+
+- the **unnamed places that have happened** by it in story time (the strands' layers, then reading order): a place is
+  born at its first container, with every place it stands in;
+- the **named places the city carries** (the book's terrain sites, and the universe's registry where there is one),
+  whenever the story is, at the box the spawn plan gave them, else their terrain site.
+
+A place still to come is said in words, as the text names it, and the journey falls back to a landmark in reach. The
+same rule guards the journey's box (`director.mjs`, `existsBy`, `boxOf`).
+
+**What the reading extracts as a thing.** The user: "A dart is something not important to the novel at all. It is not
+nominated, not a vehicle, not a weapon. It's just something small in routine basis. There's no hint that it's something
+important, don't extract it." The typing step had "weapon: a weapon"; volume 1's 27 weapon slots include a thrown dart,
+flames, a current, a blast and handcuffs. Now (`typing.ts`, `listing.ts`): a weapon is one the story uses as one (drawn,
+aimed, fired, thrown or struck at someone to hurt or threaten); the fire, lightning or blast of an ability is the
+ability's; a thing at its everyday use or in a game, even one that could hurt (darts at a board, a kitchen knife at
+cooking), is routine, never extracted. It takes effect when a reading is made again (the typing step is asked again:
+paid).
+
+**Still decided per scene (found, not changed).** The world engine plays segments, but the place layer under them is
+the reading's, made per scene: a segment stands in its scene's place (in all 39 scenes with several segments, every
+segment has the scene's place; 215 of the 346 segments stand in the whole city, because their scene's place is the
+city); the 96 unnamed places are born and named per scene ("… (scene 21)"); the spawn plan sets places per scene. A
+place per segment, from the segment's own lines, is the next step on this layer (for the user to decide).

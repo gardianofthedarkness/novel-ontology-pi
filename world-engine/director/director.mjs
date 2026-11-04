@@ -315,6 +315,24 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
       };
       const spawn = await spawnOf();
       const script = await scriptOf();
+      // Places in story time (the user, 2026-11-04: "why there's no positive time direction order of buildings"): an
+      // unnamed place comes into the story at its first container in story order (the strands' layers, then reading order),
+      // with every place it stands in. Before that it does not exist for anyone: a journey of an earlier container is never
+      // offered it (the pilot: a stair down in scene 3, where the scene's own place is the
+      // whole city, was matched to the underpass of scene 21, which spawning had put 1.5 km away).
+      const storyRank = (() => {
+        const layers = new Map((strandsNow?.scenes ?? []).map(entry => [entry.id, entry.layer ?? 0])), index = new Map(script.scenes.map((entry, n) => [entry.id, n]));
+        return new Map([...script.scenes].sort((a, b) => (layers.get(a.id) ?? 0) - (layers.get(b.id) ?? 0) || index.get(a.id) - index.get(b.id)).map((entry, n) => [entry.id, n]));
+      })();
+      const bornAt = new Map(), born = (place, rank) => { for (let id = place, guard = 0; id && guard < 12; id = script.places?.[id]?.parent ?? null, guard++) if (!(bornAt.get(id) <= rank)) bornAt.set(id, rank); };
+      for (const entry of script.scenes) if (entry.place) born(entry.place, storyRank.get(entry.id));
+      // The user, 2026-11-04: "the list should be composed of places that have happened plus a list of nominated places the
+      // city itself carries across volumes." A named place is the city's (the book's terrain sites, and the universe's
+      // registry where there is one), there whenever the story is; an unnamed one is known only from where it happened.
+      const sitesOf = async path => JSON.parse(await readFile(path, 'utf8').catch(() => 'null'))?.sites ?? {};
+      const citySites = { ...(await sitesOf(join(novelDir, '..', '..', 'universe', 'terrain.json'))), ...(await sitesOf(join(novelDir, 'stage', 'terrain.json'))) };
+      const nominated = id => !!id && !String(id).startsWith('unnamed:') && !String(id).startsWith('slot:') && !script.places?.[id]?.unnamed;
+      const existsBy = (place, container) => nominated(place) || (bornAt.get(place) ?? Infinity) <= (storyRank.get(container) ?? -1);
       let before = null;
       const where = new Map(), lastSceneOf = new Map();
       const timeOf = id => (id ? reading.time?.scenes?.find(entry => entry.scene === id)?.node ?? null : null);
@@ -399,6 +417,10 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // the building round a point, the street's width there, the block (the scene's place where it is one, else the reach
         // of the buildings round), a landmark's distance, the district's or the city's extent; times how many of it.
         const placeBox = new Map((spawn?.scenes ?? []).filter(entry => entry.target?.box).map(entry => [entry.place, entry.target.box]));
+        // Where a place stands: where the spawn plan set it (the line plays there), else, for a named place the volume has not
+        // set yet, its site in the city's terrain ([x0, z0, x1, z1] to the plan's [centre x, centre z, width, depth]).
+        const boxOf = id => placeBox.get(id) ?? (nominated(id) && Array.isArray(citySites[id]?.box) && citySites[id].box.length >= 4 ? (([x0, z0, x1, z1]) => [(x0 + x1) / 2, (z0 + z1) / 2, Math.abs(x1 - x0), Math.abs(z1 - z0)])(citySites[id].box) : null);
+        const placeIds = [...new Set([...placeBox.keys(), ...Object.keys(citySites).filter(nominated)])];
         const lotCentreAt = index => { const lot = world.lots[index]; return [(lot.i0 + lot.nx / 2) * CELL, (lot.floors ?? 1) * FLOOR, (lot.j0 + lot.nz / 2) * CELL]; };
         const nearestLots = (p, count) => world.lots.map((_, index) => ({ index, d: Math.hypot(lotCentreAt(index)[0] - p[0], lotCentreAt(index)[2] - p[2]) })).sort((a, b) => a.d - b.d).slice(0, count);
         const measure = (ref, p) => {
@@ -666,7 +688,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         if (gate && digestMeter) {
           const spans = firedSpans('journeys');
           if (spans.length) {
-            const places = [...placeBox.keys()].map(id => ({ id, label: script.places?.[id]?.label ?? names.get(id) ?? id, scale: script.places?.[id]?.scale ?? null }));
+            // Only the places the story has by now (story time); a place still to come is said in words, as the text names it.
+            const places = placeIds.filter(id => boxOf(id) && existsBy(id, scene.id)).map(id => ({ id, label: script.places?.[id]?.label ?? citySites[id]?.label ?? names.get(id) ?? id, scale: script.places?.[id]?.scale ?? citySites[id]?.scale ?? null }));
+            sceneRecord.placesOffered = { happened: places.filter(place => !nominated(place.id)).length, nominated: places.filter(place => nominated(place.id)).length, notYet: placeIds.filter(id => boxOf(id) && !existsBy(id, scene.id)).length };
             const journeys = await DG.journeysOf(meters.journeys, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id })), places, digest: dg?.digest ?? null });
             for (const journey of journeys) journeyOf.set(`${journey.sentence}|${journey.who}`, journey);
             sceneRecord.journeys = journeys;
@@ -1024,7 +1048,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           const megaMove = async (person, journey, far) => {
             const roofward = ['leaps between roofs', 'up or along a wall', 'flight'].includes(journey.manner), here = at(positions[person][0]);
             const lotCentre = index => { const lot = world.lots[index]; return [(lot.i0 + lot.nx / 2) * CELL, (lot.floors ?? 1) * FLOOR, (lot.j0 + lot.nz / 2) * CELL]; };
-            const box = placeBox.get(journey.to) ?? null;
+            const box = existsBy(journey.to, scene.id) ? boxOf(journey.to) : null;
             let lot = box ? null : world.lots.findIndex(entry => entry.label && journey.to && (journey.to.includes(entry.label) || entry.label.includes(journey.to)));
             let landmark = null;
             if (!box && lot < 0 && calls < budget) {
