@@ -127,3 +127,21 @@ purpose, the whole distribution kept on the scene); the engine prefers it to the
 and the sentence-kinds pass no longer asks the twelve-sentence block types. First quarter, against the 60 hand-labelled
 sentences there: typed whole, 39 right at the top and 0.56 on the true type; the block average over the same units, 33 and
 0.43 (M14's segments were 35 and 0.58 on its own test). 3 requests for 86 units.
+
+**The faculties' firing on these units (the user, 2026-11-04: "check if it needs to be retuned").** The gate fires a
+faculty on a unit whose mixed index (its type distribution, its sentences' kinds, its signals) stands above the reading's
+mean, the rule tuned on M14's segments. Scored again per sentence against the same oracle (the real faculty reads of
+scenes 1–13, 1,146 sentences, 77 of the new units over them), nothing paid:
+
+| Rule | Units: F1 / read | conversation | journeys | choreography | M14 stretches: F1 / read |
+|---|---|---|---|---|---|
+| Above the mean (current) | **0.58 / 0.33** | 0.75 | 0.52 | 0.48 | 0.65 / 0.31 |
+| Its types at least 0.05 | 0.59 / 0.41 | 0.81 | 0.44 | 0.51 | 0.68 / 0.37 |
+| Index at least 0.5 | 0.58 / 0.26 | 0.70 | 0.58 | 0.46 | — |
+| Every unit | 0.46 / 1 | 0.86 | 0.29 | 0.23 | — |
+
+No rule on the grid beats the current one at its cost (on at −0.5…1.5, off, at least, margin, and the type floor), so
+FIRING stands. The oracle's truth is M14's stretches (a stretch found something, every sentence of it counts), which
+favours M14's own cuts; the gap to it (0.58 against 0.65) is partly that. What it misses on the new units is recall
+(journeys 0.61, choreography 0.56); a lower bar for those two (−0.25) reads 0.95 of the fights and 0.82 of the journeys at
+twice the reading. An oracle read on the new units themselves would settle both (paid; not done).
