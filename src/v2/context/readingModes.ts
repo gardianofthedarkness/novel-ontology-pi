@@ -7,6 +7,7 @@ import { sentencesWith } from "../extraction/listing.js";
 import type { Role, Slot } from "../extraction/roles.js";
 import { ROLES } from "../extraction/time.js";
 import { ENTITY_TYPES, type Detected } from "../extraction/typing.js";
+import { STRETCH_TASK } from "../extraction/stretches.js";
 import type { Item, Mode, Source } from "./engine.js";
 
 /**
@@ -47,11 +48,30 @@ export const tilingSeamMode: Mode<Seam, null> = {
   cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
 };
 
+/** The one tiling (stretches.ts): every sentence, continues or begins a new stretch; then each stretch's kind. */
+export interface StretchCutFocus extends Asked { before: Sentence[]; asked: Sentence[] }
+export const stretchCutMode: Mode<StretchCutFocus, null> = {
+  name: "stretch-cut",
+  task: () => STRETCH_TASK,
+  definitions: () => ({ stretches: { ...BLOCK_TYPES } }),
+  sources: [given("before", (focus: StretchCutFocus) => sentences(focus.before)), given("passage", (focus: StretchCutFocus) => sentences(focus.asked))],
+  cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
+};
+export interface StretchTypeFocus extends Asked { stretches: { key: string; text: string }[] }
+export const stretchTypeMode: Mode<StretchTypeFocus, null> = {
+  name: "stretch-type",
+  task: () => "A novel cut into stretches, each given whole. Say what each stretch is mostly about (the kinds are defined in kinds).",
+  definitions: () => ({ kinds: { ...BLOCK_TYPES } }),
+  sources: [given("stretches", (focus: StretchTypeFocus) => focus.stretches.map((stretch) => [stretch.key, stretch.text]))],
+  cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
+};
+
 export interface KindsFocus extends Asked { summary: string; before: Sentence[]; asked: Sentence[] }
 export const kindsMode: Mode<KindsFocus, null> = {
   name: "sentence-kinds",
   task: (focus) => `${focus.summary} Classify every sentence of the passage (sentences keyed by id, in reading order).`.trim(),
-  definitions: () => ({ kinds: { ...SENTENCE_KINDS }, blocks: { ...BLOCK_TYPES }, change: SENTENCE_CHANGE }),
+  // The block types only where the request asks them (a backfill, block-types.mjs); the reading's one tiling types its stretches.
+  definitions: (focus) => ({ kinds: { ...SENTENCE_KINDS }, ...(focus.questions.some((question) => question.key.startsWith("blk_type:")) ? { blocks: { ...BLOCK_TYPES } } : {}), change: SENTENCE_CHANGE }),
   sources: [given("before", (focus: KindsFocus) => sentences(focus.before)), given("passage", (focus: KindsFocus) => sentences(focus.asked))],
   cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
 };

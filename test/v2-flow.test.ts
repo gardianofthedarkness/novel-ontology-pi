@@ -361,8 +361,7 @@ test("the flow: tiling, kinds and listing at once, then EM, the card scan, conte
     if (q.key.startsWith("dlg_turn:")) return { key: q.key, value: 0, confidence: 0.9 };
     if (q.key.startsWith("proper:")) return { key: q.key, value: 0.9, confidence: 0.9 };
     if (q.key.startsWith("type:")) { const named = (state as { names: Record<string, { text: string }> }).names[q.key.slice(5)].text; return { key: q.key, value: named.length === 4 ? "person" : "time", confidence: 0.9 }; }
-    if (q.key.startsWith("scene_start:")) return { key: q.key, value: "NONE", confidence: 0.9 };
-    if (q.key.startsWith("scene_end:")) return { key: q.key, value: q.options![q.options!.length - 1], confidence: 0.9 };
+    if (q.key.startsWith("stretch:")) return { key: q.key, value: "continues", confidence: 0.9 };
     if (q.key.startsWith("role:who:")) {
       const sentence = block.find((entry) => q.key.endsWith(entry.id))!, named = ["上条当麻", "白井黒子"].findIndex((name) => sentence.text.includes(name));
       return { key: q.key, value: named >= 0 ? `char_00000${named + 1}` : sentence.text.includes("机器") ? "none" : "char_000001", confidence: 0.9 };

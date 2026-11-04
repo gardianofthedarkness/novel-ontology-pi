@@ -27,11 +27,27 @@ After the reading, in order:
 
 | Step | Commit | Runs in |
 |---|---|---|
-| M14: segments (Jev's cut per sentence and type per segment, smoothed, with the purpose of each kind) | c4e9a26 | `segment-tiling.mjs --mode smoothed --write` on every scene (paid) |
+| M14: segments (Jev's cut per sentence and type per segment, smoothed, with the purpose of each kind) | c4e9a26 | was `segment-tiling.mjs --mode smoothed --write`; since 2026-11-04 the reading's one tiling (below) |
 | The workspace: canon and the world script from the reading; sampling pools into a new universe registry | 3589741 and after | `workspace.mjs` into a new library with no `universe/` (the blank canvas) |
 | Story strands on the world script | efb2d7f | `strands.mjs` |
 | Terrain: kinds by level, pools, pins, compatibility, shapes, settling, spawning by type; start positions by rule | 1fe7303 … f5dbd62 | `novel sim terrain <novel> --spawn --from city --run` (paid), no terrain cache |
 | The director, everything since W9: segments as containers, presence by physics, story-order strands, routes and departures, the virtual subway, the crowd field, L18 blasts, talk on one floor, places in story time, Jev's tokens metered | through 1e87569 | W10, from a fresh built checkout, on the new workspace (no director cache) |
 
-Not in W10: L19 (floating places, reserved); a place per segment (places are still per scene, for the user to decide);
-the objective replay (M15 §4).
+Not in W10: L19 (floating places, reserved); the objective replay (M15 §4). A place per segment comes with the one
+tiling below: every stretch is a scene, so the reading's place EM sets each stretch's place.
+
+## One tiling (the user, 2026-11-04, after the reading above)
+
+"There's no more scene needed anymore. Everything runs on segment level. You should make segment and scene reading the
+same thing, just a prompt level change, no two prompts for two levels." The reading now cuts the book once
+(`src/v2/extraction/stretches.ts`, in the flow where scene tiling was): one question a sentence, whether it continues the
+stretch before it or begins a new one elsewhere (another place, time or point of view: what a scene change was) or of
+another kind (what a segment change was); each stretch typed with the nine kinds; the types smoothed between changes of
+place or time with Jev's probability of a change of kind as the transition (M14's tuning). A stretch is what every later
+step calls a scene (its place, who is there, its time); `continues` names the one before when it began of another kind.
+The kinds pass no longer asks the twelve-sentence block types (a third level). `data.json`'s `segments` are its scenes, so
+the gate and the director play each scene as one container under its own id (no `scene~part`); presence carries by
+physics between stretches at the same place and story time (segmentPresence, unchanged).
+
+The W10 reading above (`v2-vol1-w10`, 47 scenes and 339 segments) was made before this; a reading with the one tiling
+is a new paid read, and the workspace, terrain and starts are made again from it.
