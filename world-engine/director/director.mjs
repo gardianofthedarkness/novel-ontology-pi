@@ -1050,8 +1050,9 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
               if (chosen?.leaves) moveRecord.leaves = true;
               if (chosen) targets = chosen.nodes;
             }
-            // The map along the arrow (beyond the spots): where nothing is offered, or the camera follows.
-            if (!targets && calls < budget && (!bounded || !offered.length)) {
+            // The map along the arrow, beyond the spots: where none was chosen (in a still frame, a place out of it, which
+            // the reframe then plays as leaving the frame).
+            if (!targets && calls < budget) {
               // c1: a rough box on the plan along the arrow.
               const along = C.frameAlong(here, arrow.vector, reach), half = (along[2] - along[0]) / 2, step = half > 60 ? 20 : half > 25 ? 10 : 5;
               const c1 = await shoot(`${slug}-c1`, [1024, 1024], { ...shotBase, topdown: { x: (along[0] + along[2]) / 2, z: (along[1] + along[3]) / 2, half }, grid: { box: along, step, y: here[1] }, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, half) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
@@ -1235,7 +1236,9 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             for (;;) {
               desk.start(node, 'layout check');
               const faults = WF.layoutFaults({ frame, cast: layoutNow() });
-              if (desk.check(node, 'layout check', faults) !== 'retake') break;
+              const verdict = desk.check(node, 'layout check', faults, { of: 'frame' });
+              if (verdict === 'passed with faults') frame = desk.kept(node, 'frame') ?? frame;
+              if (verdict !== 'retake') break;
               const crowded = faults.filter(fault => fault.fix === 'layout').map(fault => fault.who);
               for (const who of crowded) {
                 const taken = new Set(Object.values(positions).map(value => value[0])), free = near(at(positions[who][0]), 0.8, 2.5).filter(entry => !taken.has(entry.id));
@@ -1335,7 +1338,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             desk.publish(node, 'keys', cardRecord.moves.map(move => ({ who: move.person, moved: !!move.moved, ...(move.leaves ? { leaves: true } : {}) })), card.id);
             desk.done(node, 'keys', card.id);
             desk.start(node, 'key check', card.id);
-            desk.check(node, 'key check', (cardRecord.laws ?? []).filter(entry => ['L6', 'L10'].includes(entry.law) && entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), { card: card.id, canRetake: false });
+            desk.check(node, 'key check', (cardRecord.laws ?? []).filter(entry => ['L6', 'L10'].includes(entry.law) && entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), { card: card.id, canRetake: false, of: 'keys' });
             desk.publish(node, 'in-betweens', { walks: cardRecord.moves.filter(move => move.moved).length }, card.id); desk.done(node, 'in-betweens', card.id);
             const later = new Set(cards.slice(cards.indexOf(card) + 1).filter(entry => cutAt.get(entry.first)?.id === cut.id).flatMap(entry => entry.people.filter(person => person.how.some(how => how === 'speaks' || how === 'acts')).map(person => person.id)));
             const ended = castNow().filter(who => !frame.holds || frame.holds.includes(who)).map(who => ({ who, at: at(positions[who][0]) }));
@@ -1347,7 +1350,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             cardRecord.workflow = { node, frame: desk.nodes.get(node)?.tasks.frame?.kept ?? null, window: frame.window, reframe: reframe.decision, ...(reframe.outside.length ? { outside: reframe.outside } : {}) };
             desk.publish(node, 'photography', { camera: cardRecord.camera }, card.id); desk.done(node, 'photography', card.id);
             desk.start(node, 'rush check', card.id);
-            desk.check(node, 'rush check', (cardRecord.laws ?? []).filter(entry => entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), { card: card.id, canRetake: false });
+            desk.check(node, 'rush check', (cardRecord.laws ?? []).filter(entry => entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), { card: card.id, canRetake: false, of: 'photography' });
           }
           // The producer's camera rides with the card's event: the player and World · Live follow it card by card.
           event.camera = cardRecord.camera ?? null;

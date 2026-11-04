@@ -116,20 +116,23 @@ export function createDesk({ cuts = [], now = () => Date.now(), retakes = RETAKE
     },
     // Done with no check of its own.
     done(cut, task, card = null) { const entry = taskOf(cut, task, card); mark(cut, task, card, 'done', { v: entry.kept }); return 'done'; },
-    // A check on the last version: no faults, done; faults and retakes left (and a way to retake), a retake; else the
-    // version with the fewest faults is kept, passed with faults.
-    check(cut, task, faults, { card = null, canRetake = true } = {}) {
-      const entry = taskOf(cut, task, card), last = entry.versions.at(-1);
-      if (last) last.faults = faults;
+    // A check (its own task, `task`) on the last version of the task it checks (`of`): each check is a version of its
+    // own holding the faults it found and the version it looked at. No faults, done; faults and retakes left (and a way
+    // to retake), a retake; else the checked version with the fewest faults is kept, passed with faults.
+    check(cut, task, faults, { card = null, canRetake = true, of = null } = {}) {
+      const entry = taskOf(cut, task, card), checked = of ? taskOf(cut, of, card) : null, looked = checked?.versions.at(-1)?.v ?? null;
+      entry.versions.push({ v: entry.versions.length + 1, data: { of, v: looked }, faults });
+      entry.kept = entry.versions.length;
       if (!faults.length) { mark(cut, task, card, 'done', { v: entry.kept }); return 'done'; }
       if (canRetake && entry.retakes.length < retakes) {
-        entry.retakes.push({ v: last?.v ?? null, why: faults.map(fault => `${fault.law}${fault.who ? ` ${fault.who}` : ''}: ${fault.why}`) });
-        mark(cut, task, card, 'retake', { v: last?.v ?? null, faults: faults.length });
+        entry.retakes.push({ v: looked, why: faults.map(fault => `${fault.law}${fault.who ? ` ${fault.who}` : ''}: ${fault.why}`) });
+        mark(cut, task, card, 'retake', { v: entry.kept, faults: faults.length });
         return 'retake';
       }
-      const best = entry.versions.reduce((a, b) => ((b.faults?.length ?? 0) < (a.faults?.length ?? 0) ? b : a), entry.versions[0] ?? { v: null });
-      entry.kept = best?.v ?? null;
-      mark(cut, task, card, 'passed with faults', { v: entry.kept, faults: best?.faults?.length ?? faults.length, ...(canRetake ? {} : { why: 'no retake for this check yet' }) });
+      const best = entry.versions.reduce((a, b) => (b.faults.length < a.faults.length ? b : a));
+      entry.kept = best.v;
+      if (checked && best.data.v !== null) checked.kept = best.data.v;
+      mark(cut, task, card, 'passed with faults', { v: entry.kept, faults: best.faults.length, ...(canRetake ? {} : { why: 'no retake for this check yet' }) });
       return 'passed with faults';
     },
     kept(cut, task, card = null) { const entry = taskOf(cut, task, card); return entry.versions.find(version => version.v === entry.kept)?.data ?? null; },
