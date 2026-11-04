@@ -120,3 +120,10 @@ First quarter (blocks 1–2, 1,331 sentences; 334 paid Jev requests with the cac
 | M14's starts found (±1 sentence) | 24 | **67** | — |
 | Cuts at an M14 start | — | 62 of 86 | — |
 | The old scene starts kept | — | 16 of 16 | — |
+
+**The units' types in the reading (the user, 2026-11-04: "connect the type pipeline in reading").** After the two tiling
+passes, each unit is typed whole (M14's type step, now the reading's own: forty units a request, the kinds with their
+purpose, the whole distribution kept on the scene); the engine prefers it to the block answers over the unit's sentences,
+and the sentence-kinds pass no longer asks the twelve-sentence block types. First quarter, against the 60 hand-labelled
+sentences there: typed whole, 39 right at the top and 0.56 on the true type; the block average over the same units, 33 and
+0.43 (M14's segments were 35 and 0.58 on its own test). 3 requests for 86 units.

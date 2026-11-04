@@ -44,3 +44,10 @@ test('each scene a segment (a reading whose tiler cut segments): its own id, its
   assert.deepEqual(world.spawn.scenes.map(scene => scene.spawn), ['new', 'new', 'new']);
   assert.equal(world.reading.segments.length, 3, 'the gate reads them as segments');
 });
+
+test('a unit the reading typed whole keeps its own kind over the blocks', () => {
+  const reading = { scenes: [{ id: 's1', sentences: ['a1', 'a2'], type: 'confrontation', confidence: 0.8, distribution: { confrontation: 0.8, routine: 0.2 } }], blocks: [{ first: 'a1', last: 'a2', sentences: ['a1', 'a2'], distribution: { routine: 1 }, confidence: 0.9 }] };
+  const [unit] = scenesAsSegments(reading);
+  assert.equal(unit.type, 'confrontation');
+  assert.equal(unit.distribution.confrontation, 0.8);
+});

@@ -49,13 +49,15 @@ export function segmentPresence({ segments, cards, scriptScenes }) {
 
 /**
  * Each scene its own segment (the user, 2026-11-04: the reading's tiler cuts segments, "each scene a segment"): its kind
- * from the block answers over its own sentences (each sentence's blocks, averaged), so the gate fires per segment as M14
+ * as the reading typed it whole (its unit-type step), else from the block answers over its own sentences (each sentence's blocks, averaged), so the gate fires per segment as M14
  * has it; `change` is left to the scene's cut (beats.mjs).
  */
 export function scenesAsSegments(reading) {
   const blocksAt = new Map();
   for (const block of reading.blocks ?? []) for (const id of block.sentences) (blocksAt.get(id) ?? blocksAt.set(id, []).get(id)).push(block);
   return reading.scenes.map(scene => {
+    // A unit the reading typed whole (its unit-type step) keeps its own kind; else the blocks over its sentences.
+    if (scene.distribution && Object.values(scene.distribution).some(p => p > 0)) return { scene: scene.id, first: scene.sentences[0], last: scene.sentences.at(-1), sentences: scene.sentences, type: scene.type ?? null, confidence: scene.confidence ?? 0, distribution: scene.distribution, smoothed: scene.distribution, change: null };
     const answers = scene.sentences.flatMap(id => blocksAt.get(id) ?? []), sum = {};
     for (const block of answers) for (const [type, p] of Object.entries(block.distribution ?? {})) sum[type] = (sum[type] ?? 0) + p / answers.length;
     const distribution = Object.fromEntries(Object.entries(sum).map(([type, p]) => [type, Math.round(p * 1000) / 1000]));

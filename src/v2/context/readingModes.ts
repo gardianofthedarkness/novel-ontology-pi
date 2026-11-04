@@ -52,8 +52,23 @@ export interface KindsFocus extends Asked { summary: string; before: Sentence[];
 export const kindsMode: Mode<KindsFocus, null> = {
   name: "sentence-kinds",
   task: (focus) => `${focus.summary} Classify every sentence of the passage (sentences keyed by id, in reading order).`.trim(),
-  definitions: () => ({ kinds: { ...SENTENCE_KINDS }, blocks: { ...BLOCK_TYPES }, change: SENTENCE_CHANGE }),
+  // The block types only where a request asks them (a backfill, block-types.mjs); the reading types its units whole.
+  definitions: (focus) => ({ kinds: { ...SENTENCE_KINDS }, ...(focus.questions.some((question) => question.key.startsWith("blk_type:")) ? { blocks: { ...BLOCK_TYPES } } : {}), change: SENTENCE_CHANGE }),
   sources: [given("before", (focus: KindsFocus) => sentences(focus.before)), given("passage", (focus: KindsFocus) => sentences(focus.asked))],
+  cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
+};
+
+/**
+ * The units' kinds (M14's type step, now the reading's own; the user, 2026-11-04: "connect the type pipeline in reading"):
+ * each unit the two tiling passes cut, given whole, typed with one of the nine kinds, its whole distribution kept. The
+ * purpose of the kinds is said with them: each wakes its own specialist.
+ */
+export interface UnitTypeFocus extends Asked { units: { id: string; text: string }[] }
+export const unitTypeMode: Mode<UnitTypeFocus, null> = {
+  name: "unit-types",
+  task: () => "Segments of a novel, each given whole, in reading order. Say what each segment is mostly about, one of the kinds. A different specialist of a film crew takes over for each kind (a fight choreographer, a chase unit, someone for inner voices, for phone calls, for scenery), so name the kind whose specialist this segment needs most.",
+  definitions: () => ({ kinds: { ...BLOCK_TYPES } }),
+  sources: [given("segments", (focus: UnitTypeFocus) => focus.units.map((unit) => [unit.id, unit.text]))],
   cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
 };
 

@@ -1,8 +1,8 @@
 import type { DecisionQuestion, DecisionState } from "../../ground/connectors/jev.js";
 import type { Sentence } from "../../digger/intake/sectioning.js";
 import { ask, type Asker, type Manifest } from "../context/engine.js";
-import { kindsMode, tilingSeamMode, tilingWindowMode } from "../context/readingModes.js";
-import { classifySentences, kindCards, tileScenes, type BlockAnswer, type KindCard, type SentenceKind } from "../../digger/autostep/segmentation.js";
+import { kindsMode, unitTypeMode, tilingSeamMode, tilingWindowMode } from "../context/readingModes.js";
+import { BLOCK_TYPES, classifySentences, kindCards, tileScenes, type BlockAnswer, type KindCard, type SentenceKind } from "../../digger/autostep/segmentation.js";
 import { Chart, mentions, resolveBatch, type EmResult } from "./em.js";
 import { FactLedger, type FactEntry } from "./facts.js";
 import type { Lister } from "./listing.js";
@@ -46,7 +46,8 @@ export interface FlowBlock { id: string; chapter: number; sentences: Sentence[] 
 /** A card's person (or slot, or a thing or place that acts): how it is there (named, speaks, acts, addressed, described) and in which of its sentences. */
 export interface CardPerson { id: string; how: ("named" | "speaks" | "acts" | "addressed" | "described")[]; at: string[] }
 export interface FlowCard extends KindCard { block: string; sentences: string[]; entities: { id: string; at: string[] }[]; people: CardPerson[] }
-export interface FlowScene { id: string; index: number; block: string; chapter: number; sentences: string[] }
+/** A scene of the reading: one unit the two tiling passes cut, with its kind (the unit-type step) and its whole distribution. */
+export interface FlowScene { id: string; index: number; block: string; chapter: number; sentences: string[]; type?: string | null; confidence?: number; distribution?: Record<string, number>; top?: [string, number][] }
 export interface SceneContext {
   scene: string;
   cards: string[];
@@ -135,7 +136,7 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   })));
   const classified = timed(kindsLog, () => Promise.all(blocks.map(async (block) => {
     const decide = decideFor(kindsLog);
-    return { block, ...(await classifySentences(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, blocks: true, ask: async (window) => (await ask(decide, kindsMode, window, null)).replies })) };
+    return { block, ...(await classifySentences(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, ask: async (window) => (await ask(decide, kindsMode, window, null)).replies })) };
   })));
   const batches = blocks.flatMap((block) => Array.from({ length: Math.ceil(block.sentences.length / LIST_BATCH) }, (_, index) => ({ block, sentences: block.sentences.slice(index * LIST_BATCH, (index + 1) * LIST_BATCH) })));
   const listingStarted = performance.now(), typingDecide = decideFor(typing);
@@ -161,6 +162,20 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
 
   // Scenes and cards.
   const scenes: FlowScene[] = tiles.flatMap(({ block, spans }) => spans.map((ids) => ({ id: "", index: 0, block: block.id, chapter: block.chapter, sentences: ids }))).map((scene, index) => ({ ...scene, id: `scene_${String(index + 1).padStart(6, "0")}`, index }));
+  // Each unit's kind, asked of the unit whole (M14's type step in the reading): forty units a request, in reading order.
+  const unitTypes = meter("unit types");
+  await timed(unitTypes, async () => {
+    const decide = decideFor(unitTypes), PER = 40, SHOWN = 3000, kinds = Object.keys(BLOCK_TYPES);
+    await Promise.all(Array.from({ length: Math.ceil(scenes.length / PER) }, (_, n) => scenes.slice(n * PER, (n + 1) * PER)).map(async (batch) => {
+      const units = batch.map((scene) => ({ id: `unit_${scene.index + 1}`, text: scene.sentences.map(text).join("").slice(0, SHOWN) }));
+      const questions: DecisionQuestion[] = batch.map((scene) => ({ key: `unit_type:${scene.id}`, primitive: "choice", instructions: `What is segments.unit_${scene.index + 1} mostly about (one of kinds)?`, options: [...kinds], optionHints: { ...BLOCK_TYPES } }));
+      const { replies } = await ask(decide, unitTypeMode, { units, questions }, null);
+      for (const scene of batch) {
+        const reply = replies.find((entry) => entry.key === `unit_type:${scene.id}`), distribution = Object.fromEntries(kinds.map((k) => [k, Number(Number(reply?.distribution?.[k] ?? (reply?.value === k ? reply?.confidence ?? 0 : 0)).toFixed(3))]));
+        Object.assign(scene, { type: reply?.value && kinds.includes(String(reply.value)) ? String(reply.value) : null, confidence: Number(Number(reply?.confidence ?? 0).toFixed(2)), distribution, top: Object.entries(distribution).sort((a, b) => b[1] - a[1]).slice(0, 3) });
+      }
+    }));
+  });
   const kindOf: FlowResult["kinds"] = {};
   for (const { block, kinds: list, turns, confidence, distributions } of kinds) block.sentences.forEach((sentence, index) => { kindOf[sentence.id] = { kind: list[index], turn: Number(turns[index].toFixed(3)), confidence: Number(confidence[index].toFixed(3)), ...kindScores(distributions[index]) }; });
   const cut = (): FlowCard[] => blocks.flatMap((block) => {
