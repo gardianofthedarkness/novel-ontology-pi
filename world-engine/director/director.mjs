@@ -570,18 +570,20 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           scene.events.push(event);
           // A route from afar, in legs that each fit one walk graph window (128 m of a window 384 m wide): each leg's
           // ground loaded as they reach it, walked on the walk graph, the legs joined into one way.
-          const LEG = 128;
+          const LEG = 128, metresOf = node => { const p = at(node); return { x: p[0], y: p[1], z: p[2] }; };
           const groundNear = (x, z) => around(x, z, 12).nodes.filter(node => node.type === 1).sort((m, n) => Math.hypot(m.x - x, m.z - z) - Math.hypot(n.x - x, n.z - z)).slice(0, 8).map(node => node.id);
           // Run from `from` toward point b, leg by leg (each leg's blocks loaded as they reach it), ending on `last`.
           const runTo = (who, from, b, last, tag) => {
-            const a = at(from[0]), legs = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[2] - a[2]) / LEG)), path = [from[0]];
+            const a = at(from[0]), legs = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[2] - a[2]) / LEG)), path = [from[0]], skipped = [];
             let here = from;
             for (let k = 1; k <= legs; k++) {
               const t = k / legs, aim = [a[0] + (b[0] - a[0]) * t, a[2] + (b[2] - a[2]) * t];
               const targets = k === legs && last?.length ? last : groundNear(aim[0], aim[1]);
-              if (!targets.length) continue;
+              if (!targets.length) { skipped.push(k); continue; }
               const leg = walk(scene, `${scene.id}|${who}|${tag}|${k}`, here, targets, 'run');
-              if (!leg || leg.length < 2) return { path, legs: k - 1, of: legs, reached: false };
+              // Where a route stops, in metres (the engine's node ids hold only within the run): the leg, where it began, its
+              // aim on the straight line, its targets, and why the walk found no way (why-walk.mjs draws it).
+              if (!leg || leg.length < 2) return { path, legs: k - 1, of: legs, reached: false, stopped: { tag, leg: k, of: legs, skipped, here: metresOf(here[0]), aim: { x: aim[0], z: aim[1] }, to: metresOf(targets[0]), targets: targets.length, last: k === legs && !!last?.length, code: walk.code ?? (leg ? 'ONE_CELL' : null), why: walk.failed ?? null } };
               path.push(...leg.slice(1)); here = [leg.at(-1), here[1]];
             }
             return { path, legs, of: legs, reached: true };
@@ -597,7 +599,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             const first = runTo(who, from, station, groundNear(station[0], station[2]), 'to-station');
             if (!first.reached) return { ...first, trip };
             const alight = groundNear(far[0], far[2]);
-            if (!alight.length) return { ...first, reached: false, trip };
+            if (!alight.length) return { ...first, reached: false, trip, stopped: { tag: 'alight', here: { x: far[0], y: far[1], z: far[2] }, why: 'no open ground at the far station' } };
             const last = runTo(who, [alight[0], from[1]], b, near.length ? near : [dest], 'from-station');
             return { path: [...first.path, ...last.path], legs: first.legs + last.legs, of: first.of + last.of, reached: last.reached, trip, ride: { from: first.path.at(-1), to: alight[0] } };
           };
@@ -606,7 +608,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
             const p = at(entry.dest), { nodes } = around(p[0], p[2], 6), near = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= 2.5).map(node => node.id);
             if (entry.route) {
               const route = routeWalk(entry.who, entry.from, entry.dest, near), metres = Math.round(route.path.slice(1).reduce((sum, node, k) => { const u = at(route.path[k]), v = at(node); return sum + Math.hypot(v[0] - u[0], v[2] - u[2], v[1] - u[1]); }, 0));
-              sceneRecord.routes.push({ who: entry.who, metres, by: route.trip.by, seconds: route.trip.seconds, legs: route.legs, of: route.of, reached: route.reached });
+              sceneRecord.routes.push({ who: entry.who, metres, by: route.trip.by, seconds: route.trip.seconds, legs: route.legs, of: route.of, reached: route.reached, from: metresOf(entry.from[0]), dest: metresOf(entry.dest), ...(route.stopped ? { stopped: route.stopped } : {}) });
               if (route.path.length > 1) { E.moves.set(`${scene.id}|${event.id}|${entry.who}`, { person: entry.who, how: 'run', path: route.path, ensemble: [] }); positions[entry.who] = [route.path.at(-1), entry.from[1]]; }
               if (!route.reached) { positions[entry.who] = [entry.dest, entry.from[1]]; sceneRecord.offPage.push(entry.who); }
               continue;

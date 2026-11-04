@@ -61,3 +61,17 @@ test("a district keeps every room reachable from the avenue, clutter included, a
   assert.ok(path && group.graph.y[path.at(-1)!] > 0, "someone on the avenue reaches a roof");
   assert.ok(path.some((node, index) => index > 0 && group.graph.y[node] > group.graph.y[path[index - 1]] && group.nav.regions[group.nav.region[path[index - 1]]]?.includes("stair")), "by a stair core");
 });
+
+test("a lift far cheaper than its climb (a deep hall's shaft to the street) keeps the field finite and the walk drawable", () => {
+  // A hall 90 m down: 0 → 1 along the hall, 1 → 2 a lift to the street at a flat cost, 2 → 3 along the street to the
+  // target. The potential's climb term (λ per metre) would fall 720 across the lift against its cost of 24: unscaled, its
+  // weight overflowed and the whole field turned NaN.
+  const at: [number, number, number][] = [[0, 0, -90], [2, 0, -90], [2, 0, 0], [4, 0, 0]];
+  const edge = (from: number, to: number, cost: number, kind: number, dir: number) => ({ from, to, dir, cost, kind });
+  const lift = buildGraph(at, [edge(0, 1, 2, EDGE.walk, directionOf(1, 0)), edge(1, 2, 24, EDGE.climb, 8), edge(2, 3, 2, EDGE.walk, directionOf(1, 0)), edge(2, 1, 24, EDGE.descend, 9), edge(1, 0, 2, EDGE.walk, directionOf(-1, 0))]);
+  const field = solveWalk(lift, [3], { T: 0.9, kappa: 1, lambda: 8 });
+  assert.ok(Array.from(field.h).every(Number.isFinite), "no NaN or infinity in the field");
+  assert.ok(Array.from(field.weight).every(Number.isFinite));
+  let seed = 3; const rng = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  assert.deepEqual(sampleWalk(lift, field, 0, directionOf(1, 0), rng), [0, 1, 2, 3]);
+});

@@ -84,6 +84,13 @@ export function solveWalk(graph: MoveGraph, targets: Iterable<number>, options: 
   // φ: straight-line distance to Y's bounding box plus the climb Y needs; it never exceeds the cost still to go.
   const phi = new Float64Array(graph.nodes);
   for (let n = 0; n < graph.nodes; n++) phi[n] = Math.hypot(Math.max(0, minX - graph.x[n], graph.x[n] - maxX), Math.max(0, minZ - graph.z[n], graph.z[n] - maxZ)) + options.lambda * Math.max(0, minY - graph.y[n]);
+  // φ must stay within the cost of every edge it falls across (φ(from) − φ(to) ≤ the edge's cost), or a weight
+  // exp(−(cost + φ(to) − φ(from))/T) overflows: a deep hall's lift to the street (a flat cost over 90 m) once made one
+  // weight infinite, and infinity times zero turned the whole field to NaN (every route through it "no way on foot").
+  // Scaled down until it holds on every edge of this graph (most graphs keep it whole).
+  let scale = 1;
+  for (let n = 0; n < graph.nodes; n++) for (let e = graph.offsets[n]; e < graph.offsets[n + 1]; e++) { const fall = phi[n] - phi[graph.to[e]], cost = graph.cost[e] * (options.factors?.[graph.kind[e]] ?? 1); if (fall > cost) scale = Math.min(scale, Math.max(0, cost) / fall); }
+  if (scale < 1) for (let n = 0; n < graph.nodes; n++) phi[n] *= scale;
   const weight = new Float64Array(graph.to.length);
   for (let n = 0; n < graph.nodes; n++) for (let e = graph.offsets[n]; e < graph.offsets[n + 1]; e++) weight[e] = Math.exp(-(graph.cost[e] * (options.factors?.[graph.kind[e]] ?? 1) + phi[graph.to[e]] - phi[n]) / options.T);
   const turn = turnWeights(options.kappa, options.T), h = new Float64Array(graph.nodes * D), a = new Float64Array(64);

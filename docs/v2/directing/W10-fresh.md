@@ -67,3 +67,13 @@ the workspace and strands; terrain from blank (130 Jev calls: 175 places, 2 citi
 buildings); starts by rule (288 starts; 12 units with nobody placed). The host serves it. Rehearsed unpaid on the first
 quarter (units 1–26, its copy `rehearsal-novel-w10b`): all 26 cast, none borrowed, 150 cards, no camera jump over 40 m,
 22 arrivals off-page, L6 5 (one unit: two people 291 m apart), L10 0. W10 waits for the user.
+
+**Arrivals off-page: the solver's overflow (2026-11-04).** The first-quarter rehearsal of the build left 22 people
+arriving off-page: each route from afar stopped at a leg with "no way there on foot". The replays
+(`why-walk.mjs`, now drawing stopped routes from metres the record keeps) showed the ground connected in every case,
+in the run's walk window and in the solver's own box. The run's own solve, replayed, gave a field of NaN: in each
+window, a lift from a deep hall (90 m down, a flat cost of 24; underground.ts) let the path integral's potential fall
+720 across one edge, its weight overflowed to infinity, and infinity times zero spread NaN through the field, which
+then "converged" with no first step. `solveWalk` now scales its potential until it holds on every edge (most fields
+keep it whole); a test keeps the lift case. First quarter after the fix: arrivals off-page 22 to 0, all 41 routes
+arrive, L6 5 to 0; the rehearsal 6.3 to 5.4 minutes.

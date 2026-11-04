@@ -6,7 +6,7 @@
 // canon are left alone. With --passes 2, the second pass plays from the first one's smoothing (back-tested: the whole
 // strand is known, so the least-action history of pass 1 is where pass 2 starts its people).
 //   node world-engine/director/rehearsal.mjs <copy of novel-dir> --reading <reading>/v2/data.json --from scene_000001 --to scene_000046 [--passes 2] [--out report.json]
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -89,7 +89,7 @@ export function smoothedOf({ run, record, page, spawn, strands, reading }) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, passes: { type: 'string' }, out: { type: 'string' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { 'keep-page': { type: 'boolean' }, reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, passes: { type: 'string' }, out: { type: 'string' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node world-engine/director/rehearsal.mjs <copy of novel-dir> --reading <data.json> --from <scene> --to <scene> [--out report.json]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8')), world = join(resolve(novelDir), 'stage', 'world');
   const strands = JSON.parse(await readFile(join(world, 'strands.json'), 'utf8')), spawn = JSON.parse(await readFile(join(world, 'spawn.json'), 'utf8').catch(() => 'null'));
@@ -99,6 +99,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const started = Date.now();
     const { record, data } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), log: () => {} });
     const smoothedNow = smoothedOf({ run: `rehearsal-${pass}`, record, page: data, spawn, strands, reading });
+    // --keep-page: the page beside the run's record, as a real run keeps it (why-walk.mjs and the replay read it).
+    if (values['keep-page']) { const id = `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`, folder = join(resolve(novelDir), 'stage', 'simulation', 'runs', 'director'); await mkdir(folder, { recursive: true }); await writeFile(join(folder, `${id}.page.json`), JSON.stringify(data)); passes.keptPage = id; }
     // The laws as check-run reads them (L1–L20 on the line as played), from this pass's page and segment files.
     const segFolder = join(world, 'segments'), segScript = JSON.parse(await readFile(join(segFolder, 'script.json'), 'utf8')), segStrands = JSON.parse(await readFile(join(segFolder, 'strands.json'), 'utf8'));
     const lawReading = segmentWorld({ reading, script: segScript, spawn: null })?.reading ?? reading;
