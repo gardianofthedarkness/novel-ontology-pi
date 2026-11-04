@@ -60,3 +60,10 @@ from the blocks for the gate); the director plays them under their own ids (no `
 copied to parts, no borrowed cast); the world builder takes them as `played` (cast, spawn, strands); the log, the laws
 and the rehearsal read the played views; canon is by the units as played. A reading with M14's second cut plays its
 scenes. Rehearsed on the first quarter: 13 containers, all cast, none borrowed, the gate by unit, L6 1 and L10 1.
+
+**Built for W10 (2026-11-04), from f5ea3b5, nothing cached.** Reading `v2-vol1-w10b` (973 Jev requests, input about $0.35;
+177 work-model requests): 107 units, median 40 sentences, longest 251. Library `v2-host-state-11` (a blank universe):
+the workspace and strands; terrain from blank (130 Jev calls: 175 places, 2 cities, 12 districts, 103 streets, 58
+buildings); starts by rule (288 starts; 12 units with nobody placed). The host serves it. Rehearsed unpaid on the first
+quarter (units 1–26, its copy `rehearsal-novel-w10b`): all 26 cast, none borrowed, 150 cards, no camera jump over 40 m,
+22 arrivals off-page, L6 5 (one unit: two people 291 m apart), L10 0. W10 waits for the user.
