@@ -125,7 +125,7 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     write(v2, 'spatial.yaml', yamlDocument(result.spatial ?? [])),
     ...((live.usage ?? []).length ? [write(v2, 'jev-usage.json', JSON.stringify(live.usage))] : []),
     // The same data as JSON, for tools (compare.mjs, inspect.mjs, the world loop).
-    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time, places: result.places, spatial: result.spatial })),
+    write(v2, 'data.json', JSON.stringify({ log: summary, scenes: result.scenes, cards: result.cards, kinds: result.kinds, blocks: result.blocks, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time, places: result.places, spatial: result.spatial })),
     write(baseDir, 'scenes.json', JSON.stringify(base.scenes)),
     write(baseDir, 'roster.json', JSON.stringify(base.roster, null, 1)),
     write(baseDir, 'facts.json', JSON.stringify(base.facts)),
