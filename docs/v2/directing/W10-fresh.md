@@ -191,3 +191,18 @@ Every faculty reads the original text where it fires (numbered lines with their 
 the windows the whole summary and the memory carried from the units before; scale and journeys the summary and where;
 choreography the summary and where; conversation where alone; ambience where and the background crowd. None of the five
 has the memory, nor what the generalist's windows found.
+
+**Rehearsed (units 1–84, the first quarter; unpaid, the stand-in Jev).** Followed person by person through the kept page:
+of 323 unit starts, 279 exactly where the person last was, 43 first appearances, and all 23 who came back after being out
+of a cast came back where they were. One jump: an off-page arrival in unit 26 (a 4-leg route found no way on its second
+leg and the director put the runner at the destination; replayed in the run's own window the way is there, 110 m, so the
+run failed on something the replay does not recreate). Against the same units with the old presence rule:
+
+| | Held = present (before) | In view (8e9d69f) |
+|---|---|---|
+| L11, four people on one 2 m cell | 43 | 0 |
+| L6, talk across a distance | 2 | 6 (5 the off-page arrival in unit 26) |
+| L9 | 1 | 1 (the same card) |
+| L10, moves held | 0 | 3 (the stand-in's landmark pick was the building they stood in) |
+| Off-page arrivals | 2 | 1 |
+| Minutes | 8 | 6 |
