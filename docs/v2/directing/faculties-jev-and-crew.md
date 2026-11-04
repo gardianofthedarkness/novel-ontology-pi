@@ -142,3 +142,31 @@ Sources (anime): [Anime Herald, storyboarding](https://www.animeherald.com/2025/
 [Japan Expo, storyboard](https://www.japan-expo-paris.com/en/actualites/storyboard-a-fundamental-stage-in-making-an-anime_104871.htm);
 [Wikipedia, exposure sheet](https://en.wikipedia.org/wiki/Exposure_sheet);
 [Atrium, decoding anime production](https://atriumdotart.substack.com/p/decoding-anime-production).
+
+## The runtime workflow (the user, 2026-11-04: "runtime casts workflow ... model the workflows into strands and nodes. Check what is the industry standard")
+
+**Industry practice.** Anime moves each cut, by its number, through storyboard → layout → layout check (episode director,
+then animation director) → background ordered from the approved layout → rough keys → finished keys → key check →
+in-betweens → check → photography → rush check → retakes; the production desk (制作進行) carries it from desk to desk.
+CG trackers (ShotGrid, Kitsu) model the same as a graph: assets built once and cast into shots; per shot, tasks of
+standard types with upstream and downstream dependencies; statuses Todo → WIP → Waiting for approval → Done or Retake
+(Done lets the next task start; retakes are counted); hand-offs as published versions, read downstream only once published.
+
+**Ours, proposed.** Assets are the settei and the art (people, things, the terrain), built before any cut. Each **cut is a
+node** with a chain of tasks: layout (the cut's cast placed; reads the storyboard cut, the casting, the previous cut's end
+on its strand, the art) → frame (the photographer: window, angle, a pan's path; Jev where the plan does not fit) → layout
+check (L1, L11; retake to layout or frame) → keys (the key animator, Jev, its picture the frame, its options inside the
+frame or "leaves frame toward …") → key check (L6, L10) → in-betweens (the path integral) → reframe (still in frame:
+follow or widen within the cut's movement; leaves it: a new cut, a retake of the storyboard) → photography → rush check
+(the laws, the user's pins). Every task has a status and publishes a version; a retake records why and keeps the version
+before it. **Strands order the nodes**: a cut waits for the last earlier cut that cast each of its people; cuts on strands
+with no one in common run side by side. The **production desk** (the host, the run manager) schedules the ready tasks,
+keeps the Jev budget, counts retakes per cut and per role, and draws the timeline.
+
+Sources: [Mynavi, anime workflow](https://news.mynavi.jp/article/20170405-actf2017_03/2);
+[MHLW, animation production](https://www.mhlw.go.jp/content/11901000/001152417.pdf);
+[ShotGrid, pipeline steps](https://help.autodesk.com/cloudhelp/ENU/SG-Producer/files/pr-scheduling-tasks/SG_Producer_pr_scheduling_tasks_pr_tasks_pipeline_steps_html.html);
+[ShotGrid, step dependencies](https://community.shotgridsoftware.com/t/pipeline-step-dependencies/4351);
+[Kitsu, statuses](https://kitsu.cg-wire.com/configure-kitsu/);
+[CGWire, shot casting](https://blog.cg-wire.com/cg-pipeline-shot-casting/);
+[Pixune, VFX pipeline](https://pixune.com/blog/vfx-pipeline/).
