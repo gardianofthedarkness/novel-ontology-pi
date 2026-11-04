@@ -39,7 +39,9 @@ export function placeOfWords(words, places) {
   const said = String(words ?? '').trim();
   if (!said) return null;
   if (places.some(place => place.id === said)) return said;
-  const fits = places.filter(place => place.label && place.label.length >= 2 && (place.label === said || said.includes(place.label) || (said.length >= 2 && place.label.includes(said))));
+  // A label as the text names it: without the world script's marks (" (scene 8)" for an unnamed place, " · pool").
+  const bare = label => String(label ?? '').replace(/\s*\(scene \d+\)\s*$/, '').replace(/\s*·\s*pool$/, '').trim();
+  const fits = places.map(place => ({ ...place, label: bare(place.label) })).filter(place => place.label.length >= 2 && (place.label === said || said.includes(place.label) || (said.length >= 2 && place.label.includes(said))));
   fits.sort((a, b) => (b.label === said) - (a.label === said) || (b.near ? 1 : 0) - (a.near ? 1 : 0) || b.label.length - a.label.length);
   return fits[0]?.id ?? null;
 }

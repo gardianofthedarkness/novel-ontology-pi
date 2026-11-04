@@ -24,4 +24,6 @@ test('a journey said in words takes the place offered that fits, near ones first
   const placed = placedJourney({ who: 'p', from: '车站前', to: '前方', via: ['小巷'] }, places);
   assert.deepEqual([placed.from, placed.to, placed.via], ['loc_c', '前方', ['loc_b']]);
   assert.deepEqual(placed.said, { from: '车站前' });
+  assert.equal(placeOfWords('小巷中', [{ id: 'unnamed:x', label: '小巷 (scene 8)' }, { id: 'loc_p', label: '北区 · pool' }]), 'unnamed:x', 'the world script\'s marks are not the text\'s');
+  assert.equal(placeOfWords('北区', [{ id: 'loc_p', label: '北区 · pool' }]), 'loc_p');
 });
