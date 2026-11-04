@@ -103,3 +103,20 @@ the run.
 276 items, 1,589 talk, 55 breaks; 4 windows failed), Scale on 107 beats, Journeys on 36 units (81 journeys, 3 to a
 place id, the rest said in words), Choreography on 38 (83 exchanges), Conversation on 48 (1,023 channels, 137
 formations), Ambience on 42 (78 crowd reads).
+
+## Two passes of one tiling (the user, 2026-11-04)
+
+"Maybe we can do a similar structure which is double level tiling triggering with slightly different prompt, although
+we still treat the final result as one process and the middle layer isn't preserved." The tiler (`tileScenes`) takes a
+wording: the **scene pass** asks where the place, the time or the viewpoint changes (its wording from before, so its
+answers are the earlier readings' cache), and the **kind pass** asks, inside each scene-pass span, where the kind of action
+changes. The reading keeps only the kind pass's spans as its scenes; the scene pass is not kept.
+
+First quarter (blocks 1–2, 1,331 sentences; 334 paid Jev requests with the caches of both earlier readings):
+
+| | One pass (segment wording) | Two passes | M14's per-sentence cut |
+|---|---|---|---|
+| Units | 26 | **86** (median 9 sentences, longest 71, 4 of one sentence) | 124 |
+| M14's starts found (±1 sentence) | 24 | **67** | — |
+| Cuts at an M14 start | — | 62 of 86 | — |
+| The old scene starts kept | — | 16 of 16 | — |

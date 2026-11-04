@@ -41,9 +41,10 @@ export const tilingWindowMode: Mode<Window, null> = {
 export const tilingSeamMode: Mode<Seam, null> = {
   name: "tiling-seam",
   task: (focus) => focus.summary,
-  definitions: (focus) => ({ open: focus.open }),
+  // The kind pass names its unit (a segment); the scene pass's document stays as it was, so its answers are the cache's.
+  definitions: (focus) => ({ open: focus.open, ...(focus.unit ? { unit: focus.unit } : {}) }),
   sources: [given("tail", (focus: Seam) => sentences(focus.tail), true), given("head", (focus: Seam) => sentences(focus.head), true)],
-  render: (state) => tilingDocument({ kind: "seam", summary: String(state.task), open: String(state.open), tail: lines(state, "tail"), head: lines(state, "head"), questions: [] }),
+  render: (state) => tilingDocument({ kind: "seam", summary: String(state.task), open: String(state.open), tail: lines(state, "tail"), head: lines(state, "head"), questions: [], ...(state.unit ? { unit: String(state.unit) } : {}) }),
   cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
 };
 

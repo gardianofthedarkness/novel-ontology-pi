@@ -62,12 +62,33 @@ const render = (sentences: Pick<Sentence, "id" | "text">[]): string =>
 type Lines = Pick<Sentence, "id" | "text">[];
 export type TilingRequest =
   | { kind: "window"; summary: string; context: Lines; questions: DecisionQuestion[] }
-  | { kind: "seam"; summary: string; open: string; tail: Lines; head: Lines; questions: DecisionQuestion[] };
+  | { kind: "seam"; summary: string; open: string; tail: Lines; head: Lines; questions: DecisionQuestion[]; unit?: string };
+/**
+ * The tiler's wording (the user, 2026-11-04: "a similar structure which is double level tiling triggering with slightly
+ * different prompt, although we still treat the final result as one process and the middle layer isn't preserved"): the
+ * scene pass cuts where the place, the time or the viewpoint changes (the tiler's wording from before); the kind pass cuts
+ * inside each of those where the kind of action changes. A reading keeps only the kind pass's spans.
+ */
+export const TILING_WORDS = {
+  scene: {
+    unit: "SCENE",
+    end: (startId: string, last: string) => `A scene begins at sentence ${startId}: one continuous place, time and viewpoint. Which sentence id is the LAST sentence of this scene? If the scene continues past the last numbered sentence (${last}), pick that last sentence.`,
+    seam: "The previous scene's most recent sentences are shown first, then the passage that follows them. Does the previous scene CONTINUE into the following passage (same place, time and viewpoint flowing on), or did it END before the passage begins?",
+    start: (anchorId: string) => `A new scene begins where the place changes, time skips, or the viewpoint shifts. Which sentence id BEGINS the next scene at or after ${anchorId}? Pick the first sentence of the next scene, or NONE if no new scene begins in the rest of this passage.`,
+  },
+  kind: {
+    unit: "SEGMENT",
+    end: (startId: string, last: string) => `Inside one scene, a segment begins at sentence ${startId}: one kind of action (talk, a fight, a chase or a journey, someone's inner thought, a call or a message, scene-setting, a memory, the world itself changing). Which sentence id is the LAST sentence of this segment, before the kind of action changes? If it continues past the last numbered sentence (${last}), pick that last sentence.`,
+    seam: "The previous segment's most recent sentences are shown first, then the passage that follows them, inside one scene. Does the previous segment CONTINUE into the following passage (the same kind of action flowing on), or did it END before the passage begins?",
+    start: (anchorId: string) => `Inside one scene, a new segment begins where the kind of action changes: talk turns into a fight, a fight into a chase, action into someone's inner thought, scene-setting into events, or back; not where a speaker, a sentence, a blow or a moment changes within the same kind. Which sentence id BEGINS the next segment at or after ${anchorId}? Pick its first sentence, or NONE if the same kind of action runs to the end of this passage.`,
+  },
+} as const;
+export type TilingWords = keyof typeof TILING_WORDS;
 /** A tiling request's prompt, as tileScenes sends it. */
 export function tilingDocument(request: TilingRequest): string {
   return request.kind === "window"
     ? `${request.summary}\n---\n${render(request.context)}`
-    : `${request.summary}\nPREVIOUS SEGMENT (began at ${request.open}, still open) — its most recent sentences:\n${render(request.tail)}\n---\nFOLLOWING PASSAGE:\n${render(request.head)}`;
+    : `${request.summary}\nPREVIOUS ${request.unit ?? "SCENE"} (began at ${request.open}, still open) — its most recent sentences:\n${render(request.tail)}\n---\nFOLLOWING PASSAGE:\n${render(request.head)}`;
 }
 
 function choiceValue(
@@ -106,6 +127,8 @@ export async function tileScenes(
   opts: {
     stateSummary: string;
     gates: SegmentationGates;
+    /** The wording: the scene pass (the default) or the kind pass inside a scene. */
+    words?: TilingWords;
     onSpan?: (spans: string[][]) => Promise<void>;
     /** Where a caller composes the request's document itself (the v2 reading's context engine), else tilingDocument. */
     ask?: (request: TilingRequest) => Promise<DecisionAnswer[]>;
@@ -117,6 +140,7 @@ export async function tileScenes(
 }> {
   const escalations: SpanEscalation[] = [];
   const unitConfidences: Record<string, number> = {};
+  const words = TILING_WORDS[opts.words ?? "scene"];
   const n = sentences.length;
   const closed: [number, number][] = [];
   if (n === 0) return { spans: [], escalations, unitConfidences };
@@ -141,7 +165,7 @@ export async function tileScenes(
         {
           key,
           primitive: "choice",
-          instructions: `A segment begins at sentence ${startId}: one continuous place, time and viewpoint, and one kind of action (talk, a fight, a chase or a journey, someone's inner thought, a call or a message, scene-setting, a memory, the world itself changing). Which sentence id is the LAST sentence of this segment? If the segment continues past the last numbered sentence (${options[options.length - 1]}), pick that last sentence.`,
+          instructions: words.end(startId, options[options.length - 1]),
           options,
         },
       ] });
@@ -168,12 +192,11 @@ export async function tileScenes(
       const tail = sentences.slice(tailFrom, batchStart);
       const head = sentences.slice(batchStart, batchStart + SEAM_TAIL);
       const key = `scene_seam:${sentences[batchStart].id}`;
-      const answers = await ask({ kind: "seam", summary: opts.stateSummary, open: sentences[cur.start].id, tail, head, questions: [
+      const answers = await ask({ kind: "seam", summary: opts.stateSummary, open: sentences[cur.start].id, tail, head, ...(opts.words === "kind" ? { unit: words.unit } : {}), questions: [
           {
             key,
             primitive: "choice",
-            instructions:
-              "The previous segment's most recent sentences are shown first, then the passage that follows them. Does the previous segment CONTINUE into the following passage (the same place, time and viewpoint, and the same kind of action flowing on), or did it END before the passage begins?",
+            instructions: words.seam,
             options: ["continues", "ended"],
           },
         ] });
@@ -217,7 +240,7 @@ export async function tileScenes(
         {
           key,
           primitive: "choice",
-          instructions: `A new segment begins where the place changes, time skips, the viewpoint shifts, or the kind of action changes (talk turns into a fight, a fight into a chase, action into someone's inner thought, scene-setting into events, or back); not where a speaker, a sentence, a blow or a moment changes within the same kind. Which sentence id BEGINS the next segment at or after ${anchorId}? Pick the first sentence of the next segment, or NONE if no new segment begins in the rest of this passage.`,
+          instructions: words.start(anchorId),
           options,
         },
       ] });

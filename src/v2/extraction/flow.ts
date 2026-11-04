@@ -122,9 +122,16 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   // 1–3 at once.
   const tiling = meter("scene tiling"), kindsLog = meter("sentence kinds"), listing = meter("listing (work model)"), typing = meter("typing");
   // The tiling's requests stay as they were (its answers come from the cache, so a comparison of readings keeps its scenes).
+  // Two passes of one tiling (the user, 2026-11-04: "double level tiling triggering with slightly different prompt, although
+  // we still treat the final result as one process and the middle layer isn't preserved"): the scene pass where the place,
+  // the time or the viewpoint changes, then the kind pass inside each of its spans where the kind of action changes. Only
+  // the kind pass's spans are kept: they are the reading's scenes (its segments).
   const tiled = timed(tiling, () => Promise.all(blocks.map(async (block) => {
     const decide = decideFor(tiling, false);
-    return { block, ...(await tileScenes(block.sentences, decide, { stateSummary: `Processing block ${block.id}.`, gates: { accept: 0.85, reask: 0.55 }, ask: async (request) => (await (request.kind === "seam" ? ask(decide, tilingSeamMode, request, null) : ask(decide, tilingWindowMode, request, null))).replies })) };
+    const tile = (sentences: Sentence[], words: "scene" | "kind", summary: string) => tileScenes(sentences, decide, { stateSummary: summary, gates: { accept: 0.85, reask: 0.55 }, words, ask: async (request) => (await (request.kind === "seam" ? ask(decide, tilingSeamMode, request, null) : ask(decide, tilingWindowMode, request, null))).replies });
+    const scenePass = await tile(block.sentences, "scene", `Processing block ${block.id}.`);
+    const spans = (await Promise.all(scenePass.spans.map((span) => (span.length < 2 ? { spans: [span] } : tile(block.sentences.filter((sentence) => span.includes(sentence.id)), "kind", `Processing one scene of block ${block.id}.`))))).flatMap((result) => result.spans);
+    return { block, spans };
   })));
   const classified = timed(kindsLog, () => Promise.all(blocks.map(async (block) => {
     const decide = decideFor(kindsLog);
