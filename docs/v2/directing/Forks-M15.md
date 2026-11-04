@@ -73,6 +73,17 @@ a button on World · Live's bar (`tools/pi-review/sim-replay.html`, data from `s
 - **The places tab shrunk**: districts and streets only while it is open, drawn dashed; the **Buildings** tab keeps the
   book's building list (tap one to fly there). On a phone the panel starts folded.
 
+**In 3D, in calendar order, inside World · Live (the user, 2026-11-04: "build the objective replay also in 3d not in 2d,
+interactable. Only current paths are highlighted and clickable to zoom in, and current happening card interactable and
+zoom in, and a small strand selection panel to indicate which strands are happening on the calendar or near now. Replay
+should happen in calendar order"; "the world 3d live should directly carry this objective replay").** The page is three.js
+(the host's vendor files): every loaded building as its mass, the book's buildings outlined in gold; the cards in calendar
+order (the world script's story clock, then the strands' layers, then reading order) with the calendar time shown; only
+the card now has its ways drawn, over the buildings, each tappable to fly in on it; the card now has a ring and beam,
+tappable (or Card ◎) to fly in and read it; a small strand panel says which strands are at this time of the calendar
+(now) or a step away (near), and one picked plays alone. World · Live's Replay button opens it in place over the live view
+(its panels put away) and closes it again. Checked in headless Chrome (desktop, phone, embedded; no page errors).
+
 It replays the book's newest kept run, so it shows W10 once W10 runs. Checked in headless Chrome on the first-quarter
 rehearsal (26 units, 38 people, 196 moments; desktop and phone, no page errors).
 

@@ -14,7 +14,7 @@ import { playableRuns, pagePolicy } from './sim-play.mjs';
 const CELL = 2, FLOOR = 3, EVERY = 4;
 const round = value => Math.round(value * 10) / 10;
 
-/** A path kept rough: a point every EVERY metres or where it turns, the ends always (metres, x and z). */
+/** A path kept rough: a point every EVERY metres or where it turns, the ends always (metres: x and z, then anything after them, the height). */
 export function roughPath(points) {
   if (points.length <= 2) return points;
   const out = [points[0]];
@@ -32,11 +32,18 @@ export function roughPath(points) {
  * strands' layers, then reading order). Each moment is one card's event of a unit; a person's track is where they stand at
  * each unit's start and the way they took in each event (crowds are a field, not people: left out).
  */
-export function replayOf(page, strands, terrain = null) {
+/** A time-tree node as words: t:y1:12-24:late-night is "12-24 · late night". */
+export const whenOf = node => (node ? String(node).split(':').slice(2).map(part => part.replace(/-/g, part.includes('-') && /^\d/.test(part) ? '-' : ' ')).join(' · ') || 'the story' : null);
+
+export function replayOf(page, strands, terrain = null, script = null) {
   const g = page.world, decode = node => { const i = node % g.NX - g.oi, j = Math.floor(node / g.NX) % g.NZ - g.oj, k = Math.floor(node / (g.NX * g.NZ)) - g.ok; return [round((i + 0.5) * CELL), round((j + 0.5) * CELL), k * FLOOR]; };
   const index = new Map(page.scenes.map((scene, n) => [scene.id, n])), layer = new Map((strands?.scenes ?? []).map(entry => [entry.id, entry.layer ?? 0]));
   const forkOf = new Map((strands?.scenes ?? []).map(entry => [entry.id, entry.fork ?? entry.id]));
-  const story = [...page.scenes].sort((a, b) => (layer.get(a.id) ?? 0) - (layer.get(b.id) ?? 0) || index.get(a.id) - index.get(b.id));
+  // Calendar order (the user, 2026-11-04: "replay should happen in calendar order"): each unit at its place on the story's
+  // clock (the world script's clock, the time tree's order), then the strands' layers, then reading order.
+  const timed = new Map((script?.scenes ?? []).map(entry => [entry.id, { clock: Array.isArray(entry.clock) ? entry.clock : null, node: entry.at?.node ?? null }]));
+  const clockOf = id => timed.get(id)?.clock ?? null;
+  const story = [...page.scenes].sort((a, b) => (clockOf(a.id)?.[0] ?? Infinity) - (clockOf(b.id)?.[0] ?? Infinity) || (clockOf(a.id)?.[1] ?? Infinity) - (clockOf(b.id)?.[1] ?? Infinity) || (layer.get(a.id) ?? 0) - (layer.get(b.id) ?? 0) || index.get(a.id) - index.get(b.id));
   const forks = [...new Set(story.map(scene => forkOf.get(scene.id) ?? scene.id))];
   const person = who => !String(who).startsWith('crowd:');
   const moments = [], tracks = {};
@@ -45,13 +52,15 @@ export function replayOf(page, strands, terrain = null) {
     const fork = forks.indexOf(forkOf.get(scene.id) ?? scene.id);
     // The unit's start: everyone where the line has them as it begins.
     const first = moments.length;
-    moments.push({ unit: scene.id, card: null, fork, place: scene.place ?? null, text: '' });
+    const clock = clockOf(scene.id), when = whenOf(timed.get(scene.id)?.node);
+    moments.push({ unit: scene.id, card: null, fork, place: scene.place ?? null, text: '', clock, when });
     for (const [who, node] of Object.entries(scene.starts ?? {})) if (person(who) && node !== null && node !== undefined) push(who, { m: first, at: decode(node) });
     for (const event of scene.events ?? []) {
       const m = moments.length;
-      moments.push({ unit: scene.id, card: event.id, fork, place: scene.place ?? null, text: String(event.text ?? '').slice(0, 80) });
+      const focus = event.camera?.focus, actors = (event.actors ?? []).filter(person);
+      moments.push({ unit: scene.id, card: event.id, fork, place: scene.place ?? null, text: String(event.text ?? '').slice(0, 160), clock, when, actors, at: focus ? [round(focus.x), round(focus.z), round(focus.y0 ?? 0)] : null });
       for (const move of event.moves ?? []) if (person(move.person) && move.path?.length) {
-        const points = move.path.map(decode), rough = roughPath(points.map(([x, z]) => [x, z]));
+        const points = move.path.map(decode), rough = roughPath(points);
         push(move.person, { m, at: points.at(-1), path: rough, how: move.how ?? 'walk' });
       }
     }
@@ -66,7 +75,7 @@ export function replayOf(page, strands, terrain = null) {
   const places = sites.filter(([, site]) => ['district', 'street', 'city'].includes(site.scale)).map(([id, site]) => boxed(id, site));
   const people = Object.entries(page.people ?? {}).filter(([id]) => person(id) && tracks[id]).map(([id, entry]) => ({ id, name: entry.name ?? id, color: entry.color ?? null }));
   const xs = lots.flatMap(([x, , w]) => [x, x + w]), zs = lots.flatMap(([, z, , d]) => [z, z + d]);
-  return { version: 1, title: page.title ?? null, bounds: xs.length ? { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) } : null, forks: forks.map((id, n) => ({ n, id, units: story.filter(scene => (forkOf.get(scene.id) ?? scene.id) === id).map(scene => scene.id) })), moments, people, tracks, lots, buildings, places };
+  return { version: 2, order: 'calendar', title: page.title ?? null, bounds: xs.length ? { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) } : null, forks: forks.map((id, n) => ({ n, id, units: story.filter(scene => (forkOf.get(scene.id) ?? scene.id) === id).map(scene => ({ id: scene.id, clock: clockOf(scene.id), when: whenOf(timed.get(scene.id)?.node) })) })), moments, people, tracks, lots, buildings, places };
 }
 
 /** The replay of a book's newest kept run, or null when it has none. */
@@ -75,7 +84,8 @@ export async function replayData(workspace) {
   if (!run) return null;
   const read = path => readFile(resolve(workspace, ...path), 'utf8').then(JSON.parse, () => null);
   const strands = (await read(['stage', 'world', 'segments', 'strands.json'])) ?? (await read(['stage', 'world', 'strands.json']));
-  return { run: run.run ?? run.id, ...replayOf(run.data, strands, await read(['stage', 'terrain.json'])) };
+  const script = (await read(['stage', 'world', 'segments', 'script.json'])) ?? (await read(['stage', 'world', 'script.json']));
+  return { run: run.run ?? run.id, ...replayOf(run.data, strands, await read(['stage', 'terrain.json']), script) };
 }
 
 /** The replay page: static, it reads replay.json. */
