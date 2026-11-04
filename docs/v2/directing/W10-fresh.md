@@ -206,3 +206,26 @@ run failed on something the replay does not recreate). Against the same units wi
 | L10, moves held | 0 | 3 (the stand-in's landmark pick was the building they stood in) |
 | Off-page arrivals | 2 | 1 |
 | Minutes | 8 | 6 |
+
+## Sequences, headings and cuts (909265b; the user, 2026-11-04: "I agree to the new plan ... let's do it")
+
+The industry's levels (docs/v2/directing/faculties-jev-and-crew.md): episode › sequence › scene › cut. The tiler's scene
+pass is kept as **sequences**; Jev gives each a screenplay's **heading** (interior or exterior, where among the places
+offered, the time of day), and a scene whose place was only carried on takes the heading's place. A **storyboard** step
+asks Jev, card by card, where the camera cuts and the shot (size, angle, movement, seconds); the director frames each card
+by its cut (as close as its size, never cutting off its people; its angle's tilt), holds the camera's group for the cut,
+and times the card by its share of the cut's seconds. The scale faculty keeps blocking only (one move's reach, the
+scene's extent).
+
+**Volume 1 again** (`v2-vol1-w10d`, 307 paid Jev requests for the headings and the storyboard): 47 sequences, 286 scenes,
+1,355 cuts from 3,111 cards. 25 headings name a place; 95 scenes take their sequence's street, building or room, and
+those at the whole city fall from 225 to 144. **Library 13** (`v2-host-state-13`): library 12 with the new world script,
+strands and starts (its terrain kept: the place tree is the same); 12 units with nobody started, none with anyone acting
+there (two, 25 and 145, have their viewpoint character named but held at the place before: the heading should carry the
+viewpoint). Faculties asked again (1,341 requests, 11 minutes, none failed).
+
+**Rehearsed (units 1–84, unpaid):** every card plays in a cut (171 cards, 141 cuts); the camera's distance a median of
+5 m (it was never under 17 m), 3.4 m to 31.5 m between the tenth and ninetieth percentiles; the camera's focus moves more
+than 40 m between cards 11 times (3 before: cuts reframe). Laws: L6 2 (6 before), L9 1 (the same card), L10 1 (3), L11 0,
+one off-page arrival. Continuity: of 253 starts none jumped, and all 19 who came back after being out of a cast came back
+where they were. 4.7 minutes.
