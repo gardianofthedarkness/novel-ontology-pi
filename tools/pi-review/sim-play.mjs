@@ -70,7 +70,8 @@ export async function simulationVendor(file) {
  */
 export async function simulationLivePage() {
   const html = await readFile(new URL('./sim-live.html', import.meta.url), 'utf8');
-  return { html, policy: pagePolicy(html) };
+  // Framed by World · Live (its Jev debugger panel), by this same origin only.
+  return { html, policy: pagePolicy(html, { framed: true }) };
 }
 
 /**

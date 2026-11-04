@@ -45,19 +45,31 @@ ride is a straight hop, so a long trip loads only its two ends. 1 km runs in abo
 20 km 42, 100 km about an hour by rail, 500 km under 4 hours. L5 checks a route against this time. The page may play it
 faster; the story clock (the replay, §4) keeps its time.
 
-## 4 · The objective replay (to build)
+## 4 · Traces, strands and the timeline on World · Live (built, 2026-11-04)
 
-A replay of the whole world, not one strand's camera:
+The user: "Revert the new page you have pushed, build on top of what we have. The highlight of traces and strands
+selection are all directly on the page. A narrative replay as if reading the book can be simply locating them to the
+reader, but simply focusing on different part of the strands tree. The traces are visible directly on live, with timeline
+selectable that can go back in strand"; and "a specific debugger console for seeing the Jev decisions and input. It can be
+clicked either on the page or if I have a question about a step goes straight to the debug page of that Jev step."
 
-- **Top view** of every place the run loaded, the story's time as its axis (play, pause, scrub, speed).
-- **Each strand's people's paths**, rough (the moves and routes of the run, simplified), drawn in the strand's colour;
-  where strands fork and join, their lines part and meet.
-- **Names selectable** from the top view and a list: picking one highlights their whole path across strands and shows
-  where they are at the story time; picking a strand highlights its people.
-- **The places tabs shrunk**, the building list of the book kept.
+A first try as a page of its own (2D, then 3D with plain boxes) lost the player's rendering and was reverted. Now, in the
+engine's own 3D player and World · Live:
 
-Built on the run's page and world log (positions by moment, strands, forks); a page of its own beside World · Live and
-the Player.
+- **Traces** (strand-demo.html): every way walked before the card now stays on the world, faint, in each person's colour
+  (one line set per unit, drawn up to the moment played); the card now's ways are tubes, tapped to fly in on them, and the
+  tap tells World · Live who and which card. Traces on or off from the bar.
+- **Strands** (World · Live's HUD): one chip per strand, marked now or near on the story's calendar against the card
+  shown (the director's units: each unit's strand and clock, in the live notes). A strand picked keeps its traces and dims
+  the others', and the reader dims the other strands' sentences and goes to its latest card: reading along it is the
+  narrative replay.
+- **The timeline**: the cards in calendar order (of the strand picked, or all); dragged back, the card there plays again in
+  the live world.
+- **The Jev debugger** (the questions page): every Jev step with its exact prompt, pictures and answers; each card (its
+  "Jev steps ↗") and each tapped way opens it at that card's steps (`live?card=<unit>|<event>`; each step now records its
+  card). It can be framed by World · Live (it could not before: the panel was blank).
+
+Checked on a private test copy with a stand-in run (`--live-test`) through a local host in headless Chrome.
 
 ## Order
 

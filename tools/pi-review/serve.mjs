@@ -265,7 +265,8 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         if (scopedPath === '/play/live' || scopedPath === '/play/' && !page) {
           // Before a book has runs, its player is the live page (what novel sim pick is doing).
           const page = await simulationLivePage();
-          send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy });
+          // Framed by World · Live's Jev debugger panel: this origin only.
+          send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy, 'X-Frame-Options': 'SAMEORIGIN' });
           return;
         }
         // The live view of the world: the engine's world as it stands at the moment being played (live/world.json).

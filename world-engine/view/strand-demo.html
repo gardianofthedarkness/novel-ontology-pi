@@ -762,6 +762,15 @@ function focusOn(id) {
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     ray.setFromCamera(pointer, camera); ray.camera = camera;
+    const way = ray.intersectObjects(pathLines.filter((line) => line.tube).map((line) => line.object), false)[0]?.object.userData.way;
+    if (way) {
+      const box = new THREE.Box3().setFromPoints(way.points), centre = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()), direction = camera.position.clone().sub(controls.target).normalize();
+      const reach = Math.max(16, Math.max(size.x, size.z) * 0.75 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+      focusGlide = { start: performance.now(), fromTarget: controls.target.clone(), toTarget: centre, fromCamera: camera.position.clone(), toCamera: centre.clone().addScaledVector(direction, reach) };
+      follow = false; glide = null;
+      if (parent !== window) parent.postMessage({ type: "way", who: way.move.person, name: data.people[way.move.person]?.name ?? way.move.person, scene: way.segment.scene.id, event: way.segment.eventIndex, how: way.move.how }, location.origin);
+      return;
+    }
     const hit = ray.intersectObjects(clickable, true).find((entry) => entry.object.userData.place);
     if (hit) { focusOn(hit.object.userData.place); return; }
     // The ground clicked: the smallest place whose extent holds the point.
@@ -1047,7 +1056,7 @@ function extendLine({ scene, starts = null, events = null, cast = null, grid = n
   if (events) own.events = events;
   if (cast) own.cast = cast;
   if (focus && data.live) data.live.focus = focus;
-  buildTimeline(); buildHitTimes();
+  buildTimeline(); buildHitTimes(); traceUnits = null;
   for (const entry of built.values()) entry.shownHits = -1;
   const last = segments.filter((segment) => segment.scene.id === scene).at(-1);
   return { total, end: last?.end ?? total, grid: gridOf() };
@@ -1087,6 +1096,48 @@ function showPaths(segment, entry) {
     const add = (nodes, material, ensemble) => { const object = new THREE.Line(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(points(nodes), 3)), material); world.add(object); pathLines.push({ object, move, ensemble }); };
     for (const other of move.ensemble) add(other, new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.22, depthWrite: false }), true);
     if (move.how !== "teleport") add(move.path, new THREE.LineBasicMaterial({ color: tint }), false);
+    // The card now's ways stand out (the user, 2026-11-04: "only current paths are highlighted and clickable to zoom in"):
+    // a tube along each, in its person's colour, tapped to fly in on it.
+    if (move.how !== "teleport" && move.path.length > 1) {
+      const flat = points(move.path), along_ = []; for (let n = 0; n < flat.length; n += 3) along_.push(new THREE.Vector3(flat[n], flat[n + 1], flat[n + 2]));
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(along_, false, "centripetal"), Math.min(300, along_.length * 3), 0.45, 6), new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.85, depthWrite: false }));
+      tube.renderOrder = 5; tube.userData = { way: { move, segment, points: along_ } }; world.add(tube); pathLines.push({ object: tube, move, ensemble: false, tube: true });
+    }
+  }
+}
+// Traces (the user, 2026-11-04: "the traces are visible directly on live, with timeline selectable that can go back in
+// strand"): every way walked before the card now, one line set per unit, drawn up to the moment played and faint; a
+// strand picked (World · Live's strand panel) keeps its own traces and dims the others'. Built again when the line grows.
+let traceUnits = null, tracesOn = true, strandFocus = null;
+const forkOfUnit = () => new Map((data.director?.units ?? []).map((unit) => [unit.id, unit.fork]));
+function buildTraces() {
+  for (const unit of traceUnits ?? []) { world.remove(unit.object); unit.object.geometry.dispose(); unit.object.material.dispose(); }
+  traceUnits = [];
+  const forks = forkOfUnit(), byScene = new Map();
+  for (const segment of segments) if (segment.kind === "event") (byScene.get(segment.scene.id) ?? byScene.set(segment.scene.id, []).get(segment.scene.id)).push(segment);
+  for (const [sceneId, list] of byScene) {
+    const entry = buildPlace(list[0].scene.place); if (!entry) continue;
+    const positions = [], colours = [], ends = [];
+    for (const segment of list) {
+      for (const move of segment.moves) {
+        if (data.people[move.person]?.crowd || move.how === "teleport" || move.path.length < 2) continue;
+        const tint = new THREE.Color(data.people[move.person]?.color ?? "#7ce6ff");
+        for (let k = 1; k < move.path.length; k++) { const a = at(segment.place, move.path[k - 1]), b = at(segment.place, move.path[k]); positions.push(a.x - entry.cx, a.y + 0.3, a.z - entry.cz, b.x - entry.cx, b.y + 0.3, b.z - entry.cz); colours.push(tint.r, tint.g, tint.b, tint.r, tint.g, tint.b); }
+      }
+      ends.push({ end: segment.end, count: positions.length / 3 });
+    }
+    if (!positions.length) continue;
+    const object = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(positions, 3)).setAttribute("color", new THREE.Float32BufferAttribute(colours, 3)), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.3, depthWrite: false }));
+    object.renderOrder = 2; object.visible = false; world.add(object);
+    traceUnits.push({ scene: sceneId, fork: forks.get(sceneId) ?? sceneId, object, ends });
+  }
+}
+function showTraces() {
+  if (!traceUnits) buildTraces();
+  for (const unit of traceUnits) {
+    let count = 0; for (const end of unit.ends) { if (end.end > time) break; count = end.count; }
+    unit.object.visible = tracesOn && count > 0; unit.object.geometry.setDrawRange(0, count);
+    unit.object.material.opacity = strandFocus === null ? 0.3 : unit.fork === strandFocus ? 0.6 : 0.04;
   }
 }
 function position(place, move, elapsed) {
@@ -1131,6 +1182,7 @@ function frame(now) {
   }
   const settling = !quiet && segment.kind === "event" && segment.event.hit && elapsed < 3.2 ? segment.event.hit : null;
   for (const id of new Map(Object.keys(data.places).map((id) => [keyOf(id), id])).values()) drawSkeletons(id, built.get(id), (hitTimes[keyOf(id)] ?? []).filter((at) => at <= time && (hitsBefore === null || at < hitsBefore)).length, keyOf(id) === keyOf(segment.scene.place) ? settling : null);
+  if (!capture) showTraces();
   if (segment !== shownSegment) {
     shownSegment = segment; showPaths(segment, entry); showTrace(segment);
     const hit = segment.kind === "event" && segment.event.hit;
@@ -1209,7 +1261,7 @@ function frame(now) {
     // Under the street, a pawn shows through the ground above it.
     body.material.depthTest = p.y > -1;
     body.material.opacity = p.fade ?? 1;
-    if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
+    if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble && !line.tube) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
   }
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
   // The line being said, in a bubble over its speaker (or, unsure who says it, over the card's first person present).
@@ -1345,6 +1397,8 @@ if (liveMode) {
     if (event.data?.type === "speed") { speed = event.data.speed ?? speed; return; }
     if (event.data?.type === "live") { replaying = null; stopAt = null; playing = true; speed = 2; time = total - 0.001; return; }
     if (event.data?.type === "underground") { xray = !!event.data.on; return; }
+    if (event.data?.type === "traces") { tracesOn = !!event.data.on; return; }
+    if (event.data?.type === "strand") { strandFocus = event.data.fork ?? null; return; }
     if (event.data?.type === "clouds") { showClouds(event.data.clouds); return; }
     if (event.data?.type === "dev") { showDev(event.data.mode, event.data.people); return; }
     // A page around the world (the terrain io's step list) picks a place: the same as clicking it here.

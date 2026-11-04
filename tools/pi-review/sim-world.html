@@ -17,6 +17,14 @@
   .jev { color: var(--jev); font-size: 12px; }
   .counts { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 11px; }
   .empty { position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); }
+  .strands { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .strands button { font-size: 11px; padding: 2px 8px; border-radius: 99px; display: inline-flex; gap: 5px; align-items: center; }
+  .strands .chip { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .strands .now { color: #7dffa4; } .strands .near { color: #f2c66d; }
+  .tline { display: flex; gap: 6px; align-items: center; margin-top: 6px; } .tline input { flex: 1; min-width: 0; accent-color: var(--accent); }
+  #tlabel { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 58%; }
+  .way { font-size: 12px; margin-top: 6px; } .way a { color: var(--accent); }
+  .book .s.other { opacity: .3; }
   .empty[hidden] { display: none; }
   .bar { position: fixed; z-index: 5; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   .bar a, .bar button { font: inherit; font-size: 12px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; text-decoration: none; cursor: pointer; }
@@ -172,6 +180,9 @@
   <div class="jev" id="jev"></div>
   <div class="row" id="replaying" hidden></div>
   <div class="counts" id="counts"></div>
+  <div class="strands" id="strands" hidden aria-label="Strands: now or near on the calendar"></div>
+  <div class="tline" id="tline" hidden><input id="tslider" type="range" min="0" max="0" value="0" aria-label="The cards in calendar order"><span id="tlabel"></span></div>
+  <div class="way" id="way" hidden></div>
 </section>
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
 <section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
@@ -180,7 +191,7 @@
 <section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
 <div class="sub" id="sub" hidden aria-live="polite"><b id="subwho"></b><span id="subtx"></span></div>
-<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
+<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="traces" aria-pressed="true" title="Every way walked so far, faint; the card now's bright and tappable">Traces</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks" title="Every Jev step: its exact input, pictures and answers">Jev debugger</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
@@ -372,7 +383,49 @@
     mark();
     $("replaying").hidden = false; $("replaying").textContent = `▶ playing scene ${Number(card.scene.slice(-3))} · card ${n + 1} of ${cards.length} · ${card.kind === "pass" ? "narration" : card.kind}`;
     if (scroll) $("book").querySelector(`.s[data-id="${card.lines[0]?.id}"]`)?.scrollIntoView({ block: "center" });
+    // The debugger at this card's Jev steps; the strands as of this card's time; the timeline at it.
+    $("cmeta").insertAdjacentHTML("beforeend", ` · <a href="#" class="jevsteps">Jev steps ↗</a>`); $("cmeta").querySelector(".jevsteps").addEventListener("click", (event) => { event.preventDefault(); openDebug(card.scene, card.event); });
+    renderStrands(); const k = timeline.findIndex((entry) => entry.n === n); if (k >= 0) { $("tslider").value = String(k); tlabel(); }
   };
+  // Strands, the calendar and the traces (the user, 2026-11-04: "the highlight of traces and strands selection are all
+  // directly on the page … a narrative replay as if reading the book can be simply locating them to the reader, but simply
+  // focusing on different part of the strands tree. The traces are visible directly on live, with timeline selectable that
+  // can go back in strand"): the director's units (live notes) give each card its strand and its time on the story's clock.
+  // A strand picked: its traces stay, the others' dim (the frame), the timeline holds its cards in calendar order (dragged
+  // back, a card plays again there), and the reader dims the other strands' sentences and goes to its latest card.
+  const STRAND = ["#7ce6ff", "#ff8fb1", "#b6f27a", "#f2c66d", "#c9a2ff", "#ff9e5e", "#5ef2c4", "#f27aa8", "#9ec1ff", "#e6e66d"];
+  let units = [], unitOf = new Map(), forkIds = [], strandPick = null, tracesOn = true, timeline = [];
+  const whenOf = (node) => (node ? String(node).split(":").slice(2).map((part) => (/^\d/.test(part) ? part : part.replace(/-/g, " "))).join(" · ") || "the story" : "");
+  const forkOfCard = (card) => unitOf.get(card.scene)?.fork ?? card.scene, clockOf = (card) => unitOf.get(card.scene)?.clock ?? [Infinity, Infinity];
+  const sendAll = (message) => { for (const frame of [shown, next]) frame?.contentWindow.postMessage(message, origin); };
+  const strandsUpdate = (director) => { units = director?.units ?? []; unitOf = new Map(units.map((unit) => [unit.id, unit])); forkIds = [...new Set(units.map((unit) => unit.fork))]; renderStrands(); buildTimeline(); };
+  const renderStrands = () => {
+    const card = cards[cardAt] ?? cards.at(-1), clock = card ? clockOf(card) : null, overlap = (unit, pad) => unit.clock && clock && unit.clock[0] <= clock[1] + pad && unit.clock[1] >= clock[0] - pad;
+    $("strands").replaceChildren(...forkIds.map((fork, n) => {
+      const mine = units.filter((unit) => unit.fork === fork), now = mine.some((unit) => overlap(unit, 0)), near = !now && mine.some((unit) => overlap(unit, 1)), button = document.createElement("button");
+      button.setAttribute("aria-pressed", String(strandPick === fork)); button.title = `${mine.length} units`;
+      button.innerHTML = `<span class="chip" style="background:${STRAND[n % STRAND.length]}"></span>Strand ${n + 1}${now ? ' <span class="now">now</span>' : near ? ' <span class="near">near</span>' : ""}`;
+      button.addEventListener("click", () => pickStrand(strandPick === fork ? null : fork)); return button;
+    }));
+    $("strands").hidden = !forkIds.length;
+  };
+  const pickStrand = (fork) => { strandPick = fork; sendAll({ type: "strand", fork }); renderStrands(); buildTimeline(true); markStrand(); };
+  const buildTimeline = (jump = false) => {
+    const atEnd = Number($("tslider").value) >= Number($("tslider").max);
+    timeline = cards.map((card, n) => ({ card, n })).filter(({ card }) => strandPick === null || forkOfCard(card) === strandPick).sort((a, b) => clockOf(a.card)[0] - clockOf(b.card)[0] || clockOf(a.card)[1] - clockOf(b.card)[1] || a.n - b.n);
+    $("tline").hidden = !timeline.length; $("tslider").max = String(Math.max(0, timeline.length - 1));
+    if (atEnd || jump) $("tslider").value = $("tslider").max; tlabel();
+  };
+  const tlabel = () => { const entry = timeline[Number($("tslider").value)]; if (entry) $("tlabel").textContent = `${whenOf(unitOf.get(entry.card.scene)?.when)} · unit ${Number(entry.card.scene.slice(-6))} · card ${entry.n + 1}`; };
+  $("tslider").addEventListener("input", () => { tlabel(); const entry = timeline[Number($("tslider").value)]; if (entry) playCard(entry.n); });
+  const markStrand = () => {
+    for (const span of $("book").querySelectorAll(".s")) { const n = cardOfSentence.get(span.dataset.id); span.classList.toggle("other", strandPick !== null && n !== undefined && forkOfCard(cards[n]) !== strandPick); }
+    const latest = strandPick !== null ? timeline.at(-1) : null; if (latest) $("book").querySelector(`.s[data-id="${latest.card.lines[0]?.id}"]`)?.scrollIntoView({ block: "center" });
+  };
+  $("traces").addEventListener("click", () => { tracesOn = !tracesOn; $("traces").setAttribute("aria-pressed", String(tracesOn)); sendAll({ type: "traces", on: tracesOn }); });
+  // The Jev debugger (the questions page) opened at one card's Jev steps.
+  const debugLink = (scene, event) => `live${query}${query ? "&" : "?"}card=${encodeURIComponent(`${scene}|${event}`)}`;
+  const openDebug = (scene, event) => { fold("live", "asks", true); fold("bopen", "blist", false); fold("sopen", "slist", false); fold("copen", "clist", false); $("asksFrame").src = debugLink(scene, event); $("asksFull").href = debugLink(scene, event); };
   // A replay or Continue keeps Follow as it is (the user, 2026-11-03: in World · Live the camera stayed put while people
   // walked off, where the Player follows them): the frame glides to the card's view, then follows its people if Follow is on.
   const send = (message) => { const on = $("follow").getAttribute("aria-pressed") === "true"; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ ...message, follow: on }, origin); };
@@ -429,6 +482,7 @@
     if (key === cardKey) return; cardKey = key;
     cards = director?.cards ?? [];
     cardOfSentence = new Map(cards.flatMap((card, n) => card.lines.map((line) => [line.id, n])));
+    strandsUpdate(director);
     $("csum").textContent = cards.length ? `The whole text; ${cards.length} cards played, ${cards.reduce((sum, card) => sum + card.moves.filter((m) => m.moved).length, 0)} moves (➜). Tap an underlined sentence to play it here.` : "The whole text. No director's run yet.";
     for (const id of ["bgo", "bauto"]) $(id).hidden = !cards.length;
     mark();
@@ -603,6 +657,7 @@
     ready = false;
     if (camera) next.contentWindow.postMessage({ ...camera, type: "camera" }, origin);
     next.contentWindow.postMessage({ type: "underground", on: $("under").getAttribute("aria-pressed") === "true" }, origin);
+    next.contentWindow.postMessage({ type: "traces", on: tracesOn }, origin); next.contentWindow.postMessage({ type: "strand", fork: strandPick }, origin);
     const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment; shownPage = page;
     shown.classList.remove("waiting"); $("empty").hidden = true;
     if (old) setTimeout(() => retire(old), 450);
@@ -623,6 +678,11 @@
     if (message?.type === "camera" && shown && event.source === shown.contentWindow) { camera = message; showFollow(!!message.follow); }
     if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; lastTouch = Date.now(); if (!touching) swap(); }
     if (message?.type === "interact" && shown && event.source === shown.contentWindow) lastTouch = Date.now();
+    // A way tapped in the world: who, which card, and that card's Jev steps.
+    if (message?.type === "way" && shown && event.source === shown.contentWindow) {
+      $("way").hidden = false; $("way").innerHTML = `${esc(message.name)} · ${esc(message.how ?? "walk")} · unit ${Number(String(message.scene).slice(-6))} · card ${message.event + 1} · <a href="#">Jev steps ↗</a>`;
+      $("way").querySelector("a").addEventListener("click", (e) => { e.preventDefault(); openDebug(message.scene, message.event); });
+    }
     if (message?.type === "ready" && next && event.source === next.contentWindow) { next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
     if (message?.type === "failed" && next && event.source === next.contentWindow) drop(next);
   });

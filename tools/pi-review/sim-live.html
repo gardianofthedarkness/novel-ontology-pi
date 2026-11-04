@@ -59,6 +59,8 @@
   .log div:hover { background: var(--panel); }
   .empty { color: var(--muted); padding: 30px 0; text-align: center; }
   .note { color: var(--muted); font-size: 12px; margin-top: 12px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; font-size: 13px; }
+  .steps button { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -194,11 +196,26 @@
         $('scrub').max = Math.max(0, frames.length - 1);
         log();
       }
+      cardSteps();
       if (mode === 'live') {
         const asking = state.status === 'running' && state.ask && !state.ask.answers && (!frames.length || state.ask.f > frames.at(-1).f);
         render(asking ? state.ask : frames.at(-1), asking);
       }
     } catch {}
+  }
+
+  // Opened for one card (World · Live's "Jev steps ↗", or a way tapped in the world: ?card=<unit>|<event>): straight to
+  // that card's Jev steps, each a button, the first shown; a card Jev was never asked about says so.
+  const focusCard = new URLSearchParams(location.search).get('card');
+  let focused = false;
+  function cardSteps() {
+    if (!focusCard || focused || !frames.length) return;
+    const mine = frames.filter(frame => frame.card && `${frame.card.scene}|${frame.card.event}` === focusCard);
+    if (!mine.length && state?.status === 'running') return;
+    focused = true;
+    const [unit, event] = focusCard.split('|'), bar = make('div', { className: 'steps' }, make('b', { textContent: `Unit ${Number(String(unit).slice(-6))} · card ${Number(event) + 1}: ` }), mine.length ? `${mine.length} Jev step${mine.length === 1 ? '' : 's'} · ` : 'Jev was not asked about this card (it played by rule, from the summary or from the cache).', ...mine.map(frame => make('button', { textContent: `#${frame.f + 1} ${frame.questions?.[0]?.key ?? frame.kind ?? ''}`, onclick: () => { show('replay'); seek(frames.indexOf(frame)); } })));
+    $('transport').before(bar);
+    if (mine.length) { show('replay'); seek(frames.indexOf(mine[0])); }
   }
 
   function seek(index) { at = Math.max(0, Math.min(frames.length - 1, index)); $('scrub').value = at; $('position').textContent = frames.length ? `${at + 1} / ${frames.length}` : ''; render(frames[at]); preload(); }

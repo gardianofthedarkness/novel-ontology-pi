@@ -252,7 +252,7 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
   const queue = work => (writing = writing.then(work).catch(() => {}));
   const write = () => queue(() => { state.updatedAt = at(); return replace(join(folder, 'live.json'), JSON.stringify(state)); });
   // A frame's pictures, re-encoded small when a browser is at hand; their names beside the page.
-  const keep = async (f, images) => Promise.all(images.slice(0, LIVE_PICTURES).map(async ([name, png], index) => {
+  const keep = async (f, images) => Promise.all(images.filter(([, png]) => png).slice(0, LIVE_PICTURES).map(async ([name, png], index) => {
     const jpeg = encode ? await encode(png).catch(() => null) : null, file = `frames/${f}-${index}.${jpeg ? 'jpg' : 'png'}`;
     await writeFile(join(recording, file), Buffer.from(jpeg ?? png, 'base64'), { mode: 0o644 }).catch(() => {});
     return { name, file };
@@ -267,7 +267,8 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
   return {
     state,
     line(index, patch) { state.line = index; Object.assign(state.lines[index], patch); return write(); },
-    phase(name) { state.phase = name; return write(); },
+    // `card`: the director's card being played ({ scene, event, card }), so each question can be found from its card.
+    phase(name, card = undefined) { state.phase = name; if (card !== undefined) state.card = card; return write(); },
     finish(status, extra = {}) { state.status = status; state.phase = null; Object.assign(state, extra); return write(); },
     /** How pictures are made small for the record (base64 PNG in, base64 JPEG out): set once a browser is open, cleared when it closes. */
     encoder(fn) { encode = fn; },
@@ -279,7 +280,7 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
         await writeFile(join(recording, file), Buffer.from(picture, 'base64'), { mode: 0o644 }).catch(() => {});
         files.push({ name, file });
       }
-      return record({ f, kind, at: at(), line: state.line, phase: state.phase, subject, text, ...(context.length ? { context } : {}), pictures: files, ...(answers ? { answers } : {}), ...(moves ? { moves } : {}) });
+      return record({ f, kind, at: at(), line: state.line, phase: state.phase, ...(state.card ? { card: state.card } : {}), subject, text, ...(context.length ? { context } : {}), pictures: files, ...(answers ? { answers } : {}), ...(moves ? { moves } : {}) });
     },
     /**
      * The world as the engine stands it at a moment (export-strand-demo.mjs's snapshot): written whole to live/world.json, which
@@ -307,7 +308,7 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
           const f = frame++, started = Date.now(), context = text.split('\n').filter(line => /^(Place|Event|Thing): |^A thing a novel mentions: /.test(line)).map(line => line.slice(0, 400));
           const files = await keep(f, Object.entries(options.images ?? {}));
           state.calls++;
-          state.ask = { f, at: at(), call: state.calls, line: state.line, phase: state.phase, subject: subjectOf(context), context, pictures: files, questions: questions.map(question => ({ key: question.key, primitive: question.primitive, ...(question.label ? { label: question.label } : {}), instructions: String(question.instructions).slice(0, 300), ...(question.options ? { options: question.options.length } : {}) })), answers: null , prompt: text };
+          state.ask = { f, at: at(), call: state.calls, line: state.line, phase: state.phase, ...(state.card ? { card: state.card } : {}), subject: subjectOf(context), context, pictures: files, questions: questions.map(question => ({ key: question.key, primitive: question.primitive, ...(question.label ? { label: question.label } : {}), instructions: String(question.instructions).slice(0, 300), ...(question.options ? { options: question.options.length } : {}) })), answers: null , prompt: text };
           await write();
           try {
             const answers = await jev.decide(input, questions, options);

@@ -86,6 +86,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json') });
   if (!seg) throw new Error('the reading has no scenes to play');
   const segStrands = SG.strandsFile(seg.script, { scriptProjection: (await load('dist/src/v2/extraction/strands.js')).scriptProjection, storyStrands: (await load('dist/apps/playground/src/data/storyStrands.js')).storyStrands });
+  const segForkOf = new Map((segStrands.scenes ?? []).map(entry => [entry.id, entry.fork ?? entry.id]));
   reading = seg.reading;
   const scriptOf = async () => seg.script ?? { scenes: [] }, strandsOf = async () => segStrands, spawnOf = async () => seg.spawn;
   { const dir = join(novelDir, 'stage', 'world', 'segments'); await mkdir(dir, { recursive: true }); const { strands: _, ...file } = segStrands; await Promise.all([writeFile(join(dir, 'script.json'), JSON.stringify(seg.script)), writeFile(join(dir, 'spawn.json'), JSON.stringify(seg.spawn)), writeFile(join(dir, 'strands.json'), JSON.stringify(file, null, 1))]); }
@@ -152,7 +153,10 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
    * written, who moved and what Jev answered, the producer's camera, and its event on the timeline.
    */
   const payload = () => ({ model: record.model, cards: record.scenes.flatMap(scene => scene.cards.map(card => ({ scene: scene.scene, event: card.event, card: card.card, kind: card.pass ? 'pass' : card.kind, lines: card.lines, camera: card.camera ?? null,
-    moves: card.moves.map(move => ({ who: move.person, name: names.get(move.person) ?? move.person, moved: !!move.moved, direction: move.direction ?? null, how: move.how ?? null, spot: move.spot ?? null, height: move.height ?? null, boxed: !!move.box, to: move.to ?? null, why: move.why ?? null, line: move.line ?? null })) }))) });
+    moves: card.moves.map(move => ({ who: move.person, name: names.get(move.person) ?? move.person, moved: !!move.moved, direction: move.direction ?? null, how: move.how ?? null, spot: move.spot ?? null, height: move.height ?? null, boxed: !!move.box, to: move.to ?? null, why: move.why ?? null, line: move.line ?? null })) }))),
+    // The strands and the calendar (World · Live's strand panel and timeline, the player's traces): each unit's strand (its
+    // fork), its place on the story's clock and its time-tree node, in the order played.
+    units: (seg?.script?.scenes ?? []).map(entry => ({ id: entry.id, fork: segForkOf.get(entry.id) ?? entry.id, clock: entry.clock ?? null, when: entry.at?.node ?? null })) });
   // Jev's service comes and goes: a request is tried again after a pause (sim-jev.mjs retried).
   // System 2 (system2.mjs, Track B W3): what Jev answers below 0.5 is asked of the work model with the same context; both
   // answers kept with the card (or the scene, for its pass) being asked about.
@@ -788,7 +792,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           const reachOf = how => drag(how) * (scale ? Math.max(speedOf(how) * (cardSeconds ?? 0), measure(scale.reach, centre) ?? 0) || (C.REACH[how] ?? C.REACH.walk) : C.REACH[how] ?? C.REACH.walk);
           if (scale) cardRecord.scale = { frame: scale.frame, metres: frameHere ? Math.round(frameHere) : null, angle: scale.angle, reach: scale.reach, seconds: cardSeconds ? Math.round(cardSeconds * 10) / 10 : null };
           asking = cardRecord;
-          await live?.phase(`scene ${sceneLabel(scene.id)} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`);
+          await live?.phase(`scene ${sceneLabel(scene.id)} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`, { scene: scene.id, event: scene.events.length, card: card.id });
           sceneRecord.cards.push(cardRecord);
           const event = { id: card.id, text: card.sentences.map(id => text.get(id)?.text ?? '').join('').slice(0, 120), actors: card.people.filter(person => positions[person.id] && person.how.some(how => PRESENT.has(how))).map(person => person.id) };
           scene.events.push(event);
@@ -1352,7 +1356,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node world-engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8'));
   let jev = standIn();
@@ -1369,7 +1373,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     workModel = cachedWork(workModelFromEnv(process.env), join(resolve(novelDir), 'stage', 'director', 'cache-work'));
   } else if (!values['stand-in']) console.error('system 2 off: no work model configured (WORK_LLM_API_KEY)');
   let live = null;
-  if (values.live && values['stand-in']) { console.error('a stand-in run does not write the live view (its answers are made by rule)'); process.exit(2); }
+  // A stand-in run never writes a book's live view (its answers are made by rule), except, asked for by name, on a private
+  // copy for checking the view itself (--live-test).
+  if (values.live && values['stand-in'] && !values['live-test']) { console.error('a stand-in run does not write the live view (its answers are made by rule); --live-test on a private copy only'); process.exit(2); }
   if (values.live) { const { createLive } = await import('../live/sim-jev.mjs'); live = await createLive(resolve(novelDir), { command: 'sim direct', lines: [{ id: 'director', title: 'The director: cards played forward' }], model: jev.modelId }); jev = Object.assign(live.watch(jev), { usage: jev.usage }); }
   try {
     // --agent <host state dir>: the main agent's console (Pi, through the host's queue) the held batches are sent to.
