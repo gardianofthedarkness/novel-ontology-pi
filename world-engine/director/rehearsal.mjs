@@ -7,7 +7,7 @@
 // strand is known, so the least-action history of pass 1 is where pass 2 starts its people).
 //   node world-engine/director/rehearsal.mjs <copy of novel-dir> --reading <reading>/v2/data.json --from scene_000001 --to scene_000046 [--passes 2] [--out report.json]
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { direct, standIn } from './director.mjs';
@@ -94,10 +94,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const reading = JSON.parse(await readFile(values.reading, 'utf8')), world = join(resolve(novelDir), 'stage', 'world');
   const strands = JSON.parse(await readFile(join(world, 'strands.json'), 'utf8')), spawn = JSON.parse(await readFile(join(world, 'spawn.json'), 'utf8').catch(() => 'null'));
   const passes = [];
+  // The faculties the reading step made, beside the reading (the real ones when a paid step made them).
+  const faculties = JSON.parse(await readFile(join(dirname(resolve(values.reading)), 'faculties.json'), 'utf8').catch(() => 'null'));
   let smoothing = null, blasts = [];
   for (let pass = 1; pass <= Number(values.passes ?? 1); pass++) {
     const started = Date.now();
-    const { record, data } = await direct(resolve(novelDir), { reading, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), log: () => {} });
+    const { record, data } = await direct(resolve(novelDir), { reading, faculties, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), log: () => {} });
     const smoothedNow = smoothedOf({ run: `rehearsal-${pass}`, record, page: data, spawn, strands, reading });
     // --keep-page: the page beside the run's record, as a real run keeps it (why-walk.mjs and the replay read it).
     if (values['keep-page']) { const id = `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`, folder = join(resolve(novelDir), 'stage', 'simulation', 'runs', 'director'); await mkdir(folder, { recursive: true }); await writeFile(join(folder, `${id}.page.json`), JSON.stringify(data)); passes.keptPage = id; }

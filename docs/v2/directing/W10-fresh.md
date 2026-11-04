@@ -77,3 +77,23 @@ window, a lift from a deep hall (90 m down, a flat cost of 24; underground.ts) l
 then "converged" with no first step. `solveWalk` now scales its potential until it holds on every edge (most fields
 keep it whole); a test keeps the lift case. First quarter after the fix: arrivals off-page 22 to 0, all 41 routes
 arrive, L6 5 to 0; the rehearsal 6.3 to 5.4 minutes.
+
+## The faculties are a reading step (the user, 2026-11-04)
+
+The faculties read the text, not the world: none takes Jev's decisions, positions or walks; only Journeys touched the
+terrain (the place ids it may name, with their boxes), and all took who is present from the run. So they run once per
+reading, after the world script and before terrain and any play (`experiments/v2/faculties.mjs`, the work in
+`world-engine/digest/faculties.mjs`), and write `faculties.json` beside the reading:
+
+- the **Generalist** (the summarizer) on every unit in reading order, its memory carried; **Scale and view** on every
+  beat; **Journeys**, **Choreography**, **Conversation** and **Ambience** where the gate fires them;
+- who is present: the reading's cast by physics from the cards, with the review's pins over it (the world's evidence comes
+  back to the reading; a rerun pays only for what changed, the work model's answers cached beside the reading);
+- Journeys is offered the places the story has by then: the named places the city carries and the unnamed ones that have
+  happened in story time; a place's box stays the engine's to find.
+
+The director and the rehearsal read `faculties.json` when it is there and ask the work model nothing for the faculties
+(`--no-faculties` to ask as before). First quarter, rehearsed: the same play card for card, no work-model request in the run.
+
+Order for a fresh run: reading → segments (the tiler's own) → workspace and strands → **faculties** → terrain → starts →
+the run.

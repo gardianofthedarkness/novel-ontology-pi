@@ -67,7 +67,7 @@ export async function readerView(reading, text) {
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
 }
 
-export async function direct(novelDir, { reading, readingPath = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, digest = true, speakers = true, smoothing = null, blasts = [], log = console.error }) {
+export async function direct(novelDir, { reading, readingPath = null, faculties = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, digest = true, speakers = true, smoothing = null, blasts = [], log = console.error }) {
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -178,7 +178,12 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
   // to it. Its moves (graded), facts (stated and implied), items, talk and breaks replace the pass and the text-only
   // questions; Jev still decides on the pictures. Without a work model, the director plays as before.
   const digested = new Map();
-  if (digestMeter) {
+  // The faculties as a reading step (world-engine/digest/faculties.mjs; the user, 2026-11-04): where the reading has them,
+  // the run plays from them and asks the work model nothing for them.
+  if (faculties) {
+    for (const [id, unit] of Object.entries(faculties.units ?? {})) digested.set(id, Promise.resolve(unit.generalist ?? null));
+    await writeFile(join(runDir, 'digest.json'), JSON.stringify({ version: 1, model: faculties.model ?? null, from: 'the reading step', scenes: Object.fromEntries(Object.entries(faculties.units ?? {}).filter(([, unit]) => unit.generalist).map(([id, unit]) => [id, unit.generalist])) }));
+  } else if (digestMeter) {
     // The line from `from` to `to` (scene ids): every container whose scene is in it (by segment, each scene's segments).
     const ids = reading.scenes.map(scene => scene.parent ?? scene.id), lineScenes = reading.scenes.slice(ids.indexOf(from), ids.lastIndexOf(to) + 1);
     const scriptNow = await scriptOf();
@@ -386,7 +391,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         // carries on from where they are; seen for the first time, they start at spawning's start (spawning happens once);
         // standing outside the scene's place, they travel to their start in it (walked; beyond 300 m they arrive off-page).
         const own = script.scenes.find(entry => entry.id === scene.id), spawned = spawn?.scenes?.find(entry => entry.id === scene.id);
-        const dg = digested.has(scene.id) ? await digested.get(scene.id) : null;
+        const dg = digested.has(scene.id) ? await digested.get(scene.id) : null, prepared = faculties?.units?.[scene.id] ?? null;
         const startNode = who => {
           const start = spawned?.starts.find(entry => entry.who === who);
           if (!start) return run.starts[who]?.[0] ?? null;
@@ -441,11 +446,11 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         };
         // Scale and view (M5, referential since): each beat of the scene given its frame, reach, angle and duration by the
         // work model; only the action directors' questions and their camera operator read them.
-        const sceneBeats = gate && digestMeter ? gate.beats.map((beat, n) => ({ ...beat, n })).filter(beat => beat.scene === scene.id) : [];
+        const sceneBeats = gate && (digestMeter || faculties) ? gate.beats.map((beat, n) => ({ ...beat, n })).filter(beat => beat.scene === scene.id) : [];
         const order_ = reads.sentences, scaleOf = new Map();
         if (sceneBeats.length) {
           const span = beat => { const a = order_.indexOf(beat.first), b = order_.indexOf(beat.last); return order_.slice(Math.max(0, a), (b < 0 ? order_.length : b + 1)).slice(0, 40); };
-          const scales = await DG.scaleBeats(meters.scale, { scene, beats: sceneBeats.map(beat => ({ ...beat, sentences: span(beat) })), line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: present.map(id => ({ id, name: names.get(id) ?? id })), digest: dg?.digest ?? null });
+          const scales = faculties ? (prepared?.scale ?? []).map(entry => ({ ...entry, n: sceneBeats.find(beat => beat.first === entry.first)?.n ?? entry.n })) : await DG.scaleBeats(meters.scale, { scene, beats: sceneBeats.map(beat => ({ ...beat, sentences: span(beat) })), line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: present.map(id => ({ id, name: names.get(id) ?? id })), digest: dg?.digest ?? null });
           for (const entry of scales) scaleOf.set(entry.n, entry);
           sceneRecord.scales = scales;
         }
@@ -686,8 +691,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
           return spans.flatMap(span => Array.from({ length: Math.ceil(span.length / 60) }, (_, k) => span.slice(k * 60, (k + 1) * 60)));
         };
         const people_ = () => Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id }));
-        if (gate && digestMeter) {
-          const spans = firedSpans('journeys');
+        if (gate && (digestMeter || faculties)) {
+          const spans = faculties ? [] : firedSpans('journeys');
+          if (faculties) { for (const journey of prepared?.journeys ?? []) journeyOf.set(`${journey.sentence}|${journey.who}`, journey); if (prepared?.journeys) sceneRecord.journeys = prepared.journeys; }
           if (spans.length) {
             // Only the places the story has by now (story time); a place still to come is said in words, as the text names it.
             const places = placeIds.filter(id => boxOf(id) && existsBy(id, scene.id)).map(id => ({ id, label: script.places?.[id]?.label ?? citySites[id]?.label ?? names.get(id) ?? id, scale: script.places?.[id]?.scale ?? citySites[id]?.scale ?? null }));
@@ -699,8 +705,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         }
         // Choreography (M7): the exchanges of this scene's fights and catastrophes, by the sentence each is told in.
         const exchangesAt = new Map();
-        if (gate && digestMeter) {
-          const spans = firedSpans('choreography');
+        if (gate && (digestMeter || faculties)) {
+          const spans = faculties ? [] : firedSpans('choreography');
+          if (faculties) { for (const exchange of prepared?.choreography ?? []) (exchangesAt.get(exchange.sentence) ?? exchangesAt.set(exchange.sentence, []).get(exchange.sentence)).push(exchange); if (prepared?.choreography) sceneRecord.exchanges = prepared.choreography.length; }
           if (spans.length) {
             const exchanges = await DG.exchangesOf(meters.choreography, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null });
             for (const exchange of exchanges) (exchangesAt.get(exchange.sentence) ?? exchangesAt.set(exchange.sentence, []).get(exchange.sentence)).push(exchange);
@@ -709,8 +716,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         }
         // Conversation and blocking (M8): the channels, formations and attention of this scene's talk.
         const channelAt = new Map(), formationAt = new Map(), inFormation = new Set(), talkingUntil = new Map();
-        if (gate && digestMeter) {
-          const spans = firedSpans('conversation');
+        if (gate && (digestMeter || faculties)) {
+          const spans = faculties ? [] : firedSpans('conversation');
+          if (faculties && prepared?.conversation) { const talk = prepared.conversation; for (const entry of talk.exchanges ?? []) (channelAt.get(entry.sentence) ?? channelAt.set(entry.sentence, []).get(entry.sentence)).push(entry); for (const entry of talk.formations ?? []) (formationAt.get(entry.sentence) ?? formationAt.set(entry.sentence, []).get(entry.sentence)).push(entry); sceneRecord.talk = { exchanges: (talk.exchanges ?? []).length, formations: (talk.formations ?? []).length, attention: (talk.attention ?? []).length }; }
           if (spans.length) {
             const talk = await DG.talkOf(meters.conversation, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null });
             for (const entry of talk.exchanges) (channelAt.get(entry.sentence) ?? channelAt.set(entry.sentence, []).get(entry.sentence)).push(entry);
@@ -720,8 +728,9 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
         }
         // Ambience (M9): the crowd's size, state and focus as the text has them, read where the ambience faculty fires.
         const crowdAt = [];
-        if (gate && digestMeter && crowd) {
-          const spans = firedSpans('ambience');
+        if (gate && (digestMeter || faculties) && crowd) {
+          const spans = faculties ? [] : firedSpans('ambience');
+          if (faculties) crowdAt.push(...(prepared?.ambience ?? []).filter(entry => entry.sure >= MOVE_SURE));
           if (spans.length) { crowdAt.push(...(await DG.crowdOf(meters.ambience, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null })).filter(entry => entry.sure >= MOVE_SURE)); sceneRecord.crowdRead = crowdAt.map(entry => ({ sentence: entry.sentence, size: entry.size, state: entry.state, focus: entry.focus })); }
         }
         // A card's crowd: the state the text last gave it (a focus where it watches or flees someone present), and a hazard
@@ -1356,7 +1365,7 @@ export async function direct(novelDir, { reading, readingPath = null, from, to, 
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-faculties': { type: 'boolean' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node world-engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8'));
   let jev = standIn();
@@ -1381,7 +1390,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     // --agent <host state dir>: the main agent's console (Pi, through the host's queue) the held batches are sent to.
     const agentLinks = values.agent ? JSON.parse(await readFile(join(resolve(values.agent), 'links.json'), 'utf8').catch(() => '{}')) : null;
     const agent = values.agent ? { console: join(resolve(values.agent), 'runtime', 'pi-console'), expiresAt: agentLinks?.expiresAt ? Date.parse(agentLinks.expiresAt) || agentLinks.expiresAt : Date.now() + 3600_000 } : null;
-    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, agent, digest: !values['no-digest'], speakers: !values['no-speakers'], from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    // The faculties the reading step made (experiments/v2/faculties.mjs), beside the reading.
+    const faculties = values['no-faculties'] ? null : JSON.parse(await readFile(join(dirname(resolve(values.reading)), 'faculties.json'), 'utf8').catch(() => 'null'));
+    if (faculties) console.error(`faculties from the reading step: ${Object.keys(faculties.units ?? {}).length} units${faculties.standIn ? ' (made by a stand-in)' : ''}`);
+    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, faculties, agent, digest: !values['no-digest'], speakers: !values['no-speakers'], from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     const moves = record.scenes.flatMap(scene => scene.cards.flatMap(card => card.moves));
     const second = record.scenes.flatMap(scene => [...(scene.system2 ?? []), ...scene.cards.flatMap(card => card.system2 ?? [])]);
     console.error(`system 2: ran on ${second.length} answers, the work model's used for ${second.filter(entry => entry.used === 'work').length}, differing from Jev's on ${second.filter(entry => entry.work && String(entry.work.value) !== String(entry.jev.value)).length}`);
