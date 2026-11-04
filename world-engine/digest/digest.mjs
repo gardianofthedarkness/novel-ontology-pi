@@ -144,7 +144,12 @@ export function checkScene(reply, { people }) {
  * digest, the windows' entries merged, and the memory for the next scene. Failed requests leave their part empty
  * (`failed` names them), and the director plays those cards as before.
  */
-export async function digestScene(work, { scene, line, kind, people, place = '', when = null, cardOf = new Map(), memory = null, parallel = 4 }) {
+export async function digestScene(work, args) {
+  return sceneWindows(work, { ...args, ...(await sceneSummary(work, args)) });
+}
+
+/** A scene's summary alone: the one request the next scene waits on (its memory). Returns { digest, failed }. */
+export async function sceneSummary(work, { scene, line, kind, people, place = '', when = null, memory = null }) {
   const ids = people.map(person => person.id), cast = people.map(person => ({ id: person.id, name: person.name }));
   const numbered = list => list.map(id => ({ id, kind: kind(id) ?? null, text: line(id) }));
   const failed = [];
@@ -153,7 +158,14 @@ export async function digestScene(work, { scene, line, kind, people, place = '',
     scene: { id: scene.id, place, when }, before: memory ?? 'nothing yet: the first scene', people: cast, sentences: numbered(scene.sentences),
   }) });
   if (!sceneReply) failed.push('scene');
-  const digest = checkScene(sceneReply, { people: ids });
+  return { digest: checkScene(sceneReply, { people: ids }), failed };
+}
+
+/** A scene's windows read with its summary (`digest`, `failed` from sceneSummary): the whole digest of digestScene. */
+export async function sceneWindows(work, { scene, line, kind, people, place = '', when = null, cardOf = new Map(), memory = null, parallel = 4, digest, failed: summaryFailed = [] }) {
+  const ids = people.map(person => person.id), cast = people.map(person => ({ id: person.id, name: person.name }));
+  const numbered = list => list.map(id => ({ id, kind: kind(id) ?? null, text: line(id) }));
+  const failed = [...summaryFailed];
   const windows = windowsOf(scene.sentences, cardOf);
   const results = new Array(windows.length);
   let next = 0;
@@ -177,16 +189,42 @@ export async function digestScene(work, { scene, line, kind, people, place = '',
 /**
  * The scenes of a run digested in reading order, the memory carried from one to the next; `peopleOf(scene)` the people
  * for each, `onScene(result)` called as each is done. Scenes in `done` (a scene id → its digest) are kept, not asked again.
+ *
+ * `ahead` (a work model, the faculties step's): only the summaries wait on each other (each takes the memory of the one
+ * before), so a scene's windows are read through `ahead` while the next scene is summarized, and `onSummary(scene,
+ * digest)` lets the caller start what needs only the summary. `onScene` then comes in the order scenes finish. Without
+ * it (the director, which writes its file at each scene), one scene after another as before.
  */
-export async function digestScenes(work, { scenes, line, kind, peopleOf, placeOf = () => '', whenOf = () => null, cardOf = new Map(), done = {}, onScene = () => {} }) {
-  const out = {};
+export async function digestScenes(work, { scenes, line, kind, peopleOf, placeOf = () => '', whenOf = () => null, cardOf = new Map(), done = {}, onScene = () => {}, ahead = null, onSummary = () => {} }) {
+  const out = {}, pending = [];
   let memory = null;
   for (const scene of scenes) {
-    const result = done[scene.id] ?? await digestScene(work, { scene, line, kind, people: peopleOf(scene), place: placeOf(scene), when: whenOf(scene), cardOf, memory });
-    out[scene.id] = result; memory = result.memory ?? memory;
-    await onScene(result);
+    const args = { scene, line, kind, people: peopleOf(scene), place: placeOf(scene), when: whenOf(scene), cardOf, memory };
+    if (done[scene.id] || !ahead) {
+      const result = done[scene.id] ?? await digestScene(work, args);
+      out[scene.id] = result; memory = result.memory ?? memory;
+      await onScene(result);
+      continue;
+    }
+    const head = await sceneSummary(work, args);
+    memory = head.digest.memory ?? memory;
+    onSummary(scene, head.digest);
+    pending.push(sceneWindows(ahead, { ...args, ...head }).then(async result => { out[scene.id] = result; await onScene(result); }));
   }
+  await Promise.all(pending);
   return out;
+}
+
+/**
+ * At most `at` requests at once through every work model it wraps (one shared lane): the faculties step's windows and
+ * specialists, all started as soon as they can be, without flooding the work model.
+ */
+export function limiter(at = 12) {
+  let active = 0;
+  const queue = [], take = () => new Promise(resolve => { if (active < at) { active++; resolve(); } else queue.push(resolve); });
+  const give = () => { const next = queue.shift(); if (next) next(); else active--; };
+  const run = call => async request => { await take(); try { return await call(request); } finally { give(); } };
+  return work => ({ modelId: work.modelId, get usage() { return work.usage; }, generate: run(request => work.generate(request)), ...(work.generateWithUsage ? { generateWithUsage: run(request => work.generateWithUsage(request)) } : {}) });
 }
 
 // ── Scale and view (M5; the user, 2026-11-03: "an implicit or scale faculty of summarization pass the zoom and view angle

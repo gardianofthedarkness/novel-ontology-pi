@@ -103,3 +103,32 @@ test('talk: channels and formations from their lists, a formation of two or more
   assert.deepEqual(out.formations.map(entry => [entry.who, entry.formation]), [[['a', 'b'], 'facing']]);
   assert.deepEqual(out.attention, [{ sentence: 's1', who: 'b', looksAt: 'a' }]);
 });
+
+test('ahead: only the summaries wait on each other; windows read while the next scene is summarized, the same digests', async () => {
+  const { digestScenes, limiter } = await import('./digest.mjs');
+  const make = log => ({ modelId: 'fake', async generate({ prompt }) {
+    const request = JSON.parse(prompt), id = request.scene.id;
+    log.push(`${request.passage ? 'window' : 'summary'} ${id} start`);
+    await new Promise(resolve => setTimeout(resolve, request.passage ? 20 : 5));
+    log.push(`${request.passage ? 'window' : 'summary'} ${id} end`);
+    return request.passage ? JSON.stringify({ moves: request.passage.map(line => ({ sentence: line.id, who: 'a', motion: 'step', sure: 0.7 })) }) : JSON.stringify({ summary: `in ${id}`, memory: `after ${id} (${request.before})` });
+  } });
+  const scenes = ['x', 'y', 'z'].map(id => ({ id, sentences: Array.from({ length: 12 }, (_, n) => `${id}${n}`) }));
+  const common = { scenes, line: id => id, kind: () => 'narration', peopleOf: () => [{ id: 'a', name: 'A' }] };
+  const before = [], after = [], summaries = [];
+  const one = await digestScenes(make(before), common);
+  const two = await digestScenes(make(after), { ...common, ahead: limiter(4)(make(after)), onSummary: (scene, digest) => summaries.push([scene.id, digest.summary]) });
+  assert.deepEqual(two, one, 'the same digests, memory carried the same');
+  assert.deepEqual(summaries, [['x', 'in x'], ['y', 'in y'], ['z', 'in z']]);
+  assert.ok(after.indexOf('summary y start') < after.indexOf('window x end'), 'the next summary does not wait for the windows');
+  assert.ok(before.indexOf('summary y start') > before.indexOf('window x end'), 'without ahead, as before');
+});
+
+test('the limiter keeps at most so many requests at once across every model it wraps', async () => {
+  const { limiter } = await import('./digest.mjs');
+  let now = 0, most = 0;
+  const slow = { async generate() { now++; most = Math.max(most, now); await new Promise(resolve => setTimeout(resolve, 5)); now--; return '{}'; } };
+  const lane = limiter(3), a = lane(slow), b = lane(slow);
+  await Promise.all(Array.from({ length: 10 }, (_, n) => (n % 2 ? a : b).generate({})));
+  assert.equal(most, 3);
+});

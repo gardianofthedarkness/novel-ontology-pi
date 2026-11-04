@@ -60,9 +60,10 @@ export function placedJourney(journey, places) {
 /**
  * Every faculty over a reading. `text`: sentence id → its text; `work`: a work model (cached by the caller); `strandsOf`:
  * (script) → the strands file (segments.mjs strandsFile with the TypeScript pieces bound); `pins`: the review's presence
- * pins ({ "unit|who": true | false }); `from`/`to`: unit ids to read (all when absent). Returns { units, usage }.
+ * pins ({ "unit|who": true | false }); `from`/`to`: unit ids to read (all when absent); `parallel`: requests at once.
+ * Returns { units, usage }.
  */
-export async function readFaculties({ reading: given, script, text, work, strandsOf, pins = {}, from = null, to = null, log = () => {} }) {
+export async function readFaculties({ reading: given, script, text, work, strandsOf, pins = {}, from = null, to = null, parallel = 12, log = () => {} }) {
   const world = SG.segmentWorld({ reading: given, script, spawn: null }), reading = world.reading, scenes = reading.scenes;
   const strands = strandsOf(world.script), forkOf = new Map((strands.scenes ?? []).map(entry => [entry.id, entry.fork]));
   const gate = G.gateOf(G.windowsOf(reading), { strandOf: scene => forkOf.get(scene) ?? null });
@@ -110,30 +111,38 @@ export async function readFaculties({ reading: given, script, text, work, strand
   };
 
   const meters = Object.fromEntries(['generalist', 'scale', 'journeys', 'choreography', 'conversation', 'ambience'].map(id => [id, DG.metered(work)]));
-  const units = {}, chosen = scenes.slice(first, last + 1);
-  // The generalist first, in reading order (its memory carries from unit to unit); the others need its summary.
+  const found = {}, chosen = scenes.slice(first, last + 1), tasks = [];
+  // What needs only a unit's summary runs as soon as that summary is in, every faculty at once, `parallel` requests at a
+  // time in one lane (the user, 2026-11-04: "parallel for different faculties if they don't have dependencies"). Only the
+  // summaries wait on each other, the memory carried from unit to unit.
+  const lane = DG.limiter(parallel), through = Object.fromEntries(Object.entries(meters).map(([id, meter]) => [id, lane(meter)]));
+  const specialists = async (scene, digest) => {
+    const unit = (found[scene.id] ??= {}), people = castOf(scene), base = { scene, line, kind, people, digest };
+    const beats = gate.beats.map((beat, n) => ({ ...beat, n })).filter(beat => beat.scene === scene.id);
+    const span = beat => { const a = scene.sentences.indexOf(beat.first), b = scene.sentences.indexOf(beat.last); return scene.sentences.slice(Math.max(0, a), (b < 0 ? scene.sentences.length : b + 1)).slice(0, 40); };
+    const fired = faculty => firedSpans(gate, scene, faculty);
+    const journeys = fired('journeys'), choreography = fired('choreography'), conversation = fired('conversation'), ambience = fired('ambience');
+    await Promise.all([
+      // Each scale kept with its beat's first sentence, so a run finds its beat whatever it numbers them.
+      beats.length && DG.scaleBeats(through.scale, { ...base, beats: beats.map(beat => ({ ...beat, sentences: span(beat) })) }).then(list => { unit.scale = list.map(entry => ({ ...entry, first: beats.find(beat => beat.n === entry.n)?.first ?? null })); }),
+      journeys.length && (async () => { const places = placesAt(scene); unit.journeys = (await DG.journeysOf(through.journeys, { ...base, spans: journeys, places })).map(journey => placedJourney(journey, places)); })(),
+      choreography.length && DG.exchangesOf(through.choreography, { ...base, spans: choreography }).then(list => { unit.choreography = list; }),
+      conversation.length && DG.talkOf(through.conversation, { ...base, spans: conversation }).then(talk => { unit.conversation = talk; }),
+      ambience.length && DG.crowdOf(through.ambience, { ...base, spans: ambience }).then(list => { unit.ambience = list; }),
+    ]);
+    unit.cast = people.map(person => person.id);
+    log(`faculties ${scene.id}: ${['scale', 'journeys', 'choreography', 'conversation', 'ambience'].filter(id => unit[id]).join(', ') || 'none fired'}`);
+  };
   await DG.digestScenes(meters.generalist, {
     scenes: chosen, line, kind, peopleOf: castOf, cardOf: new Map(reading.cards.flatMap(card => card.sentences.map(id => [id, card.id]))),
     placeOf: scene => { const place = own.get(scene.id)?.place; return names.get(place) ?? script.places?.[place]?.label ?? place ?? ''; },
     whenOf: scene => reading.time?.scenes?.find(entry => entry.scene === scene.id)?.when ?? null,
-    onScene: async result => { (units[result.scene] ??= {}).generalist = result; log(`generalist ${result.scene}: ${result.moves.length} moves, ${result.facts.length} facts`); },
+    ahead: through.generalist, onSummary: (scene, digest) => tasks.push(specialists(scene, digest)),
+    onScene: async result => { (found[result.scene] ??= {}).generalist = result; log(`generalist ${result.scene}: ${result.moves.length} moves, ${result.facts.length} facts`); },
   });
-  for (const scene of chosen) {
-    const unit = (units[scene.id] ??= {}), digest = unit.generalist?.digest ?? null, people = castOf(scene), base = { scene, line, kind, people, digest };
-    const beats = gate.beats.map((beat, n) => ({ ...beat, n })).filter(beat => beat.scene === scene.id);
-    if (beats.length) {
-      const span = beat => { const a = scene.sentences.indexOf(beat.first), b = scene.sentences.indexOf(beat.last); return scene.sentences.slice(Math.max(0, a), (b < 0 ? scene.sentences.length : b + 1)).slice(0, 40); };
-      // Each scale kept with its beat's first sentence, so a run finds its beat whatever it numbers them.
-      unit.scale = (await DG.scaleBeats(meters.scale, { ...base, beats: beats.map(beat => ({ ...beat, sentences: span(beat) })) })).map(entry => ({ ...entry, first: beats.find(beat => beat.n === entry.n)?.first ?? null }));
-    }
-    const fired = faculty => firedSpans(gate, scene, faculty);
-    const journeys = fired('journeys'), choreography = fired('choreography'), conversation = fired('conversation'), ambience = fired('ambience');
-    if (journeys.length) { const places = placesAt(scene); unit.journeys = (await DG.journeysOf(meters.journeys, { ...base, spans: journeys, places })).map(journey => placedJourney(journey, places)); }
-    if (choreography.length) unit.choreography = await DG.exchangesOf(meters.choreography, { ...base, spans: choreography });
-    if (conversation.length) unit.conversation = await DG.talkOf(meters.conversation, { ...base, spans: conversation });
-    if (ambience.length) unit.ambience = await DG.crowdOf(meters.ambience, { ...base, spans: ambience });
-    unit.cast = people.map(person => person.id);
-    log(`faculties ${scene.id}: ${['scale', 'journeys', 'choreography', 'conversation', 'ambience'].filter(id => unit[id]).join(', ') || 'none fired'}`);
-  }
+  await Promise.all(tasks);
+  // In reading order, each unit's entries in the order they always had.
+  const ORDER = ['generalist', 'scale', 'journeys', 'choreography', 'conversation', 'ambience', 'cast'];
+  const units = Object.fromEntries(chosen.filter(scene => found[scene.id]).map(scene => [scene.id, Object.fromEntries(ORDER.filter(key => key in found[scene.id]).map(key => [key, found[scene.id][key]]))]));
   return { units, usage: Object.fromEntries(Object.entries(meters).map(([id, meter]) => [id, meter.usage])) };
 }
