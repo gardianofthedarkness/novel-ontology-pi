@@ -334,6 +334,9 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
       })();
       const bornAt = new Map(), born = (place, rank) => { for (let id = place, guard = 0; id && guard < 12; id = script.places?.[id]?.parent ?? null, guard++) if (!(bornAt.get(id) <= rank)) bornAt.set(id, rank); };
       for (const entry of script.scenes) if (entry.place) born(entry.place, storyRank.get(entry.id));
+      // A place first told inside a unit (the world script's `scene`: the alley of unit 8 in a unit placed at its district)
+      // has happened there too.
+      for (const [id, place] of Object.entries(script.places ?? {})) if (place?.scene && storyRank.has(place.scene)) born(id, storyRank.get(place.scene));
       // The user, 2026-11-04: "the list should be composed of places that have happened plus a list of nominated places the
       // city itself carries across volumes." A named place is the city's (the book's terrain sites, and the universe's
       // registry where there is one), there whenever the story is; an unnamed one is known only from where it happened.

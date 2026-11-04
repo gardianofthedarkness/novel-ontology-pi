@@ -32,7 +32,8 @@ export function firedSpans(gate, scene, faculty) {
 
 /**
  * The place a journey names in words, when one offered fits: its id as given, a label the same as the words, or a label
- * within the words or the words within it (two characters at least); a place near the unit first, then the longest label.
+ * within the words or the words within it (two characters at least); the label ending latest in the words first, then a
+ * place near the unit, then the longest label.
  * Null when none fits (the words stay, the engine finds a landmark).
  */
 export function placeOfWords(words, places) {
@@ -42,7 +43,9 @@ export function placeOfWords(words, places) {
   // A label as the text names it: without the world script's marks (" (scene 8)" for an unnamed place, " · pool").
   const bare = label => String(label ?? '').replace(/\s*\(scene \d+\)\s*$/, '').replace(/\s*·\s*pool$/, '').trim();
   const fits = places.map(place => ({ ...place, label: bare(place.label) })).filter(place => place.label.length >= 2 && (place.label === said || said.includes(place.label) || (said.length >= 2 && place.label.includes(said))));
-  fits.sort((a, b) => (b.label === said) - (a.label === said) || (b.near ? 1 : 0) - (a.near ? 1 : 0) || b.label.length - a.label.length);
+  // The label ending latest in the words first: the head of a Chinese phrase comes last (混合大厦间的小巷 is an alley).
+  const end = place => said.includes(place.label) ? said.lastIndexOf(place.label) + place.label.length : said.length;
+  fits.sort((a, b) => (b.label === said) - (a.label === said) || end(b) - end(a) || (b.near ? 1 : 0) - (a.near ? 1 : 0) || b.label.length - a.label.length);
   return fits[0]?.id ?? null;
 }
 
@@ -80,9 +83,11 @@ export async function readFaculties({ reading: given, script, text, work, strand
   const rank = new Map([...ids].sort((a, b) => clock(a)[0] - clock(b)[0] || clock(a)[1] - clock(b)[1] || (layer.get(a) ?? 0) - (layer.get(b) ?? 0) || index.get(a) - index.get(b)).map((id, n) => [id, n]));
   const bornAt = new Map(), born = (place, r) => { for (let id = place, guard = 0; id && guard < 12; id = script.places?.[id]?.parent ?? null, guard++) if (!(bornAt.get(id) <= r)) bornAt.set(id, r); };
   for (const entry of world.script.scenes) if (entry.place) born(entry.place, rank.get(entry.id));
+  // A place first told inside a unit (its `scene`) has happened there too, not only where it is a unit's own place.
+  for (const [id, place] of Object.entries(script.places ?? {})) if (place?.scene && rank.has(place.scene)) born(id, rank.get(place.scene));
   const nominated = id => !String(id).startsWith('unnamed:') && !script.places?.[id]?.unnamed;
   // Near a unit, offered first and marked: its own place, the places of the units either side, each with its parent, its
-  // siblings and its children in the tree (W10b: 14 of 81 journeys said in words a place the tree has, near where they were).
+  // siblings and its children in the tree, and the places first told in those units (W10b: 14 of 81 journeys said in words a place the tree has, near where they were).
   const parentOf = id => script.places?.[id]?.parent ?? null, childrenOf = new Map();
   for (const [id, place] of Object.entries(script.places ?? {})) if (place.parent) (childrenOf.get(place.parent) ?? childrenOf.set(place.parent, []).get(place.parent)).push(id);
   const nearOf = scene => {
@@ -92,6 +97,9 @@ export async function readFaculties({ reading: given, script, text, work, strand
       if (parent) { near.add(parent); for (const sibling of childrenOf.get(parent) ?? []) near.add(sibling); }
       for (const child of childrenOf.get(id) ?? []) near.add(child);
     }
+    // And the places first told in those units (an alley of the unit, whose parent is its district's pool).
+    const units = new Set([ids[at - 1], scene.id, ids[at + 1]].filter(Boolean));
+    for (const [id, place] of Object.entries(script.places ?? {})) if (units.has(place?.scene)) near.add(id);
     return near;
   };
   const placesAt = scene => {

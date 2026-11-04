@@ -26,4 +26,5 @@ test('a journey said in words takes the place offered that fits, near ones first
   assert.deepEqual(placed.said, { from: '车站前' });
   assert.equal(placeOfWords('小巷中', [{ id: 'unnamed:x', label: '小巷 (scene 8)' }, { id: 'loc_p', label: '北区 · pool' }]), 'unnamed:x', 'the world script\'s marks are not the text\'s');
   assert.equal(placeOfWords('北区', [{ id: 'loc_p', label: '北区 · pool' }]), 'loc_p');
+  assert.equal(placeOfWords('两栋大楼间的小巷中', [{ id: 'b', label: '大楼 (scene 8)' }, { id: 'a', label: '小巷 (scene 8)' }]), 'a', 'the head of the phrase, not the longer word');
 });
