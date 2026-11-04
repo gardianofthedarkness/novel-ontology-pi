@@ -256,6 +256,17 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         send(200, JSON.stringify(note), { 'Content-Type': 'application/json; charset=utf-8' });
         return;
       }
+      if (scopedPath === '/play/replay' || scopedPath === '/play/replay.json') {
+        // The objective replay (sim-replay.mjs; Forks-M15 §4): the whole world from above in story time, the book's newest run.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const { replayData, simulationReplayPage } = await import('./sim-replay.mjs');
+        if (scopedPath === '/play/replay') { const page = await simulationReplayPage(); send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy }); return; }
+        const replay = await bounded(async () => replayData(await resolveWorkspace(volume)));
+        if (!replay) { send(404); return; }
+        send(200, JSON.stringify(replay), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        return;
+      }
       if (scopedPath === '/play/' || scopedPath === '/play/live' || scopedPath === '/play/world' || scopedPath === '/play/now' || scopedPath === '/play/live.json' || scopedPath.startsWith('/play/live/')) {
         // The stage simulation: the player (the selected book's accepted runs, or with newest=1 its latest; novel sim run) in the
         // engine's own page, and the live page with what a running novel sim pick|run is doing and the replay of Jev's questions.
