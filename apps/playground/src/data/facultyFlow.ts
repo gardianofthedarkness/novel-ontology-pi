@@ -43,11 +43,16 @@ export const FLOW_NODES: FlowNode[] = [
   node("roles", "Roles · EM² · v2", "digger", "jev", ["role", "ref"], 3.6, 4),
   node("placetree", "Place EM · v2", "digger", "jev", ["tree", "setting", "place"], 3.6, 6),
   node("storytime", "Story time · v2", "digger", "jev", ["time"], 3.6, 5),
+  // Sequence headings (their setting and place questions report as place EM's) and the storyboard's cuts (storyboard.ts).
+  node("headings", "Sequence headings · v2", "digger", "jev", ["daytime"], 4.7, 6),
+  node("storyboard", "Storyboard · v2", "digger", "jev", ["cut", "size", "angle", "move", "seconds"], 4.7, 7),
 ];
 
 const edge = (source: string, target: string, context: string, feedback = false): FlowEdge => ({ id: `${source}->${target}`, source, target, context, ...(feedback ? { feedback } : {}) });
 
 export const FLOW_EDGES: FlowEdge[] = [
+  edge("placetree", "headings", "settings, unnamed places"),
+  edge("headings", "storyboard", "headings"),
   edge("intake", "album", "sentence ids"),
   edge("intake", "scenes", "sentences"),
   edge("intake", "exchanges", "sentences"),

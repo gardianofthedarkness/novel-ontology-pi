@@ -11,6 +11,7 @@ import { readStoryTime, timeWords, type StoryTime } from "./time.js";
 import { hintsOnce } from "./hints.js";
 import { placeEm, type PlaceResult } from "./placeEm.js";
 import { spatialMentions, type SpatialMention } from "./spatial.js";
+import { readHeadings, readStoryboard, type Cut } from "./storyboard.js";
 import { CATEGORY_OF, typeNames, type Decide, type Detected, type EntityType } from "./typing.js";
 import { settledCategory, usualType } from "../rules/typing.js";
 
@@ -47,7 +48,11 @@ export interface FlowBlock { id: string; chapter: number; sentences: Sentence[] 
 export interface CardPerson { id: string; how: ("named" | "speaks" | "acts" | "addressed" | "described")[]; at: string[] }
 export interface FlowCard extends KindCard { block: string; sentences: string[]; entities: { id: string; at: string[] }[]; people: CardPerson[] }
 /** A scene of the reading: one unit the two tiling passes cut, with its kind (the unit-type step) and its whole distribution. */
-export interface FlowScene { id: string; index: number; block: string; chapter: number; sentences: string[]; type?: string | null; confidence?: number; distribution?: Record<string, number>; top?: [string, number][] }
+/** A sequence: one span of the tiler's scene pass (where the place, the time or the viewpoint changes), its scenes, and its heading. */
+export interface FlowSequence { id: string; index: number; block: string; chapter: number; sentences: string[]; scenes: string[]; spans?: string[][]; heading?: SequenceHeading }
+/** A sequence's heading, as a screenplay's: interior or exterior, where (a place of the tree or an unnamed one), the time of day. */
+export interface SequenceHeading { setting: string | null; place: string | null; daytime: string | null; confidence: { setting: number; place: number; daytime: number } }
+export interface FlowScene { id: string; index: number; block: string; chapter: number; sequence?: string; sentences: string[]; type?: string | null; confidence?: number; distribution?: Record<string, number>; top?: [string, number][] }
 export interface SceneContext {
   scene: string;
   cards: string[];
@@ -58,6 +63,10 @@ export interface SceneContext {
 /** `contexts`: what the context engine composed for the step's requests, by mode: requests, items kept and cut, characters. */
 export interface StepLog { step: string; requests: number; ms: number; inputChars: number; questionChars?: number; detail?: Record<string, unknown>; contexts?: Record<string, { requests: number; kept: number; cut: number; chars: number }> }
 export interface FlowResult extends RolesResult {
+  /** The tiler's scene-pass spans, each with its scenes and its heading (interior or exterior, where, the time of day). */
+  sequences: FlowSequence[];
+  /** The cuts: each scene's cards storyboarded into shots (size, angle, movement, seconds). */
+  storyboard: Cut[];
   /** `was`: the kind the classifier gave, where the action rule changed it (nothing that matters acts); `actor`: the thing that did. */
   /** The blocks (twelve sentences, moving six at a time) and what each is about, as Jev's whole distribution (M2). */
   blocks: (BlockAnswer & { block: string })[];
@@ -131,8 +140,10 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
     const decide = decideFor(tiling, false);
     const tile = (sentences: Sentence[], words: "scene" | "kind", summary: string) => tileScenes(sentences, decide, { stateSummary: summary, gates: { accept: 0.85, reask: 0.55 }, words, ask: async (request) => (await (request.kind === "seam" ? ask(decide, tilingSeamMode, request, null) : ask(decide, tilingWindowMode, request, null))).replies });
     const scenePass = await tile(block.sentences, "scene", `Processing block ${block.id}.`);
-    const spans = (await Promise.all(scenePass.spans.map((span) => (span.length < 2 ? { spans: [span] } : tile(block.sentences.filter((sentence) => span.includes(sentence.id)), "kind", `Processing one scene of block ${block.id}.`))))).flatMap((result) => result.spans);
-    return { block, spans };
+    // Each scene-pass span is kept as a sequence (the user, 2026-11-04: the industry's levels, episode › sequence › scene ›
+    // cut): its place, time and viewpoint are read once, as a heading, below.
+    const groups = await Promise.all(scenePass.spans.map(async (span) => ({ sequence: span, spans: span.length < 2 ? [span] : (await tile(block.sentences.filter((sentence) => span.includes(sentence.id)), "kind", `Processing one scene of block ${block.id}.`)).spans })));
+    return { block, groups };
   })));
   const classified = timed(kindsLog, () => Promise.all(blocks.map(async (block) => {
     const decide = decideFor(kindsLog);
@@ -161,7 +172,9 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   const [tiles, kinds] = await Promise.all([tiled, classified, listed]);
 
   // Scenes and cards.
-  const scenes: FlowScene[] = tiles.flatMap(({ block, spans }) => spans.map((ids) => ({ id: "", index: 0, block: block.id, chapter: block.chapter, sentences: ids }))).map((scene, index) => ({ ...scene, id: `scene_${String(index + 1).padStart(6, "0")}`, index }));
+  const sequences: FlowSequence[] = tiles.flatMap(({ block, groups }) => groups.map((group) => ({ id: "", index: 0, block: block.id, chapter: block.chapter, sentences: group.sequence, scenes: [] as string[], spans: group.spans }))).map((sequence, index) => ({ ...sequence, id: `sequence_${String(index + 1).padStart(6, "0")}`, index }));
+  const scenes: FlowScene[] = sequences.flatMap((sequence) => (sequence.spans ?? []).map((ids) => ({ id: "", index: 0, block: sequence.block, chapter: sequence.chapter, sequence: sequence.id, sentences: ids }))).map((scene, index) => ({ ...scene, id: `scene_${String(index + 1).padStart(6, "0")}`, index }));
+  for (const sequence of sequences) { sequence.scenes = scenes.filter((scene) => scene.sequence === sequence.id).map((scene) => scene.id); delete (sequence as { spans?: unknown }).spans; }
   // Each unit's kind, asked of the unit whole (M14's type step in the reading): forty units a request, in reading order.
   const unitTypes = meter("unit types");
   await timed(unitTypes, async () => {
@@ -304,6 +317,18 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   const spatial = spatialMentions({ em, cards, roles: resolved.roles, scenes });
   const placesLog = meter("place EM");
   const places = await timed(placesLog, () => placeEm(decideFor(placesLog), { chart, scenes, cards, sentences: all.map(({ sentence }) => sentence), kinds: kindOf, text, facts: facts.facts, time, descriptions: [...placeDescriptions.values()], spatial }));
+  // Sequence headings and the storyboard (storyboard.ts): each sequence's heading (a scene of it whose place was only
+  // carried on takes the heading's), then each scene's cards cut into shots.
+  const flashback = new Set(time.scenes.filter((entry) => entry.flashback).map((entry) => entry.scene));
+  const labelOf = (id: string) => { const slot = places.slots.find((entry) => entry.id === id); return slot ? slot.label : chart.entities.get(id)?.names[0] ?? id; };
+  const headingLog = meter("sequence headings");
+  const headed = await timed(headingLog, () => readHeadings(decideFor(headingLog), { sequences, places, label: labelOf, text, flashback: (scene) => flashback.has(scene) }));
+  for (const sequence of sequences) { const heading = headed.headings.get(sequence.id); if (heading) sequence.heading = { setting: heading.setting, place: heading.place, daytime: heading.daytime, confidence: heading.confidence }; }
+  headingLog.detail = { scenesPlaced: headed.changed };
+  const sequenceOf = new Map(scenes.map((scene) => [scene.id, scene.sequence ?? null])), sequenceById = new Map(sequences.map((sequence) => [sequence.id, sequence]));
+  const boardLog = meter("storyboard");
+  const storyboard = await timed(boardLog, () => readStoryboard(decideFor(boardLog), { scenes, cards, text, sequenceOf: (scene) => sequenceOf.get(scene) ?? null,
+    headingOf: (scene) => { const heading = sequenceById.get(sequenceOf.get(scene) ?? "")?.heading; return heading ? { setting: heading.setting, where: heading.place ? labelOf(heading.place) : null, daytime: heading.daytime } : null; } }));
   const { periodOf: _, ...storyTime } = time;
-  return { scenes, cards, kinds: kindOf, blocks: kinds.flatMap((entry) => entry.blocks.map((answer) => ({ ...answer, block: entry.block.id }))), chart, em, contexts, steps, facts: facts.facts, time: storyTime, places, spatial, ...resolved };
+  return { sequences, storyboard, scenes, cards, kinds: kindOf, blocks: kinds.flatMap((entry) => entry.blocks.map((answer) => ({ ...answer, block: entry.block.id }))), chart, em, contexts, steps, facts: facts.facts, time: storyTime, places, spatial, ...resolved };
 }

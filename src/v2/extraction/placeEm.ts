@@ -39,7 +39,7 @@ export interface UnnamedPlace { id: string; kind: "place" | "building" | "room";
 export interface PlaceReference { text: string; scene: string; sentences: string[]; entity: string | null; answer: string; confidence: number; by: "rule" | "habit" | "jev" }
 /** What a description of a place has meant (learned as the book goes): a prior for the recommender, and a rule once it holds. */
 export interface PlaceHabit { text: string; place: string; count: number }
-export interface Setting { scene: string; place: string | null; by: "environment" | "action" | "named" | "carried" | "raised" | "unnamed" | "jev" | "none"; confidence?: number }
+export interface Setting { scene: string; place: string | null; by: "environment" | "action" | "named" | "carried" | "raised" | "unnamed" | "jev" | "sequence" | "none"; confidence?: number }
 export interface Occupancy { who: string; place: string; scene: string; time: string | null; by: "setting" | "spatial"; level?: string | null; sentence?: string }
 export interface PlaceAsked { mode: string; keys: Record<string, string>; manifest: Manifest }
 /** The tree's laws, checked (docs/v2/world-model.md §2.1): n places, r roots, n − r links, no loop, every link graded by scale. */

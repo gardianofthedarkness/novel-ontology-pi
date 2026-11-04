@@ -72,6 +72,30 @@ export const unitTypeMode: Mode<UnitTypeFocus, null> = {
   cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
 };
 
+/**
+ * Sequence headings (the user, 2026-11-04: the industry's levels): each sequence, a span of the tiler's scene pass, given
+ * its heading as a screenplay gives one, interior or exterior, where, the time of day. Its places are offered as options.
+ */
+export interface HeadingFocus extends Asked { items: [string, unknown][] }
+export const headingMode: Mode<HeadingFocus, null> = {
+  name: "sequence-headings",
+  task: "Sequences of a novel being staged in a 3D city, in reading order: each runs where one place, one time and one point of view hold. Give each its heading as a screenplay's: interior or exterior, where it is (one of the places offered for it, by what the text says or implies; none of these when it is somewhere else), and the time of day.",
+  sources: [given("sequences", (focus: HeadingFocus) => focus.items)],
+  cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
+};
+
+/**
+ * The storyboard (絵コンテ; the user, 2026-11-04): a scene's cards in order, each asked where the camera cuts and the shot it
+ * is (size, angle, movement, seconds on screen), as a storyboard artist with the director of photography would plan them.
+ */
+export interface StoryboardFocus extends Asked { items: [string, unknown][] }
+export const storyboardMode: Mode<StoryboardFocus, null> = {
+  name: "storyboard",
+  task: "A scene of a novel being staged in a 3D city, cut into its cards in reading order, with the sequence's heading. Storyboard it as an anime storyboard artist with the director of photography would: for each card say whether the camera cuts to a new shot there, and the shot: its size, its angle, how the camera moves, and how long it is on screen. Keep a shot while the action and the speakers stay framed by it; cut where the action moves, the speaker changes in a way the frame cannot hold, or the story needs a closer or wider look.",
+  sources: [given("scene", (focus: StoryboardFocus) => focus.items)],
+  cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
+};
+
 export interface TypingFocus extends Asked { batch: Sentence[]; names: string[] }
 export const typingMode: Mode<TypingFocus, null> = {
   name: "typing",

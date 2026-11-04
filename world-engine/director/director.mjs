@@ -98,6 +98,11 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
   // Smoothed per strand (the user, 2026-11-03): each scene's fork from the workspace's strands.
   const forkOf = new Map(((await strandsOf())?.scenes ?? []).map(entry => [entry.id, entry.fork]));
   const gate = G.gateOf(G.windowsOf(reading), { strandOf: scene => forkOf.get(scene) ?? null }), beatOf = new Map();
+  // The storyboard's cuts (the reading's storyboard step, src/v2/extraction/storyboard.ts): each line's cut, so a card plays
+  // in the cut its first line is in, framed by its shot size and angle, timed by its seconds. A reading without one plays
+  // the scale faculty's beats as before.
+  const cutAt = new Map();
+  if (reading.storyboard?.length) { const order = reading.scenes.flatMap(entry => entry.sentences), at_ = new Map(order.map((id, n) => [id, n])); for (const cut of reading.storyboard) for (let k = at_.get(cut.first); k !== undefined && k <= (at_.get(cut.last) ?? -1); k++) cutAt.set(order[k], cut); }
   if (gate) { const order = reading.scenes.flatMap(entry => entry.sentences), at_ = new Map(order.map((id, n) => [id, n])); gate.beats.forEach((beat, n) => { for (let k = at_.get(beat.first); k <= at_.get(beat.last); k++) if (!beatOf.has(order[k])) beatOf.set(order[k], { n, type: beat.type, lead: beat.lead }); }); }
   const cardsOf = new Map();
   for (const card of reading.cards) { const id = sceneOf.get(card.first); if (id && ['action', 'dialogue'].includes(card.kind)) (cardsOf.get(id) ?? cardsOf.set(id, []).get(id)).push(card); }
@@ -679,7 +684,12 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
         // How many cards each beat plays (a card's share of its beat's time, L17).
         const cardsInBeat = new Map();
         for (const entry of cards) { const n = beatOf.get(entry.first)?.n; if (n !== undefined) cardsInBeat.set(n, (cardsInBeat.get(n) ?? 0) + 1); }
-        const ELEVATION = { 'eye level': 12, 'over a shoulder': 20, high: 45, 'top-down': 80, 'low, looking up': 6, aerial: 60 };
+        // How many cards each cut plays (a card's share of its cut's seconds: the cut's timesheet).
+        const cardsInCut = new Map();
+        for (const entry of cards) { const cut = cutAt.get(entry.first); if (cut) cardsInCut.set(cut.id, (cardsInCut.get(cut.id) ?? 0) + 1); }
+        const ELEVATION = { 'eye level': 12, 'over a shoulder': 20, 'over the shoulder': 20, high: 45, 'top-down': 80, overhead: 80, 'low, looking up': 6, low: 6, aerial: 60 };
+        // What a shot size takes in, metres across (a close-up one face, a wide shot the room or the street round them).
+        const SHOT_SPAN = { 'extreme close-up': 0.6, 'close-up': 1.2, 'medium close-up': 2, 'medium shot': 3.5, 'full shot': 6, 'wide shot': 30, 'extreme wide shot': 250 };
         // Journeys (M6): where the journeys faculty fires in this scene (gate.mjs), its spans read for journeys at scale,
         // given the places the world has placed (each with its box).
         const journeyOf = new Map();
@@ -797,11 +807,15 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
           // share of the beat's time; Jev's pictures framed at the frame, a move's reach its way's speed times that time (or
           // the reach the reader names, measured, if further). Without a scale, the camera's own defaults.
           const scale = scaleOf.get(beatOf.get(card.first)?.n) ?? null, centre = (() => { const points = card.people.filter(person => positions[person.id]).map(person => at(positions[person.id][0])); return points.length ? [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length) : anchorAt; })();
-          const frameHere = scale ? measure(scale.frame, centre) : null, cardSeconds = scale?.duration ? scale.duration / (cardsInBeat.get(beatOf.get(card.first)?.n) || 1) : null;
+          const cut = cutAt.get(card.first) ?? null;
+          // The scale's frame stays the scene's extent for blocking (facts searched, moves' targets); the cut frames the camera.
+          const frameHere = scale ? measure(scale.frame, centre) : null, shotSpan = cut ? SHOT_SPAN[cut.size] ?? 3.5 : null;
+          const cardSeconds = cut ? cut.seconds / (cardsInCut.get(cut.id) || 1) : scale?.duration ? scale.duration / (cardsInBeat.get(beatOf.get(card.first)?.n) || 1) : null;
           const frameRadius = Math.min(400, Math.max(10 * BODY, (frameHere ?? 20 * BODY) / 2)), speedOf = how => LW.SPEED[how] ?? LW.SPEED.walk;
           // L20: a reach on foot shrinks by the crowd's drag at the card's people.
           const drag = how => (crowd && centre && ['walk', 'run', 'step'].includes(how) ? crowd.dragAt(centre[0], centre[2]) : 1);
           const reachOf = how => drag(how) * (scale ? Math.max(speedOf(how) * (cardSeconds ?? 0), measure(scale.reach, centre) ?? 0) || (C.REACH[how] ?? C.REACH.walk) : C.REACH[how] ?? C.REACH.walk);
+          if (cut) cardRecord.cut = { id: cut.id, n: cut.index + 1, size: cut.size, angle: cut.angle, move: cut.move, seconds: Math.round(cardSeconds * 10) / 10 };
           if (scale) cardRecord.scale = { frame: scale.frame, metres: frameHere ? Math.round(frameHere) : null, angle: scale.angle, reach: scale.reach, seconds: cardSeconds ? Math.round(cardSeconds * 10) / 10 : null };
           asking = cardRecord;
           await live?.phase(`scene ${sceneLabel(scene.id)} · card ${cards.indexOf(card) + 1}/${cards.length}${card.pass ? ' · from the pass' : ''} · ${card.people.filter(person => positions[person.id]).map(person => names.get(person.id) ?? person.id).join(', ')}`, { scene: scene.id, event: scene.events.length, card: card.id });
@@ -1255,12 +1269,16 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
           // A card no one was asked about: the producer's camera on the people of the card, as they stood when it began.
           // The camera holds one group for a beat (M4; the user, 2026-11-03: the camera shifting back and forth): everyone
           // who has acted, spoken or moved in the beat so far, framed together; a new beat starts a new group.
-          const beat = beatOf.get(card.first) ?? null, key = beat?.n ?? `card:${card.id}`;
+          // With a storyboard, the camera holds one group for a cut instead: a cut is one camera setup.
+          const beat = beatOf.get(card.first) ?? null, key = cut?.id ?? beat?.n ?? `card:${card.id}`;
           if (beat) cardRecord.beat = beat;
           if (key !== cameraBeat) { cameraBeat = key; cameraGroup = new Set(); }
           for (const who of [...event.actors, ...cardRecord.moves.filter(move => move.moved && !String(move.why ?? '').startsWith('background')).map(move => move.person)]) if (positions[who]) cameraGroup.add(who);
           { const points = [...cameraGroup].filter(who => positions[who]).map(who => at(positions[who][0]));
-            if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length), spread = Math.max(0, ...points.map(p => Math.hypot(p[0] - mid[0], p[2] - mid[2]))); cardRecord.camera = { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(10 * BODY, spread * 1.2 + 4 * BODY, frameHere ? Math.min(400, frameHere / 2) : 0), elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35, yaw: 0 }; } }
+            if (points.length) { const mid = [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length), spread = Math.max(0, ...points.map(p => Math.hypot(p[0] - mid[0], p[2] - mid[2]))); cardRecord.camera = cut
+              // A cut's shot: as close as its size, never cutting off the people it holds.
+              ? { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(shotSpan + 1.5, spread * 1.2 + 2 * BODY), elevation: ELEVATION[cut.angle] ?? 12, yaw: 0, cut: cut.id, move: cut.move }
+              : { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(10 * BODY, spread * 1.2 + 4 * BODY, frameHere ? Math.min(400, frameHere / 2) : 0), elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35, yaw: 0 }; } }
           // The producer's camera rides with the card's event: the player and World · Live follow it card by card.
           event.camera = cardRecord.camera ?? null;
           // Streamed: the line as far as this card, played on in World · Live; a moment to watch a move before the next question.
