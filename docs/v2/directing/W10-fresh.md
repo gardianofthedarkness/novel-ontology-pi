@@ -145,3 +145,31 @@ FIRING stands. The oracle's truth is M14's stretches (a stretch found something,
 favours M14's own cuts; the gap to it (0.58 against 0.65) is partly that. What it misses on the new units is recall
 (journeys 0.61, choreography 0.56); a lower bar for those two (−0.25) reads 0.95 of the fights and 0.82 of the journeys at
 twice the reading. An oracle read on the new units themselves would settle both (paid; not done).
+
+## Volume 1 rebuilt on the two-pass units (2026-11-04)
+
+From 0b6e551, stopped before W10. **Reading** `v2-vol1-w10c` (two-pass tiling and unit types, started from the earlier
+readings' caches; 966 paid Jev requests): **286 units**, median 10 sentences, longest 174, 9 of one sentence; every unit
+typed; 3,111 cards. **Library** `v2-host-state-12` (a blank universe): the workspace and strands (all 286 placed);
+**terrain** from blank (144 Jev calls: 185 sites, 2 cities, 12 districts, 103 streets, 68 buildings); **starts** by rule
+(490: 480 people, 10 things; 68 units with nobody placed, all with nobody present in the world script, median 4
+sentences, mostly interior and exposition).
+
+**Faculties** (`v2-vol1-w10c/v2/faculties.json`; 1,341 work-model requests, 1.93M prompt and 0.31M completion tokens, none
+failed): the generalist on all 286 units (354 moves, 346 facts, 260 items, 1,604 talk, 47 breaks), scale on 286 beats,
+journeys on 79 units, choreography on 103, conversation on 119, ambience on 84. Three fixes on the way:
+
+- **One retry** (0b6e551): a request whose reply is unreadable or that fails is asked once more with half as much room
+  again. 5 replies were unreadable the first time; every one came back on the retry.
+- **Journeys and places** (0b6e551, f4ce2e9, d460643): the places near a unit are offered first (its own, the units' either
+  side, their parents, siblings and children, and the places first told in those units), and a place said in words is
+  matched to one offered, its label as the text names it (without " (scene 8)" and " · pool"), the label ending latest
+  in the words first (the head of a Chinese phrase). A place first told inside a unit now exists from that unit for the
+  director too: before, only a unit's own place did, so the unnamed places mentioned in a unit were never offered.
+  Journeys to a place: **32 of 87** (22 named by id, 10 matched from words), against 3 of 81.
+- **In parallel** (deebf41, a15c8db; the user: "parallel for different faculties if they don't have dependencies"): only
+  the summaries wait on each other (each takes the memory of the unit before). A unit's windows and its five other
+  faculties start as soon as its summary is in, all at once, twelve requests at a time. The first run took 36 minutes:
+  20 for the generalist, 16 for the others one after another. With a stand-in answering after the same delay each time,
+  80 units took 66 seconds against 229. The file is the same (each faculty's answers now kept in span order, so a
+  rerun is identical).
