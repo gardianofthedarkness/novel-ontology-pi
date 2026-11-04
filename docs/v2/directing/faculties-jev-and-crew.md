@@ -158,8 +158,12 @@ on its strand, the art) → frame (the photographer: window, angle, a pan's path
 check (L1, L11; retake to layout or frame) → keys (the key animator, Jev, its picture the frame, its options inside the
 frame or "leaves frame toward …") → key check (L6, L10) → in-betweens (the path integral) → reframe (still in frame:
 follow or widen within the cut's movement; leaves it: a new cut, a retake of the storyboard) → photography → rush check
-(the laws, the user's pins). Every task has a status and publishes a version; a retake records why and keeps the version
-before it. **Strands order the nodes**: a cut waits for the last earlier cut that cast each of its people; cuts on strands
+(the laws). Every task has a status (waiting, ready, in progress, checking, done or retake) and publishes a version; a
+retake records the law that failed and keeps the version before it. **Nobody is in the loop** (the user, 2026-11-04:
+"user is never on the loop. Everything automatic"): every check is a law or a geometry test; a task gets at most two
+retakes, then the desk keeps the version that broke the fewest laws, marks it passed with faults, and the cut moves on.
+A main agent may later be called where a check cannot decide; there is none for now. Notes written after a run feed the
+next run, never the one in progress. **Strands order the nodes**: a cut waits for the last earlier cut that cast each of its people; cuts on strands
 with no one in common run side by side. The **production desk** (the host, the run manager) schedules the ready tasks,
 keeps the Jev budget, counts retakes per cut and per role, and draws the timeline.
 

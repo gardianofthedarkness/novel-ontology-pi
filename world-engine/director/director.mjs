@@ -27,7 +27,7 @@ const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
-const CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
+const WF = await import('./workflow.mjs'), CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
@@ -106,6 +106,10 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
   if (gate) { const order = reading.scenes.flatMap(entry => entry.sentences), at_ = new Map(order.map((id, n) => [id, n])); gate.beats.forEach((beat, n) => { for (let k = at_.get(beat.first); k <= at_.get(beat.last); k++) if (!beatOf.has(order[k])) beatOf.set(order[k], { n, type: beat.type, lead: beat.lead }); }); }
   const cardsOf = new Map();
   for (const card of reading.cards) { const id = sceneOf.get(card.first); if (id && ['action', 'dialogue'].includes(card.kind)) (cardsOf.get(id) ?? cardsOf.set(id, []).get(id)).push(card); }
+  // The runtime workflow (workflow.mjs; the user, 2026-11-04): each storyboard cut a node with its tasks, statuses and
+  // versions, ordered by the strands (a cut waits for the last earlier cut casting each of its people); every check
+  // automatic, a task retaken at most twice, then passed with faults.
+  const desk = WF.createDesk({ cuts: reading.storyboard?.length ? WF.castOfCuts({ storyboard: reading.storyboard, cards: reading.cards, present: PRESENT }) : [] });
   const out = join(novelDir, 'stage', 'director'), shots = join(out, 'shots'), work = join(out, 'page');
   await mkdir(shots, { recursive: true }); await mkdir(work, { recursive: true });
   // The reading as the reader shows it over the whole book (World · Live's play/reading.json): every sentence's kind, and the
@@ -681,6 +685,10 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
         };
         const nodeAt = id => { const p = at(id), found = around(p[0], p[2], 3).nodes.find(node => node.id === id); return describe(found ?? { id, x: p[0], y: p[1], z: p[2], type: 0, lot: -1 }); };
         let factsUpTo = -1, itemsUpTo = -1, cameraBeat = null, cameraGroup = new Set();
+        // The photographer's frame for the cut being made (workflow.mjs): set at its first card, checked with its layout,
+        // the window the key animator works in; `splitOf` a cut split by a storyboard retake, the node its cards go to now.
+        let frame = null, framed = null;
+        const splitOf = new Map();
         // How many cards each beat plays (a card's share of its beat's time, L17).
         const cardsInBeat = new Map();
         for (const entry of cards) { const n = beatOf.get(entry.first)?.n; if (n !== undefined) cardsInBeat.set(n, (cardsInBeat.get(n) ?? 0) + 1); }
@@ -973,6 +981,11 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
           // following someone after they have gone. Elsewhere, Jev's text question first, as before.
           const jevMove = async (person, hint = null) => {
             const here = at(positions[person][0]), mover = { id: person, name: names.get(person) ?? person }, slug = `${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-${person}`;
+            // The key animator works in the photographer's window (the user, 2026-11-04: "The key animator needs to rely on the
+            // window provided by photographer"): a still camera's frame bounds the pictures and the spots, and a spot beyond it
+            // is offered as one choice, leaving the frame that way; a camera that follows lets the move go as far as it reaches.
+            const bounded = !!frame && !frame.follows, keyRadius = bounded ? Math.max(4 * BODY, frame.window * 1.3) : frameRadius;
+            const keyFocus = bounded ? { x: frame.centre[0], z: frame.centre[2], y0: frame.centre[1], w: 6, d: 6, h: 3 } : { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 };
             await show();
             const played = await grow(scene, run);
             const others = Object.keys(positions).filter(who => who !== person).map(who => ({ id: who, name: names.get(who) ?? who }));
@@ -987,8 +1000,9 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             // a. The direction: every arrow, said by what it meets.
             const arrows = C.DIRECTIONS.map(direction => {
               let blocked = false, meets = null;
-              for (const metres of [2, 5, 10, 20].map(d => Math.round(d * frameRadius / 16))) { const p = C.arrowEnd(here, direction.vector, metres), what = said(p); if (what !== said(here)) { meets = `${what} (${metres} m)`; blocked = metres <= 2 && /a wall/.test(what); break; } }
-              return { ...direction, said: meets ?? `more of ${said(here)}`, blocked };
+              for (const metres of [2, 5, 10, 20].map(d => Math.max(1, Math.round(d * keyRadius / 16)))) { const p = C.arrowEnd(here, direction.vector, metres), what = said(p); if (what !== said(here)) { meets = `${what} (${metres} m)`; blocked = metres <= 2 && /a wall/.test(what); break; } }
+              const leaves = bounded && !WF.inFrame(frame, C.arrowEnd(here, direction.vector, keyRadius * 0.55));
+              return { ...direction, said: `${meets ?? `more of ${said(here)}`}${leaves ? ', out of the frame' : ''}`, blocked };
             });
             // First the text alone: does this person go anywhere in this card? (Not asked when the digest says they go elsewhere.)
             if (!hint) {
@@ -999,7 +1013,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
               if (!goes) { cardRecord.moves.push({ person, direction: 'stays', line: said_, moved: false }); return; }
             }
             cardRecord.camera ??= { focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 };
-            const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: frameRadius, elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.max(9, frameRadius * 0.55), blocked: arrow.blocked })) });
+            const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: keyFocus, radius: keyRadius, elevation: bounded ? Math.min(60, Math.max(20, frame.camera.elevation)) : scale ? ELEVATION[scale.angle] ?? 35 : 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.max(bounded ? 3 : 9, keyRadius * 0.55), blocked: arrow.blocked })) });
             const asked = await ask(decide, M.moveDirectionMode, { ...base, pictures: { arrows: `${mover.name} now, from 35° above; the lettered arrows go out of them (warm rise, cool fall, level ones flat).` }, arrows: arrows.map(arrow => ({ letter: arrow.letter, said: `${arrow.rise}, toward ${arrow.said}` })), others }, null, { request: { images: { arrows: a.png } } });
             const reply = key => asked.replies.find(entry => entry.key === key)?.value;
             const choice = String(reply('direction') ?? 'stays'), how = String(reply('how') ?? 'walk'), because = reply('line') ?? null;
@@ -1024,19 +1038,23 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             }
             for (const [what, nodes] of groups) { const d = Math.min(...nodes.map(node => Math.hypot(node.x - here[0], node.y - here[1], node.z - here[2]))); if (!/a wall/.test(what)) spots.push({ what, nodes: nodes.map(node => node.id), d }); }
             for (const other of others) { const p = at(positions[other.id][0]); if (C.inWedge(here, arrow.vector, p, 60) && Math.hypot(p[0] - here[0], p[2] - here[2]) <= reach) spots.push({ what: `beside ${other.name}`, nodes: pool.nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= 2).map(node => node.id), d: Math.hypot(p[0] - here[0], p[2] - here[2]) }); }
-            const offered = spots.filter(spot => spot.nodes.length).sort((x, y) => x.d - y.d).slice(0, 16).map((spot, n) => ({ ...spot, letter: String.fromCharCode(65 + n) }));
+            // In a still camera's frame: the spots inside it, and the nearest beyond it as one choice, leaving the frame.
+            const found = spots.filter(spot => spot.nodes.length).sort((x, y) => x.d - y.d), inside = bounded ? found.filter(spot => WF.inFrame(frame, at(spot.nodes[0]))) : found, beyond = bounded ? found.filter(spot => !inside.includes(spot)) : [];
+            const offered = [...inside.slice(0, beyond.length ? 15 : 16), ...(beyond.length ? [{ what: `leaves the frame toward ${arrow.said.replace(/, out of the frame$/, '')}`, nodes: beyond[0].nodes, d: beyond[0].d, leaves: true }] : [])].map((spot, n) => ({ ...spot, letter: String.fromCharCode(65 + n) }));
             let targets = null, how2 = how;
             if (offered.length) {
-              const b = await shoot(`${slug}-b`, [1440, 900], { ...shotBase, focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: Math.max(frameRadius, Math.min(reach, 400) * 0.7), elevation: 35, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, Math.max(30, frameRadius)) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
+              const b = await shoot(`${slug}-b`, [1440, 900], { ...shotBase, focus: keyFocus, radius: bounded ? keyRadius : Math.max(frameRadius, Math.min(reach, 400) * 0.7), elevation: 35, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, Math.max(30, frameRadius)) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
               const spotAsked = await ask(decide, M.moveSpotMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, pictures: { wedge: `${mover.name}, the chosen arrow and its wedge, as far as a ${how} reaches.` }, spots: offered.map(spot => ({ letter: spot.letter, said: `${spot.what} (${Math.round(spot.d)} m)` })) }, null, { request: { images: { wedge: b.png } } });
               const spot = String(spotAsked.replies.find(entry => entry.key === 'spot')?.value ?? 'none'), chosen = offered.find(entry => entry.letter === spot);
               moveRecord.spot = chosen ? chosen.what : 'none';
+              if (chosen?.leaves) moveRecord.leaves = true;
               if (chosen) targets = chosen.nodes;
             }
-            if (!targets && calls < budget) {
+            // The map along the arrow (beyond the spots): where nothing is offered, or the camera follows.
+            if (!targets && calls < budget && (!bounded || !offered.length)) {
               // c1: a rough box on the plan along the arrow.
-              const frame = C.frameAlong(here, arrow.vector, reach), half = (frame[2] - frame[0]) / 2, step = half > 60 ? 20 : half > 25 ? 10 : 5;
-              const c1 = await shoot(`${slug}-c1`, [1024, 1024], { ...shotBase, topdown: { x: (frame[0] + frame[2]) / 2, z: (frame[1] + frame[3]) / 2, half }, grid: { box: frame, step, y: here[1] }, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, half) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
+              const along = C.frameAlong(here, arrow.vector, reach), half = (along[2] - along[0]) / 2, step = half > 60 ? 20 : half > 25 ? 10 : 5;
+              const c1 = await shoot(`${slug}-c1`, [1024, 1024], { ...shotBase, topdown: { x: (along[0] + along[2]) / 2, z: (along[1] + along[3]) / 2, half }, grid: { box: along, step, y: here[1] }, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, half) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
               const roughAsked = await ask(decide, M.moveRoughMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, pictures: { plan: `straight down, north up, ${Math.round(half * 2)} m across, a grid of ${step} m; ${mover.name}'s arrow and its wedge drawn.` } }, null, { request: { images: { plan: c1.png } } });
               const roughReply = roughAsked.replies.find(entry => entry.key === 'box'), roughBox = roughReply?.box ?? roughReply?.value, map = c1.view?.map;
               if (roughBox?.left !== undefined && map) {
@@ -1202,6 +1220,36 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
               Object.assign(cardRecord.moves.at(-1), { direction: entry.motion, line: entry.sentence, by: 'digest' });
             }
           };
+          // The cut's node (workflow.mjs): at its first card, the layout (its cast as they stand), the photographer's frame,
+          // and the layout check, every fault retaken automatically: two on one cell step apart (L11); a shot size that
+          // cannot hold its cast tightens on the card's lead; at most two retakes, then passed with faults.
+          const node = cut ? splitOf.get(cut.id) ?? cut.id : null, castNow = () => (desk.nodes.get(cut?.id)?.cast ?? card.people.filter(person => person.how.some(how => PRESENT.has(how))).map(person => person.id)).filter(who => positions[who]);
+          if (node && node !== framed) {
+            framed = node;
+            const layoutNow = () => castNow().map(who => ({ who, node: positions[who][0], at: at(positions[who][0]), held: !frame?.holds || frame.holds.includes(who) }));
+            desk.start(node, 'layout'); desk.publish(node, 'layout', Object.fromEntries(layoutNow().map(entry => [entry.who, entry.at.map(round)])));
+            desk.start(node, 'frame');
+            frame = null;
+            frame = WF.frameOf({ points: layoutNow().map(entry => entry.at), size: cut.size, angle: cut.angle, move: cut.move }) ?? (anchorAt ? WF.frameOf({ points: [anchorAt], size: cut.size, angle: cut.angle, move: cut.move }) : null);
+            desk.publish(node, 'frame', frame);
+            for (;;) {
+              desk.start(node, 'layout check');
+              const faults = WF.layoutFaults({ frame, cast: layoutNow() });
+              if (desk.check(node, 'layout check', faults) !== 'retake') break;
+              const crowded = faults.filter(fault => fault.fix === 'layout').map(fault => fault.who);
+              for (const who of crowded) {
+                const taken = new Set(Object.values(positions).map(value => value[0])), free = near(at(positions[who][0]), 0.8, 2.5).filter(entry => !taken.has(entry.id));
+                if (free.length) moveTo(who, walk(scene, `${scene.id}|${card.id}|${who}|layout`, positions[who], [free[0].id], 'walk'), 'walk', 'layout: one to a cell', { quiet: true });
+              }
+              if (crowded.length) desk.publish(node, 'layout', Object.fromEntries(layoutNow().map(entry => [entry.who, entry.at.map(round)])));
+              if (faults.some(fault => fault.fix === 'tighten' || fault.fix === 'frame')) {
+                const lead = card.people.find(person => positions[person.id] && person.how.some(how => how === 'speaks' || how === 'acts'))?.id ?? castNow()[0];
+                if (lead) { frame = { ...WF.frameOf({ points: [at(positions[lead][0])], lead: at(positions[lead][0]), size: cut.size, angle: cut.angle, move: cut.move }), holds: [lead] }; desk.publish(node, 'frame', frame); }
+              }
+            }
+            desk.done(node, 'layout'); desk.done(node, 'frame');
+          }
+          if (node) desk.start(node, 'keys', card.id); else frame = null;
           const movers = card.kind === 'dialogue' ? (read(card) ? [...new Set(digestMovers(card))] : [])
             : [...new Set([...card.people.filter(entry => positions[entry.id] && entry.how.includes('acts')).map(entry => entry.id), ...(read(card) ? digestMovers(card) : [])])];
           for (const person of movers) {
@@ -1279,6 +1327,28 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
               // A cut's shot: as close as its size, never cutting off the people it holds.
               ? { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(shotSpan + 1.5, spread * 1.2 + 2 * BODY), elevation: ELEVATION[cut.angle] ?? 12, yaw: 0, cut: cut.id, move: cut.move }
               : { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(10 * BODY, spread * 1.2 + 4 * BODY, frameHere ? Math.min(400, frameHere / 2) : 0), elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35, yaw: 0 }; } }
+          // The cut's node after the keys (workflow.mjs): the key check (L6, L10 as the card played them; no key retake yet,
+          // so faults pass), the in-betweens (the walks), the reframe (held, followed, exits frame, or a new cut where someone
+          // who left is seen again in this cut), the photography (the camera is the frame's) and the rush check (every law
+          // the card holds).
+          if (node && frame) {
+            desk.publish(node, 'keys', cardRecord.moves.map(move => ({ who: move.person, moved: !!move.moved, ...(move.leaves ? { leaves: true } : {}) })), card.id);
+            desk.done(node, 'keys', card.id);
+            desk.start(node, 'key check', card.id);
+            desk.check(node, 'key check', (cardRecord.laws ?? []).filter(entry => ['L6', 'L10'].includes(entry.law) && entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), { card: card.id, canRetake: false });
+            desk.publish(node, 'in-betweens', { walks: cardRecord.moves.filter(move => move.moved).length }, card.id); desk.done(node, 'in-betweens', card.id);
+            const later = new Set(cards.slice(cards.indexOf(card) + 1).filter(entry => cutAt.get(entry.first)?.id === cut.id).flatMap(entry => entry.people.filter(person => person.how.some(how => how === 'speaks' || how === 'acts')).map(person => person.id)));
+            const ended = castNow().filter(who => !frame.holds || frame.holds.includes(who)).map(who => ({ who, at: at(positions[who][0]) }));
+            const reframe = WF.reframeOf({ frame, ended, later });
+            desk.publish(node, 'reframe', reframe, card.id); desk.done(node, 'reframe', card.id);
+            if (reframe.decision === 'followed') { frame = { ...WF.frameOf({ points: ended.map(entry => entry.at), size: cut.size, angle: cut.angle, move: cut.move }), ...(frame.holds ? { holds: frame.holds } : {}) }; desk.publish(node, 'frame', frame); desk.done(node, 'frame'); }
+            if (reframe.decision === 'new cut') splitOf.set(cut.id, desk.split(cut.id, card.id, `${reframe.outside.map(who => names.get(who) ?? who).join(', ')} left the frame and come back in this cut`));
+            cardRecord.camera = { ...frame.camera, cut: node, move: cut.move };
+            cardRecord.workflow = { node, frame: desk.nodes.get(node)?.tasks.frame?.kept ?? null, window: frame.window, reframe: reframe.decision, ...(reframe.outside.length ? { outside: reframe.outside } : {}) };
+            desk.publish(node, 'photography', { camera: cardRecord.camera }, card.id); desk.done(node, 'photography', card.id);
+            desk.start(node, 'rush check', card.id);
+            desk.check(node, 'rush check', (cardRecord.laws ?? []).filter(entry => entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), { card: card.id, canRetake: false });
+          }
           // The producer's camera rides with the card's event: the player and World · Live follow it card by card.
           event.camera = cardRecord.camera ?? null;
           // Streamed: the line as far as this card, played on in World · Live; a moment to watch a move before the next question.
@@ -1362,7 +1432,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
   } });
   // Only the stretches this run played: the gate reads the whole volume, the run plays its range (the pilot's 109 of 346).
   { const played = new Set(record.scenes.map(entry => entry.scene)); record.stretches = record.stretches.filter(stretch => played.has(stretch.scene)); }
-  record.finishedAt = new Date().toISOString(); record.calls = calls;
+  record.finishedAt = new Date().toISOString(); record.calls = calls; record.workflow = desk.summary();
   // The run priced (M12), by the rates per million tokens in stage/director/prices.json ({ jev: { input, output }, work:
   // { input, output }, currency }) where the workspace has them: Jev's tokens as reported, each meter's tokens less the
   // share its cache answered (a cached answer costs nothing). Without rates, the tokens alone.
@@ -1374,6 +1444,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
   record.timing = { seconds: Math.round((performance.now() - runStarted) / 1000), reloads: timing.reloads, reloadSeconds: Math.round(timing.reloadMs / 1000), shots: timing.shots, shotSeconds: Math.round(timing.shotMs / 1000), notShot: timing.skipped, ...(engineCost ? { graphBuilds: engineCost.builds, graphSeconds: Math.round(engineCost.ms / 1000), graphCleared: engineCost.cleared, windowsDropped: engineCost.dropped } : {}) };
   await save();
   // The run's own copies: its record, the laws over it, and the questions Jev was asked in it.
+  await writeFile(join(runDir, 'workflow.json'), JSON.stringify(desk.toJSON()));
   await copyFile(join(out, 'run.json'), join(runDir, 'run.json')).catch(() => {});
   const lawsNow = JSON.parse(await readFile(join(out, 'laws.json'), 'utf8').catch(() => 'null'));
   if (lawsNow?.run === runId) await writeFile(join(runDir, 'laws.json'), JSON.stringify(lawsNow, null, 1));
