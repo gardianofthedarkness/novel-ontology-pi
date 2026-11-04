@@ -35,3 +35,14 @@ After the reading, in order:
 
 Not in W10: L19 (floating places, reserved); a place per segment (places are still per scene, for the user to decide);
 the objective replay (M15 §4).
+
+## Segments by the tiler's wording (the user, 2026-11-04)
+
+"There's no more scene needed anymore. Everything runs on segment level … no two prompts for two levels", and then: "we
+simply tune the prompt and the wording so there's no scene, only segments. There's no even code change needed." The
+reading's tiler keeps its code; its three questions and its seam's heading now ask for segments
+(`src/digger/autostep/segmentation.ts` `tileScenes`): a segment is one continuous place, time and viewpoint and one kind
+of action; a new one begins where the place changes, time skips, the viewpoint shifts, or the kind of action changes
+(talk into a fight, a fight into a chase, action into inner thought, scene-setting into events, or back), not where a
+speaker, a sentence, a blow or a moment changes within the same kind. What the code calls a scene is then a segment, and
+`segment-tiling.mjs` (a second cut) is not run. (A first attempt with a new tiler was reverted at the user's word.)

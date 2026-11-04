@@ -67,7 +67,7 @@ export type TilingRequest =
 export function tilingDocument(request: TilingRequest): string {
   return request.kind === "window"
     ? `${request.summary}\n---\n${render(request.context)}`
-    : `${request.summary}\nPREVIOUS SCENE (began at ${request.open}, still open) — its most recent sentences:\n${render(request.tail)}\n---\nFOLLOWING PASSAGE:\n${render(request.head)}`;
+    : `${request.summary}\nPREVIOUS SEGMENT (began at ${request.open}, still open) — its most recent sentences:\n${render(request.tail)}\n---\nFOLLOWING PASSAGE:\n${render(request.head)}`;
 }
 
 function choiceValue(
@@ -141,7 +141,7 @@ export async function tileScenes(
         {
           key,
           primitive: "choice",
-          instructions: `A scene begins at sentence ${startId}: one continuous place, time and viewpoint. Which sentence id is the LAST sentence of this scene? If the scene continues past the last numbered sentence (${options[options.length - 1]}), pick that last sentence.`,
+          instructions: `A segment begins at sentence ${startId}: one continuous place, time and viewpoint, and one kind of action (talk, a fight, a chase or a journey, someone's inner thought, a call or a message, scene-setting, a memory, the world itself changing). Which sentence id is the LAST sentence of this segment? If the segment continues past the last numbered sentence (${options[options.length - 1]}), pick that last sentence.`,
           options,
         },
       ] });
@@ -173,7 +173,7 @@ export async function tileScenes(
             key,
             primitive: "choice",
             instructions:
-              "The previous scene's most recent sentences are shown first, then the passage that follows them. Does the previous scene CONTINUE into the following passage (same place, time and viewpoint flowing on), or did it END before the passage begins?",
+              "The previous segment's most recent sentences are shown first, then the passage that follows them. Does the previous segment CONTINUE into the following passage (the same place, time and viewpoint, and the same kind of action flowing on), or did it END before the passage begins?",
             options: ["continues", "ended"],
           },
         ] });
@@ -217,7 +217,7 @@ export async function tileScenes(
         {
           key,
           primitive: "choice",
-          instructions: `A new scene begins where the place changes, time skips, or the viewpoint shifts. Which sentence id BEGINS the next scene at or after ${anchorId}? Pick the first sentence of the next scene, or NONE if no new scene begins in the rest of this passage.`,
+          instructions: `A new segment begins where the place changes, time skips, the viewpoint shifts, or the kind of action changes (talk turns into a fight, a fight into a chase, action into someone's inner thought, scene-setting into events, or back); not where a speaker, a sentence, a blow or a moment changes within the same kind. Which sentence id BEGINS the next segment at or after ${anchorId}? Pick the first sentence of the next segment, or NONE if no new segment begins in the rest of this passage.`,
           options,
         },
       ] });
