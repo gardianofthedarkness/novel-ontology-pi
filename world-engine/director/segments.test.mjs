@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alignCards, segmentPresence, segmentWorld, sceneOfContainer } from './segments.mjs';
+import { alignCards, scenesAsSegments, segmentPresence, segmentWorld, sceneOfContainer } from './segments.mjs';
 
 const segments = [
   { scene: 's1', first: 'a1', last: 'a3', sentences: ['a1', 'a2', 'a3'], type: 'routine', distribution: { routine: 1 } },
@@ -35,4 +35,23 @@ test('the world by segment: containers with their scene as parent, the scene\'s 
   assert.deepEqual(world.reading.time.scenes.map(entry => entry.scene), ['s1~1', 's1~2', 's1~3']);
   assert.deepEqual(world.spawn.scenes.map(scene => [scene.spawn, scene.starts.length]), [['new', 1], ['carry', 0], ['carry', 0]]);
   assert.equal(sceneOfContainer('s1~2'), 's1');
+});
+
+test('each scene a segment (a reading whose tiler cut segments): its own id, its kind from the blocks over its sentences, presence by physics', () => {
+  const block = (sentences, distribution) => ({ first: sentences[0], last: sentences.at(-1), sentences, distribution, confidence: 0.8, type: Object.keys(distribution)[0] });
+  const reading = {
+    scenes: [{ id: 's1', sentences: ['a1', 'a2'] }, { id: 's2', sentences: ['a3', 'a4'] }, { id: 's3', sentences: ['b1'] }],
+    blocks: [block(['a1', 'a2', 'a3'], { routine: 0.9, confrontation: 0.1 }), block(['a3', 'a4', 'b1'], { confrontation: 0.8, routine: 0.2 })],
+    cards: [{ id: 'action:a1', kind: 'action', first: 'a1', sentences: ['a1'], people: [{ id: 'p', how: ['acts'], at: ['a1'] }] }],
+    time: { scenes: [{ scene: 's1', node: 't:1' }, { scene: 's2', node: 't:1' }, { scene: 's3', node: 't:1' }] },
+  };
+  const segments = scenesAsSegments(reading);
+  assert.deepEqual(segments.map(segment => segment.type), ['routine', 'confrontation', 'confrontation']);
+  assert.equal(segments[0].distribution.routine, 0.9);
+  const script = { places: {}, scenes: [{ id: 's1', place: 'bar', present: ['p'], at: { node: 't:1' }, timeline: [] }, { id: 's2', place: 'bar', present: [], at: { node: 't:1' }, timeline: [] }, { id: 's3', place: 'street', present: [], at: { node: 't:1' }, timeline: [] }] };
+  const world = segmentWorld({ reading, script, spawn: { scenes: reading.scenes.map(scene => ({ id: scene.id, spawn: 'new', starts: scene.id === 's1' ? [{ who: 'p', scene: 's1' }] : [] })) } });
+  assert.deepEqual(world.ids, ['s1', 's2', 's3'], 'no scene~part');
+  assert.deepEqual(world.script.scenes.map(scene => scene.present), [['p'], ['p'], []], 'p held in the bar into the fight, not carried to the street');
+  assert.deepEqual(world.spawn.scenes.map(scene => scene.spawn), ['new', 'new', 'new']);
+  assert.equal(world.reading.segments.length, 3, 'the gate reads them as segments');
 });

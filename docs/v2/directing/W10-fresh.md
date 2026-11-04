@@ -46,3 +46,9 @@ of action; a new one begins where the place changes, time skips, the viewpoint s
 (talk into a fight, a fight into a chase, action into inner thought, scene-setting into events, or back), not where a
 speaker, a sentence, a blow or a moment changes within the same kind. What the code calls a scene is then a segment, and
 `segment-tiling.mjs` (a second cut) is not run. (A first attempt with a new tiler was reverted at the user's word.)
+
+**Each scene a segment (the user's choice, 2026-11-04).** A reading with no segment list (the tiler now cuts segments)
+is played with each scene as its own segment under its own id (`segments.mjs` `scenesAsSegments`, `segmentWorld`): its
+kind from the block answers over its own sentences, so the gate fires per segment; presence by physics, no borrowed cast
+and the rest of the segment path apply. Rehearsed on the first quarter with the reading from before segments (scenes
+1–13): 13 containers, all cast, none borrowed, the gate by segment, L6 1 and L10 1 broken.

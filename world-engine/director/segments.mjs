@@ -53,15 +53,38 @@ export function segmentPresence({ segments, cards, scriptScenes }) {
 }
 
 /**
- * The world as segments: the reading's scenes, the world script's scenes and the spawn plan's, one entry a segment (its
- * scene's place, time and chapter; its own people), in story order. `parent` maps each segment back to its scene.
+ * Each scene its own segment (the user, 2026-11-04: the reading's tiler cuts segments, "each scene a segment"): its kind
+ * from the block answers over its own sentences (each sentence's blocks, averaged), so the gate fires per segment as M14
+ * has it; `change` is left to the scene's cut (beats.mjs).
  */
-export function segmentWorld({ reading, script, spawn }) {
-  if (!reading.segments?.length) return null;
+export function scenesAsSegments(reading) {
+  const blocksAt = new Map();
+  for (const block of reading.blocks ?? []) for (const id of block.sentences) (blocksAt.get(id) ?? blocksAt.set(id, []).get(id)).push(block);
+  return reading.scenes.map(scene => {
+    const answers = scene.sentences.flatMap(id => blocksAt.get(id) ?? []), sum = {};
+    for (const block of answers) for (const [type, p] of Object.entries(block.distribution ?? {})) sum[type] = (sum[type] ?? 0) + p / answers.length;
+    const distribution = Object.fromEntries(Object.entries(sum).map(([type, p]) => [type, Math.round(p * 1000) / 1000]));
+    const type = Object.entries(distribution).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    const confidence = answers.length ? Math.round(answers.reduce((total, block) => total + (block.confidence ?? 0), 0) / answers.length * 100) / 100 : 0;
+    return { scene: scene.id, first: scene.sentences[0], last: scene.sentences.at(-1), sentences: scene.sentences, type, confidence, distribution, smoothed: distribution, change: null };
+  });
+}
+
+/**
+ * The world as segments: the reading's scenes, the world script's scenes and the spawn plan's, one entry a segment (its
+ * scene's place, time and chapter; its own people), in story order. `parent` maps each segment back to its scene. A
+ * reading without segments plays each scene as its own segment, under its own id.
+ */
+export function segmentWorld({ reading: given, script, spawn }) {
+  if (!given?.scenes?.length) return null;
+  const reading = given.segments?.length ? given : { ...given, segments: scenesAsSegments(given) };
   const segments = reading.segments, cards = alignCards(reading.cards, segments), scriptScenes = new Map((script?.scenes ?? []).map(scene => [scene.id, scene]));
   const presence = segmentPresence({ segments, cards, scriptScenes });
   const sceneIndex = new Map(reading.scenes.map((scene, n) => [scene.id, n])), k = new Map(), ids = [];
-  segments.forEach(segment => { const n = k.get(segment.scene) ?? 0; k.set(segment.scene, n + 1); ids.push(segmentId(segment.scene, n)); });
+  // A scene that is one segment keeps its own id (no scene~part).
+  const parts = new Map(); for (const segment of segments) parts.set(segment.scene, (parts.get(segment.scene) ?? 0) + 1);
+  segments.forEach(segment => { const n = k.get(segment.scene) ?? 0; k.set(segment.scene, n + 1); ids.push(parts.get(segment.scene) === 1 ? segment.scene : segmentId(segment.scene, n)); });
+  const firstOfScene = new Set(segments.map((segment, n) => (n === 0 || segments[n - 1].scene !== segment.scene ? ids[n] : null)).filter(Boolean));
   const parent = new Map(ids.map((id, n) => [id, segments[n].scene]));
   const readingScenes = segments.map((segment, n) => { const scene = reading.scenes[sceneIndex.get(segment.scene)]; return { ...scene, id: ids[n], parent: segment.scene, sentences: segment.sentences, type: segment.type }; });
   const time = reading.time ? { ...reading.time, scenes: ids.map(id => { const entry = reading.time.scenes?.find(item => item.scene === parent.get(id)); return entry ? { ...entry, scene: id } : null; }).filter(Boolean) } : reading.time;
@@ -74,7 +97,7 @@ export function segmentWorld({ reading, script, spawn }) {
     const placed = seen.get(own.id) ?? seen.set(own.id, new Set()).get(own.id), here = presence[n].present.filter(who => !placed.has(who));
     for (const who of here) placed.add(who);
     const starts = (own.starts ?? []).filter(start => here.includes(start.who)).map(start => ({ ...start, scene: id }));
-    return { ...own, id, parent: own.id, ...(id.endsWith('~1') ? {} : { spawn: own.spawn === 'new' ? 'carry' : own.spawn }), starts };
+    return { ...own, id, parent: own.id, ...(firstOfScene.has(id) ? {} : { spawn: own.spawn === 'new' ? 'carry' : own.spawn }), starts };
   }).filter(Boolean) } : spawn;
   return { segments, ids, parent, reading: { ...reading, scenes: readingScenes, cards, time, bySegment: true }, script: scriptOut, spawn: spawnOut };
 }
