@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
-const C = await load('dist/src/v2/context/camera.js'), M = await load('dist/src/v2/context/directorModes.js'), { ask } = await load('dist/src/v2/context/engine.js');
+const C = await load('dist/src/v2/context/camera.js'), CB = await load('dist/src/v2/context/cutBag.js'), M = await load('dist/src/v2/context/directorModes.js'), { ask } = await load('dist/src/v2/context/engine.js');
 const S = await load('dist/apps/playground/src/data/skeleton.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
 const { strandDemo, inlineStrand } = await import('../world/export-strand-demo.mjs');
 const { browser, serve } = await import('../view/two-view-things.mjs');
@@ -689,6 +689,25 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
         // the window the key animator works in; `splitOf` a cut split by a storyboard retake, the node its cards go to now.
         let frame = null, framed = null;
         const splitOf = new Map();
+        // The cut bag (cutBag.ts; the user, 2026-11-04: the context engine decides which pre-film casts' notes go to which
+        // runtime cast): every pre-film cast's notes on this unit, with its sequence's heading and its storyboard cuts.
+        const cutBag = { notes: CB.notesOfUnit(scene.id, prepared ?? (dg ? { generalist: dg } : null), { heading: (reading.sequences ?? []).find(entry => entry.id === reads?.sequence)?.heading ?? null, cuts: (reading.storyboard ?? []).filter(entry => entry.scene === scene.id) }) };
+        const cutLines = id => { const entry = (reading.storyboard ?? []).find(cut => cut.id === id); if (!entry) return []; const from = sentenceAt.get(entry.first), to = sentenceAt.get(entry.last); return from === undefined ? [] : reads.sentences.slice(from, (to ?? from) + 1); };
+        const routeAt = (lines, subject = null, cutId = null) => ({ unit: scene.id, lines, cut: cutId ? cutLines(cutId) : lines, order: reads.sentences, cast: (desk.nodes.get(cutId)?.cast ?? []).filter(who => positions[who]), subject });
+        // The script supervisor's facts the routing gives a check, tested on where the cast stands now: each binding one that
+        // fails is a fault (L14), with the spot nearest that agrees where there is one in the set.
+        const factFaults = (task, lines, cutId) => {
+          const positionOf = who => (positions[who] ? at(positions[who][0]) : null), routed = CB.route(task, routeAt(lines, null, cutId), cutBag.notes).filter(item => item.note.kind === 'fact');
+          const facts = routed.map(item => item.note.raw).filter(Boolean);
+          const faults = [];
+          for (const who of [...new Set(facts.map(fact => fact.who))].filter(who => positions[who])) {
+            const here = nodeAt(positions[who][0]), binding = facts.filter(fact => fact.who === who && FA.binding(fact)), failing = binding.filter(fact => FA.holds(fact, here, positionOf) === false);
+            if (!failing.length) continue;
+            const nearby = around(here.x, here.z, 6 * BODY).nodes.filter(node => inside(node.id)).map(describe), best = FA.bestFor(binding, here, nearby, positionOf);
+            faults.push({ law: 'L14', who, why: failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; '), fix: best ? 'layout' : null, spot: best?.id ?? null, lines: failing.map(fact => fact.sentence) });
+          }
+          return { faults, notes: routed.map(item => item.id) };
+        };
         // How many cards each beat plays (a card's share of its beat's time, L17).
         const cardsInBeat = new Map();
         for (const entry of cards) { const n = beatOf.get(entry.first)?.n; if (n !== undefined) cardsInBeat.set(n, (cardsInBeat.get(n) ?? 0) + 1); }
@@ -994,7 +1013,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             const first = reads.sentences.indexOf(card.sentences[0]), forms = nameForms.get(person) ?? [mover.name], spatial = new Set((reading.spatial ?? []).filter(entry => entry.scene === scene.id).map(entry => entry.sentence));
             const others_ = reads.sentences.map((id, n) => ({ id, n })).filter(({ id, n }) => !card.sentences.includes(id) && (Math.abs(n - first) <= 4 || spatial.has(id) || reading.kinds[id]?.kind === 'environment' || forms.some(form => (text.get(id)?.text ?? '').includes(form))));
             const context = others_.sort((a, b) => Math.abs(a.n - first) - Math.abs(b.n - first)).map(({ id }) => line(id));
-            const base = { scene: { id: scene.id, place: placeName, when }, card: { id: card.id, lines: card.sentences.map(line) }, mover, lines: context, now, ...(dg ? { digest: { scene: dg.digest.summary ?? '', ...(hint ? { move: moveWords(hint) } : {}) } } : {}) };
+            const base = { scene: { id: scene.id, place: placeName, when }, card: { id: card.id, lines: card.sentences.map(line) }, mover, lines: context, now, route: routeAt(card.sentences, person, cut?.id ?? null), ...(dg ? { digest: { scene: dg.digest.summary ?? '', ...(hint ? { move: moveWords(hint) } : {}) } } : {}) };
             // Every picture is of the line as played to this moment: people where their walks ended, buildings as broken.
             const shotBase = { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], mover: person };
             // a. The direction: every arrow, said by what it meets.
@@ -1006,7 +1025,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             });
             // First the text alone: does this person go anywhere in this card? (Not asked when the digest says they go elsewhere.)
             if (!hint) {
-              const whether = await ask(decide, M.moveWhetherMode, { ...base, pictures: {} }, null);
+              const whether = await ask(decide, M.moveWhetherMode, { ...base, pictures: {} }, cutBag);
               const goes = String(whether.replies.find(entry => entry.key === 'moves')?.value ?? 'stays') === 'goes', said_ = whether.replies.find(entry => entry.key === 'line')?.value ?? null;
               // Destruction only on clear evidence (the user, 2026-11-02: routine things blasted): Jev sure of it, 0.7 or more.
               { const breaks = whether.replies.find(entry => entry.key === 'breaks'); if (breaks?.value === 'yes' && (breaks.confidence ?? 0) >= 0.7) cardRecord.breaks = true; }
@@ -1014,7 +1033,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             }
             cardRecord.camera ??= { focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 };
             const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: keyFocus, radius: keyRadius, elevation: bounded ? Math.min(60, Math.max(20, frame.camera.elevation)) : scale ? ELEVATION[scale.angle] ?? 35 : 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.max(bounded ? 3 : 9, keyRadius * 0.55), blocked: arrow.blocked })) });
-            const asked = await ask(decide, M.moveDirectionMode, { ...base, pictures: { arrows: `${mover.name} now, from 35° above; the lettered arrows go out of them (warm rise, cool fall, level ones flat).` }, arrows: arrows.map(arrow => ({ letter: arrow.letter, said: `${arrow.rise}, toward ${arrow.said}` })), others }, null, { request: { images: { arrows: a.png } } });
+            const asked = await ask(decide, M.moveDirectionMode, { ...base, pictures: { arrows: `${mover.name} now, from 35° above; the lettered arrows go out of them (warm rise, cool fall, level ones flat).` }, arrows: arrows.map(arrow => ({ letter: arrow.letter, said: `${arrow.rise}, toward ${arrow.said}` })), others }, cutBag, { request: { images: { arrows: a.png } } });
             const reply = key => asked.replies.find(entry => entry.key === key)?.value;
             const choice = String(reply('direction') ?? 'stays'), how = String(reply('how') ?? 'walk'), because = reply('line') ?? null;
             const moveRecord = { person, direction: choice, how, line: because, ...(hint ? { digest: moveWords(hint) } : {}) };
@@ -1044,7 +1063,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             let targets = null, how2 = how;
             if (offered.length) {
               const b = await shoot(`${slug}-b`, [1440, 900], { ...shotBase, focus: keyFocus, radius: bounded ? keyRadius : Math.max(frameRadius, Math.min(reach, 400) * 0.7), elevation: 35, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, Math.max(30, frameRadius)) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
-              const spotAsked = await ask(decide, M.moveSpotMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, pictures: { wedge: `${mover.name}, the chosen arrow and its wedge, as far as a ${how} reaches.` }, spots: offered.map(spot => ({ letter: spot.letter, said: `${spot.what} (${Math.round(spot.d)} m)` })) }, null, { request: { images: { wedge: b.png } } });
+              const spotAsked = await ask(decide, M.moveSpotMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, pictures: { wedge: `${mover.name}, the chosen arrow and its wedge, as far as a ${how} reaches.` }, spots: offered.map(spot => ({ letter: spot.letter, said: `${spot.what} (${Math.round(spot.d)} m)` })) }, cutBag, { request: { images: { wedge: b.png } } });
               const spot = String(spotAsked.replies.find(entry => entry.key === 'spot')?.value ?? 'none'), chosen = offered.find(entry => entry.letter === spot);
               moveRecord.spot = chosen ? chosen.what : 'none';
               if (chosen?.leaves) moveRecord.leaves = true;
@@ -1056,7 +1075,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
               // c1: a rough box on the plan along the arrow.
               const along = C.frameAlong(here, arrow.vector, reach), half = (along[2] - along[0]) / 2, step = half > 60 ? 20 : half > 25 ? 10 : 5;
               const c1 = await shoot(`${slug}-c1`, [1024, 1024], { ...shotBase, topdown: { x: (along[0] + along[2]) / 2, z: (along[1] + along[3]) / 2, half }, grid: { box: along, step, y: here[1] }, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, half) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
-              const roughAsked = await ask(decide, M.moveRoughMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, pictures: { plan: `straight down, north up, ${Math.round(half * 2)} m across, a grid of ${step} m; ${mover.name}'s arrow and its wedge drawn.` } }, null, { request: { images: { plan: c1.png } } });
+              const roughAsked = await ask(decide, M.moveRoughMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, pictures: { plan: `straight down, north up, ${Math.round(half * 2)} m across, a grid of ${step} m; ${mover.name}'s arrow and its wedge drawn.` } }, cutBag, { request: { images: { plan: c1.png } } });
               const roughReply = roughAsked.replies.find(entry => entry.key === 'box'), roughBox = roughReply?.box ?? roughReply?.value, map = c1.view?.map;
               if (roughBox?.left !== undefined && map) {
                 const rough = C.planToGround([roughBox.left, roughBox.top, roughBox.right, roughBox.bottom], map), mid = [(rough[0] + rough[2]) / 2, (rough[1] + rough[3]) / 2], zoom = Math.max(6, (rough[2] - rough[0]) * 0.75, (rough[3] - rough[1]) * 0.75);
@@ -1067,7 +1086,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
                 const side = C.sideView(rough, arrow.vector, slices), radius = Math.max(12, side.focus.h * 0.55), distance = radius / Math.tan(Math.PI / 8);
                 const plan = await shoot(`${slug}-c2-plan`, [1024, 1024], { ...shotBase, topdown: { x: mid[0], z: mid[1], half: zoom }, grid: { box: [mid[0] - zoom, mid[1] - zoom, mid[0] + zoom, mid[1] + zoom], step: 1, y: 0 } });
                 const heights = await shoot(`${slug}-c2-side`, [1440, 900], { ...shotBase, focus: side.focus, radius, vague: { near: distance * 1.05, far: distance * 1.9 }, yaw: side.yaw, elevation: side.elevation, slices: slices.map(slice => ({ box: rough, y: slice.y, label: `${slice.letter} ${slice.said}` })) });
-                const exactAsked = await ask(decide, M.moveExactMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, slices: slices.map(slice => ({ letter: slice.letter, said: slice.said })), pictures: { plan: `the rough box's ground close up, straight down, north up, ${Math.round(zoom * 2)} m across, a grid of 1 m.`, heights: 'the rough box\'s column from the side, its heights lettered.' } }, null, { request: { images: { plan: plan.png, heights: heights.png } } });
+                const exactAsked = await ask(decide, M.moveExactMode, { ...base, direction: `toward ${arrow.said} (arrow ${arrow.letter}, ${how})`, slices: slices.map(slice => ({ letter: slice.letter, said: slice.said })), pictures: { plan: `the rough box's ground close up, straight down, north up, ${Math.round(zoom * 2)} m across, a grid of 1 m.`, heights: 'the rough box\'s column from the side, its heights lettered.' } }, cutBag, { request: { images: { plan: plan.png, heights: heights.png } } });
                 const exactReply = exactAsked.replies.find(entry => entry.key === 'box'), exactBox = exactReply?.box ?? exactReply?.value, height = slices.find(slice => slice.letter === exactAsked.replies.find(entry => entry.key === 'height')?.value) ?? slices.find(slice => slice.y === 0);
                 const exact = exactBox?.left !== undefined && plan.view?.map ? C.planToGround([exactBox.left, exactBox.top, exactBox.right, exactBox.bottom], plan.view.map) : rough;
                 moveRecord.box = exact; moveRecord.height = height ? height.said : null;
@@ -1228,26 +1247,31 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
           if (node && node !== framed) {
             framed = node;
             const layoutNow = () => castNow().map(who => ({ who, node: positions[who][0], at: at(positions[who][0]), held: !frame?.holds || frame.holds.includes(who) }));
-            desk.start(node, 'layout'); desk.publish(node, 'layout', Object.fromEntries(layoutNow().map(entry => [entry.who, entry.at.map(round)])));
+            // What the routing gives the layout artist and the photographer (recorded with their versions).
+            const layoutNotes = CB.route('layout', routeAt(card.sentences, null, cut.id), cutBag.notes).map(item => item.id), frameNotes = CB.route('frame', routeAt(card.sentences, null, cut.id), cutBag.notes).map(item => item.id);
+            const layoutVersion = () => ({ at: Object.fromEntries(layoutNow().map(entry => [entry.who, entry.at.map(round)])), notes: layoutNotes });
+            desk.start(node, 'layout'); desk.publish(node, 'layout', layoutVersion());
             desk.start(node, 'frame');
             frame = null;
             frame = WF.frameOf({ points: layoutNow().map(entry => entry.at), size: cut.size, angle: cut.angle, move: cut.move }) ?? (anchorAt ? WF.frameOf({ points: [anchorAt], size: cut.size, angle: cut.angle, move: cut.move }) : null);
-            desk.publish(node, 'frame', frame);
+            desk.publish(node, 'frame', { ...frame, notes: frameNotes });
             for (;;) {
               desk.start(node, 'layout check');
-              const faults = WF.layoutFaults({ frame, cast: layoutNow() });
+              const faults = [...WF.layoutFaults({ frame, cast: layoutNow() }), ...factFaults('layout check', card.sentences, cut.id).faults];
               const verdict = desk.check(node, 'layout check', faults, { of: 'frame' });
               if (verdict === 'passed with faults') frame = desk.kept(node, 'frame') ?? frame;
               if (verdict !== 'retake') break;
-              const crowded = faults.filter(fault => fault.fix === 'layout').map(fault => fault.who);
+              const crowded = faults.filter(fault => fault.fix === 'layout' && fault.law === 'L11').map(fault => fault.who), placed = faults.filter(fault => fault.fix === 'layout' && fault.law === 'L14');
+              // Where the text puts someone (the script supervisor's note) and the layout disagree: to the nearest spot that agrees.
+              for (const fault of placed) moveTo(fault.who, walk(scene, `${scene.id}|${card.id}|${fault.who}|layout-note`, positions[fault.who], [fault.spot], 'walk'), 'walk', `layout: ${fault.why}`, { quiet: true });
               for (const who of crowded) {
                 const taken = new Set(Object.values(positions).map(value => value[0])), free = near(at(positions[who][0]), 0.8, 2.5).filter(entry => !taken.has(entry.id));
                 if (free.length) moveTo(who, walk(scene, `${scene.id}|${card.id}|${who}|layout`, positions[who], [free[0].id], 'walk'), 'walk', 'layout: one to a cell', { quiet: true });
               }
-              if (crowded.length) desk.publish(node, 'layout', Object.fromEntries(layoutNow().map(entry => [entry.who, entry.at.map(round)])));
+              if (crowded.length || placed.length) desk.publish(node, 'layout', layoutVersion());
               if (faults.some(fault => fault.fix === 'tighten' || fault.fix === 'frame')) {
                 const lead = card.people.find(person => positions[person.id] && person.how.some(how => how === 'speaks' || how === 'acts'))?.id ?? castNow()[0];
-                if (lead) { frame = { ...WF.frameOf({ points: [at(positions[lead][0])], lead: at(positions[lead][0]), size: cut.size, angle: cut.angle, move: cut.move }), holds: [lead] }; desk.publish(node, 'frame', frame); }
+                if (lead) { frame = { ...WF.frameOf({ points: [at(positions[lead][0])], lead: at(positions[lead][0]), size: cut.size, angle: cut.angle, move: cut.move }), holds: [lead] }; desk.publish(node, 'frame', { ...frame, notes: frameNotes }); }
               }
             }
             desk.done(node, 'layout'); desk.done(node, 'frame');
@@ -1338,7 +1362,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             desk.publish(node, 'keys', cardRecord.moves.map(move => ({ who: move.person, moved: !!move.moved, ...(move.leaves ? { leaves: true } : {}) })), card.id);
             desk.done(node, 'keys', card.id);
             desk.start(node, 'key check', card.id);
-            desk.check(node, 'key check', (cardRecord.laws ?? []).filter(entry => ['L6', 'L10'].includes(entry.law) && entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), { card: card.id, canRetake: false, of: 'keys' });
+            desk.check(node, 'key check', [...(cardRecord.laws ?? []).filter(entry => ['L6', 'L10'].includes(entry.law) && entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), ...factFaults('key check', card.sentences, cut.id).faults.map(({ law, who, why }) => ({ law, who, why }))], { card: card.id, canRetake: false, of: 'keys' });
             desk.publish(node, 'in-betweens', { walks: cardRecord.moves.filter(move => move.moved).length }, card.id); desk.done(node, 'in-betweens', card.id);
             const later = new Set(cards.slice(cards.indexOf(card) + 1).filter(entry => cutAt.get(entry.first)?.id === cut.id).flatMap(entry => entry.people.filter(person => person.how.some(how => how === 'speaks' || how === 'acts')).map(person => person.id)));
             const ended = castNow().filter(who => !frame.holds || frame.holds.includes(who)).map(who => ({ who, at: at(positions[who][0]) }));

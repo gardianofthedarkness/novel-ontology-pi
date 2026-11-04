@@ -8,6 +8,7 @@
  */
 import type { DecisionQuestion } from "../../ground/connectors/jev.js";
 import type { Item, Mode, Source } from "./engine.js";
+import { notesSource, type RouteFocus } from "./cutBag.js";
 
 export interface Line { id: string; text: string }
 export interface MoveFocus {
@@ -23,6 +24,8 @@ export interface MoveFocus {
   pictures: Record<string, string>;
   /** The summarizer's reading of the scene and of this person's moves in the card (Track A), when there is one. */
   digest?: Record<string, string>;
+  /** What the key animator is working on, for the cut bag (cutBag.ts): the pre-film casts' notes routed to it come under `notes`. */
+  route?: RouteFocus;
 }
 export interface DirectionFocus extends MoveFocus {
   /** Each arrow: its letter, and what it points at (the first thing it meets). */
@@ -44,8 +47,10 @@ const text = <F extends MoveFocus>(): Source<F, unknown>[] => [
   fixed<F>("now", (focus) => focus.now),
   fixed<F>("digest", (focus) => focus.digest ?? {}),
   fixed<F>("pictures", (focus) => focus.pictures),
+  // The pre-film casts' notes the routing table gives the key animator (cutBag.ts), from the cut bag passed as the stores.
+  notesSource<F>("keys", (focus) => focus.route) as unknown as Source<F, unknown>,
 ];
-const lead = (focus: MoveFocus) => `In scene ${Number(focus.scene.id.slice(-3)) || focus.scene.id} (${focus.scene.place}${focus.scene.when ? `, ${focus.scene.when}` : ""}), the card's lines (card) are being played. ${focus.mover.name} is the person asked about.`;
+const lead = (focus: MoveFocus) => `In scene ${Number(focus.scene.id.slice(-3)) || focus.scene.id} (${focus.scene.place}${focus.scene.when ? `, ${focus.scene.when}` : ""}), the card's lines (card) are being played. ${focus.mover.name} is the person asked about.${focus.route ? " The notes are the pre-film crew's (by whom, stated or implied, how sure, the line they rest on): trust the text over a note." : ""}`;
 
 /**
  * First, from the text alone (no picture): does the person go somewhere else in this card, or act where they are? The
@@ -56,7 +61,7 @@ export const moveWhetherMode: Mode<MoveFocus, unknown> = {
   name: "move-whether",
   task: (focus) => `${lead(focus)} In this card, does ${focus.mover.name} go somewhere else (walk, run, come, leave, follow, jump, climb, fly, get carried), or act where they already are (speak, look, think, pick up, hold, hit someone beside them)?`,
   sources: text<MoveFocus>().filter((source) => source.name !== "pictures"),
-  cutOrder: ["scene"],
+  cutOrder: ["scene", "notes"],
   questions: (focus) => [
     { key: "moves", primitive: "choice", instructions: `Does ${focus.mover.name} go somewhere else in this card?`, options: ["goes", "stays"], optionHints: { goes: "changes place: walks, runs, comes, leaves, follows, jumps, climbs, flies, is carried", stays: "acts where they already are" } },
     { key: "line", primitive: "choice", instructions: "Which line says so?", options: [...focus.card.lines, ...focus.lines].map((line) => line.id) },
@@ -69,7 +74,7 @@ export const moveDirectionMode: Mode<DirectionFocus, unknown> = {
   name: "move-direction",
   task: (focus) => `${lead(focus)} ${focus.mover.name} goes somewhere else in this card. Which way, as the picture "arrows" shows it: one of the lettered arrows out of them (each said by what it points at), or with someone? And how, and which line says so.`,
   sources: [...text<DirectionFocus>(), fixed<DirectionFocus>("arrows", (focus) => Object.fromEntries(focus.arrows.map((arrow) => [arrow.letter, arrow.said])))],
-  cutOrder: ["scene"],
+  cutOrder: ["scene", "notes"],
   questions: (focus) => {
     const options = [...focus.arrows.map((arrow) => arrow.letter), ...focus.others.map((other) => `with:${other.id}`)];
     const hints = Object.fromEntries([...focus.arrows.map((arrow) => [arrow.letter, `arrow ${arrow.letter}: ${arrow.said}`]), ...focus.others.map((other) => [`with:${other.id}`, `goes with ${other.name}, to where they go`])]);
@@ -87,7 +92,7 @@ export const moveSpotMode: Mode<SpotFocus, unknown> = {
   name: "move-spot",
   task: (focus) => `${lead(focus)} They go ${focus.direction}, the shaded wedge on picture "wedge". Where do they end up in this card: one of the spots (spots), or none of these when the text puts them somewhere the spots do not name?`,
   sources: [...text<SpotFocus>(), fixed<SpotFocus>("spots", (focus) => Object.fromEntries(focus.spots.map((spot) => [spot.letter, spot.said])))],
-  cutOrder: ["scene"],
+  cutOrder: ["scene", "notes"],
   questions: (focus) => [{ key: "spot", primitive: "choice", instructions: `Where does ${focus.mover.name} end up?`, options: [...focus.spots.map((spot) => spot.letter), "none"], optionHints: Object.fromEntries([...focus.spots.map((spot) => [spot.letter, `${spot.letter}: ${spot.said}`]), ["none", "none of these spots"]]) }] as DecisionQuestion[],
   budget: 12000,
 };
@@ -96,7 +101,7 @@ export const moveRoughMode: Mode<MoveFocus & { direction: string }, unknown> = {
   name: "move-rough",
   task: (focus) => `${lead(focus)} They go ${focus.direction}. Box roughly where they end up on picture "plan" (straight down, north up, a metre grid; the arrow and its wedge drawn).`,
   sources: text<MoveFocus & { direction: string }>(),
-  cutOrder: ["scene"],
+  cutOrder: ["scene", "notes"],
   questions: (focus) => [{ key: "box", primitive: "box", instructions: `Box roughly where ${focus.mover.name} ends up on picture "plan".` }] as DecisionQuestion[],
   budget: 12000,
 };
@@ -105,7 +110,7 @@ export const moveExactMode: Mode<HeightFocus, unknown> = {
   name: "move-exact",
   task: (focus) => `${lead(focus)} They go ${focus.direction}, about where the rough box was. Picture "plan" is that place close up, straight down, a grid of one metre; picture "heights" is its column from the side, its heights lettered (heights). Box exactly where they end up on "plan", and say at which height.`,
   sources: [...text<HeightFocus>(), fixed<HeightFocus>("heights", (focus) => Object.fromEntries(focus.slices.map((slice) => [slice.letter, slice.said])))],
-  cutOrder: ["scene"],
+  cutOrder: ["scene", "notes"],
   questions: (focus) => [
     { key: "box", primitive: "box", instructions: `Box exactly where ${focus.mover.name} ends up on picture "plan".` },
     { key: "height", primitive: "choice", instructions: "At which height?", options: focus.slices.map((slice) => slice.letter), optionHints: Object.fromEntries(focus.slices.map((slice) => [slice.letter, `${slice.letter}: ${slice.said}`])) },
