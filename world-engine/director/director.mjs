@@ -1258,7 +1258,8 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             for (;;) {
               desk.start(node, 'layout check');
               const faults = [...WF.layoutFaults({ frame, cast: layoutNow() }), ...factFaults('layout check', card.sentences, cut.id).faults];
-              const verdict = desk.check(node, 'layout check', faults, { of: 'frame' });
+              // A retake only where one can help: a fault no cast can fix (no spot near agrees with the note) passes as it is.
+              const verdict = desk.check(node, 'layout check', faults, { of: 'frame', canRetake: faults.some(fault => fault.fix) });
               if (verdict === 'passed with faults') frame = desk.kept(node, 'frame') ?? frame;
               if (verdict !== 'retake') break;
               const crowded = faults.filter(fault => fault.fix === 'layout' && fault.law === 'L11').map(fault => fault.who), placed = faults.filter(fault => fault.fix === 'layout' && fault.law === 'L14');
