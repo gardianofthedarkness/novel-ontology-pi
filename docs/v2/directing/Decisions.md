@@ -406,12 +406,17 @@ same rule guards the journey's box (`director.mjs`, `existsBy`, `boxOf`).
 
 **What the reading extracts as a thing.** The user: "A dart is something not important to the novel at all. It is not
 nominated, not a vehicle, not a weapon. It's just something small in routine basis. There's no hint that it's something
-important, don't extract it." The typing step had "weapon: a weapon"; volume 1's 27 weapon slots include a thrown dart,
-flames, a current, a blast and handcuffs. Now (`typing.ts`, `listing.ts`): a weapon is one the story uses as one (drawn,
-aimed, fired, thrown or struck at someone to hurt or threaten); the fire, lightning or blast of an ability is the
-ability's; a thing at its everyday use or in a game, even one that could hurt (darts at a board, a kitchen knife at
-cooking), is routine, never extracted. It takes effect when a reading is made again (the typing step is asked again:
-paid).
+important, don't extract it", and then the rule: "only weapons, vehicles or items that in that segment look like
+probably play an important role, has a dedicated name, or has impact on the scene because of its functionality, will be
+extracted. Routine things used will not." The typing step had "weapon: a weapon"; volume 1's 27 weapon slots include a
+thrown dart, flames, a current, a blast and handcuffs. Now (`typing.ts`, `listing.ts`) an item, a weapon or a vehicle
+is a thing only where, in the passage it stands in, it has a dedicated name of its own, probably plays an important
+role, or changes the scene by what it does; the fire, lightning or blast of an ability is the ability's; anything only
+used in routine there (darts at a board, a kitchen knife at cooking, traffic passing by, a bus taken home) is routine,
+never extracted. The same kind of thing can matter in one passage and be routine in another. It takes effect when a
+reading is made again; on a reading already made, `experiments/v2/retype-things.mjs` asks the typing step again for each
+unnamed weapon and vehicle in the segment where it is first described (volume 1: 50 slots, 36 segments, one paid
+request each) and can write the reading without the routine ones.
 
 **Still decided per scene (found, not changed).** The world engine plays segments, but the place layer under them is
 the reading's, made per scene: a segment stands in its scene's place (in all 39 scenes with several segments, every
