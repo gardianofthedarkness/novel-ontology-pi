@@ -11,9 +11,6 @@
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.45 system-ui, -apple-system, "PingFang SC", sans-serif; overflow: hidden; }
   iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); transition: opacity .35s ease; }
   iframe.waiting { opacity: 0; pointer-events: none; }
-  iframe.replay { z-index: 4; }
-  body.replaying .hud, body.replaying .legend, body.replaying .sub, body.replaying .asks, body.replaying .blist { display: none !important; }
-  body.replaying .bar > :not(#replay) { display: none; }
   .hud { position: fixed; z-index: 5; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); max-width: min(440px, calc(100vw - 24px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
   .hud h1 { margin: 0; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
   .row { color: var(--dim); font-size: 12px; }
@@ -183,24 +180,14 @@
 <section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
 <div class="sub" id="sub" hidden aria-live="polite"><b id="subwho"></b><span id="subtx"></span></div>
-<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="replay" aria-pressed="false" title="The whole world in 3D, in calendar order: the card now and its paths, the strands at this time">Replay</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
+<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="replay" title="The whole world from above in story time: every strand's paths, names to pick">Replay</button><button id="live" aria-pressed="false" aria-controls="asks">Jev's questions</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><a id="play" href="./">Player</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
   $("play").href = `./${query}`; $("asksFull").href = `live${query}`;
   // Jev's questions fold out over the world (the live page, loaded the first time they are opened) and fold away again.
   const fold = (button, panel, on) => { $(button).setAttribute("aria-pressed", String(on)); $(panel).hidden = !on; };
-  // The objective replay (sim-replay.html) carried in the world view: a 3D frame of its own over the live one, the live
-  // view's panels put away while it shows; pressed again, it goes (its WebGL context let go) and the live view is back.
-  let replayFrame = null;
-  $("replay").addEventListener("click", () => {
-    const on = !replayFrame;
-    $("replay").setAttribute("aria-pressed", String(on)); document.body.classList.toggle("replaying", on);
-    if (on) { replayFrame = document.createElement("iframe"); replayFrame.className = "replay"; replayFrame.title = "The objective replay, in calendar order"; replayFrame.src = `replay${query}${query ? "&" : "?"}embedded=1`; document.body.append(replayFrame); return; }
-    const frame = replayFrame; replayFrame = null;
-    try { frame.contentWindow?.postMessage({ type: "dispose" }, origin); } catch {}
-    setTimeout(() => { frame.src = "about:blank"; frame.remove(); }, 100);
-  });
+  $("replay").addEventListener("click", () => { location.href = `replay${location.search}`; });
   $("live").addEventListener("click", () => {
     const on = $("live").getAttribute("aria-pressed") !== "true";
     fold("live", "asks", on); if (on) { fold("bopen", "blist", false); fold("sopen", "slist", false); fold("copen", "clist", false); }

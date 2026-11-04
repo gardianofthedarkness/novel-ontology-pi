@@ -23,22 +23,13 @@ test('the replay: units in story time, every person\'s track, crowds left out, b
   assert.equal(replay.tracks['crowd:001:1'], undefined);
   assert.deepEqual(replay.tracks.a.map(entry => entry.m), [2, 3]);
   assert.deepEqual(replay.tracks.a[1].at, [7, 3, 0]);
-  assert.equal(replay.tracks.a[1].path[0].length, 3, 'paths keep their height');
   assert.deepEqual(replay.buildings.map(entry => [entry.name, entry.x, entry.z]), [['the school', 5, 10]]);
   assert.deepEqual(replay.places.map(entry => entry.name), ['a street']);
-  assert.deepEqual(replay.forks.map(fork => fork.units.map(unit => unit.id)), [['s2'], ['s1']]);
+  assert.deepEqual(replay.forks.map(fork => fork.units), [['s2'], ['s1']]);
 });
 
 test('a rough path keeps its ends, a point every few metres and its turns', () => {
   const straight = Array.from({ length: 11 }, (_, k) => [k, 0]);
   assert.deepEqual(roughPath(straight), [[0, 0], [4, 0], [8, 0], [10, 0]]);
   assert.deepEqual(roughPath([[0, 0], [1, 0], [1, 1]]), [[0, 0], [1, 0], [1, 1]], 'a turn is kept');
-});
-
-test('calendar order: units by the story clock first, whatever the reading order', () => {
-  const script = { scenes: [{ id: 's1', clock: [1, 1], at: { node: 't:y1:12-24:late-night' } }, { id: 's2', clock: [5, 5], at: { node: 't:y1:12-25' } }] };
-  const replay = replayOf(page, { scenes: [{ id: 's1', fork: 's1', layer: 2 }, { id: 's2', fork: 's2', layer: 1 }] }, null, script);
-  assert.deepEqual([...new Set(replay.moments.map(entry => entry.unit))], ['s1', 's2'], 'the clock wins over the strands\' layers');
-  assert.equal(replay.moments[0].when, '12-24 · late night');
-  assert.deepEqual(replay.moments[1].clock, [1, 1]);
 });

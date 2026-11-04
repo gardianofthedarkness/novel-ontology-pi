@@ -5,258 +5,230 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>World · Replay</title>
 <style>
-  :root { --bg: #0b141c; --panel: #0f1c27ee; --line: #1d3242; --text: #d8e6ef; --dim: #7f97a8; --accent: #7ce6ff; --now: #7dffa4; --near: #f2c66d; }
+  :root { --bg: #0b141c; --panel: #0f1c27f2; --line: #1d3242; --text: #d8e6ef; --dim: #7f97a8; --accent: #7ce6ff; --lot: #22384a; --lot-edge: #2d4a60; --named: #f2c66d; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif; overflow: hidden; }
-  #view { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
-  header { position: fixed; z-index: 3; top: env(safe-area-inset-top, 0px); left: 0; right: 0; display: flex; gap: 8px; align-items: center; padding: 8px max(12px, env(safe-area-inset-left, 0px)); background: linear-gradient(#0b141cf0, #0b141c00); pointer-events: none; }
+  #map { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  #map.dragging { cursor: grabbing; }
+  header { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; display: flex; gap: 8px; align-items: center; padding: 8px max(12px, env(safe-area-inset-left, 0px)); background: linear-gradient(#0b141cf0, #0b141c00); pointer-events: none; }
   header > * { pointer-events: auto; }
-  h1 { margin: 0; font-size: 15px; font-weight: 650; white-space: nowrap; }
+  h1 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: .02em; white-space: nowrap; }
   .sub { color: var(--dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
-  button, select { font: inherit; color: var(--text); background: #132636; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
-  #time { position: fixed; z-index: 3; left: 0; right: 0; bottom: 0; padding: 10px max(12px, env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--panel); border-top: 1px solid var(--line); display: grid; gap: 4px; }
-  .row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+  button, select, input { font: inherit; color: var(--text); background: #132636; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  button { cursor: pointer; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  #time { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px max(12px, env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--panel); border-top: 1px solid var(--line); display: grid; gap: 6px; }
+  #time .row { display: flex; gap: 8px; align-items: center; min-width: 0; }
   #slider { flex: 1; min-width: 0; accent-color: var(--accent); }
-  #when { font-weight: 650; white-space: nowrap; }
   #now { font-size: 12px; color: var(--dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  /* The strands: small, which are at this time of the calendar (now) or close to it (near). */
-  #strands { position: fixed; z-index: 3; left: max(12px, env(safe-area-inset-left, 0px)); top: calc(48px + env(safe-area-inset-top, 0px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; display: grid; gap: 2px; max-height: 40vh; overflow: auto; min-width: 150px; max-width: 46vw; }
-  #strands .title { font-size: 11px; color: var(--dim); padding: 0 4px 2px; letter-spacing: .04em; text-transform: uppercase; }
-  .strand { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-size: 12px; white-space: nowrap; }
-  .strand.on { background: #7ce6ff22; outline: 1px solid #7ce6ff66; }
-  .strand.off { opacity: .45; }
-  .chip { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
-  .state { margin-left: auto; font-size: 11px; color: var(--dim); }
-  .state.now { color: var(--now); }
-  .state.near { color: var(--near); }
-  /* What was tapped: the card happening now, or one person's way. */
-  #info { position: fixed; z-index: 3; right: max(12px, env(safe-area-inset-right, 0px)); top: calc(48px + env(safe-area-inset-top, 0px)); width: min(320px, calc(100vw - 24px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
-  #info h2 { margin: 0; font-size: 14px; }
-  #info .text { font-size: 13px; color: var(--text); max-height: 30vh; overflow: auto; }
-  #info .meta { font-size: 12px; color: var(--dim); }
-  #info .close { position: absolute; right: 6px; top: 4px; border: 0; background: transparent; color: var(--dim); font-size: 18px; padding: 2px 6px; }
-  .label { position: fixed; z-index: 2; transform: translate(-50%, -130%); font-size: 12px; padding: 1px 6px; border-radius: 6px; background: #0b141ccc; pointer-events: none; white-space: nowrap; }
-  .label.building { color: #f2c66d; font-size: 11px; background: #0b141c99; }
-  [hidden] { display: none !important; }
+  #now b { color: var(--text); font-weight: 600; }
+  #side { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); width: min(320px, calc(100vw - 24px)); max-height: calc(100vh - 190px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  #side.closed .body { display: none; }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; padding: 9px 4px; font-size: 13px; color: var(--dim); }
+  .tabs button.on { color: var(--accent); box-shadow: inset 0 -2px var(--accent); }
+  .tabs button.small { flex: 0 0 auto; padding: 9px 10px; }
+  .body { overflow: auto; padding: 8px; display: grid; gap: 4px; align-content: start; }
+  .body input { width: 100%; margin-bottom: 4px; }
+  .item { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; cursor: pointer; min-width: 0; }
+  .item:hover { background: #ffffff0d; }
+  .item.on { background: #7ce6ff1f; outline: 1px solid #7ce6ff55; }
+  .item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .meta { color: var(--dim); font-size: 12px; white-space: nowrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+  .note { color: var(--dim); font-size: 12px; padding: 4px 8px; }
   #empty { position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); text-align: center; padding: 24px; }
-  /* Inside World · Live: its own header and bar stay; the time goes on top. */
-  body.embedded header { display: none; }
-  body.embedded #time { top: env(safe-area-inset-top, 0px); bottom: auto; border-top: 0; border-bottom: 1px solid var(--line); padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
-  body.embedded #strands, body.embedded #info { top: calc(84px + env(safe-area-inset-top, 0px)); }
   @media (max-width: 640px) {
+    #side { top: auto; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); right: 8px; left: 8px; width: auto; max-height: 42vh; }
     .sub { display: none; }
-    #info { top: auto; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); right: 8px; left: 8px; width: auto; }
-    body.embedded #info { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); top: auto; }
-    #strands { max-width: 60vw; }
   }
 </style>
-<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
 </head>
 <body>
-<canvas id="view"></canvas>
-<header><h1>World · Replay</h1><span class="sub" id="sub"></span><button id="fit">Fit</button></header>
-<nav id="strands" hidden><div class="title">Strands · calendar</div></nav>
-<section id="info" hidden></section>
+<canvas id="map"></canvas>
+<header>
+  <h1>World · Replay</h1>
+  <span class="sub" id="sub"></span>
+  <button id="fit" title="See the whole world">Fit</button>
+</header>
+<aside id="side">
+  <div class="tabs">
+    <button data-tab="people" class="on">People</button>
+    <button data-tab="strands">Strands</button>
+    <button data-tab="buildings">Buildings</button>
+    <button data-tab="places" class="small" title="The book's places (folded)">Places</button>
+    <button id="fold" class="small" title="Fold the panel">▾</button>
+  </div>
+  <div class="body" id="list"></div>
+</aside>
 <section id="time">
-  <div class="row"><button id="play">▶</button><input id="slider" type="range" min="0" max="0" value="0"><select id="speed" title="Cards a second"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></div>
-  <div class="row"><span id="when"></span><span id="now">Loading the run…</span><button id="card" title="Fly to the card happening now">Card ◎</button></div>
+  <div class="row">
+    <button id="play">▶</button>
+    <input id="slider" type="range" min="0" max="0" value="0">
+    <select id="speed" title="Moments a second"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select>
+  </div>
+  <div class="row"><span id="now">Loading the run…</span><button id="trails" class="on" title="The ways taken so far">Paths</button></div>
 </section>
 <div id="empty" hidden></div>
-<script type="module">
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+<script>
+(() => {
+  const STRAND = ['#7ce6ff', '#ff8fb1', '#b6f27a', '#f2c66d', '#c9a2ff', '#ff9e5e', '#5ef2c4', '#f27aa8', '#9ec1ff', '#e6e66d'];
+  const $ = id => document.getElementById(id), canvas = $('map'), ctx = canvas.getContext('2d');
+  let data = null, view = { x: 0, z: 0, scale: 1 }, moment = 0, sub = 1, playing = false, last = 0, tab = 'people', filter = '';
+  const selected = new Set(); let strandOn = null;
+  const dpr = () => Math.min(2, window.devicePixelRatio || 1);
+  const resize = () => { canvas.width = innerWidth * dpr(); canvas.height = innerHeight * dpr(); draw(); };
+  const toScreen = (x, z) => [(x - view.x) * view.scale + innerWidth / 2, (z - view.z) * view.scale + innerHeight / 2];
+  const toWorld = (sx, sz) => [(sx - innerWidth / 2) / view.scale + view.x, (sz - innerHeight / 2) / view.scale + view.z];
+  const fit = () => { const b = data?.bounds; if (!b) return; view.x = (b.x0 + b.x1) / 2; view.z = (b.z0 + b.z1) / 2; view.scale = Math.min(innerWidth / (b.x1 - b.x0 + 80), (innerHeight - 160) / (b.z1 - b.z0 + 80)); draw(); };
 
-// The objective replay in 3D (Forks-M15 §4; the user, 2026-11-04: "build the objective replay also in 3d not in 2d,
-// interactable. Only current paths are highlighted and clickable to zoom in, and current happening card interactable and
-// zoom in, and a small strand selection panel to indicate which strands are happening on the calendar or near now. Replay
-// should happen in calendar order"; and: "the world 3d live should directly carry this objective replay").
-const STRAND = ["#7ce6ff", "#ff8fb1", "#b6f27a", "#f2c66d", "#c9a2ff", "#ff9e5e", "#5ef2c4", "#f27aa8", "#9ec1ff", "#e6e66d"];
-const $ = (id) => document.getElementById(id), params = new URLSearchParams(location.search);
-if (params.get("embedded") === "1") document.body.classList.add("embedded");
-const esc = (text) => String(text ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-
-const renderer = new THREE.WebGLRenderer({ canvas: $("view"), antialias: true });
-renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
-const scene = new THREE.Scene(); scene.background = new THREE.Color("#0b141c"); scene.fog = new THREE.Fog("#0b141c", 1500, 4000);
-const camera = new THREE.PerspectiveCamera(45, 1, 1, 8000);
-const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.48; controls.screenSpacePanning = false;
-scene.add(new THREE.HemisphereLight("#bcd7ff", "#0b141c", 1.1)); const sun = new THREE.DirectionalLight("#ffffff", 1.2); sun.position.set(-300, 600, 200); scene.add(sun);
-
-let data = null, order = [], step = 0, sub = 1, playing = false, last = performance.now(), strandOn = null, fly = null;
-const people = new Map(), labels = new Map(), current = new THREE.Group(); scene.add(current);
-let marker = null;
-
-/** Where someone stands at moment m (part way, t, along the way they take in it): [x, z, y]. */
-const along = (path, t) => {
-  if (path.length < 2) return path[0];
-  const lengths = [0]; for (let k = 1; k < path.length; k++) lengths.push(lengths[k - 1] + Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]));
-  const want = t * lengths.at(-1); let k = 1; while (k < lengths.length - 1 && lengths[k] < want) k++;
-  const u = (want - lengths[k - 1]) / (lengths[k] - lengths[k - 1] || 1), a = path[k - 1], b = path[k];
-  return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, (a[2] ?? 0) + ((b[2] ?? 0) - (a[2] ?? 0)) * u];
-};
-const standing = (track, m, t) => { let here = null; for (const entry of track) { if (entry.m > m) break; if (entry.m === m && entry.path && t < 1) return along(entry.path, t); here = entry.at; } return here; };
-const momentNow = () => order[step] ?? 0, moment = () => data.moments[momentNow()];
-
-/** The world: every building the run loaded as its mass, the book's named buildings outlined in gold, the ground. */
-function build() {
-  const b = data.bounds, cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(b.x1 - b.x0 + 800, b.z1 - b.z0 + 800), new THREE.MeshLambertMaterial({ color: "#0f1c27" }));
-  ground.rotation.x = -Math.PI / 2; ground.position.set(cx, -0.05, cz); scene.add(ground);
-  const masses = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: "#2a4458", transparent: true, opacity: 0.88 }), data.lots.length), m = new THREE.Matrix4();
-  data.lots.forEach(([x, z, w, d, floors], k) => { const h = Math.max(3, floors * 3); m.compose(new THREE.Vector3(x + w / 2, h / 2, z + d / 2), new THREE.Quaternion(), new THREE.Vector3(w, h, d)); masses.setMatrixAt(k, m); });
-  scene.add(masses);
-  const gold = new THREE.LineBasicMaterial({ color: "#f2c66d" });
-  for (const site of data.buildings) {
-    const tall = Math.max(6, ...data.lots.filter(([x, z, w, d]) => site.x > x && site.x < x + w && site.z > z && site.z < z + d).map((lot) => lot[4] * 3));
-    const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(site.w, tall, site.d)), gold); box.position.set(site.x, tall / 2, site.z); scene.add(box); site.tall = tall;
-  }
-  for (const person of data.people) { const dot = new THREE.Mesh(new THREE.SphereGeometry(1.8, 12, 10), new THREE.MeshBasicMaterial({ color: person.color ?? "#d8e6ef", depthTest: false })); dot.renderOrder = 11; dot.visible = false; dot.userData = { who: person.id }; scene.add(dot); people.set(person.id, dot); }
-  // The card happening now: a ring on the ground and a beam over it.
-  marker = new THREE.Group();
-  const ring = new THREE.Mesh(new THREE.RingGeometry(4, 5.2, 40), new THREE.MeshBasicMaterial({ color: "#ffffff", side: THREE.DoubleSide, transparent: true, opacity: 0.85 })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.3;
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 40, 8), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.35 })); beam.position.y = 20;
-  const hit = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 44, 12), new THREE.MeshBasicMaterial({ visible: false })); hit.position.y = 20; hit.userData = { card: true };
-  marker.add(ring, beam, hit); marker.userData = { ring }; scene.add(marker);
-}
-
-/** The ways taken in the card happening now: tubes, each pickable to zoom in on it. Nothing else is drawn. */
-function showCurrent() {
-  for (const child of [...current.children]) { current.remove(child); child.geometry.dispose(); child.material.dispose(); }
-  const m = momentNow(), here = data.moments[m], color = STRAND[here.fork % STRAND.length];
-  for (const person of data.people) {
-    if (strandOn !== null && here.fork !== strandOn) break;
-    const entry = data.tracks[person.id].find((e) => e.m === m && e.path?.length > 1);
-    if (!entry) continue;
-    const points = entry.path.map(([x, z, y]) => new THREE.Vector3(x, (y ?? 0) + 0.8, z)), curve = new THREE.CatmullRomCurve3(points, false, "centripetal");
-    // Drawn over the buildings (the ways now are what to look at), a little wider than a person.
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.min(240, points.length * 4), 1.1, 6), new THREE.MeshBasicMaterial({ color: person.color ?? color, depthTest: false, transparent: true, opacity: 0.95 })); tube.renderOrder = 10;
-    const metres = entry.path.slice(1).reduce((sum, p, k) => sum + Math.hypot(p[0] - entry.path[k][0], p[1] - entry.path[k][1]), 0);
-    tube.userData = { who: person.id, name: person.name, how: entry.how, metres: Math.round(metres), path: entry.path };
-    current.add(tube);
-  }
-  // Where the card is: its camera's focus, else where its movers end, else nowhere.
-  const ends = current.children.map((tube) => tube.userData.path.at(-1)), at = here.at ?? (ends.length ? [ends.reduce((s, p) => s + p[0], 0) / ends.length, ends.reduce((s, p) => s + p[1], 0) / ends.length, 0] : null);
-  marker.visible = !!at && here.card !== null; if (at) marker.position.set(at[0], at[2] ?? 0, at[1]);
-  marker.children.forEach((part, k) => { if (k < 2) part.material.color.set(color); });
-}
-
-/** The strands: which are at this time of the calendar (now) or a step away (near); one picked plays alone. */
-function strands() {
-  const nav = $("strands"); nav.hidden = data.forks.length < 1;
-  const clock = moment().clock, overlap = (unit, pad) => unit.clock && clock && unit.clock[0] <= clock[1] + pad && unit.clock[1] >= clock[0] - pad;
-  const rows = data.forks.map((fork) => {
-    const now = fork.units.some((unit) => overlap(unit, 0)), near = !now && fork.units.some((unit) => overlap(unit, 1)), here = moment().fork === fork.n;
-    const row = document.createElement("div"); row.className = `strand${strandOn === fork.n ? " on" : ""}${strandOn !== null && strandOn !== fork.n ? " off" : ""}`;
-    row.innerHTML = `<span class="chip" style="background:${STRAND[fork.n % STRAND.length]}"></span><span>Strand ${fork.n + 1}${here ? " ▸" : ""}</span><span class="state ${now ? "now" : near ? "near" : ""}">${now ? "now" : near ? "near" : `${fork.units.length} units`}</span>`;
-    row.addEventListener("click", () => { pick(strandOn === fork.n ? null : fork.n); });
-    return row;
-  });
-  nav.replaceChildren(Object.assign(document.createElement("div"), { className: "title", textContent: "Strands · calendar" }), ...rows);
-}
-/** One strand alone (its cards in calendar order), or every strand. */
-function pick(fork) {
-  const at = momentNow(); strandOn = fork;
-  order = data.moments.map((_, k) => k).filter((k) => fork === null || data.moments[k].fork === fork);
-  step = Math.max(0, order.findIndex((k) => k >= at)); if (step < 0) step = 0;
-  $("slider").max = String(Math.max(0, order.length - 1)); sub = 1; changed();
-}
-
-function changed() {
-  const here = moment(), unit = Number(String(here.unit).slice(-6)), cards = data.moments.filter((e) => e.unit === here.unit), k = cards.indexOf(here);
-  $("when").textContent = here.when ?? "";
-  $("now").textContent = `${step + 1} / ${order.length} · unit ${unit} · ${k === 0 ? "its start" : `card ${k} of ${cards.length - 1}`} · strand ${here.fork + 1}${here.actors?.length ? ` · ${here.actors.map(name).join("、")}` : ""}`;
-  $("slider").value = String(step);
-  showCurrent(); strands();
-  if (!$("info").hidden && $("info").dataset.kind === "card") cardInfo();
-}
-const name = (id) => data.people.find((p) => p.id === id)?.name ?? id;
-
-/** The camera flies to a box round some points (metres: x, z, y). */
-function zoomTo(points, room = 20) {
-  const xs = points.map((p) => p[0]), zs = points.map((p) => p[1]), size = Math.max(room, Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
-  const target = new THREE.Vector3((Math.min(...xs) + Math.max(...xs)) / 2, 0, (Math.min(...zs) + Math.max(...zs)) / 2);
-  const direction = camera.position.clone().sub(controls.target).normalize(), distance = size * 1.6 + 20;
-  fly = { from: { target: controls.target.clone(), position: camera.position.clone() }, to: { target, position: target.clone().add(direction.multiplyScalar(distance)) }, t: 0 };
-}
-function fit() { const b = data.bounds; zoomTo([[b.x0, b.z0], [b.x1, b.z1]], 100); }
-
-function cardInfo() {
-  const here = moment(), box = $("info"); box.dataset.kind = "card"; box.hidden = false;
-  box.innerHTML = `<button class="close" aria-label="Close">×</button><h2>The card now · strand ${here.fork + 1}</h2><div class="meta">${esc(here.when ?? "")} · unit ${Number(String(here.unit).slice(-6))} · ${esc(here.card ?? "its start")}</div>${here.actors?.length ? `<div class="meta">${here.actors.map((id) => esc(name(id))).join("、")}</div>` : ""}<div class="text">${esc(here.text || "(the unit begins)")}</div>`;
-  box.querySelector(".close").addEventListener("click", () => { box.hidden = true; });
-}
-function wayInfo(way) {
-  const box = $("info"); box.dataset.kind = "way"; box.hidden = false;
-  box.innerHTML = `<button class="close" aria-label="Close">×</button><h2>${esc(way.name)}</h2><div class="meta">${esc(way.how)} · ${way.metres} m in this card · ${esc(moment().when ?? "")}</div>`;
-  box.querySelector(".close").addEventListener("click", () => { box.hidden = true; });
-}
-
-// A tap (not a drag) on a way or on the card zooms in on it.
-const ray = new THREE.Raycaster(), pointer = new THREE.Vector2(); let down = null;
-renderer.domElement.addEventListener("pointerdown", (e) => { down = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener("pointerup", (e) => {
-  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
-  const r = renderer.domElement.getBoundingClientRect(); pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-  ray.setFromCamera(pointer, camera); ray.params.Line = { threshold: 2 };
-  const hit = ray.intersectObjects([...current.children, ...(marker.visible ? [marker] : [])], true)[0]?.object;
-  if (!hit) return;
-  if (hit.userData.card) { const p = marker.position; zoomTo([[p.x - 25, p.z - 25], [p.x + 25, p.z + 25]], 50); cardInfo(); }
-  else if (hit.userData.path) { zoomTo(hit.userData.path, 30); wayInfo(hit.userData); }
-});
-
-function frame(now) {
-  const dt = Math.min(0.25, (now - last) / 1000); last = now;
-  if (playing && data) {
-    sub += dt * Number($("speed").value);
-    while (sub >= 1) { if (step >= order.length - 1) { playing = false; $("play").textContent = "▶"; sub = 1; break; } step++; sub -= 1; changed(); }
-  }
-  if (fly) { fly.t = Math.min(1, fly.t + dt / 0.7); const e = 1 - (1 - fly.t) ** 3; controls.target.lerpVectors(fly.from.target, fly.to.target, e); camera.position.lerpVectors(fly.from.position, fly.to.position, e); if (fly.t >= 1) fly = null; }
-  if (data) {
-    const m = momentNow(), here = data.moments[m];
-    for (const person of data.people) {
-      const dot = people.get(person.id), at = standing(data.tracks[person.id], m, sub);
-      dot.visible = !!at && (strandOn === null || here.fork === strandOn); if (at) dot.position.set(at[0], (at[2] ?? 0) + 1.6, at[1]);
+  // Where each person stands at a moment (and part way, `t`, along the way they take in it).
+  const at = (track, m, t) => {
+    let here = null;
+    for (const entry of track) {
+      if (entry.m > m) break;
+      if (entry.m === m && entry.path && t < 1) { const p = alongPath(entry.path, t); return { p, moving: true }; }
+      here = entry.at;
     }
-    if (marker.visible) { const s = 1 + 0.15 * Math.sin(now / 250); marker.userData.ring.scale.set(s, s, s); }
-    placeLabels(here);
+    return here ? { p: [here[0], here[1]], moving: false } : null;
+  };
+  const alongPath = (path, t) => {
+    if (path.length < 2) return path[0];
+    const lengths = [0]; for (let k = 1; k < path.length; k++) lengths.push(lengths[k - 1] + Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]));
+    const want = t * lengths.at(-1); let k = 1; while (k < lengths.length - 1 && lengths[k] < want) k++;
+    const span = lengths[k] - lengths[k - 1] || 1, u = (want - lengths[k - 1]) / span;
+    return [path[k - 1][0] + (path[k][0] - path[k - 1][0]) * u, path[k - 1][1] + (path[k][1] - path[k - 1][1]) * u];
+  };
+  const forkOfMoment = m => data.moments[m]?.fork ?? 0;
+  const highlighted = id => selected.size ? selected.has(id) : strandOn === null || (data.tracks[id] ?? []).some(entry => forkOfMoment(entry.m) === strandOn);
+
+  function draw() {
+    if (!data) return;
+    const s = dpr(); ctx.setTransform(s, 0, 0, s, 0, 0); ctx.clearRect(0, 0, innerWidth, innerHeight);
+    // Buildings.
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--lot'); ctx.strokeStyle = '#2d4a60'; ctx.lineWidth = 1;
+    for (const [x, z, w, d] of data.lots) { const [sx, sz] = toScreen(x, z); const sw = w * view.scale, sd = d * view.scale; if (sx > innerWidth || sz > innerHeight || sx + sw < 0 || sz + sd < 0) continue; ctx.fillRect(sx, sz, Math.max(1, sw), Math.max(1, sd)); }
+    // Places, when their tab is open (folded otherwise).
+    if (tab === 'places') { ctx.setLineDash([4, 4]); ctx.strokeStyle = '#7f97a866'; for (const place of data.places) { const [sx, sz] = toScreen(place.x - place.w / 2, place.z - place.d / 2); ctx.strokeRect(sx, sz, place.w * view.scale, place.d * view.scale); } ctx.setLineDash([]); }
+    // The book's buildings: outlined, named when there is room.
+    ctx.strokeStyle = '#f2c66d'; ctx.lineWidth = 1.2; ctx.font = '11px -apple-system, "PingFang SC", sans-serif'; ctx.fillStyle = '#f2c66d';
+    const labels = [];
+    for (const b of data.buildings) {
+      const [sx, sz] = toScreen(b.x - b.w / 2, b.z - b.d / 2); ctx.strokeRect(sx, sz, Math.max(3, b.w * view.scale), Math.max(3, b.d * view.scale));
+      // A name where there is room for it (none over another).
+      if (view.scale > 0.9) { const w = ctx.measureText(b.name).width, box = [sx, sz - 14, sx + w, sz]; if (!labels.some(o => box[0] < o[2] && o[0] < box[2] && box[1] < o[3] && o[1] < box[3])) { labels.push(box); ctx.fillText(b.name, sx, sz - 3); } }
+    }
+    // The ways taken so far, rough, by strand; the chosen people bright, everyone else faint.
+    if ($('trails').classList.contains('on')) for (const person of data.people) {
+      const bright = highlighted(person.id);
+      for (const entry of data.tracks[person.id]) {
+        if (!entry.path) continue;
+        // A picked person's whole way: what is still to come dashed and faint.
+        if (entry.m > moment) {
+          if (!selected.has(person.id)) continue;
+          ctx.strokeStyle = person.color ?? '#fff'; ctx.globalAlpha = 0.35; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
+          ctx.beginPath(); entry.path.forEach(([x, z], k) => { const [sx, sz] = toScreen(x, z); k ? ctx.lineTo(sx, sz) : ctx.moveTo(sx, sz); }); ctx.stroke(); ctx.setLineDash([]);
+          continue;
+        }
+        const path = entry.m === moment ? cut(entry.path, sub) : entry.path;
+        ctx.strokeStyle = selected.has(person.id) ? (person.color ?? '#fff') : STRAND[forkOfMoment(entry.m) % STRAND.length];
+        ctx.globalAlpha = bright ? (selected.size ? 0.95 : 0.55) : 0.08; ctx.lineWidth = selected.has(person.id) ? 3 : 1.5;
+        ctx.beginPath(); path.forEach(([x, z], k) => { const [sx, sz] = toScreen(x, z); k ? ctx.lineTo(sx, sz) : ctx.moveTo(sx, sz); }); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    // Everyone where they are now.
+    for (const person of data.people) {
+      const here = at(data.tracks[person.id], moment, sub); if (!here) continue;
+      const [sx, sz] = toScreen(here.p[0], here.p[1]), bright = highlighted(person.id), r = selected.has(person.id) ? 6 : 4;
+      ctx.globalAlpha = bright ? 1 : 0.25; ctx.fillStyle = person.color ?? '#d8e6ef'; ctx.beginPath(); ctx.arc(sx, sz, r, 0, Math.PI * 2); ctx.fill();
+      if (selected.has(person.id) || (bright && view.scale > 1.6)) { ctx.fillStyle = '#ffffff'; ctx.font = '12px -apple-system, "PingFang SC", sans-serif'; ctx.fillText(person.name, sx + 8, sz + 4); }
+    }
+    ctx.globalAlpha = 1;
   }
-  controls.update(); renderer.render(scene, camera); requestAnimationFrame(frame);
-}
+  const cut = (path, t) => { const end = alongPath(path, t), out = []; let walked = 0; const total = path.slice(1).reduce((sum, p, k) => sum + Math.hypot(p[0] - path[k][0], p[1] - path[k][1]), 0) * t; out.push(path[0]); for (let k = 1; k < path.length; k++) { walked += Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]); if (walked > total) break; out.push(path[k]); } out.push(end); return out; };
 
-/** Names over those in the card now, and the book's buildings near the middle when close enough to read. */
-function placeLabels(here) {
-  const want = new Map(), v = new THREE.Vector3(), w = innerWidth, h = innerHeight;
-  const put = (key, text, pos, kind) => { v.copy(pos).project(camera); if (v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05) return; want.set(key, { text, x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h, kind }); };
-  // At most six names: those nearest the card.
-  const centre = marker.visible ? marker.position : controls.target;
-  const named = [...new Set([...(here.actors ?? []), ...current.children.map((tube) => tube.userData.who)])].map((id) => people.get(id)).filter((dot) => dot?.visible).sort((a, b) => a.position.distanceTo(centre) - b.position.distanceTo(centre)).slice(0, 6);
-  for (const dot of named) put(`p:${dot.userData.who}`, name(dot.userData.who), dot.position, "person");
-  if (camera.position.distanceTo(controls.target) < 600) for (const site of data.buildings.slice(0, 200)) { const p = new THREE.Vector3(site.x, site.tall ?? 10, site.z); if (p.distanceTo(controls.target) < 220) put(`b:${site.id}`, site.name, p, "building"); }
-  for (const [key, el] of labels) if (!want.has(key)) { el.remove(); labels.delete(key); }
-  for (const [key, entry] of want) { let el = labels.get(key); if (!el) { el = document.createElement("div"); el.className = `label ${entry.kind}`; el.textContent = entry.text; document.body.append(el); labels.set(key, el); } el.style.left = `${entry.x}px`; el.style.top = `${entry.y}px`; }
-}
+  function label() {
+    const m = data.moments[moment]; if (!m) return;
+    const unit = Number(String(m.unit).slice(-6)), cards = data.moments.filter(entry => entry.unit === m.unit), k = cards.indexOf(m);
+    $('now').innerHTML = `<b>${moment + 1} / ${data.moments.length}</b> · unit ${unit} · ${k === 0 ? 'its start' : `card ${k} of ${cards.length - 1}`} · strand ${m.fork + 1}${m.text ? ` · ${escapeHtml(m.text)}` : ''}`;
+    $('slider').value = moment;
+  }
+  const escapeHtml = text => text.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-const resize = () => { const r = renderer.domElement.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); };
-addEventListener("resize", resize);
-$("play").addEventListener("click", () => { if (!data) return; if (step >= order.length - 1) { step = 0; sub = 0; changed(); } playing = !playing; $("play").textContent = playing ? "❚❚" : "▶"; });
-$("slider").addEventListener("input", () => { step = Number($("slider").value); sub = 1; changed(); });
-$("fit").addEventListener("click", () => data && fit());
-const toCard = () => { if (!data) return; const p = marker.visible ? marker.position : null, ways = current.children.flatMap((tube) => tube.userData.path); const points = [...ways, ...(p ? [[p.x, p.z]] : [])]; if (points.length) zoomTo(points, 50); cardInfo(); };
-$("card").addEventListener("click", toCard);
-// World · Live closes the replay by telling it to let its WebGL context go (a phone allows only a few).
-addEventListener("message", (e) => { if (e.origin === location.origin && e.data?.type === "dispose") { renderer.dispose(); renderer.forceContextLoss(); } });
+  function list() {
+    const body = $('list'); body.innerHTML = '';
+    const add = (html, on, click) => { const row = document.createElement('div'); row.className = `item${on ? ' on' : ''}`; row.innerHTML = html; row.addEventListener('click', click); body.append(row); };
+    if (tab === 'people') {
+      const input = document.createElement('input'); input.placeholder = 'Find a name'; input.value = filter; input.addEventListener('input', () => { filter = input.value; list(); input.focus(); input.setSelectionRange(filter.length, filter.length); }); body.append(input);
+      if (selected.size) add(`<span class="name">Show everyone</span><span class="meta">${selected.size} picked</span>`, false, () => { selected.clear(); list(); draw(); });
+      for (const person of data.people.filter(entry => !filter || entry.name.includes(filter))) {
+        const moves = data.tracks[person.id].filter(entry => entry.path).length;
+        add(`<span class="dot" style="background:${person.color ?? '#d8e6ef'}"></span><span class="name">${escapeHtml(person.name)}</span><span class="meta">${moves} moves</span>`, selected.has(person.id), () => { selected.has(person.id) ? selected.delete(person.id) : selected.add(person.id); strandOn = null; list(); draw(); if (selected.has(person.id)) focusOn(person.id); });
+      }
+    } else if (tab === 'strands') {
+      add(`<span class="name">Every strand</span>`, strandOn === null, () => { strandOn = null; list(); draw(); });
+      for (const fork of data.forks) add(`<span class="dot" style="background:${STRAND[fork.n % STRAND.length]}"></span><span class="name">Strand ${fork.n + 1}</span><span class="meta">${fork.units.length} units</span>`, strandOn === fork.n, () => { strandOn = fork.n; selected.clear(); list(); draw(); });
+    } else if (tab === 'buildings') {
+      const shown = data.buildings.filter(b => b.scale === 'building');
+      if (!shown.length) body.append(Object.assign(document.createElement('div'), { className: 'note', textContent: 'No named buildings in this book yet.' }));
+      for (const b of shown.sort((a, c) => a.name.localeCompare(c.name))) add(`<span class="dot" style="background:var(--named)"></span><span class="name">${escapeHtml(b.name)}</span><span class="meta">${b.kind ?? ''}</span>`, false, () => flyTo(b.x, b.z, 3));
+    } else {
+      body.append(Object.assign(document.createElement('div'), { className: 'note', textContent: 'The book’s districts and streets, drawn dashed on the map while this tab is open.' }));
+      for (const place of data.places) add(`<span class="name">${escapeHtml(place.name)}</span><span class="meta">${place.scale ?? ''}</span>`, false, () => flyTo(place.x, place.z, Math.min(3, innerWidth / Math.max(60, place.w * 1.4))));
+    }
+  }
+  const flyTo = (x, z, scale) => { view.x = x; view.z = z; view.scale = scale; draw(); };
+  const focusOn = id => { const points = data.tracks[id].flatMap(entry => entry.path ?? [entry.at]); const xs = points.map(p => p[0]), zs = points.map(p => p[1]); view.x = (Math.min(...xs) + Math.max(...xs)) / 2; view.z = (Math.min(...zs) + Math.max(...zs)) / 2; view.scale = Math.min(4, innerWidth / (Math.max(...xs) - Math.min(...xs) + 200), (innerHeight - 200) / (Math.max(...zs) - Math.min(...zs) + 200)); draw(); };
 
-const query = new URLSearchParams(location.search); query.delete("embedded");
-fetch(`replay.json${query.toString() ? `?${query}` : ""}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((json) => {
-  if (!json) { $("empty").hidden = false; $("empty").textContent = "No run of this book to replay yet."; $("now").textContent = ""; return; }
-  data = json; $("sub").textContent = `${json.title ?? "The director"} · run ${json.run} · ${json.people.length} people · ${json.forks.length} strand${json.forks.length === 1 ? "" : "s"} · in calendar order`;
-  resize(); build();
-  const b = data.bounds, cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, span = Math.max(b.x1 - b.x0, b.z1 - b.z0);
-  controls.target.set(cx, 0, cz); camera.position.set(cx, span * 0.75, cz + span * 0.75); controls.update();
-  pick(null); step = 0; changed();
-  window.__replay = { ready: true, moments: data.moments.length, toCard, ways: () => current.children.length, go: (n) => { step = n; sub = 1; changed(); } };
-  requestAnimationFrame(frame);
-}).catch(() => { $("empty").hidden = false; $("empty").textContent = "The replay could not be loaded."; });
+  // Playing: a moment a second at 1×; within a moment the ways are walked from start to end.
+  function tick(now) {
+    if (playing) {
+      const dt = Math.min(0.25, (now - last) / 1000) * Number($('speed').value); sub += dt;
+      while (sub >= 1) { if (moment >= data.moments.length - 1) { playing = false; $('play').textContent = '▶'; sub = 1; break; } moment++; sub -= 1; label(); }
+      draw();
+    }
+    last = now; requestAnimationFrame(tick);
+  }
+
+  // Pan and zoom: drag, wheel, two fingers.
+  const pointers = new Map(); let pinch = null;
+  canvas.addEventListener('pointerdown', event => { canvas.setPointerCapture(event.pointerId); pointers.set(event.pointerId, [event.clientX, event.clientY]); canvas.classList.add('dragging'); if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: view.scale }; } });
+  canvas.addEventListener('pointermove', event => {
+    const before = pointers.get(event.pointerId); if (!before) return;
+    pointers.set(event.pointerId, [event.clientX, event.clientY]);
+    if (pointers.size === 2 && pinch) { const [a, b] = [...pointers.values()]; view.scale = Math.max(0.05, Math.min(20, pinch.scale * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d)); }
+    else if (pointers.size === 1) { view.x -= (event.clientX - before[0]) / view.scale; view.z -= (event.clientY - before[1]) / view.scale; }
+    draw();
+  });
+  const up = event => { pointers.delete(event.pointerId); if (pointers.size < 2) pinch = null; if (!pointers.size) canvas.classList.remove('dragging'); };
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  canvas.addEventListener('wheel', event => { event.preventDefault(); const [wx, wz] = toWorld(event.clientX, event.clientY); view.scale = Math.max(0.05, Math.min(20, view.scale * Math.exp(-event.deltaY / 400))); const [nx, nz] = toWorld(event.clientX, event.clientY); view.x += wx - nx; view.z += wz - nz; draw(); }, { passive: false });
+  // A tap on someone picks them.
+  canvas.addEventListener('click', event => {
+    let best = null;
+    for (const person of data?.people ?? []) { const here = at(data.tracks[person.id], moment, sub); if (!here) continue; const [sx, sz] = toScreen(here.p[0], here.p[1]), d = Math.hypot(sx - event.clientX, sz - event.clientY); if (d < 14 && (!best || d < best.d)) best = { d, id: person.id }; }
+    if (best) { selected.has(best.id) ? selected.delete(best.id) : selected.add(best.id); strandOn = null; tab = 'people'; tabs(); list(); draw(); }
+  });
+
+  const tabs = () => document.querySelectorAll('.tabs button[data-tab]').forEach(button => button.classList.toggle('on', button.dataset.tab === tab));
+  document.querySelectorAll('.tabs button[data-tab]').forEach(button => button.addEventListener('click', () => { tab = button.dataset.tab; $('side').classList.remove('closed'); tabs(); list(); draw(); }));
+  $('fold').addEventListener('click', () => { $('side').classList.toggle('closed'); $('fold').textContent = $('side').classList.contains('closed') ? '▸' : '▾'; });
+  $('play').addEventListener('click', () => { if (!data) return; if (moment >= data.moments.length - 1) { moment = 0; sub = 0; } playing = !playing; $('play').textContent = playing ? '❚❚' : '▶'; });
+  $('slider').addEventListener('input', () => { moment = Number($('slider').value); sub = 1; label(); draw(); });
+  $('trails').addEventListener('click', () => { $('trails').classList.toggle('on'); draw(); });
+  $('fit').addEventListener('click', fit);
+  addEventListener('resize', resize);
+
+  fetch(`replay.json${location.search}`, { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(json => {
+    if (!json) { $('empty').hidden = false; $('empty').textContent = 'No run of this book to replay yet.'; $('now').textContent = ''; return; }
+    data = json; $('sub').textContent = `${json.title ?? 'The director'} · run ${json.run} · ${json.people.length} people · ${json.forks.length} strand${json.forks.length === 1 ? '' : 's'}`;
+    $('slider').max = String(Math.max(0, json.moments.length - 1)); moment = 0; sub = 1;
+    // On a phone the panel starts folded: the map first, the lists a tap away.
+    if (innerWidth <= 640) { $('side').classList.add('closed'); $('fold').textContent = '▸'; }
+    resize(); fit(); label(); list(); requestAnimationFrame(tick);
+  }).catch(() => { $('empty').hidden = false; $('empty').textContent = 'The replay could not be loaded.'; });
+})();
 </script>
 </body>
 </html>
