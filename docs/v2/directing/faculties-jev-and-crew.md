@@ -109,3 +109,36 @@ Sources: [MasterClass, breaking down a script](https://www.masterclass.com/artic
 [Wikipedia, assistant director](https://wikipedia.com/wiki/Assistant_director);
 [Central Casting, AD roles](https://www.centralcasting.com/spotlight/blog/what-does-an-assistant-director-do-a-guide-to-ad-roles-in-film-and-tv/);
 [Wikipedia, previsualization](https://en.wikipedia.org/wiki/Previsualization).
+
+## The anime studio, and the cut (the user, 2026-11-04: "rephrase and redefine our faculty to director map list entirely into the industry standard ... anime scripting and key animator workflows ... optimize the topology of our current cut")
+
+An anime episode goes: series composition (シリーズ構成) → script (脚本) → settei (設定: model sheets, art boards) →
+storyboard (絵コンテ: numbered cuts, each with its picture, action and camera, dialogue, and seconds+frames) → layout
+(レイアウト: per cut, the frame and the characters on the background, approved by the episode director and the animation
+director) → key animation (原画: key poses and the timesheet) → the animation director's corrections (作画監督) →
+in-betweens (動画) → background art (美術) → photography (撮影) and edit. A cut (カット) is one shot, edit point to edit
+point; everything after the storyboard is organised by cut number.
+
+**Proposed names** (ours → the role that does that job): director.mjs → episode director (演出); the user and the rules
+→ series director (監督); Generalist → script supervisor (synopsis, continuity log); the gate → the 1st AD's breakdown
+routing; Scale → storyboard (with the DP); Journeys → blocking; Choreography → action director; Conversation →
+dialogue coverage; Ambience → background action (モブ); spawn → layout; Jev in the run → key animator; the path
+integral → in-betweener; the laws and smoothing → animation director (continuity); terrain → art (美術); review pins →
+retakes (リテイク); the host → production desk (制作進行); strands and the story clock → composition; the chart, places
+and things → settei.
+
+**Proposed levels**: episode (a volume) › **sequence** (the tiler's scene pass: place, time, viewpoint, kept as a
+heading; today dropped) › scene (the unit: one kind of action, the breakdown every department reads) › **cut** (one
+camera setup, made by a storyboard step: shot size, angle, movement, seconds, who is in frame; today only implicit in the
+cards) › keys (Jev) › in-betweens (the walks). And: layout per cut checked (L1, L6, L11) before any key; one continuity
+owner for presence, the laws, smoothing and review pins, retakes by cut; a cut's seconds as its timesheet.
+
+Sources (anime): [Anime Herald, storyboarding](https://www.animeherald.com/2025/10/25/the-unseen-art-of-anime-storyboarding/);
+[SIGGRAPH Asia 2021, Japanese animation](https://history.siggraph.org/wp-content/uploads/2025/09/2021-SA_Courses_Japanese-Animation-in-2021-To-CG-or-not-CG.pdf);
+[Kanzenshuu, process](https://kanzenshuu.com/animation-production/process);
+[Gengaland, terminology](https://gengaland.blogspot.com/2021/11/anime-staff-production-terminology.html);
+[ANN, credits guide](https://www.animenewsnetwork.com/feature/2016-08-17/your-ultimate-guide-to-anime-ending-credits-part-iv/.105472);
+[Sakugabooru, scripting](https://blog.sakugabooru.com/2017/07/05/the-pre-production-of-anime-2-scripting/);
+[Japan Expo, storyboard](https://www.japan-expo-paris.com/en/actualites/storyboard-a-fundamental-stage-in-making-an-anime_104871.htm);
+[Wikipedia, exposure sheet](https://en.wikipedia.org/wiki/Exposure_sheet);
+[Atrium, decoding anime production](https://atriumdotart.substack.com/p/decoding-anime-production).
