@@ -57,12 +57,12 @@ export const stretchCutMode: Mode<StretchCutFocus, null> = {
   sources: [given("before", (focus: StretchCutFocus) => sentences(focus.before)), given("passage", (focus: StretchCutFocus) => sentences(focus.asked))],
   cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
 };
-export interface StretchTypeFocus extends Asked { stretches: { id: string; text: string }[] }
+export interface StretchTypeFocus extends Asked { stretches: { key: string; text: string }[] }
 export const stretchTypeMode: Mode<StretchTypeFocus, null> = {
   name: "stretch-type",
   task: () => "A novel cut into stretches, each given whole. Say what each stretch is mostly about (the kinds are defined in kinds).",
   definitions: () => ({ kinds: { ...BLOCK_TYPES } }),
-  sources: [given("stretches", (focus: StretchTypeFocus) => focus.stretches.map((stretch) => [stretch.id, stretch.text]))],
+  sources: [given("stretches", (focus: StretchTypeFocus) => focus.stretches.map((stretch) => [stretch.key, stretch.text]))],
   cutOrder: [], questions: (focus) => focus.questions, budget: BUDGET,
 };
 

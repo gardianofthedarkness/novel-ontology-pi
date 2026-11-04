@@ -102,7 +102,7 @@ export async function tileStretches(sentences: Sentence[], decide: Asker): Promi
   const typed = new Map<number, { distribution: Record<string, number>; confidence: number }>();
   await Promise.all(Array.from({ length: Math.ceil(asked.length / TYPED) }, (_, n) => n * TYPED).map(async (from) => {
     const group = asked.slice(from, from + TYPED);
-    const stretches = group.map((stretch, k) => ({ id: `stretch_${from + k + 1}`, text: stretch.sentences.map((at) => sentences[at].text).join("").slice(0, SHOWN) }));
+    const stretches = group.map((stretch, k) => ({ key: `stretch_${from + k + 1}`, text: stretch.sentences.map((at) => sentences[at].text).join("").slice(0, SHOWN) }));
     const questions: DecisionQuestion[] = group.map((_, k) => ({ key: `stretch_type:${from + k + 1}`, primitive: "choice", instructions: `What is stretches.stretch_${from + k + 1} mostly about (one of kinds)?`, options: [...TYPES], optionHints: { ...BLOCK_TYPES } }));
     const { replies } = await ask(decide, stretchTypeMode, { stretches, questions }, null);
     group.forEach((_, k) => { const reply = replies.find((entry) => entry.key === `stretch_type:${from + k + 1}`); typed.set(from + k, { distribution: distributionOf(reply, TYPES), confidence: Number(reply?.confidence ?? 0) }); });
