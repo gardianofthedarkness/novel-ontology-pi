@@ -422,7 +422,8 @@ function shellOf(name) {
     geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(bytes(model.indices)), 1));
     geometry.computeBoundingBox(); const box = geometry.boundingBox;
     geometry.translate(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2); geometry.computeBoundingBox();
-    shells.set(name, { fill: geometry, edges: new THREE.EdgesGeometry(geometry, 25), size: geometry.boundingBox.getSize(new THREE.Vector3()) });
+    const edges = new THREE.EdgesGeometry(geometry, 25); geometry.userData.shared = true; edges.userData.shared = true;
+    shells.set(name, { fill: geometry, edges, size: geometry.boundingBox.getSize(new THREE.Vector3()) });
   }
   return shells.get(name);
 }
@@ -581,11 +582,24 @@ function unitBox(lot, entry, [kind, i, j, k]) {
  * and what fell lies as rubble; except, while `settling` (a hit in progress) is falling, its own rubble, which the
  * animation is still bringing down.
  */
+/** What an object made for one moment holds, let go: its geometries, and its materials unless they are the page's shared ones. */
+const sharedMaterials = new Set();
+function release(root) {
+  root.traverse((part) => {
+    if (part.isInstancedMesh) part.dispose();
+    if (part.geometry && !part.geometry.userData?.shared) part.geometry.dispose();
+    for (const material of [part.material].flat()) if (material && !sharedMaterials.has(material)) { material.map?.dispose?.(); material.dispose(); }
+  });
+}
+for (const material of Object.values(mats)) if (material?.isMaterial) sharedMaterials.add(material);
+sharedMaterials.add(groundMat); unit.userData.shared = true;
 function drawSkeletons(id, entry, count, settling = null) {
   const reached = entry.bornAt ? entry.bornAt.filter((at) => at <= time).length : 0, key = `${count}|${settling ? 1 : 0}|${reached}|${entry.farKey ?? ""}`;
   if (entry.shownHits === key) return;
   entry.shownHits = key;
-  if (entry.dynamic) entry.group.remove(entry.dynamic);
+  // The insides drawn before are let go, not only taken off (the user, 2026-11-05: the phone's browser reloading the page;
+  // every rebuild kept the last one's geometry, some 20 geometries a jump about the story).
+  if (entry.dynamic) { entry.group.remove(entry.dynamic); release(entry.dynamic); }
   const place = data.places[id], dynamic = new THREE.Group(), lost = place.lots.map(() => new Set()), cutCells = place.lots.map(() => new Set()), cutRooms = place.lots.map(() => new Set());
   // A hit may reach several buildings (an impact sphere): each lot it reaches loses its own cells.
   const gone = place.lots.map(() => new Set()), structural = new Set(), rubble = [];
@@ -643,9 +657,13 @@ function drawSkeletons(id, entry, count, settling = null) {
 
 // People: a glowing pawn and a name each; a shadow when off the ground.
 const pawns = new Map();
+const crowdShape = new THREE.CapsuleGeometry(0.22, 0.75, 3, 8), crowdLooks = new Map();
+crowdShape.userData.shared = true;
+const crowdLook = (colour) => { if (!crowdLooks.has(colour)) { const look = new THREE.MeshStandardMaterial({ color: new THREE.Color(colour), transparent: true, opacity: 0.8 }); sharedMaterials.add(look); crowdLooks.set(colour, look); } return crowdLooks.get(colour); };
 for (const [id, person] of Object.entries(data.people)) {
   // The crowd (M9): its field's samples as small plain figures, no halo, no name: a crowd, not people.
-  if (person.crowd) { const pawn = new THREE.Group(), body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.75, 3, 8), new THREE.MeshStandardMaterial({ color: new THREE.Color(person.color), transparent: true, opacity: 0.8 })); body.position.y = 0.6; pawn.add(body); pawns.set(id, { pawn, body }); continue; }
+  // One shape and one material a colour for the whole crowd (it was one each: some 1,300 of each in volume 1).
+  if (person.crowd) { const pawn = new THREE.Group(), body = new THREE.Mesh(crowdShape, crowdLook(person.color)); body.userData.shared = true; body.position.y = 0.6; pawn.add(body); pawns.set(id, { pawn, body }); continue; }
   const tint = new THREE.Color(person.color), pawn = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.95, 4, 12), new THREE.MeshStandardMaterial({ color: tint, emissive: tint, emissiveIntensity: 0.7, transparent: true })); body.position.y = 0.82; pawn.add(body);
   const halo = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.8, 24), new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 0.05; pawn.add(halo);
@@ -1194,7 +1212,7 @@ function glideFrom(glide) {
   return { ...glide, from, mid: { target: midTarget, position: midTarget.clone().add(new THREE.Vector3(d * 0.2, Math.max(140, d * 0.85), d * 0.55)) } };
 }
 function showPaths(segment, entry) {
-  for (const line of pathLines) world.remove(line.object);
+  for (const line of pathLines) { world.remove(line.object); release(line.object); }
   pathLines = [];
   for (const move of segment.moves) {
     if (data.people[move.person]?.crowd) continue;
@@ -1377,11 +1395,10 @@ function frame(now) {
     const p = posed ? (posed[id] == null ? null : at(place, posed[id])) : !present.has(id) ? (heldPlace?.world ? at(heldPlace, held.node) : null) : move ? position(place, move, elapsed) : node == null ? null : at(place, node);
     if (!p) { if (pawn.parent) world.remove(pawn); continue; }
     if (!pawn.parent) world.add(pawn);
-    if (travel && elapsed < travel.total) { pawn.position.copy(travelAt(travel, elapsed)); body.material.opacity = 1; movers.push(pawn.position); continue; }
+    if (travel && elapsed < travel.total) { pawn.position.copy(travelAt(travel, elapsed)); if (!body.userData.shared) body.material.opacity = 1; movers.push(pawn.position); continue; }
     pawn.position.set(p.x - entry.cx, p.y, p.z - entry.cz);
     // Under the street, a pawn shows through the ground above it.
-    body.material.depthTest = p.y > -1;
-    body.material.opacity = held ? 0.4 : p.fade ?? 1;
+    if (!body.userData.shared) { body.material.depthTest = p.y > -1; body.material.opacity = held ? 0.4 : p.fade ?? 1; }
     if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble && !line.tube) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
   }
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
@@ -1637,6 +1654,20 @@ function producerPose(sceneId, cam) {
   if (cam.elevation != null) { const length = offset.length(), level = new THREE.Vector3(offset.x, 0, offset.z).normalize(), up = THREE.MathUtils.degToRad(cam.elevation); offset.copy(level.multiplyScalar(Math.cos(up) * length)).setY(Math.max(2 - target.y, Math.sin(up) * length)); }
   return { target, position: target.clone().add(offset) };
 }
+/** For checking memory (the user, 2026-11-05: the phone's browser reloading the page): what the renderer and the page hold. */
+window.__mem = () => ({ geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, programs: renderer.info.programs?.length ?? null, calls: renderer.info.render.calls, built: built.size, labels: labels.size, pawns: pawns.size, pathLines: pathLines.length, children: world.children.length, objects: (() => { let n = 0; world.traverse(() => n++); return n; })(), heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null });
+/** For checking memory: the buffers the scene and every built place hold, by object type, each geometry counted once (MB). */
+window.__buffers = () => {
+  const seen = new Set(), by = {};
+  const add = (kind, bytes) => { const row = (by[kind] ??= { n: 0, mb: 0 }); row.n++; row.mb = Math.round((row.mb + bytes / 1048576) * 10) / 10; };
+  const visit = (root) => root?.traverse?.((obj) => {
+    const g = obj.geometry;
+    if (g && !seen.has(g)) { seen.add(g); let bytes = g.index?.array.byteLength ?? 0; for (const attr of Object.values(g.attributes)) bytes += attr.array?.byteLength ?? 0; add(`${obj.type} geometry`, bytes); }
+    if (obj.isInstancedMesh && !seen.has(obj.instanceMatrix)) { seen.add(obj.instanceMatrix); add("instances", obj.instanceMatrix.array.byteLength + (obj.instanceColor?.array.byteLength ?? 0)); }
+  });
+  visit(world); for (const entry of new Set(built.values())) visit(entry.group);
+  return by;
+};
 /** For checking Follow Jev live: the card being played, whether it carries the photographer's camera, and where that puts the view. */
 window.__follow = () => { const segment = segmentAt(time), cam = segment?.event?.camera ?? null, pose = cam ? producerPose(segment.scene.id, cam) : null;
   return { scene: segment?.scene.id ?? null, kind: segment?.kind ?? null, event: segment?.eventIndex ?? null, segments: segments.length, newest: segments.at(-1) ? { scene: segments.at(-1).scene.id, start: Math.round(segments.at(-1).start * 10) / 10 } : null,
