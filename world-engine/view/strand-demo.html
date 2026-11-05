@@ -206,9 +206,14 @@ function buildTimeline() {
   // newest one, where Follow Jev looks, never at a unit of the range still to be played.
   // (`final` is no sign of the end here: the director's snapshots all say so; a unit not landed yet is.)
   const landedOnly = liveMode && data.scenes.some((scene) => scene.landed === false) && data.scenes.some((scene) => scene.landed);
+  // Nobody vanishes (the user, 2026-11-05: "a person can't just disappear without a path. If nothing said about that person
+  // he should always stay where he is"): the world holds everyone where they last stood until they are in a scene again
+  // (and walk on from there); each scene carries, for the people it does not have, where they stand, and they are drawn there.
+  const heldAll = new Map(), crowdOf = (who) => who.startsWith("crowd:") || !!data.people[who]?.crowd;
   for (const [index, scene] of data.scenes.entries()) {
     if (landedOnly && !scene.landed) continue;
-    const place = data.places[scene.place], positions = { ...scene.starts };
+    const place = data.places[scene.place], positions = { ...scene.starts }, held = {};
+    for (const [who, spot] of heldAll) if (!(who in scene.starts)) held[who] = spot;
     hitsSoFar[keyOf(scene.place)] ??= 0;
     // People coming from another place: the macro view first, in 2D.
     const migrations = data.migrations.filter((migration) => migration.scene === scene.id);
@@ -216,10 +221,10 @@ function buildTimeline() {
       // The camera rises once the first of them is out of the old place's grid, and comes down on the new place as the last arrives at its edge.
       const travels = migrations.map((migration) => travelOf(migration, scene, place)), length = Math.max(MACRO, ...travels.map((travel) => travel.total + 0.6));
       const glideFrom = Math.min(...travels.map((travel) => travel.exitEnd)), glideTo = Math.max(...travels.map((travel) => travel.mapEnd));
-      segments.push({ kind: "macro", scene, index, place, start: clock, end: clock + length, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)], migrations, travels, glide: { from: glideFrom, seconds: Math.max(1.5, glideTo - glideFrom) } });
+      segments.push({ kind: "macro", scene, index, place, held, start: clock, end: clock + length, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)], migrations, travels, glide: { from: glideFrom, seconds: Math.max(1.5, glideTo - glideFrom) } });
       clock += length;
     }
-    segments.push({ kind: "card", scene, index, place, start: clock, end: clock + CARD, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)] });
+    segments.push({ kind: "card", scene, index, place, held, start: clock, end: clock + CARD, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)] });
     clock += CARD;
     for (const [eventIndex, event] of scene.events.entries()) {
       if (event.hit) hitsSoFar[keyOf(scene.place)]++;
@@ -228,10 +233,11 @@ function buildTimeline() {
       const length = Math.max(READ, event.hit ? 2.6 : 0, chars ? chars * SAY + 0.6 : 0, ...moves.map((move) => move.time.total + 0.6));
       let from = 0;
       const says = said.map((line) => { const span = ((length - 0.6) * line.text.length) / chars, entry = { ...line, from, to: from + span }; from += span; return entry; });
-      segments.push({ kind: "event", scene, index, eventIndex, event, place, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[keyOf(scene.place)], says });
+      segments.push({ kind: "event", scene, index, eventIndex, event, place, held, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[keyOf(scene.place)], says });
       for (const move of moves) positions[move.person] = move.path.at(-1);
       clock += length;
     }
+    if (place?.world) for (const [who, node] of Object.entries(positions)) if (node != null && !crowdOf(who)) heldAll.set(who, { node, place: scene.place });
   }
   total = clock;
   for (const segment of segments) { if (segment.kind === "event") eventStart.set(`${segment.scene.id}|${segment.eventIndex}`, segment.start); if (segment.kind === "card") sceneStart.set(segment.scene.id, segment.start); }
@@ -1365,14 +1371,15 @@ function frame(now) {
   for (const [id, { pawn, body }] of pawns) {
     const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
     const travel = segment.kind === "macro" && segment.travels.find((entry) => entry.migration.person === id);
-    const p = posed ? (posed[id] == null ? null : at(place, posed[id])) : !present.has(id) ? null : move ? position(place, move, elapsed) : node == null ? null : at(place, node);
+    const held = !posed && !present.has(id) && place?.world ? segment.held?.[id] ?? null : null, heldPlace = held ? data.places[held.place] : null;
+    const p = posed ? (posed[id] == null ? null : at(place, posed[id])) : !present.has(id) ? (heldPlace?.world ? at(heldPlace, held.node) : null) : move ? position(place, move, elapsed) : node == null ? null : at(place, node);
     if (!p) { if (pawn.parent) world.remove(pawn); continue; }
     if (!pawn.parent) world.add(pawn);
     if (travel && elapsed < travel.total) { pawn.position.copy(travelAt(travel, elapsed)); body.material.opacity = 1; movers.push(pawn.position); continue; }
     pawn.position.set(p.x - entry.cx, p.y, p.z - entry.cz);
     // Under the street, a pawn shows through the ground above it.
     body.material.depthTest = p.y > -1;
-    body.material.opacity = p.fade ?? 1;
+    body.material.opacity = held ? 0.4 : p.fade ?? 1;
     if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble && !line.tube) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
   }
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
@@ -1628,7 +1635,7 @@ function producerPose(sceneId, cam) {
 /** For checking Follow Jev live: the card being played, whether it carries the photographer's camera, and where that puts the view. */
 window.__follow = () => { const segment = segmentAt(time), cam = segment?.event?.camera ?? null, pose = cam ? producerPose(segment.scene.id, cam) : null;
   return { scene: segment?.scene.id ?? null, kind: segment?.kind ?? null, event: segment?.eventIndex ?? null, segments: segments.length, newest: segments.at(-1) ? { scene: segments.at(-1).scene.id, start: Math.round(segments.at(-1).start * 10) / 10 } : null,
-    camera: cam ? { cut: cam.cut ?? null, radius: cam.radius, elevation: cam.elevation } : null, pose: pose ? pose.target.toArray().map(Math.round) : null, onIt: cameraSegment === segment, follow, glide: !!glide, cuts, pin: pin ? { id: pin.id, r: Math.round(pin.r) } : null, pinGlide: !!pinGlide, focus: focusOf(segment).map((p) => [Math.round(p.x), Math.round(p.z)]) }; };
+    camera: cam ? { cut: cam.cut ?? null, radius: cam.radius, elevation: cam.elevation } : null, pose: pose ? pose.target.toArray().map(Math.round) : null, onIt: cameraSegment === segment, follow, glide: !!glide, cuts, pin: pin ? { id: pin.id, r: Math.round(pin.r) } : null, pinGlide: !!pinGlide, focus: focusOf(segment).map((p) => [Math.round(p.x), Math.round(p.z)]), cast: Object.keys(segment.scene.starts ?? {}).length, held: [...pawns.entries()].filter(([id, { pawn }]) => pawn.parent && !(id in (segment.scene.starts ?? {}))).map(([id]) => id) }; };
 /** For checking a replay: where the timeline and the camera stand. */
 window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
 function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null, follow: keep = false }) {
