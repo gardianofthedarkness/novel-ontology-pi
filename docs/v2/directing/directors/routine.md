@@ -48,7 +48,7 @@ Asked in `src/v2/context/directorModes.ts`, mode `moveSpotMode` (run here on a s
 
 > In scene 1 (&lt;the place&gt;), the card's lines (card) are being played. &lt;the mover&gt; is the person asked about. They go &lt;toward what&gt;, the shaded wedge on picture "wedge". Where do they end up in this card: one of the spots (spots), or none of these when the text puts them somewhere the spots do not name?
 
-**Given**: card, scene, now, digest, pictures, notes, spots.
+**Given**: card, scene, now, digest, pictures, retake, notes, spots.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|

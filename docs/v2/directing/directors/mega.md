@@ -37,7 +37,7 @@ Asked in `src/v2/context/directorModes.ts`, mode `moveDirectionMode` (run here o
 
 > In scene 1 (&lt;the place&gt;), the card's lines (card) are being played. &lt;the mover&gt; is the person asked about. &lt;the mover&gt; goes somewhere else in this card. Which way, as the picture "arrows" shows it: one of the lettered arrows out of them (each said by what it points at), or with someone? And how, and which line says so.
 
-**Given**: card, scene, now, digest, pictures, notes, arrows.
+**Given**: card, scene, now, digest, pictures, retake, notes, arrows.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|
