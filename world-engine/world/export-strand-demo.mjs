@@ -519,7 +519,7 @@ export async function strandDemo(novelDir, options) {
     const toward = (id, parent) => terrain?.sites?.[id]?.parent === parent ? terrain.sites[id].toward : Object.values(canvas.places).filter(place => place.parent === parent && place.id !== id).map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0].at;
     const birth = (id, parent) => {
       if (canvas.places[id]) return;
-      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent), ground: groundPatch(id) });
+      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent), ground: groundPatch(id), ...(Array.isArray(terrain?.sites?.[id]?.at) ? { fixed: terrain.sites[id].at } : {}) });
     };
     // An unnamed place (a v2 reading's EM² place) is never an area of the build: it is a marker in one, until Jev places it.
     const areaScale = id => { if (String(id).startsWith('unnamed:')) return null; const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };

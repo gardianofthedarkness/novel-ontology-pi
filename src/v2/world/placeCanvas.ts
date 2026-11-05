@@ -29,7 +29,7 @@ export interface Unit { id: string; label: string; kind: "building" | "street" |
  * stands exactly at its kept offset inside the parent's ground, its own ground a patch of the parent's; it is never pushed
  * and pushes nothing, the fading of the patches being how it meets its neighbours.
  */
-export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; embedded?: boolean; temporary?: boolean; dwelling?: string; pool?: string }
+export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; embedded?: boolean; fixed?: boolean; temporary?: boolean; dwelling?: string; pool?: string }
 export interface Canvas { places: Record<string, CanvasPlace>; born: number }
 
 /** The least radius of a place of each scale, in metres, before anything is built in it. */
@@ -81,7 +81,7 @@ export function grow(canvas: Canvas, id: string): Canvas {
  * A place born on the canvas: at the free spot nearest its parent's middle (or toward a direction), then grown up. `ground`:
  * its first patch as given (terrain spawning: the type and the size Jev chose), in place of one sampled from its type.
  */
-export function bear(canvas: Canvas, place: { id: string; label: string; scale: string; parent: string | null; landscape?: LandscapeType | null; toward?: Point; ground?: Patch | null; at?: Point; embedded?: boolean }): Canvas {
+export function bear(canvas: Canvas, place: { id: string; label: string; scale: string; parent: string | null; landscape?: LandscapeType | null; toward?: Point; ground?: Patch | null; at?: Point; embedded?: boolean; fixed?: Point }): Canvas {
   if (canvas.places[place.id]) return canvas;
   // A manifold of its parent's ground stands exactly where it was kept, in the parent's ground (no spot of its own to find).
   if (place.embedded && place.parent && canvas.places[place.parent]) {
@@ -95,8 +95,10 @@ export function bear(canvas: Canvas, place: { id: string; label: string; scale: 
   entry.r = radiusOf(canvas, place.id);
   const parent = place.parent ? canvas.places[place.parent] : null, own = parent?.landscape?.patches.length ? [{ x: 0, z: 0, r: circleOf(parent.landscape, 0) }] : [];
   const occupied = [...own, ...(parent?.units ?? []).map((unit) => ({ x: unit.at[0], z: unit.at[1], r: unit.r })), ...childrenOf(canvas, place.parent).filter((child) => child.id !== place.id && !child.embedded).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))];
-  const spot = placeBeside(occupied, entry.r, place.id, place.toward, GAP);
-  entry.at = [spot.x, spot.z];
+  // A place the floating terrain moved (L19, world-engine/terrain/float.mjs; the terrain site's `at`) stands where it was
+  // moved, beside its parent (siblings then kept clear by its parent's growing); every other at its free spot.
+  if (place.fixed) { entry.at = [place.fixed[0], place.fixed[1]]; entry.fixed = true; }
+  else { const spot = placeBeside(occupied, entry.r, place.id, place.toward, GAP); entry.at = [spot.x, spot.z]; }
   return parent ? grow(canvas, parent.id) : grow(canvas, place.id);
 }
 
