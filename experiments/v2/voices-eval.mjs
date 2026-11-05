@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto';
 import * as V from '../../world-engine/review/voices.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
-const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { embed: { type: 'string', default: 'http://127.0.0.1:8194/v1' }, jev: { type: 'string' }, out: { type: 'string' }, cache: { type: 'string' } } });
+const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { embed: { type: 'string', default: 'http://127.0.0.1:8194/v1' }, jev: { type: 'string' }, profiles: { type: 'boolean' }, out: { type: 'string' }, cache: { type: 'string' } } });
 if (!novelDir || !readingPath) { console.error('usage: node experiments/v2/voices-eval.mjs <novel-dir> <data.json> [--embed <url>] [--jev N] [--out report.json]'); process.exit(2); }
 const reading = JSON.parse(await readFile(resolve(readingPath), 'utf8')), dir = dirname(resolve(readingPath)), cacheDir = resolve(values.cache ?? join(dir, '..', 'cache-voices'));
 const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
@@ -104,28 +104,55 @@ if (values.jev) {
   const clip = (value, size) => (value.length > size ? `${value.slice(0, size - 1)}…` : value);
   const exemplars = (line, who) => { const entry = results.get(line.id), v = vectors[line.id]; return entry.index.filter(item => item.who === who).map(item => ({ item, sim: item.vector.reduce((s, x, k) => s + x * v[k], 0) })).sort((a, b) => b.sim - a.sim).slice(0, 3).map(({ item }) => item); };
   const quoteById = new Map(lines.map(line => [line.id, line])), vectorKey = new Map(lines.map(line => [vectors[line.id], line.id]));
-  for (let n = 0; n < sample.length; n += 6) {
+  // Voice profiles (the user, 2026-11-05: "ask a llm to summarize each characters profile and add that into the context"):
+  // the work model writes how each candidate talks from their known lines of that fold only (never the hidden ones).
+  const variants = values.profiles ? ['jev', 'jevProfiles', 'jevProfilesOnly'] : ['jev'], profiles = new Map();
+  if (values.profiles) {
+    const { workModelFromEnv } = await load('dist/src/ground/connectors/workModel.js'), { cachedWork } = await load('dist/src/digger/timeplace/cache.js');
+    const work = cachedWork(workModelFromEnv(process.env), join(cacheDir, 'profiles'));
+    let tokens = { prompt: 0, completion: 0, requests: 0 };
+    const wanted = new Set(sample.flatMap(line => line.candidates.map(who => `${fold(line)}|${who}`)));
+    for (const entry of wanted) {
+      const [f, who] = [Number(entry.split('|')[0]), entry.split('|')[1]], own = known.filter(line => fold(line) !== f && line.who === who);
+      if (own.length < 3) { profiles.set(entry, `few lines known (${own.length})`); continue; }
+      // Up to 80 of their lines, spread over the volume.
+      const step = Math.max(1, Math.floor(own.length / 80)), picked = own.filter((_, k) => k % step === 0).slice(0, 80);
+      const prompt = `Character: ${names.get(who) ?? who}\nTheir lines of dialogue (one per line):\n${picked.map(line => line.quote).join('\n')}\n\nDescribe how this character talks, so that a reader could tell a new line of theirs from other characters' lines: how they refer to themselves, how they address each other person (names, titles, nicknames), how their sentences end (particles, tone), their register and politeness, verbal tics and catchphrases, what they typically talk about. Quote short examples in the original language. At most 150 words.`;
+      const result = await work.generateWithUsage({ system: 'You are a careful literary analyst of character voice.', prompt, maxTokens: 400 });
+      profiles.set(entry, result.content.trim());
+      if (!result.cached) { tokens.requests++; tokens.prompt += result.usage?.promptTokens ?? 0; tokens.completion += result.usage?.completionTokens ?? 0; }
+    }
+    report.profiles = { written: profiles.size, ...tokens, usd: Math.round(((tokens.prompt * 0.27 + tokens.completion * 1.1) / 1e6) * 10000) / 10000 };
+    console.error(`profiles: ${profiles.size} (${tokens.requests} requests)`);
+  }
+  const profileOf = (f, who) => profiles.get(`${f}|${who}`) ?? 'no profile';
+  const profileMode = { ...mode, name: 'voices-profiles', task: 'Lines of dialogue from a light novel. For each line, say which of the candidates says it, judging by how each of them talks: a profile of each candidate\'s voice is given (written from their other lines), and, where given, the three lines of each candidate most like it, and the quoted lines round it (with their speaker where known). The narration is left out on purpose.' };
+  for (const variant of variants) for (let n = 0; n < sample.length; n += 6) {
     const batch = sample.slice(n, n + 6), key = k => `line_${n + k + 1}`;
     const items = batch.map((line, k) => {
       const group = lines.filter(other => other.exchange === line.exchange), i = group.indexOf(line), round = [...group.slice(Math.max(0, i - 2), i), ...group.slice(i + 1, i + 3)];
-      return [key(k), { line: clip(line.quote, 200), round: round.map(other => `${results.has(other.id) || !other.who ? '?' : names.get(other.who) ?? other.who}: ${clip(other.quote, 120)}`), candidates: Object.fromEntries(line.candidates.map(who => [names.get(who) ?? who, exemplars(line, who).map(item => clip(quoteById.get(vectorKey.get(item.vector))?.quote ?? '', 100))])) }];
+      const said = { line: clip(line.quote, 200), round: round.map(other => `${results.has(other.id) || !other.who ? '?' : names.get(other.who) ?? other.who}: ${clip(other.quote, 120)}`), candidates: Object.fromEntries(line.candidates.map(who => [names.get(who) ?? who, exemplars(line, who).map(item => clip(quoteById.get(vectorKey.get(item.vector))?.quote ?? '', 100))])) };
+      if (variant === 'jevProfilesOnly') delete said.candidates;
+      if (variant !== 'jev') said.profiles = Object.fromEntries(line.candidates.map(who => [names.get(who) ?? who, profileOf(fold(line), who)]));
+      return [key(k), said];
     });
     const questions = batch.map((line, k) => ({ key: `who:${n + k}`, primitive: 'choice', instructions: `Who says lines.${key(k)}?`, options: line.candidates, optionHints: Object.fromEntries(line.candidates.map(who => [who, names.get(who) ?? who])) }));
-    const { replies } = await ask(decide, mode, { items, questions }, null);
-    batch.forEach((line, k) => { const reply = replies.find(entry => entry.key === `who:${n + k}`); results.get(line.id).jev = reply?.value ?? null; });
-    console.error(`jev: ${Math.min(n + 6, sample.length)} of ${sample.length}`);
+    const { replies } = await ask(decide, variant === 'jev' ? mode : profileMode, { items, questions }, null);
+    batch.forEach((line, k) => { const reply = replies.find(entry => entry.key === `who:${n + k}`); results.get(line.id)[variant] = reply?.value ?? null; });
+    console.error(`${variant}: ${Math.min(n + 6, sample.length)} of ${sample.length}`);
   }
   const ids = new Set(sample.map(line => line.id));
-  WAYS.push('jev');
+  WAYS.push(...variants);
   report.jevSample = { paid, ...score(results, line => ids.has(line.id)) };
   // Hybrids: the exchange's pick, with Jev's where the exchange is unsure (it and the line's own scores disagree, or the
   // line's own margin is small), or the majority of the three.
-  const rows = sample.map(line => { const entry = results.get(line.id); return { id: line.id, who: line.who, exchange: entry.exchange, jev: entry.jev, both: entry.both, margin: Math.round(entry.margin * 100) / 100 }; });
+  const rows = sample.map(line => { const entry = results.get(line.id); return { id: line.id, who: line.who, exchange: entry.exchange, jev: entry.jev, jevProfiles: entry.jevProfiles, jevProfilesOnly: entry.jevProfilesOnly, both: entry.both, margin: Math.round(entry.margin * 100) / 100 }; });
   const rate = choose => Math.round(1000 * rows.filter(row => choose(row) === row.who).length / rows.length) / 10;
   report.hybrids = {
     exchangeElseJevWhereDisagree: rate(row => (row.exchange === row.both ? row.exchange : row.jev ?? row.exchange)),
     ...Object.fromEntries([0.5, 1, 2].map(m => [`exchangeElseJevUnderMargin${m}`, rate(row => (row.margin >= m ? row.exchange : row.jev ?? row.exchange))])),
     majority: rate(row => ([row.jev, row.both].filter(other => other === row.exchange).length >= 1 ? row.exchange : row.jev === row.both ? row.jev : row.exchange)),
+    ...(values.profiles ? { exchangeElseProfilesWhereDisagree: rate(row => (row.exchange === row.both ? row.exchange : row.jevProfiles ?? row.exchange)), exchangeElseProfilesUnderMargin1: rate(row => (row.margin >= 1 ? row.exchange : row.jevProfiles ?? row.exchange)), majorityOfExchangeJevProfiles: rate(row => (row.exchange === row.jev || row.exchange === row.jevProfiles ? row.exchange : row.jev === row.jevProfiles ? row.jev : row.exchange)) } : {}),
     sentToJev: { disagree: rows.filter(row => row.exchange !== row.both).length, under1: rows.filter(row => row.margin < 1).length, of: rows.length },
   };
   report.jevRows = rows;
